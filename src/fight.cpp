@@ -4367,6 +4367,7 @@ int BrittleCheck(struct char_data* ch, struct char_data* v, int dam) {
 
 int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 	unsigned Our_Bit;
+    sh_int dam_type;
 
 	/*
 	 * long, intricate list, with the various bits and the various spells and
@@ -4383,7 +4384,8 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 	case SPELL_INCENDIARY_CLOUD:
 	case SKILL_MIND_BURN:
 	case TYPE_GENERIC_FIRE:
-		Our_Bit = IMM_FIRE;
+        dam_type = RESI_FIRE;
+	//	Our_Bit = IMM_FIRE;
 		break;
 
 	case SPELL_SHOCKING_GRASP:
@@ -4392,7 +4394,8 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 	case SPELL_LIGHTNING_BREATH:
 	case SPELL_CHAIN_LIGHTNING:
 	case TYPE_GENERIC_ELEC:
-		Our_Bit = IMM_ELEC;
+        dam_type = RESI_ELEC;
+	//	Our_Bit = IMM_ELEC;
 		break;
 
 	case SPELL_CHILL_TOUCH:
@@ -4400,7 +4403,8 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 	case SPELL_ICE_STORM:
 	case SPELL_FROST_BREATH:
 	case TYPE_GENERIC_COLD:
-		Our_Bit = IMM_COLD;
+        dam_type = RESI_COLD;
+	//	Our_Bit = IMM_COLD;
 		break;
 
 	case SPELL_MAGIC_MISSILE:
@@ -4410,17 +4414,20 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 	case SPELL_SUNRAY:
 	case SPELL_DISINTEGRATE:
 	case TYPE_GENERIC_ENERGY:
-		Our_Bit = IMM_ENERGY;
+        dam_type = RESI_ENERGY;
+	//	Our_Bit = IMM_ENERGY;
 		break;
 
 	case SPELL_ENERGY_DRAIN:
-		Our_Bit = IMM_DRAIN;
+        dam_type = RESI_DRAIN;
+	//	Our_Bit = IMM_DRAIN;
 		break;
 
 	case SPELL_ACID_BREATH:
 	case SPELL_ACID_BLAST:
 	case TYPE_GENERIC_ACID:
-		Our_Bit = IMM_ACID;
+        dam_type = RESI_ACID;
+	//	Our_Bit = IMM_ACID;
 		break;
 
 	case SKILL_BACKSTAB:
@@ -4428,14 +4435,16 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 	case TYPE_STING:
 	case TYPE_STAB:
 	case TYPE_RANGE_WEAPON:
-		Our_Bit = IMM_PIERCE;
+        dam_type = RESI_PIERCE;
+	//	Our_Bit = IMM_PIERCE;
 		break;
 
 	case TYPE_SLASH:
 	case TYPE_WHIP:
 	case TYPE_CLEAVE:
 	case TYPE_CLAW:
-		Our_Bit = IMM_SLASH;
+        dam_type = RESI_SLASH;
+	//	Our_Bit = IMM_SLASH;
 		break;
 
 	case TYPE_BLUDGEON:
@@ -4446,18 +4455,32 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 	case TYPE_SMASH:
 	case TYPE_SMITE:
 	case TYPE_BLAST:
-		Our_Bit = IMM_BLUNT;
+        dam_type = RESI_BLUNT;
+	//	Our_Bit = IMM_BLUNT;
 		break;
 
 	case SPELL_POISON:
-		Our_Bit = IMM_POISON;
+        dam_type = RESI_POISON;
+	//	Our_Bit = IMM_POISON;
 		break;
+
+    case SPELL_EARTHQUAKE:
+    case SPELL_HARM:
+    case SPELL_CAUSE_LIGHT:
+    case SPELL_CAUSE_CRITICAL:
+    case SPELL_CAUSE_SERIOUS:
+    case SPELL_HOLY_WORD:
+    case SPELL_UNHOLY_WORD:
+    case SPELL_PWORD_KILL:
+        dam_type = RESI_HOLY;
 
 	default:
 		return(dam);
 		break;
 	}
-	if(classe !=CLASS_MONK) {
+
+    dam -= int(dam * ch->resistenza[dam_type] / 100);
+/*	if(classe !=CLASS_MONK) {
 		if(IS_SET(ch->susc, Our_Bit)) {
 			dam <<= 1;
 		}
@@ -4477,7 +4500,7 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 			}
 		}
 
-	}
+	} */
 
 	return(dam);
 }

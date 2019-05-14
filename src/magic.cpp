@@ -428,7 +428,6 @@ void spell_earthquake(byte level, struct char_data* ch,
 
 void spell_dispel_evil(byte level, struct char_data* ch,
 					   struct char_data* victim, struct obj_data* obj) {
-	int dam=1;
 	assert(ch && victim);
 	if(level <0 || level >ABS_MAX_LVL) {
 		return;
@@ -461,7 +460,6 @@ void spell_dispel_evil(byte level, struct char_data* ch,
 		else {
 			act("$N resiste all'attacco.",TRUE, ch, 0, victim, TO_CHAR);
 			act("Resisti all'attacco di $n.", TRUE, ch, 0, victim, TO_VICT);
-			damage(ch, victim, dam, SPELL_EARTHQUAKE, 5);
 		}
 	}
 	else {

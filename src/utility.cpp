@@ -9474,4 +9474,65 @@ char RemColorString(char * buffer)
     }
     return *buffer;
 }
+
+#define MAX_RESI_PC      50
+#define MAX_RESI_NPC    100
+int ResiTotal(char_data* ch, int type)
+{
+    int max = 0;
+
+    if(ch->resistenze[EDIT_RESI][type] > 50)
+    {
+        max = ch->resistenze[EDIT_RESI][type];
+        if(max > MAX_EDIT_RESI)
+        {
+            if(IS_NPC(ch))
+            {
+                if(max > MAX_RESI_NPC)
+                {
+                    max = MAX_RESI_NPC;
+                }
+            }
+            else
+            {
+                max = MAX_EDIT_RESI;
+            }
+        }
+    }
+    else
+    {
+        max += ch->resistenze[EDIT_RESI][type] + ch->resistenze[EQUIP_RESI][type];
+        if(IS_PC(ch) && max > MAX_RESI_PC)
+        {
+            max = MAX_RESI_PC;
+        }
+    }
+
+    if(IS_PC(ch))
+    {
+        max += ch->resistenze[RACIAL_RESI][type];
+
+        if(IS_PC(ch))
+        {
+            if(ch->resistenze[EDIT_RESI][type] > 50)
+            {
+                if(max > 80)
+                {
+                    max = MAX_EDIT_RESI + 20;
+                }
+            }
+            else
+            {
+                if(max > 70)
+                {
+                    max = MAX_RESI_PC + 20;
+                }
+            }
+        }
+    }
+
+    if(ch->resistenze[EDIT_RESI][type])
+    
+        
+}
 } // namespace Alarmud

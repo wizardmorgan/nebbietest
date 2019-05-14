@@ -453,7 +453,6 @@ void spell_flamestrike(byte level, struct char_data* ch,
 
 void spell_dispel_good(byte level, struct char_data* ch,
 					   struct char_data* victim, struct obj_data* obj) {
-
 	assert(ch && victim);
 	assert((level >= 1) && (level<=ABS_MAX_LVL));
 
@@ -476,9 +475,13 @@ void spell_dispel_good(byte level, struct char_data* ch,
 			act("$c0009$n scaccia $N $c0009da questo piano di esistenza.",TRUE,ch,0,victim,TO_NOTVICT);
 			act("$c0009Scacci $N $c0009da questo piano di esistenza.", TRUE, ch, 0, victim, TO_CHAR);
 			act("$c0009$n ti scaccia da questo piano di esistenza.", TRUE, ch, 0, victim,TO_VICT);
-			gain_exp(ch, MIN(GET_EXP(victim)/2, 50000));
+			gain_exp(ch, MIN(GET_EXP(victim)/2, 150000));
 			extract_char(victim);
 		}
+        else {
+            act("$N resiste all'attacco.",TRUE, ch, 0, victim, TO_CHAR);
+            act("Resisti all'attacco di $n.", TRUE, ch, 0, victim, TO_VICT);
+        }
 	}
 	else {
 		act("$N ti ride in faccia.", TRUE, ch, 0, victim, TO_CHAR);

@@ -823,6 +823,7 @@ struct char_data {
 	
     char* lastpkill; // last player killed, used also for destroy checks
     char* lastmkill; // last mob killed, used also for quest checks
+    sh_int resistenze[4][20];  // [naturali/eq/editati] [resistenze ai tipi di danni da -100 a +100]
 
 };
 

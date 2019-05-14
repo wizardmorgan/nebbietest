@@ -3833,6 +3833,89 @@
                 "value": 64,
                 "comment": "only prince can use the item"
             }
+        },
+        "e_damage_type": {
+            "comment": "",
+            "RESI_FIRE": {
+                "value": 0,
+                "comment": ""
+            },
+            "RESI_COLD": {
+                "value": 1,
+                "comment": ""
+            },
+            "RESI_ELEC": {
+                "value": 2,
+                "comment": ""
+            },
+            "RESI_ENERGY": {
+                "value": 3,
+                "comment": ""
+            },
+            "RESI_BLUNT": {
+                "value": 4,
+                "comment": ""
+            },
+            "RESI_PIERCE": {
+                "value": 5,
+                "comment": ""
+            },
+            "RESI_SLASH": {
+                "value": 6,
+                "comment": ""
+            },
+            "RESI_ACID": {
+                "value": 7,
+                "comment": ""
+            },
+            "RESI_POISON": {
+                "value": 8,
+                "comment": ""
+            },
+            "RESI_DRAIN": {
+                "value": 9,
+                "comment": ""
+            },
+            "RESI_SLEEP": {
+                "value": 10,
+                "comment": ""
+            },
+            "RESI_CHARM": {
+                "value": 11,
+                "comment": ""
+            },
+            "RESI_HOLD": {
+                "value": 12,
+                "comment": ""
+            },
+            "RESI_HOLY": {
+                "value": 13,
+                "comment": ""
+            },
+            "RESI_UNUSED1": {
+                "value": 14,
+                "comment": ""
+            },
+            "RESI_UNUSED2": {
+                "value": 15,
+                "comment": ""
+            },
+            "RESI_UNUSED3": {
+                "value": 16,
+                "comment": ""
+            },
+            "RESI_UNUSED4": {
+                "value": 17,
+                "comment": ""
+            },
+            "RESI_UNUSED5": {
+                "value": 18,
+                "comment": ""
+            },
+            "RESI_UNUSED6": {
+                "value": 19,
+                "comment": ""
+            }
         }
 	}
 }

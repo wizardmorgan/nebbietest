@@ -2211,7 +2211,8 @@ void kick_messages(struct char_data* ch, struct char_data* victim, int damage) {
         classe=CLASS_BARBARIAN;
     }
 
-    if(classe != CLASS_MONK)
+    damage -= int(damage * victim->resistenza[RESI_BLUNT] / 100);
+/*    if(classe != CLASS_MONK)
     {
         if(IS_SET(victim->susc, IMM_BLUNT)) {
             damage <<= 1;
@@ -2232,7 +2233,7 @@ void kick_messages(struct char_data* ch, struct char_data* victim, int damage) {
             }
         }
 
-    }
+    } */
 
 	if(!damage) {
         sprintf(buf, "%s", att_kick_miss_ch[i]);

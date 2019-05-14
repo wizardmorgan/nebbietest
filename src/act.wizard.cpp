@@ -1674,6 +1674,7 @@ ACTION_FUNC(do_stat) {
 					send_to_char(buf, ch);
 				}
 
+                
 				/* resistances */
 				if(k->immune) {
 					send_to_char("$c0005Resistant to: $c0014", ch);
