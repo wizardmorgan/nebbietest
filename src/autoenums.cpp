@@ -77,6 +77,25 @@ e_apply encode_e_apply(std::string s,e_apply fallback) {
 	if (s == "APPLY_T_MOVE") return APPLY_T_MOVE;
 	if (s == "APPLY_T_MANA") return APPLY_T_MANA;
 	if (s == "APPLY_SKIP") return APPLY_SKIP;
+	if (s == "APPLY_RESI_FIRE") return APPLY_RESI_FIRE;
+	if (s == "APPLY_RESI_COLD") return APPLY_RESI_COLD;
+	if (s == "APPLY_RESI_ELEC") return APPLY_RESI_ELEC;
+	if (s == "APPLY_RESI_ENERGY") return APPLY_RESI_ENERGY;
+	if (s == "APPLY_RESI_BLUNT") return APPLY_RESI_BLUNT;
+	if (s == "APPLY_RESI_PIERCE") return APPLY_RESI_PIERCE;
+	if (s == "APPLY_RESI_SLASH") return APPLY_RESI_SLASH;
+	if (s == "APPLY_RESI_ACID") return APPLY_RESI_ACID;
+	if (s == "APPLY_RESI_POISON") return APPLY_RESI_POISON;
+	if (s == "APPLY_RESI_DRAIN") return APPLY_RESI_DRAIN;
+	if (s == "APPLY_RESI_SLEEP") return APPLY_RESI_SLEEP;
+	if (s == "APPLY_RESI_CHARM") return APPLY_RESI_CHARM;
+	if (s == "APPLY_RESI_HOLD") return APPLY_RESI_HOLD;
+	if (s == "APPLY_RESI_NONMAG") return APPLY_RESI_NONMAG;
+	if (s == "APPLY_RESI_PLUS1") return APPLY_RESI_PLUS1;
+	if (s == "APPLY_RESI_PLUS2") return APPLY_RESI_PLUS2;
+	if (s == "APPLY_RESI_PLUS3") return APPLY_RESI_PLUS3;
+	if (s == "APPLY_RESI_PLUS4") return APPLY_RESI_PLUS4;
+	if (s == "APPLY_RESI_HOLY") return APPLY_RESI_HOLY;
 	return fallback;
 }
 
@@ -214,6 +233,44 @@ std::string translate(const e_apply e) {
 		return "APPLY_T_MANA";
 	case APPLY_SKIP:
 		return "APPLY_SKIP";
+	case APPLY_RESI_FIRE:
+		return "APPLY_RESI_FIRE";
+	case APPLY_RESI_COLD:
+		return "APPLY_RESI_COLD";
+	case APPLY_RESI_ELEC:
+		return "APPLY_RESI_ELEC";
+	case APPLY_RESI_ENERGY:
+		return "APPLY_RESI_ENERGY";
+	case APPLY_RESI_BLUNT:
+		return "APPLY_RESI_BLUNT";
+	case APPLY_RESI_PIERCE:
+		return "APPLY_RESI_PIERCE";
+	case APPLY_RESI_SLASH:
+		return "APPLY_RESI_SLASH";
+	case APPLY_RESI_ACID:
+		return "APPLY_RESI_ACID";
+	case APPLY_RESI_POISON:
+		return "APPLY_RESI_POISON";
+	case APPLY_RESI_DRAIN:
+		return "APPLY_RESI_DRAIN";
+	case APPLY_RESI_SLEEP:
+		return "APPLY_RESI_SLEEP";
+	case APPLY_RESI_CHARM:
+		return "APPLY_RESI_CHARM";
+	case APPLY_RESI_HOLD:
+		return "APPLY_RESI_HOLD";
+	case APPLY_RESI_NONMAG:
+		return "APPLY_RESI_NONMAG";
+	case APPLY_RESI_PLUS1:
+		return "APPLY_RESI_PLUS1";
+	case APPLY_RESI_PLUS2:
+		return "APPLY_RESI_PLUS2";
+	case APPLY_RESI_PLUS3:
+		return "APPLY_RESI_PLUS3";
+	case APPLY_RESI_PLUS4:
+		return "APPLY_RESI_PLUS4";
+	case APPLY_RESI_HOLY:
+		return "APPLY_RESI_HOLY";
 	default:
 		return "UNKNOWN";
 	}
@@ -286,6 +343,25 @@ bool enum_validate(const e_apply value) {
 		case APPLY_T_MOVE:
 		case APPLY_T_MANA:
 		case APPLY_SKIP:
+		case APPLY_RESI_FIRE:
+		case APPLY_RESI_COLD:
+		case APPLY_RESI_ELEC:
+		case APPLY_RESI_ENERGY:
+		case APPLY_RESI_BLUNT:
+		case APPLY_RESI_PIERCE:
+		case APPLY_RESI_SLASH:
+		case APPLY_RESI_ACID:
+		case APPLY_RESI_POISON:
+		case APPLY_RESI_DRAIN:
+		case APPLY_RESI_SLEEP:
+		case APPLY_RESI_CHARM:
+		case APPLY_RESI_HOLD:
+		case APPLY_RESI_NONMAG:
+		case APPLY_RESI_PLUS1:
+		case APPLY_RESI_PLUS2:
+		case APPLY_RESI_PLUS3:
+		case APPLY_RESI_PLUS4:
+		case APPLY_RESI_HOLY:
 		return true;
 		default:
 		return false;

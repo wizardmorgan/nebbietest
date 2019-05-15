@@ -43,6 +43,15 @@ struct QuestItem {
 	const char* where;
 };
 
+struct TableReistPC
+{
+    sh_int racial_pc;
+    sh_int equip_pc;
+    sh_int edit_pc;
+    sh_int superEdit;
+    sh_int spell_pc;
+};
+
 /*
  * Achievements
  */

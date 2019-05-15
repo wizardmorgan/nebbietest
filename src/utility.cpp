@@ -9475,13 +9475,7 @@ char RemColorString(char * buffer)
     return *buffer;
 }
 
-#define MAX_RESI_PC         80
-#define MAX_RESI_EDIT_PC    50
-#define MAX_SUPER_EDIT_PC   10
-#define MAX_RESI_EQUIP_PC   50
-#define MAX_RESI_SPELL_PC   50
 #define MAX_SPELL_BONUS     5
-#define MAX_RESI_RACIAL_PC  80
 #define MAX_RESI_NPC        100
 #define MIN_RESI_PC_NPC    -100
 
@@ -9489,51 +9483,94 @@ int ResiTotal(char_data* ch, int type)
 {
     int total_resi, racial_resi, equip_resi, edit_resi, spell_resi;
 
-    racial_resi = MIN(ch->resistenze[RACIAL_RESI][type], (IS_PC(ch) ? MAX_RESI_RACIAL_PC : MAX_RESI_NPC));
-    equip_resi  = MIN(ch->resistenze[EQUIP_RESI][type], MAX_RESI_EQUIP_PC);
-    edit_resi   = MIN(ch->resistenze[EDIT_RESI][type], (MAX_RESI_EDIT_PC + MAX_SUPER_EDIT_PC));
-    spell_resi  = MIN(ch->resistenze[SPELL_RESI][type], MAX_RESI_SPELL_PC);
+    racial_resi = MIN(ch->resistenze[RACIAL_RESI][type], (IS_PC(ch) ? MaxResisPC[type].racial_pc : MAX_RESI_NPC));
+    if(IS_PC(ch))
+        mudlog(LOG_PLAYERS, "Racial Resi numero %d di %s e' = %d", type, GET_NAME(ch), racial_resi);
+    equip_resi  = MIN(ch->resistenze[EQUIP_RESI][type], (IS_PC(ch) ? MaxResisPC[type].equip_pc : MAX_RESI_NPC));
+    if(IS_PC(ch))
+        mudlog(LOG_PLAYERS, "Equip Resi numero %d di %s e' = %d", type, GET_NAME(ch), equip_resi);
+    edit_resi   = MIN(ch->resistenze[EDIT_RESI][type], (IS_PC(ch) ? (MaxResisPC[type].edit_pc + MaxResisPC[type].superEdit) : MAX_RESI_NPC));
+    if(IS_PC(ch))
+        mudlog(LOG_PLAYERS, "Edit Resi numero %d di %s e' = %d", type, GET_NAME(ch), edit_resi);
+    spell_resi  = MIN(ch->resistenze[SPELL_RESI][type], (IS_PC(ch) ? MaxResisPC[type].spell_pc : MAX_RESI_NPC));
+    if(IS_PC(ch))
+        mudlog(LOG_PLAYERS, "Spell Resi numero %d di %s e' = %d", type, GET_NAME(ch), spell_resi);
 
     if(IS_PC(ch))
     {
-        if(edit_resi > MAX_RESI_EDIT_PC)
+        if(edit_resi >= MaxResisPC[type].edit_pc)
         {
             equip_resi = 0;
+            if(IS_PC(ch))
+                mudlog(LOG_PLAYERS, "Ho trovato su %s l'edit resi(%d) maggiore/uguale a %d quindi equip resi e' ora pari a %d", GET_NAME(ch), type, MaxResisPC[type].edit_pc, racial_resi);
         }
-        else if(edit_resi <= MAX_RESI_EDIT_PC)
+        else if(edit_resi <= MaxResisPC[type].edit_pc)
         {
-            if((equip_resi + edit_resi) >= MAX_RESI_EDIT_PC)
+            if((equip_resi + edit_resi) >= MaxResisPC[type].edit_pc)
             {
-                equip_resi = MAX_RESI_EDIT_PC - edit_resi;
+                equip_resi = MIN((MaxResisPC[type].edit_pc - edit_resi), equip_resi);
+                if(IS_PC(ch))
+                    mudlog(LOG_PLAYERS, "EquipResi+EditResi(%d) di %s maggiore/uguale a %d quindi equip resi e' ora pari a %d", type, GET_NAME(ch), MaxResisPC[type].edit_pc, racial_resi);
             }
         }
 
-        if(edit_resi >= MAX_RESI_EDIT_PC || equip_resi == MAX_RESI_EQUIP_PC)
+        if(edit_resi >= MaxResisPC[type].edit_pc || equip_resi == MaxResisPC[type].equip_pc)
         {
             if(spell_resi > MAX_SPELL_BONUS)
             {
                 spell_resi = MAX_SPELL_BONUS;
+                if(IS_PC(ch))
+                    mudlog(LOG_PLAYERS, "editResi o equipResi(%d) di %s sono uguali ai massimali e spellResi era maggiore %d quindi spellResi e' %d", type, GET_NAME(ch), MAX_SPELL_BONUS, spell_resi);
             }
         }
         else
         {
-            spell_resi = MAX_RESI_SPELL_PC - MIN((edit_resi + equip_resi), MAX_RESI_EDIT_PC);
+            if(IS_PC(ch))
+                mudlog(LOG_PLAYERS, "spellResi(%d) di %s e' %d, editResi = %d equipResi = %d", type, GET_NAME(ch), edit_resi, equip_resi);
+            spell_resi = MIN(spell_resi, (MaxResisPC[type].spell_pc - MIN((edit_resi + equip_resi), MaxResisPC[type].edit_pc)));
+            
         }
 
-        total_resi = MIN((racial_resi + equip_resi + edit_resi + spell_resi), MAX_RESI_PC);
+        total_resi = MIN((racial_resi + equip_resi + edit_resi + spell_resi), MaxResisPC[type].racial_pc);
     }
     else if(IS_NPC(ch) && IS_AFFECTED(ch, AFF_CHARM))
     {
-        total_resi = MIN((racial_resi + equip_resi + edit_resi + spell_resi), MAX_RESI_PC);
+        total_resi = MIN((racial_resi + equip_resi + edit_resi + spell_resi), MaxResisPC[type].racial_pc);
     }
     else
     {
-        total_resi = MIN((equip_resi + edit_resi + spell_resi), 50);
-        total_resi = MIN((racial_resi + total_resi), MAX_RESI_NPC);
+        if(edit_resi != 100)
+        {
+            total_resi = MIN((equip_resi + edit_resi + spell_resi), 50);
+            total_resi = MIN((racial_resi + total_resi), MAX_RESI_NPC);
+        }
+        else
+        {
+            total_resi = MIN((edit_resi + spell_resi + equip_resi + racial_resi), MAX_RESI_NPC);
+        }
     }
     
     total_resi = MAX(total_resi, MIN_RESI_PC_NPC);
 
+    if(IS_PC(ch) && IS_IMMORTAL(ch))
+    {
+        total_resi = MAX_RESI_NPC;
+    }
+
     return total_resi;
+}
+
+int converti_numero(unsigned long n)
+{
+    sh_int r = -1;
+
+    while(n != 0)
+    {
+        r += 1;
+        n /= 2;
+        
+    }
+
+    return r;
 }
 } // namespace Alarmud

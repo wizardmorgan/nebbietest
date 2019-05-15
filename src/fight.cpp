@@ -4366,7 +4366,7 @@ int BrittleCheck(struct char_data* ch, struct char_data* v, int dam) {
 }
 
 int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
-	unsigned Our_Bit;
+	// unsigned Our_Bit;
     sh_int dam_type;
 
 	/*
@@ -4473,6 +4473,7 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
     case SPELL_UNHOLY_WORD:
     case SPELL_PWORD_KILL:
         dam_type = RESI_HOLY;
+        break;
 
 	default:
 		return(dam);
@@ -4483,7 +4484,7 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
     {
         if(ResiTotal(ch, RESI_SLASH) > 80 && ResiTotal(ch, RESI_PIERCE) > 80 && ResiTotal(ch, RESI_BLUNT) > 80)
         {
-            dam -= int(dam * 20 / 100);
+            dam -= int(dam * 50 / 100);
         }
         else if(ResiTotal(ch, RESI_BLUNT) > 80)
         {

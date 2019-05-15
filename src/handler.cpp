@@ -446,26 +446,44 @@ void affect_modify(struct char_data* ch,byte loc, long mod, long bitv,bool add) 
 	if(loc == APPLY_IMMUNE) {
 		if(add) {
 			SET_BIT(ch->immune, mod);
+            ch->resistenze[EQUIP_RESI][converti_numero(mod)] += 50;
+            if(IS_PC(ch))
+                mudlog(LOG_PLAYERS, "assegno a %s il valore di resistenza(tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
 		}
 		else {
 			REMOVE_BIT(ch->immune, mod);
+            ch->resistenze[EQUIP_RESI][converti_numero(mod)] -= 50;
+            if(IS_PC(ch))
+                mudlog(LOG_PLAYERS, "rimuovo a %s il valore di resistenza(tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
 		}
 	}
 	else if(loc == APPLY_SUSC) {
 		if(add) {
 			SET_BIT(ch->susc, mod);
+            ch->resistenze[EQUIP_RESI][converti_numero(mod)] += -100;
+            if(IS_PC(ch))
+            mudlog(LOG_PLAYERS, "assegno a %s il valore di suscettibilita' (tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
 		}
 		else {
 			REMOVE_BIT(ch->susc, mod);
+            ch->resistenze[EQUIP_RESI][converti_numero(mod)] -= -100;
+            if(IS_PC(ch))
+            mudlog(LOG_PLAYERS, "rimuovo a %s il valore di suscettibilita' (tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
 		}
 
 	}
 	else if(loc == APPLY_M_IMMUNE) {
 		if(add) {
 			SET_BIT(ch->M_immune, mod);
+            ch->resistenze[EQUIP_RESI][converti_numero(mod)] += 100;
+            if(IS_PC(ch))
+            mudlog(LOG_PLAYERS, "assegno a %s il valore di immunita' (tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
 		}
 		else {
 			REMOVE_BIT(ch->M_immune, mod);
+            ch->resistenze[EQUIP_RESI][converti_numero(mod)] -= 100;
+            if(IS_PC(ch))
+            mudlog(LOG_PLAYERS, "rimuovo a %s il valore di immunita' (tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
 		}
 	}
 	else if(loc == APPLY_SPELL) {
@@ -855,6 +873,82 @@ void affect_modify(struct char_data* ch,byte loc, long mod, long bitv,bool add) 
 	case APPLY_T_MOVE:
 	case APPLY_T_MANA:
 		break;
+
+    case APPLY_RESI_FIRE:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_FIRE] += mod;
+        break;
+
+    case APPLY_RESI_COLD:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_COLD] += mod;
+        break;
+
+    case APPLY_RESI_ELEC:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_ELEC] += mod;
+        break;
+
+    case APPLY_RESI_ENERGY:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_ENERGY] += mod;
+        break;
+
+    case APPLY_RESI_BLUNT:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_BLUNT] += mod;
+        break;
+
+    case APPLY_RESI_PIERCE:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PIERCE] += mod;
+        break;
+
+    case APPLY_RESI_SLASH:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_SLASH] += mod;
+        break;
+
+    case APPLY_RESI_ACID:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_ACID] += mod;
+        break;
+
+    case APPLY_RESI_POISON:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_POISON] += mod;
+        break;
+
+    case APPLY_RESI_DRAIN:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_DRAIN] += mod;
+        break;
+
+    case APPLY_RESI_SLEEP:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_SLEEP] += mod;
+        break;
+
+    case APPLY_RESI_CHARM:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_CHARM] += mod;
+        break;
+
+    case APPLY_RESI_HOLD:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_HOLD] += mod;
+        break;
+
+    case APPLY_RESI_NONMAG:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_NONMAG] += mod;
+        break;
+
+    case APPLY_RESI_PLUS1:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PLUS1] += mod;
+        break;
+
+    case APPLY_RESI_PLUS2:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PLUS2] += mod;
+        break;
+
+    case APPLY_RESI_PLUS3:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PLUS3] += mod;
+        break;
+
+    case APPLY_RESI_PLUS4:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PLUS4] += mod;
+        break;
+
+    case APPLY_RESI_HOLY:
+        ch->resistenze[(EQUIP_RESI + bitv)][RESI_HOLY] += mod;
+        break;
 
 	default:
 

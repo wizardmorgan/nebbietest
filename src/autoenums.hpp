@@ -419,11 +419,30 @@ modifiers to char's abilities*/
 	APPLY_T_HPS                                  =62,
 	APPLY_T_MOVE                                 =63,
 	APPLY_T_MANA                                 =64,
-	APPLY_SKIP                                   =65 /*Non viene toccato il bitvector*/
+	APPLY_SKIP                                   =65, /*Non viene toccato il bitvector*/
+	APPLY_RESI_FIRE                              =66,
+	APPLY_RESI_COLD                              =67,
+	APPLY_RESI_ELEC                              =68,
+	APPLY_RESI_ENERGY                            =69,
+	APPLY_RESI_BLUNT                             =70,
+	APPLY_RESI_PIERCE                            =71,
+	APPLY_RESI_SLASH                             =72,
+	APPLY_RESI_ACID                              =73,
+	APPLY_RESI_POISON                            =74,
+	APPLY_RESI_DRAIN                             =75,
+	APPLY_RESI_SLEEP                             =76,
+	APPLY_RESI_CHARM                             =77,
+	APPLY_RESI_HOLD                              =78,
+	APPLY_RESI_NONMAG                            =79,
+	APPLY_RESI_PLUS1                             =80,
+	APPLY_RESI_PLUS2                             =81,
+	APPLY_RESI_PLUS3                             =82,
+	APPLY_RESI_PLUS4                             =83,
+	APPLY_RESI_HOLY                              =84
 };
-#define E_APPLY_COUNT 66
+#define E_APPLY_COUNT 85
 #define E_APPLY_MIN 0
-#define E_APPLY_MAX 65
+#define E_APPLY_MAX 84
 #define E_APPLY_KEY "e_apply"
 
 #define E_APPLY_ACCEPT_ZERO true
@@ -1115,6 +1134,35 @@ enum e_wear {
 #define	SKILL_UNDEFINED                              2 
 #define	SKILL_UNDEFINED2                             4 
 #define	ABS_MAX_LVL                                  70 
+#define	RACIAL_RESI                                  0 
+#define	EQUIP_RESI                                   1 
+#define	EDIT_RESI                                    2 
+#define	SPELL_RESI                                   3 
+#define	RESI_FIRE                                    0 
+#define	RESI_COLD                                    1 
+#define	RESI_ELEC                                    2 
+#define	RESI_ENERGY                                  3 
+#define	RESI_BLUNT                                   4 
+#define	RESI_PIERCE                                  5 
+#define	RESI_SLASH                                   6 
+#define	RESI_ACID                                    7 
+#define	RESI_POISON                                  8 
+#define	RESI_DRAIN                                   9 
+#define	RESI_SLEEP                                   10 
+#define	RESI_CHARM                                   11 
+#define	RESI_HOLD                                    12 
+#define	RESI_NONMAG                                  13 
+#define	RESI_PLUS1                                   14 
+#define	RESI_PLUS2                                   15 
+#define	RESI_PLUS3                                   16 
+#define	RESI_PLUS4                                   17 
+#define	RESI_HOLY                                    18 
+#define	RESI_UNUSED1                                 19 
+#define	RESI_UNUSED2                                 20 
+#define	RESI_UNUSED3                                 21 
+#define	RESI_UNUSED4                                 22 
+#define	RESI_UNUSED5                                 23 
+#define	RESI_UNUSED6                                 24 
 #define	MAX_CLASS_ACHIE                              34 
 #define	MAX_BOSS_ACHIE                               21 
 #define	MAX_QUEST_ACHIE                              1 

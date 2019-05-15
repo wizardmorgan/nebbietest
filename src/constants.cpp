@@ -2907,6 +2907,25 @@ const char* apply_types[] = {
 	"T_HPS",
 	"T_MOVE",
 	"T_MANA",
+    "RESI-FIRE",
+    "RESI-COLD",
+    "RESI-ELEC",
+    "RESI-ENERGY",
+    "RESI-BLUNT",
+    "RESI-PIERCE",
+    "RESI-SLASH",
+    "RESI-ACID",
+    "RESI-POISON",
+    "RESI-DRAIN",
+    "RESI-SLEEP",
+    "RESI-CHARM",
+    "RESI-HOLD",
+    "RESI-NONMAG",
+    "RESI-PLUS1",
+    "RESI-PLUS2",
+    "RESI-PLUS3",
+    "RESI-PLUS4",
+    "RESI-HOLY",
 	"\n"
 };
 
@@ -7928,6 +7947,35 @@ struct ClassAchieTable AchievementsList[MAX_ACHIE_CLASSES][MAX_ACHIE_TYPE] = {
             0,                                                      LEV_BEGINNER,                               3
         }
     }
+};
+
+struct TableReistPC MaxResisPC[25] =
+{//     racial_pc   equip_pc    edit_pc     superEdit   spell_pc
+    {   80,         50,         50,         10,         50      },  //  RESI_FIRE
+    {   80,         50,         50,         10,         50      },  //  RESI_COLD
+    {   80,         50,         50,         10,         50      },  //  RESI_ELEC
+    {   80,         50,         50,         10,         50      },  //  RESI_ENERGY
+    {   50,         50,         50,         0,          50      },  //  RESI_BLUNT
+    {   50,         50,         50,         0,          50      },  //  RESI_PIERCE
+    {   50,         50,         50,         0,          50      },  //  RESI_SLASH
+    {   80,         50,         50,         10,         50      },  //  RESI_ACID
+    {   100,        100,        100,        0,          50      },  //  RESI_POISON
+    {   100,        100,        100,        0,          50      },  //  RESI_DRAIN
+    {   100,        50,         50,         0,          50      },  //  RESI_SLEEP
+    {   100,        100,        100,        0,          50      },  //  RESI_CHARM
+    {   80,         50,         50,         30,         50      },  //  RESI_HOLD
+    {   0,          0,          0,          0,          0       },  //  RESI_NONMAG
+    {   0,          0,          0,          0,          0       },  //  RESI_PLUS1
+    {   0,          0,          0,          0,          0       },  //  RESI_PLUS2
+    {   0,          0,          0,          0,          0       },  //  RESI_PLUS3
+    {   0,          0,          0,          0,          0       },  //  RESI_PLUS4
+    {   80,         50,         50,         10,         50      },  //  RESI_HOLY
+    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED1
+    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED2
+    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED3
+    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED4
+    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED5
+    {   0,          0,          0,          0,          0       }   //  RESI_UNUSED6
 };
 } // namespace Alarmud
 

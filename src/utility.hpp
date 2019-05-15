@@ -17,6 +17,7 @@ int SaveZoneFile(FILE* fp, int start_room, int end_room) ;
 void mail_to_god(struct char_data* ch, const char* god, const char* message);
 
 int ResiTotal(char_data* ch, int type);
+int converti_numero(unsigned long n);
 
     // Achievements stuff
 char* spamAchie(struct char_data* ch, const char *titolo, int valore, const char *stringa);

@@ -69,6 +69,25 @@
 ** APPLY_T_MOVE                                 =63
 ** APPLY_T_MANA                                 =64
 ** APPLY_SKIP                                   =65Non viene toccato il bitvector
+** APPLY_RESI_FIRE                              =66
+** APPLY_RESI_COLD                              =67
+** APPLY_RESI_ELEC                              =68
+** APPLY_RESI_ENERGY                            =69
+** APPLY_RESI_BLUNT                             =70
+** APPLY_RESI_PIERCE                            =71
+** APPLY_RESI_SLASH                             =72
+** APPLY_RESI_ACID                              =73
+** APPLY_RESI_POISON                            =74
+** APPLY_RESI_DRAIN                             =75
+** APPLY_RESI_SLEEP                             =76
+** APPLY_RESI_CHARM                             =77
+** APPLY_RESI_HOLD                              =78
+** APPLY_RESI_NONMAG                            =79
+** APPLY_RESI_PLUS1                             =80
+** APPLY_RESI_PLUS2                             =81
+** APPLY_RESI_PLUS3                             =82
+** APPLY_RESI_PLUS4                             =83
+** APPLY_RESI_HOLY                              =84
 == Enumerations ==
 
 === enum e_class_index ===
@@ -604,6 +623,35 @@ l'array connected_types in constants.cpp
 **SKILL_UNDEFINED                              2 
 **SKILL_UNDEFINED2                             4 
 **ABS_MAX_LVL                                  70 
+**RACIAL_RESI                                  0 
+**EQUIP_RESI                                   1 
+**EDIT_RESI                                    2 
+**SPELL_RESI                                   3 
+**RESI_FIRE                                    0 
+**RESI_COLD                                    1 
+**RESI_ELEC                                    2 
+**RESI_ENERGY                                  3 
+**RESI_BLUNT                                   4 
+**RESI_PIERCE                                  5 
+**RESI_SLASH                                   6 
+**RESI_ACID                                    7 
+**RESI_POISON                                  8 
+**RESI_DRAIN                                   9 
+**RESI_SLEEP                                   10 
+**RESI_CHARM                                   11 
+**RESI_HOLD                                    12 
+**RESI_NONMAG                                  13 
+**RESI_PLUS1                                   14 
+**RESI_PLUS2                                   15 
+**RESI_PLUS3                                   16 
+**RESI_PLUS4                                   17 
+**RESI_HOLY                                    18 
+**RESI_UNUSED1                                 19 
+**RESI_UNUSED2                                 20 
+**RESI_UNUSED3                                 21 
+**RESI_UNUSED4                                 22 
+**RESI_UNUSED5                                 23 
+**RESI_UNUSED6                                 24 
 **MAX_CLASS_ACHIE                              34 
 **MAX_BOSS_ACHIE                               21 
 **MAX_QUEST_ACHIE                              1 

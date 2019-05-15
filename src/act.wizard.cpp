@@ -1669,13 +1669,13 @@ ACTION_FUNC(do_stat) {
                 if(IS_PC(k))
                 {
                     send_to_char("$c0005Resistance (edit):\n\r", ch);
-                    sprintf(buf, " $c0005Fire: $c0014%d$c0005($c0014%d$c0005) Cold: $c0014%d$c0005($c0014%d$c0005) Elec: $c0014%d$c0005($c0014%d$c0005) Acid: $c0014%d$c0005($c0014%d$c0005) Energy: $c0014%d$c0005($c0014%d$c0005)\n\r", ResiTotal(k, RESI_FIRE), EDIT_RESI(k, RESI_FIRE), ResiTotal(k, RESI_COLD), EDIT_RESI(k, RESI_COLD), ResiTotal(k, RESI_ELEC), EDIT_RESI(k, RESI_ELEC), ResiTotal(k, RESI_ACID), EDIT_RESI(k, RESI_ACID), ResiTotal(k, RESI_ENERGY), EDIT_RESI(k, RESI_ENERGY));
+                    sprintf(buf, " $c0005Fire: $c0014%d$c0005($c0014%d$c0005) Cold: $c0014%d$c0005($c0014%d$c0005) Elec: $c0014%d$c0005($c0014%d$c0005) Acid: $c0014%d$c0005($c0014%d$c0005) Energy: $c0014%d$c0005($c0014%d$c0005)\n\r", ResiTotal(k, RESI_FIRE), EDITED_RESI(k, RESI_FIRE), ResiTotal(k, RESI_COLD), EDITED_RESI(k, RESI_COLD), ResiTotal(k, RESI_ELEC), EDITED_RESI(k, RESI_ELEC), ResiTotal(k, RESI_ACID), EDITED_RESI(k, RESI_ACID), ResiTotal(k, RESI_ENERGY), EDITED_RESI(k, RESI_ENERGY));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005Poison: $c0014%d$c0005($c0014%d$c0005) Drain: $c0014%d$c0005($c0014%d$c0005) Sleep: $c0014%d$c0005($c0014%d$c0005) Charm: $c0014%d$c0005($c0014%d$c0005) Hold: $c0014%d$c0005($c0014%d$c0005)\n\r", ResiTotal(k, RESI_POISON), EDIT_RESI(k, RESI_POISON), ResiTotal(k, RESI_DRAIN), EDIT_RESI(k, RESI_DRAIN), ResiTotal(k, RESI_SLEEP), EDIT_RESI(k, RESI_SLEEP), ResiTotal(k, RESI_CHARM), EDIT_RESI(k, RESI_CHARM), ResiTotal(k, RESI_HOLD), EDIT_RESI(k, RESI_HOLD));
+                    sprintf(buf, " $c0005Poison: $c0014%d$c0005($c0014%d$c0005) Drain: $c0014%d$c0005($c0014%d$c0005) Sleep: $c0014%d$c0005($c0014%d$c0005) Charm: $c0014%d$c0005($c0014%d$c0005) Hold: $c0014%d$c0005($c0014%d$c0005)\n\r", ResiTotal(k, RESI_POISON), EDITED_RESI(k, RESI_POISON), ResiTotal(k, RESI_DRAIN), EDITED_RESI(k, RESI_DRAIN), ResiTotal(k, RESI_SLEEP), EDITED_RESI(k, RESI_SLEEP), ResiTotal(k, RESI_CHARM), EDITED_RESI(k, RESI_CHARM), ResiTotal(k, RESI_HOLD), EDITED_RESI(k, RESI_HOLD));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005NonMag: $c0014%d$c0005($c0014%d$c0005) +1: $c0014%d$c0005($c0014%d$c0005) +2: $c0014%d$c0005($c0014%d$c0005) +3: $c0014%d$c0005($c0014%d$c0005) +4: $c0014%d$c0005($c0014%d$c0005) \n\r", ResiTotal(k, RESI_NONMAG), EDIT_RESI(k, RESI_NONMAG), ResiTotal(k, RESI_PLUS1), EDIT_RESI(k, RESI_PLUS1), ResiTotal(k, RESI_PLUS2), EDIT_RESI(k, RESI_PLUS2), ResiTotal(k, RESI_PLUS3), EDIT_RESI(k, RESI_PLUS3), ResiTotal(k, RESI_PLUS4), EDIT_RESI(k, RESI_PLUS4));
+                    sprintf(buf, " $c0005NonMag: $c0014%d$c0005($c0014%d$c0005) +1: $c0014%d$c0005($c0014%d$c0005) +2: $c0014%d$c0005($c0014%d$c0005) +3: $c0014%d$c0005($c0014%d$c0005) +4: $c0014%d$c0005($c0014%d$c0005) \n\r", ResiTotal(k, RESI_NONMAG), EDITED_RESI(k, RESI_NONMAG), ResiTotal(k, RESI_PLUS1), EDITED_RESI(k, RESI_PLUS1), ResiTotal(k, RESI_PLUS2), EDITED_RESI(k, RESI_PLUS2), ResiTotal(k, RESI_PLUS3), EDITED_RESI(k, RESI_PLUS3), ResiTotal(k, RESI_PLUS4), EDITED_RESI(k, RESI_PLUS4));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005Blunt: $c0014%d$c0005($c0014%d$c0005) Pierce: $c0014%d$c0005($c0014%d$c0005) Slash: $c0014%d$c0005($c0014%d$c0005) Holy: $c0014%d$c0005($c0014%d$c0005)\n\r", ResiTotal(k, RESI_BLUNT), EDIT_RESI(k, RESI_BLUNT), ResiTotal(k, RESI_PIERCE), EDIT_RESI(k, RESI_PIERCE), ResiTotal(k, RESI_SLASH), EDIT_RESI(k, RESI_SLASH), ResiTotal(k, RESI_HOLY), EDIT_RESI(k, RESI_HOLY));
+                    sprintf(buf, " $c0005Blunt: $c0014%d$c0005($c0014%d$c0005) Pierce: $c0014%d$c0005($c0014%d$c0005) Slash: $c0014%d$c0005($c0014%d$c0005) Holy: $c0014%d$c0005($c0014%d$c0005)\n\r", ResiTotal(k, RESI_BLUNT), EDITED_RESI(k, RESI_BLUNT), ResiTotal(k, RESI_PIERCE), EDITED_RESI(k, RESI_PIERCE), ResiTotal(k, RESI_SLASH), EDITED_RESI(k, RESI_SLASH), ResiTotal(k, RESI_HOLY), EDITED_RESI(k, RESI_HOLY));
                     send_to_char(buf, ch);
                 }
                 else
@@ -1691,7 +1691,7 @@ ACTION_FUNC(do_stat) {
                     send_to_char(buf, ch);
                 }
                 
-				/* immunities
+				/* immunities */
 				if(k->M_immune) {
 					send_to_char("$c0005Immune to: $c0014", ch);
 					sprintbit(k->M_immune, immunity_names, buf);
@@ -1700,7 +1700,7 @@ ACTION_FUNC(do_stat) {
 				}
 
                 
-				* resistances *
+				/* resistances */
 				if(k->immune) {
 					send_to_char("$c0005Resistant to: $c0014", ch);
 					sprintbit(k->immune, immunity_names, buf);
@@ -1708,13 +1708,13 @@ ACTION_FUNC(do_stat) {
 					send_to_char(buf, ch);
 				}
 
-				* Susceptible *
+				/* Susceptible */
 				if(k->susc) {
 					send_to_char("$c0005Susceptible to: $c0014", ch);
 					sprintbit(k->susc, immunity_names, buf);
 					strcat(buf, "\n\r");
 					send_to_char(buf, ch);
-				} */
+				}
 
 				if(k->player.user_flags) {
 					send_to_char("$c0005SPECIAL FLAGS: $c0014", ch);

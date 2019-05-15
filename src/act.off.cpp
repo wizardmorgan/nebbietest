@@ -2086,7 +2086,8 @@ ACTION_FUNC(do_quivering_palm) {
 
 
 void kick_messages(struct char_data* ch, struct char_data* victim, int damage) {
-	int i, dummy, result, classe = CLASS_WARRIOR;
+	// int i, dummy, result, classe = CLASS_WARRIOR;
+    int i;
     char buf[MAX_STRING_LENGTH];
 
 	switch(GET_RACE(victim)) {
@@ -2193,7 +2194,7 @@ void kick_messages(struct char_data* ch, struct char_data* victim, int damage) {
 		i=18;
 	};
 
-    WEARING_N(ch,dummy,result);
+ /*   WEARING_N(ch,dummy,result);
     if(HasClass(ch, CLASS_MONK) &&
        !((ch->equipment[WIELD]) &&
          (ch->equipment[WIELD]->obj_flags.type_flag == ITEM_WEAPON)
@@ -2209,7 +2210,7 @@ void kick_messages(struct char_data* ch, struct char_data* victim, int damage) {
     else if(HasClass(ch, CLASS_BARBARIAN))
     {
         classe=CLASS_BARBARIAN;
-    }
+    } */
 
     damage -= int(damage * ResiTotal(victim, RESI_BLUNT) / 100);
 /*    if(classe != CLASS_MONK)

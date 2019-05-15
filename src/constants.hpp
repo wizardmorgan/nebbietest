@@ -170,6 +170,8 @@ extern struct ObjBonusTable AchieBonus[MAX_CLASS][12];
 extern struct MobQuestAchie QuestMobAchie[MAX_QUEST_ACHIE];
 extern struct ClassAchieTable AchievementsList[MAX_ACHIE_CLASSES][MAX_ACHIE_TYPE];
 
+extern struct TableReistPC MaxResisPC[25];
+
 extern const char* QuestKind[];
     
 extern const char* NameGenStart[];
