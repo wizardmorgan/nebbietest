@@ -4479,7 +4479,22 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 		break;
 	}
 
-    dam -= int(dam * ch->resistenza[dam_type] / 100);
+    if(classe == CLASS_MONK && (dam_type == RESI_SLASH || dam_type == RESI_PIERCE || dam_type == RESI_BLUNT))
+    {
+        if(ResiTotal(ch, RESI_SLASH) > 80 && ResiTotal(ch, RESI_PIERCE) > 80 && ResiTotal(ch, RESI_BLUNT) > 80)
+        {
+            dam -= int(dam * 20 / 100);
+        }
+        else if(ResiTotal(ch, RESI_BLUNT) > 80)
+        {
+            dam -= int(dam * 50 / 100);
+        }
+    }
+    else
+    {
+        dam -= int(dam * ResiTotal(ch, dam_type) / 100);
+    }
+
 /*	if(classe !=CLASS_MONK) {
 		if(IS_SET(ch->susc, Our_Bit)) {
 			dam <<= 1;

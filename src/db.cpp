@@ -1588,7 +1588,7 @@ void boot_zones() {
 
 /* read a mobile from MOB_FILE */
 struct char_data* read_mobile(int nr, int type) {
-	int i;
+	int i, j;
 	long tmp, tmp2, tmp3, bc = 0;
 	struct char_data* mob;
 	char letter;
@@ -1717,18 +1717,47 @@ struct char_data* read_mobile(int nr, int type) {
 			mob->immune = 0;
 			mob->M_immune = 0;
 			mob->susc = 0;
+            for(i = 0; i < 4; i++)
+            {
+                for(j = 0; j < 25; j++)
+                {
+                    mob->resistenze[i][j] = 0;
+                }
+            }
 		}
 		else if(tmp < 6) {
 			mob->player.sex = tmp - 3;
 			mob->immune = fread_number(mob_f);
 			mob->M_immune = fread_number(mob_f);
 			mob->susc = fread_number(mob_f);
+            for(j = 0; j < RESI_UNUSED1; j++)
+            {
+                if(IS_SET(mob->immune, 1 << j))
+                {
+                    mob->resistenze[EDIT_RESI][j] = 50;
+                }
+                if(IS_SET(mob->M_immune, 1 << j))
+                {
+                    mob->resistenze[EDIT_RESI][j] = 100;
+                }
+                if(IS_SET(mob->susc, 1 << j))
+                {
+                    mob->resistenze[EDIT_RESI][j] = -100;
+                }
+            }
 		}
 		else {
 			mob->player.sex = 0;
 			mob->immune = 0;
 			mob->M_immune = 0;
 			mob->susc = 0;
+            for(i = 0; i < 4; i++)
+            {
+                for(j = 0; j < 25; j++)
+                {
+                    mob->resistenze[i][j] = 0;
+                }
+            }
 		}
 
 		fscanf(mob_f, "\n");
@@ -1834,18 +1863,47 @@ struct char_data* read_mobile(int nr, int type) {
 			mob->immune = 0;
 			mob->M_immune = 0;
 			mob->susc = 0;
+            for(i = 0; i < 4; i++)
+            {
+                for(j = 0; j < 25; j++)
+                {
+                    mob->resistenze[i][j] = 0;
+                }
+            }
 		}
 		else if(tmp < 6) {
 			mob->player.sex = tmp - 3;
 			mob->immune = fread_number(mob_f);
 			mob->M_immune = fread_number(mob_f);
 			mob->susc = fread_number(mob_f);
+            for(j = 0; j < RESI_UNUSED1; j++)
+            {
+                if(IS_SET(mob->immune, 1 << j))
+                {
+                    mob->resistenze[EDIT_RESI][j] = 50;
+                }
+                if(IS_SET(mob->M_immune, 1 << j))
+                {
+                    mob->resistenze[EDIT_RESI][j] = 100;
+                }
+                if(IS_SET(mob->susc, 1 << j))
+                {
+                    mob->resistenze[EDIT_RESI][j] = -100;
+                }
+            }
 		}
 		else {
 			mob->player.sex = 0;
 			mob->immune = 0;
 			mob->M_immune = 0;
 			mob->susc = 0;
+            for(i = 0; i < 4; i++)
+            {
+                for(j = 0; j < 25; j++)
+                {
+                    mob->resistenze[i][j] = 0;
+                }
+            }
 		}
 
 		/* read in the sound string for a mobile */
@@ -3731,7 +3789,7 @@ void ClearDeadBit(struct char_data* ch) {
 /* clear some of the the working variables of a char */
 void reset_char(struct char_data* ch) {
 	double ratio = 0.0;
-	int i;
+	int i, j;
 	double absmaxhp;
 	mudlog(LOG_SAVE, "Resetting char %s", GET_NAME(ch));
 	for(i = 0; i < MAX_WEAR; i++) {  /* Initializing */
@@ -3747,6 +3805,15 @@ void reset_char(struct char_data* ch) {
 	ch->M_immune = 0;
 	ch->susc = 0;
 	ch->mult_att = 1.0;
+
+    // reset resistenze
+    for(i = 0; i < 4; i++)
+    {
+        for(j = 0; j < 25; j++)
+        {
+            ch->resistenze[i][j] = 0;
+        }
+    }
 
 	if(!GET_RACE(ch)) {
 		GET_RACE(ch) = RACE_HUMAN;

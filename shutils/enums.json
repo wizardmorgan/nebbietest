@@ -108,6 +108,22 @@
 			"value": 70,
 			"comment": ""
 		},
+        "RACIAL_RESI": {
+            "value": 0,
+            "comment": ""
+        },
+        "EQUIP_RESI": {
+            "value": 1,
+            "comment": ""
+        },
+        "EDIT_RESI": {
+            "value": 2,
+            "comment": ""
+        },
+        "SPELL_RESI": {
+            "value": 3,
+            "comment": ""
+        },
         "MAX_CLASS_ACHIE": {
             "value": 34,
             "comment": "Achievements stuffs"
@@ -3525,7 +3541,11 @@
 			"IMM_PLUS4": {
 				"value": 131072,
 				"comment": ""
-			}
+            },
+            "IMM_HOLY": {
+                "value": 262144,
+                "comment": ""
+            },
 		},
 		"e_hate_type": {
 			"comment": "",
@@ -3888,32 +3908,52 @@
                 "value": 12,
                 "comment": ""
             },
-            "RESI_HOLY": {
+            "RESI_NONMAG": {
                 "value": 13,
                 "comment": ""
             },
-            "RESI_UNUSED1": {
+            "RESI_PLUS1": {
                 "value": 14,
                 "comment": ""
             },
-            "RESI_UNUSED2": {
+            "RESI_PLUS2": {
                 "value": 15,
                 "comment": ""
             },
-            "RESI_UNUSED3": {
+            "RESI_PLUS3": {
                 "value": 16,
                 "comment": ""
             },
-            "RESI_UNUSED4": {
+            "RESI_PLUS4": {
                 "value": 17,
                 "comment": ""
             },
-            "RESI_UNUSED5": {
+            "RESI_HOLY": {
                 "value": 18,
                 "comment": ""
             },
-            "RESI_UNUSED6": {
+            "RESI_UNUSED1": {
                 "value": 19,
+                "comment": ""
+            },
+            "RESI_UNUSED2": {
+                "value": 20,
+                "comment": ""
+            },
+            "RESI_UNUSED3": {
+                "value": 21,
+                "comment": ""
+            },
+            "RESI_UNUSED4": {
+                "value": 22,
+                "comment": ""
+            },
+            "RESI_UNUSED5": {
+                "value": 23,
+                "comment": ""
+            },
+            "RESI_UNUSED6": {
+                "value": 24,
                 "comment": ""
             }
         }

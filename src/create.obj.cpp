@@ -1188,7 +1188,7 @@ void ChangeObjAffect(struct char_data* ch, const char* arg, int type) {
             if(ch->term == VT100)
             {
                 row = 0;
-                for(i = 0; i < 18; i++)
+                for(i = 0; i < 19; i++)
                 {
                     sprintf(buf, VT_CURSPOS, row + 4, ((i & 1) ? 45 : 5));
                     if(i & 1)
@@ -1215,7 +1215,7 @@ void ChangeObjAffect(struct char_data* ch, const char* arg, int type) {
                 char buf2[255];
                 int x = 0;
 
-                for(i = 0; i < 18; i++)
+                for(i = 0; i < 19; i++)
                 {
                     check=1;
                     sprintf(buf2, "%s", "%-");

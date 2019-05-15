@@ -9475,64 +9475,65 @@ char RemColorString(char * buffer)
     return *buffer;
 }
 
-#define MAX_RESI_PC      50
-#define MAX_RESI_NPC    100
+#define MAX_RESI_PC         80
+#define MAX_RESI_EDIT_PC    50
+#define MAX_SUPER_EDIT_PC   10
+#define MAX_RESI_EQUIP_PC   50
+#define MAX_RESI_SPELL_PC   50
+#define MAX_SPELL_BONUS     5
+#define MAX_RESI_RACIAL_PC  80
+#define MAX_RESI_NPC        100
+#define MIN_RESI_PC_NPC    -100
+
 int ResiTotal(char_data* ch, int type)
 {
-    int max = 0;
+    int total_resi, racial_resi, equip_resi, edit_resi, spell_resi;
 
-    if(ch->resistenze[EDIT_RESI][type] > 50)
-    {
-        max = ch->resistenze[EDIT_RESI][type];
-        if(max > MAX_EDIT_RESI)
-        {
-            if(IS_NPC(ch))
-            {
-                if(max > MAX_RESI_NPC)
-                {
-                    max = MAX_RESI_NPC;
-                }
-            }
-            else
-            {
-                max = MAX_EDIT_RESI;
-            }
-        }
-    }
-    else
-    {
-        max += ch->resistenze[EDIT_RESI][type] + ch->resistenze[EQUIP_RESI][type];
-        if(IS_PC(ch) && max > MAX_RESI_PC)
-        {
-            max = MAX_RESI_PC;
-        }
-    }
+    racial_resi = MIN(ch->resistenze[RACIAL_RESI][type], (IS_PC(ch) ? MAX_RESI_RACIAL_PC : MAX_RESI_NPC));
+    equip_resi  = MIN(ch->resistenze[EQUIP_RESI][type], MAX_RESI_EQUIP_PC);
+    edit_resi   = MIN(ch->resistenze[EDIT_RESI][type], (MAX_RESI_EDIT_PC + MAX_SUPER_EDIT_PC));
+    spell_resi  = MIN(ch->resistenze[SPELL_RESI][type], MAX_RESI_SPELL_PC);
 
     if(IS_PC(ch))
     {
-        max += ch->resistenze[RACIAL_RESI][type];
-
-        if(IS_PC(ch))
+        if(edit_resi > MAX_RESI_EDIT_PC)
         {
-            if(ch->resistenze[EDIT_RESI][type] > 50)
+            equip_resi = 0;
+        }
+        else if(edit_resi <= MAX_RESI_EDIT_PC)
+        {
+            if((equip_resi + edit_resi) >= MAX_RESI_EDIT_PC)
             {
-                if(max > 80)
-                {
-                    max = MAX_EDIT_RESI + 20;
-                }
-            }
-            else
-            {
-                if(max > 70)
-                {
-                    max = MAX_RESI_PC + 20;
-                }
+                equip_resi = MAX_RESI_EDIT_PC - edit_resi;
             }
         }
-    }
 
-    if(ch->resistenze[EDIT_RESI][type])
+        if(edit_resi >= MAX_RESI_EDIT_PC || equip_resi == MAX_RESI_EQUIP_PC)
+        {
+            if(spell_resi > MAX_SPELL_BONUS)
+            {
+                spell_resi = MAX_SPELL_BONUS;
+            }
+        }
+        else
+        {
+            spell_resi = MAX_RESI_SPELL_PC - MIN((edit_resi + equip_resi), MAX_RESI_EDIT_PC);
+        }
+
+        total_resi = MIN((racial_resi + equip_resi + edit_resi + spell_resi), MAX_RESI_PC);
+    }
+    else if(IS_NPC(ch) && IS_AFFECTED(ch, AFF_CHARM))
+    {
+        total_resi = MIN((racial_resi + equip_resi + edit_resi + spell_resi), MAX_RESI_PC);
+    }
+    else
+    {
+        total_resi = MIN((equip_resi + edit_resi + spell_resi), 50);
+        total_resi = MIN((racial_resi + total_resi), MAX_RESI_NPC);
+    }
     
-        
+    total_resi = MAX(total_resi, MIN_RESI_PC_NPC);
+
+    return total_resi;
 }
 } // namespace Alarmud

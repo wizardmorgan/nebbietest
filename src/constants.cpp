@@ -2837,6 +2837,7 @@ const char* immunity_names[] = {
 	"+2",
 	"+3",
 	"+4",
+    "HOLY",
 	"\n"
 };
 
