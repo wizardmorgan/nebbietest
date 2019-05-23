@@ -32,6 +32,10 @@
 
 namespace Alarmud {
 
+#define PROT_MOD(ch)    if(!IS_PC(ch) || (IS_PC(ch) && IS_IMMORTALE(ch)))   {af.modifier  = 50;}            \
+                        else if(OnlyClass(ch, CLASS_CLERIC))                                                \
+                             {af.modifier  = 35 + static_cast<int>(level / 5) + (IS_PRINCE(ch) ? 1 : 0);}   \
+                        else {af.modifier  = 25 + static_cast<int>(level / 5) + (IS_PRINCE(ch) ? 1 : 0);}
 
 /*
  * cleric spells
@@ -2602,10 +2606,10 @@ void spell_prot_energy_drain(byte level, struct char_data* ch,
 		send_to_char("Evochi uno $c0014scudo$c0007 protettivo contro i $c0008Non-Morti$c0007.\n\r", ch);
         act("$n evoca uno $c0014scudo$c0007 protettivo contro i $c0008Non-Morti$c0007.", TRUE, ch, 0, 0, TO_ROOM);
 		af.type      = SPELL_PROT_ENERGY_DRAIN;
-		af.duration  = level >= LOW_IMMORTAL ? level: 3;
-		af.modifier  = IMM_DRAIN;
-		af.location  = APPLY_IMMUNE;
-		af.bitvector = 0;
+        PROT_MOD(ch);
+        af.location  = APPLY_RESI_DRAIN;
+        af.bitvector = 0;
+        af.duration  = level >= LOW_IMMORTAL ? level: 3;
 		affect_to_char(ch, &af);
 	}
 	else {
@@ -2672,10 +2676,10 @@ void spell_prot_fire(byte level, struct char_data* ch,
 		}
 
 		af.type      = SPELL_PROT_FIRE;
-		af.modifier  = IMM_FIRE;
-		af.location  = APPLY_IMMUNE; /* res to fire */
-		af.bitvector = 0;
-		af.duration  = (int)level/10;
+        PROT_MOD(ch);
+        af.location  = APPLY_RESI_FIRE;
+        af.bitvector = 0;
+        af.duration  = (int)level/10;
 		affect_to_char(victim, &af);
 	}
 	else {
@@ -2710,10 +2714,10 @@ void spell_prot_cold(byte level, struct char_data* ch,
 		}
 
 		af.type      = SPELL_PROT_COLD;
-		af.modifier  = IMM_COLD;
-		af.location  = APPLY_IMMUNE; /* res to fire */
-		af.bitvector = 0;
-		af.duration  = (int)level/10;
+        PROT_MOD(ch);
+        af.location  = APPLY_RESI_COLD;
+        af.bitvector = 0;
+        af.duration  = (int)level/10;
 		affect_to_char(victim, &af);
 	}
 	else {
@@ -2747,12 +2751,12 @@ void spell_prot_energy(byte level, struct char_data* ch,
 			act("Evochi attorno a te uno $c0011scudo$c0007 di protezione dall'$c0011energia$c0007.", FALSE, ch, 0, victim, TO_CHAR);
 		}
 
-		af.type      = SPELL_PROT_ENERGY;
-		af.modifier  = IMM_ENERGY;
-		af.location  = APPLY_IMMUNE; /* res to fire */
-		af.bitvector = 0;
-		af.duration  = (int)level/10;
-		affect_to_char(victim, &af);
+        af.type      = SPELL_PROT_ENERGY;
+        PROT_MOD(ch);
+        af.location  = APPLY_RESI_ENERGY;
+        af.bitvector = 0;
+        af.duration  = (int)level/10;
+        affect_to_char(victim, &af);
 	}
 	else {
 		if(ch != victim) {
@@ -2786,10 +2790,10 @@ void spell_prot_elec(byte level, struct char_data* ch,
 		}
 
 		af.type      = SPELL_PROT_ELEC;
-		af.modifier  = IMM_ELEC;
-		af.location  = APPLY_IMMUNE; /* res */
-		af.bitvector = 0;
-		af.duration  = (int)level/10;
+        PROT_MOD(ch);
+        af.location  = APPLY_RESI_ELEC;
+        af.bitvector = 0;
+        af.duration  = (int)level/10;
 		affect_to_char(victim, &af);
 	}
 	else {

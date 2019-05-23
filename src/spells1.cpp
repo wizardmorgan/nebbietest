@@ -215,7 +215,16 @@ void cast_harm(byte level, struct char_data* ch,const char* arg, int type,
 			   struct char_data* victim, struct obj_data* tar_obj) {
 	switch(type) {
 	case SPELL_TYPE_SPELL:
-		spell_harm(level, ch, victim, 0);
+        {
+            if(IsUndead(victim) && !IS_PC(victim))
+            {
+                spell_heal(level, ch, victim, 0);
+            }
+            else
+            {
+                spell_harm(level, ch, victim, 0);
+            }
+        }
 		break;
 	case SPELL_TYPE_POTION:
 		spell_harm(level, ch, ch, 0);
@@ -224,7 +233,16 @@ void cast_harm(byte level, struct char_data* ch,const char* arg, int type,
 		for(victim = real_roomp(ch->in_room)->people ;
 				victim ; victim = victim->next_in_room)
 			if(!in_group(ch,victim)) {
-				spell_harm(level, ch, victim, 0);
+                {
+                    if(IsUndead(victim) && !IS_PC(victim))
+                    {
+                        spell_heal(level, ch, victim, 0);
+                    }
+                    else
+                    {
+                        spell_harm(level, ch, victim, 0);
+                    }
+                }
 			}
 		break;
 	default :

@@ -84,7 +84,7 @@ void spell_magic_missile(byte level, struct char_data* ch,
 		return;
 	}
 
-	dam = dice(static_cast<int>((level / 2))+1,4)+(level / 2)+1;
+	dam = dice((static_cast<int>(level / 2) + 1), 4) + static_cast<int>(level / 2);
 
 	if(affected_by_spell(victim,SPELL_SHIELD)) {
 		dam = 0;
@@ -105,11 +105,11 @@ void spell_chill_touch(byte level, struct char_data* ch,
 		return;
 	}
 
-	dam = number(level, 3*level);
+	dam = dice(level, 3);
 
 	if(!saves_spell(victim, SAVING_SPELL)) {
 		af.type      = SPELL_CHILL_TOUCH;
-		af.duration  = 6;
+		af.duration  = static_cast<int>(level / 12);
 		af.modifier  = -1;
 		af.location  = APPLY_STR;
 		af.bitvector = 0;
@@ -131,7 +131,7 @@ void spell_burning_hands(byte level, struct char_data* ch,
 		return;
 	}
 
-	dam = dice(1,4) + level/2 + 1;
+//	dam = dice(1, 4) + static_cast<int>(level / 2) + 1;
 
 	send_to_char("Dalle tue mani si sprigionano lingue di $c0001fuoco$c0007!\n\r", ch);
 	act("Ad un gesto di $n lingue di $c0001fuoco$c0007 scaturiscono dalle sue mani!\n\r",
@@ -145,6 +145,7 @@ void spell_burning_hands(byte level, struct char_data* ch,
 				return;
 			}
 			if(!in_group(ch, tmp_victim)) {
+                dam = dice(1, 4) + static_cast<int>(level / 2) + 1;;
 				act("$c0001Vieni raggiunt$b dalle fiamme!\n\r",
 					FALSE, ch, 0, tmp_victim, TO_VICT);
 				heat_blind(tmp_victim);
@@ -173,11 +174,11 @@ void spell_shocking_grasp(byte level, struct char_data* ch,
 		return;
 	}
 
-	dam = number(1,8)+level;
+	dam = number(1,8) + level;
 
 	if(GET_HIT(victim) < -4 && IsHumanoid(victim) &&
 			!IsUndead(victim)) {
-		act("$n pronuncia a voce alta '$c0012clear$c0007', e tocca il torace di $N.",
+		act("$n pronuncia a voce alta '$c0012libera$c0007', e tocca il torace di $N.",
 			FALSE,ch, 0, victim, TO_ROOM);
 		GET_HIT(victim) +=dam;
 		alter_hit(victim,0);
@@ -203,7 +204,7 @@ void spell_lightning_bolt(byte level, struct char_data* ch,
 		return;
 	}
 
-	dam = dice(level,6);
+	dam = dice(level, 6);
 
 	if(saves_spell(victim, SAVING_SPELL)) {
 		dam >>= 1;
@@ -241,9 +242,11 @@ void spell_energy_drain(byte level, struct char_data* ch,
 	int tmp;
 	void set_title(struct char_data *ch);
 	void gain_exp(struct char_data *ch, int gain);
+    char buf[MAX_STRING_LENGTH];
 
 	assert(victim && ch);
-	if(IS_PC(ch) && !IS_NPC(victim) && !IS_IMMORTAL(ch)) {
+	if(IS_PC(ch) && !IS_NPC(victim) && !IS_IMMORTAL(ch))
+    {
 		actall("Cerchi invano di risucchiare l'energia vitale di",
 			   "cerca invano di risucchiarti l'energia vitale",
 			   "cerca di risucchiare l'energia vitale di",
@@ -251,31 +254,82 @@ void spell_energy_drain(byte level, struct char_data* ch,
 		return;
 	}
 
-	if(level < 0 || level > ABS_MAX_LVL) {
+	if(level < 0 || level > ABS_MAX_LVL)
+    {
 		return;
 	}
 
-	if(!saves_spell(victim, SAVING_SPELL)) {
-		if(!IS_IMMORTAL(ch)) {
+	if(!saves_spell(victim, SAVING_SPELL) || IsSusc(victim, IMM_DRAIN))
+    {
+		if(!IS_IMMORTAL(ch))
+        {
 			GET_ALIGNMENT(ch) = MAX(-1000, GET_ALIGNMENT(ch)-200);
 		}
 
-		if(GetMaxLevel(victim) <= 1) {
+		if(GetMaxLevel(victim) <= 1)
+        {
 			damage(ch, victim, 100, SPELL_ENERGY_DRAIN, 5); /* Kill the sucker */
 		}
-		else if((!IS_NPC(victim)) && (GetMaxLevel(victim) >= LOW_IMMORTAL)) {
+		else if((!IS_NPC(victim)) && (GetMaxLevel(victim) >= LOW_IMMORTAL))
+        {
 			send_to_char("Un misero mortale cerca di risucchiare la tua energia...\n\r",victim);
 		}
-		else { /* Ne' primo livello, ne' immortale */
-			if(!IS_SET(victim->M_immune, IMM_DRAIN) &&
-					(!IS_SET(victim->immune, IMM_DRAIN) ||
-					 !saves_spell(victim, SAVING_SPELL))) {
+        else
+        { /* Ne' primo livello, ne' immortale */
+			if(IsSusc(victim, IMM_DRAIN) || (!IS_SET(victim->M_immune, IMM_DRAIN) && !IsImmune(victim, IMM_DRAIN) &&
+					((!IS_SET(victim->immune, IMM_DRAIN) && !IsResist(victim, IMM_DRAIN)) ||
+					 !saves_spell(victim, SAVING_SPELL))))
+            {
 				/* Fallito secondo tiro salvezza */
 				send_to_char("$c0008La tua energia vitale viene risucchiata!\n\r", victim);
-				dam = 4;
+				dam = dice(level, 7);
+                if(saves_spell(victim, SAVING_SPELL))
+                {
+                    dam >>= 1;
+                }
+                if(!IS_PC(victim))
+                {
+                    tmp = GET_MAX_HIT(victim)/GetMaxLevel(victim);
+                    victim->points.max_hit -=tmp;
+                    if(victim->points.max_hit < 1)
+                    {
+                        victim->points.max_hit = 1;
+                    }
+                    victim->points.hit -=tmp;
+                    if(victim->points.hit < 1)
+                    {
+                        victim->points.hit = 1;
+                    }
+                    tmp = GET_EXP(victim)/GetMaxLevel(victim);
+                    if(tmp > 15000)
+                    {
+                        tmp = 15000;
+                    }
+                    sprintf(buf, "$c0005Guadagni $c0013%d $c0005punti esperienza.\n\r", tmp);
+                    send_to_char(buf, ch);
+                    GET_EXP(ch)+=tmp;
+                    GET_EXP(victim)-=tmp;
+                    if(GET_EXP(victim) < 1)
+                    {
+                        GET_EXP(victim) = 1;
+                    }
+                    victim->points.hitroll+=1;
+                }
 				damage(ch, victim, dam, SPELL_ENERGY_DRAIN, 5);
+
 				if(IS_PC(victim)) {
-					GET_EXP(victim)=GET_EXP(victim)- (static_cast<int>(GET_EXP(victim))/10);
+					tmp = static_cast<int>(GET_EXP(victim)) / 10;
+                    if(tmp > 50000000)
+                    {
+                        tmp = 50000000;
+                    }
+                    else if (tmp < 1)
+                    {
+                        tmp = 1;
+                    }
+                    sprintf(buf, "$c0005Hai perso $c0013%d $c0005punti esperienza.\n\r", tmp);
+                    send_to_char(buf, victim);
+                    GET_EXP(victim) -= tmp;
 					/*if ( GET_EXP(victim)>=200000000 )
 					{
 					       if (HowManyClasses(victim) == 1)
@@ -293,8 +347,9 @@ void spell_energy_drain(byte level, struct char_data* ch,
 					}*/
 
 				}
-				else {
-					/* ATTENZIONE Se victim e' morta ci potrebbero essere dei problemi */
+				/*else {
+					 ATTENZIONE Se victim e' morta ci potrebbero essere dei problemi
+                     sposto questa parte disopra
 					tmp = GET_MAX_HIT(victim)/GetMaxLevel(victim);
 					victim->points.max_hit -=tmp;
 					victim->points.hit -=tmp;
@@ -302,12 +357,16 @@ void spell_energy_drain(byte level, struct char_data* ch,
 					GET_EXP(ch)+=tmp;
 					GET_EXP(victim)-=tmp;
 					victim->points.hitroll+=1;
-				}
+				} */
 			}/* Tiro salvezza riuscito  */
 			else {
-				if(!IS_SET(ch->M_immune, IMM_DRAIN)) {
+				if(!IS_SET(ch->M_immune, IMM_DRAIN)&& !IsImmune(ch, IMM_DRAIN)) {
 					send_to_char("Il tuo incantesimo ti si ritorce contro!\n\r",ch);
-					dam = 1;
+                    dam = dice(level, 7);
+                    if(saves_spell(victim, SAVING_SPELL))
+                    {
+                        dam >>= 1;
+                    }
 					damage(ch, victim, dam, SPELL_ENERGY_DRAIN, 5);
 				}
 				else {
@@ -333,11 +392,12 @@ void spell_fireball(byte level, struct char_data* ch,
 		return;
 	}
 
-	dam = dice(level,8);
+//	dam = dice(level,8);
 	for(tmp_victim = character_list; tmp_victim; tmp_victim = temp) {
 		temp = tmp_victim->next;
 		if((ch->in_room == tmp_victim->in_room) && (ch != tmp_victim)) {
 			if(!in_group(ch,tmp_victim) && !IS_IMMORTAL(tmp_victim)) {
+                dam = dice(level,8);
 				if(saves_spell(tmp_victim, SAVING_SPELL)) {
 					dam >>= 1;
 				}
@@ -365,7 +425,7 @@ void spell_fireball(byte level, struct char_data* ch,
 void spell_earthquake(byte level, struct char_data* ch,
 					  struct char_data* victim, struct obj_data* obj) {
 	int dam;
-    char buf[MAX_STRING_LENGTH];
+    char buf[MAX_STRING_LENGTH], buf2[MAX_STRING_LENGTH];
 
 	struct char_data* tmp_victim, *temp;
 
@@ -374,32 +434,61 @@ void spell_earthquake(byte level, struct char_data* ch,
 		return;
 	}
 
-	dam =  dice(1,4) + level + 1;
+//	dam =  dice(1,4) + level + 1;
 
 	send_to_char("$c0003La terra sotto di te inizia a tremare!\n\r", ch);
 	act("$c0003Ad un gesto di $n $c0003la terra trema e si scuote.",
 		FALSE, ch, 0, 0, TO_ROOM);
 
-	for(tmp_victim = character_list; tmp_victim; tmp_victim = temp) {
+	for(tmp_victim = character_list; tmp_victim; tmp_victim = temp)
+    {
 		temp = tmp_victim->next;
-		if((ch->in_room == tmp_victim->in_room) && (ch != tmp_victim)) {
-			if(!in_group(ch,tmp_victim) && !IS_IMMORTAL(tmp_victim)) {
-
-				if(GetMaxLevel(tmp_victim) > 4) {
-                    sprintf(buf, "$N cade a terra e si fa male!");
+		if((ch->in_room == tmp_victim->in_room) && (ch != tmp_victim))
+        {
+			if(!in_group(ch,tmp_victim) && !IS_IMMORTAL(tmp_victim))
+            {
+				if(GetMaxLevel(tmp_victim) > 4)
+                {
+                    dam =  dice(1,4) + level + 1;
+                    if(OnlyClass(ch, CLASS_CLERIC) || IS_IMMORTALE(ch))
+                    {
+                        if(real_roomp(ch->in_room)->sector_type != SECT_AIR && !CheckEquilibrium(tmp_victim) && CheckOneStat(ch, GET_WIS(ch), SPELL_EARTHQUAKE, tmp_victim, GET_DEX(tmp_victim)))
+                        {
+                            sprintf(buf, "$c0009$N$c0009 cade rovinosamente a terra e si fa male!");
+                            sprintf(buf2, "$c0009Cadi rovinosamente a terra e ti fai male!!!");
+                            act(buf, FALSE, ch, 0, tmp_victim, TO_ROOM);
+                            WAIT_STATE(tmp_victim, PULSE_VIOLENCE * 1);
+                            GET_POS(tmp_victim) = POSITION_SITTING;
+                        }
+                        else
+                        {
+                            dam =  dice(1,4) + level - 10;
+                            sprintf(buf, "$c0015$N$c0015 perde l'equilibrio per un attimo, ma si rialza subito!");
+                            sprintf(buf2, "$c0015Perdi l'equilibrio per un attimo, ma ti rialzi subito!");
+                            act(buf, FALSE, ch, 0, tmp_victim, TO_ROOM);
+                        }
+                    }
+                    else
+                    {
+                        sprintf(buf, "$N cade a terra e si fa male!");
+                        sprintf(buf2, "Cadi a terra e ti fai male!!!");
+                        act(buf, FALSE, ch, 0, tmp_victim, TO_ROOM);
+                    }
                     if(IS_SET(ch->player.user_flags,PWP_MODE))
                         sprintf(buf, "%s $c0003[%d]$c0007",buf, (IS_AFFECTED(tmp_victim, AFF_SANCTUARY) ? MAX((int)(dam / 2), 0) : dam));
                     act(buf, FALSE, ch, 0, tmp_victim, TO_CHAR);
-                    sprintf(buf, "Cadi a terra e ti fai male!!");
                     if(IS_SET(tmp_victim->player.user_flags,PWP_MODE))
-                        sprintf(buf, "%s $c0001[%s%d]$c0007\n\r",buf, (dam > 0 ? "-" : ""), (IS_AFFECTED(tmp_victim, AFF_SANCTUARY) ? MAX((int)(dam / 2), 0) : dam));
+                        sprintf(buf2, "%s $c0001[%s%d]$c0007\n\r",buf2, (dam > 0 ? "-" : ""), (IS_AFFECTED(tmp_victim, AFF_SANCTUARY) ? MAX((int)(dam / 2), 0) : dam));
                     else
-                        sprintf(buf, "%s\n\r",buf);
-					act(buf, FALSE, ch, 0, tmp_victim, TO_VICT);
+                    {
+                        sprintf(buf2, "%s\n\r",buf2);
+                    }
+					act(buf2, FALSE, ch, 0, tmp_victim, TO_VICT);
 					MissileDamage(ch, tmp_victim, dam, SPELL_EARTHQUAKE, 5);
 				}
-				else {
-                    sprintf(buf, "La terra si apre ed inghiotte $N!");
+				else
+                {
+                    sprintf(buf, "La $c0003terra$c0007 si apre ed inghiotte $N!");
                     if(IS_SET(ch->player.user_flags,PWP_MODE))
                         sprintf(buf, "%s $c0003[%d]$c0007",buf, GET_MAX_HIT(tmp_victim)+30);
                     act(buf, FALSE, ch, 0, tmp_victim, TO_CHAR);
@@ -410,14 +499,15 @@ void spell_earthquake(byte level, struct char_data* ch,
 					MissileDamage(ch, tmp_victim, GET_MAX_HIT(tmp_victim)+30, SPELL_EARTHQUAKE, 5);
 				}
 			}
-			else {
-				act("Per poco non cadi facendoti male!!\n\r",
-					FALSE, ch, 0, tmp_victim, TO_VICT);
+			else
+            {
+				act("Per poco non cadi facendoti male!!\n\r", FALSE, ch, 0, tmp_victim, TO_VICT);
 			}
 		}
-		else {
-			if(real_roomp(ch->in_room)->zone ==
-					real_roomp(tmp_victim->in_room)->zone) {
+		else
+        {
+			if(real_roomp(ch->in_room)->zone == real_roomp(tmp_victim->in_room)->zone)
+            {
 				send_to_char("$c0003La terra trema...\n\r", tmp_victim);
 			}
 		}
@@ -450,7 +540,7 @@ void spell_dispel_evil(byte level, struct char_data* ch,
 				return;
 			}
 		}
-		if(!saves_spell(victim, SAVING_SPELL)) {
+		if(!saves_spell(victim, SAVING_SPELL) && GetMaxLevel(ch) > GetMaxLevel(victim)) {
 			act("$c0014$n scaccia $N $c0014da questo piano di esistenza.", TRUE, ch, 0, victim, TO_ROOM);
 			act("$c0014Scacci $N $c0014da questo piano di esistenza.", TRUE, ch, 0, victim, TO_CHAR);
 			act("$c0014$n ti scaccia da questo piano di esistenza.", TRUE, ch, 0, victim,TO_VICT);
@@ -511,9 +601,6 @@ void spell_harm(byte level, struct char_data* ch,
 		dam = 100;    /* Kill the suffering bastard */
 	}
 	else {
-		if(GET_RACE(ch) == RACE_GOD) {
-			dam = 0;
-		}
 		if(!HitOrMiss(ch, victim, CalcThaco(ch, victim))) {
 			dam = 0;
 		}
@@ -2722,7 +2809,7 @@ void sprintbit(unsigned long, char* [], char*);
 void spell_identify(byte level, struct char_data* ch,
 					struct char_data* victim, struct obj_data* obj) {
 	char buf[256], buf2[256], col1[10], col2[10], col3[10];
-	int i, color[2];
+	int i, color[2], vnum;
 	bool found;
 
 	struct time_info_data age(struct char_data *ch);
@@ -2792,6 +2879,39 @@ void spell_identify(byte level, struct char_data* ch,
 				obj->obj_flags.cost >= LIM_ITEM_COST_MIN ? "[RARO]" : " ");
 		send_to_char(buf, ch);
 
+ /*       if(IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
+        {
+            int exp = 0;
+            int exp_d = 0;
+            if(obj->value_exp_edit > 0)
+            {
+                exp = int(obj->value_exp_edit / 1000000);
+                exp_d = int((obj->value_exp_edit - (exp * 1000000)) / 10000);
+            }
+            if(obj->value_exp_edit > 0 || obj->value_rune_edit > 0)
+            {
+                sprintf(buf, "%sSono stati spesi: %s%d%s,%s%d%s MegaXP, e %s%d%s Rune degli Dei.\n\r", col1, col2, exp, col1, col2, exp_d, col1, col2, obj->value_rune_edit, col1);
+                send_to_char(buf, ch);
+            }
+        } */
+
+        vnum = static_cast<int>(obj->char_vnum);
+        if(vnum > 0)
+        {
+            int exp = 0;
+            int exp_d = 0;
+            obj->value_exp_edit = ValueExpObj(obj) * 10000;
+            if(obj->value_exp_edit > 0)
+            {
+                exp = int(obj->value_exp_edit / 1000000);
+                exp_d = int((obj->value_exp_edit - (exp * 1000000)) / 10000);
+            }
+            if(obj->value_exp_edit > 0 || obj->value_rune_edit > 0)
+            {
+                sprintf(buf, "%sSono stati spesi: %s%d,%d%s MegaXP, e %s%d%s Rune degli Dei.\n\r", col1, col2, exp, exp_d, col1, col2, obj->value_rune_edit, col1);
+                send_to_char(buf, ch);
+            }
+        }
 
 		switch(GET_ITEM_TYPE(obj)) {
 		case ITEM_SCROLL :

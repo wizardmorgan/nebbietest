@@ -1305,9 +1305,13 @@ void ChangeMobResist(struct char_data* ch, const char* arg, int type) {
 
 		if(IS_SET(ch->specials.mobedit->immune, i)) {
 			REMOVE_BIT(ch->specials.mobedit->immune, i);
+            ch->specials.mobedit->resistenze[EQUIP_RESI][update] -= 50;
+            ch->specials.mobedit->resistenze[TOTAL_RESI][update]= ResiTotal(ch->specials.mobedit, update);
 		}
 		else {
 			SET_BIT(ch->specials.mobedit->immune, i);
+            ch->specials.mobedit->resistenze[EQUIP_RESI][update] += 50;
+            ch->specials.mobedit->resistenze[TOTAL_RESI][update]= ResiTotal(ch->specials.mobedit, update);
 		}
 	}
 
@@ -1414,9 +1418,13 @@ void ChangeMobImmune(struct char_data* ch, const char* arg, int type) {
 
 		if(IS_SET(ch->specials.mobedit->M_immune, i)) {
 			REMOVE_BIT(ch->specials.mobedit->M_immune, i);
+            ch->specials.mobedit->resistenze[EQUIP_RESI][update] -= 100;
+            ch->specials.mobedit->resistenze[TOTAL_RESI][update]= ResiTotal(ch->specials.mobedit, update);
 		}
 		else {
 			SET_BIT(ch->specials.mobedit->M_immune, i);
+            ch->specials.mobedit->resistenze[EQUIP_RESI][update] += 100;
+            ch->specials.mobedit->resistenze[TOTAL_RESI][update]= ResiTotal(ch->specials.mobedit, update);
 		}
 	}
 
@@ -1521,9 +1529,13 @@ void ChangeMobSuscep(struct char_data* ch, const char* arg, int type) {
 
 		if(IS_SET(ch->specials.mobedit->susc, i)) {
 			REMOVE_BIT(ch->specials.mobedit->susc, i);
+            ch->specials.mobedit->resistenze[EQUIP_RESI][update] -= -100;
+            ch->specials.mobedit->resistenze[TOTAL_RESI][update]= ResiTotal(ch->specials.mobedit, update);
 		}
 		else {
 			SET_BIT(ch->specials.mobedit->susc, i);
+            ch->specials.mobedit->resistenze[EQUIP_RESI][update] += -100;
+            ch->specials.mobedit->resistenze[TOTAL_RESI][update]= ResiTotal(ch->specials.mobedit, update);
 		}
 	}
 

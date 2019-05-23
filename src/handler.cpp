@@ -433,8 +433,17 @@ void destroy_string_block(struct string_block* sb) {
 
 #define SECURE_INCR(act,gain) act=(gain>0?MIN(255,act+gain):MAX(0,act+gain))
 
-void affect_modify(struct char_data* ch,byte loc, long mod, long bitv,bool add) {
-	int i;
+void affect_modify(struct char_data* ch,byte loc, long mod, long bitv, int type, bool add) {
+	int i, resiType;
+
+    if(type > 0)
+    {
+        resiType = SPELL_RESI;
+    }
+    else
+    {
+        resiType = EQUIP_RESI;
+    }
 
 	if(!ch) {
 		return;
@@ -446,44 +455,80 @@ void affect_modify(struct char_data* ch,byte loc, long mod, long bitv,bool add) 
 	if(loc == APPLY_IMMUNE) {
 		if(add) {
 			SET_BIT(ch->immune, mod);
-            ch->resistenze[EQUIP_RESI][converti_numero(mod)] += 50;
-            if(IS_PC(ch))
-                mudlog(LOG_PLAYERS, "assegno a %s il valore di resistenza(tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
+            for(i = 0; i < 19; i++)
+            {
+                if(IS_SET(mod, (1 << i)))
+                {
+                    ch->resistenze[EQUIP_RESI][i] += 50;
+ //                   if(IS_PC(ch))
+//                        mudlog(LOG_PLAYERS, "assegno a %s il valore di resistenza(sommo 50) a %s(tot %d)", GET_NAME(ch), MaxResisPC[i].name, ch->resistenze[EQUIP_RESI][i]);
+                }
+            }
 		}
 		else {
 			REMOVE_BIT(ch->immune, mod);
-            ch->resistenze[EQUIP_RESI][converti_numero(mod)] -= 50;
-            if(IS_PC(ch))
-                mudlog(LOG_PLAYERS, "rimuovo a %s il valore di resistenza(tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
+            for(i = 0; i < 19; i++)
+            {
+                if(IS_SET(mod, (1 << i)))
+                {
+                    ch->resistenze[EQUIP_RESI][i] -= 50;
+//                    if(IS_PC(ch))
+//                        mudlog(LOG_PLAYERS, "rimuovo a %s il valore di resistenza(tolgo 50) a %s(tot %d)", GET_NAME(ch), MaxResisPC[i].name, ch->resistenze[EQUIP_RESI][i]);
+                }
+            }
 		}
 	}
 	else if(loc == APPLY_SUSC) {
 		if(add) {
 			SET_BIT(ch->susc, mod);
-            ch->resistenze[EQUIP_RESI][converti_numero(mod)] += -100;
-            if(IS_PC(ch))
-            mudlog(LOG_PLAYERS, "assegno a %s il valore di suscettibilita' (tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
+            for(i = 0; i < 19; i++)
+            {
+                if(IS_SET(mod, (1 << i)))
+                {
+                    ch->resistenze[EQUIP_RESI][i] += -100;
+//                    if(IS_PC(ch))
+//                        mudlog(LOG_PLAYERS, "assegno a %s il valore di suscettibilita'(tolgo 100) a %s(tot %d)", GET_NAME(ch), MaxResisPC[i].name, ch->resistenze[EQUIP_RESI][i]);
+                }
+            }
 		}
 		else {
 			REMOVE_BIT(ch->susc, mod);
-            ch->resistenze[EQUIP_RESI][converti_numero(mod)] -= -100;
-            if(IS_PC(ch))
-            mudlog(LOG_PLAYERS, "rimuovo a %s il valore di suscettibilita' (tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
+            for(i = 0; i < 19; i++)
+            {
+                if(IS_SET(mod, (1 << i)))
+                {
+                    ch->resistenze[EQUIP_RESI][i] -= -100;
+//                    if(IS_PC(ch))
+//                        mudlog(LOG_PLAYERS, "rimuovo a %s il valore di suscettibilita'(sommo 100) a %s(tot %d)", GET_NAME(ch), MaxResisPC[i].name, ch->resistenze[EQUIP_RESI][i]);
+                }
+            }
 		}
 
 	}
 	else if(loc == APPLY_M_IMMUNE) {
 		if(add) {
 			SET_BIT(ch->M_immune, mod);
-            ch->resistenze[EQUIP_RESI][converti_numero(mod)] += 100;
-            if(IS_PC(ch))
-            mudlog(LOG_PLAYERS, "assegno a %s il valore di immunita' (tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
+            for(i = 0; i < 19; i++)
+            {
+                if(IS_SET(mod, (1 << i)))
+                {
+                    ch->resistenze[EQUIP_RESI][i] += 100;
+//                        if(IS_PC(ch))
+//                        mudlog(LOG_PLAYERS, "assegno a %s il valore di immunita'(sommo 100) a %s(tot %d)", GET_NAME(ch), MaxResisPC[i].name, ch->resistenze[EQUIP_RESI][i]);
+                }
+            }
 		}
 		else {
 			REMOVE_BIT(ch->M_immune, mod);
-            ch->resistenze[EQUIP_RESI][converti_numero(mod)] -= 100;
-            if(IS_PC(ch))
-            mudlog(LOG_PLAYERS, "rimuovo a %s il valore di immunita' (tot %d) al numero %d", GET_NAME(ch), ch->resistenze[EQUIP_RESI][converti_numero(mod)], converti_numero(mod));
+            for(i = 0; i < 19; i++)
+            {
+                if(IS_SET(mod, (1 << i)))
+                {
+                    ch->resistenze[EQUIP_RESI][i] -= 100;
+//                    if(IS_PC(ch))
+//                        mudlog(LOG_PLAYERS, "rimuovo a %s il valore di immunita'(tolgo 100) a %s(tot %d)", GET_NAME(ch), MaxResisPC[i].name, ch->resistenze[EQUIP_RESI][i]);
+                }
+            }
 		}
 	}
 	else if(loc == APPLY_SPELL) {
@@ -875,79 +920,79 @@ void affect_modify(struct char_data* ch,byte loc, long mod, long bitv,bool add) 
 		break;
 
     case APPLY_RESI_FIRE:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_FIRE] += mod;
+        ch->resistenze[resiType][RESI_FIRE] += mod;
         break;
 
     case APPLY_RESI_COLD:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_COLD] += mod;
+        ch->resistenze[resiType][RESI_COLD] += mod;
         break;
 
     case APPLY_RESI_ELEC:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_ELEC] += mod;
+        ch->resistenze[resiType][RESI_ELEC] += mod;
         break;
 
     case APPLY_RESI_ENERGY:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_ENERGY] += mod;
+        ch->resistenze[resiType][RESI_ENERGY] += mod;
         break;
 
     case APPLY_RESI_BLUNT:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_BLUNT] += mod;
+        ch->resistenze[resiType][RESI_BLUNT] += mod;
         break;
 
     case APPLY_RESI_PIERCE:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PIERCE] += mod;
+        ch->resistenze[resiType][RESI_PIERCE] += mod;
         break;
 
     case APPLY_RESI_SLASH:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_SLASH] += mod;
+        ch->resistenze[resiType][RESI_SLASH] += mod;
         break;
 
     case APPLY_RESI_ACID:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_ACID] += mod;
+        ch->resistenze[resiType][RESI_ACID] += mod;
         break;
 
     case APPLY_RESI_POISON:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_POISON] += mod;
+        ch->resistenze[resiType][RESI_POISON] += mod;
         break;
 
     case APPLY_RESI_DRAIN:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_DRAIN] += mod;
+        ch->resistenze[resiType][RESI_DRAIN] += mod;
         break;
 
     case APPLY_RESI_SLEEP:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_SLEEP] += mod;
+        ch->resistenze[resiType][RESI_SLEEP] += mod;
         break;
 
     case APPLY_RESI_CHARM:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_CHARM] += mod;
+        ch->resistenze[resiType][RESI_CHARM] += mod;
         break;
 
     case APPLY_RESI_HOLD:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_HOLD] += mod;
+        ch->resistenze[resiType][RESI_HOLD] += mod;
         break;
 
     case APPLY_RESI_NONMAG:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_NONMAG] += mod;
+        ch->resistenze[resiType][RESI_NONMAG] += mod;
         break;
 
     case APPLY_RESI_PLUS1:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PLUS1] += mod;
+        ch->resistenze[resiType][RESI_PLUS1] += mod;
         break;
 
     case APPLY_RESI_PLUS2:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PLUS2] += mod;
+        ch->resistenze[resiType][RESI_PLUS2] += mod;
         break;
 
     case APPLY_RESI_PLUS3:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PLUS3] += mod;
+        ch->resistenze[resiType][RESI_PLUS3] += mod;
         break;
 
     case APPLY_RESI_PLUS4:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_PLUS4] += mod;
+        ch->resistenze[resiType][RESI_PLUS4] += mod;
         break;
 
     case APPLY_RESI_HOLY:
-        ch->resistenze[(EQUIP_RESI + bitv)][RESI_HOLY] += mod;
+        ch->resistenze[resiType][RESI_HOLY] += mod;
         break;
 
 	default:
@@ -981,7 +1026,7 @@ void affect_total(struct char_data* ch) {
 			for(j=0; j<MAX_OBJ_AFFECT; j++)
 				affect_modify(ch, ch->equipment[i]->affected[j].location,
 							  ch->equipment[i]->affected[j].modifier,
-							  ch->equipment[i]->obj_flags.bitvector, FALSE);
+							  ch->equipment[i]->obj_flags.bitvector, 0, FALSE);
 			if(GET_ITEM_TYPE(ch->equipment[ i ]) == ITEM_ARMOR) {
 				GET_AC(ch) += apply_ac(ch, i);
 			}
@@ -989,7 +1034,7 @@ void affect_total(struct char_data* ch) {
 	}
 
 	for(af = ch->affected; af; af=af->next)
-		affect_modify(ch, af->location,  af->modifier, af->bitvector,
+		affect_modify(ch, af->location,  af->modifier, af->bitvector, af->type,
 					  FALSE);
 
 	ch->tmpabilities = ch->abilities;
@@ -1005,7 +1050,7 @@ void affect_total(struct char_data* ch) {
 			for(j=0; j<MAX_OBJ_AFFECT; j++)
 				affect_modify(ch, ch->equipment[i]->affected[j].location,
 							  ch->equipment[i]->affected[j].modifier,
-							  ch->equipment[i]->obj_flags.bitvector, TRUE);
+                              ch->equipment[i]->obj_flags.bitvector, 0, TRUE);
 			if(GET_ITEM_TYPE(ch->equipment[ i ]) == ITEM_ARMOR) {
 				GET_AC(ch) -= apply_ac(ch, i);
 			}
@@ -1014,7 +1059,7 @@ void affect_total(struct char_data* ch) {
 
 	for(af = ch->affected; af; af=af->next)
 		affect_modify(ch, af->location, af->modifier,
-					  af->bitvector, TRUE);
+					  af->bitvector, af->type, TRUE);
 
 	if(!HasClass(ch, CLASS_MONK)) {
 		GET_AC(ch) += dex_app[(int)GET_DEX(ch) ].defensive;
@@ -1072,6 +1117,11 @@ void affect_total(struct char_data* ch) {
 	alter_hit(ch, 0);
 	alter_mana(ch, 0);
 	alter_move(ch, 0);
+    //  aggiorno totale resistenze
+    for(i = 0; i < RESI_UNUSED1; i++)
+    {
+        ch->resistenze[TOTAL_RESI][i] = ResiTotal(ch, i);
+    }
 }
 
 /* Insert an affect_type in a char_data structure
@@ -1085,7 +1135,7 @@ void affect_to_char(struct char_data* ch, struct affected_type* af) {
 	*affected_alloc = *af;
 	affected_alloc->next = ch->affected;
 	ch->affected = affected_alloc;
-	affect_modify(ch, af->location,af->modifier,af->bitvector, TRUE);
+	affect_modify(ch, af->location,af->modifier,af->bitvector, af->type, TRUE);
 	affect_total(ch);
 
 }
@@ -1117,7 +1167,7 @@ void affect_remove(struct char_data* ch, struct affected_type* af) {
 		return;
 	}
 
-	affect_modify(ch, af->location, af->modifier, af->bitvector, FALSE);
+	affect_modify(ch, af->location, af->modifier, af->bitvector, af->type, FALSE);
 
 
 	/* remove structure *af from linked list */
@@ -1565,7 +1615,7 @@ void equip_char(struct char_data* ch, struct obj_data* obj, int pos) {
 	for(j=0; j<MAX_OBJ_AFFECT; j++)
 		affect_modify(ch, obj->affected[j].location,
 					  obj->affected[j].modifier,
-					  obj->obj_flags.bitvector, TRUE);
+					  obj->obj_flags.bitvector, 0, TRUE);
 
 	if(GET_ITEM_TYPE(obj) == ITEM_WEAPON) {
 		/* some nifty manuevering for strength */
@@ -1629,7 +1679,7 @@ struct obj_data* unequip_char(struct char_data* ch, int pos) {
 	for(j=0; j<MAX_OBJ_AFFECT; j++)
 		affect_modify(ch, obj->affected[j].location,
 					  obj->affected[j].modifier,
-					  obj->obj_flags.bitvector, FALSE);
+					  obj->obj_flags.bitvector, 0, FALSE);
 
 	affect_total(ch);
 
@@ -3015,7 +3065,7 @@ void AddAffects(struct char_data* ch, struct obj_data* o) {
 		if(o->affected[i].location != APPLY_NONE) {
 			affect_modify(ch, o->affected[i].location,
 						  o->affected[i].modifier,
-						  o->obj_flags.bitvector, TRUE);
+						  o->obj_flags.bitvector, 0, TRUE);
 		}
 		else {
 			return;

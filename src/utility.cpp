@@ -354,7 +354,7 @@ char* spamAchie(struct char_data* ch, const char *titolo, int valore, const char
     strcat(buffer, "    ");
     if(max > lung[0])
     {
-        diff = int((max - lung[0]) /2);
+        diff = static_cast<int>((max - lung[0]) /2);
         if((diff * 2) != (max - lung[0]))
         {
             diff += 1;
@@ -367,7 +367,7 @@ char* spamAchie(struct char_data* ch, const char *titolo, int valore, const char
     strcat(buffer, riga1);
     if(max > lung[0])
     {
-        diff = int((max - lung[0]) /2);
+        diff = static_cast<int>((max - lung[0]) /2);
         for(i = 0; i < diff; i++)
         {
             strcat(buffer, " ");
@@ -380,7 +380,7 @@ char* spamAchie(struct char_data* ch, const char *titolo, int valore, const char
     strcat(buffer, "    ");
     if(max > lung[1])
     {
-        diff = int((max - lung[1]) /2);
+        diff = static_cast<int>((max - lung[1]) /2);
         if((diff * 2) != (max - lung[1]))
         {
             diff += 1;
@@ -393,7 +393,7 @@ char* spamAchie(struct char_data* ch, const char *titolo, int valore, const char
     strcat(buffer, riga2);
     if(max > lung[1])
     {
-        diff = int((max - lung[1]) /2);
+        diff = static_cast<int>((max - lung[1]) /2);
         for(i = 0; i < diff; i++)
         {
             strcat(buffer, " ");
@@ -405,7 +405,7 @@ char* spamAchie(struct char_data* ch, const char *titolo, int valore, const char
     strcat(buffer, "    ");
     if(max > lung[2])
     {
-        diff = int((max - lung[2]) /2);
+        diff = static_cast<int>((max - lung[2]) /2);
         if((diff * 2) != (max - lung[2]))
         {
             diff += 1;
@@ -418,7 +418,7 @@ char* spamAchie(struct char_data* ch, const char *titolo, int valore, const char
     strcat(buffer, riga3);
     if(max > lung[2])
     {
-        diff = int((max - lung[2]) /2);
+        diff = static_cast<int>((max - lung[2]) /2);
         for(i = 0; i < diff; i++)
         {
             strcat(buffer, " ");
@@ -1522,7 +1522,7 @@ void RewardAll(struct char_data* ch, int achievement_type, int achievement_class
                         }
                         else if(percent > 60 && percent <= 100)
                         {
-                            nperc = int(((percent - 60) / 10) + achievement_level + AchievementsList[achievement_class][achievement_type].grado_diff);
+                            nperc = static_cast<int>(((percent - 60) / 10) + achievement_level + AchievementsList[achievement_class][achievement_type].grado_diff);
                             if(nperc > 12)
                             {
                                 nperc = 12;
@@ -3360,7 +3360,7 @@ void RewardAll(struct char_data* ch, int achievement_type, int achievement_class
                             };
 
                             obj->obj_flags.value[0] = GetMaxLevel(ch);
-                            obj->obj_flags.value[1] = MAX(5, number(1, int(GetMaxLevel(ch) / 2)));
+                            obj->obj_flags.value[1] = MAX(5, number(1, static_cast<int>(GetMaxLevel(ch) / 2)));
                             obj->obj_flags.value[2] = obj->obj_flags.value[1];
                             obj->obj_flags.value[3] = randomSpell[number(0, 35)];
                         }
@@ -3988,7 +3988,7 @@ void CheckAchie(struct char_data* ch, int achievement_type, int achievement_clas
         }
 
         reward = reward * molt / 10;
-        reward = number(int(reward - reward * 5 / 100), int(reward + reward * 5 / 100));
+        reward = number(static_cast<int>(reward - reward * 5 / 100), static_cast<int>(reward + reward * 5 / 100));
         gain_exp(ch, reward);
 
         RewardAll(ch, achievement_type, achievement_class, lvl);
@@ -4841,15 +4841,18 @@ int WeaponImmune(struct char_data* ch) {
 }
 
 unsigned IsImmune(struct char_data* ch, int bit) {
-	return(IS_SET(bit, ch->M_immune));
+    return(CHECK_RESI(ch, converti_numero(bit)) == 100);
+//	return(IS_SET(bit, ch->M_immune));
 }
 
 unsigned IsResist(struct char_data* ch, int bit) {
-	return(IS_SET(bit, ch->immune));
+    return(CHECK_RESI(ch, converti_numero(bit)) > 50);
+//	return(IS_SET(bit, ch->immune));
 }
 
 unsigned IsSusc(struct char_data* ch, int bit) {
-	return(IS_SET(bit, ch->susc));
+    return(CHECK_RESI(ch, converti_numero(bit)) == -100);
+//	return(IS_SET(bit, ch->susc));
 }
 
 /* creates a random number in interval [from;to] */
@@ -9479,38 +9482,39 @@ char RemColorString(char * buffer)
 #define MAX_RESI_NPC        100
 #define MIN_RESI_PC_NPC    -100
 
-int ResiTotal(char_data* ch, int type)
+int ResiTotal(struct char_data* ch, int type)
 {
     int total_resi, racial_resi, equip_resi, edit_resi, spell_resi;
 
+    ch->resistenze[TOTAL_RESI][type] = 0;
     racial_resi = MIN(ch->resistenze[RACIAL_RESI][type], (IS_PC(ch) ? MaxResisPC[type].racial_pc : MAX_RESI_NPC));
-    if(IS_PC(ch))
-        mudlog(LOG_PLAYERS, "Racial Resi numero %d di %s e' = %d", type, GET_NAME(ch), racial_resi);
+//    if(IS_PC(ch))
+//        mudlog(LOG_PLAYERS, "Racial Resi %s di %s e' = %d", MaxResisPC[type].name, GET_NAME(ch), racial_resi);
     equip_resi  = MIN(ch->resistenze[EQUIP_RESI][type], (IS_PC(ch) ? MaxResisPC[type].equip_pc : MAX_RESI_NPC));
-    if(IS_PC(ch))
-        mudlog(LOG_PLAYERS, "Equip Resi numero %d di %s e' = %d", type, GET_NAME(ch), equip_resi);
+//    if(IS_PC(ch))
+//        mudlog(LOG_PLAYERS, "Equip Resi %s di %s e' = %d", MaxResisPC[type].name, GET_NAME(ch), equip_resi);
     edit_resi   = MIN(ch->resistenze[EDIT_RESI][type], (IS_PC(ch) ? (MaxResisPC[type].edit_pc + MaxResisPC[type].superEdit) : MAX_RESI_NPC));
-    if(IS_PC(ch))
-        mudlog(LOG_PLAYERS, "Edit Resi numero %d di %s e' = %d", type, GET_NAME(ch), edit_resi);
+//    if(IS_PC(ch))
+//        mudlog(LOG_PLAYERS, "Edit Resi %s di %s e' = %d", MaxResisPC[type].name, GET_NAME(ch), edit_resi);
     spell_resi  = MIN(ch->resistenze[SPELL_RESI][type], (IS_PC(ch) ? MaxResisPC[type].spell_pc : MAX_RESI_NPC));
-    if(IS_PC(ch))
-        mudlog(LOG_PLAYERS, "Spell Resi numero %d di %s e' = %d", type, GET_NAME(ch), spell_resi);
+//    if(IS_PC(ch))
+//        mudlog(LOG_PLAYERS, "Spell Resi %s di %s e' = %d", MaxResisPC[type].name, GET_NAME(ch), spell_resi);
 
     if(IS_PC(ch))
     {
         if(edit_resi >= MaxResisPC[type].edit_pc)
         {
             equip_resi = 0;
-            if(IS_PC(ch))
-                mudlog(LOG_PLAYERS, "Ho trovato su %s l'edit resi(%d) maggiore/uguale a %d quindi equip resi e' ora pari a %d", GET_NAME(ch), type, MaxResisPC[type].edit_pc, racial_resi);
+  //          if(IS_PC(ch))
+  //              mudlog(LOG_PLAYERS, "Ho trovato su %s l'edit resi(%s) maggiore/uguale a %d quindi equip resi e' ora pari a %d", GET_NAME(ch), MaxResisPC[type].name, MaxResisPC[type].edit_pc, racial_resi);
         }
         else if(edit_resi <= MaxResisPC[type].edit_pc)
         {
             if((equip_resi + edit_resi) >= MaxResisPC[type].edit_pc)
             {
                 equip_resi = MIN((MaxResisPC[type].edit_pc - edit_resi), equip_resi);
-                if(IS_PC(ch))
-                    mudlog(LOG_PLAYERS, "EquipResi+EditResi(%d) di %s maggiore/uguale a %d quindi equip resi e' ora pari a %d", type, GET_NAME(ch), MaxResisPC[type].edit_pc, racial_resi);
+ //               if(IS_PC(ch))
+ //                   mudlog(LOG_PLAYERS, "EquipResi+EditResi(%s) di %s maggiore/uguale a %d quindi equip resi e' ora pari a %d", MaxResisPC[type].name, GET_NAME(ch), MaxResisPC[type].edit_pc, racial_resi);
             }
         }
 
@@ -9518,15 +9522,25 @@ int ResiTotal(char_data* ch, int type)
         {
             if(spell_resi > MAX_SPELL_BONUS)
             {
-                spell_resi = MAX_SPELL_BONUS;
-                if(IS_PC(ch))
-                    mudlog(LOG_PLAYERS, "editResi o equipResi(%d) di %s sono uguali ai massimali e spellResi era maggiore %d quindi spellResi e' %d", type, GET_NAME(ch), MAX_SPELL_BONUS, spell_resi);
+                if(HowManyClasses(ch) == 1)
+                {
+                    if(spell_resi > (MAX_SPELL_BONUS + 5))
+                    {
+                        spell_resi = MAX_SPELL_BONUS + 5;
+                    }
+                }
+                else
+                {
+                    spell_resi = MAX_SPELL_BONUS;
+                }
+//                if(IS_PC(ch))
+//                    mudlog(LOG_PLAYERS, "editResi o equipResi(%s) di %s sono uguali ai massimali e spellResi era maggiore %d quindi spellResi e' %d", MaxResisPC[type].name, GET_NAME(ch), MAX_SPELL_BONUS, spell_resi);
             }
         }
         else
         {
-            if(IS_PC(ch))
-                mudlog(LOG_PLAYERS, "spellResi(%d) di %s e' %d, editResi = %d equipResi = %d", type, GET_NAME(ch), edit_resi, equip_resi);
+//            if(IS_PC(ch))
+//                mudlog(LOG_PLAYERS, "spellResi(%s) di %s e' %d, editResi = %d equipResi = %d", MaxResisPC[type].name, GET_NAME(ch), spell_resi, edit_resi, equip_resi);
             spell_resi = MIN(spell_resi, (MaxResisPC[type].spell_pc - MIN((edit_resi + equip_resi), MaxResisPC[type].edit_pc)));
             
         }
@@ -9539,23 +9553,10 @@ int ResiTotal(char_data* ch, int type)
     }
     else
     {
-        if(edit_resi != 100)
-        {
-            total_resi = MIN((equip_resi + edit_resi + spell_resi), 50);
-            total_resi = MIN((racial_resi + total_resi), MAX_RESI_NPC);
-        }
-        else
-        {
-            total_resi = MIN((edit_resi + spell_resi + equip_resi + racial_resi), MAX_RESI_NPC);
-        }
+        total_resi = MIN((edit_resi + spell_resi + equip_resi + racial_resi), MAX_RESI_NPC);
     }
     
     total_resi = MAX(total_resi, MIN_RESI_PC_NPC);
-
-    if(IS_PC(ch) && IS_IMMORTAL(ch))
-    {
-        total_resi = MAX_RESI_NPC;
-    }
 
     return total_resi;
 }
@@ -9572,5 +9573,795 @@ int converti_numero(unsigned long n)
     }
 
     return r;
+}
+
+bool CheckOneStat(struct char_data* ch, int statCh, int skill, struct char_data* victim, int statVictim)
+{
+    float oneStat = 9;
+    int d20;
+
+    oneStat += dice(1, 111);
+
+    oneStat -= bash_reaction[statCh];
+
+    oneStat += bash_reaction[statVictim];
+
+    if(!IS_PC(victim) && GetMaxLevel(victim) > 51)
+    {
+        oneStat += (GetMaxLevel(victim) - 50) * 2.5;
+    }
+
+    if((GetMaxLevel(victim) - GetMaxLevel(ch)) > 10)
+    {
+        oneStat += (GetMaxLevel(victim) - GetMaxLevel(ch)) * 2.5;
+    }
+    else
+    {
+        oneStat += (GetMaxLevel(victim) - GetMaxLevel(ch)) * 0.8;
+    }
+
+    if(HowManyClasses(ch) == 3)
+    {
+        oneStat += 5;
+    }
+    else if(HowManyClasses(ch) == 1)
+    {
+        oneStat -=5;
+    }
+
+    d20 = dice(1, 20);
+
+    if(d20 > 1 && int(oneStat) <= ch->skills[skill].learned)
+    {
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+int ValueExpObj(struct obj_data* obj)
+{
+    struct obj_data* obj_original;
+    int valore = 0, valore_originale = 0, differenza;
+    int i, vnumber, vnum;
+
+    vnum = static_cast<int>(obj->char_vnum);
+    if(vnum <= 0)
+    {
+        return 0;
+    }
+
+    vnumber = real_object(vnum);
+    obj_original = read_object(vnumber, REAL);
+mudlog (LOG_CHECK, "oggetto caricato");
+    for(i = 0; i < MAX_OBJ_AFFECT; i++)
+    {
+        mudlog(LOG_CHECK, "valore = %d", valore);
+        switch(obj->affected[i].location)
+        {
+            case APPLY_NONE:
+            case APPLY_SEX:
+                break;
+
+            case APPLY_AFF2:
+                if(IS_SET(obj->affected[i].modifier, AFF2_DANGER_SENSE))
+                {
+                    valore += 15000;
+                }
+                break;
+
+            case APPLY_STR:
+            case APPLY_DEX:
+            case APPLY_INT:
+            case APPLY_WIS:
+            case APPLY_CON:
+                valore += obj->affected[i].modifier * 1500;
+                break;
+
+            case APPLY_CHR:
+                valore += obj->affected[i].modifier * 1000;
+                break;
+
+            case APPLY_LEVEL:
+            case APPLY_AGE:
+            case APPLY_CHAR_WEIGHT:
+            case APPLY_CHAR_HEIGHT:
+            case APPLY_MANA:
+                valore += obj->affected[i].modifier * 150;
+                break;
+
+            case APPLY_HIT:
+                valore += obj->affected[i].modifier * 300;
+                break;
+
+            case APPLY_MOVE:
+                valore += obj->affected[i].modifier * 100;
+                break;
+
+            case APPLY_GOLD:
+            case APPLY_EXP:
+                break;
+
+            case APPLY_AC:
+                valore -= obj->affected[i].modifier * 100;
+                break;
+
+            case APPLY_HITROLL:
+                valore += obj->affected[i].modifier * 4500;
+                break;
+                
+            case APPLY_DAMROLL:
+                valore += obj->affected[i].modifier * 10000;
+                break;
+                
+            case APPLY_SAVING_PARA:
+            case APPLY_SAVING_ROD:
+            case APPLY_SAVING_PETRI:
+            case APPLY_SAVING_BREATH:
+            case APPLY_SAVING_SPELL:
+            case APPLY_SAVE_ALL:
+                break;
+
+            case APPLY_IMMUNE:
+            {
+                if(IS_SET(obj->affected[i].modifier, IMM_ACID))
+                {
+                    valore += 7500;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_ELEC))
+                {
+                    valore += 15000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_FIRE))
+                {
+                    valore += 10000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_COLD))
+                {
+                    valore += 7500;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_ENERGY))
+                {
+                    valore += 15000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_DRAIN))
+                {
+                    valore += 3000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_HOLD))
+                {
+                    valore += 7500;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_POISON))
+                {
+                    valore += 3000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_HOLY))
+                {
+                    valore += 15000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_SLASH))
+                {
+                    valore += 15000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_PIERCE))
+                {
+                    valore += 15000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_BLUNT))
+                {
+                    valore += 30000;
+                }
+            }
+                break;
+
+            case APPLY_SUSC:
+                break;
+
+            case APPLY_M_IMMUNE:
+            {
+                if(IS_SET(obj->affected[i].modifier, IMM_DRAIN))
+                {
+                    valore += 10000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_CHARM))
+                {
+                    valore += 6000;
+                }
+                if(IS_SET(obj->affected[i].modifier, IMM_POISON))
+                {
+                    valore += 10000;
+                }
+            }
+                break;
+
+            case APPLY_SPELL:
+            {
+                if(IS_SET(obj->affected[i].modifier, AFF_INVISIBLE))
+                {
+                    valore += 3000;
+                }
+                if(IS_SET(obj->affected[i].modifier, AFF_TELEPATHY))
+                {
+                    valore += 5000;
+                }
+                if(IS_SET(obj->affected[i].modifier, AFF_WATERBREATH))
+                {
+                    valore += 5000;
+                }
+                if(IS_SET(obj->affected[i].modifier, AFF_TRUE_SIGHT))
+                {
+                    valore += 5000;
+                }
+                if(IS_SET(obj->affected[i].modifier, AFF_SCRYING))
+                {
+                    valore += 15000;
+                }
+                if(IS_SET(obj->affected[i].modifier, AFF_PROTECT_FROM_EVIL))
+                {
+                    valore += 5000;
+                }
+                if(IS_SET(obj->affected[i].modifier, AFF_SENSE_LIFE))
+                {
+                    valore += 5000;
+                }
+                if(IS_SET(obj->affected[i].modifier, AFF_FLYING))
+                {
+                    valore += 5000;
+                }
+                if(IS_SET(obj->affected[i].modifier, AFF_GLOBE_DARKNESS))
+                {
+                    valore += 5000;
+                }
+            }
+                break;
+
+            case APPLY_HITNDAM:
+                mudlog(LOG_CHECK, "hit and dam");
+                valore += obj->affected[i].modifier * 14500;
+                break;
+
+            case APPLY_WEAPON_SPELL:
+            case APPLY_EAT_SPELL:
+            case APPLY_BACKSTAB:
+            case APPLY_KICK:
+            case APPLY_SNEAK:
+            case APPLY_HIDE:
+            case APPLY_BASH:
+            case APPLY_PICK:
+            case APPLY_STEAL:
+            case APPLY_TRACK:
+                break;
+                
+            case APPLY_SPELLFAIL:
+            case APPLY_HASTE:
+            case APPLY_SLOW:
+            case APPLY_ATTACKS:
+            case APPLY_FIND_TRAPS:
+            case APPLY_RIDE:
+            case APPLY_RACE_SLAYER:
+            case APPLY_ALIGN_SLAYER:
+                break;
+
+            case APPLY_MANA_REGEN:
+                valore += obj->affected[i].modifier * 300;
+                break;
+                
+            case APPLY_HIT_REGEN:
+                valore += obj->affected[i].modifier * 300;
+                break;
+                
+            case APPLY_MOVE_REGEN:
+                valore += obj->affected[i].modifier * 200;
+                break;
+
+            case APPLY_MOD_THIRST:
+            case APPLY_MOD_HUNGER:
+            case APPLY_MOD_DRUNK:
+            case APPLY_T_STR:
+            case APPLY_T_INT:
+            case APPLY_T_DEX:
+            case APPLY_T_WIS:
+            case APPLY_T_CON:
+            case APPLY_T_CHR:
+            case APPLY_T_HPS:
+            case APPLY_T_MOVE:
+            case APPLY_T_MANA:
+            case APPLY_RESI_FIRE:
+            case APPLY_RESI_COLD:
+            case APPLY_RESI_ELEC:
+            case APPLY_RESI_ENERGY:
+            case APPLY_RESI_BLUNT:
+            case APPLY_RESI_PIERCE:
+            case APPLY_RESI_SLASH:
+            case APPLY_RESI_ACID:
+            case APPLY_RESI_POISON:
+            case APPLY_RESI_DRAIN:
+            case APPLY_RESI_SLEEP:
+            case APPLY_RESI_CHARM:
+            case APPLY_RESI_HOLD:
+            case APPLY_RESI_NONMAG:
+            case APPLY_RESI_PLUS1:
+            case APPLY_RESI_PLUS2:
+            case APPLY_RESI_PLUS3:
+            case APPLY_RESI_PLUS4:
+            case APPLY_RESI_HOLY:
+                break;
+                
+            default:
+                break;
+        }
+    }
+
+    for(i = 0; i < MAX_OBJ_AFFECT; i++)
+    {
+        switch(obj_original->affected[i].location)
+        {
+            case APPLY_NONE:
+            case APPLY_SEX:
+                break;
+
+            case APPLY_AFF2:
+                if(IS_SET(obj_original->affected[i].modifier, AFF2_DANGER_SENSE))
+                {
+                    valore_originale += 15000;
+                }
+                break;
+
+            case APPLY_STR:
+            case APPLY_DEX:
+            case APPLY_INT:
+            case APPLY_WIS:
+            case APPLY_CON:
+                valore_originale += obj_original->affected[i].modifier * 1500;
+                break;
+
+            case APPLY_CHR:
+                valore_originale += obj_original->affected[i].modifier * 1000;
+                break;
+
+            case APPLY_LEVEL:
+            case APPLY_AGE:
+            case APPLY_CHAR_WEIGHT:
+            case APPLY_CHAR_HEIGHT:
+            case APPLY_MANA:
+                valore_originale += obj_original->affected[i].modifier * 150;
+                break;
+
+            case APPLY_HIT:
+                valore_originale += obj_original->affected[i].modifier * 300;
+                break;
+
+            case APPLY_MOVE:
+                valore_originale += obj_original->affected[i].modifier * 100;
+                break;
+
+            case APPLY_GOLD:
+            case APPLY_EXP:
+                break;
+
+            case APPLY_AC:
+                valore_originale -= obj_original->affected[i].modifier * 100;
+                break;
+
+            case APPLY_HITROLL:
+                valore_originale += obj_original->affected[i].modifier * 4500;
+                break;
+
+            case APPLY_DAMROLL:
+                valore_originale += obj_original->affected[i].modifier * 10000;
+                break;
+
+            case APPLY_SAVING_PARA:
+            case APPLY_SAVING_ROD:
+            case APPLY_SAVING_PETRI:
+            case APPLY_SAVING_BREATH:
+            case APPLY_SAVING_SPELL:
+            case APPLY_SAVE_ALL:
+                break;
+
+            case APPLY_IMMUNE:
+            {
+                if(IS_SET(obj_original->affected[i].modifier, IMM_ACID))
+                {
+                    valore_originale += 7500;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_ELEC))
+                {
+                    valore_originale += 15000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_FIRE))
+                {
+                    valore_originale += 10000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_COLD))
+                {
+                    valore_originale += 7500;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_ENERGY))
+                {
+                    valore_originale += 15000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_DRAIN))
+                {
+                    valore_originale += 3000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_HOLD))
+                {
+                    valore_originale += 7500;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_POISON))
+                {
+                    valore_originale += 3000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_HOLY))
+                {
+                    valore_originale += 15000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_SLASH))
+                {
+                    valore_originale += 15000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_PIERCE))
+                {
+                    valore_originale += 15000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_BLUNT))
+                {
+                    valore_originale += 30000;
+                }
+            }
+                break;
+
+            case APPLY_SUSC:
+                break;
+
+            case APPLY_M_IMMUNE:
+            {
+                if(IS_SET(obj_original->affected[i].modifier, IMM_DRAIN))
+                {
+                    valore_originale += 10000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_CHARM))
+                {
+                    valore_originale += 6000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, IMM_POISON))
+                {
+                    valore_originale += 10000;
+                }
+            }
+                break;
+
+            case APPLY_SPELL:
+            {
+                if(IS_SET(obj_original->affected[i].modifier, AFF_INVISIBLE))
+                {
+                    valore_originale += 3000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, AFF_TELEPATHY))
+                {
+                    valore_originale += 5000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, AFF_WATERBREATH))
+                {
+                    valore_originale += 5000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, AFF_TRUE_SIGHT))
+                {
+                    valore_originale += 5000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, AFF_SCRYING))
+                {
+                    valore_originale += 15000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, AFF_PROTECT_FROM_EVIL))
+                {
+                    valore_originale += 5000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, AFF_SENSE_LIFE))
+                {
+                    valore_originale += 5000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, AFF_FLYING))
+                {
+                    valore_originale += 5000;
+                }
+                if(IS_SET(obj_original->affected[i].modifier, AFF_GLOBE_DARKNESS))
+                {
+                    valore_originale += 5000;
+                }
+            }
+                break;
+
+            case APPLY_HITNDAM:
+                valore_originale += obj_original->affected[i].modifier * 14500;
+                break;
+
+            case APPLY_WEAPON_SPELL:
+            case APPLY_EAT_SPELL:
+            case APPLY_BACKSTAB:
+            case APPLY_KICK:
+            case APPLY_SNEAK:
+            case APPLY_HIDE:
+            case APPLY_BASH:
+            case APPLY_PICK:
+            case APPLY_STEAL:
+            case APPLY_TRACK:
+                break;
+
+            case APPLY_SPELLFAIL:
+            case APPLY_HASTE:
+            case APPLY_SLOW:
+            case APPLY_ATTACKS:
+            case APPLY_FIND_TRAPS:
+            case APPLY_RIDE:
+            case APPLY_RACE_SLAYER:
+            case APPLY_ALIGN_SLAYER:
+                break;
+
+            case APPLY_MANA_REGEN:
+                valore_originale += obj_original->affected[i].modifier * 300;
+                break;
+
+            case APPLY_HIT_REGEN:
+                valore_originale += obj_original->affected[i].modifier * 300;
+                break;
+
+            case APPLY_MOVE_REGEN:
+                valore_originale += obj_original->affected[i].modifier * 200;
+                break;
+
+            case APPLY_MOD_THIRST:
+            case APPLY_MOD_HUNGER:
+            case APPLY_MOD_DRUNK:
+            case APPLY_T_STR:
+            case APPLY_T_INT:
+            case APPLY_T_DEX:
+            case APPLY_T_WIS:
+            case APPLY_T_CON:
+            case APPLY_T_CHR:
+            case APPLY_T_HPS:
+            case APPLY_T_MOVE:
+            case APPLY_T_MANA:
+            case APPLY_RESI_FIRE:
+            case APPLY_RESI_COLD:
+            case APPLY_RESI_ELEC:
+            case APPLY_RESI_ENERGY:
+            case APPLY_RESI_BLUNT:
+            case APPLY_RESI_PIERCE:
+            case APPLY_RESI_SLASH:
+            case APPLY_RESI_ACID:
+            case APPLY_RESI_POISON:
+            case APPLY_RESI_DRAIN:
+            case APPLY_RESI_SLEEP:
+            case APPLY_RESI_CHARM:
+            case APPLY_RESI_HOLD:
+            case APPLY_RESI_NONMAG:
+            case APPLY_RESI_PLUS1:
+            case APPLY_RESI_PLUS2:
+            case APPLY_RESI_PLUS3:
+            case APPLY_RESI_PLUS4:
+            case APPLY_RESI_HOLY:
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    differenza = valore - valore_originale;
+
+    if(IS_OBJ_STAT(obj, ITEM_IMMUNE))
+    {
+        differenza *= 1.5;
+    }
+
+    mudlog (LOG_CHECK, "valore = %d, originale = %d, differenza %d", valore, valore_originale, differenza);
+
+    extract_obj(obj_original);
+    return differenza;
+}
+
+void WriteDbObj(FILE* f, int type, int limit, int loc)
+{
+    char buf[256], buf2[256];
+    int i, j, vnumber, iVNum;
+    struct obj_data* obj;
+    bool found;
+
+    j = limit;
+
+    if((j > 34029 && j < 35000) && type < 28)
+    {
+            return;
+    }
+
+    vnumber = real_object(j);
+    if(vnumber < 0 || vnumber > 99999)
+    {
+        return;
+    }
+//  mudlog(LOG_PLAYERS, "inizio a scrivere l'oggetto numero %d", j);
+    obj = read_object(vnumber, REAL);
+    if((obj->obj_flags.type_flag == type || type >= 27) && (IS_SET(obj->obj_flags.wear_flags, (1 << loc)) || loc == 0))
+    {
+        fprintf(f, "#%d\n", j);
+        sprintf(buf, "Oggetto: '%s', Tipo di Oggetto ", obj->name);
+        sprinttype(GET_ITEM_TYPE(obj),item_types,buf2);
+        strcat(buf,buf2);
+        fprintf(f, "%s\n", buf);
+
+        if(type == 28)
+        {
+            iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
+            fprintf(f," V-Number Originario: %d %s\n", static_cast<int>(obj->char_vnum), (iVNum == static_cast<int>(obj->char_vnum) ? "CONTROLLARE" : ""));
+        }
+
+        fprintf(f, "Indossabile su: ");
+        sprintbit((unsigned) obj->obj_flags.wear_flags, wear_bits, buf2);
+        sprintf(buf, "%s", buf2);
+        fprintf(f, "%s\n", buf);
+
+        if(obj->obj_flags.bitvector)
+        {
+            sprintf(buf, "L'oggetto dona le seguenti abilita':  ");
+            sprintbit(static_cast<unsigned>(obj->obj_flags.bitvector),affected_bits,buf2);
+            strcat(buf, buf2);
+            fprintf(f, "%s\n", buf);
+        }
+
+        sprintf(buf,"L'oggetto e': ");
+        sprintbit2(static_cast<unsigned>(obj->obj_flags.extra_flags),extra_bits,static_cast<unsigned>(obj->obj_flags.extra_flags2),extra_bits2,buf2);
+        strcat(buf, buf2);
+        fprintf(f, "%s\n", buf);
+
+        sprintf(buf,"Peso: %d, Valore: %d, Costo di rent: %d %s", obj->obj_flags.weight, obj->obj_flags.cost, obj->obj_flags.cost_per_day, obj->obj_flags.cost >= LIM_ITEM_COST_MIN ? "[RARO]" : " ");
+        fprintf(f, "%s\n", buf);
+
+        if(type == 28)
+        {
+            if(static_cast<int>(obj->char_vnum) > 0)
+            {
+                int exp = 0, exp_d = 0, Bexp = 0, Bexp_d = 0, Texp = 0, Texp_d = 0, Bval = 0, Tval = 0;
+                obj->value_exp_edit = ValueExpObj(obj) * 10000;
+                if(obj->value_exp_edit > 0)
+                {
+                    exp = int(obj->value_exp_edit / 1000000);
+                    exp_d = int((obj->value_exp_edit - (exp * 1000000)) / 10000);
+                    Bval = obj->value_exp_edit * 1.5;
+                    Tval = obj->value_exp_edit * 2;
+                    Bexp = int(Bval / 1000000);
+                    Bexp_d = int((Bval - (Bexp * 1000000)) / 10000);
+                    Texp = int(Tval / 1000000);
+                    Texp_d = int((Tval - (Texp * 1000000)) / 10000);
+                }
+                
+                sprintf(buf, "Valore Mono: %d,%d MegaXP, Valore Bi: %d,%d MegaXP, Valore Tri: %d,%d MegaXP.", exp, exp_d, Bexp, Bexp_d, Texp, Texp_d);
+                fprintf(f, "%s\n", buf);
+            }
+        }
+
+        switch(GET_ITEM_TYPE(obj))
+        {
+            case ITEM_SCROLL :
+            case ITEM_POTION :
+                sprintf(buf, "Livello %d dell'incantesimo:\n", obj->obj_flags.value[0]);
+                fprintf(f, "%s\n", buf);
+                if(obj->obj_flags.value[1] >= 1)
+                {
+                    sprinttype(obj->obj_flags.value[1]-1,spells,buf2);
+                    sprintf(buf, "%s", buf2);
+                    fprintf(f, "%s\n", buf);
+                }
+                if(obj->obj_flags.value[2] >= 1)
+                {
+                    sprinttype(obj->obj_flags.value[2]-1,spells,buf2);
+                    sprintf(buf, "%s", buf2);
+                    fprintf(f, "%s\n", buf);
+                }
+                if(obj->obj_flags.value[3] >= 1)
+                {
+                    sprinttype(obj->obj_flags.value[3]-1,spells,buf2);
+                    sprintf(buf, "%s", buf2);
+                    fprintf(f, "%s\n", buf);
+                }
+                break;
+
+            case ITEM_WAND :
+            case ITEM_STAFF :
+                sprintf(buf, "Ha %d cariche totali, con %d cariche rimanenti.", obj->obj_flags.value[1], obj->obj_flags.value[2]);
+                fprintf(f, "%s\n", buf);
+                sprintf(buf, "Livello %d dell'incantesimo:", obj->obj_flags.value[0]);
+                fprintf(f, "%s\n", buf);
+                if(obj->obj_flags.value[3] >= 1)
+                {
+                    sprinttype(obj->obj_flags.value[3]-1,spells,buf2);
+                    strcat(buf, buf2);
+                    fprintf(f, "%s\n", buf);
+                }
+                break;
+
+            case ITEM_WEAPON :
+                sprintf(buf, "Dado di danno: '%dd%d'", obj->obj_flags.value[1], obj->obj_flags.value[2]);
+                fprintf(f, "%s\n", buf);
+                sprinttype(obj->obj_flags.value[3],aszWeaponType,buf2);
+                sprintf(buf,"Tipo di danno: '%s'", buf2);
+                fprintf(f, "%s\n", buf);
+                break;
+
+            case ITEM_ARMOR :
+                sprintf(buf, "AC-apply di %d.", obj->obj_flags.value[0]);
+                fprintf(f, "%s\n", buf);
+                break;
+
+            default:
+                break;
+        }
+
+        found = FALSE;
+
+        for(i=0; i<MAX_OBJ_AFFECT; i++)
+        {
+            if((obj->affected[i].location != APPLY_NONE) && (obj->affected[i].modifier != 0) && (obj->affected[i].location !=APPLY_SKIP))
+            {
+                if(!found)
+                {
+                    sprintf(buf, "Caratteristiche: ");
+                    fprintf(f, "%s\n", buf);
+                    found = TRUE;
+                }
+
+                sprinttype(obj->affected[i].location,apply_types,buf2);
+                sprintf(buf,"    Ti puo' dare : %s by ", buf2);
+                fprintf(f, "%s", buf);
+
+                switch(obj->affected[i].location)
+                {
+                    case APPLY_M_IMMUNE:
+                    case APPLY_IMMUNE:
+                    case APPLY_SUSC:
+                        sprintbit(obj->affected[i].modifier,immunity_names,buf2);
+                        sprintf(buf, "%s", buf2);
+                        break;
+                    case APPLY_ATTACKS:
+                        sprintf(buf,"%f", static_cast<double>(obj->affected[i].modifier / 10));
+                        break;
+                    case APPLY_WEAPON_SPELL:
+                    case APPLY_EAT_SPELL:
+                        sprintf(buf,"%s", spells[obj->affected[i].modifier-1]);
+                        break;
+                    case APPLY_SPELL:
+                        sprintbit(obj->affected[i].modifier,affected_bits, buf2);
+                        sprintf(buf, "%s", buf2);
+                        break;
+                    case APPLY_AFF2:
+                        sprintbit(obj->affected[i].modifier,affected_bits2, buf2);
+                        sprintf(buf, "%s", buf2);
+                        break;
+                    case APPLY_RACE_SLAYER:
+                        sprintf(buf, "%s", RaceName[ obj->affected[i].modifier ]);
+                        break;
+                    case APPLY_ALIGN_SLAYER:
+                        sprintbit(static_cast<unsigned>(obj->affected[i].modifier), gaszAlignSlayerBits, buf2);
+                        sprintf(buf, "%s", buf2);
+                        break;
+                    default:
+                        sprintf(buf,"%d", obj->affected[i].modifier);
+                        break;
+                }
+                fprintf(f, "%s\n", buf);
+            }
+        }
+
+        fprintf(f, "\n");
+
+        extract_obj(obj);
+        mudlog(LOG_PLAYERS, "ho finito di scrivere l'oggetto numero %d", j);
+    }
+    else
+    {
+        extract_obj(obj);
+    }
 }
 } // namespace Alarmud

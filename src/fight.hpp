@@ -52,6 +52,8 @@ int HitOrMiss(struct char_data* ch, struct char_data* victim, int calc_thaco);
 DamageResult HitVictim(struct char_data* ch, struct char_data* v, int dam,int type, int w_type,damage_func dam_func, int location);
 int Hit_Location(struct char_data* victim) ;
 int ItemSave(struct obj_data* i, int dam_type) ;
+int oldItemSave(struct obj_data* i, int dam_type) ;                 // old item save routine
+void EditedItemState(struct char_data* ch, struct obj_data* obj);   // edited obj routine
 int LevelMod(struct char_data* ch, struct char_data* v, int exp) ;
 int LoreBackstabBonus(struct char_data* ch, struct char_data* v) ;
 void MakeScrap(struct char_data* ch,struct char_data* v, struct obj_data* obj) ;

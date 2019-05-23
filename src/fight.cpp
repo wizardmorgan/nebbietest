@@ -3320,10 +3320,20 @@ int GetWeaponDam(struct char_data* ch, struct char_data* v,
 			}
 		}
 		else {
-			act("$p snaps into pieces!", TRUE, ch, wielded, 0, TO_CHAR);
-			act("$p snaps into pieces!", TRUE, ch, wielded, 0, TO_ROOM);
+            /* spostato sotto
+            act("$p snaps into pieces!", TRUE, ch, wielded, 0, TO_CHAR);
+			act("$p snaps into pieces!", TRUE, ch, wielded, 0, TO_ROOM); */
 			if((obj = unequip_char(ch, WIELD))!=NULL) {
-				MakeScrap(ch,v, obj);
+                if(IS_OBJ_STAT2(obj, ITEM2_EDIT))
+                {
+                    // mettere funzione che ti sistema l'oggetto in inventario rotto e inutilizzabile
+                }
+                else
+                {
+                    act("$p snaps into pieces!", TRUE, ch, wielded, 0, TO_CHAR);
+                    act("$p snaps into pieces!", TRUE, ch, wielded, 0, TO_ROOM);
+                    MakeScrap(v, NULL, obj);
+                }
 				dam += 1;
 			}
 		}
@@ -4471,7 +4481,6 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
     case SPELL_CAUSE_SERIOUS:
     case SPELL_HOLY_WORD:
     case SPELL_UNHOLY_WORD:
-    case SPELL_PWORD_KILL:
         dam_type = RESI_HOLY;
         break;
 
@@ -4482,18 +4491,21 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 
     if(classe == CLASS_MONK && (dam_type == RESI_SLASH || dam_type == RESI_PIERCE || dam_type == RESI_BLUNT))
     {
-        if(ResiTotal(ch, RESI_SLASH) > 80 && ResiTotal(ch, RESI_PIERCE) > 80 && ResiTotal(ch, RESI_BLUNT) > 80)
+        if(CHECK_RESI(ch, RESI_SLASH) > 80 && CHECK_RESI(ch, RESI_PIERCE) > 80 && CHECK_RESI(ch, RESI_BLUNT) > 80)
         {
+            mudlog(LOG_PLAYERS, "dam = %d, resistenza = %d, danno diminuito = %d", dam, CHECK_RESI(ch, dam_type), int(dam * 50 / 100));
             dam -= int(dam * 50 / 100);
         }
-        else if(ResiTotal(ch, RESI_BLUNT) > 80)
+        else if(CHECK_RESI(ch, RESI_BLUNT) > 80)
         {
+            mudlog(LOG_PLAYERS, "dam = %d, resistenza = %d, danno diminuito = %d", dam, CHECK_RESI(ch, dam_type), int(dam * 50 / 100));
             dam -= int(dam * 50 / 100);
         }
     }
     else
     {
-        dam -= int(dam * ResiTotal(ch, dam_type) / 100);
+        mudlog(LOG_PLAYERS, "dam = %d, resistenza = %d, danno diminuito = %d", dam, CHECK_RESI(ch, dam_type), int(dam * CHECK_RESI(ch, dam_type) / 100));
+        dam -= int(dam * CHECK_RESI(ch, dam_type) / 100);
     }
 
 /*	if(classe !=CLASS_MONK) {
@@ -4527,16 +4539,18 @@ int DamageOneItem(struct char_data* ch, int dam_type, struct obj_data* obj) {
 	char buf[256];
 
 	num = DamagedByAttack(obj, dam_type);
-	if(num) {
-		sprintf(buf, "%s si %s.\n\r",obj->short_description,
-				ItemDamType[dam_type-1]);
+	if(num)
+    {
+		sprintf(buf, "%s si %s.\n\r",obj->short_description, ItemDamType[dam_type-1]);
 		send_to_char(buf,ch);
-		if(num == -1) {   /* destroy object*/
+		if(num == -1)
+        {   /* destroy object*/
 			return(TRUE);
-
 		}
-		else {     /* "damage item"  (armor), (weapon) */
-			if(DamageItem(ch, obj, num)) {
+		else
+        {     /* "damage item"  (armor), (weapon) */
+			if(DamageItem(ch, obj, num))
+            {
 				return(TRUE);
 			}
 		}
@@ -4545,6 +4559,20 @@ int DamageOneItem(struct char_data* ch, int dam_type, struct obj_data* obj) {
 
 }
 
+void EditedItemState(struct char_data* ch, struct obj_data* obj)
+{
+    obj_to_char(obj, ch);
+
+    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+    {
+        return;
+    }
+
+    SET_BIT(obj->obj_flags.extra_flags2, ITEM2_DESTROYED);
+
+    act("$p diventa inutilizzabile.", TRUE, ch, obj, 0, TO_CHAR);
+    act("$p diventa inutilizzabile.", TRUE, ch, obj, 0, TO_ROOM);
+}
 
 void MakeScrap(struct char_data* ch,struct char_data* v, struct obj_data* obj) {
 	char buf[200];
@@ -4610,8 +4638,16 @@ void DamageAllStuff(struct char_data* ch, int dam_type) {
 			obj = ch->equipment[j];
 			if(DamageOneItem(ch, dam_type, obj)) {
 				/* TRUE == destroyed */
-				if((obj = unequip_char(ch,j))!=NULL) {
-					MakeScrap(ch,NULL, obj);
+				if((obj = unequip_char(ch,j))!=NULL)
+                {
+                    if(IS_OBJ_STAT2(obj, ITEM2_EDIT) || IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
+                    {
+                        EditedItemState(ch, obj);
+                    }
+                    else
+                    {
+                        MakeScrap(ch, NULL, obj);
+                    }
 				}
 				else {
 					mudlog(LOG_SYSERR, "hmm, really wierd in DamageAllStuff!");
@@ -4626,8 +4662,16 @@ void DamageAllStuff(struct char_data* ch, int dam_type) {
 	while(obj) {
 		next = obj->next_content;
 		if(obj->item_number >= 0) {
-			if(DamageOneItem(ch, dam_type, obj)) {
-				MakeScrap(ch,NULL, obj);
+			if(DamageOneItem(ch, dam_type, obj))
+            {
+                if(IS_OBJ_STAT2(obj, ITEM2_EDIT) || IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
+                {
+                    EditedItemState(ch, obj);
+                }
+                else
+                {
+                    MakeScrap(ch, NULL, obj);
+                }
 			}
 		}
 		obj = next;
@@ -4654,7 +4698,125 @@ int DamageItem(struct char_data* ch, struct obj_data* o, int num) {
 	return(FALSE);
 }
 
-int ItemSave(struct obj_data* i, int dam_type) {
+int ItemSave(struct obj_data* i, int dam_type)
+{
+    int num, j, val = 1;
+    
+    /* obj fails save automatically it brittle */
+    if(IS_OBJ_STAT(i,ITEM_BRITTLE))
+    {
+        return(FALSE);
+    }
+
+    /* this is to give resistant magic items a better chance to save */
+    if(IS_OBJ_STAT(i, ITEM_RESISTANT))
+    {
+        val = 2;
+    }
+
+    /* this is to give immune magic items a very better chance to save */
+    if(IS_OBJ_STAT(i, ITEM_IMMUNE))
+    {
+        val = 3;
+        if(ITEM_TYPE(i) == ITEM_CONTAINER)
+        {
+            return(TRUE);
+        }
+    }
+
+    /* ALAR */
+    /* Inserito drastico miglioramento dei tiri salvezza..
+     * solo una su 4 testa il tiro*/
+    /* Rimosso per riammettere lo scrap nel mondo */
+#if NOSCRAP
+    if(number(0,3))
+    {
+        return(TRUE);
+    }
+#endif
+
+    do {
+        num = number(1, 20);
+        mudlog(LOG_PLAYERS, "val %d - oggetto %s - num = %d", val, i->short_description, num);
+
+        if(num == 1 && val == 1)
+        {
+            return(FALSE);
+        }
+        else if(num == 1 && val > 1)
+        {
+            val -= 1;
+        }
+
+        if(num >= 20)
+        {
+            return(TRUE);
+        }
+
+        if(IS_OBJ_STAT(i, ITEM_IMMUNE))
+        {
+            num += 7;
+            mudlog(LOG_PLAYERS, "val %d - oggetto %s - num = %d dopo immune", val, i->short_description, num);
+        }
+
+        for(j = 0; j < MAX_OBJ_AFFECT; j++)
+        {
+            if((i->affected[j].location == APPLY_SAVING_SPELL) ||
+               (i->affected[j].location == APPLY_SAVE_ALL))
+            {
+                num -= i->affected[j].modifier;
+            }
+            else if(i->affected[j].location == APPLY_NONE || i->affected[j].location == APPLY_SKIP)
+            {
+                num -= 1;
+            }
+            else if(i->affected[j].location == APPLY_HITNDAM || i->affected[j].location == APPLY_DAMROLL)
+            {
+                num -= i->affected[j].modifier;
+            }
+            mudlog(LOG_PLAYERS, "val %d - oggetto %s - num = %d affect %d", val, i->short_description, num, j);
+        }
+
+        if(ITEM_TYPE(i) != ITEM_ARMOR)
+        {
+            num += 3;
+            mudlog(LOG_PLAYERS, "val %d - oggetto %s - num = %d oggetto non armor", val, i->short_description, num);
+        }
+
+        if(IS_SET(i->obj_flags.extra_flags, ITEM_BLESS))
+        {
+            num += 1;
+            mudlog(LOG_PLAYERS, "val %d - oggetto %s - num = %d dopo controllo bless", val, i->short_description, num);
+        }
+
+        if(num <= 1 && val <= 1)
+        {
+            return(FALSE);
+        }
+        
+        if(num >= 20)
+        {
+            return(TRUE);
+        }
+
+        if(num >= ItemSaveThrows[(int)GET_ITEM_TYPE(i)-1][dam_type-1])
+        {
+            mudlog(LOG_PLAYERS, "val %d - oggetto %s - num = %d ha passato il save", val, i->short_description, num);
+            return(TRUE);
+        }
+        else if(val <= 1)
+        {
+            return(FALSE);
+        }
+        
+        val -= 1;
+        mudlog(LOG_PLAYERS, "oggetto %s - num = %d ora val = %d a fine ciclo", i->short_description, num, val);
+    } while (val > 0);
+    
+    return(FALSE);
+}
+
+int oldItemSave(struct obj_data* i, int dam_type) {
 	int num, j;
 
 	/* obj fails save automatically it brittle */
@@ -4701,6 +4863,11 @@ int ItemSave(struct obj_data* i, int dam_type) {
 		num += 1;
 	}
 
+    if(IS_SET(i->obj_flags.extra_flags, ITEM_BLESS))
+    {
+        num += 2;
+    }
+
 	if(num <= 1) {
 		return(FALSE);
 	}
@@ -4721,21 +4888,27 @@ int ItemSave(struct obj_data* i, int dam_type) {
 int DamagedByAttack(struct obj_data* i, int dam_type) {
 	int num = 0;
 
-	if((ITEM_TYPE(i) == ITEM_ARMOR) || (ITEM_TYPE(i) == ITEM_WEAPON)) {
-		while(!ItemSave(i,dam_type)) {
+	if((ITEM_TYPE(i) == ITEM_ARMOR) || (ITEM_TYPE(i) == ITEM_WEAPON))
+    {
+		while(!ItemSave(i,dam_type))
+        {
 			num+=1;
-			if(num > 75) {
+			if(num > 75)
+            {
 				return(num);
 			}  /* so anything with over 75 ac points will not be
 			destroyed */
 		}
 		return(num);
 	}
-	else {
-		if(ItemSave(i, dam_type)) {
+	else
+    {
+		if(ItemSave(i, dam_type))
+        {
 			return(0);
 		}
-		else {
+		else
+        {
 			return(-1);
 		}
 	}
@@ -4836,8 +5009,16 @@ void DamageStuff(struct char_data* v, int type, int dam, int location) {
 					(type == TYPE_HIT && dam > 40) ||
 					(num == WEAR_SHIELD && dam > 1)) {
 				if(DamageOneItem(v, BLOW_DAMAGE, v->equipment[ num ])) {
-					if((obj = unequip_char(v, num)) != NULL) {
-						MakeScrap(v, NULL, obj);
+					if((obj = unequip_char(v, num)) != NULL)
+                    {
+                        if(IS_OBJ_STAT2(obj, ITEM2_EDIT) || IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
+                        {
+                            EditedItemState(v, obj);
+                        }
+                        else
+                        {
+                            MakeScrap(v, NULL, obj);
+                        }
 					}
 				}
 			}

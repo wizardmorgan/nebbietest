@@ -187,89 +187,119 @@ void show_obj_to_char(struct obj_data* object, struct char_data* ch, int mode) {
 	}
 
 	if(mode != 3) {
-		if(IS_OBJ_STAT(object, ITEM_INVISIBLE)) {
-			strcat(buffer,"$c0011 (invisibile)$c0007");
-		}
-		if(IS_OBJ_STAT(object, ITEM_ANTI_GOOD) &&
-				IS_AFFECTED(ch, AFF_DETECT_EVIL)) {
-			if(singular(object)) {
-				strcat(buffer, "$c0009 (ha un alone di luce rossa)$c0007");
-			}
-			else {
-				strcat(buffer,"$c0009 (hanno un alone di luce rossa)$c0007");
-			}
-		}
-		if(IS_OBJ_STAT(object, ITEM_MAGIC) &&
-				IS_AFFECTED(ch, AFF_DETECT_MAGIC)) {
-			if(singular(object)) {
-				strcat(buffer,"$c0012 (ha un alone di luce blu)$c0007");
-			}
-			else {
-				strcat(buffer,"$c0012 (hanno un alone di luce blu)$c0007");
-			}
-		}
-		if(IS_OBJ_STAT(object, ITEM_GLOW)) {
-			if(singular(object)) {
-				strcat(buffer, "$c0015 (ha un alone luminoso)$c0007");
-			}
-			else {
-				strcat(buffer,"$c0015 (hanno un alone luminoso)$c0007");
-			}
-		}
-		if(IS_OBJ_STAT(object,ITEM_HUM)) {
-			if(singular(object)) {
-				strcat(buffer,"$c0008 (emette un forte ronzio)$c0007");
-			}
-			else {
-				strcat(buffer,"$c0008 (emettono un forte ronzio)$c0007");
-			}
-		}
-		if(object->obj_flags.type_flag == ITEM_ARMOR) {
-			if(object->obj_flags.value[ 0 ] <
-					(object->obj_flags.value[ 1 ] / 4)) {
-				if(singular(object)) {
-					strcat(buffer, "$c0009 (distrutto)$c0007");
-				}
-				else {
-					strcat(buffer,"$c0009 (sono distrutti)$c0007");
-				}
-			}
-			else if(object->obj_flags.value[ 0 ] <
-					(object->obj_flags.value[ 1 ] / 3)) {
-				if(singular(object)) {
-					strcat(buffer, "$c0009 (ha bisogno di essere riparato)$c0007");
-				}
-				else {
-					strcat(buffer,"$c0009 (hanno bisogno di essere riparati)$c0007");
-				}
-			}
-			else if(object->obj_flags.value[ 0 ] <
-					(object->obj_flags.value[ 1 ] / 2)) {
-				if(singular(object)) {
-					strcat(buffer, "$c0011 (in buone condizioni)$c0007");
-				}
-				else {
-					strcat(buffer,"$c0011 (in buone condizioni)$c0007");
-				}
-			}
-			else if(object->obj_flags.value[ 0 ] <
-					object->obj_flags.value[1]) {
-				if(singular(object)) {
-					strcat(buffer, "$c0010 (in ottime condizioni)$c0007");
-				}
-				else {
-					strcat(buffer,"$c0010 (in ottime condizioni)$c0007");
-				}
-			}
-			else {
-				if(singular(object)) {
-					strcat(buffer, "$c0010 (in condizioni eccellenti)$c0007");
-				}
-				else {
-					strcat(buffer,"$c0010 (in condizioni eccellenti)$c0007");
-				}
-			}
-		}
+        if(IS_OBJ_STAT2(object, ITEM2_DESTROYED))
+        {
+            strcat(buffer,"$c0011 (inutilizzabile)$c0007");
+        }
+        else
+        {
+            if(IS_OBJ_STAT(object, ITEM_INVISIBLE))
+            {
+                strcat(buffer,"$c0011 (invisibile)$c0007");
+            }
+            if(IS_OBJ_STAT(object, ITEM_ANTI_GOOD) && IS_AFFECTED(ch, AFF_DETECT_EVIL))
+            {
+                if(singular(object))
+                {
+                    strcat(buffer, "$c0009 (ha un alone di luce rossa)$c0007");
+                }
+                else
+                {
+                    strcat(buffer,"$c0009 (hanno un alone di luce rossa)$c0007");
+                }
+            }
+            if(IS_OBJ_STAT(object, ITEM_MAGIC) && IS_AFFECTED(ch, AFF_DETECT_MAGIC))
+            {
+                if(singular(object))
+                {
+                    strcat(buffer,"$c0012 (ha un alone di luce blu)$c0007");
+                }
+                else
+                {
+                    strcat(buffer,"$c0012 (hanno un alone di luce blu)$c0007");
+                }
+            }
+            if(IS_OBJ_STAT(object, ITEM_GLOW))
+            {
+                if(singular(object))
+                {
+                    strcat(buffer, "$c0015 (ha un alone luminoso)$c0007");
+                }
+                else
+                {
+                    strcat(buffer,"$c0015 (hanno un alone luminoso)$c0007");
+                }
+            }
+            if(IS_OBJ_STAT(object,ITEM_HUM))
+            {
+                if(singular(object))
+                {
+                    strcat(buffer,"$c0008 (emette un forte ronzio)$c0007");
+                }
+                else
+                {
+                    strcat(buffer,"$c0008 (emettono un forte ronzio)$c0007");
+                }
+            }
+            if(object->obj_flags.type_flag == ITEM_ARMOR)
+            {
+                if(object->obj_flags.value[ 0 ] < (object->obj_flags.value[ 1 ] / 4))
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0009 (distrutto)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0009 (sono distrutti)$c0007");
+                    }
+                }
+                else if(object->obj_flags.value[ 0 ] < (object->obj_flags.value[ 1 ] / 3))
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0009 (ha bisogno di essere riparato)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0009 (hanno bisogno di essere riparati)$c0007");
+                    }
+                }
+                else if(object->obj_flags.value[ 0 ] < (object->obj_flags.value[ 1 ] / 2))
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0011 (in buone condizioni)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0011 (in buone condizioni)$c0007");
+                    }
+                }
+                else if(object->obj_flags.value[ 0 ] < object->obj_flags.value[1])
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0010 (in ottime condizioni)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0010 (in ottime condizioni)$c0007");
+                    }
+                }
+                else
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0010 (in condizioni eccellenti)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0010 (in condizioni eccellenti)$c0007");
+                    }
+                }
+            }
+        }
 	}
 	if(buffer[ 0 ]) {
 		strcat(buffer, "\n\r");
@@ -2155,10 +2185,88 @@ ACTION_FUNC(do_checkachielevel)
 {
     int i, num = 0;
     std::string sb;
+    char save_db[128];
 
     if(strcmp(GET_NAME(ch), "Croneh") && strcmp(GET_NAME(ch), "Alar") && strcmp(GET_NAME(ch), "Requiem"))
     {
         send_to_char("Pardon?\n\r", ch);
+        return;
+    }
+
+    arg = one_argument(arg, save_db);
+    if(!strcmp(save_db, "edit"))
+    {
+        FILE* f;
+
+/*        if(strcmp(save_db, "edit"))
+        {
+            send_to_char("Se vuoi salvare il database scrivi checkachielevel edit.\n\r", ch);
+            return;
+        } */
+
+        send_to_char("Inizio a scrivere il Database Oggetti su file.\n\n", ch);
+        
+        for(int i = 34030; i < 35000; i++)
+        {
+            if((f = fopen(DB_EDIT_FILE, "at")) == NULL) {
+                send_to_char("Can't write to disk now..try later.\n\r", ch);
+                return;
+            }
+            WriteDbObj(f, 28, i, 0);
+            fclose(f);
+        }
+        send_to_char("Fatto.\n\n", ch);
+        return;
+    }
+    else if(!strcmp(save_db, "numero"))
+    {
+        char argomento2[128], buf[128], buf2[128];
+        int type, location = 0, low = 0, high = 0;
+        FILE* f;
+
+        arg = one_argument(arg, argomento2);
+        type = atoi(argomento2);
+
+        if(type < 1 || type > 27)
+        {
+            send_to_char("Se vuoi salvare il database degli oggetti scrivi checkachielevel numero <numero> <numero_slot>.\n\r", ch);
+            return;
+        }
+
+        arg = one_argument(arg, argomento2);
+        location = atoi(argomento2);
+        if(location > 20)
+        {
+            send_to_char("Se vuoi salvare il database degli oggetti scrivi checkachielevel numero <numero> <numero_slot>.\n\r", ch);
+            return;
+        }
+
+        if(type == 27)
+        {
+            sprintf(buf, "ALL_database");
+            low = 1;
+            high = 51000;
+        }
+        else
+        {
+            sprintf(buf, "%s_database_%s", item_types[type], (location == 0 ? "ALL" : wear_bits[location]));
+            low = 1;
+            high = 51000;
+        }
+
+        sprintf(buf2, "Inizio a scrivere il Database Oggetti %s%s%s.\n\n", (type == 27 ? "Completo" : ""), (type == 27 ? "" : "di tipo "), (type == 27 ? "" : item_types[type]));
+        send_to_char(buf2, ch);
+
+        for(int i = low; i < high; i++)
+        {
+            if((f = fopen(buf, "at")) == NULL) {
+                send_to_char("Can't write to disk now..try later.\n\r", ch);
+                return;
+            }
+            WriteDbObj(f, type, i, location);
+            fclose(f);
+        }
+        send_to_char("Fatto.\n\n", ch);
         return;
     }
 
@@ -4910,7 +5018,7 @@ void do_where_person(struct char_data* ch, struct char_data* person,
 		return;
 	}
 
-	snprintf(buf, MAX_STRING_LENGTH-1,"%-40s- %s ", PERS(person, ch),
+	snprintf(buf, MAX_STRING_LENGTH-1,"%-50s- %s ", PERS(person, ch),
 			 (person->in_room > -1 ? real_roomp(person->in_room)->name :
 			  "Nowhere"));
 
@@ -4929,7 +5037,7 @@ void do_where_object(struct char_data* ch, struct obj_data* obj,
 	if(obj->in_room != NOWHERE) {
 		/* object in a room */
 		snprintf(buf, MAX_STRING_LENGTH-1,
-				 "%-40s- %s [%d]\n\r",
+				 "%-50s- %s [%d]\n\r",
 				 obj->short_description,
 				 real_roomp(obj->in_room)->name,
 				 obj->in_room);
@@ -4937,25 +5045,25 @@ void do_where_object(struct char_data* ch, struct obj_data* obj,
 	else if(obj->carried_by != NULL) {
 		/* object carried by monster */
 		snprintf(buf, MAX_STRING_LENGTH-1,
-				 "%-40s- trasportato da %s\n\r",
+				 "%-50s- trasportato da %s\n\r",
 				 obj->short_description,
 				 numbered_person(ch, obj->carried_by));
 	}
 	else if(obj->equipped_by != NULL) {
 		/* object equipped by monster */
 		snprintf(buf, MAX_STRING_LENGTH-1,
-				 "%-40s- usato da %s\n\r",
+				 "%-50s- usato da %s\n\r",
 				 obj->short_description,
 				 numbered_person(ch, obj->equipped_by));
 	}
 	else if(obj->in_obj) {
 		/* object in object */
-		snprintf(buf, MAX_STRING_LENGTH-1,"%-40s- in %s\n\r",
+		snprintf(buf, MAX_STRING_LENGTH-1,"%-50s- in %s\n\r",
 				 obj->short_description,
 				 numbered_object(ch, obj->in_obj));
 	}
 	else {
-		snprintf(buf, MAX_STRING_LENGTH-1,"%-40s- Nemmeno Dio sa dove...\n\r",
+		snprintf(buf, MAX_STRING_LENGTH-1,"%-50s- Nemmeno Dio sa dove...\n\r",
 				 obj->short_description);
 	}
 	if(*buf) {
@@ -4978,6 +5086,94 @@ void do_where_object(struct char_data* ch, struct obj_data* obj,
 	}
 }
 
+void owhere(struct char_data* ch, char* nome)
+{
+    char name [MAX_STRING_LENGTH], buf[MAX_STRING_LENGTH];
+//    register struct char_data* i;
+    register struct obj_data* k;
+//    struct descriptor_data* d;
+    int        number = 0, count = 0;
+    struct string_block        sb;
+ //   string sb_rent_pg;
+    
+    only_argument(nome, name);
+
+    int N_oggetto = atoi(name);
+    
+    init_string_block(&sb);
+    
+    for(k = object_list; k; k = k->next)
+    {
+        if(isname(name, k->name) && CAN_SEE_OBJ(ch, k))
+        {
+            if(number==0 || (--count)==0)
+            {
+                if(number==0)
+                {
+                    snprintf(buf, MAX_STRING_LENGTH-1,"[%3d] ", ++count);
+                    append_to_string_block(&sb, buf);
+                }
+                do_where_object(ch, k, number!=0, &sb);
+                *buf = 1;
+                if(number!=0)
+                {
+                    break;
+                }
+            }
+        }
+    }
+    
+    count++;
+    bool found = FALSE;
+    struct stringa_valore sb_count;
+    if(N_oggetto < 1)
+    {
+        for(number = 0; number < top_of_objt; number++)
+        {
+            if(isname(name, obj_index[number].name))
+            {
+                sb_count = find_obj(ch, obj_index[number].iVNum, count++);
+                found = TRUE;
+                append_to_string_block(&sb, sb_count.sb.c_str());
+                count = sb_count.conteggio;
+            }
+        }
+        if(number >= top_of_objt)
+        {
+            number = -1;
+        }
+    }
+    
+    if((number < 0 || number >= top_of_objt) && !*sb.data)
+    {
+        send_to_char("Non trovo niente del genere da nessuna parte.\n\r", ch);
+    }
+    else
+    {
+        if(N_oggetto > 0 && N_oggetto < 99999)
+        {
+            sb_count = find_obj(ch, obj_index[number].iVNum, count++);
+            found = TRUE;
+            append_to_string_block(&sb, sb_count.sb.c_str());
+            count = sb_count.conteggio;
+        }
+
+        if(!*sb.data)
+        {
+                send_to_char("Non trovo niente del genere da nessuna parte.\n\r", ch);
+        }
+        else if(!found)
+        {
+            append_to_string_block(&sb,"Non trovo niente del genere nei personaggi rentati.\n\r");
+        }
+        else
+        {
+            page_string_block(&sb, ch);
+        }
+    }
+    destroy_string_block(&sb);
+}
+
 ACTION_FUNC(do_where) {
 	char name[MAX_INPUT_LENGTH], buf[MAX_STRING_LENGTH];
 	char*        nameonly;
@@ -4986,8 +5182,20 @@ ACTION_FUNC(do_where) {
 	struct descriptor_data* d;
 	int        number, count;
 	struct string_block        sb;
+    char tipo[10];
+    const char* copia;
 
+    copia = arg;
 	only_argument(arg, name);
+
+    copia = one_argument(copia, tipo);
+    if(!strcmp(tipo, "obj") && IS_DIO(ch))
+    {
+        only_argument(copia, name);
+        mudlog(LOG_PLAYERS, "cerco %s", name);
+        owhere(ch, name);
+        return;
+    }
 
 	if(!*name) {
 		if(GetMaxLevel(ch) < DIO) {
@@ -5004,14 +5212,14 @@ ACTION_FUNC(do_where) {
 						CAN_SEE(ch, d->character)) {
 					if(d->original)    /* If switched */
 						snprintf(buf, MAX_STRING_LENGTH-1,
-								 "%-20s - %s [%d] Nel corpo di %s\n\r",
+								 "%-20s - %s [%3d] Nel corpo di %s\n\r",
 								 d->original->player.name,
 								 real_roomp(d->character->in_room)->name,
 								 d->character->in_room,
 								 fname(d->character->player.name));
 					else
 						snprintf(buf, MAX_STRING_LENGTH-1,
-								 "%-20s - %s [%d]\n\r",
+								 "%-20s - %s [%3d]\n\r",
 								 d->character->player.name,
 								 real_roomp(d->character->in_room)->name,
 								 d->character->in_room);
@@ -5051,7 +5259,7 @@ ACTION_FUNC(do_where) {
 				if(number==0 || (--count) == 0) {
 					if(number==0) {
 						snprintf(buf, MAX_STRING_LENGTH-1,
-								 "[%2d] ", ++count); /* I love short circuiting :) */
+								 "[%3d] ", ++count); /* I love short circuiting :) */
 						append_to_string_block(&sb, buf);
 					}
 					do_where_person(ch, i, &sb);
@@ -5073,7 +5281,7 @@ ACTION_FUNC(do_where) {
 			if(isname(name, k->name) && CAN_SEE_OBJ(ch, k)) {
 				if(number==0 || (--count)==0) {
 					if(number==0) {
-						snprintf(buf, MAX_STRING_LENGTH-1,"[%2d] ", ++count);
+						snprintf(buf, MAX_STRING_LENGTH-1,"[%3d] ", ++count);
 						append_to_string_block(&sb, buf);
 					}
 					do_where_object(ch, k, number!=0, &sb);
@@ -5802,6 +6010,21 @@ ACTION_FUNC(do_value) {
 					   ch->skills[SKILL_EVALUATE].learned-10),
 			 obj->obj_flags.cost >= LIM_ITEM_COST_MIN ? "[RARO]" : " ");
 	send_to_char(buf, ch);
+
+    if(IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
+    {
+        int exp = 0;
+        int exp_d = 0;
+        if(obj->value_exp_edit > 0)
+        {
+            exp = int(obj->value_exp_edit / 1000000);
+            exp_d = int((obj->value_exp_edit - (exp * 1000000)) / 10000);
+        }
+        if(obj->value_exp_edit > 0 || obj->value_rune_edit > 0)
+        {
+            snprintf(buf,999,"Sono stati spesi : %d,%d MegaXP, e %d Rune degli Dei.\n\r", exp, exp_d, obj->value_rune_edit);
+        }
+    }
 
 	if(ITEM_TYPE(obj) == ITEM_WEAPON) {
 		snprintf(buf, 999,"Valore di danno: '%dD%d'\n\r",

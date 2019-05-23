@@ -732,7 +732,7 @@ void ChangeObjType(struct char_data* ch, const char* arg, int type) {
 	if(type != ENTER_CHECK) {
 		switch(ch->specials.oedit) {
 		case CHANGE_OBJ_TYPE:
-			if(update < 0 || update > 24) {
+			if(update < 1 || update > 26) {
 				return;
 			}
 			else {
@@ -775,7 +775,7 @@ void ChangeObjType(struct char_data* ch, const char* arg, int type) {
         send_to_char(buf, ch);
 
         row = 0;
-        for(i = 0; i < 25; i++)
+        for(i = 1; i < 27; i++)
         {
             sprintf(buf, VT_CURSPOS, row + 4, ((i & 1) ? 45 : 5));
             if(i & 1)
@@ -801,7 +801,7 @@ void ChangeObjType(struct char_data* ch, const char* arg, int type) {
         sprintf(buf, "\n\rObject Type: %s\n\r\n\r", item_types[(int)(ch->specials.objedit->obj_flags.type_flag) ]);
         send_to_char(buf, ch);
         
-        for(i = 0; i < 27; i++)
+        for(i = 1; i < 27; i++)
         {
             sprintf(buf2, "%s", "%-");
             sprintf(buf2, "%s%d", buf2, 45-x);
@@ -1036,7 +1036,7 @@ void ChangeObjAffect(struct char_data* ch, const char* arg, int type) {
 
 		update = atoi(arg)-1;
 
-		if(update < 0 || update > 55) {
+		if(update < 0 || update > E_APPLY_MAX) {
 			ch->specials.oedit = OBJ_MAIN_MENU;
 			UpdateObjMenu(ch);
 			return;
@@ -1157,6 +1157,25 @@ void ChangeObjAffect(struct char_data* ch, const char* arg, int type) {
 		case APPLY_DAMROLL:
 		case APPLY_HITNDAM:
 		case APPLY_SPELLFAIL:
+        case APPLY_RESI_FIRE:
+        case APPLY_RESI_COLD:
+        case APPLY_RESI_ELEC:
+        case APPLY_RESI_ENERGY:
+        case APPLY_RESI_BLUNT:
+        case APPLY_RESI_PIERCE:
+        case APPLY_RESI_SLASH:
+        case APPLY_RESI_ACID:
+        case APPLY_RESI_POISON:
+        case APPLY_RESI_DRAIN:
+        case APPLY_RESI_SLEEP:
+        case APPLY_RESI_CHARM:
+        case APPLY_RESI_HOLD:
+        case APPLY_RESI_NONMAG:
+        case APPLY_RESI_PLUS1:
+        case APPLY_RESI_PLUS2:
+        case APPLY_RESI_PLUS3:
+        case APPLY_RESI_PLUS4:
+        case APPLY_RESI_HOLY:
 			send_to_char("\n\rNote: Modifier will make field go up modifier number "
 						 "of points.\n\r",ch);
 			send_to_char("      Positive modifier will make field go up, negative "
@@ -1379,7 +1398,7 @@ void ChangeObjAffect(struct char_data* ch, const char* arg, int type) {
         sprintf(buf, VT_HOMECLR);
         send_to_char(buf, ch);
         
-        for(i = 0; i < 56; i++)
+        for(i = 0; i < E_APPLY_COUNT; i++)
         {
             a++;
             if(a==1)
@@ -1417,7 +1436,7 @@ void ChangeObjAffect(struct char_data* ch, const char* arg, int type) {
         
         send_to_char("\n\r\n\r", ch);
         
-        for(i = 0; i < 56; i++)
+        for(i = 0; i < E_APPLY_COUNT; i++)
         {
             a++;
             if(a == 1)

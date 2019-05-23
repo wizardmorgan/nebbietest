@@ -124,6 +124,10 @@
             "value": 3,
             "comment": ""
         },
+        "TOTAL_RESI": {
+            "value": 4,
+            "comment": ""
+        },
         "RESI_FIRE": {
             "value": 0,
             "comment": ""
@@ -3717,6 +3721,10 @@
             "IMM_PLUS4": {
                 "value": 131072,
                 "comment": ""
+            },
+            "IMM_HOLY": {
+                "value": 262144,
+                "comment": ""
             }
         },
         "e_hate_type": {
@@ -4024,6 +4032,10 @@
             "ITEM2_ONLY_PRINCE": {
                 "value": 64,
                 "comment": "only prince can use the item"
+            },
+            "ITEM2_DESTROYED": {
+                "value": 128,
+                "comment": "destroyed item"
             }
         }
     }

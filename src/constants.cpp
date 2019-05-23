@@ -1684,27 +1684,28 @@ int RacialHome[MAX_RACE+1][2] = {
 /*  fire cold elec blow acid */
 
 int ItemSaveThrows[22][5] = {
-	{15, 2, 10, 10, 10},
-	{19, 2, 16, 2, 7},
-	{11, 2, 2, 13, 9},
-	{7,  2, 2, 10, 8},
-	{6,  2, 2, 7, 13},
-	{10, 10, 10, 10, 10},  /* not defined */
-	{10, 10, 10, 10, 10},  /* not defined */
-	{6,  2, 2, 7, 13},  /* treasure */
-	{6,  2, 2, 7, 13},  /* armor */
-	{7,  6, 2, 20, 5},  /* potion */
-	{10, 10, 10, 10, 10},  /* not defined */
-	{10, 10, 10, 10, 10},  /* not defined */
-	{10, 10, 10, 10, 10},  /* not defined */
-	{10, 10, 10, 10, 10},  /* not defined */
-	{19, 2, 2, 16, 7},
-	{7,  6, 2, 20, 5},  /* drinkcon */
-	{6,  2, 2, 7, 13},
-	{6,  3, 2, 3, 10},
-	{6,  2, 2, 7, 13},  /* treasure */
-	{11, 2, 2, 13, 9},
-	{7,  2, 2, 10, 8}
+	{15, 2, 10, 10, 10},    //  light
+	{19, 2, 16, 2, 7},      //  scroll
+	{11, 2, 2, 13, 9},      //  wand
+	{7,  2, 2, 10, 8},      //  staff
+	{6,  2, 2, 7, 13},      //  weapon
+	{10, 10, 10, 10, 10},   //  fireweapon  /* not defined */
+	{10, 10, 10, 10, 10},   //  missile     /* not defined */
+	{6,  2, 2, 7, 13},      //  treasure
+	{6,  2, 2, 7, 13},      //  armor
+	{7,  6, 2, 20, 5},      //  potion
+	{10, 10, 10, 10, 10},   //  worn        /* not defined */
+	{10, 10, 10, 10, 10},   //  other       /* not defined */
+	{10, 10, 10, 10, 10},   //  trash       /* not defined */
+	{10, 10, 10, 10, 10},   //  trap        /* not defined */
+	{19, 2, 2, 16, 7},      //  container
+    {10, 10, 10, 10, 10},   //  note        /* not defined */
+	{7,  6, 2, 20, 5},      //  drinkcon
+	{6,  2, 2, 7, 13},      //  key
+	{6,  3, 2, 3, 10},      //  food
+	{6,  2, 2, 7, 13},      //  money
+	{11, 2, 2, 13, 9},      //  pen
+	{7,  2, 2, 10, 8}       //  boat
 };
 
 
@@ -2907,6 +2908,7 @@ const char* apply_types[] = {
 	"T_HPS",
 	"T_MOVE",
 	"T_MANA",
+    "SKIP",
     "RESI-FIRE",
     "RESI-COLD",
     "RESI-ELEC",
@@ -7950,32 +7952,68 @@ struct ClassAchieTable AchievementsList[MAX_ACHIE_CLASSES][MAX_ACHIE_TYPE] = {
 };
 
 struct TableReistPC MaxResisPC[25] =
-{//     racial_pc   equip_pc    edit_pc     superEdit   spell_pc
-    {   80,         50,         50,         10,         50      },  //  RESI_FIRE
-    {   80,         50,         50,         10,         50      },  //  RESI_COLD
-    {   80,         50,         50,         10,         50      },  //  RESI_ELEC
-    {   80,         50,         50,         10,         50      },  //  RESI_ENERGY
-    {   50,         50,         50,         0,          50      },  //  RESI_BLUNT
-    {   50,         50,         50,         0,          50      },  //  RESI_PIERCE
-    {   50,         50,         50,         0,          50      },  //  RESI_SLASH
-    {   80,         50,         50,         10,         50      },  //  RESI_ACID
-    {   100,        100,        100,        0,          50      },  //  RESI_POISON
-    {   100,        100,        100,        0,          50      },  //  RESI_DRAIN
-    {   100,        50,         50,         0,          50      },  //  RESI_SLEEP
-    {   100,        100,        100,        0,          50      },  //  RESI_CHARM
-    {   80,         50,         50,         30,         50      },  //  RESI_HOLD
-    {   0,          0,          0,          0,          0       },  //  RESI_NONMAG
-    {   0,          0,          0,          0,          0       },  //  RESI_PLUS1
-    {   0,          0,          0,          0,          0       },  //  RESI_PLUS2
-    {   0,          0,          0,          0,          0       },  //  RESI_PLUS3
-    {   0,          0,          0,          0,          0       },  //  RESI_PLUS4
-    {   80,         50,         50,         10,         50      },  //  RESI_HOLY
-    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED1
-    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED2
-    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED3
-    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED4
-    {   0,          0,          0,          0,          0       },  //  RESI_UNUSED5
-    {   0,          0,          0,          0,          0       }   //  RESI_UNUSED6
+{//     racial_pc   equip_pc    edit_pc     superEdit   spell_pc    name
+    {   80,         50,         50,         10,         50,         "RESI-FIRE"     },
+    {   80,         50,         50,         10,         50,         "RESI-COLD"     },
+    {   80,         50,         50,         10,         50,         "RESI-ELEC"     },
+    {   80,         50,         50,         10,         50,         "RESI-ENERGY"   },
+    {   50,         50,         50,         0,          50,         "RESI-BLUNT"    },
+    {   50,         50,         50,         0,          50,         "RESI-PIERCE"   },
+    {   50,         50,         50,         0,          50,         "RESI-SLASH"    },
+    {   80,         50,         50,         10,         50,         "RESI-ACID"     },
+    {   100,        100,        100,        0,          50,         "RESI-POISON"   },
+    {   100,        100,        100,        0,          50,         "RESI-DRAIN"    },
+    {   100,        50,         50,         0,          50,         "RESI-SLEEP"    },
+    {   100,        100,        100,        0,          50,         "RESI-CHARM"    },
+    {   80,         50,         50,         30,         50,         "RESI-HOLD"     },
+    {   0,          0,          0,          0,          0 ,         "RESI-NONMAG"   },
+    {   0,          0,          0,          0,          0 ,         "RESI-PLUS1"    },
+    {   0,          0,          0,          0,          0 ,         "RESI-PLUS2"    },
+    {   0,          0,          0,          0,          0 ,         "RESI-PLUS3"    },
+    {   0,          0,          0,          0,          0 ,         "RESI-PLUS4"    },
+    {   80,         50,         50,         10,         50,         "RESI-HOLY"     },
+    {   0,          0,          0,          0,          0 ,         "RESI-UNUSED1"  },
+    {   0,          0,          0,          0,          0 ,         "RESI-UNUSED2"  },
+    {   0,          0,          0,          0,          0 ,         "RESI-UNUSED3"  },
+    {   0,          0,          0,          0,          0 ,         "RESI-UNUSED4"  },
+    {   0,          0,          0,          0,          0 ,         "RESI-UNUSED5"  },
+    {   0,          0,          0,          0,          0 ,         "RESI-UNUSED6"  }
 };
+
+float bash_reaction[] =
+{
+    -7,     //  0
+    -4,     //  1
+    -3,     //  2
+    -2.5,   //  3
+    -2,     //  4
+    -1.5,   //  5
+    -1,     //  6
+    -0.5,   //  7
+    0,      //  8
+    0,      //  9
+    0.5,    // 10
+    1,      // 11
+    2,      // 12
+    3,      // 13
+    3.5,    // 14
+    4,      // 15
+    4.5,    // 16
+    5,      // 17
+    5.5,    // 18
+    6,      // 19
+    6.5,    // 20
+    7,      // 21
+    7.5,    // 22
+    8,      // 23
+    8.5,    // 24
+    9       // 25
+};
+/*
+int DataBaseObj[] =     // 34030
+{
+    3699,
+    
+}; */
 } // namespace Alarmud
 

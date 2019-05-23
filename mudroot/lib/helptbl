@@ -2,6 +2,11 @@
 EMPTY SLOT
 
 #
+"PERDITA LIVELLO"
+
+Vedi anche: MORTE, XP
+
+#
 MULTICLASSE
 
 E' possibile avere personaggi che appartengono a piu' classi.
@@ -721,18 +726,26 @@ le proprie magie.
 #
 "ASTRAL WALK"
 
-Sintassi    : cast 'astral walk' 
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 30 Cleric.
-Save        : Nessuno
-Costo di lancio: 30 mana
+| Sintassi          : cast 'astral walk'
+| Classi            : Chierico livello 30
+| Costo             : 30 mana
+| Tipo di danno     : -
+| Danno             : -
+| Durata            : -
+| Lag               : 1 round
+| Spellfail         : 0
+| Area effetto      : il Chierico e il suo gruppo
+| Tiro Salvezza     : -
+| Allineamento      : $c0010Neutrale$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Con questo incantesimo il chierico proietta lui e il suo gruppo sul piano astrale.
+| 
+|__________________________________________________________________________________________
 
-Con questo spell il caster puo' trasportarsi sul piano astrale.
-Se il caster e' seguito od in gruppo con altri giocatori o creature,
-anche questi verranno trasportati sul piano astrale insieme al caster.
-
-Vedi anche: -
+Vedi anche: PIANO ASTRALE, INCANTESIMI DI TRASPORTO
 
 #
 "CREATE LIGHT"
@@ -3219,28 +3232,52 @@ esatto della wand o staff per evitare confusioni.
 #
 "ARMOR"
 
-Sintassi    : cast 'armor' [vittima]
-Accumulazione: No
-Durata      : 24 ore
-Costo di lancio: 5 mana
+| Sintassi          : cast 'armor' <bersaglio>
+| Classi            : Mago livello 5, Stregone livello 5, Chierico livello 2
+| Costo             : 5 mana
+| Tipo di danno     : -
+| Danno             : -
+| Durata            : livello/2 ore
+| Lag               : 1 round
+| Spellfail         : 0
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : -
+| Allineamento      : $c0014Neutrale$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Un campo di forza invisibile, ma tangibile, circonda il bersaglio dell'incantesimo, 
+|  garantendogli un bonus all'armatura pari a 20 punti.
+| 
+|__________________________________________________________________________________________
 
-Lo spell Armor migliora la tua classe armatura (AC) di 20.
-
-Vedi anche: AC
+Vedi anche: INCANTESIMI DI PROTEZIONE, AC
 
 #
 "TELEPORT"
 
-Sintassi    : cast 'teleport' [vittima]
-Accumulazione: -
-Durata      : Instant
-Costo di lancio: 33 mana
+| Sintassi          : cast 'teleport' <bersaglio>
+| Classi            : Mago livello 17, Stregone livello 17
+| Costo             : 33 mana
+| Tipo di danno     : -
+| Danno             : -
+| Durata            : -
+| Lag               : 1 round
+| Spellfail         : 60
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : Incantesimi
+| Allineamento      : $c0010Neutrale$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Con questo incantesimo l'incantatore trasferira' il bersaglio, che puo' essere anche
+|  lui stesso, in un'altra locazione casuale del mondo.
+| 
+|__________________________________________________________________________________________
 
-Lo spell Teleport (con possibile errore) trasferira' istantaneamente
-la vittima in un'altra locazione nel mondo. La locazione e' casuale
-percio' ci sara' sempre il rischio di trovarsi in un posto pericoloso.
-Puo' essere usato anche come spell di combattimento per mandare al
-diavolo gli avversari.
+Vedi anche: INCANTESIMI DI TRASPORTO
 
 #
 "BLESS"
@@ -3725,126 +3762,210 @@ Vedi anche: HIDE
 #
 "MAGIC MISSILE"
 
-Sintassi    : cast 'magic missile' nome
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 1 magic user.
-Save        : Nessuno
-Costo di lancio: 15 mana
+| Sintassi          : cast 'magic missile' <bersaglio>
+| Classi            : Mago livello 1, Stregone livello 1
+| Costo             : 15 mana
+| Tipo di danno     : Energia
+| Danno             : (livello/2)d4 + 1d4 + livello/2
+| Durata            : -
+| Lag               : 1 round
+| Spellfail         : 10
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : -
+| Allineamento      : $c0010Neutrale$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+| 
+|  Un dardo di energia magica scaturisce dalle dita dell'incantatore e colpisce il
+|  bersaglio. Se la creatura bersaglio e' protetta dall'incantesimo 'shield' il dardo non
+|  provochera' alcun danno.
+|__________________________________________________________________________________________
 
-Produce danni per 1d4+1/2 livelli 
-Lo spell 'shield' resiste completamente agli effetti di questo spell.
+Vedi anche: DANNI ELEMENTALI, SHIELD
 
 #
 "CHILL TOUCH"
 
-Sintassi    : cast 'chill touch' nome
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 3 magic user.
-Save        : Versus spell for half damage.
-Costo di lancio: 15 mana
+| Sintassi          : cast 'chill touch' <bersaglio>
+| Classi            : Mago livello 4, Stregone livello 4
+| Costo             : 15 mana
+| Tipo di danno     : Freddo
+| Danno             : 1d3*livello
+| Durata            : -
+| Lag               : 1 round
+| Spellfail         : 10
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : Incantesimi, danno dimezzato
+| Allineamento      : $c0009Malvagio$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|  
+|  Il tocco della mano, che risplende di energia blu, devasta l’energia vitale delle
+|  creature viventi facendo perdere, in caso di fallimento del tiro salvezza verso
+|  incantesimi, 1 punto Forza al bersaglio per la durata di livello/12 ore.
+|__________________________________________________________________________________________
 
-Questo spell e' piu' potente dello spell 'magic missile' producendo
-1d3 punti danno per livello. La vittima che fallisca il tiro salvezza
-vedra' la sua forza ridotta di un punto.
-
-Vedi anche: MAGIC MISSILE
+Vedi anche: DANNI ELEMENTALI
 
 #
 "BURNING HANDS"
 
-Sintassi    : cast 'burning hands' nome
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 5 magic user.
-Save        : Versus spell for half damage.
-Costo di lancio: 15 mana
+| Sintassi          : cast 'burning hands' <bersaglio>
+| Classi            : Mago livello 6, Stregone livello 6
+| Costo             : 15 mana
+| Tipo di danno     : Fuoco
+| Danno             : 1d4 + livello/2
+| Durata            : -
+| Lag               : 2 rounds
+| Spellfail         : 5
+| Area effetto      : stanza
+| Tiro Salvezza     : Incantesimi, annulla il danno
+| Allineamento      : $c0009Neutrale$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Un cono di fiamme incandescenti si sprigiona dalle proprie dita ed investe tutte le
+|  creature nella stanza non in gruppo con l'incantatore. Se la stanza e' buia e non si e'
+|  affetti dall'incantesimo 'true sight', ma si possiede l'infravisione, si resta accecati
+|  per un numero variabile di ore (da 1 a 4).
+|__________________________________________________________________________________________
 
-1d4+1/livello.
-Colpisce tutti quelli che non sono nel gruppo del caster-
-
-Vedi anche: CHILL TOUCH
+Vedi anche: DANNI ELEMENTALI, FIREBALL, BLINDNESS
 
 #
 "SHOCKING GRASP"
 
-Sintassi    : cast 'shocking grasp' nome
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 1 magic user.
-Save        : Neg
-Costo di lancio: 15 mana
+| Sintassi          : cast 'shocking grasp' <bersaglio>
+| Classi            : Mago livello 2, Stregone livello 2
+| Costo             : 15 mana
+| Tipo di danno     : Elettricita'
+| Danno             : 1d8 + livello
+| Durata            : -
+| Lag               : 1 round
+| Spellfail         : 0
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : -
+| Allineamento      : $c0009Neutrale$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Un attacco di contatto in mischia compiuto con successo infligge una scarica elettrica 
+|  al bersaglio. Se il bersaglio e' una creatura umanoide in fin di vita l'incantatore
+|  effettuera', con la scarica elettrica, la rianimazione di quest'ultimo. 
+|__________________________________________________________________________________________
 
-2-9 + 1/livello.
-Se il tiro salvezza riesce il tocco necessario per lo spell fallisce e non
-si ha alcun effetto.
-
-Vedi anche: BURNING HANDS
+Vedi anche: DANNI ELEMENTALI
 
 #
 "LIGHTNING BOLT"
 
-Sintassi    : cast 'lightning bolt' nome
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 11 magic user.
-Save        : Versus spell for half damage.
-Costo di lancio: 15 mana
+| Sintassi          : cast 'lightning bolt' <bersaglio>
+| Classi            : Mago livello 2, Stregone livello 2
+| Costo             : 15 mana
+| Tipo di danno     : Elettricita'
+| Danno             : 1d6*livello
+| Durata            : -
+| Lag               : 2 rounds
+| Spellfail         : 20
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : Incantesimi, danno dimezzato
+| Allineamento      : $c0014Neutrale$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Dalle dita dell'incantatore si genera una potente scarica di energia elettrica che  
+|  colpisce il bersaglio.
+|  
+|__________________________________________________________________________________________
 
-
-1d6/livello.  1 target.
-
-Vedi anche: SHOCKING GRASP
+Vedi anche: DANNI ELEMENTALI
 
 #
 "COLOUR SPRAY"
 
-Sintassi    : cast 'color spray' nome
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 15 magic user.
-Save        : Versus spell for half damage.
-Costo di lancio: 20 mana
+| Sintassi          : cast 'colour spray' <bersaglio>
+| Classi            : Mago livello 14, Stregone livello 14
+| Costo             : 20 mana
+| Tipo di danno     : Energia
+| Danno             : 4*livello
+| Durata            : -
+| Lag               : 2 rounds
+| Spellfail         : 40
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : Incantesimi, danno dimezzato
+| Allineamento      : $c0009Neutrale$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Un cono di vividi colori si scaturisce dalla mano dell'incantatore investendo il  
+|  bersaglio.
+|  
+|  
+|__________________________________________________________________________________________
 
-4 punti danno per livello. Un solo obiettivo
-
-Vedi anche: LIGHTNING BOLT
+Vedi anche: DANNI ELEMENTALI
 
 #
 "ENERGY DRAIN"
 
-Sintassi    : cast 'energy drain' nome
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 23 magic user.
-Save        : Versus spell for half damage.
-Costo di lancio: 35 mana
+| Sintassi          : cast 'energy drain' <bersaglio>
+| Classi            : Mago livello 22, Stregone livello 22
+| Costo             : 35 mana
+| Tipo di danno     : Speciale
+| Danno             : 1d7*livello
+| Durata            : -
+| Lag               : 3 rounds
+| Spellfail         : 100
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : Incantesimi, danno dimezzato
+| Allineamento      : $c0009Malvagio$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Un raggio nero di energia negativa viene rilasciato dalle dita dell'incantatore verso  
+|  il bersaglio che, se fallisce il tiro salvezza e non e' immune al 'drain', subisce il
+|  risucchio della propria energia vitale. Il personaggio inoltre subisce anche la perdita 
+|  di un decimo dei propri punti esperienza (questo puo' portare anche alla perdita di uno
+|  o piu' livelli) fino ad un massimo di 50 milioni di punti per i Principi.
+|__________________________________________________________________________________________
 
-Risucchia un livello da un personaggio o da un mostro. Il livello perso
-porta via anche punti vita e pratiche di conseguenza. Sta molto attento
-ai mostri che hanno questa capacita'. Stai anche attendo al fatto che
-questo spell ti rende velocemente di allineamento malvagio.
-
-Vedi anche: -
+Vedi anche: PERDITA LIVELLO, PROTECTION FROM DRAIN
 
 #
 FIREBALL
-Sintassi    : cast 'fireball' nome
-Accumulazione: -
-Durata      : Istantanea
-Save        : Versus spell for half damage.
-Costo di lancio: 50 mana
 
-Con questo spell il caster dirige un grande volume di fiamma in una
-stanza. Danneggia tutti coloro che si trovano nella stanza ad
-eccezione dei componenti del suo gruppo. (1d6*livello del caster)
-Come per altre spell di attacco puo' danneggiare l'equipaggiamento.
-Le persone dotate di infravisione che non sono influenzate dallo spell
-'truesight' e che si trovano in una stanza buia saranno momentaneamente
-accecate.
+| Sintassi          : cast 'fireball'
+| Classi            : Mago livello 25, Stregone livello 25
+| Costo             : 50 mana
+| Tipo di danno     : Fuoco
+| Danno             : 1d8*livello
+| Durata            : -
+| Lag               : 3 rounds
+| Spellfail         : 25
+| Area effetto      : stanza
+| Tiro Salvezza     : Incantesimi, danno dimezzato
+| Allineamento      : $c0009Malvagio$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Una perla scintillante delle dimensioni di una biglia parte dal dito indice dello
+|  incantatore e cresce di dimensioni fino a diventare una palla di fuoco, una sfera
+|  infuocata che esplode con un sordo boato investendo con le fiamme tutte le creature 
+|  presenti nell'area ad eccezione dei compagni di avventura dell'incantatore. Come per
+|  l'incantesimo 'burning hands', se la stanza e' buia e non si e' affetti dall'incantesimo
+|  'true sight', ma si possiede l'infravisione, si resta accecati per un numero variabile
+|  di ore (da 1 a 4).
+|__________________________________________________________________________________________
 
-Vedi anche: COLOR SPRAY
+Vedi anche: DANNI ELEMENTALI, BURNING HANDS, BLINDNESS
 
 #
 "PRISMATIC SPRAY"
@@ -3878,27 +3999,58 @@ Il danno causato equivale a 1d10*livello del caster.
 
 #
 EARTHQUAKE
-Sintassi    : cast 'earthquake'
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 18 cleric.
-Costo di lancio: 15 mana
 
-Questo spell danneggera' tutti coloro nella stanza che non appartengono
-al gruppo del caster per un totale di 2d8+livello del caster.
+| Sintassi          : cast 'earthquake'
+| Classi            : Chierico livello 15
+| Costo             : 15 mana
+| Tipo di danno     : Sacro
+| Danno             : 1d4+livello+1
+| Durata            : -
+| Lag               : 2 rounds
+| Spellfail         : 30
+| Area effetto      : stanza
+| Tiro Salvezza     : -
+| Allineamento      : $c0009Malvagio$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Il chierico prega ed il terreno viene scosso da un tremito localizzato molto intenso
+|  che provoca danni a tutte le creature presenti nella stanza che non fanno parte del
+|  gruppo del chierico. I chierici monoclasse, grazie alla loro maggiore devozione,
+|  invocano un terremoto di una potenza maggiore che provoca alle creature presenti nella
+|  stanza, in caso di fallimento del tiro salvezza basato sulla destrezza, la caduta a
+|  terra per un round.
+|__________________________________________________________________________________________
+
+Vedi anche: DANNO SACRO
 
 #
 "DISPEL EVIL"
 
-Sintassi    : cast 'dispel evil' nome
-Accumulazione: -
-Durata      : Istantanea
-Save        : Speciale
-Costo di lancio: 15 mana
+| Sintassi          : cast 'dispel evil' <bersaglio>
+| Classi            : Chierico livello 20
+| Costo             : 15 mana
+| Tipo di danno     : Speciale
+| Danno             : -
+| Durata            : -
+| Lag               : 2 rounds
+| Spellfail         : 30
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : Incantesimi
+| Allineamento      : $c0014Buono$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Un chierico di allineamento buono prova a scacciare da questo piano una creatura di
+|  un altro piano di allineamento malvagio. Se quest'ultima fallisce il tiro salvezza e
+|  non e' di livello maggiore o uguale del chierico scompare da questo piano. 
+|  Il chierico inoltre guadagnerà' dell'esperienza in caso di riuscita dell'incantesimo.
+| 
+|__________________________________________________________________________________________
 
-Questo spell elimina creature di tipo malvagio che siano state evocate.
-
-Vedi anche: -
+Vedi anche: DISPEL GOOD
 
 #
 "DISPEL GOOD"
@@ -3915,38 +4067,54 @@ Vedi anche: -
 #
 "CALL LIGHTNING"
 
-Sintassi    : cast 'call lightning' nome
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 50 cleric, 18 Druid.
-Save        : Versus spell for half damage.
-Costo di lancio: 20 mana
+| Sintassi          : cast 'call lightning' <bersaglio>
+| Classi            : Chierico livello 45, Druido livello 18
+| Costo             : 20 mana
+| Tipo di danno     : Elettricita'
+| Danno             : 1d8*(livello + 2)
+| Durata            : -
+| Lag               : 3 rounds
+| Spellfail         : 50
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : Incantesimi, danno dimezzato
+| Allineamento      : $c0014Neutrale$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Questo incantesimo utilizza la forza della natura per richiamare un fulmine che si 
+|  abbatte sul bersaglio. Il fulmine puo' essere evocato solo all'aperto e se le condizioni
+|  atmosferiche lo permettono. Ricordati che puoi manipolare il tempo atmosferico con
+|  l'incantesimo 'control weather'.
+|__________________________________________________________________________________________
 
-Questo spell utilizza la forza della natura per creare un fulmine che
-si abbatte sulla vittima. E' naturalmente possibile utilizzarla solo
-all'aperto e solo se sta piovendo.
-
-Il fulmine infliggera' 1d8*(2+livello del caster) punti danno sulla
-vittima.
-
-Vedi anche: WEATHER and CONTROL WEATHER
+Vedi anche: DANNI ELEMENTALI, CONTROL WEATHER, TEMPO ATMOSFERICO
 
 #
 "HARM"
 
-Sintassi    : cast 'harm' nome
-Accumulazione: -
-Durata      : Istantanea
-Livello     : Level 25 cleric.
-Save        : Nessuno
-Costo di lancio: 35 mana
+| Sintassi          : cast 'harm' <bersaglio>
+| Classi            : Chierico livello 25
+| Costo             : 35 mana
+| Tipo di danno     : Sacro
+| Danno             : 100
+| Durata            : -
+| Lag               : 3 rounds
+| Spellfail         : 200
+| Area effetto      : 1 creatura bersaglio
+| Tiro Salvezza     : -
+| Allineamento      : $c0009Malvagio$c0007
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Se il chierico riesce a toccare con un attacco da mischia il bersaglio quest'ultimo
+|  subira' l'effetto dell'incantesimo. I non morti che vengono colpiti dal chierico con
+|  l'incantesimo 'harm' saranno curati di 100 punti ferita.
+| 
+|__________________________________________________________________________________________
 
-Questo spell funziona solo se il chierico riesce a toccare (colpire)
-la vittima. Se funziona elimina tutti i punti vita della vittima meno
-1d4, con un massimo di danno di 100.
-Non e' possibile uccidere una vittima con questo spell, ma quasi.
-
-Vedi anche: -
+Vedi anche: DANNO SACRO
 
 #
 HELP

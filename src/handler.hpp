@@ -20,7 +20,7 @@ void CheckCharList() ;
 int GiveMinStrToWield(struct obj_data* obj, struct char_data* ch) ;
 void affect_from_char(struct char_data* ch, short skill) ;
 void affect_join(struct char_data* ch, struct affected_type* af, bool avg_dur, bool avg_mod);
-void affect_modify(struct char_data* ch,byte loc, long mod, long bitv,bool add) ;
+void affect_modify(struct char_data* ch,byte loc, long mod, long bitv, int type, bool add) ;
 void affect_remove(struct char_data* ch, struct affected_type* af) ;
 void affect_to_char(struct char_data* ch, struct affected_type* af) ;
 void affect_total(struct char_data* ch) ;

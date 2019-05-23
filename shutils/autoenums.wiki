@@ -627,6 +627,7 @@ l'array connected_types in constants.cpp
 **EQUIP_RESI                                   1 
 **EDIT_RESI                                    2 
 **SPELL_RESI                                   3 
+**TOTAL_RESI                                   4 
 **RESI_FIRE                                    0 
 **RESI_COLD                                    1 
 **RESI_ELEC                                    2 

@@ -12,6 +12,7 @@
 #include <cstring>
 #include <cctype>
 #include <cstdlib>
+#include <dirent.h>
 #include <unistd.h>
 #include <ctime>
 #include <boost/algorithm/string.hpp>
@@ -1669,25 +1670,25 @@ ACTION_FUNC(do_stat) {
                 if(IS_PC(k))
                 {
                     send_to_char("$c0005Resistance (edit):\n\r", ch);
-                    sprintf(buf, " $c0005Fire: $c0014%d$c0005($c0014%d$c0005) Cold: $c0014%d$c0005($c0014%d$c0005) Elec: $c0014%d$c0005($c0014%d$c0005) Acid: $c0014%d$c0005($c0014%d$c0005) Energy: $c0014%d$c0005($c0014%d$c0005)\n\r", ResiTotal(k, RESI_FIRE), EDITED_RESI(k, RESI_FIRE), ResiTotal(k, RESI_COLD), EDITED_RESI(k, RESI_COLD), ResiTotal(k, RESI_ELEC), EDITED_RESI(k, RESI_ELEC), ResiTotal(k, RESI_ACID), EDITED_RESI(k, RESI_ACID), ResiTotal(k, RESI_ENERGY), EDITED_RESI(k, RESI_ENERGY));
+                    sprintf(buf, " $c0005Fire: $c0014%d$c0005($c0014%d$c0005) Cold: $c0014%d$c0005($c0014%d$c0005) Elec: $c0014%d$c0005($c0014%d$c0005) Acid: $c0014%d$c0005($c0014%d$c0005) Energy: $c0014%d$c0005($c0014%d$c0005)\n\r", CHECK_RESI(k, RESI_FIRE), EDITED_RESI(k, RESI_FIRE), CHECK_RESI(k, RESI_COLD), EDITED_RESI(k, RESI_COLD), CHECK_RESI(k, RESI_ELEC), EDITED_RESI(k, RESI_ELEC), CHECK_RESI(k, RESI_ACID), EDITED_RESI(k, RESI_ACID), CHECK_RESI(k, RESI_ENERGY), EDITED_RESI(k, RESI_ENERGY));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005Poison: $c0014%d$c0005($c0014%d$c0005) Drain: $c0014%d$c0005($c0014%d$c0005) Sleep: $c0014%d$c0005($c0014%d$c0005) Charm: $c0014%d$c0005($c0014%d$c0005) Hold: $c0014%d$c0005($c0014%d$c0005)\n\r", ResiTotal(k, RESI_POISON), EDITED_RESI(k, RESI_POISON), ResiTotal(k, RESI_DRAIN), EDITED_RESI(k, RESI_DRAIN), ResiTotal(k, RESI_SLEEP), EDITED_RESI(k, RESI_SLEEP), ResiTotal(k, RESI_CHARM), EDITED_RESI(k, RESI_CHARM), ResiTotal(k, RESI_HOLD), EDITED_RESI(k, RESI_HOLD));
+                    sprintf(buf, " $c0005Poison: $c0014%d$c0005($c0014%d$c0005) Drain: $c0014%d$c0005($c0014%d$c0005) Sleep: $c0014%d$c0005($c0014%d$c0005) Charm: $c0014%d$c0005($c0014%d$c0005) Hold: $c0014%d$c0005($c0014%d$c0005)\n\r", CHECK_RESI(k, RESI_POISON), EDITED_RESI(k, RESI_POISON), CHECK_RESI(k, RESI_DRAIN), EDITED_RESI(k, RESI_DRAIN), CHECK_RESI(k, RESI_SLEEP), EDITED_RESI(k, RESI_SLEEP), CHECK_RESI(k, RESI_CHARM), EDITED_RESI(k, RESI_CHARM), CHECK_RESI(k, RESI_HOLD), EDITED_RESI(k, RESI_HOLD));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005NonMag: $c0014%d$c0005($c0014%d$c0005) +1: $c0014%d$c0005($c0014%d$c0005) +2: $c0014%d$c0005($c0014%d$c0005) +3: $c0014%d$c0005($c0014%d$c0005) +4: $c0014%d$c0005($c0014%d$c0005) \n\r", ResiTotal(k, RESI_NONMAG), EDITED_RESI(k, RESI_NONMAG), ResiTotal(k, RESI_PLUS1), EDITED_RESI(k, RESI_PLUS1), ResiTotal(k, RESI_PLUS2), EDITED_RESI(k, RESI_PLUS2), ResiTotal(k, RESI_PLUS3), EDITED_RESI(k, RESI_PLUS3), ResiTotal(k, RESI_PLUS4), EDITED_RESI(k, RESI_PLUS4));
+                    sprintf(buf, " $c0005NonMag: $c0014%d$c0005($c0014%d$c0005) +1: $c0014%d$c0005($c0014%d$c0005) +2: $c0014%d$c0005($c0014%d$c0005) +3: $c0014%d$c0005($c0014%d$c0005) +4: $c0014%d$c0005($c0014%d$c0005) \n\r", CHECK_RESI(k, RESI_NONMAG), EDITED_RESI(k, RESI_NONMAG), CHECK_RESI(k, RESI_PLUS1), EDITED_RESI(k, RESI_PLUS1), CHECK_RESI(k, RESI_PLUS2), EDITED_RESI(k, RESI_PLUS2), CHECK_RESI(k, RESI_PLUS3), EDITED_RESI(k, RESI_PLUS3), CHECK_RESI(k, RESI_PLUS4), EDITED_RESI(k, RESI_PLUS4));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005Blunt: $c0014%d$c0005($c0014%d$c0005) Pierce: $c0014%d$c0005($c0014%d$c0005) Slash: $c0014%d$c0005($c0014%d$c0005) Holy: $c0014%d$c0005($c0014%d$c0005)\n\r", ResiTotal(k, RESI_BLUNT), EDITED_RESI(k, RESI_BLUNT), ResiTotal(k, RESI_PIERCE), EDITED_RESI(k, RESI_PIERCE), ResiTotal(k, RESI_SLASH), EDITED_RESI(k, RESI_SLASH), ResiTotal(k, RESI_HOLY), EDITED_RESI(k, RESI_HOLY));
+                    sprintf(buf, " $c0005Blunt: $c0014%d$c0005($c0014%d$c0005) Pierce: $c0014%d$c0005($c0014%d$c0005) Slash: $c0014%d$c0005($c0014%d$c0005) Holy: $c0014%d$c0005($c0014%d$c0005)\n\r", CHECK_RESI(k, RESI_BLUNT), EDITED_RESI(k, RESI_BLUNT), CHECK_RESI(k, RESI_PIERCE), EDITED_RESI(k, RESI_PIERCE), CHECK_RESI(k, RESI_SLASH), EDITED_RESI(k, RESI_SLASH), CHECK_RESI(k, RESI_HOLY), EDITED_RESI(k, RESI_HOLY));
                     send_to_char(buf, ch);
                 }
                 else
                 {
                     send_to_char("$c0005Resistance:\n\r", ch);
-                    sprintf(buf, " $c0005Fire: $c0014%d $c0005Cold: $c0014%d $c0005Elec: $c0014%d $c0005Acid: $c0014%d $c0005Energy: $c0014%d\n\r", ResiTotal(k, RESI_FIRE), ResiTotal(k, RESI_COLD), ResiTotal(k, RESI_ELEC), ResiTotal(k, RESI_ACID), ResiTotal(k, RESI_ENERGY));
+                    sprintf(buf, " $c0005Fire: $c0014%d $c0005Cold: $c0014%d $c0005Elec: $c0014%d $c0005Acid: $c0014%d $c0005Energy: $c0014%d\n\r", CHECK_RESI(k, RESI_FIRE), CHECK_RESI(k, RESI_COLD), CHECK_RESI(k, RESI_ELEC), CHECK_RESI(k, RESI_ACID), CHECK_RESI(k, RESI_ENERGY));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005Poison: $c0014%d $c0005Drain: $c0014%d $c0005Sleep: $c0014%d $c0005Charm: $c0014%d $c0005Hold: $c0014%d\n\r", ResiTotal(k, RESI_POISON), ResiTotal(k, RESI_DRAIN), ResiTotal(k, RESI_SLEEP), ResiTotal(k, RESI_CHARM), ResiTotal(k, RESI_HOLD));
+                    sprintf(buf, " $c0005Poison: $c0014%d $c0005Drain: $c0014%d $c0005Sleep: $c0014%d $c0005Charm: $c0014%d $c0005Hold: $c0014%d\n\r", CHECK_RESI(k, RESI_POISON), CHECK_RESI(k, RESI_DRAIN), CHECK_RESI(k, RESI_SLEEP), CHECK_RESI(k, RESI_CHARM), CHECK_RESI(k, RESI_HOLD));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005NonMag: $c0014%d $c0005+1: $c0014%d $c0005+2: $c0014%d $c0005+3: $c0014%d $c0005+4: $c0014%d\n\r", ResiTotal(k, RESI_NONMAG), ResiTotal(k, RESI_PLUS1), ResiTotal(k, RESI_PLUS2), ResiTotal(k, RESI_PLUS3), ResiTotal(k, RESI_PLUS4));
+                    sprintf(buf, " $c0005NonMag: $c0014%d $c0005+1: $c0014%d $c0005+2: $c0014%d $c0005+3: $c0014%d $c0005+4: $c0014%d\n\r", CHECK_RESI(k, RESI_NONMAG), CHECK_RESI(k, RESI_PLUS1), CHECK_RESI(k, RESI_PLUS2), CHECK_RESI(k, RESI_PLUS3), CHECK_RESI(k, RESI_PLUS4));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005Blunt: $c0014%d $c0005Pierce: $c0014%d $c0005Slash: $c0014%d $c0005Holy: $c0014%d\n\r", ResiTotal(k, RESI_BLUNT), ResiTotal(k, RESI_PIERCE), ResiTotal(k, RESI_SLASH), ResiTotal(k, RESI_HOLY));
+                    sprintf(buf, " $c0005Blunt: $c0014%d $c0005Pierce: $c0014%d $c0005Slash: $c0014%d $c0005Holy: $c0014%d\n\r", CHECK_RESI(k, RESI_BLUNT), CHECK_RESI(k, RESI_PIERCE), CHECK_RESI(k, RESI_SLASH), CHECK_RESI(k, RESI_HOLY));
                     send_to_char(buf, ch);
                 }
                 
@@ -1880,6 +1881,9 @@ ACTION_FUNC(do_stat) {
 					j->obj_flags.weight, j->obj_flags.cost,
 					j->obj_flags.cost_per_day, j->obj_flags.timer);
 			send_to_char(buf, ch);
+
+            sprintf(buf, "$c0005Edited Exp: $c0014%ld$c0005, Edited Rune: $c0014%d\n\r", j->value_exp_edit, j->value_rune_edit);
+            send_to_char(buf, ch);
 
 			strcpy(buf, "$c0005In room: $c0005");
 			if(j->in_room == NOWHERE) {
@@ -2089,6 +2093,7 @@ ACTION_FUNC(do_ooedit) {
 			"cost   = item cost to rent per day\n\r"
 			"value  = Item value if sold    | timer    = item timer\n\r"
 			"type   = item type             | weight   = item weight\n\r"
+            "edexp  = amount of exp edited  | edrune   = amount of rune edited"
 			"v0     = value[0] of item      | v1       = value[1] of item\n\r"
 			"v2     = value[2] of item      | v3       = value[3] of item\n\r"
 			"aff1   = special affect 1 (syntax is: oedit aff1 <modifer> <type>)\n\r"
@@ -2172,6 +2177,18 @@ ACTION_FUNC(do_ooedit) {
         if(!strcmp(field, "exflags2")) {
             arg = one_argument(arg, parmstr);
             j->obj_flags.extra_flags2 = atol(parmstr);
+            return;
+        } /* end exflags2 */
+
+        if(!strcmp(field, "edexp")) {
+            arg = one_argument(arg, parmstr);
+            j->value_exp_edit = atol(parmstr);
+            return;
+        } /* end exflags2 */
+
+        if(!strcmp(field, "edrune")) {
+            arg = one_argument(arg, parmstr);
+            j->value_rune_edit = atol(parmstr);
             return;
         } /* end exflags2 */
 
@@ -2417,7 +2434,7 @@ ACTION_FUNC(do_showskills) {
 ACTION_FUNC(do_set) {
 	char field[100], name[100], parmstr[100];
 	struct char_data* mob;
-	int parm = 0;
+	int parm = 0, i;
 	unsigned int uparm=0;
 	int parm2 = 0;
 	char buf[256];
@@ -2553,6 +2570,11 @@ ACTION_FUNC(do_set) {
 		mob->affected = NULL;
 		mob->specials.affected_by = 0;
 		mob->specials.affected_by2 = 0;
+        for(i = 0; i < RESI_UNUSED1; i++)
+        {
+            mob->resistenze[SPELL_RESI][i] = 0;
+        }
+        affect_total(mob);
 		send_to_char("Tutti gli affect sono stati rimossi dal personaggio!\n\r", ch);
 	}
 	else if(!strcmp(field, "lev")) {
@@ -4863,6 +4885,55 @@ ACTION_FUNC(do_show) {
 			append_to_string_block(&sb, buf);
 		}
 	}
+    else if((is_abbrev(buf, "items") && (which_i = obj_index) && (topi = top_of_objt)))
+    {
+        int objn;
+        struct index_data* oi;
+        struct obj_data* obj;
+        int vnum, i;
+
+        only_argument(arg, zonenum);
+
+        for(i = 0; i < 20; i++)
+        {
+            if(is_abbrev(zonenum, wear_bits[i]))
+            {
+                break;
+            }
+        }
+    /*    zone = -1;
+        if(sscanf(zonenum, "%i", &zone) == 1 && (zone < 0 || zone > top_of_zone_table))
+        {
+            append_to_string_block(&sb, "That is not a valid zone_number\n\r");
+            return;
+        }
+        if(zone >= 0)
+        {
+            bottom = zone ? (zone_table[zone - 1].top + 1) : 0;
+            top = zone_table[zone].top;
+        } */
+
+        append_to_string_block(&sb, "VNUM  rnum count names\n\r");
+        for(objn = 0; objn < topi; objn++)
+        {
+            oi = which_i + objn;
+
+            vnum = real_object(oi->iVNum);
+            if(vnum > 0 && vnum < 99999 && oi->iVNum != 99999)
+            {
+                obj = read_object(vnum, REAL);
+
+                if(!IS_SET(obj->obj_flags.wear_flags, (1 << i)))
+                {
+                    extract_obj(obj);
+                    continue;
+                } /* optimize later*/
+                extract_obj(obj);
+                sprintf(buf, "%5d %4d %3d  %s\n\r", oi->iVNum, objn, oi->number, oi->name);
+                append_to_string_block(&sb, buf);
+            }
+        }
+    }
 	else if(is_abbrev(buf, "rooms")) {
 
 		only_argument(arg, zonenum);
@@ -4939,7 +5010,8 @@ ACTION_FUNC(do_show) {
 							   "  show zones\n\r"
 							   "  show (objects|mobiles) (zone#|name)\n\r"
 							   "  show rare (only liv>=58)\n\r"
-							   "  show rooms (zone#|death|private)\n\r");
+							   "  show rooms (zone#|death|private)\n\r"
+                               "  show items (location)\n\r");
 	}
 	page_string_block(&sb, ch);
 	destroy_string_block(&sb);
@@ -6197,8 +6269,8 @@ ACTION_FUNC(do_viewfile) {
 ACTION_FUNC(do_osave) {
 	FILE* f;
 	struct obj_data* obj;
-	char oname[128], field[120], buf[254];
-	long vnum = -1;
+	char oname[128], field[120], field2[120], buf[254];
+	long vnum = -1, vnum2 = -1;
 
 	if(IS_NPC(ch) || GetMaxLevel(ch) < IMMORTALE) {
 		return;
@@ -6206,15 +6278,20 @@ ACTION_FUNC(do_osave) {
 
 	arg = one_argument(arg, oname);
 	if(!*oname) {
-		send_to_char("Osave <object name> <new_vnum>\n\r", ch);
+		send_to_char("Osave <nome oggetto> <nuovo_vnum> \n\roppure \n\rOsave <nome oggetto> <nuovo_vnum> <vnum_originale>\n\r", ch);
 		return;
 	}
 
 	arg = one_argument(arg, field);
 	if(!*field) {
-		send_to_char("osave <object name> <vnum>\n\r", ch);
+		send_to_char("Osave <nome oggetto> <nuovo_vnum> \n\roppure \n\rOsave <nome oggetto> <nuovo_vnum> <vnum_originale>\n\r", ch);
 		return;
 	}
+
+    arg = one_argument(arg, field2);
+    if(!*field2) {
+        send_to_char("Ok, il vnum originale non verra' cambiato.\n\r", ch);
+    }
 
 	if(!(obj = get_obj_vis_accessible(ch, oname))) {
 		send_to_char("Hum, I do not know where that is?!?!?\n\r", ch);
@@ -6226,6 +6303,19 @@ ACTION_FUNC(do_osave) {
 		send_to_char("Invalid object number\n\r", ch);
 		return;
 	}
+
+    if(*field2)
+    {
+        vnum2 = atoi(field2);
+        if(vnum < 1 || vnum > 99999) {
+            send_to_char("Il secondo valore non e' corretto.\n\r", ch);
+            return;
+        }
+    }
+    else
+    {
+        vnum2 = vnum;
+    }
 
 	/* check for valid VNUM in this zone */
 
@@ -6254,7 +6344,8 @@ ACTION_FUNC(do_osave) {
 		return;
 	}
 
-	write_obj_to_file(obj, f);
+//	write_obj_to_file(obj, f);
+    write_obj_to_file(obj, f, vnum2);
 	fclose(f);
 
 	/* check for valid VNUM period */
@@ -6413,6 +6504,116 @@ ACTION_FUNC(do_checktypos)
     }
 }
 
+stringa_valore find_obj(struct char_data* ch, ush_int vnumber, int count)
+{
+    struct obj_file_u st;
+    struct old_obj_file_u old_st;
+    struct char_file_u ch_st;
+    struct char_data* vict;
+    FILE* pObjFile;
+    DIR* dir;
+    struct stringa_valore sb_count;
+    int vnum;
+    struct obj_data* oggetto;
+
+    sb_count.conteggio = count;
+
+    if((dir = opendir(PLAYERS_DIR)) != NULL)
+    {
+        struct dirent* ent;
+        while((ent = readdir(dir)) != NULL)
+        {
+            FILE* pCharFile;
+            char szFileName[ 300];
+
+            if(*ent->d_name == '.')
+            {
+                continue;
+            }
+            if(!strstr(ent->d_name,".dat"))
+            {
+                continue;
+            }
+
+            snprintf(szFileName, sizeof(szFileName)-1, "%s/%s", PLAYERS_DIR, ent->d_name);
+
+            if((pCharFile = fopen(szFileName, "r")) != NULL)
+            {
+                if(fread(&ch_st, 1, sizeof(ch_st), pCharFile) == sizeof(ch_st))
+                {
+                    snprintf(szFileName, sizeof(szFileName)-1, "%s/%s", RENT_DIR, lower(ch_st.name));
+                    if(!(vict = get_char(ch_st.name)))
+                    {
+                        if((pObjFile = fopen(szFileName, "rb")) != NULL)
+                        {
+                            if(!IS_SET(ch_st.act,PLR_NEW_EQ))
+                            {
+                                int i;
+                                // carico i dati dei pg formato vecchio
+                                fread(old_st.owner, sizeof(old_st.owner), 1, pObjFile);
+                                fread(&old_st.gold_left, sizeof(old_st.gold_left), 1, pObjFile);
+                                fread(&old_st.total_cost, sizeof(old_st.total_cost), 1, pObjFile);
+                                fread(&old_st.last_update, sizeof(old_st.last_update), 1, pObjFile);
+                                fread(&old_st.minimum_stay, sizeof(old_st.minimum_stay), 1, pObjFile);
+                                fread(&old_st.number, sizeof(old_st.number), 1, pObjFile);
+                                for(i=0; i<old_st.number; i++)
+                                {
+                                    fread(&old_st.objects[i], sizeof(struct old_obj_file_elem), 1, pObjFile);
+                                }
+                                // effettuo la ricerca dell'oggetto
+                                for(i = 0; i < old_st.number; i++)
+                                {
+                                    if(old_st.objects[i].item_number == vnumber)
+                                    {
+                                        vnum = real_object(vnumber);
+                                        oggetto = read_object(vnum, REAL);
+                                        boost::format fmt("[%3d] %-50s- rentato da %s\n\r");
+                                        fmt % sb_count.conteggio++ % oggetto->short_description % ch_st.name;
+                                        sb_count.sb.append(fmt.str().c_str());
+                                        fmt.clear();
+                                        extract_obj(oggetto);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                int i;
+                                // carico i dati dei pg
+                                fread(st.owner, sizeof(st.owner), 1, pObjFile);
+                                fread(&st.gold_left, sizeof(st.gold_left), 1, pObjFile);
+                                fread(&st.total_cost, sizeof(st.total_cost), 1, pObjFile);
+                                fread(&st.last_update, sizeof(st.last_update), 1, pObjFile);
+                                fread(&st.minimum_stay, sizeof(st.minimum_stay), 1, pObjFile);
+                                fread(&st.number, sizeof(st.number), 1, pObjFile);
+                                for(i = 0; i < st.number; i++)
+                                {
+                                    fread(&st.objects[i], sizeof(struct obj_file_elem), 1, pObjFile);
+                                }
+                                // effettuo la ricerca dell'oggetto
+                                for(i = 0; i < st.number; i++)
+                                {
+                                    if(st.objects[i].item_number == vnumber)
+                                    {
+                                        vnum = real_object(vnumber);
+                                        oggetto = read_object(vnum, REAL);
+                                        boost::format fmt("[%3d] %-50s- rentato da %s\n\r");
+                                        fmt % sb_count.conteggio++ % oggetto->short_description % ch_st.name;
+                                        sb_count.sb.append(fmt.str().c_str());
+                                        fmt.clear();
+                                        extract_obj(oggetto);
+                                    }
+                                }
+                            }
+                        }
+                        fclose(pObjFile);
+                    }
+                }
+            }
+            fclose(pCharFile);
+        }
+    }
+    return sb_count;
+}
 //FLYP 2004 Perdono
 /*void do_perdono(struct char_data *ch, char *arg, int cmd)
  {

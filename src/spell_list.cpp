@@ -51,8 +51,8 @@ void boot_spells() {
 		   /*align       */ 3,
 		   /*ostile      */ 0);
 
-	/* cast_magic_missile */
-	spello(32,
+	/* cast_magic_missile       -   magic.cpp   */
+	spello(SPELL_MAGIC_MISSILE,         //  32
 		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ 1,
@@ -69,8 +69,8 @@ void boot_spells() {
 		   /*align       */ 0,
 		   /*ostile      */ 25);
 
-	/* cast_chill_touch */
-	spello(8,
+	/* cast_chill_touch         -   magic.cpp   */
+	spello(SPELL_CHILL_TOUCH,           //  8
 		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ 4,
@@ -87,8 +87,8 @@ void boot_spells() {
 		   /*align       */ -3,
 		   /*ostile      */ 20);
 
-	/* cast_burning_hands */
-	spello(5,
+	/* cast_burning_hands       -   magic.cpp   */
+	spello(SPELL_BURNING_HANDS,         //  5
 		   /*beats       */ 24,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ 6,
@@ -105,8 +105,8 @@ void boot_spells() {
 		   /*align       */ -1,
 		   /*ostile      */ 20);
 
-	/* cast_shocking_grasp */
-	spello(37,
+	/* cast_shocking_grasp      -   magic.cpp   */
+	spello(SPELL_SHOCKING_GRASP,        //  37
 		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ 2,
@@ -123,12 +123,12 @@ void boot_spells() {
 		   /*align       */ -1,
 		   /*ostile      */ 20);
 
-	/* cast_lightning_bolt */
-	spello(30,
+	/* cast_lightning_bolt      -   magic.cpp   */
+	spello(SPELL_LIGHTNING_BOLT,        //  30
 		   /*beats       */ 24,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ 10,
-		   /*Cleric      */ 50,
+		   /*Cleric      */ IMMORTALE,
 		   /*Druid       */ IMMORTALE,
 		   /*Sorcerer    */ 10,
 		   /*Paladin     */ IMMORTALE,
@@ -141,8 +141,8 @@ void boot_spells() {
 		   /*align       */ 1,
 		   /*ostile      */ 25);
 
-	/* cast_colour_spray */
-	spello(10,
+	/* cast_colour_spray        -   magic.cpp   */
+	spello(SPELL_COLOUR_SPRAY,          //  10
 		   /*beats       */ 24,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ 14,
@@ -159,8 +159,8 @@ void boot_spells() {
 		   /*align       */ -1,
 		   /*ostile      */ 15);
 
-	/* cast_fireball */
-	spello(26,
+	/* cast_fireball            -   magic.cpp   */
+	spello(SPELL_FIREBALL,              //  26
 		   /*beats       */ 36,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ 25,
@@ -177,8 +177,8 @@ void boot_spells() {
 		   /*align       */ -2,
 		   /*ostile      */ 10);
 
-	/* cast_earthquake */
-	spello(23,
+	/* cast_earthquake          -   magic.cpp   */
+	spello(SPELL_EARTHQUAKE,            //  23
 		   /*beats       */ 24,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
@@ -195,8 +195,8 @@ void boot_spells() {
 		   /*align       */ -2,
 		   /*ostile      */ 5);
 
-	/* cast_dispel_evil */
-	spello(22,
+	/* cast_dispel_evil         -   magic.cpp   */
+	spello(SPELL_DISPEL_EVIL,           //  22
 		   /*beats       */ 24,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
@@ -213,8 +213,8 @@ void boot_spells() {
 		   /*align       */ 2,
 		   /*ostile      */ 5);
 
-	/* cast_call_lightning */
-	spello(6,
+	/* cast_call_lightning      -   magic.cpp   */
+	spello(SPELL_CALL_LIGHTNING,        //  6
 		   /*beats       */ 36,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
@@ -231,8 +231,8 @@ void boot_spells() {
 		   /*align       */ 1,
 		   /*ostile      */ 10);
 
-	/* cast_energy_drain */
-	spello(25,
+	/* cast_energy_drain        -   magic.cpp   */
+	spello(SPELL_ENERGY_DRAIN,      //  25
 		   /*beats       */ 36,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ 22,
@@ -249,8 +249,8 @@ void boot_spells() {
 		   /*align       */ -5,
 		   /*ostile      */ 15);
 
-	/* cast_harm */
-	spello(27,
+	/* cast_harm            -   magic.cpp   */
+	spello(SPELL_HARM,              //  27
 		   /*beats       */ 36,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
@@ -267,8 +267,8 @@ void boot_spells() {
 		   /*align       */ -2,
 		   /*ostile      */ 25);
 
-	/* cast_armor */
-	spello(1,
+	/* cast_armor           -   magic.cpp   */
+	spello(SPELL_ARMOR,             //  1
 		   /*beats       */ 12,
 		   /*min position*/ POSITION_STANDING,
 		   /*Mage        */ 5,
@@ -285,8 +285,8 @@ void boot_spells() {
 		   /*align       */ 1,
 		   /*ostile      */ -1);
 
-	/* cast_teleport */
-	spello(2,
+	/* cast_teleport        -   magic.cpp   */
+	spello(SPELL_TELEPORT,          //  2
 		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ 17,
@@ -303,8 +303,8 @@ void boot_spells() {
 		   /*align       */ 0,
 		   /*ostile      */ 0);
 
-	/* cast_bless */
-	spello(3,
+	/* cast_bless           -   magic.cpp   */
+	spello(SPELL_BLESS,             //  3
 		   /*beats       */ 12,
 		   /*min position*/ POSITION_STANDING,
 		   /*Mage        */ IMMORTALE,
@@ -1797,8 +1797,8 @@ void boot_spells() {
 		   /*align       */ 0,
 		   /*ostile      */ 0);
 
-	/* cast_astral_walk */
-	spello(101,
+	/* cast_astral_walk     -   magic.cpp   */
+	spello(SPELL_ASTRAL_WALK,       //  101
 		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,

@@ -498,6 +498,18 @@ void mobile_activity(struct char_data* ch) {
                 
 		}
 
+        // se e' un mob e non e' un poly si rialza in combattimento
+        if(IS_SET(ch->specials.act,ACT_ISNPC) && !IS_POLY(ch))
+        {
+            if(ch->specials.fighting)
+            {
+                if((GET_POS(ch) < POSITION_FIGHTING) && (GET_POS(ch) > POSITION_STUNNED))
+                {
+                    StandUp(ch);
+                }
+            }
+        }
+
 		if(IS_SET(ch->specials.act,ACT_THIEF))
 			if(thief(ch,0,"",ch,EVENT_TICK)) {
 				return;

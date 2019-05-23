@@ -1954,6 +1954,20 @@ void load_char_extra(struct char_data* ch) {
                     n = atoi(achie_n);
                     ch->specials.achievements[OTHER_ACHIE][n] = atoi(achie_v);
                 }
+                else if(!strcmp(p, "Edit_Resi"))
+                {
+                    achie_n = (char*)strtok(s, "#");
+                    achie_v = (char*)strtok(0, "\0");
+                    n = atoi(achie_n);
+                    ch->resistenze[EDIT_RESI][n] = atoi(achie_v);
+                }
+                else if(!strcmp(p, "Spell_Resi"))
+                {
+                    achie_n = (char*)strtok(s, "#");
+                    achie_v = (char*)strtok(0, "\0");
+                    n = atoi(achie_n);
+                    ch->resistenze[SPELL_RESI][n] = atoi(achie_v);
+                }
 				else if(!strcmp(p, "email")) {
 					/* setup email */
 					RECREATE(GET_EMAIL(ch),char,strlen(s));
@@ -2069,6 +2083,22 @@ void write_char_extra(struct char_data* ch) {
         {
             if(ch->specials.achievements[OTHER_ACHIE][i] > 0)
                 fprintf(fp, "achie_other:%d#%d\n", i, ch->specials.achievements[OTHER_ACHIE][i]);
+        }
+    }
+
+    for(i = 0; i < RESI_UNUSED1; i++)
+    {
+        if(ch->resistenze[EDIT_RESI][i] != 0)
+        {
+            fprintf(fp, "Edit_Resi:%d#%d\n", i, ch->resistenze[EDIT_RESI][i]);
+        }
+    }
+
+    for(i = 0; i < RESI_UNUSED1; i++)
+    {
+        if(ch->resistenze[SPELL_RESI][i] != 0)
+        {
+            fprintf(fp, "Spell_Resi:%d#%d\n", i, ch->resistenze[SPELL_RESI][i]);
         }
     }
 

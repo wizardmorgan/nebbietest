@@ -1501,7 +1501,16 @@ void cast_heal(byte level, struct char_data* ch, const char* arg, int type,
 			   struct char_data* tar_ch, struct obj_data* tar_obj) {
 	switch(type) {
 	case SPELL_TYPE_SPELL:
-		spell_heal(level, ch, tar_ch, 0);
+        {
+            if(IsUndead(tar_ch) && !IS_PC(tar_ch) && tar_ch != ch)
+            {
+                spell_harm(level, ch, tar_ch, 0);
+            }
+            else
+            {
+                spell_heal(level, ch, tar_ch, 0);
+            }
+        }
 		break;
 	case SPELL_TYPE_POTION:
 		spell_heal(level, ch, ch, 0);
@@ -1510,7 +1519,16 @@ void cast_heal(byte level, struct char_data* ch, const char* arg, int type,
 		for(tar_ch = real_roomp(ch->in_room)->people ;
 				tar_ch ; tar_ch = tar_ch->next_in_room)
 			if(tar_ch != ch) {
-				spell_heal(level,ch,tar_ch,0);
+                {
+                    if(IsUndead(tar_ch) && !IS_PC(tar_ch))
+                    {
+                        spell_harm(level, ch, tar_ch, 0);
+                    }
+                    else
+                    {
+                        spell_heal(level, ch, tar_ch, 0);
+                    }
+                }
 			}
 		break;
 	default :

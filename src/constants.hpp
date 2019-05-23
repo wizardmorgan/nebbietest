@@ -171,6 +171,8 @@ extern struct MobQuestAchie QuestMobAchie[MAX_QUEST_ACHIE];
 extern struct ClassAchieTable AchievementsList[MAX_ACHIE_CLASSES][MAX_ACHIE_TYPE];
 
 extern struct TableReistPC MaxResisPC[25];
+    
+extern float bash_reaction[];
 
 extern const char* QuestKind[];
     

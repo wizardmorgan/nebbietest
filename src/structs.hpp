@@ -45,11 +45,12 @@ struct QuestItem {
 
 struct TableReistPC
 {
-    sh_int racial_pc;
-    sh_int equip_pc;
-    sh_int edit_pc;
-    sh_int superEdit;
-    sh_int spell_pc;
+    int racial_pc;
+    int equip_pc;
+    int edit_pc;
+    int superEdit;
+    int spell_pc;
+    const char* name;
 };
 
 /*
@@ -441,6 +442,9 @@ struct obj_data {
 	struct obj_data* next;         /* For the object list            */
 	char* szForbiddenWearToChar;   /* messaggi da visualizzare quando  */
 	char* szForbiddenWearToRoom;   /* si tenta di indossare un oggetto */
+    long value_exp_edit;  /* valore dell'edit in punti esperienza */
+    int value_rune_edit;  /* valore dell'edit in rune degli dei */
+    long value_exp;       /* valore dell'oggetto in punti esperienza */
 	/* proibito.                        */
 	int iGeneric;                  /* Valore generico a disposizione delle
                                   * procedure speciali */
@@ -832,7 +836,7 @@ struct char_data {
 	
     char* lastpkill; // last player killed, used also for destroy checks
     char* lastmkill; // last mob killed, used also for quest checks
-    sh_int resistenze[4][25];  // [raziale/eq/edit/spell] [resistenze ai tipi di danni da -100 a +100]
+    sh_int resistenze[5][25];  // [raziale/eq/edit/spell/totale] [resistenze ai tipi di danni da -100 a +100]
 
 };
 

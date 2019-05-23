@@ -1717,7 +1717,7 @@ struct char_data* read_mobile(int nr, int type) {
 			mob->immune = 0;
 			mob->M_immune = 0;
 			mob->susc = 0;
-            for(i = 0; i < 4; i++)
+            for(i = 0; i < 5; i++)
             {
                 for(j = 0; j < 25; j++)
                 {
@@ -1730,19 +1730,29 @@ struct char_data* read_mobile(int nr, int type) {
 			mob->immune = fread_number(mob_f);
 			mob->M_immune = fread_number(mob_f);
 			mob->susc = fread_number(mob_f);
+            for(i = 0; i < 5; i++)
+            {
+                for(j = 0; j < 25; j++)
+                {
+                    mob->resistenze[i][j] = 0;
+                }
+            }
             for(j = 0; j < RESI_UNUSED1; j++)
             {
                 if(IS_SET(mob->immune, 1 << j))
                 {
                     mob->resistenze[EDIT_RESI][j] = 50;
+                    mob->resistenze[TOTAL_RESI][j]= ResiTotal(mob, j);
                 }
                 if(IS_SET(mob->M_immune, 1 << j))
                 {
                     mob->resistenze[EDIT_RESI][j] = 100;
+                    mob->resistenze[TOTAL_RESI][j]= ResiTotal(mob, j);
                 }
                 if(IS_SET(mob->susc, 1 << j))
                 {
                     mob->resistenze[EDIT_RESI][j] = -100;
+                    mob->resistenze[TOTAL_RESI][j]= ResiTotal(mob, j);
                 }
             }
 		}
@@ -1751,7 +1761,7 @@ struct char_data* read_mobile(int nr, int type) {
 			mob->immune = 0;
 			mob->M_immune = 0;
 			mob->susc = 0;
-            for(i = 0; i < 4; i++)
+            for(i = 0; i < 5; i++)
             {
                 for(j = 0; j < 25; j++)
                 {
@@ -1863,7 +1873,7 @@ struct char_data* read_mobile(int nr, int type) {
 			mob->immune = 0;
 			mob->M_immune = 0;
 			mob->susc = 0;
-            for(i = 0; i < 4; i++)
+            for(i = 0; i < 5; i++)
             {
                 for(j = 0; j < 25; j++)
                 {
@@ -1876,19 +1886,29 @@ struct char_data* read_mobile(int nr, int type) {
 			mob->immune = fread_number(mob_f);
 			mob->M_immune = fread_number(mob_f);
 			mob->susc = fread_number(mob_f);
+            for(i = 0; i < 5; i++)
+            {
+                for(j = 0; j < 25; j++)
+                {
+                    mob->resistenze[i][j] = 0;
+                }
+            }
             for(j = 0; j < RESI_UNUSED1; j++)
             {
                 if(IS_SET(mob->immune, 1 << j))
                 {
                     mob->resistenze[EDIT_RESI][j] = 50;
+                    mob->resistenze[TOTAL_RESI][j]= ResiTotal(mob, j);
                 }
                 if(IS_SET(mob->M_immune, 1 << j))
                 {
                     mob->resistenze[EDIT_RESI][j] = 100;
+                    mob->resistenze[TOTAL_RESI][j]= ResiTotal(mob, j);
                 }
                 if(IS_SET(mob->susc, 1 << j))
                 {
                     mob->resistenze[EDIT_RESI][j] = -100;
+                    mob->resistenze[TOTAL_RESI][j]= ResiTotal(mob, j);
                 }
             }
 		}
@@ -1897,7 +1917,7 @@ struct char_data* read_mobile(int nr, int type) {
 			mob->immune = 0;
 			mob->M_immune = 0;
 			mob->susc = 0;
-            for(i = 0; i < 4; i++)
+            for(i = 0; i < 5; i++)
             {
                 for(j = 0; j < 25; j++)
                 {
@@ -2152,6 +2172,8 @@ void clone_obj_to_obj(struct obj_data* obj, struct obj_data* osrc) {
 	obj->obj_flags.weight = osrc->obj_flags.weight;
 	obj->obj_flags.cost = osrc->obj_flags.cost;
 	obj->obj_flags.cost_per_day = osrc->obj_flags.cost_per_day;
+//    obj->value_exp_edit = osrc->value_exp_edit;
+//    obj->value_rune_edit = osrc->value_rune_edit;
 
 	/* *** extra descriptions *** */
 
@@ -2265,6 +2287,16 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
         obj->obj_flags.extra_flags2 = fread_number(f);
     }
 
+    if(*chk == 'R')
+    {
+        obj->value_rune_edit = fread_number(f);
+    }
+
+    if(*chk == 'X')
+    {
+        obj->value_exp_edit = fread_number(f);
+    }
+
 	SetStatus("Reading forbidden string in read_obj_from_file", NULL);
 
 	if(*chk == 'P') {
@@ -2282,12 +2314,12 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
 	return bc;
 }
 
-void write_obj_to_file(struct obj_data* obj, FILE* f) {
+void write_obj_to_file(struct obj_data* obj, FILE* f, long vnumber) {
 	int i;
 	struct extra_descr_data* descr;
 
-	fprintf(f, "#%d\n",
-			obj->item_number >= 0 ? obj_index[obj->item_number].iVNum : 0);
+//	fprintf(f, "#%d\n", obj->item_number >= 0 ? obj_index[obj->item_number].iVNum : 0);
+    fprintf(f, "#%ld\n", vnumber);
 	fwrite_string(f, obj->name);
 	fwrite_string(f, obj->short_description);
 	fwrite_string(f, obj->description);
@@ -2321,6 +2353,18 @@ void write_obj_to_file(struct obj_data* obj, FILE* f) {
         fprintf(f, "%d\n", obj->obj_flags.extra_flags2);
     }
 
+    if(obj->value_exp_edit)
+    {
+        fprintf(f, "X\n");
+        fprintf(f, "%ld\n", obj->value_exp_edit);
+    }
+
+    if(obj->value_rune_edit)
+    {
+        fprintf(f, "R\n");
+        fprintf(f, "%d\n", obj->value_rune_edit);
+    }
+
 	if(obj->szForbiddenWearToChar) {
 		fprintf(f, "P\n");
 		fwrite_string(f, obj->szForbiddenWearToChar);
@@ -2333,7 +2377,7 @@ void write_obj_to_file(struct obj_data* obj, FILE* f) {
 struct obj_data* read_object(int nr, int type) {
 	FILE* f;
 	struct obj_data* obj;
-	int i;
+	int i, tmp;
 	long bc;
 	char buf[300];
 
@@ -2368,7 +2412,8 @@ struct obj_data* read_object(int nr, int type) {
 				free(obj);
 				return (0);
 			}
-			fscanf(f, "#%*d \n");
+			fscanf(f, "#%d \n", &tmp);
+            obj->char_vnum = tmp;
 			SetStatus("before read_obj_from_file 1", NULL);
 			read_obj_from_file(obj, f);
 			fclose(f);
@@ -3129,7 +3174,7 @@ void char_to_store(struct char_data* ch, struct char_file_u* st) {
 			st->affected[i].next = 0;
 			/* subtract effect of the spell or the effect will be doubled */
 			affect_modify(ch, st->affected[i].location,
-						  st->affected[i].modifier, st->affected[i].bitvector, FALSE);
+						  st->affected[i].modifier, st->affected[i].bitvector, st->affected[i].type, FALSE);
 			snprintf(buf,sizeof(buf)-1, "Saving %s modifies %s by %d points", GET_NAME(ch),
 					apply_types[st->affected[i].location],
 					st->affected[i].modifier);
@@ -3255,7 +3300,7 @@ void char_to_store(struct char_data* ch, struct char_file_u* st) {
 			/* Add effect of the spell or it will be lost */
 			/* When saving without quitting               */
 			affect_modify(ch, st->affected[i].location,
-						  st->affected[i].modifier, st->affected[i].bitvector, TRUE);
+						  st->affected[i].modifier, st->affected[i].bitvector, st->affected[i].type, TRUE);
 			af = af->next;
 		}
 	}
@@ -3807,7 +3852,7 @@ void reset_char(struct char_data* ch) {
 	ch->mult_att = 1.0;
 
     // reset resistenze
-    for(i = 0; i < 4; i++)
+    for(i = 0; i < 5; i++)
     {
         for(j = 0; j < 25; j++)
         {
@@ -3945,7 +3990,7 @@ void reset_char(struct char_data* ch) {
 	ch->specials.sev = LOG_SYSERR | LOG_ERROR | LOG_CONNECT;
 #if 0
 	for(af = ch->affected; af; af = af->next) {
-		affect_modify(ch, af->location, af->modifier, af->bitvector, TRUE);
+		affect_modify(ch, af->location, af->modifier, af->bitvector, af->type TRUE);
 	}
 #endif
 	if(!HasClass(ch, CLASS_MONK)) {

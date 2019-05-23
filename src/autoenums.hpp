@@ -116,6 +116,7 @@ Bitvector for 'affected_by'*/
 	constexpr unsigned long IMM_PLUS2                                    =32768;
 	constexpr unsigned long IMM_PLUS3                                    =65536;
 	constexpr unsigned long IMM_PLUS4                                    =131072;
+	constexpr unsigned long IMM_HOLY                                     =262144;
 // Flag type: E_ITEM2_FLAG -- start
 /*
 Bitvector for 'extra_flags2'*/
@@ -126,6 +127,7 @@ Bitvector for 'extra_flags2'*/
 	constexpr unsigned long ITEM2_INSERT                                 =16; /*item with gems mounted*/
 	constexpr unsigned long ITEM2_NO_PRINCE                              =32; /*prince can't use the item*/
 	constexpr unsigned long ITEM2_ONLY_PRINCE                            =64; /*only prince can use the item*/
+	constexpr unsigned long ITEM2_DESTROYED                              =128; /*destroyed item*/
 // Flag type: E_ITEM_FLAG -- start
 /*
 Bitvector for 'extra_flags'*/
@@ -1138,6 +1140,7 @@ enum e_wear {
 #define	EQUIP_RESI                                   1 
 #define	EDIT_RESI                                    2 
 #define	SPELL_RESI                                   3 
+#define	TOTAL_RESI                                   4 
 #define	RESI_FIRE                                    0 
 #define	RESI_COLD                                    1 
 #define	RESI_ELEC                                    2 

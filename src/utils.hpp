@@ -33,8 +33,10 @@ namespace Alarmud {
 #define OBJ_RESI_SLASH      110
 #define OBJ_RESI_PIERCE     111
 #define OBJ_SPY             112
-    
-#define EDITED_RESI(ch, type) ((ch)->resistenze[EDIT_RESI][type])
+
+//  resistenze
+#define EDITED_RESI(ch, type)   ((ch)->resistenze[EDIT_RESI][type])
+#define CHECK_RESI(ch, type)    ((ch)->resistenze[TOTAL_RESI][type])
 
 #define RM_BLOOD(rm)   (real_roomp(rm)->blood)
 
