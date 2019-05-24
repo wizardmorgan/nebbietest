@@ -2428,7 +2428,7 @@ NANNY_FUNC(con_slct) {
 		}
 		toonUpdate(d);
 		mudlog(LOG_PLAYERS, "M1.Loading %s's equipment",d->character->player.name);
-		load_char_objs(d->character);
+		load_char_objs(d->character, FALSE);
 		mudlog(LOG_CHECK, "Sending Welcome message to %s",d->character->player.name);
 		send_to_char(WELC_MESSG, d->character);
 		mudlog(LOG_CHECK, "Putting %s in list",
@@ -3207,7 +3207,7 @@ NANNY_FUNC(con_city_choice) {
 			reset_char(d->character);
 			mudlog(LOG_CONNECT, "1.Loading %s's equipment",
 				   d->character->player.name);
-			load_char_objs(d->character);
+			load_char_objs(d->character, FALSE);
 			SetStatus("int 1",NULL,NULL);
 			save_char(d->character, AUTO_RENT, 0);
 			SetStatus("int 2",NULL,NULL);
@@ -3241,7 +3241,7 @@ NANNY_FUNC(con_city_choice) {
 		case '2':
 			reset_char(d->character);
 			mudlog(LOG_CONNECT, "2.Loading %s's equipment",d->character->player.name);
-			load_char_objs(d->character);
+			load_char_objs(d->character, FALSE);
 			save_char(d->character, AUTO_RENT, 0);
 			send_to_char(WELC_MESSG, d->character);
 			d->character->next = character_list;
@@ -3265,7 +3265,7 @@ NANNY_FUNC(con_city_choice) {
 				reset_char(d->character);
 				mudlog(LOG_CONNECT, "3.Loading %s's equipment",
 					   d->character->player.name);
-				load_char_objs(d->character);
+				load_char_objs(d->character, FALSE);
 				save_char(d->character, AUTO_RENT, 0);
 				send_to_char(WELC_MESSG, d->character);
 				d->character->next = character_list;
@@ -3296,7 +3296,7 @@ NANNY_FUNC(con_city_choice) {
 				reset_char(d->character);
 				mudlog(LOG_CONNECT, "4.Loading %s's equipment",
 					   d->character->player.name);
-				load_char_objs(d->character);
+				load_char_objs(d->character, FALSE);
 				save_char(d->character, AUTO_RENT, 0);
 				send_to_char(WELC_MESSG, d->character);
 				d->character->next = character_list;
@@ -3329,7 +3329,7 @@ NANNY_FUNC(con_city_choice) {
 				reset_char(d->character);
 				mudlog(LOG_CONNECT, "5.Loading %s's equipment",
 					   d->character->player.name);
-				load_char_objs(d->character);
+				load_char_objs(d->character, FALSE);
 				save_char(d->character, AUTO_RENT, 0);
 				send_to_char(WELC_MESSG, d->character);
 				d->character->next = character_list;

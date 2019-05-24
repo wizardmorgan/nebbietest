@@ -5950,7 +5950,7 @@ ACTION_FUNC(do_ghost) {
 		clear_char(tmp_ch);
 		store_to_char(&tmp_store, tmp_ch);
 		reset_char(tmp_ch);
-		load_char_objs(tmp_ch);
+		load_char_objs(tmp_ch, TRUE);
         save_ghost_forcerent(tmp_ch);       // salvo il pg senza desc
 //send_to_char("stop5\n\r",ch);
 //return;
