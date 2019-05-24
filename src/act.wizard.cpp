@@ -5844,6 +5844,8 @@ ACTION_FUNC(do_force_rent) {
 							   "%s had a failed recp_offer, they are losing EQ!",
 							   GET_NAME(victim));
 					}
+
+                    save_ghost_forcerent(victim);       // salvo il pg senza desc
 					extract_char(victim);
 				} /* higher than presons level */
 			} /* was linkdead */
@@ -5886,9 +5888,39 @@ ACTION_FUNC(do_force_rent) {
 				   "%s had a failed recp_offer, they are losing EQ!",
 				   GET_NAME(victim));
 		}
+
+        save_ghost_forcerent(victim);       // salvo il pg senza desc
 		extract_char(victim);
 		return;
 	} /* higher than presons level */
+}
+
+void save_ghost_forcerent(struct char_data* ch);
+{
+    struct char_file_u tmp_store;
+    FILE* fl;
+    char szFileName[200];
+
+    if(!IS_SET(ch->specials.act,PLR_NEW_EQ))
+    {
+        SET_BIT(ch->specials.act,PLR_NEW_EQ);
+    }
+
+    char_to_store(ch, &tmp_store);
+    sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(victim->player.name));
+    if((fl = fopen(szFileName, "r+b")) == NULL)
+    {
+        if((fl = fopen(szFileName, "wb")) == NULL)
+        {
+            mudlog(LOG_ERROR, "Cannot create file %s for saving player.", szFileName);
+            return;
+        }
+    }
+
+    rewind(fl);
+    fwrite(&tmp_store, sizeof(struct char_file_u), 1, fl);
+    fclose(fl);
+
 }
 
 ACTION_FUNC(do_ghost) {
@@ -5919,6 +5951,7 @@ ACTION_FUNC(do_ghost) {
 		store_to_char(&tmp_store, tmp_ch);
 		reset_char(tmp_ch);
 		load_char_objs(tmp_ch);
+        save_ghost_forcerent(tmp_ch);       // salvo il pg senza desc
 //send_to_char("stop5\n\r",ch);
 //return;
 		save_char(tmp_ch, AUTO_RENT, 0);

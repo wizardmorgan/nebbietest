@@ -94,6 +94,7 @@ struct stringa_valore
     int conteggio;
 };
 stringa_valore find_obj(struct char_data* ch, ush_int vnumber, int count);
+void save_ghost_forcerent(struct char_data* ch);
 } // namespace Alarmud
 #endif // _ACT_WIZARD_HPP
 

@@ -3354,6 +3354,7 @@ void save_char(struct char_data* ch, sh_int load_room, int bonus) {
 	}
 	else {
 		if(!ch->desc) {
+            mudlog(LOG_PLAYERS, "non salvo perche' non trova la desc2");
 			return;
 		}
 	}

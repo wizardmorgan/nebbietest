@@ -1194,6 +1194,9 @@ void update_obj_file() {
                             else
                             {
                                 ok = TRUE;
+                                SET_BIT(ch_st.act,PLR_NEW_EQ);
+                                rewind(pCharFile);
+                                fwrite(&ch_st, sizeof(ch_st), 1, pCharFile);
                             }
                             old_st_to_st(&old_st, &st);
                         }
