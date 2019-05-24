@@ -5895,7 +5895,7 @@ ACTION_FUNC(do_force_rent) {
 	} /* higher than presons level */
 }
 
-void save_ghost_forcerent(struct char_data* ch);
+void save_ghost_forcerent(struct char_data* ch)
 {
     struct char_file_u tmp_store;
     FILE* fl;
@@ -5907,7 +5907,7 @@ void save_ghost_forcerent(struct char_data* ch);
     }
 
     char_to_store(ch, &tmp_store);
-    sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(victim->player.name));
+    sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(ch->player.name));
     if((fl = fopen(szFileName, "r+b")) == NULL)
     {
         if((fl = fopen(szFileName, "wb")) == NULL)
