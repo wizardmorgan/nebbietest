@@ -5805,7 +5805,7 @@ struct ClassAchieTable AchievementsList[MAX_ACHIE_CLASSES][MAX_ACHIE_TYPE] = {
             CLASS_PALADIN,                                          LEV_EASY,                                   5
         },
         {
-            ACHIE_PALADIN_2,                                        "grido di guerra lanciato",                 "grida di guerra lanciati",
+            ACHIE_PALADIN_2,                                        "grido di guerra lanciato",                 "grida di guerra lanciate",
             "Volevo solo chiamarti...",                             1,
             "Posso sussurrarti una cosa all'orecchio?",             50,
             "Huj, Huj, Hajra'",                                     300,
@@ -6187,7 +6187,7 @@ struct ClassAchieTable AchievementsList[MAX_ACHIE_CLASSES][MAX_ACHIE_TYPE] = {
             0,                                                      LEV_HARD,                                   5
         },
         {   //  19
-            ACHIE_FIDEX_GATOR,                                      "Fidex Gator ucciso",                       "Fodex Gator uccisi",
+            ACHIE_FIDEX_GATOR,                                      "Fidex Gator ucciso",                       "Fidex Gator uccisi",
             "Che bello! Dite che morde?",                           1,
             "Aspettate, io ci so fare con i cani",                  10,
             "Dog sitter",                                           100,
