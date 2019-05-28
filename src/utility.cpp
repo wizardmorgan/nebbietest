@@ -1522,7 +1522,7 @@ void RewardAll(struct char_data* ch, int achievement_type, int achievement_class
                         }
                         else if(percent > 60 && percent <= 100)
                         {
-                            nperc = int (((percent - 60) / 10) + achievement_level + AchievementsList[achievement_class][achievement_type].grado_diff);
+                            nperc = int(((percent - 60) / 10) + achievement_level + AchievementsList[achievement_class][achievement_type].grado_diff);
                             if(nperc > 8)
                             {
                                 nperc = 8;
