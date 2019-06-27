@@ -671,13 +671,6 @@ void wear(struct char_data* ch, struct obj_data* obj_object, long keyword) {
     {
         tch = ch->desc->original;
     }
-
-    if(IS_OBJ_STAT2(obj_object, ITEM2_DESTROYED))
-    {
-        sprintf(buffer, "Non puoi, %s e' inutilizzabile!\n\r", obj_object->short_description);
-        send_to_char(buffer, ch);
-        return;
-    }
     
     if(IS_OBJ_STAT2(obj_object, ITEM2_PERSONAL) && !IS_IMMORTAL(ch) && IS_PC(ch) && !pers_on(ch,obj_object))
     {
