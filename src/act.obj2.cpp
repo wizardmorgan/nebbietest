@@ -664,9 +664,9 @@ void wear(struct char_data* ch, struct obj_data* obj_object, long keyword) {
 	int BitMask;
 	struct room_data* rp;
     struct char_data* tch;
-
+    
     tch = ch;
-
+    
     if(IS_POLY(ch))
     {
         tch = ch->desc->original;
