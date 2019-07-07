@@ -280,6 +280,7 @@ void InsertObject(struct obj_data* pObj, int nVNum);
 void InsertMobile(struct char_data* pMob, int nVNum);
 void Start_Auction();
 ACTION_FUNC(do_WorldSave);
+int CheckSpellPowerFlags(struct obj_data* obj);
 int NewMobMov (struct char_data* mob);
 
 } // namespace Alarmud

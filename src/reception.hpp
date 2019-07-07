@@ -15,8 +15,10 @@ void CountLimitedItems(struct obj_file_u* st) ;
 void PrintLimitedItems() ;
 int ReadObjs(FILE* fl, struct obj_file_u* st) ;
 int ReadObjsOld(FILE* fl, struct old_obj_file_u* st) ;
+int ReadObjsOld2(FILE* fl, struct obj_file_u_old* st) ;
 void WriteObjs(FILE* fl, struct obj_file_u* st) ;
 void WriteObjsOld(FILE* fl, struct old_obj_file_u* st) ;
+void WriteObjsOld2(FILE* fl, struct obj_file_u_old* st) ;
 void ZeroRent(char* n) ;
 void add_obj_cost(struct char_data* ch, struct char_data* re,struct obj_data* obj, struct obj_cost* cost);
 int contained_weight(struct obj_data* container) ;
@@ -26,9 +28,11 @@ void load_char_objs(struct char_data* ch, bool ghost) ;
 void load_room_objs(int room) ;
 void obj_store_to_char(struct char_data* ch, struct obj_file_u* st) ;
 void old_obj_store_to_char(struct char_data* ch, struct old_obj_file_u* st) ;
+void obj_store_to_char_old(struct char_data* ch, struct obj_file_u_old* st) ;
 void obj_store_to_room(int room, struct obj_file_u* st) ;
 void obj_to_store(struct obj_data* obj, struct obj_file_u* st, struct char_data* ch, int bDelete);
 void old_st_to_st(struct old_obj_file_u* old_st, struct obj_file_u* st);
+void st_old_to_st(struct obj_file_u_old* st_old, struct obj_file_u* st);
 void put_obj_in_store(struct obj_data* obj, struct obj_file_u* st, struct char_data* ch) ;
 bool recep_offer(struct char_data* ch, struct char_data* receptionist, struct obj_cost* cost, int forcerent);
 int receptionist(struct char_data* ch, int cmd, char* arg, struct char_data* mob, int type) ;
@@ -39,6 +43,8 @@ void update_file(struct char_data* ch, struct obj_file_u* st) ;
 void update_obj_file() ;
 void write_char_extra(struct char_data* ch) ;
 void zero_rent(struct char_data* ch) ;
+bool ToonVersion(const char* name) ;
+void old_chst_to_chst(struct char_file_u_3040* old_ch_st, struct char_file_u* ch_st) ;
 } // namespace Alarmud
 #endif // __RECEPTION_HPP
 

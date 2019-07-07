@@ -337,7 +337,7 @@ const char* spell_wear_off_msg[] = {
 	/*  252 LANG_OGRE                   */  "!lang ogre!",
 	/*  253 LANG_GNOMISH                */  "!lang gnomish!",
 	/*  254 SKILL_ESP                   */  "Smetti di ascoltare i pensieri degli altri.",
-	/*  255 SPELL_COMP_LANGUAGES        */  "Senti che la tua capacita' di comprende gli altri linguaggi svanisce.",
+	/*  255 SPELL_COMP_LANGUAGES        */  "Senti che la tua capacita' di comprendere gli altri linguaggi svanisce.",
 	/*  256 SPELL_PROT_FIRE             */  "La tua protezione dal $c0009fuoco$c0007 svanisce.",
 	/*  257 SPELL_PROT_COLD             */  "La tua protezione dal $c0014freddo$c0007 svanisce.",
 	/*  258 SPELL_PROT_ENERGY           */  "La tua protezione dall'$c0011energia$c0007 svanisce.",
@@ -2655,6 +2655,7 @@ const char* extra_bits2[] = {
     "HAS-GEMS",
     "NO-PRINCE",
     "ONLY-PRINCE",
+    "DESTROYED",
     "\n"
 };
     
@@ -2928,6 +2929,8 @@ const char* apply_types[] = {
     "RESI-PLUS3",
     "RESI-PLUS4",
     "RESI-HOLY",
+    "SPELLPOWER",
+    "HIT-N-SP",
 	"\n"
 };
 
@@ -3041,6 +3044,7 @@ const char* player_bits[] = {
 	"HAS_NEW_EQ",
 	"HAS_ACHIEVEMENT",
 	"NOBEEP",
+    "HP_ON_OBJ",
 	"\n"
 };
 
@@ -3453,32 +3457,32 @@ struct con_app_type con_app[26] = {
 
 /* [int] apply (all) */
 struct int_app_type int_app[26] = {
-	{  0, -1 },
-	{  1, -1 },  /* 1 */
-	{  2, -1 },
-	{  3, -1 },
-	{  4,  0 },
-	{  5,  0 },  /* 5 */
-	{  6,  0 },
-	{  8,  0 },
-	{ 10,  1 },
-	{ 12,  1 },
-	{ 14,  1 },  /* 10 */
-	{ 16,  1 },
-	{ 18,  2 },
-	{ 20,  2 },
-	{ 22,  2 },
-	{ 25,  2 },  /* 15 */
-	{ 28,  3 },
-	{ 32,  3 },
-	{ 35,  3 },
-	{ 40,  3 },
-	{ 45,  4 },  /* 20 */
-	{ 50,  4 },
-	{ 60,  5 },
-	{ 70,  7 },
-	{ 80, 10 },
-	{ 99, 15 }   /* 25 */
+	{  0, -1, -9 },
+	{  1, -1, -5 },  /* 1 */
+	{  2, -1, -4 },
+	{  3, -1, -3 },
+	{  4,  0, -3 },
+	{  5,  0, -2 },  /* 5 */
+	{  6,  0, -1 },
+	{  8,  0,  0 },
+	{ 10,  1,  0 },
+	{ 12,  1,  1 },
+	{ 14,  1,  1 },  /* 10 */
+	{ 16,  1,  1 },
+	{ 18,  2,  2 },
+	{ 20,  2,  2 },
+	{ 22,  2,  2 },
+	{ 25,  2,  3 },  /* 15 */
+	{ 28,  3,  3 },
+	{ 32,  3,  4 },
+	{ 35,  3,  5 },
+	{ 40,  3,  7 },
+	{ 45,  4,  8 },  /* 20 */
+	{ 50,  4,  9 },
+	{ 60,  5, 10 },
+	{ 70,  7, 11 },
+	{ 80, 10, 12 },
+	{ 99, 15, 15 }   /* 25 */
 };
 
 /* [wis] apply (all) */

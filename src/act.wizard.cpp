@@ -1471,12 +1471,12 @@ ACTION_FUNC(do_stat) {
 				act(buf, FALSE, ch, 0, 0, TO_CHAR);
 
 				sprintf(buf,
-						"$c0005Mana:[$c0014%d$c0005/$c0015%d$c0005+$c0011%d$c0005]\n"
-						"Hit:[$c0014%d$c0005/$c0015%d$c0005+$c0011%d$c0005](%d)\n"
-						"Move:[$c0014%d$c0005/$c0015%d$c0005+$c0011%d$c0005]",
-						GET_MANA(k), mana_limit(k), mana_gain(k), GET_HIT(k),
-						hit_limit(k), hit_gain(k), GetExtimatedHp(k),
-						GET_MOVE(k), move_limit(k), move_gain(k));
+						"$c0005Mana:[$c0014%d$c0005/$c0015%d$c0005($c0009%d$c0005)+$c0011%d$c0005($c0009%d$c0005)]\n"
+						"Hit: [$c0014%d$c0005/$c0015%d$c0005($c0009%d$c0005)+$c0011%d$c0005($c0009%d$c0005)]($c0011%d$c0005)\n"
+						"Move:[$c0014%d$c0005/$c0015%d$c0005($c0009%d$c0005)+$c0011%d$c0005($c0009%d$c0005)]",
+						GET_MANA(k), mana_limit(k), GET_E_MANA(k), mana_gain(k), k->specials.mana_gain_edit,
+                        GET_HIT(k), hit_limit(k), GET_E_HIT(k), hit_gain(k), k->specials.hit_gain_edit, GetExtimatedHp(k),
+						GET_MOVE(k), move_limit(k), GET_E_MOVE(k), move_gain(k), k->specials.move_gain_edit);
 				if(k == NULL || GET_NAME(k) == NULL) {
 					return;
 				} // SALVO la vittima non e' piu' tra noi dopo il controllo sugli hp
@@ -1490,13 +1490,15 @@ ACTION_FUNC(do_stat) {
 						"Exp: [$c0014%d$c0005], Rune degli Dei: [$c0014%d$c0005]\n\r"
 						"$c0005Hitroll: [$c0014%d$c0005+($c0015%d$c0005)], "
 						"Damroll: [$c0014%d$c0005+($c0015%d$c0005)] "
-						"Spellfail: [$c0014%d$c0005]", GET_AC(k),
+                        "Spellpower: [$c0014%d$c0005+($c0015%d$c0005)] "
+						"Spellfail: [$c0014%d$c0005($c0009%d$c0005)]", GET_AC(k),
 						GET_GOLD(k), GET_BANK(k), GET_EXP(k), GET_RUNEDEI(k),
 						k->points.hitroll,
 						str_app[STRENGTH_APPLY_INDEX(k)].tohit,
 						k->points.damroll,
 						str_app[STRENGTH_APPLY_INDEX(k)].todam,
-						k->specials.spellfail);
+                        GET_SPELLPOWER(k), int_app[(int)GET_INT(k)].tosp,
+						k->specials.spellfail, k->specials.spellfail_edit);
 
 				act(buf, FALSE, ch, 0, 0, TO_CHAR);
 
@@ -1670,13 +1672,13 @@ ACTION_FUNC(do_stat) {
                 if(IS_PC(k))
                 {
                     send_to_char("$c0005Resistance (edit):\n\r", ch);
-                    sprintf(buf, " $c0005Fire: $c0014%d$c0005($c0014%d$c0005) Cold: $c0014%d$c0005($c0014%d$c0005) Elec: $c0014%d$c0005($c0014%d$c0005) Acid: $c0014%d$c0005($c0014%d$c0005) Energy: $c0014%d$c0005($c0014%d$c0005)\n\r", CHECK_RESI(k, RESI_FIRE), EDITED_RESI(k, RESI_FIRE), CHECK_RESI(k, RESI_COLD), EDITED_RESI(k, RESI_COLD), CHECK_RESI(k, RESI_ELEC), EDITED_RESI(k, RESI_ELEC), CHECK_RESI(k, RESI_ACID), EDITED_RESI(k, RESI_ACID), CHECK_RESI(k, RESI_ENERGY), EDITED_RESI(k, RESI_ENERGY));
+                    sprintf(buf, " $c0005Fire: $c0014%d$c0005($c0009%d$c0005) Cold: $c0014%d$c0005($c0009%d$c0005) Elec: $c0014%d$c0005($c0009%d$c0005) Acid: $c0014%d$c0005($c0009%d$c0005) Energy: $c0014%d$c0005($c0009%d$c0005)\n\r", CHECK_RESI(k, RESI_FIRE), EDITED_RESI(k, RESI_FIRE), CHECK_RESI(k, RESI_COLD), EDITED_RESI(k, RESI_COLD), CHECK_RESI(k, RESI_ELEC), EDITED_RESI(k, RESI_ELEC), CHECK_RESI(k, RESI_ACID), EDITED_RESI(k, RESI_ACID), CHECK_RESI(k, RESI_ENERGY), EDITED_RESI(k, RESI_ENERGY));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005Poison: $c0014%d$c0005($c0014%d$c0005) Drain: $c0014%d$c0005($c0014%d$c0005) Sleep: $c0014%d$c0005($c0014%d$c0005) Charm: $c0014%d$c0005($c0014%d$c0005) Hold: $c0014%d$c0005($c0014%d$c0005)\n\r", CHECK_RESI(k, RESI_POISON), EDITED_RESI(k, RESI_POISON), CHECK_RESI(k, RESI_DRAIN), EDITED_RESI(k, RESI_DRAIN), CHECK_RESI(k, RESI_SLEEP), EDITED_RESI(k, RESI_SLEEP), CHECK_RESI(k, RESI_CHARM), EDITED_RESI(k, RESI_CHARM), CHECK_RESI(k, RESI_HOLD), EDITED_RESI(k, RESI_HOLD));
+                    sprintf(buf, " $c0005Poison: $c0014%d$c0005($c0009%d$c0005) Drain: $c0014%d$c0005($c0009%d$c0005) Sleep: $c0014%d$c0005($c0009%d$c0005) Charm: $c0014%d$c0005($c0009%d$c0005) Hold: $c0014%d$c0005($c0009%d$c0005)\n\r", CHECK_RESI(k, RESI_POISON), EDITED_RESI(k, RESI_POISON), CHECK_RESI(k, RESI_DRAIN), EDITED_RESI(k, RESI_DRAIN), CHECK_RESI(k, RESI_SLEEP), EDITED_RESI(k, RESI_SLEEP), CHECK_RESI(k, RESI_CHARM), EDITED_RESI(k, RESI_CHARM), CHECK_RESI(k, RESI_HOLD), EDITED_RESI(k, RESI_HOLD));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005NonMag: $c0014%d$c0005($c0014%d$c0005) +1: $c0014%d$c0005($c0014%d$c0005) +2: $c0014%d$c0005($c0014%d$c0005) +3: $c0014%d$c0005($c0014%d$c0005) +4: $c0014%d$c0005($c0014%d$c0005) \n\r", CHECK_RESI(k, RESI_NONMAG), EDITED_RESI(k, RESI_NONMAG), CHECK_RESI(k, RESI_PLUS1), EDITED_RESI(k, RESI_PLUS1), CHECK_RESI(k, RESI_PLUS2), EDITED_RESI(k, RESI_PLUS2), CHECK_RESI(k, RESI_PLUS3), EDITED_RESI(k, RESI_PLUS3), CHECK_RESI(k, RESI_PLUS4), EDITED_RESI(k, RESI_PLUS4));
+                    sprintf(buf, " $c0005NonMag: $c0014%d$c0005($c0009%d$c0005) +1: $c0014%d$c0005($c0009%d$c0005) +2: $c0014%d$c0005($c0009%d$c0005) +3: $c0014%d$c0005($c0009%d$c0005) +4: $c0014%d$c0005($c0009%d$c0005) \n\r", CHECK_RESI(k, RESI_NONMAG), EDITED_RESI(k, RESI_NONMAG), CHECK_RESI(k, RESI_PLUS1), EDITED_RESI(k, RESI_PLUS1), CHECK_RESI(k, RESI_PLUS2), EDITED_RESI(k, RESI_PLUS2), CHECK_RESI(k, RESI_PLUS3), EDITED_RESI(k, RESI_PLUS3), CHECK_RESI(k, RESI_PLUS4), EDITED_RESI(k, RESI_PLUS4));
                     send_to_char(buf, ch);
-                    sprintf(buf, " $c0005Blunt: $c0014%d$c0005($c0014%d$c0005) Pierce: $c0014%d$c0005($c0014%d$c0005) Slash: $c0014%d$c0005($c0014%d$c0005) Holy: $c0014%d$c0005($c0014%d$c0005)\n\r", CHECK_RESI(k, RESI_BLUNT), EDITED_RESI(k, RESI_BLUNT), CHECK_RESI(k, RESI_PIERCE), EDITED_RESI(k, RESI_PIERCE), CHECK_RESI(k, RESI_SLASH), EDITED_RESI(k, RESI_SLASH), CHECK_RESI(k, RESI_HOLY), EDITED_RESI(k, RESI_HOLY));
+                    sprintf(buf, " $c0005Blunt: $c0014%d$c0005($c0009%d$c0005) Pierce: $c0014%d$c0005($c0009%d$c0005) Slash: $c0014%d$c0005($c0009%d$c0005) Holy: $c0014%d$c0005($c0009%d$c0005)\n\r", CHECK_RESI(k, RESI_BLUNT), EDITED_RESI(k, RESI_BLUNT), CHECK_RESI(k, RESI_PIERCE), EDITED_RESI(k, RESI_PIERCE), CHECK_RESI(k, RESI_SLASH), EDITED_RESI(k, RESI_SLASH), CHECK_RESI(k, RESI_HOLY), EDITED_RESI(k, RESI_HOLY));
                     send_to_char(buf, ch);
                 }
                 else
@@ -2093,7 +2095,7 @@ ACTION_FUNC(do_ooedit) {
 			"cost   = item cost to rent per day\n\r"
 			"value  = Item value if sold    | timer    = item timer\n\r"
 			"type   = item type             | weight   = item weight\n\r"
-            "edexp  = amount of exp edited  | edrune   = amount of rune edited"
+            "edexp  = amount of exp edited  | edrune   = amount of rune edited\n\r"
 			"v0     = value[0] of item      | v1       = value[1] of item\n\r"
 			"v2     = value[2] of item      | v3       = value[3] of item\n\r"
 			"aff1   = special affect 1 (syntax is: oedit aff1 <modifer> <type>)\n\r"
@@ -5905,6 +5907,10 @@ void save_ghost_forcerent(struct char_data* ch)
     {
         SET_BIT(ch->specials.act,PLR_NEW_EQ);
     }
+    if(!IS_SET(ch->specials.act, PLR_EQ_HP))
+    {
+        SET_BIT(ch->specials.act, PLR_EQ_HP);
+    }
 
     char_to_store(ch, &tmp_store);
     sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(ch->player.name));
@@ -5944,6 +5950,12 @@ ACTION_FUNC(do_ghost) {
 					 ch);
 		return;
 	}
+
+    if(!ToonVersion(find_name))
+    {
+        send_to_char("That person does not exist.\n\r", ch);
+        return;
+    }
 
 	if(load_char(find_name, &tmp_store)) {
 		CREATE(tmp_ch, struct char_data, 1);
@@ -6541,6 +6553,7 @@ stringa_valore find_obj(struct char_data* ch, ush_int vnumber, int count)
 {
     struct obj_file_u st;
     struct old_obj_file_u old_st;
+    struct obj_file_u_old st_old;
     struct char_file_u ch_st;
     struct char_data* vict;
     FILE* pObjFile;
@@ -6597,6 +6610,35 @@ stringa_valore find_obj(struct char_data* ch, ush_int vnumber, int count)
                                 for(i = 0; i < old_st.number; i++)
                                 {
                                     if(old_st.objects[i].item_number == vnumber)
+                                    {
+                                        vnum = real_object(vnumber);
+                                        oggetto = read_object(vnum, REAL);
+                                        boost::format fmt("[%3d] %-50s- rentato da %s\n\r");
+                                        fmt % sb_count.conteggio++ % oggetto->short_description % ch_st.name;
+                                        sb_count.sb.append(fmt.str().c_str());
+                                        fmt.clear();
+                                        extract_obj(oggetto);
+                                    }
+                                }
+                            }
+                            else if(!IS_SET(ch_st.act, PLR_EQ_HP))
+                            {
+                                int i;
+                                // carico i dati dei pg formato vecchio
+                                fread(st_old.owner, sizeof(st_old.owner), 1, pObjFile);
+                                fread(&st_old.gold_left, sizeof(st_old.gold_left), 1, pObjFile);
+                                fread(&st_old.total_cost, sizeof(st_old.total_cost), 1, pObjFile);
+                                fread(&st_old.last_update, sizeof(st_old.last_update), 1, pObjFile);
+                                fread(&st_old.minimum_stay, sizeof(st_old.minimum_stay), 1, pObjFile);
+                                fread(&st_old.number, sizeof(st_old.number), 1, pObjFile);
+                                for(i = 0; i < st_old.number; i++)
+                                {
+                                    fread(&st_old.objects[i], sizeof(struct obj_file_elem_old), 1, pObjFile);
+                                }
+                                // effettuo la ricerca dell'oggetto
+                                for(i = 0; i < st_old.number; i++)
+                                {
+                                    if(st_old.objects[i].item_number == vnumber)
                                     {
                                         vnum = real_object(vnumber);
                                         oggetto = read_object(vnum, REAL);

@@ -82,19 +82,19 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
 	update = atoi(arg);
 	update--;
 	if(type != ENTER_CHECK) {
-		if(update < 0 || update > 39) {
+		if(update < 0 || update > 40) {
 			return;
 		}
 		i=1;
 		if(update > 0 && update < 32)
-			for(a=1; a<=update; a++) {
+			for(a = 1; a <= update; a++) {
 				i*=2;
 			}
         else
-            for(a=1; a<=update-32; a++) {
+            for(a = 1; a <= update-32; a++) {
                 i*=2;
             }
-        if(update<32)
+        if(update < 32)
         {
             if(IS_SET(ch->specials.objedit->obj_flags.extra_flags, i)) {
                 REMOVE_BIT(ch->specials.objedit->obj_flags.extra_flags, i);
@@ -124,7 +124,7 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
         send_to_char(buf, ch);
 
         row = 0;
-        for(i = 0; i < 39; i++)
+        for(i = 0; i < 40; i++)
         {
             sprintf(buf, VT_CURSPOS, row + 4, ((i & 1) ? 45 : 5));
             if(i & 1)
@@ -169,7 +169,7 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
         sprintf(buf, "\n\rObject Extra Flags:\n\r\n\r");
         send_to_char(buf, ch);
         
-        for(i = 0; i < 39; i++)
+        for(i = 0; i < 40; i++)
         {
             check = 1;
             sprintf(buf2, "%s", "%-");
@@ -221,7 +221,7 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
             fmt2.clear();
         }
         
-        sb.append("\r\n\n\r");
+        sb.append("\n\r\n\r");
         page_string(ch->desc, sb.c_str(), true);
         send_to_char("Select the number to toggle, <C/R> to return to main menu.\n\r--> ", ch);
     }
@@ -1176,6 +1176,8 @@ void ChangeObjAffect(struct char_data* ch, const char* arg, int type) {
         case APPLY_RESI_PLUS3:
         case APPLY_RESI_PLUS4:
         case APPLY_RESI_HOLY:
+        case APPLY_SPELLPOWER:
+        case APPLY_HITNSP:
 			send_to_char("\n\rNote: Modifier will make field go up modifier number "
 						 "of points.\n\r",ch);
 			send_to_char("      Positive modifier will make field go up, negative "

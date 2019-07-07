@@ -230,6 +230,11 @@ namespace Alarmud {
 
 #define GET_GOLD(ch)    ((ch)->points.gold)
 
+//  edit
+#define GET_E_MANA(ch)  ((ch)->specials.mana_edit)
+#define GET_E_MOVE(ch)  ((ch)->specials.move_edit)
+#define GET_E_HIT(ch)   ((ch)->specials.hit_edit)
+
 //#define GET_PQUEST(ch)  ((ch)->points.pQuest)
 #define GET_RUNEDEI(ch)  ((ch)->points.pRuneDei)
 
@@ -250,6 +255,35 @@ namespace Alarmud {
 #define GET_HITROLL(ch) ((ch)->points.hitroll)
 
 #define GET_DAMROLL(ch) ((ch)->points.damroll)
+
+#define GET_SPELLPOWER(ch)  ((ch)->specials.spellpower)
+
+#define GET_TOT_SP(ch)      (((ch)->specials.spellpower + int_app[(int)GET_INT(ch)].tosp) < 1 ? 0 :     \
+                                        ((ch)->specials.spellpower + int_app[(int)GET_INT(ch)].tosp))
+
+#define DAM_SP_BONUS(ch)    (IS_IMMORTALE(ch) ? dice(GET_TOT_SP(ch), 8) :                               \
+                                                HowManyClasses(ch) == 1 ?  dice(GET_TOT_SP(ch), 8) :    \
+                                                HowManyClasses(ch) == 2 ?  dice(GET_TOT_SP(ch), 5) :    \
+                                                HowManyClasses(ch) == 3 ?  dice(GET_TOT_SP(ch), 3) :    \
+                                                GET_TOT_SP(ch))
+
+#define AOE_SP_BONUS(ch)    (IS_IMMORTALE(ch) ? dice(GET_TOT_SP(ch), 5) :                               \
+                                                HowManyClasses(ch) == 1 ?  dice(GET_TOT_SP(ch), 5) :    \
+                                                HowManyClasses(ch) == 2 ?  dice(GET_TOT_SP(ch), 3) :    \
+                                                HowManyClasses(ch) == 3 ?  dice(GET_TOT_SP(ch), 2) :    \
+                                                GET_TOT_SP(ch))
+
+#define HEAL_SP_BONUS(ch)   (IS_IMMORTALE(ch) ? (GET_TOT_SP(ch) * 5) :                              \
+                                                HowManyClasses(ch) == 1 ? (GET_TOT_SP(ch) * 3) :    \
+                                                HowManyClasses(ch) == 2 ? (GET_TOT_SP(ch) * 2) :    \
+                                                HowManyClasses(ch) == 3 ? GET_TOT_SP(ch) :          \
+                                                GET_TOT_SP(ch))
+
+#define CURE_SP_BONUS(ch)   (IS_IMMORTALE(ch) ? (GET_TOT_SP(ch) * 2) :                                  \
+                                                HowManyClasses(ch) == 1 ? GET_TOT_SP(ch) :              \
+                                                HowManyClasses(ch) == 2 ? (int)(GET_TOT_SP(ch) / 2) :   \
+                                                HowManyClasses(ch) == 3 ? (int)(GET_TOT_SP(ch) / 3) :   \
+                                                (int)(GET_TOT_SP(ch) / 4))
 
 #define GET_SPECFLAGS(ch) ((ch)->player.user_flags)
 

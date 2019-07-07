@@ -177,6 +177,11 @@ int mana_limit(struct char_data* ch) {
 	max += ch->points.max_mana;
 	/* bonus mana. In questo campo vanno gli affect  */
 
+    if(IS_PC(ch))
+    {
+        max += GET_E_MANA(ch);
+    }
+
 	struct time_info_data ma;
 	age2(ch, &ma);
 	max += (graf(ma.year, 6,8,12,16,20,24,28))-10;
@@ -196,13 +201,15 @@ int mana_limit(struct char_data* ch) {
 int hit_limit(struct char_data* ch) {
 	int max;
 
-	if(IS_PC(ch)) {
+	if(IS_PC(ch))
+    {
 		struct time_info_data ma;
 		age2(ch, &ma);
 		max = (ch->points.max_hit) + (graf(ma.year, 2,4,17,14,8,-5,-15));
-
+        max += GET_E_HIT(ch);
 	}
-	else {
+	else
+    {
 		max = (ch->points.max_hit);
 	}
 
@@ -219,6 +226,7 @@ int move_limit(struct char_data* ch) {
 
 	if(IS_PC(ch)) {
 		max = 100 ;
+        max += GET_E_MOVE(ch);
 	}
 	else {
 		max = ch->points.max_move;
@@ -298,6 +306,9 @@ int mana_gain(struct char_data* ch) {
 	gain += wis_app[(int)GET_WIS(ch) ].bonus*2;
 
 	gain += ch->points.mana_gain;
+
+    //  sommo il mana_gain editato
+    gain += ch->specials.mana_gain_edit;
 
 	if(IS_AFFECTED(ch, AFF_POISON)) {
 		gain >>= 2;
@@ -418,6 +429,9 @@ int hit_gain(struct char_data* ch) // Gaia 2001
 	gain += con_app[(int)GET_CON(ch) ].hitp/2;
 
 	gain += ch->points.hit_gain;
+
+    //  sommo l' hit_gain editato
+    gain += ch->specials.hit_gain_edit;
 
 	if(GET_COND(ch,FULL) == 0 || GET_COND(ch, THIRST) == 0) {
 		gain >>= 4;
@@ -549,6 +563,9 @@ int move_gain(struct char_data* ch)
 	}
 
 	gain += ch->points.move_gain;
+
+    //  sommo il move_gain editato
+    gain += ch->specials.move_gain_edit;
 
 	if(IS_AFFECTED(ch,AFF_POISON)) {
 		gain >>= 5;

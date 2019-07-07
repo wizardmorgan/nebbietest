@@ -96,6 +96,8 @@ e_apply encode_e_apply(std::string s,e_apply fallback) {
 	if (s == "APPLY_RESI_PLUS3") return APPLY_RESI_PLUS3;
 	if (s == "APPLY_RESI_PLUS4") return APPLY_RESI_PLUS4;
 	if (s == "APPLY_RESI_HOLY") return APPLY_RESI_HOLY;
+	if (s == "APPLY_SPELLPOWER") return APPLY_SPELLPOWER;
+	if (s == "APPLY_HITNSP") return APPLY_HITNSP;
 	return fallback;
 }
 
@@ -271,6 +273,10 @@ std::string translate(const e_apply e) {
 		return "APPLY_RESI_PLUS4";
 	case APPLY_RESI_HOLY:
 		return "APPLY_RESI_HOLY";
+	case APPLY_SPELLPOWER:
+		return "APPLY_SPELLPOWER";
+	case APPLY_HITNSP:
+		return "APPLY_HITNSP";
 	default:
 		return "UNKNOWN";
 	}
@@ -362,6 +368,8 @@ bool enum_validate(const e_apply value) {
 		case APPLY_RESI_PLUS3:
 		case APPLY_RESI_PLUS4:
 		case APPLY_RESI_HOLY:
+		case APPLY_SPELLPOWER:
+		case APPLY_HITNSP:
 		return true;
 		default:
 		return false;

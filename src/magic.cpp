@@ -85,6 +85,9 @@ void spell_magic_missile(byte level, struct char_data* ch,
 	}
 
 	dam = dice((static_cast<int>(level / 2) + 1), 4) + static_cast<int>(level / 2);
+    mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+    dam += DAM_SP_BONUS(ch);
+    mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
 
 	if(affected_by_spell(victim,SPELL_SHIELD)) {
 		dam = 0;
@@ -106,6 +109,9 @@ void spell_chill_touch(byte level, struct char_data* ch,
 	}
 
 	dam = dice(level, 3);
+    mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+    dam += DAM_SP_BONUS(ch);
+    mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
 
 	if(!saves_spell(victim, SAVING_SPELL)) {
 		af.type      = SPELL_CHILL_TOUCH;
@@ -145,7 +151,10 @@ void spell_burning_hands(byte level, struct char_data* ch,
 				return;
 			}
 			if(!in_group(ch, tmp_victim)) {
-                dam = dice(1, 4) + static_cast<int>(level / 2) + 1;;
+                dam = dice(1, 4) + static_cast<int>(level / 2) + 1;
+                mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+                dam += AOE_SP_BONUS(ch);
+                mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
 				act("$c0001Vieni raggiunt$b dalle fiamme!\n\r",
 					FALSE, ch, 0, tmp_victim, TO_VICT);
 				heat_blind(tmp_victim);
@@ -175,6 +184,9 @@ void spell_shocking_grasp(byte level, struct char_data* ch,
 	}
 
 	dam = number(1,8) + level;
+    mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+    dam += DAM_SP_BONUS(ch);
+    mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
 
 	if(GET_HIT(victim) < -4 && IsHumanoid(victim) &&
 			!IsUndead(victim)) {
@@ -205,6 +217,9 @@ void spell_lightning_bolt(byte level, struct char_data* ch,
 	}
 
 	dam = dice(level, 6);
+    mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+    dam += DAM_SP_BONUS(ch);
+    mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
 
 	if(saves_spell(victim, SAVING_SPELL)) {
 		dam >>= 1;
@@ -225,6 +240,9 @@ void spell_colour_spray(byte level, struct char_data* ch,
 	}
 
 	dam = 4 * level;
+    mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+    dam += DAM_SP_BONUS(ch);
+    mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
 
 	if(saves_spell(victim, SAVING_SPELL)) {
 		dam >>= 1;
@@ -283,6 +301,9 @@ void spell_energy_drain(byte level, struct char_data* ch,
 				/* Fallito secondo tiro salvezza */
 				send_to_char("$c0008La tua energia vitale viene risucchiata!\n\r", victim);
 				dam = dice(level, 7);
+                mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+                dam += DAM_SP_BONUS(ch);
+                mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
                 if(saves_spell(victim, SAVING_SPELL))
                 {
                     dam >>= 1;
@@ -398,6 +419,9 @@ void spell_fireball(byte level, struct char_data* ch,
 		if((ch->in_room == tmp_victim->in_room) && (ch != tmp_victim)) {
 			if(!in_group(ch,tmp_victim) && !IS_IMMORTAL(tmp_victim)) {
                 dam = dice(level,8);
+                mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+                dam += AOE_SP_BONUS(ch);
+                mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
 				if(saves_spell(tmp_victim, SAVING_SPELL)) {
 					dam >>= 1;
 				}
@@ -450,6 +474,9 @@ void spell_earthquake(byte level, struct char_data* ch,
 				if(GetMaxLevel(tmp_victim) > 4)
                 {
                     dam =  dice(1,4) + level + 1;
+                    mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+                    dam += CURE_SP_BONUS(ch);
+                    mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
                     if(OnlyClass(ch, CLASS_CLERIC) || IS_IMMORTALE(ch))
                     {
                         if(real_roomp(ch->in_room)->sector_type != SECT_AIR && !CheckEquilibrium(tmp_victim) && CheckOneStat(ch, GET_WIS(ch), SPELL_EARTHQUAKE, tmp_victim, GET_DEX(tmp_victim)))
@@ -575,6 +602,9 @@ void spell_call_lightning(byte level, struct char_data* ch,
 		if(saves_spell(victim, SAVING_SPELL)) {
 			dam >>= 1;
 		}
+        mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
+        dam += DAM_SP_BONUS(ch);
+        mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
 
 		MissileDamage(ch, victim, dam, SPELL_CALL_LIGHTNING, 5);
 	}
@@ -588,7 +618,7 @@ void spell_call_lightning(byte level, struct char_data* ch,
 
 void spell_harm(byte level, struct char_data* ch,
 				struct char_data* victim, struct obj_data* obj) {
-	int dam;
+	int dam, damsp;
 
 	assert(victim && ch);
 	if(level <0 || level >ABS_MAX_LVL) {
@@ -596,16 +626,19 @@ void spell_harm(byte level, struct char_data* ch,
 	}
 
 	dam = GET_HIT(victim) - dice(1,4);
+    damsp = HEAL_SP_BONUS(ch);
 
 	if(dam < 0) {
-		dam = 100;    /* Kill the suffering bastard */
+		dam = 100 + damsp;    /* Kill the suffering bastard */
 	}
 	else {
 		if(!HitOrMiss(ch, victim, CalcThaco(ch, victim))) {
 			dam = 0;
 		}
 	}
-	dam = MIN(dam, 100);
+	dam = MIN(dam, (100 + damsp));
+    
+    mudlog(LOG_CHECK, "Damage prima dello spellpower = max 100, dopo lo spellpower: %d", dam);
 
 	if(IS_PC(ch) && IS_PC(victim) && !IS_IMMORTAL(ch)) {
 		GET_ALIGNMENT(ch)-=4;
@@ -986,6 +1019,10 @@ void spell_cure_critic(byte level, struct char_data* ch,
 
 	healpoints = dice(3,8)+3;
 
+    mudlog(LOG_CHECK, "Healpoints prima dello spellpower: %d", healpoints);
+    healpoints += CURE_SP_BONUS(ch);
+    mudlog(LOG_CHECK, "Healpoints dopo lo spellpower: %d", healpoints);
+
 	if((healpoints + GET_HIT(victim)) > hit_limit(victim)) {
         healpoints = hit_limit(victim) - GET_HIT(victim);
 		GET_HIT(victim) = hit_limit(victim);
@@ -1045,6 +1082,10 @@ void spell_cure_light(byte level, struct char_data* ch,
 	}
 
 	healpoints = dice(1,8);
+
+    mudlog(LOG_CHECK, "Healpoints prima dello spellpower: %d", healpoints);
+    healpoints += CURE_SP_BONUS(ch);
+    mudlog(LOG_CHECK, "Healpoints dopo lo spellpower: %d", healpoints);
 
 	if((healpoints + GET_HIT(victim)) > hit_limit(victim)) {
         healpoints = hit_limit(victim) - GET_HIT(victim);
@@ -1381,6 +1422,11 @@ void spell_heal(byte level, struct char_data* ch,
 	spell_cure_blind(level, ch, victim, obj);
 
     healpoints = 100;
+
+    mudlog(LOG_CHECK, "Healpoints prima dello spellpower: %d", healpoints);
+    healpoints += HEAL_SP_BONUS(ch);
+    mudlog(LOG_CHECK, "Healpoints dopo lo spellpower: %d", healpoints);
+
 	GET_HIT(victim) += healpoints;
 //	alter_hit(victim,0);
 

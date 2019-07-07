@@ -5865,10 +5865,12 @@ ACTION_FUNC(do_attribute) {
 	}
 
 	snprintf(buf, MAX_STRING_LENGTH-1,
-			 "$c0005I tuoi hit e damage bonus sono $c0014%s$c0005 e "
+			 "$c0005I tuoi bonus per colpire ed al danno sono $c0014%s$c0005 e "
 			 "$c0014%s$c0005 rispettivamente.",
-			 HitRollDesc(GET_HITROLL(ch)), DamRollDesc(GET_DAMROLL(ch)));
+			 HitRollDesc(GET_HITROLL(ch) + str_app[STRENGTH_APPLY_INDEX(ch)].tohit), DamRollDesc(GET_DAMROLL(ch) + str_app[STRENGTH_APPLY_INDEX(ch)].todam));
 	act(buf,FALSE, ch,0,0,TO_CHAR);
+    snprintf(buf, MAX_STRING_LENGTH-1, "$c0005La tua abilita' di potenziare gli incantesimi e' $c0014%s$c0005.", SpRollDesc(GET_TOT_SP(ch)));
+    act(buf, FALSE, ch, NULL, NULL, TO_CHAR);
 	snprintf(buf, MAX_STRING_LENGTH-1,
 			 "$c0005Il tuo equipaggiamento e' $c0014%s$c0005",
 			 EqDesc(GetCharBonusIndex(ch)));
@@ -6110,13 +6112,13 @@ const char* EqDesc(float a) {
 
 const char* SpellfailDesc(int a) {
 	if(a >= 100) {
-		return("Terribile");
+		return("terribile");
 	}
 	else if(a >= 90) {
-		return("Scarsa");
+		return("scarsa");
 	}
 	else if(a >= 75) {
-		return("Nella norma");
+		return("nella norma");
 	}
 	else if(a >= 55) {
 		return("buona");
@@ -6160,53 +6162,148 @@ const char* ArmorDesc(int a) {
 	}
 }
 
-const char* HitRollDesc(int a) {
-	if(a < -5) {
-		return("pessimo");
-	}
-	else if(a < -1) {
-		return("basso");
-	}
-	else if(a <= 1) {
-		return("nella media");
-	}
-	else if(a < 3) {
-		return("non male");
-	}
-	else if(a < 8) {
-		return("buono");
-	}
-	else if(a < 12) {
-		return("molto buono");
-	}
-	else {
-		return("eccellente");
-	}
-
+const char* HitRollDesc(int a)
+{
+    if(a < 1)
+    {
+        return("nullo");
+    }
+    else if(a < 5)
+    {
+        return("pessimo");
+    }
+    else if(a < 10)
+    {
+        return("scarso");
+    }
+    else if(a < 15)
+    {
+        return("mediocre");
+    }
+    else if(a < 20)
+    {
+        return("nella media");
+    }
+    else if(a < 26)
+    {
+        return("non male");
+    }
+    else if(a < 32)
+    {
+        return("buono");
+    }
+    else if(a < 38)
+    {
+        return("molto buono");
+    }
+    else if(a < 45)
+    {
+        return("ottimo");
+    }
+    else if(a < 55)
+    {
+        return("eccellente");
+    }
+    else
+    {
+        return("incredibile");
+    }
 }
 
-const char* DamRollDesc(int a) {
-	if(a < -5) {
-		return("pessimo");
-	}
-	else if(a < -1) {
-		return("basso");
-	}
-	else if(a <= 1) {
-		return("nella media");
-	}
-	else if(a < 3) {
-		return("non male");
-	}
-	else if(a < 8) {
-		return("buono");
-	}
-	else if(a< 12) {
-		return("molto buono");
-	}
-	else {
-		return("eccellente");
-	}
+const char* DamRollDesc(int a)
+{
+    if(a < 1)
+    {
+        return("nullo");
+    }
+    else if(a < 5)
+    {
+        return("pessimo");
+    }
+    else if(a < 10)
+    {
+        return("scarso");
+    }
+    else if(a < 15)
+    {
+        return("mediocre");
+    }
+    else if(a < 20)
+    {
+        return("nella media");
+    }
+    else if(a < 26)
+    {
+        return("non male");
+    }
+    else if(a < 32)
+    {
+        return("buono");
+    }
+    else if(a < 38)
+    {
+        return("molto buono");
+    }
+    else if(a < 45)
+    {
+        return("ottimo");
+    }
+    else if(a < 55)
+    {
+        return("eccellente");
+    }
+    else
+    {
+        return("incredibile");
+    }
+}
+
+const char* SpRollDesc(int a)
+{
+    if(a < 1)
+    {
+        return("nulla");
+    }
+    else if(a < 5)
+    {
+        return("pessima");
+    }
+    else if(a < 10)
+    {
+        return("scarsa");
+    }
+    else if(a < 15)
+    {
+        return("mediocre");
+    }
+    else if(a < 20)
+    {
+        return("nella media");
+    }
+    else if(a < 26)
+    {
+        return("non male");
+    }
+    else if(a < 32)
+    {
+        return("buona");
+    }
+    else if(a < 38)
+    {
+        return("molto buona");
+    }
+    else if(a < 45)
+    {
+        return("ottima");
+    }
+    else if(a < 55)
+    {
+        return("eccellente");
+    }
+    else
+    {
+        return("incredibile");
+    }
 }
 
 const char* DescRatio(float f) { /* theirs / yours */

@@ -88,6 +88,8 @@
 ** APPLY_RESI_PLUS3                             =82
 ** APPLY_RESI_PLUS4                             =83
 ** APPLY_RESI_HOLY                              =84
+** APPLY_SPELLPOWER                             =85
+** APPLY_HITNSP                                 =86
 == Enumerations ==
 
 === enum e_class_index ===
@@ -607,7 +609,8 @@ l'array connected_types in constants.cpp
 **MAX_WEAR_POS                                 E_WEAR_MAX 
 **MAX_TOUNGE                                   3 
 **MAX_NEW_LANGUAGES                            10 
-**MAX_SKILLS                                   350 
+**MAX_SKILLS                                   500 
+**MAX_3040_SKILLS                              350 
 **MAX_WEAR                                     E_WEAR_COUNT 
 **MAX_AFFECT                                   40 
 **MAX_SAVES                                    8 

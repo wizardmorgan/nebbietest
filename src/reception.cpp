@@ -8,6 +8,7 @@
 //#include <sys/ctime>
 #include <ctime>
 #include <dirent.h>
+#include <sys/stat.h>
 #include <cstring>
 /***************************  General include ************************************/
 #include "config.hpp"
@@ -451,6 +452,9 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st) {
 				obj->obj_flags.weight       = st->objects[i].weight;
 				obj->obj_flags.timer        = st->objects[i].timer;
 				obj->obj_flags.bitvector    = st->objects[i].bitvector;
+                obj->obj_flags.hitp         = st->objects[i].hitp;
+                obj->obj_flags.hitpTot      = st->objects[i].hitpTot;
+                
 
 				SetStatus(STATUS_OTCFREESTRING, NULL);
 
@@ -531,6 +535,139 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st) {
 		SetStatus(STATUS_OTCENDLOOP, NULL);
 	}
 	SetStatus(STATUS_OTCAFTERLOOP, NULL);
+}
+
+void obj_store_to_char_old(struct char_data* ch, struct obj_file_u_old* st) {
+    struct obj_data* obj;
+    struct obj_data* in_obj[64],*last_obj = NULL;
+    int tmp_cur_depth=0;
+    int i, j, iRealObjNumber;
+    
+    void obj_to_char(struct obj_data *object, struct char_data *ch);
+    
+    for(i = 0; i < 64; i++) {
+        in_obj[ i ] = NULL;
+    }
+    
+    SetStatus(STATUS_OTCBEFORELOOP, NULL);
+    
+    for(i=0; i<st->number; i++) {
+        SetStatus(STATUS_OTCREALOBJECT, NULL);
+        
+        if(st->objects[i].item_number > 0 &&
+           (iRealObjNumber = real_object(st->objects[i].item_number)) > -1) {
+            SetStatus(STATUS_OTCREADOBJECT, NULL);
+            if((obj = read_object(st->objects[i].item_number, VIRTUAL)) !=
+               NULL) {
+#if LIMITED_ITEMS
+                /* Se l` oggetto costa al rent, e` considerato raro, e percio` viene
+                 * gia` contato nella procedura CountLimitedItems. Questo dovrebbe
+                 * risolvere il problema degli oggetti rari che non ripoppano come
+                 * dovrebbero.
+                 */
+                if(obj->item_number >= 0 &&
+                   obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+                    obj_index[ obj->item_number ].number--;
+                }
+#endif
+                SetStatus(STATUS_OTCCOPYVALUE, NULL);
+                
+                obj->obj_flags.value[0] = st->objects[i].value[0];
+                obj->obj_flags.value[1] = st->objects[i].value[1];
+                obj->obj_flags.value[2] = st->objects[i].value[2];
+                obj->obj_flags.value[3] = st->objects[i].value[3];
+                obj->obj_flags.extra_flags  = st->objects[i].extra_flags;
+                if(IS_SET(ch->specials.act,PLR_NEW_EQ))
+                {
+                    obj->obj_flags.extra_flags2 = st->objects[i].extra_flags2;
+                }
+                else
+                {
+                    obj->obj_flags.extra_flags2 = 0;
+                }
+                obj->obj_flags.weight       = st->objects[i].weight;
+                obj->obj_flags.timer        = st->objects[i].timer;
+                obj->obj_flags.bitvector    = st->objects[i].bitvector;
+                
+                SetStatus(STATUS_OTCFREESTRING, NULL);
+                
+                if(obj->name) {
+                    free(obj->name);
+                }
+                if(obj->short_description) {
+                    free(obj->short_description);
+                }
+                if(obj->description) {
+                    free(obj->description);
+                }
+                
+                SetStatus(STATUS_OTCALLOCSTRING, NULL);
+                
+                obj->name = (char*)malloc(strlen(st->objects[i].name)+1);
+                obj->short_description = (char*)malloc(strlen(st->objects[i].sd)+1);
+                obj->description = (char*)malloc(strlen(st->objects[i].desc)+1);
+                
+                SetStatus(STATUS_OTCCOPYSTRING, NULL);
+                
+                strcpy(obj->name, st->objects[i].name);
+                strcpy(obj->short_description, st->objects[i].sd);
+                strcpy(obj->description, st->objects[i].desc);
+                
+                SetStatus(STATUS_OTCCOPYAFFECT, NULL);
+                
+                for(j=0; j<MAX_OBJ_AFFECT; j++) {
+                    obj->affected[j] = st->objects[i].affected[j];
+                }
+                
+                SetStatus(STATUS_OTCBAGTREE, NULL);
+                
+                /* item restoring */
+                if(st->objects[i].depth > 60) {
+                    mudlog(LOG_SYSERR, "weird! object have depth >60.");
+                    st->objects[i].depth = 0;
+                }
+                if(st->objects[i].depth && st->objects[i].wearpos) {
+                    mudlog(LOG_SYSERR,
+                           "weird! object (%s) weared and in cointainer.",obj->name);
+                    st->objects[i].depth = st->objects[i].wearpos=0;
+                }
+                if(st->objects[i].depth > tmp_cur_depth) {
+                    if(st->objects[i].depth != tmp_cur_depth + 1) {
+                        mudlog(LOG_SYSERR, "weird! object depth changed from %d to %d",
+                               tmp_cur_depth, st->objects[i].depth);
+                    }
+                    if(last_obj == NULL) {
+                        mudlog(LOG_SYSERR,
+                               "weird! object depth > current depth but not last_obj in "
+                               "obj_store_to_char_old (reception.c).");
+                    }
+                    
+                    in_obj[ tmp_cur_depth++ ] = last_obj;
+                }
+                else if(st->objects[i].depth<tmp_cur_depth) {
+                    tmp_cur_depth--;
+                }
+                if(st->objects[ i ].wearpos) {
+                    equip_char(ch, obj, st->objects[ i ].wearpos - 1);
+                }
+                else if(tmp_cur_depth) {
+                    if(in_obj[ tmp_cur_depth - 1 ]) {
+                        obj_to_obj(obj, in_obj[ tmp_cur_depth - 1 ]);
+                    }
+                    else
+                        mudlog(LOG_SYSERR,
+                               "weird! in_obj[ tmp_cur_depth - 1 ] == NULL in "
+                               "obj_store_to_char_old (reception.c).");
+                }
+                else {
+                    obj_to_char(obj, ch);
+                }
+                last_obj = obj;
+            }
+        }
+        SetStatus(STATUS_OTCENDLOOP, NULL);
+    }
+    SetStatus(STATUS_OTCAFTERLOOP, NULL);
 }
 
 void SetPersonOnSave(struct char_data* ch, struct obj_data* obj)
@@ -682,6 +819,7 @@ void load_char_objs(struct char_data* ch, bool ghost) {
 	bool found = FALSE;
 	long timegold;
 	struct obj_file_u st;
+    struct obj_file_u_old st_old;
     struct old_obj_file_u old_st;
 	char tbuf[200];
 	/*
@@ -707,9 +845,9 @@ void load_char_objs(struct char_data* ch, bool ghost) {
 
 	rewind(fl);
 
-    if(IS_SET(ch->specials.act,PLR_NEW_EQ))
+    if(IS_SET(ch->specials.act, PLR_EQ_HP))
     {
-
+        
         if(!ReadObjs(fl, &st))
         {
             mudlog(LOG_PLAYERS, "No objects found");
@@ -717,6 +855,19 @@ void load_char_objs(struct char_data* ch, bool ghost) {
             SetStatus(tbuf);
             return;
         }
+    }
+    else if(IS_SET(ch->specials.act,PLR_NEW_EQ))
+    {
+
+        if(!ReadObjsOld2(fl, &st_old))
+        {
+            mudlog(LOG_PLAYERS, "No objects found");
+            snprintf(tbuf,199,"File %s.aux chiuso",GET_NAME(ch));
+            SetStatus(tbuf);
+            return;
+        }
+
+        st_old_to_st(&st_old, &st);
     }
     else
     {
@@ -858,10 +1009,16 @@ void load_char_objs(struct char_data* ch, bool ghost) {
 
 	if(found) {
 		mudlog(LOG_CHECK, "Reading objects...");
-        if(IS_SET(ch->specials.act,PLR_NEW_EQ))
+        if(IS_SET(ch->specials.act, PLR_EQ_HP))
         {
             mudlog(LOG_CHECK,"New Format Objects %s",GET_NAME(ch));
             obj_store_to_char(ch, &st);
+        }
+        else if(IS_SET(ch->specials.act, PLR_NEW_EQ))
+        {
+            mudlog(LOG_CHECK,"No-Hp Format Objects %s",GET_NAME(ch));
+            obj_store_to_char_old(ch, &st_old);
+            st_old_to_st(&st_old, &st);
         }
         else
         {
@@ -1151,13 +1308,65 @@ void save_obj(struct char_data* ch, struct obj_cost* cost, int bDelete) {
 * Routines used to update object file, upon boot time                     *
 ************************************************************************* */
 
+#define PG_DAT_SIZE_V_3_5   3040
+#define PG_DAT_SIZE_V_4     3696
+
+//  Converte una vecchia versione di un file pg a quello attuale
+bool ToonVersion(const char* name)
+{
+    FILE* pCharFile;
+    struct char_file_u ch_st;
+    struct char_file_u_3040 ch_st_3040;
+    struct stat fileinfo;
+    char szFileName[41];
+    
+    snprintf(szFileName, sizeof(szFileName)-1,"%s/%s.dat", PLAYERS_DIR, lower(name));
+    
+    if((pCharFile = fopen(szFileName, "r+")) != NULL)
+    {
+        mudlog(LOG_CHECK, "ho trovato il pg");
+        stat(szFileName, &fileinfo);
+        
+        if(fileinfo.st_size == PG_DAT_SIZE_V_3_5)
+        {
+            mudlog(LOG_CHECK, "il file size e' 3040");
+            if(fread(&ch_st_3040, 1, sizeof(ch_st_3040), pCharFile) == sizeof(ch_st_3040))
+            {
+                mudlog(LOG_CHECK, "la size e' ok, provo a trasformare old ch st to new");
+                old_chst_to_chst(&ch_st_3040, &ch_st);
+                mudlog(LOG_CHECK, "ok trasformato");
+                if(!IS_SET(ch_st.act, PLR_NEW_EQ))
+                {
+                    SET_BIT(ch_st.act, PLR_NEW_EQ);
+                }
+                rewind(pCharFile);
+                fwrite(&ch_st, sizeof(ch_st), 1, pCharFile);
+                fclose(pCharFile);
+                return TRUE;
+            }
+        }
+        else
+        {
+            if(fread(&ch_st, 1, sizeof(ch_st), pCharFile) == sizeof(ch_st))
+            {
+                fclose(pCharFile);
+                return TRUE;
+            }
+        }
+    }
+
+    return FALSE;
+}
+
 void update_obj_file() {
     struct obj_file_u st;
     struct old_obj_file_u old_st;
+    struct obj_file_u_old st_old;
     struct char_file_u ch_st;
+    struct char_file_u_3040 ch_st_3040;
     long days_passed;
-    bool ok = FALSE;
-
+    bool ok = FALSE, ok2 = FALSE;
+    struct stat fileinfo;
     FILE* pObjFile;
     DIR* dir;
 
@@ -1182,7 +1391,28 @@ void update_obj_file() {
 
             if((pCharFile = fopen(szFileName, "r+")) != NULL)
             {
-                if(fread(&ch_st, 1, sizeof(ch_st), pCharFile) == sizeof(ch_st))
+                stat(szFileName, &fileinfo);
+
+                if(fileinfo.st_size == PG_DAT_SIZE_V_3_5)
+                {
+                    if(fread(&ch_st_3040, 1, sizeof(ch_st_3040), pCharFile) == sizeof(ch_st_3040))
+                    {
+                        old_chst_to_chst(&ch_st_3040, &ch_st);
+                        rewind(pCharFile);
+                        fwrite(&ch_st, sizeof(ch_st), 1, pCharFile);
+                        ok2 = TRUE;
+                    }
+                }
+                else
+                {
+                    if(fread(&ch_st, 1, sizeof(ch_st), pCharFile) == sizeof(ch_st))
+                    {
+                        ok2 = TRUE;
+                    }
+                }
+
+          //      if(fread(&ch_st, 1, sizeof(ch_st), pCharFile) == sizeof(ch_st))
+                if(ok2)
                 {
                     snprintf(szFileName, sizeof(szFileName)-1, "%s/%s", RENT_DIR, lower(ch_st.name));
                     // r+b is for Binary Reading/Writing
@@ -1202,6 +1432,21 @@ void update_obj_file() {
                                 fwrite(&ch_st, sizeof(ch_st), 1, pCharFile);
                             }
                             old_st_to_st(&old_st, &st);
+                        }
+                        else if(!IS_SET(ch_st.act,PLR_EQ_HP))
+                        {
+                            if(!ReadObjsOld2(pObjFile, &st_old))
+                            {
+                                ok = FALSE;
+                            }
+                            else
+                            {
+                                ok = TRUE;
+                                SET_BIT(ch_st.act,PLR_EQ_HP);
+                                rewind(pCharFile);
+                                fwrite(&ch_st, sizeof(ch_st), 1, pCharFile);
+                            }
+                            st_old_to_st(&st_old, &st);
                         }
                         else
                         {
@@ -1240,6 +1485,10 @@ void update_obj_file() {
                                     if(!IS_SET(ch_st.act,PLR_NEW_EQ))
                                     {
                                         WriteObjsOld(pObjFile, &old_st);
+                                    }
+                                    else if(!IS_SET(ch_st.act, PLR_EQ_HP))
+                                    {
+                                        WriteObjsOld2(pObjFile, &st_old);
                                     }
                                     else
                                     {
@@ -1282,6 +1531,10 @@ void update_obj_file() {
                                             {
                                                 WriteObjsOld(pObjFile, &old_st);
                                             }
+                                            else if(!IS_SET(ch_st.act, PLR_EQ_HP))
+                                            {
+                                                WriteObjsOld2(pObjFile, &st_old);
+                                            }
                                             else
                                             {
                                                 WriteObjs(pObjFile, &st);
@@ -1304,6 +1557,10 @@ void update_obj_file() {
                                         if(!IS_SET(ch_st.act,PLR_NEW_EQ))
                                         {
                                             WriteObjsOld(pObjFile, &old_st);
+                                        }
+                                        else if(!IS_SET(ch_st.act, PLR_EQ_HP))
+                                        {
+                                            WriteObjsOld2(pObjFile, &st_old);
                                         }
                                         else
                                         {
@@ -1337,6 +1594,58 @@ void update_obj_file() {
     {
         mudlog(LOG_ERROR, "Cannot open dir %s.", PLAYERS_DIR);
     }
+}
+
+void st_old_to_st(struct obj_file_u_old* st_old, struct obj_file_u* st)
+{
+    int i, j, iRealObjNumber;
+    
+    strcpy(st->owner, st_old->owner);
+    st->gold_left       = st_old->gold_left;
+    st->total_cost      = st_old->total_cost;
+    st->last_update     = st_old->last_update;
+    st->minimum_stay    = st_old->minimum_stay;
+    st->number          = st_old->number;
+    
+    for(i = 0; i < st_old->number; i++)
+    {
+        if(st_old->objects[i].item_number > 0 &&
+           (iRealObjNumber = real_object(st_old->objects[i].item_number)) > -1)
+        {
+            st->objects[i].item_number   = st_old->objects[i].item_number;
+            st->objects[i].value[0]      = st_old->objects[i].value[0];
+            st->objects[i].value[1]      = st_old->objects[i].value[1];
+            st->objects[i].value[2]      = st_old->objects[i].value[2];
+            st->objects[i].value[3]      = st_old->objects[i].value[3];
+            st->objects[i].value[4]      = st_old->objects[i].value[4];
+            st->objects[i].extra_flags   = st_old->objects[i].extra_flags;
+            st->objects[i].extra_flags2  = st_old->objects[i].extra_flags2;
+            st->objects[i].weight        = st_old->objects[i].weight;
+            st->objects[i].timer         = st_old->objects[i].timer;
+            st->objects[i].bitvector     = st_old->objects[i].bitvector;
+            st->objects[i].hitp          = 100.0;
+            st->objects[i].hitpTot       = 100.0;
+            st->objects[i].free1         = 0;
+            st->objects[i].free2         = 0;
+            st->objects[i].free3         = 0;
+            st->objects[i].free4         = 0;
+            
+            strcpy(st->objects[i].name, st_old->objects[ i ].name);
+            strcpy(st->objects[i].sd, st_old->objects[ i ].sd);
+            strcpy(st->objects[i].desc, st_old->objects[ i ].desc);
+            strcpy(st->objects[i].free5, " ");
+            strcpy(st->objects[i].free6, " ");
+            
+            st->objects[i].wearpos       = st_old->objects[i].wearpos;
+            st->objects[i].depth         = st_old->objects[i].depth;
+            
+            for(j=0; j<MAX_OBJ_AFFECT; j++)
+            {
+                st->objects[i].affected[j] = st_old->objects[i].affected[j];
+            }
+        }
+    }
+
 }
 
 void old_st_to_st(struct old_obj_file_u* old_st, struct obj_file_u* st)
@@ -1750,6 +2059,52 @@ void ZeroRent(char* n) {
 }
 
 int ReadObjs(FILE* fl, struct obj_file_u* st) {
+    int i;
+
+    if(feof(fl)) {
+        fclose(fl);
+        return(FALSE);
+    }
+
+    fread(st->owner, sizeof(st->owner), 1, fl);
+    if(feof(fl)) {
+        fclose(fl);
+        return(FALSE);
+    }
+    fread(&st->gold_left, sizeof(st->gold_left), 1, fl);
+    if(feof(fl)) {
+        fclose(fl);
+        return(FALSE);
+    }
+    fread(&st->total_cost, sizeof(st->total_cost), 1, fl);
+    if(feof(fl)) {
+        fclose(fl);
+        return(FALSE);
+    }
+    fread(&st->last_update, sizeof(st->last_update), 1, fl);
+    if(feof(fl)) {
+        fclose(fl);
+        return(FALSE);
+    }
+    fread(&st->minimum_stay, sizeof(st->minimum_stay), 1, fl);
+    if(feof(fl)) {
+        fclose(fl);
+        return(FALSE);
+    }
+    fread(&st->number, sizeof(st->number), 1, fl);
+    if(feof(fl)) {
+        fclose(fl);
+        return(FALSE);
+    }
+    mudlog(LOG_SAVE,"Letto %s %d %d %d %d %d",st->owner,
+           st->gold_left,st->total_cost,st->last_update,st->minimum_stay,st->number);
+    for(i=0; i<st->number; i++) {
+        fread(&st->objects[i], sizeof(struct obj_file_elem), 1, fl);
+    }
+    return TRUE;
+}
+
+int ReadObjsOld2(FILE* fl, struct obj_file_u_old* st) {
 	int i;
 
 	if(feof(fl)) {
@@ -1787,10 +2142,10 @@ int ReadObjs(FILE* fl, struct obj_file_u* st) {
 		fclose(fl);
 		return(FALSE);
 	}
-	mudlog(LOG_SAVE,"Letto %s %d %d %d %d %d",st->owner,
+	mudlog(LOG_SAVE,"LettoOld %s %d %d %d %d %d",st->owner,
 		   st->gold_left,st->total_cost,st->last_update,st->minimum_stay,st->number);
 	for(i=0; i<st->number; i++) {
-		fread(&st->objects[i], sizeof(struct obj_file_elem), 1, fl);
+		fread(&st->objects[i], sizeof(struct obj_file_elem_old), 1, fl);
 	}
 	return TRUE;
 }
@@ -1858,6 +2213,25 @@ void WriteObjs(FILE* fl, struct obj_file_u* st) {
         fwrite(&st->objects[i], sizeof(struct obj_file_elem), 1, fl);
 	}
 	PopStatus();
+}
+
+void WriteObjsOld2(FILE* fl, struct obj_file_u_old* st) {
+    int i;
+    PushStatus("WriteObjsOld2");
+    fwrite(st->owner, sizeof(st->owner), 1, fl);
+    fwrite(&st->gold_left, sizeof(st->gold_left), 1, fl);
+#if NEW_RENT
+    /* RENTAL COST ADJUSTMENT */
+    st->total_cost = 0;
+#endif
+    fwrite(&st->total_cost, sizeof(st->total_cost), 1, fl);
+    fwrite(&st->last_update, sizeof(st->last_update), 1, fl);
+    fwrite(&st->minimum_stay, sizeof(st->minimum_stay), 1, fl);
+    fwrite(&st->number, sizeof(st->number), 1, fl);
+    for(i=0; i<st->number; i++) {
+        fwrite(&st->objects[i], sizeof(struct obj_file_elem_old), 1, fl);
+    }
+    PopStatus();
 }
 
 void WriteObjsOld(FILE* fl, struct old_obj_file_u* st) {
@@ -1959,13 +2333,6 @@ void load_char_extra(struct char_data* ch) {
                     achie_v = (char*)strtok(0, "\0");
                     n = atoi(achie_n);
                     ch->specials.achievements[OTHER_ACHIE][n] = atoi(achie_v);
-                }
-                else if(!strcmp(p, "Edit_Resi"))
-                {
-                    achie_n = (char*)strtok(s, "#");
-                    achie_v = (char*)strtok(0, "\0");
-                    n = atoi(achie_n);
-                    ch->resistenze[EDIT_RESI][n] = atoi(achie_v);
                 }
                 else if(!strcmp(p, "Spell_Resi"))
                 {
@@ -2094,14 +2461,6 @@ void write_char_extra(struct char_data* ch) {
 
     for(i = 0; i < RESI_UNUSED1; i++)
     {
-        if(ch->resistenze[EDIT_RESI][i] != 0)
-        {
-            fprintf(fp, "Edit_Resi:%d#%d\n", i, ch->resistenze[EDIT_RESI][i]);
-        }
-    }
-
-    for(i = 0; i < RESI_UNUSED1; i++)
-    {
         if(ch->resistenze[SPELL_RESI][i] != 0)
         {
             fprintf(fp, "Spell_Resi:%d#%d\n", i, ch->resistenze[SPELL_RESI][i]);
@@ -2159,6 +2518,8 @@ void obj_store_to_room(int room, struct obj_file_u* st) {
 			obj->obj_flags.weight       = st->objects[ i ].weight;
 			obj->obj_flags.timer        = st->objects[ i ].timer;
 			obj->obj_flags.bitvector    = st->objects[ i ].bitvector;
+            obj->obj_flags.hitp         = st->objects[ i ].hitp;
+            obj->obj_flags.hitpTot      = st->objects[ i ].hitpTot;
 
 			if(obj->name) {
 				free(obj->name);
@@ -2265,6 +2626,85 @@ void save_room(int room) {
 			fclose(f1);
 		}
 	}
+}
+
+//  converte il formato del file .dat dei pg di 3040 bytes al nuovo formato
+void old_chst_to_chst(struct char_file_u_3040* ch_st_3040, struct char_file_u* ch_st)
+{
+    int i;
+
+    ch_st->iClass   = ch_st_3040->iClass;
+    ch_st->sex      = ch_st_3040->sex;
+    for(i = 0; i < ABS_MAX_CLASS; i++)
+    {
+        ch_st->level[i] = ch_st_3040->level[i];
+    }
+    ch_st->birth    = ch_st_3040->birth;
+    ch_st->played   = ch_st_3040->played;
+    ch_st->race     = ch_st_3040->race;
+    ch_st->weight   = ch_st_3040->weight;
+    ch_st->height   = ch_st_3040->height;
+    strcpy(ch_st->title, ch_st_3040->title);
+    strcpy(ch_st->extra_str, ch_st_3040->extra_str);
+    ch_st->hometown =   ch_st_3040->hometown;
+    strcpy(ch_st->description, ch_st_3040->description);
+    for(i = 0; i < MAX_TOUNGE; i++)
+    {
+        ch_st->talks[i] = ch_st_3040->talks[i];
+    }
+    ch_st->extra_flags  = ch_st_3040->extra_flags;
+    ch_st->load_room    = ch_st_3040->load_room;
+    ch_st->abilities    = ch_st_3040->abilities;
+    ch_st->points       = ch_st_3040->points;
+    for(i = 0; i < MAX_3040_SKILLS; i++)
+    {
+        ch_st->skills[i] = ch_st_3040->skills[i];
+    }
+    for(i = MAX_3040_SKILLS; i < MAX_SKILLS; i++)
+    {
+        ch_st->skills[i].learned    = 0;
+        ch_st->skills[i].flags      = 0;
+        ch_st->skills[i].special    = 0;
+        ch_st->skills[i].nummem     = 0;
+    }
+    for(i = 0; i < MAX_AFFECT; i++)
+    {
+        ch_st->affected[i] = ch_st_3040->affected[i];
+    }
+    ch_st->spells_to_learn  = ch_st_3040->spells_to_learn;
+    ch_st->alignment        = ch_st_3040->alignment;
+    ch_st->affected_by      = ch_st_3040->affected_by;
+    ch_st->affected_by2     = ch_st_3040->affected_by2;
+    ch_st->last_logon       = ch_st_3040->last_logon;
+    ch_st->act              = ch_st_3040->act;
+    for(i = 0; i < 25; i++)
+    {
+        ch_st->edit_resi[i] = 0;
+    }
+    ch_st->mana_edit        = 0;
+    ch_st->mana_gain_edit   = 0;
+    ch_st->hit_edit         = 0;
+    ch_st->hit_gain_edit    = 0;
+    ch_st->move_edit        = 0;
+    ch_st->move_gain_edit   = 0;
+    ch_st->spellfail_edit   = 0;
+    strcpy(ch_st->name, ch_st_3040->name);
+    strcpy(ch_st->authcode, ch_st_3040->authcode);
+    strcpy(ch_st->WimpyLevel, ch_st_3040->WimpyLevel);
+    strcpy(ch_st->dummy, ch_st_3040->dummy);
+    strcpy(ch_st->pwd, ch_st_3040->pwd);
+    for(i = 0; i < MAX_SAVES; i++)
+    {
+        ch_st->apply_saving_throw[i] = ch_st_3040->apply_saving_throw[i];
+    }
+    for(i = 0; i < MAX_CONDITIONS; i++)
+    {
+        ch_st->conditions[i] = ch_st_3040->conditions[i];
+    }
+    ch_st->startroom = ch_st_3040->startroom;
+    ch_st->user_flags = ch_st_3040->user_flags;
+    ch_st->speaks = ch_st_3040->speaks;
+    ch_st->agemod = ch_st_3040->agemod;
 }
 
 } // namespace Alarmud

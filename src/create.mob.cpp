@@ -55,6 +55,7 @@ namespace Alarmud {
 #define CHANGE_MOB_SOUND     20
 #define CHANGE_MOB_DSOUND    21
 #define CHANGE_MOB_SPECIAL   22
+#define CHANGE_MOB_SP_POWER  23
 #define MOB_HIT_RETURN       99
 
 #define ENTER_CHECK        1
@@ -71,7 +72,8 @@ const char* mob_edit_menu = "    1) Name                    2) Short description
 							"   15) Exp flags/amount       16) Default position\n\r"
 							"   17) Resistances            18) Immunities\n\r"
 							"   19) Susceptibilities       20) Sounds\n\r"
-							"   21) Distant sounds         22) Special\n\r\n\r";
+							"   21) Distant sounds         22) Special\n\r"
+                            "   23) Spellpower Plus\n\r\n\r";
 
 
 void ChangeMobActFlags(struct char_data* ch, const char* arg, int type) {
@@ -505,6 +507,10 @@ void MobEdit(struct char_data* ch, const char* arg) {
             ch->specials.medit = CHANGE_MOB_SPECIAL;
             ChangeMobSpecial(ch, "", ENTER_CHECK);
             return;
+        case 23:
+            ch->specials.medit = CHANGE_MOB_SP_POWER;
+            ChangeMobSpellPower(ch, "", ENTER_CHECK);
+            return;
 		default:
 			UpdateMobMenu(ch);
 			return;
@@ -581,12 +587,48 @@ void MobEdit(struct char_data* ch, const char* arg) {
     case CHANGE_MOB_SPECIAL:
         ChangeMobSpecial(ch, arg, 0);
         return;
+    case CHANGE_MOB_SP_POWER:
+        ChangeMobSpellPower(ch, arg, 0);
+        return;
 	default:
 		mudlog(LOG_ERROR, "Got to bad spot in MobEdit");
 		return;
 	}
 }
 
+void ChangeMobSpellPower(struct char_data* ch, const char* arg, int type) {
+    char buf[255];
+    struct char_data* mob;
+    int change;
+
+    if(type != ENTER_CHECK)
+    if(!*arg || (*arg == '\n')) {
+        ch->specials.medit = MOB_MAIN_MENU;
+        UpdateMobMenu(ch);
+        return;
+    }
+
+    mob=ch->specials.mobedit;
+    if(type != ENTER_CHECK) {
+        change=atoi(arg);
+        if(change <= 0 || change > 255) {
+            change = 1;
+        }
+        mob->specials.spellpower = change;
+        ch->specials.medit = MOB_MAIN_MENU;
+        UpdateMobMenu(ch);
+        return;
+    }
+    
+    sprintf(buf, VT_HOMECLR);
+    send_to_char(buf, ch);
+    
+    sprintf(buf, "Current Mob Spellpower Plus: %d", mob->specials.spellpower);
+    send_to_char(buf, ch);
+    send_to_char("\n\r\n\rNew Spellpower Plus: ", ch);
+    
+    return;
+}
 
 void ChangeMobSpecial(struct char_data* ch, const char* arg, int type) {
     char buf[256], proc[256], parms[256];

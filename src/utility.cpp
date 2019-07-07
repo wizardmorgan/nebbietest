@@ -130,7 +130,8 @@ const char* zonename_by_room(int room) {
         "l'Oscura Birreria",
         "la Torre Fantasma",
         "la Citta' Perduta di Nilmys",
-        "free",
+        "la Quest di Nilmys",
+        "la fossa comune",
         "la Casa dei Giganti delle Colline",
         "il Crepaccio di Ghiaccio",
         "il Regno del Gelo",
@@ -9724,6 +9725,7 @@ mudlog (LOG_CHECK, "oggetto caricato");
                 break;
                 
             case APPLY_DAMROLL:
+            case APPLY_SPELLPOWER:
                 valore += obj->affected[i].modifier * 10000;
                 break;
                 
@@ -9850,7 +9852,8 @@ mudlog (LOG_CHECK, "oggetto caricato");
                 break;
 
             case APPLY_HITNDAM:
-                mudlog(LOG_CHECK, "hit and dam");
+            case APPLY_HITNSP:
+                mudlog(LOG_CHECK, "hit and dam/sp");
                 valore += obj->affected[i].modifier * 14500;
                 break;
 
@@ -9982,6 +9985,7 @@ mudlog (LOG_CHECK, "oggetto caricato");
                 break;
 
             case APPLY_DAMROLL:
+            case APPLY_SPELLPOWER:
                 valore_originale += obj_original->affected[i].modifier * 10000;
                 break;
 
@@ -10108,6 +10112,7 @@ mudlog (LOG_CHECK, "oggetto caricato");
                 break;
 
             case APPLY_HITNDAM:
+            case APPLY_HITNSP:
                 valore_originale += obj_original->affected[i].modifier * 14500;
                 break;
 

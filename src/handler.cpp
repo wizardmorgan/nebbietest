@@ -995,6 +995,15 @@ void affect_modify(struct char_data* ch,byte loc, long mod, long bitv, int type,
         ch->resistenze[resiType][RESI_HOLY] += mod;
         break;
 
+    case APPLY_SPELLPOWER:
+        GET_SPELLPOWER(ch) += mod;
+        break;
+
+    case APPLY_HITNSP:
+        GET_HITROLL(ch)    += mod;
+        GET_SPELLPOWER(ch) += mod;
+        break;
+
 	default:
 
 		mudlog(LOG_SYSERR,

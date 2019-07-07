@@ -1638,6 +1638,11 @@ struct char_data* read_mobile(int nr, int type) {
 
 	mob->mult_att = 1.0;
 	mob->specials.spellfail = 101;
+    mob->specials.spellpower = 0;
+    mob->specials.dam_red_blunt = 0;
+    mob->specials.dam_red_slash = 0;
+    mob->specials.dam_red_pierce = 0;
+    mob->specials.dam_red_magic = 0;
 
 	mob->specials.act = fread_number(mob_f);
 	SET_BIT(mob->specials.act, ACT_ISNPC);
@@ -2075,6 +2080,14 @@ struct char_data* read_mobile(int nr, int type) {
     mob->lastpkill = NULL;
     mob->lastmkill = NULL;
 
+    mob->specials.mana_edit      = 0;
+    mob->specials.mana_gain_edit = 0;
+    mob->specials.hit_edit       = 0;
+    mob->specials.hit_gain_edit  = 0;
+    mob->specials.move_edit      = 0;
+    mob->specials.move_gain_edit = 0;
+    mob->specials.spellfail_edit = 0;
+
     mob->points.max_move = NewMobMov(mob);
     mob->points.move = mob->points.max_move;
 
@@ -2172,6 +2185,8 @@ void clone_obj_to_obj(struct obj_data* obj, struct obj_data* osrc) {
 	obj->obj_flags.weight = osrc->obj_flags.weight;
 	obj->obj_flags.cost = osrc->obj_flags.cost;
 	obj->obj_flags.cost_per_day = osrc->obj_flags.cost_per_day;
+    obj->obj_flags.hitp = osrc->obj_flags.hitp;
+    obj->obj_flags.hitpTot = osrc->obj_flags.hitpTot;
 //    obj->value_exp_edit = osrc->value_exp_edit;
 //    obj->value_rune_edit = osrc->value_rune_edit;
 
@@ -2268,6 +2283,24 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
 
 	for(i = 0; (i < MAX_OBJ_AFFECT) && (*chk == 'A'); i++) {
 		fscanf(f, " %d ", &tmp);
+        if(tmp == APPLY_DAMROLL || tmp == APPLY_HITNDAM)
+        {
+            if(number(1, 100) > CheckSpellPowerFlags(obj))
+            {
+                if(tmp == APPLY_HITNDAM)
+                {
+                    //  hit and spellpower is very hard, so check it again!
+                    if(number(1, 100) > CheckSpellPowerFlags(obj))
+                    {
+                        tmp= APPLY_HITNSP;
+                    }
+                }
+                else
+                {
+                    tmp = APPLY_SPELLPOWER;
+                }
+            }
+        }
 		obj->affected[i].location = tmp;
 		fscanf(f, " %d \n", &tmp);
 		obj->affected[i].modifier = tmp;
@@ -2296,6 +2329,9 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
     {
         obj->value_exp_edit = fread_number(f);
     }
+
+    obj->obj_flags.hitp = 100.0;
+    obj->obj_flags.hitpTot = 100.0;
 
 	SetStatus("Reading forbidden string in read_obj_from_file", NULL);
 
@@ -3015,6 +3051,24 @@ void store_to_char(struct char_file_u* st, struct char_data* ch) {
 		ch->skills[i].learned = MIN(st->skills[i].learned, max);
 	}
 
+    //  edit
+    for(i = 0; i < 25; i++)
+    {
+        ch->resistenze[EDIT_RESI][i] = st->edit_resi[i];
+    }
+
+    ch->specials.mana_edit      = st->mana_edit;
+    ch->specials.mana_gain_edit = st->mana_gain_edit;
+    ch->specials.hit_edit       = st->hit_edit;
+    ch->specials.hit_gain_edit  = st->hit_gain_edit;
+    ch->specials.move_edit      = st->move_edit;
+    ch->specials.move_gain_edit = st->move_gain_edit;
+    ch->specials.spellfail_edit = st->spellfail_edit;
+
+    ch->specials.spellfail     += ch->specials.spellfail_edit;
+
+    mudlog(LOG_SAVE, "<-MMana/MHits after edit: %d/%d", GET_MAX_MANA(ch), GET_MAX_HIT(ch));
+
 	/* Specials */
 	ch->specials.spells_to_learn = st->spells_to_learn;
 	ch->specials.alignment = st->alignment;
@@ -3234,6 +3288,10 @@ void char_to_store(struct char_data* ch, struct char_file_u* st) {
     if(!IS_SET(ch->specials.act, PLR_NEW_EQ))
     {
         SET_BIT(ch->specials.act, PLR_NEW_EQ);
+    }
+    if(!IS_SET(ch->specials.act, PLR_EQ_HP))
+    {
+        SET_BIT(ch->specials.act, PLR_EQ_HP);
     }
 	st->act = ch->specials.act;
 	st->affected_by = ch->specials.affected_by;
@@ -3867,6 +3925,15 @@ void reset_char(struct char_data* ch) {
         }
     }
 
+    //  reset edit
+    ch->specials.mana_edit      = 0;
+    ch->specials.mana_gain_edit = 0;
+    ch->specials.hit_edit       = 0;
+    ch->specials.hit_gain_edit  = 0;
+    ch->specials.move_edit      = 0;
+    ch->specials.move_gain_edit = 0;
+    ch->specials.spellfail_edit = 0;
+
 	if(!GET_RACE(ch)) {
 		GET_RACE(ch) = RACE_HUMAN;
 	}
@@ -3905,6 +3972,13 @@ void reset_char(struct char_data* ch) {
 	ch->specials.carry_weight = 0;
 	ch->specials.carry_items = 0;
 	ch->specials.spellfail = 101;
+
+    //  Spellpower and absorb damage
+    ch->specials.spellpower = 0;
+    ch->specials.dam_red_blunt = 0;
+    ch->specials.dam_red_slash = 0;
+    ch->specials.dam_red_pierce = 0;
+    ch->specials.dam_red_magic = 0;
 
     /* Achievemets */
     for( i = 0; i < MAX_RACE_ACHIE; i++)
@@ -5124,31 +5198,65 @@ ACTION_FUNC(do_WorldSave) {
 }
 
 /* Mob related handy functions */
+int CheckSpellPowerFlags(struct obj_data* obj)
+{
+    int malus = 69;
 
-    int NewMobMov (struct char_data* mob) {
-        int extra_mov = 0;
+    if(IS_SET(obj->obj_flags.extra_flags, ITEM_ANTI_CLERIC))
+    {
+        malus += 8;
+    }
+    if(IS_SET(obj->obj_flags.extra_flags, ITEM_ANTI_MAGE))
+    {
+        malus += 10;
+    }
+    if(IS_SET(obj->obj_flags.extra_flags, ITEM_ANTI_PSI))
+    {
+        malus += 8;
+    }
+    if(IS_SET(obj->obj_flags.extra_flags, ITEM_ANTI_DRUID))
+    {
+        malus += 8;
+    }
+    if(IS_SET(obj->obj_flags.extra_flags, ITEM_ANTI_SORCERER))
+    {
+        malus += 6;
+    }
+
+    if(IS_SET(obj->obj_flags.extra_flags, ITEM_ONLY_CLASS) && IS_SET(obj->obj_flags.extra_flags, ITEM_ANTI_THIEF | ITEM_ANTI_FIGHTER | ITEM_ANTI_BARBARIAN | ITEM_ANTI_RANGER | ITEM_ANTI_MONK) && !IS_SET(obj->obj_flags.extra_flags, ITEM_ANTI_CLERIC | ITEM_ANTI_MAGE | ITEM_ANTI_PSI | ITEM_ANTI_DRUID | ITEM_ANTI_SORCERER))
+    {
+        malus = 101;
+    }
+
+    mudlog(LOG_CHECK, "malus e' %d", malus);
+    return malus;
+}
+
+int NewMobMov(struct char_data* mob)
+{
+    int extra_mov = 0;
 
     /* Nuova assegnazione punti movimento mob */
-        if(GET_LEVEL(mob, WARRIOR_LEVEL_IND) > ALLIEVO && GET_LEVEL(mob, WARRIOR_LEVEL_IND) < INIZIATO )
-        {
-            extra_mov += GET_LEVEL(mob, WARRIOR_LEVEL_IND);
-        }
-        else if(GET_LEVEL(mob, WARRIOR_LEVEL_IND) >= INIZIATO && GET_LEVEL(mob, WARRIOR_LEVEL_IND) < MAESTRO)
-        {
-            extra_mov += (50 + GET_LEVEL(mob, WARRIOR_LEVEL_IND));
-        }
-        else if(GET_LEVEL(mob, WARRIOR_LEVEL_IND) >= MAESTRO && GET_LEVEL(mob, WARRIOR_LEVEL_IND) < PRINCIPE)
-        {
-            extra_mov += (100 + GET_LEVEL(mob, WARRIOR_LEVEL_IND));
-        }
-        else if(GET_LEVEL(mob, WARRIOR_LEVEL_IND) >= PRINCIPE)
-        {
-            extra_mov += (250 + GET_LEVEL(mob, WARRIOR_LEVEL_IND));
-        }
+    if(GET_LEVEL(mob, WARRIOR_LEVEL_IND) > ALLIEVO && GET_LEVEL(mob, WARRIOR_LEVEL_IND) < INIZIATO )
+    {
+        extra_mov += GET_LEVEL(mob, WARRIOR_LEVEL_IND);
+    }
+    else if(GET_LEVEL(mob, WARRIOR_LEVEL_IND) >= INIZIATO && GET_LEVEL(mob, WARRIOR_LEVEL_IND) < MAESTRO)
+    {
+        extra_mov += (50 + GET_LEVEL(mob, WARRIOR_LEVEL_IND));
+    }
+    else if(GET_LEVEL(mob, WARRIOR_LEVEL_IND) >= MAESTRO && GET_LEVEL(mob, WARRIOR_LEVEL_IND) < PRINCIPE)
+    {
+        extra_mov += (100 + GET_LEVEL(mob, WARRIOR_LEVEL_IND));
+    }
+    else if(GET_LEVEL(mob, WARRIOR_LEVEL_IND) >= PRINCIPE)
+    {
+        extra_mov += (250 + GET_LEVEL(mob, WARRIOR_LEVEL_IND));
+    }
 
     return(mob->points.max_move+extra_mov);
 
-    }
+}
 
 }
 

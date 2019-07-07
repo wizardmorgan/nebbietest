@@ -409,6 +409,8 @@ struct obj_flag_data {
 	int cost_per_day;   /* Cost to keep pr. real day        */
 	int timer;          /* Timer for object                 */
 	unsigned int bitvector;     /* To set chars bits                */
+    float hitp;         /* Hit points of the obj            */
+    float hitpTot;      /* Total hit points of the obj  */
 };
 
 /* Used in OBJ_FILE_ELEM *DO*NOT*CHANGE* */
@@ -724,6 +726,21 @@ struct char_special_data {
 
 	sh_int apply_saving_throw[MAX_SAVES]; /* Saving throw (Bonuses)  */
 
+    sbyte spellpower;
+    sbyte dam_red_blunt;
+    sbyte dam_red_slash;
+    sbyte dam_red_pierce;
+    sbyte dam_red_magic;
+
+    // edit
+    ubyte mana_edit;
+    ubyte mana_gain_edit;
+    ubyte hit_edit;
+    ubyte hit_gain_edit;
+    ubyte move_edit;
+    ubyte move_gain_edit;
+    sbyte spellfail_edit;
+
 };
 
 /* skill_data special */
@@ -883,6 +900,14 @@ struct char_file_u {
 	unsigned int affected_by2;
 	unsigned int last_logon;  /* Time (in secs) of last logon */
 	unsigned int    act;        /* ACT Flags                    */
+    sh_int  edit_resi[25];
+    ubyte   mana_edit;
+    ubyte   mana_gain_edit;
+    ubyte   hit_edit;
+    ubyte   hit_gain_edit;
+    ubyte   move_edit;
+    ubyte   move_gain_edit;
+    sbyte   spellfail_edit;
 
 	/* char data */
 	char name[20];
@@ -898,6 +923,47 @@ struct char_file_u {
 	int agemod;
 };
 
+struct char_file_u_3040 {
+    int iClass;
+    ubyte sex;
+    ubyte level[ABS_MAX_CLASS];
+    unsigned int birth;  /* Time of birth of character     */
+    int played;    /* Number of secs played in total */
+    int   race;
+    unsigned int weight;
+    unsigned int height;
+    char title[80];
+    char extra_str[255];
+    sh_int hometown;
+    char description[240];
+    bool talks[MAX_TOUNGE];
+    int extra_flags;
+    sh_int load_room;            /* Which room to place char in  */
+    struct char_ability_data abilities; // No pointers inside, same size on 32 and 64 bit
+    struct char_point_data points; // No pointers inside, same size on 32 and 64 bit
+    struct char_skill_data skills[MAX_3040_SKILLS]; // No pointers inside, same size on 32 and 64 bit
+    struct affected_type_u affected[MAX_AFFECT];
+    /* specials */
+    byte spells_to_learn;
+    int alignment;
+    unsigned int affected_by;
+    unsigned int affected_by2;
+    unsigned int last_logon;  /* Time (in secs) of last logon */
+    unsigned int    act;        /* ACT Flags                    */
+    
+    /* char data */
+    char name[20];
+    char authcode[7];  /* codice di autorizzazione */
+    char WimpyLevel[4]; /* Wimpy level */
+    char dummy[19];      /* per usi futuri */
+    char pwd[11];
+    sh_int apply_saving_throw[MAX_SAVES];
+    int conditions[MAX_CONDITIONS];
+    int startroom;  /* which room the player should start in */
+    int user_flags;        /* no-delete,use ansi,etc... */
+    int speaks;                /* language currently speakin in */
+    int agemod;
+};
 
 
 /* ***********************************************************************
@@ -914,6 +980,31 @@ struct obj_cost {
 #define MAX_OBJ_SAVE 200 /* Used in OBJ_FILE_U *DO*NOT*CHANGE* */
 
 struct obj_file_elem {
+    ush_int item_number;
+
+    int value[4];
+    int extra_flags;
+    int weight;
+    int timer;
+    unsigned int bitvector;
+    char name[128];  /* big, but not horrendously so */
+    char sd[128];
+    char desc[256];
+    ubyte wearpos;
+    ubyte depth;
+    struct obj_affected_type affected[MAX_OBJ_AFFECT];
+    int extra_flags2;
+    float hitp;
+    float hitpTot;
+    int free1;
+    int free2;
+    int free3;
+    int free4;
+    char free5[128];
+    char free6[256];
+};
+
+struct obj_file_elem_old {
 	/* Bug, rendeva impossibile rentare oggetti oltre il 32565 */
 	/*sh_int item_number;*/
 	ush_int item_number;
@@ -958,6 +1049,16 @@ struct obj_file_u {
 	int minimum_stay; /* For stasis */
 	int  number;       /* number of objects */
 	struct obj_file_elem objects[MAX_OBJ_SAVE];
+};
+
+struct obj_file_u_old {
+    char owner[20];    /* Name of player                     */
+    int gold_left;     /* Number of goldcoins left at owner  */
+    int total_cost;    /* The cost for all items, per day    */
+    int last_update;  /* Time in seconds, when last updated */
+    int minimum_stay; /* For stasis */
+    int  number;       /* number of objects */
+    struct obj_file_elem_old objects[MAX_OBJ_SAVE];
 };
 
 struct old_obj_file_u {
@@ -1097,8 +1198,9 @@ struct wis_app_type {
 
 struct int_app_type {
 	byte learn;       /* how many % a player learns a spell/skill */
-	sh_int memorize;  /* quanti incantesimi puo` imparare un giocatore */
-	/* contemporaneamente. */
+	sh_int memorize;  /* quanti incantesimi puo` imparare un giocatore contemporaneamente */
+    sh_int tosp;      /* Spellpower Bonus/Penalty */
+//    sh_int sp_pen;    /* Spell Penetration */
 };
 
 struct con_app_type {

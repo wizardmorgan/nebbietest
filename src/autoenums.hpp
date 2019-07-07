@@ -250,6 +250,7 @@ For players : specials.act*/
 	constexpr unsigned long PLR_NEW_EQ                                   =262144;
 	constexpr unsigned long PLR_ACHIE                                    =524288; /*The player has achievements*/
 	constexpr unsigned long PLR_NOBEEP                                   =1048576; /*ignore all beeps*/
+	constexpr unsigned long PLR_EQ_HP                                    =2097152;
 // Flag type: E_ROOM_FLAGS -- start
 /*
 Bitvector For 'room_flags'*/
@@ -440,11 +441,13 @@ modifiers to char's abilities*/
 	APPLY_RESI_PLUS2                             =81,
 	APPLY_RESI_PLUS3                             =82,
 	APPLY_RESI_PLUS4                             =83,
-	APPLY_RESI_HOLY                              =84
+	APPLY_RESI_HOLY                              =84,
+	APPLY_SPELLPOWER                             =85,
+	APPLY_HITNSP                                 =86
 };
-#define E_APPLY_COUNT 85
+#define E_APPLY_COUNT 87
 #define E_APPLY_MIN 0
-#define E_APPLY_MAX 84
+#define E_APPLY_MAX 86
 #define E_APPLY_KEY "e_apply"
 
 #define E_APPLY_ACCEPT_ZERO true
@@ -1120,7 +1123,8 @@ enum e_wear {
 #define	MAX_WEAR_POS                                 E_WEAR_MAX 
 #define	MAX_TOUNGE                                   3 
 #define	MAX_NEW_LANGUAGES                            10 
-#define	MAX_SKILLS                                   350 
+#define	MAX_SKILLS                                   500 
+#define	MAX_3040_SKILLS                              350 
 #define	MAX_WEAR                                     E_WEAR_COUNT 
 #define	MAX_AFFECT                                   40 
 #define	MAX_SAVES                                    8 

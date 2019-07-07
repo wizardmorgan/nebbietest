@@ -334,6 +334,10 @@ void spell_cure_serious(byte level, struct char_data* ch,
 
 	healpoints = dice(2,8)+2;
 
+    mudlog(LOG_CHECK, "Healpoints prima dello spellpower: %d", healpoints);
+    healpoints += CURE_SP_BONUS(ch);
+    mudlog(LOG_CHECK, "Healpoints dopo lo spellpower: %d", healpoints);
+
 	if((healpoints + GET_HIT(victim)) > hit_limit(victim)) {
         healpoints = hit_limit(victim) - GET_HIT(victim);
 		GET_HIT(victim) = hit_limit(victim);

@@ -19,6 +19,7 @@ const char* DescRatioF(float f) ; /* theirs / yours */
 const char* EqDesc(float a) ;
 double GetLagIndex() ;
 const char* HitRollDesc(int a) ;
+const char* SpRollDesc(int a) ;
 int HowManyConnection(int ToAdd) ;
 int MobLevBonus(struct char_data* ch) ;
 void ScreenOff(struct char_data* ch) ;
