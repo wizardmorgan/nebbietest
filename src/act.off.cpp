@@ -349,7 +349,7 @@ ACTION_FUNC(do_kill) {
 ACTION_FUNC(do_backstab) {
 	struct char_data* victim;
 	char name[256];
-	byte percent, base=0;
+	byte percent, base=0, quick = 0;
 	int location = 12;
 	if(!ch->skills) {
 		return;
@@ -525,8 +525,17 @@ ACTION_FUNC(do_backstab) {
 			return;
 		}
 	}
-	WAIT_STATE(ch, PULSE_VIOLENCE * 2);
 
+    if(HowManyClasses(ch) == 1 && GET_RACE(ch) != RACE_HALFLING)
+    {
+        quick = 4;
+    }
+    else
+    {
+        quick = CheckQuickness(ch);
+    }
+
+	WAIT_STATE(ch, (PULSE_VIOLENCE * 2) - quick);
 }
 
 

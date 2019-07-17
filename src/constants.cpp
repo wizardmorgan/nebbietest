@@ -14,6 +14,7 @@
 #include "structs.hpp"
 #include "logging.hpp"
 #include "constants.hpp"
+#include "spells.hpp"
 #include "utils.hpp"
 /***************************  Local    include ************************************/
 #include "constants.hpp"
@@ -250,7 +251,7 @@ const char* spell_wear_off_msg[] = {
 	/*  165 SPELL_DRAGON_RIDE           */  "Perdi l'affinita' con i $c0003draghi$c0007.",
 	/*  166 SPELL_MOUNT                 */  "!mount!",
 	/*  167 SPELL_NO_MESSAGE            */  "",
-	/*  168 to_do                       */  "!168!",
+	/*  168 SKILL_QUICKNESS             */  "!quickness!",
 	/*  169 SKILL_MANTRA                */  "La tua $c0011mente$c0007 ed il tuo $c0014corpo$c0007 perdono la loro sincronia.",
 	/*  170 SKILL_FIRST_AID             */  "Puoi medicarti di nuovo.",
 	/*  171 SKILL_SIGN                  */  "!sign!",
@@ -549,7 +550,7 @@ const char* spell_wear_off_room_msg[] = {
 	/*  165 SPELL_DRAGON_RIDE           */  "",
     /*  166 SPELL_MOUNT                 */  "!mount!",
     /*  167 SPELL_NO_MESSAGE            */  "",
-    /*  168 to_do                       */  "!168!",
+    /*  168 SKILL_QUICKNESS             */  "!quickness!",
 	/*  169 SKILL_MANTRA                */  "$n sembra tremare per un attimo e perdere il sincronismo.",
     /*  170 SKILL_FIRST_AID             */  "",
     /*  171 SKILL_SIGN                  */  "!sign!",
@@ -848,7 +849,7 @@ const char* spell_wear_off_soon_msg[] = {
     /*  165 SPELL_DRAGON_RIDE           */  "",
     /*  166 SPELL_MOUNT                 */  "!mount!",
     /*  167 SPELL_NO_MESSAGE            */  "",
-    /*  168 to_do                       */  "!168!",
+    /*  168 SKILL_QUICKNESS             */  "!quickness!",
 	/*  169 SKILL_MANTRA                */  "Fatichi a mantenere la concentrazione.",
     /*  170 SKILL_FIRST_AID             */  "",
     /*  171 SKILL_SIGN                  */  "!sign!",
@@ -1147,7 +1148,7 @@ const char* spell_wear_off_soon_room_msg[] = {
     /*  165 SPELL_DRAGON_RIDE           */  "",
     /*  166 SPELL_MOUNT                 */  "!mount!",
     /*  167 SPELL_NO_MESSAGE            */  "",
-    /*  168 to_do                       */  "!168!",
+    /*  168 SKILL_QUICKNESS             */  "!quickness!",
 	/*  169 SKILL_MANTRA                */  "",
     /*  170 SKILL_FIRST_AID             */  "",
     /*  171 SKILL_SIGN                  */  "!sign!",
@@ -1367,11 +1368,23 @@ const char* dirs[] = {
 
 
 const char* ItemDamType[] = {
+    "",
 	"$c0009brucia$c0007",
+    "$c0009bruciano$c0007",
 	"$c0014congela$c0007",
+    "$c0014congelano$c0007",
 	"$c0012elettrifica$c0007",
+    "$c0012elettrificano$c0007",
 	"$c0001danneggia$c0007",
-	"$c0010corrode$c0007"
+    "$c0001danneggiano$c0007",
+	"$c0010corrode$c0007",
+    "$c0010corrodono$c0007",
+    "$c0011ammacca$c0007",
+    "$c0011ammaccano$c0007",
+    "$c0011perfora$c0007",
+    "$c0011perforano$c0007",
+    "$c0011lacera$c0007",
+    "$c0011lacerano$c0007"
 };
 
 const char* weekdays[7] = {
@@ -3714,7 +3727,7 @@ const char* spell_desc[] = {
 	/*  165 SPELL_DRAGON_RIDE           */  "",
     /*  166 SPELL_MOUNT                 */  "!mount!",
     /*  167 SPELL_NO_MESSAGE            */  "",
-    /*  168 to_do                       */  "!168!",
+    /*  168 SKILL_QUICKNESS             */  "!quickness!",
 	/*  169 SKILL_MANTRA                */  "$n e' concentrat$b in una preghiera.",
     /*  170 SKILL_FIRST_AID             */  "",
     /*  171 SKILL_SIGN                  */  "!sign!",
@@ -8000,7 +8013,7 @@ struct ClassAchieTable AchievementsList[MAX_ACHIE_CLASSES][MAX_ACHIE_TYPE] = {
     }
 };
 
-struct TableReistPC MaxResisPC[25] =
+struct TableResistPC MaxResisPC[25] =
 {//     racial_pc   equip_pc    edit_pc     superEdit   spell_pc    name
     {   80,         50,         50,         10,         50,         "RESI-FIRE"     },
     {   80,         50,         50,         10,         50,         "RESI-COLD"     },
@@ -8058,11 +8071,229 @@ float bash_reaction[] =
     8.5,    // 24
     9       // 25
 };
-/*
-int DataBaseObj[] =     // 34030
+
+int ObjectHitPoints[E_ITEM_TYPE_COUNT]
 {
-    3699,
-    
-}; */
+       0,   //  ITEM_NONE
+     100,   //  ITEM_LIGHT
+       5,   //  ITEM_SCROLL
+     100,   //  ITEM_WAND
+     100,   //  ITEM_STAFF
+     150,   //  ITEM_WEAPON
+     100,   //  ITEM_FIREWEAPON
+      30,   //  ITEM_MISSILE
+      25,   //  ITEM_TREASURE
+     200,   //  ITEM_ARMOR
+       5,   //  ITEM_POTION
+      25,   //  ITEM_WORN
+      50,   //  ITEM_OTHER
+      15,   //  ITEM_TRASH
+      50,   //  ITEM_TRAP
+     120,   //  ITEM_CONTAINER
+       5,   //  ITEM_NOTE
+      25,   //  ITEM_DRINKCON
+      50,   //  ITEM_KEY
+       5,   //  ITEM_FOOD
+      80,   //  ITEM_MONEY
+      10,   //  ITEM_PEN
+     120,   //  ITEM_BOAT
+     100,   //  ITEM_AUDIO
+    1000,   //  ITEM_BOARD
+    1000,   //  ITEM_TREE
+     100    //  ITEM_ROCK
+};
+
+struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
+{
+    //  RACE_HALFBREED
+    {
+    // min  str,    int,    wis,    dex,    con,    chr
+        {
+            6,      6,      6,      6,      6,      6
+        },
+
+    // max  str,    int,    wis,    dex,    con,    chr
+        {
+            18,     18,     18,     18,     18,     18
+        },
+
+    //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
+        0,                  10,             LANG_COMMON,    FALSE,      FALSE,          0,
+
+    //  damage, spellpower, hitroll,    spellfail,
+        0,      0,          0,          0,
+        
+    //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
+        0,      0,          0,      0,          0,      0,
+        
+    //  resistances
+        {
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0
+        },
+        
+    //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
+        0,          0,          0,          0,
+        
+    //  affect
+        0,
+        
+    //  innate_skill1,      innate_skill2,      innate_skill3
+        -1,                 -1,                 -1
+    },
+
+    //  RACE_HUMAN
+    {
+    // min  str,    int,    wis,    dex,    con,    chr
+        {
+            6,      6,      6,      6,      6,      6
+        },
+
+    // max  str,    int,    wis,    dex,    con,    chr
+        {
+            18,     18,     18,     18,     18,     18
+        },
+
+    //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
+        74,                 8,              LANG_COMMON,    TRUE,       TRUE,           0,
+
+    //  damage, spellpower, hitroll,    spellfail,
+        0,      0,          0,          0,
+
+    //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
+        0,      0,          0,      0,          0,      0,
+
+    //  resistances
+        {
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0
+        },
+
+    //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
+        0,          0,          0,          0,
+
+    //  affect
+        0,
+
+    //  innate_skill1,      innate_skill2,      innate_skill3
+        -1,                 -1,                 -1
+    },
+
+    //  RACE_HUMAN
+    {
+    // min  str,    int,    wis,    dex,    con,    chr
+        {
+            6,      6,      6,      6,      6,      6
+        },
+
+    // max  str,    int,    wis,    dex,    con,    chr
+        {
+            18,     18,     18,     18,     18,     18
+        },
+
+    //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
+        74,                 8,              LANG_COMMON,    TRUE,       TRUE,           0,
+
+    //  damage, spellpower, hitroll,    spellfail,
+        0,      0,          0,          0,
+        
+    //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
+        0,      0,          0,      0,          0,      0,
+        
+    //  resistances
+        {
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0
+        },
+        
+    //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
+        0,          0,          0,          0,
+        
+    //  affect
+        0,
+        
+    //  innate_skill1,      innate_skill2,      innate_skill3
+        -1,                 -1,                 -1
+    },
+
+    //  RACE_HUMAN
+    {
+    // min  str,    int,    wis,    dex,    con,    chr
+        {
+            6,      6,      6,      6,      6,      6
+        },
+
+    // max  str,    int,    wis,    dex,    con,    chr
+        {
+            18,     18,     18,     18,     18,     18
+        },
+
+        //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
+        74,                 8,              LANG_COMMON,    TRUE,       TRUE,           0,
+        
+        //  damage, spellpower, hitroll,    spellfail,
+        0,      0,          0,          0,
+        
+        //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
+        0,      0,          0,      0,          0,      0,
+        
+        //  resistances
+        {
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0
+        },
+        
+        //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
+        0,          0,          0,          0,
+        
+        //  affect
+        0,
+        
+        //  innate_skill1,      innate_skill2,      innate_skill3
+        -1,                 -1,                 -1
+    },
+
+    //  RACE_HALFLING
+    {
+    // min  str,    int,    wis,    dex,    con,    chr
+        {
+            4,      6,      6,      8,      6,      6
+        },
+
+    // max  str,    int,    wis,    dex,    con,    chr
+        {
+            17,     18,     18,     20,     17,     18
+        },
+
+    //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
+        73,                 8,              LANG_COMMON,    TRUE,       TRUE,           0,
+        
+        //  damage, spellpower, hitroll,    spellfail,
+        0,      0,          0,          0,
+        
+        //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
+        0,      0,          0,      0,          0,      0,
+        
+        //  resistances
+        {
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            0,      0,      0,      0,      0
+        },
+        
+        //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
+        0,          0,          0,          0,
+        
+        //  affect
+        0,
+        
+        //  innate_skill1,      innate_skill2,      innate_skill3
+        SKILL_QUICKNESS,        -1,                 -1
+    }
+};
 } // namespace Alarmud
 

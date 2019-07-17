@@ -1528,7 +1528,7 @@ ACTION_FUNC(do_pick) {
 	if(percent > MIN(100, ch->skills[SKILL_PICK_LOCK].learned)) {
 		act("Non sei riuscit$b a forzare la serratura.", FALSE, ch, 0, 0, TO_CHAR);
 		LearnFromMistake(ch, SKILL_PICK_LOCK, 0, 90);
-		WAIT_STATE(ch, PULSE_VIOLENCE*4);
+		WAIT_STATE(ch, (PULSE_VIOLENCE * 4) - (CheckQuickness(ch) * 2));
 		return;
 	}
 

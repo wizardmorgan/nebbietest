@@ -557,11 +557,14 @@ enum e_damage_type {
 	COLD_DAMAGE                                  =2,
 	ELEC_DAMAGE                                  =3,
 	BLOW_DAMAGE                                  =4,
-	ACID_DAMAGE                                  =5
+	ACID_DAMAGE                                  =5,
+	BLUNT_DAMAGE                                 =6,
+	PIERCE_DAMAGE                                =7,
+	SLASH_DAMAGE                                 =8
 };
-#define E_DAMAGE_TYPE_COUNT 6
+#define E_DAMAGE_TYPE_COUNT 9
 #define E_DAMAGE_TYPE_MIN 0
-#define E_DAMAGE_TYPE_MAX 5
+#define E_DAMAGE_TYPE_MAX 8
 #define E_DAMAGE_TYPE_KEY "e_damage_type"
 
 #define E_DAMAGE_TYPE_ACCEPT_ZERO true

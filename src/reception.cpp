@@ -1089,6 +1089,8 @@ void put_obj_in_store(struct obj_data* obj, struct obj_file_u* st, struct char_d
 	oe->weight  = obj->obj_flags.weight;
 	oe->timer  = obj->obj_flags.timer;
 	oe->bitvector  = obj->obj_flags.bitvector;
+    oe->hitp = obj->obj_flags.hitp;
+    oe->hitpTot = obj->obj_flags.hitpTot;
 
 	if(obj->name) {
 		strcpy(oe->name, obj->name);
@@ -1599,6 +1601,7 @@ void update_obj_file() {
 void st_old_to_st(struct obj_file_u_old* st_old, struct obj_file_u* st)
 {
     int i, j, iRealObjNumber;
+    obj_data* obj;
     
     strcpy(st->owner, st_old->owner);
     st->gold_left       = st_old->gold_left;
@@ -1623,8 +1626,35 @@ void st_old_to_st(struct obj_file_u_old* st_old, struct obj_file_u* st)
             st->objects[i].weight        = st_old->objects[i].weight;
             st->objects[i].timer         = st_old->objects[i].timer;
             st->objects[i].bitvector     = st_old->objects[i].bitvector;
-            st->objects[i].hitp          = 100.0;
-            st->objects[i].hitpTot       = 100.0;
+            if((obj = read_object(st->objects[i].item_number, VIRTUAL)) != NULL)
+            {
+                st->objects[i].hitp         = ObjectHitPoints[GET_ITEM_TYPE(obj)];
+                st->objects[i].hitpTot      = ObjectHitPoints[GET_ITEM_TYPE(obj)];
+
+                if(GET_ITEM_TYPE(obj) == ITEM_WEAPON || GET_ITEM_TYPE(obj) == ITEM_FIREWEAPON)
+                {
+                    st->objects[i].hitp     += obj->obj_flags.value[2] * 10;
+                    st->objects[i].hitpTot  += obj->obj_flags.value[2] * 10;
+                }
+                else if(GET_ITEM_TYPE(obj) == ITEM_ARMOR)
+                {
+                    st->objects[i].hitp     += obj->obj_flags.value[1] * 10;
+                    st->objects[i].hitpTot  += obj->obj_flags.value[1] * 10;
+                }
+
+                if(IS_RARE(obj))
+                {
+                    st->objects[i].hitp     *= 2;
+                    st->objects[i].hitpTot  *= 2;
+                }
+                extract_obj(obj);
+            }
+            else
+            {
+                mudlog(LOG_CHECK, "Something goes wrong on convert equipment of %s, hitp of one the obj is set to 100", st->owner);
+                st->objects[i].hitp      = 100.0;
+                st->objects[i].hitpTot   = 100.0;
+            }
             st->objects[i].free1         = 0;
             st->objects[i].free2         = 0;
             st->objects[i].free3         = 0;

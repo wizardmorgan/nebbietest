@@ -170,7 +170,7 @@ extern struct ObjBonusTable AchieBonus[MAX_CLASS][12];
 extern struct MobQuestAchie QuestMobAchie[MAX_QUEST_ACHIE];
 extern struct ClassAchieTable AchievementsList[MAX_ACHIE_CLASSES][MAX_ACHIE_TYPE];
 
-extern struct TableReistPC MaxResisPC[25];
+extern struct TableResistPC MaxResisPC[25];
     
 extern float bash_reaction[];
 
@@ -199,6 +199,10 @@ extern const char* att_kick_hit_ch[];
 extern const char* att_kick_hit_victim[];
 
 extern const char* att_kick_hit_room[];
+
+extern int ObjectHitPoints[E_ITEM_TYPE_COUNT];
+
+extern struct RaceListTable RaceStuffs[5];
 } // namespace Alarmud
 #endif
 

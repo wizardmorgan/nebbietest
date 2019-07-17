@@ -64,6 +64,7 @@ int CheckEgoGive(struct char_data* ch, struct char_data* vict, struct obj_data* 
 int CheckForBlockedMove(struct char_data* ch, int cmd, const char* arg, int room, int dir, int iClass);
 int CheckGetBarbarianOK(struct char_data* ch, struct obj_data* obj_object);
 int CheckGiveBarbarianOK(struct char_data* ch, struct char_data* vict, struct obj_data* obj);
+int CheckQuickness(struct char_data* ch);
 int check_nomagic(struct char_data* ch, const char* msg_ch, const char* msg_rm);
 int check_nomind(struct char_data* ch, const char* msg_ch, const char* msg_rm);
 int check_soundproof(struct char_data* ch);

@@ -157,7 +157,7 @@ namespace Alarmud {
 /* druid... */
 #define SPELL_SHILLELAGH            122
 #define SPELL_GOODBERRY             123
-#define SPELL_ELEMENTAL_BLADE           124
+#define SPELL_ELEMENTAL_BLADE       124
 #define SPELL_ANIMAL_GROWTH         125
 #define SPELL_INSECT_GROWTH         126
 #define SPELL_CREEPING_DEATH        127
@@ -219,162 +219,164 @@ namespace Alarmud {
 #define SPELL_SUMMON_OBJ
 
 /* add 168 here.......   */
-#define SKILL_MANTRA                 169
-#define SKILL_FIRST_AID              170
-#define SKILL_SIGN                   171
-#define SKILL_RIDE                   172
-#define SKILL_SWITCH_OPP             173
-#define SKILL_DODGE                  174
-#define SKILL_REMOVE_TRAP            175
-#define SKILL_RETREAT                176
-#define SKILL_QUIV_PALM              177
-#define SKILL_SAFE_FALL              178
-#define SKILL_FEIGN_DEATH            179
-#define SKILL_HUNT                   180
-#define SKILL_FIND_TRAP              181
-#define SKILL_SPRING_LEAP            182
-#define SKILL_DISARM                 183
-#define SKILL_READ_MAGIC             184
-#define SKILL_EVALUATE               185
-#define SKILL_SPY                    186
-#define SKILL_DOORBASH               187
-#define SKILL_SWIM                   188
-#define SKILL_CONS_UNDEAD            189
-#define SKILL_CONS_VEGGIE            190
-#define SKILL_CONS_DEMON             191
-#define SKILL_CONS_ANIMAL            192
-#define SKILL_CONS_REPTILE           193
-#define SKILL_CONS_PEOPLE            194
-#define SKILL_CONS_GIANT             195
-#define SKILL_CONS_OTHER             196
-#define SKILL_DISGUISE               197
-#define SKILL_CLIMB                  198
-#define SKILL_FINGER                 199
-#define SPELL_GEYSER                 200
-#define SPELL_MIRROR_IMAGES          201
-#define SKILL_TSPY                   202
-#define SKILL_EAVESDROP	             203
+#define SKILL_QUICKNESS             168     
+#define SKILL_MANTRA                169
+#define SKILL_FIRST_AID             170
+#define SKILL_SIGN                  171
+#define SKILL_RIDE                  172
+#define SKILL_SWITCH_OPP            173
+#define SKILL_DODGE                 174
+#define SKILL_REMOVE_TRAP           175
+#define SKILL_RETREAT               176
+#define SKILL_QUIV_PALM             177
+#define SKILL_SAFE_FALL             178
+#define SKILL_FEIGN_DEATH           179
+#define SKILL_HUNT                  180
+#define SKILL_FIND_TRAP             181
+#define SKILL_SPRING_LEAP           182
+#define SKILL_DISARM                183
+#define SKILL_READ_MAGIC            184
+#define SKILL_EVALUATE              185
+#define SKILL_SPY                   186
+#define SKILL_DOORBASH              187
+#define SKILL_SWIM                  188
+#define SKILL_CONS_UNDEAD           189
+#define SKILL_CONS_VEGGIE           190
+#define SKILL_CONS_DEMON            191
+#define SKILL_CONS_ANIMAL           192
+#define SKILL_CONS_REPTILE          193
+#define SKILL_CONS_PEOPLE           194
+#define SKILL_CONS_GIANT            195
+#define SKILL_CONS_OTHER            196
+#define SKILL_DISGUISE              197
+#define SKILL_CLIMB                 198
+#define SKILL_FINGER                199
+#define SPELL_GEYSER                200
+#define SPELL_MIRROR_IMAGES         201
+#define SKILL_TSPY                  202
+#define SKILL_EAVESDROP	            203
 /* aggiunto da GAIA 2001 */
-#define SKILL_PARRY                  204
+#define SKILL_PARRY                 204
 /* aggiunto da ACIDUS 2003 */
-#define SKILL_MINER                  205
-#define SPELL_GREEN_SLIME            206
+#define SKILL_MINER                 205
+#define SPELL_GREEN_SLIME           206
 
 
 /* Add more skills/Spells here... */
 
-#define SKILL_BERSERK            207    /* msw */
-#define SKILL_TAN                 208        /* msw */
-#define SKILL_AVOID_BACK_ATTACK  209        /* msw */
-#define SKILL_FIND_FOOD                 210        /* msw */
-#define SKILL_FIND_WATER         211    /* msw */
-#define SPELL_PRAYER                 212    /* msw, not a spell but I need */
+#define SKILL_BERSERK               207    /* msw */
+#define SKILL_TAN                   208        /* msw */
+#define SKILL_AVOID_BACK_ATTACK     209        /* msw */
+#define SKILL_FIND_FOOD             210        /* msw */
+#define SKILL_FIND_WATER            211    /* msw */
+#define SPELL_PRAYER                212    /* msw, not a spell but I need */
 /* a aff flag,could use PLR_*   */
-#define SKILL_MEMORIZE                 213    /* msw, used for memorization stuff */
-#define SKILL_BELLOW                 214   /* msw */
+#define SKILL_MEMORIZE              213    /* msw, used for memorization stuff */
+#define SKILL_BELLOW                214   /* msw */
 
-#define SPELL_GLOBE_DARKNESS     215
-#define SPELL_GLOBE_MINOR_INV    216
-#define SPELL_GLOBE_MAJOR_INV    217
-#define SPELL_PROT_ENERGY_DRAIN  218
-#define SPELL_PROT_DRAGON_BREATH 219 /* used for scrolls, ALL BREATH */
-#define SPELL_ANTI_MAGIC_SHELL   220
+#define SPELL_GLOBE_DARKNESS        215
+#define SPELL_GLOBE_MINOR_INV       216
+#define SPELL_GLOBE_MAJOR_INV       217
+#define SPELL_PROT_ENERGY_DRAIN     218
+#define SPELL_PROT_DRAGON_BREATH    219 /* used for scrolls, ALL BREATH */
+#define SPELL_ANTI_MAGIC_SHELL      220
 
-#define SKILL_DOORWAY                221 /* psi, msw */
+#define SKILL_DOORWAY               221 /* psi, msw */
 #define SKILL_PORTAL                222 /* psi, msw */
 #define SKILL_SUMMON                223 /* psi, msw */
-#define SKILL_INVIS                224 /* psi, msw */
-#define SKILL_CANIBALIZE        225 /* psi, msw */
-#define SKILL_FLAME_SHROUD        226 /* psi, msw */
-#define SKILL_AURA_SIGHT        227 /* psi, msw */
-#define SKILL_GREAT_SIGHT        228 /* psi, msw */
-#define SKILL_PSIONIC_BLAST        229 /* psi, msw */
-#define SKILL_HYPNOSIS                230 /* psi, msw */
-#define SKILL_MEDITATE                231 /* psi, msw */
-#define SKILL_SCRY                232 /* psi, msw */
-#define SKILL_ADRENALIZE        233 /* psi, msw */
+#define SKILL_INVIS                 224 /* psi, msw */
+#define SKILL_CANIBALIZE            225 /* psi, msw */
+#define SKILL_FLAME_SHROUD          226 /* psi, msw */
+#define SKILL_AURA_SIGHT            227 /* psi, msw */
+#define SKILL_GREAT_SIGHT           228 /* psi, msw */
+#define SKILL_PSIONIC_BLAST         229 /* psi, msw */
+#define SKILL_HYPNOSIS              230 /* psi, msw */
+#define SKILL_MEDITATE              231 /* psi, msw */
+#define SKILL_SCRY                  232 /* psi, msw */
+#define SKILL_ADRENALIZE            233 /* psi, msw */
 
-#define SKILL_BREW                234 /* druid/mages, msw */
+#define SKILL_BREW                  234 /* druid/mages, msw */
 #define SKILL_RATION                235 /* ranger/druid, msw */
 
-#define SKILL_HOLY_WARCRY        236  /* paladin, msw */
-#define SKILL_BLESSING                237  /* paladin, msw */
-#define SKILL_LAY_ON_HANDS        238  /* paladin, msw */
-#define SKILL_HEROIC_RESCUE        239  /* paladin, msw */
-#define SKILL_DUAL_WIELD        240  /* ranger, msw */
-#define SKILL_PSI_SHIELD        241  /* psi, psw */
-#define SPELL_PROT_FROM_EVIL_GROUP 242 /* msw */
-#define SPELL_PRISMATIC_SPRAY           243 /* msw */
-#define SPELL_INCENDIARY_CLOUD           244
+#define SKILL_HOLY_WARCRY           236  /* paladin, msw */
+#define SKILL_BLESSING              237  /* paladin, msw */
+#define SKILL_LAY_ON_HANDS          238  /* paladin, msw */
+#define SKILL_HEROIC_RESCUE         239  /* paladin, msw */
+#define SKILL_DUAL_WIELD            240  /* ranger, msw */
+#define SKILL_PSI_SHIELD            241  /* psi, psw */
+#define SPELL_PROT_FROM_EVIL_GROUP  242 /* msw */
+#define SPELL_PRISMATIC_SPRAY       243 /* msw */
+#define SPELL_INCENDIARY_CLOUD      244
 
-#define SPELL_DISINTEGRATE           245
+#define SPELL_DISINTEGRATE          245
 
 /* language skills */
-#define LANG_COMMON                246
-#define LANG_ELVISH                247
-#define LANG_HALFLING                248
-#define LANG_DWARVISH                249
-#define LANG_ORCISH                250
-#define LANG_GIANTISH                251
-#define LANG_OGRE                252
+#define LANG_COMMON                 246
+#define LANG_ELVISH                 247
+#define LANG_HALFLING               248
+#define LANG_DWARVISH               249
+#define LANG_ORCISH                 250
+#define LANG_GIANTISH               251
+#define LANG_OGRE                   252
 #define LANG_GNOMISH                253
 /* end languages at this time */
-#define SKILL_ESP                254
+#define SKILL_ESP                   254
 #define SPELL_COMP_LANGUAGES        255
-#define SPELL_PROT_FIRE                256
-#define SPELL_PROT_COLD                257
-#define SPELL_PROT_ENERGY        258
-#define SPELL_PROT_ELEC                259
-#define SPELL_ENCHANT_ARMOR        260
-#define SPELL_MESSENGER                261
-#define SPELL_PROT_BREATH_FIRE                262
-#define SPELL_PROT_BREATH_FROST                263
-#define SPELL_PROT_BREATH_ELEC                264
-#define SPELL_PROT_BREATH_ACID                265
-#define SPELL_PROT_BREATH_GAS                266
-#define SPELL_WIZARDEYE                        267
-#define SKILL_MIND_BURN                268        /* flamer like Fire Starter */
-#define SKILL_CLAIRVOYANCE        269        /* spy into the next room */
-#define SKILL_DANGER_SENSE        270        /* sense dt's */
-#define SKILL_DISINTEGRATE        271        /* not effective when used against minor or major globe */
-#define SKILL_TELEKINESIS        272        /* shove mob form room, if fighting, like bash */
-#define SKILL_LEVITATION        273        /* fly for psi's */
-#define SKILL_CELL_ADJUSTMENT        274        /* 100 mana,stunned, get 100 HPS back */
-#define SKILL_CHAMELEON                275        /* hide */
-#define SKILL_PSI_STRENGTH        276        /* strength */
+#define SPELL_PROT_FIRE             256
+#define SPELL_PROT_COLD             257
+#define SPELL_PROT_ENERGY           258
+#define SPELL_PROT_ELEC             259
+#define SPELL_ENCHANT_ARMOR         260
+#define SPELL_MESSENGER             261
+#define SPELL_PROT_BREATH_FIRE      262
+#define SPELL_PROT_BREATH_FROST     263
+#define SPELL_PROT_BREATH_ELEC      264
+#define SPELL_PROT_BREATH_ACID      265
+#define SPELL_PROT_BREATH_GAS       266
+#define SPELL_WIZARDEYE             267
+#define SKILL_MIND_BURN             268        /* flamer like Fire Starter */
+#define SKILL_CLAIRVOYANCE          269        /* spy into the next room */
+#define SKILL_DANGER_SENSE          270        /* sense dt's */
+#define SKILL_DISINTEGRATE          271        /* not effective when used against minor or major globe */
+#define SKILL_TELEKINESIS           272        /* shove mob form room, if fighting, like bash */
+#define SKILL_LEVITATION            273        /* fly for psi's */
+#define SKILL_CELL_ADJUSTMENT       274        /* 100 mana,stunned, get 100 HPS back */
+#define SKILL_CHAMELEON             275        /* hide */
+#define SKILL_PSI_STRENGTH          276        /* strength */
 #define SKILL_MIND_OVER_BODY        277        /* no food/drink, rest, then 12hrs no-food/drink period */
-#define SKILL_PROBABILITY_TRAVEL 278        /* astral for psi's */
-#define SKILL_PSI_TELEPORT        279        /* teleport */
-#define SKILL_DOMINATION        280        /* like command I think... */
-#define SKILL_MIND_WIPE                281        /* feeble mind type attack */
-#define SKILL_PSYCHIC_CRUSH        282        /* attack spell, massive */
-#define SKILL_TOWER_IRON_WILL        283        /* immnune to some skills */
-#define SKILL_MINDBLANK                284        /* immune to more skills */
-#define SKILL_PSYCHIC_IMPERSONATION        285        /* disguise */
-#define SKILL_ULTRA_BLAST         286        /* area effect psionic blast type skill */
-#define SKILL_INTENSIFY         287        /* increase con/int or wis +1, -3 for attribs not chosen */
-#define SKILL_SPOT                288        /* spot, for ranged weapons, archery */
+#define SKILL_PROBABILITY_TRAVEL    278        /* astral for psi's */
+#define SKILL_PSI_TELEPORT          279        /* teleport */
+#define SKILL_DOMINATION            280        /* like command I think... */
+#define SKILL_MIND_WIPE             281        /* feeble mind type attack */
+#define SKILL_PSYCHIC_CRUSH         282        /* attack spell, massive */
+#define SKILL_TOWER_IRON_WILL       283        /* immnune to some skills */
+#define SKILL_MINDBLANK             284        /* immune to more skills */
+#define SKILL_PSYCHIC_IMPERSONATION 285        /* disguise */
+#define SKILL_ULTRA_BLAST           286        /* area effect psionic blast type skill */
+#define SKILL_INTENSIFY             287        /* increase con/int or wis +1, -3 for attribs not chosen */
+#define SKILL_SPOT                  288        /* spot, for ranged weapons, archery */
 
-#define SKILL_IMMOLATION	289
+#define SKILL_IMMOLATION	        289
 
 /* status */
-#define STATUS_QUEST      290
-#define SKILL_DAIMOKU     291
-#define SKILL_FORGE      292   /* ACIDUS 2003 skill forge per creazione oggetti */
-#define SKILL_DETERMINE      293   /* ACIDUS 2003 skill determine established per determinazione teleport */
-#define SKILL_EQUILIBRIUM      294   /* ACIDUS 2003 skill better equilibrium per equilibrio nanesco */
-
-#define MAX_EXIST_SPELL         294   /* max number of skills/spells/status */
+#define STATUS_QUEST                290
+#define SKILL_DAIMOKU               291
+#define SKILL_FORGE                 292   /* ACIDUS 2003 skill forge per creazione oggetti */
+#define SKILL_DETERMINE             293   /* ACIDUS 2003 skill determine established per determinazione teleport */
+#define SKILL_EQUILIBRIUM           294   /* ACIDUS 2003 skill better equilibrium per equilibrio nanesco */
 
 
+#define MAX_EXIST_SPELL             294   /* max number of skills/spells/status */
 
-#define FIRST_BREATH_WEAPON          325 /*        201 */
-#define SPELL_FIRE_BREATH            325 /*        201 */
-#define SPELL_GAS_BREATH             326 /*        202 */
-#define SPELL_FROST_BREATH           327 /*        203 */
-#define SPELL_ACID_BREATH            328 /*        204 */
-#define SPELL_LIGHTNING_BREATH       329 /*        205 */
-#define LAST_BREATH_WEAPON           329 /*        205 */
+
+
+#define FIRST_BREATH_WEAPON         475 /*        201   then 325 */
+#define SPELL_FIRE_BREATH           475 /*        201   then 325 */
+#define SPELL_GAS_BREATH            476 /*        202   then 326 */
+#define SPELL_FROST_BREATH          477 /*        203   then 327 */
+#define SPELL_ACID_BREATH           478 /*        204   then 328 */
+#define SPELL_LIGHTNING_BREATH      479 /*        205   then 329 */
+#define LAST_BREATH_WEAPON          479 /*        205   then 330 */
 
 /* NOTE!!!!!!!!!!!!!!!
  * all spells MUST be before these types.   Otherwise, certain aspects of
@@ -382,25 +384,25 @@ namespace Alarmud {
  * */
 
 // Flyp 20180201: this set of types should identify only phisical damage and exclude the spells
-#define TYPE_HIT                     330
-#define TYPE_BLUDGEON                331
-#define TYPE_PIERCE                  332
-#define TYPE_SLASH                   333
-#define TYPE_WHIP                    334  /* EXAMPLE */
-#define TYPE_CLAW                    335  /* NO MESSAGES WRITTEN YET! */
-#define TYPE_BITE                    336  /* NO MESSAGES WRITTEN YET! */
-#define TYPE_STING                   337  /* NO MESSAGES WRITTEN YET! */
-#define TYPE_CRUSH                   338  /* NO MESSAGES WRITTEN YET! */
-#define TYPE_CLEAVE                  339
-#define TYPE_STAB                    340
-#define TYPE_SMASH                   341
-#define TYPE_SMITE                   342
-#define TYPE_BLAST                   343
-#define TYPE_RANGE_WEAPON            344
+#define TYPE_HIT                    480
+#define TYPE_BLUDGEON               481
+#define TYPE_PIERCE                 482
+#define TYPE_SLASH                  483
+#define TYPE_WHIP                   484  /* EXAMPLE */
+#define TYPE_CLAW                   485  /* NO MESSAGES WRITTEN YET! */
+#define TYPE_BITE                   486  /* NO MESSAGES WRITTEN YET! */
+#define TYPE_STING                  487  /* NO MESSAGES WRITTEN YET! */
+#define TYPE_CRUSH                  488  /* NO MESSAGES WRITTEN YET! */
+#define TYPE_CLEAVE                 489
+#define TYPE_STAB                   490
+#define TYPE_SMASH                  491
+#define TYPE_SMITE                  492
+#define TYPE_BLAST                  493
+#define TYPE_RANGE_WEAPON           494
 
 /* This one needs to be after all real damage skills, might wanna */
 /* alter messages if you move it */
-#define TYPE_SUFFERING               345
+#define TYPE_SUFFERING              495
 /* MAX is MAX_SKILLS = 350 */
 
 /*****************************************
@@ -409,17 +411,17 @@ namespace Alarmud {
  * devono essere dati dalla procedura che
  * chiama la funzione damage.
  * */
-#define TYPE_GENERIC_FIRST   346
-#define TYPE_GENERIC_FIRE    346
-#define TYPE_GENERIC_ELEC    347
-#define TYPE_GENERIC_COLD    348
-#define TYPE_GENERIC_ENERGY  349
-#define TYPE_GENERIC_ACID    350
-#define TYPE_GENERIC_LAST    350
+#define TYPE_GENERIC_FIRST          496
+#define TYPE_GENERIC_FIRE           496
+#define TYPE_GENERIC_ELEC           497
+#define TYPE_GENERIC_COLD           498
+#define TYPE_GENERIC_ENERGY         499
+#define TYPE_GENERIC_ACID           500
+#define TYPE_GENERIC_LAST           500
 
 /* More anything but spells and weapontypes can be insterted here! */
-#define MAX_TYPES 70
-#define MAX_SPL_LIST     350
+#define MAX_TYPES                    70
+#define MAX_SPL_LIST                500
 
 #define SAVING_PARA   0
 #define SAVING_ROD    1
@@ -469,6 +471,7 @@ namespace Alarmud {
 #define SPELL_TYPE_WAND    2
 #define SPELL_TYPE_STAFF   3
 #define SPELL_TYPE_SCROLL  4
+#define SPELL_TYPE_WEAPON  5
 
 
 /* Attacktypes with grammar */

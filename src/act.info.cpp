@@ -241,20 +241,20 @@ void show_obj_to_char(struct obj_data* object, struct char_data* ch, int mode) {
                     strcat(buffer,"$c0008 (emettono un forte ronzio)$c0007");
                 }
             }
-            if(object->obj_flags.type_flag == ITEM_ARMOR)
+            if(object->obj_flags.type_flag != ITEM_BOARD)
             {
-                if(object->obj_flags.value[ 0 ] < (object->obj_flags.value[ 1 ] / 4))
+                if(object->obj_flags.hitp < (object->obj_flags.hitpTot / 10))
                 {
                     if(singular(object))
                     {
-                        strcat(buffer, "$c0009 (distrutto)$c0007");
+                        strcat(buffer, " $c0115(distrutto)$c0007");
                     }
                     else
                     {
-                        strcat(buffer,"$c0009 (sono distrutti)$c0007");
+                        strcat(buffer," $c0115(sono distrutti)$c0007");
                     }
                 }
-                else if(object->obj_flags.value[ 0 ] < (object->obj_flags.value[ 1 ] / 3))
+                else if(object->obj_flags.hitp < (object->obj_flags.hitpTot / 10 * 2))
                 {
                     if(singular(object))
                     {
@@ -265,7 +265,51 @@ void show_obj_to_char(struct obj_data* object, struct char_data* ch, int mode) {
                         strcat(buffer,"$c0009 (hanno bisogno di essere riparati)$c0007");
                     }
                 }
-                else if(object->obj_flags.value[ 0 ] < (object->obj_flags.value[ 1 ] / 2))
+                else if(object->obj_flags.hitp < (object->obj_flags.hitpTot / 10 * 3))
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0009 (in pessime condizioni)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0009 (in pessime condizioni)$c0007");
+                    }
+                }
+                else if(object->obj_flags.hitp < (object->obj_flags.hitpTot / 10 * 4))
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0009 (pieno di ammaccature)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0009 (pieni di ammaccature)$c0007");
+                    }
+                }
+                else if(object->obj_flags.hitp < (object->obj_flags.hitpTot / 10 * 5))
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0011 (ammaccato)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0011 (ammaccati)$c0007");
+                    }
+                }
+                else if(object->obj_flags.hitp < (object->obj_flags.hitpTot / 10 * 6))
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0011 (con qualche graffio qua e la')$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0011 (con qualche graffio qua e la')$c0007");
+                    }
+                }
+                else if(object->obj_flags.hitp < (object->obj_flags.hitpTot / 10 * 7))
                 {
                     if(singular(object))
                     {
@@ -276,7 +320,7 @@ void show_obj_to_char(struct obj_data* object, struct char_data* ch, int mode) {
                         strcat(buffer,"$c0011 (in buone condizioni)$c0007");
                     }
                 }
-                else if(object->obj_flags.value[ 0 ] < object->obj_flags.value[1])
+                else if(object->obj_flags.hitp < (object->obj_flags.hitpTot / 10 * 8))
                 {
                     if(singular(object))
                     {
@@ -287,7 +331,18 @@ void show_obj_to_char(struct obj_data* object, struct char_data* ch, int mode) {
                         strcat(buffer,"$c0010 (in ottime condizioni)$c0007");
                     }
                 }
-                else
+                else if(object->obj_flags.hitp < (object->obj_flags.hitpTot / 10 * 9))
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0010 (e' appena ammaccato)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0010 (sono appena ammaccati)$c0007");
+                    }
+                }
+                else if(object->obj_flags.hitp < object->obj_flags.hitpTot)
                 {
                     if(singular(object))
                     {
@@ -296,6 +351,17 @@ void show_obj_to_char(struct obj_data* object, struct char_data* ch, int mode) {
                     else
                     {
                         strcat(buffer,"$c0010 (in condizioni eccellenti)$c0007");
+                    }
+                }
+                else
+                {
+                    if(singular(object))
+                    {
+                        strcat(buffer, "$c0012 (in condizioni perfette)$c0007");
+                    }
+                    else
+                    {
+                        strcat(buffer,"$c0012 (in condizioni perfette)$c0007");
                     }
                 }
             }

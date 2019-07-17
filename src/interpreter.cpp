@@ -1668,18 +1668,22 @@ void ShowRollInstruction(struct descriptor_data* d) {
 
 	sprintf(buf, "Hai scelto la creazione del personaggio per esperti.\n\r");
 	SEND_TO_Q(buf, d);
-	sprintf(buf, "Ad ogni caratteristica viene assegnato il valore minimo  %d .\n\r",
-			STAT_MIN_VAL);
+	sprintf(buf, "Ad ogni caratteristica viene assegnato un valore minimo a \n\rseconda della razza.\n\r");
 	SEND_TO_Q(buf, d);
-	sprintf(buf, "Hai a disposizione ulteriori  %d  punti da distribuire a piacere.\n\r",
-			STAT_MAX_SUM);
+    sprintf(buf, "Per la razza %s i valori minimi sono:\n\r", RaceName[GET_RACE(d->character)]);
+    SEND_TO_Q(buf, d);
+    sprintf(temp,"FO IN SA AG CO CA\n\r");
+    sprintf(buf,"%s%2d %2d %2d %2d %2d %2d\n\r\n\r", temp, STAT_MIN_VAL(d->character, STAT_STR), STAT_MIN_VAL(d->character, STAT_INT), STAT_MIN_VAL(d->character, STAT_WIS), STAT_MIN_VAL(d->character, STAT_DEX), STAT_MIN_VAL(d->character, STAT_CON), STAT_MIN_VAL(d->character, STAT_CHR));
+    SEND_TO_Q(buf, d);
+	sprintf(buf, "Hai a disposizione ulteriori %d punti da distribuire a piacere.\n\r",
+			STAT_MAX_SUM(d->character));
 	SEND_TO_Q(buf,d);
 	SEND_TO_Q("Per assegnarli, inserisci i numeri in questo ordine:\n\r",d);
 	SEND_TO_Q("FOrza INtelligenza SAggezza AGilita' COstituzione CArisma.\n\r",d);
 	SEND_TO_Q("Puoi anche chiedere che i valori da te immessi siano \n\r",d);
 	SEND_TO_Q("randomizzati aggiungendo un valore da -1 a +1.\n\r",d);
 	SEND_TO_Q("Per chiedere la randomizzazione basta digitare qualsiasi cosa dopo i numeri.\n\r",d);
-	SEND_TO_Q("Esempio, per avere un pg con:\n\r",d);
+/*	SEND_TO_Q("Esempio, per avere un pg con:\n\r",d);
 	sprintf(buf,"F=%d I=%d S=%d A=%d Co=%d Ca=%d senza randomizzazione:\n\r",
 			STAT_MIN_VAL+18-STAT_MIN_VAL,
 			STAT_MIN_VAL+MAX(0,MIN(18-STAT_MIN_VAL,STAT_MAX_SUM-(18-STAT_MIN_VAL)*1)),
@@ -1712,7 +1716,7 @@ void ShowRollInstruction(struct descriptor_data* d) {
 			MAX(0,MIN(18-STAT_MIN_VAL,STAT_MAX_SUM-(18-STAT_MIN_VAL)*4)),
 			MAX(0,MIN(18-STAT_MIN_VAL,STAT_MAX_SUM-(18-STAT_MIN_VAL)*5)),
 			"r");
-	SEND_TO_Q(buf,d);
+	SEND_TO_Q(buf,d); */
 
 
 	SEND_TO_Q("Bene, premi invio per rollare. Auguri!.\n\r",d);
@@ -1723,13 +1727,7 @@ void RollPrompt(struct descriptor_data* d) {
 	char buf[254];
 	SEND_TO_Q("FO IN SA AG CO CA RN (puoi usare <b> per rinunciare)\n\r",d);
 	/* STAT LIMITS */
-	sprintf(buf,"%2d %2d %2d %2d %2d %2d    (valori limite per la tua razza)\n\r",
-			MaxStrForRace(d->character)-STAT_MIN_VAL,
-			MaxIntForRace(d->character)-STAT_MIN_VAL,
-			MaxWisForRace(d->character)-STAT_MIN_VAL,
-			MaxDexForRace(d->character)-STAT_MIN_VAL,
-			MaxConForRace(d->character)-STAT_MIN_VAL,
-			MaxChrForRace(d->character)-STAT_MIN_VAL);
+	sprintf(buf,"%2d %2d %2d %2d %2d %2d    (questi sono i valori limite che puoi sommare per la tua razza)\n\r", MaxStrForRace(d->character)-STAT_MIN_VAL(d->character, STAT_STR), MaxIntForRace(d->character)-STAT_MIN_VAL(d->character, STAT_INT), MaxWisForRace(d->character)-STAT_MIN_VAL(d->character, STAT_WIS), MaxDexForRace(d->character)-STAT_MIN_VAL(d->character, STAT_DEX), MaxConForRace(d->character)-STAT_MIN_VAL(d->character, STAT_CON), MaxChrForRace(d->character)-STAT_MIN_VAL(d->character, STAT_CHR));
 	SEND_TO_Q(buf,d);
 }
 
@@ -1775,33 +1773,33 @@ void InterpretaRoll(struct descriptor_data* d, char* riga)
 	}
 	t=FO+IN+SA+AG+CO+CA;
 	if(t < 0) {
-		t=STAT_MAX_SUM+1;
+		t=STAT_MAX_SUM(d->character)+1;
 	}
-	if(t>STAT_MAX_SUM) {
+	if(t>STAT_MAX_SUM(d->character)) {
 		sprintf(buf,"Hai usato piu' dei %2d punti disponibili (%2d)\n\r",
-				STAT_MAX_SUM,t);
+				STAT_MAX_SUM(d->character),t);
 		SEND_TO_Q(buf,d);
 		doafter=AGAIN;
 	}
 	else {
-		FO=MIN(MaxStrForRace(d->character)-STAT_MIN_VAL,FO);
-		IN=MIN(MaxIntForRace(d->character)-STAT_MIN_VAL,IN);
-		SA=MIN(MaxWisForRace(d->character)-STAT_MIN_VAL,SA);
-		AG=MIN(MaxDexForRace(d->character)-STAT_MIN_VAL,AG);
-		CO=MIN(MaxConForRace(d->character)-STAT_MIN_VAL,CO);
-		CA=MIN(MaxChrForRace(d->character)-STAT_MIN_VAL,CA);
+		FO=MIN(MaxStrForRace(d->character)-STAT_MIN_VAL(d->character, STAT_STR),FO);
+		IN=MIN(MaxIntForRace(d->character)-STAT_MIN_VAL(d->character, STAT_INT),IN);
+		SA=MIN(MaxWisForRace(d->character)-STAT_MIN_VAL(d->character, STAT_WIS),SA);
+		AG=MIN(MaxDexForRace(d->character)-STAT_MIN_VAL(d->character, STAT_DEX),AG);
+		CO=MIN(MaxConForRace(d->character)-STAT_MIN_VAL(d->character, STAT_CON),CO);
+		CA=MIN(MaxChrForRace(d->character)-STAT_MIN_VAL(d->character, STAT_CHR),CA);
 		SEND_TO_Q("Ecco le stats risultanti dalla tua scelta:\n\r",d);
 		sprintf(buf,"%2d %2d %2d %2d %2d %2d %s\n\r",
-				FO+STAT_MIN_VAL,
-				IN+STAT_MIN_VAL,
-				SA+STAT_MIN_VAL,
-				AG+STAT_MIN_VAL,
-				CO+STAT_MIN_VAL,
-				CA+STAT_MIN_VAL,(!*c7?"\0":"piu' la randomizzazione (-1/+1)"));
+				FO+STAT_MIN_VAL(d->character, STAT_STR),
+				IN+STAT_MIN_VAL(d->character, STAT_INT),
+				SA+STAT_MIN_VAL(d->character, STAT_WIS),
+				AG+STAT_MIN_VAL(d->character, STAT_DEX),
+				CO+STAT_MIN_VAL(d->character, STAT_CON),
+				CA+STAT_MIN_VAL(d->character, STAT_CHR),(!*c7?"\0":"piu' la randomizzazione (-1/+1)"));
 		SEND_TO_Q(buf,d);
 
-		if(t<STAT_MAX_SUM) {
-			sprintf(buf,"ATTENZIONE. Hai usato solo %2d dei %2d disponibili\n\r",t,STAT_MAX_SUM);
+		if(t<STAT_MAX_SUM(d->character)) {
+			sprintf(buf,"ATTENZIONE. Hai usato solo %2d dei %2d disponibili\n\r",t,STAT_MAX_SUM(d->character));
 			SEND_TO_Q(buf,d);
 		}
 	}
@@ -2679,10 +2677,10 @@ NANNY_FUNC(con_nme) {
 			CREATE(GET_NAME(d->character), char, strlen(tmp_name) + 1);
 			CAP(tmp_name);
 			strcpy(GET_NAME(d->character), tmp_name);
-			string buf("E' realmente '");
-			buf.append(tmp_name).append("' il nome che vuoi? (si/no): ");
+			string buf("E' realmente '$c0009");
+			buf.append(tmp_name).append("$c0007' il nome che vuoi? (si/no): ");
 			d->AccountData.choosen.assign(tmp_name);
-			SEND_TO_Q(buf.c_str(), d);
+			SEND_TO_Q(ParseAnsiColors(TRUE, buf.c_str()), d);
 			STATE(d) = CON_NMECNF;
 			return false;
 		}
@@ -2724,10 +2722,10 @@ NANNY_FUNC(con_nmecnf) {
 		echoOn(d);
 		SEND_TO_Q("Nuovo personaggio.\n\r", d);
 
-		string buf("Inserisci una password per ");
-		buf.append(GET_NAME(d->character));
+		string buf("Inserisci una password per $c0009");
+		buf.append(GET_NAME(d->character)).append("$c0007: ");
 
-		SEND_TO_Q(buf.c_str(), d);
+		SEND_TO_Q(ParseAnsiColors(TRUE, buf.c_str()), d);
 		echoOff(d);
 		STATE(d) = CON_PWDGET;
 	}
@@ -2802,7 +2800,7 @@ NANNY_FUNC(con_pwdok) {
 	if (d->impersonating) {
 		// Check relative level
 		if (GetMaxLevel(d->character)>=d->AccountData.level) {
-			FLUSH_TO_Q("Mi spiace, non puo impersonare personaggi di livello superiore o uguale al tuo\r\n",d);
+			FLUSH_TO_Q("Mi spiace, non puo impersonare personaggi di livello superiore o uguale al tuo.\r\n",d);
 			close_socket(d);
 			return false;
 		}
@@ -2833,7 +2831,7 @@ NANNY_FUNC(con_pwdok) {
 	/* Se era gia' in gioco assumo ld non riconosciuto e disconnetto il
 	  * vecchio char*/
 	if(d->AlreadyInGame) {
-		mudlog(LOG_PLAYERS, "%s[HOST:%s] riconnesso su se stesso.", GET_NAME(d->character),d->host);
+		mudlog(LOG_PLAYERS, "%s[HOST:%s] riconnesso su se stess%s.", GET_NAME(d->character),d->host, SSLF(d->character));
 		close_socket(d->ToBeKilled);
 	}
 	for(struct char_data* tmp_ch = character_list; tmp_ch; tmp_ch = tmp_ch->next) {
@@ -2859,7 +2857,7 @@ NANNY_FUNC(con_pwdok) {
 			d->character->persist = 0;
 			STATE(d) = CON_PLYNG;
 
-			act("$n si e' riconnesso.", TRUE, tmp_ch, 0, 0, TO_ROOM);
+			act("$n si e' riconness$b.", TRUE, tmp_ch, 0, 0, TO_ROOM);
 			mudlog(LOG_CONNECT, "%s[HOST:%s] has reconnected.",
 				   GET_NAME(d->character), d->host);
 
@@ -2923,7 +2921,7 @@ NANNY_FUNC(con_pwdget) {
 	if(!*arg || strlen(arg) > 10 ||
 			!strcasecmp(arg,d->character->player.name)) {
 		echoOn(d);
-		SEND_TO_Q("Password non valida.(MAx 10 caratteri - diversa dal nome)\n\r", d);
+		SEND_TO_Q("Password non valida.(Massimo 10 caratteri - diversa dal nome)\n\r", d);
 		SEND_TO_Q("Password: ", d);
 		echoOff(d);
 		return false;
@@ -2973,9 +2971,9 @@ NANNY_FUNC(con_qrace) {
 			if(tmpi>=0 && tmpi <=i-1) {
 				/* set the chars race to this */
 				GET_RACE(d->character) = race_choice[tmpi];
-				string buf("Quale'e' il sesso di ");
-				buf.append(GET_NAME(d->character)).append("? (Maschio/Femmina) (b per tornare indietro): ");
-				SEND_TO_Q(buf.c_str(), d);
+				string buf("Quale'e' il sesso di $c0009");
+				buf.append(GET_NAME(d->character)).append("$c0007? (Maschio/Femmina) (b per tornare indietro): ");
+				SEND_TO_Q(ParseAnsiColors(TRUE, buf.c_str()), d);
 				mudlog(LOG_CONNECT,"Razza scelta procedo con qsex");
 				STATE(d) = CON_QSEX;
 			}
@@ -2991,7 +2989,7 @@ NANNY_FUNC(con_qrace) {
 	return false;
 }
 NANNY_FUNC(con_helprace) {
-	SEND_TO_Q("\r\n[Batti INVIO] ", d);
+	SEND_TO_Q(ParseAnsiColors(TRUE, "\r\n[$c0009Batti INVIO$c0007] "), d);
 	STATE(d) = CON_ENDHELPRACE;
 	return false;
 }
@@ -3057,9 +3055,9 @@ NANNY_FUNC(con_stat_list) {
 	/* skip whitespaces */
 	oldarg(false);
 	if(strlen(arg)==1 && (*arg == 'B' || *arg == 'b')) {  /* Backward */
-		string buf("Quale'e' il sesso di ");
-		buf.append(GET_NAME(d->character)).append("? (Maschio/Femmina) (b per tornare indietro): ");
-		SEND_TO_Q(buf.c_str(),d);
+		string buf("Quale'e' il sesso di $c0009");
+		buf.append(GET_NAME(d->character)).append("$c0007? (Maschio/Femmina) (b per tornare indietro): ");
+		SEND_TO_Q(ParseAnsiColors(TRUE, buf.c_str()),d);
 		STATE(d) = CON_QSEX;
 		return false;
 	}
@@ -3128,7 +3126,7 @@ NANNY_FUNC(con_stat_list) {
 	}
 }
 NANNY_FUNC(con_helpclass) {
-	SEND_TO_Q("\n\r[Batti INVIO] ", d);
+	SEND_TO_Q(ParseAnsiColors(TRUE, "\n\r[$c0009Batti INVIO$c0007] "), d);
 	STATE(d) = CON_ENDHELPCLASS;
 	return false;
 }
@@ -3153,7 +3151,7 @@ NANNY_FUNC(con_check_mage_type) {
 		d->character->player.iClass +=CLASS_SORCERER;
 	} /* end we wanted Sorcerer class! */
 	SEND_TO_Q(NEWBIE_NOTE, d);
-	SEND_TO_Q("\n\r[Batti INVIO] ", d);
+	SEND_TO_Q(ParseAnsiColors(TRUE, "\n\r[$c0009Batti INVIO$c0007] "), d);
 	STATE(d) = CON_RNEWD;
 	return false;
 }
@@ -3162,7 +3160,7 @@ NANNY_FUNC(con_rmotd) {
 		SEND_TO_Q(ParseAnsiColors(IS_SET(d->character->player.user_flags,
 										 USE_ANSI),
 								  wmotd), d);
-		SEND_TO_Q("\r\n[Batti INVIO] ", d);
+		SEND_TO_Q(ParseAnsiColors(TRUE, "\r\n[$c0009Batti INVIO$c0007] "), d);
 		STATE(d) = CON_WMOTD;
 		return false;
 	}
@@ -3324,7 +3322,7 @@ NANNY_FUNC(con_city_choice) {
 				d->prompt_mode = 1;
 			}
 			else {
-				SEND_TO_Q("That was an illegal choice.\n\r", d);
+				SEND_TO_Q("Questa scelta non e' valida.\n\r", d);
 				STATE(d) = CON_SLCT;
 			}
 			break;
@@ -3347,7 +3345,7 @@ NANNY_FUNC(con_city_choice) {
 					plr_tick_count=0;
 				}
 
-				act("$n has entered the game.",
+				act("$n e' entrat$b in gioco.",
 					TRUE, d->character, 0, 0, TO_ROOM);
 				STATE(d) = CON_PLYNG;
 				if(!GetMaxLevel(d->character)) {
@@ -3357,12 +3355,12 @@ NANNY_FUNC(con_city_choice) {
 				d->prompt_mode = 1;
 			}
 			else {
-				SEND_TO_Q("That was an illegal choice.\n\r", d);
+				SEND_TO_Q("Questa scelta non e' valida.\n\r", d);
 				STATE(d) = CON_SLCT;
 			}
 			break;
 		default:
-			SEND_TO_Q("That was an illegal choice.\n\r", d);
+			SEND_TO_Q("Questa scelta non e' valida.\n\r", d);
 			STATE(d) = CON_SLCT;
 			break;
 		}
@@ -3385,7 +3383,7 @@ NANNY_FUNC(con_delete_me) {
 		system(buf);
 		toonPtr pg=Sql::getOne<toon>(toonQuery::name==string(GET_NAME(d->character)));
 		if (pg) Sql::erase(*pg,true);
-		SEND_TO_Q("Done\n\t",d);
+		SEND_TO_Q(ParseAnsiColors(TRUE, "$c0009Fatto!$c0007\n\t"),d);
         if (d->AccountData.id) {    // controllo se ha un id
 		SEND_TO_Q(MENU,d);
 		STATE(d)= CON_SLCT;

@@ -648,7 +648,7 @@ ACTION_FUNC(do_sneak) {
 	if(percent > MIN(100, ch->skills[SKILL_SNEAK].learned) +
 			dex_app_skill[ static_cast<int>(GET_DEX(ch)) ].sneak) {
 		LearnFromMistake(ch, SKILL_SNEAK, 1, 90);
-		WAIT_STATE(ch, PULSE_VIOLENCE);
+		WAIT_STATE(ch, PULSE_VIOLENCE - (CheckQuickness(ch) / 2));
 		return;
 	}
 
@@ -658,7 +658,7 @@ ACTION_FUNC(do_sneak) {
 	af.location = APPLY_NONE;
 	af.bitvector = AFF_SNEAK;
 	affect_to_char(ch, &af);
-	WAIT_STATE(ch, PULSE_VIOLENCE);
+	WAIT_STATE(ch, PULSE_VIOLENCE - (CheckQuickness(ch) / 2));
 
 }
 ACTION_FUNC(do_tspy) {
@@ -743,13 +743,12 @@ ACTION_FUNC(do_hide) {
 	if(percent > MIN(100, ch->skills[SKILL_HIDE].learned) +
 			dex_app_skill[ static_cast<int>(GET_DEX(ch)) ].hide) {
 		LearnFromMistake(ch, SKILL_HIDE, 1, 90);
-		WAIT_STATE(ch, PULSE_VIOLENCE*1);
+		WAIT_STATE(ch, PULSE_VIOLENCE - (CheckQuickness(ch) / 2));
 		return;
 	}
 
 	SET_BIT(ch->specials.affected_by, AFF_HIDE);
-	WAIT_STATE(ch, PULSE_VIOLENCE*1);
-
+	WAIT_STATE(ch, PULSE_VIOLENCE - (CheckQuickness(ch) / 2));
 }
 
 

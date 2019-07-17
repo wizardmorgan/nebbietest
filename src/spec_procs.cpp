@@ -3582,13 +3582,20 @@ MOBSPECIAL_FUNC(RustMonster) {
 	/*
 	 **  item makes save (or not)
 	 */
-	if(DamageOneItem(vict, ACID_DAMAGE, t_item)) {
+	if(DamageOneItem(vict, ACID_DAMAGE, number(1, 1000), t_item)) {
 		t_item = unequip_char(vict, t_pos);
 		if(t_item) {
 			/*
 			 **  if it doesn't make save, falls into a pile of scraps
 			 */
-			MakeScrap(vict,NULL, t_item);
+            if(IS_OBJ_STAT2(t_item, ITEM2_EDIT) || IS_OBJ_STAT2(t_item, ITEM2_PERSONAL))
+            {
+                EditedItemState(vict, t_item);
+            }
+            else
+            {
+                MakeScrap(vict, NULL, t_item);
+            }
 		}
 	}
 

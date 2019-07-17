@@ -1204,33 +1204,40 @@ int remove_trap(struct char_data* ch, struct obj_data* trap) {
 	int num;
 	struct obj_data* t;
 	/* to disarm traps inside item */
-	if(ITEM_TYPE(trap)  == ITEM_CONTAINER) {
-		for(t=trap->contains; t; t=t->next_content) {
-			if(ITEM_TYPE(t) == ITEM_TRAP && GET_TRAP_CHARGES(t) >0) {
+	if(ITEM_TYPE(trap)  == ITEM_CONTAINER)
+    {
+		for(t=trap->contains; t; t=t->next_content)
+        {
+			if(ITEM_TYPE(t) == ITEM_TRAP && GET_TRAP_CHARGES(t) >0)
+            {
 				return(remove_trap(ch,t));
 			}
 		} /* end for */
 	}                                 /* not container, trap on floor */
-	if(ITEM_TYPE(trap) != ITEM_TRAP) {  // SALVO tolto else perche' il disarm veniva effettuato su qualunque container
-		send_to_char("That's no trap!\n\r", ch);
+	if(ITEM_TYPE(trap) != ITEM_TRAP)
+    {  // SALVO tolto else perche' il disarm veniva effettuato su qualunque container
+		send_to_char("Non e' una trappola!\n\r", ch);
 		return(FALSE);
 	}
 
-	if(GET_TRAP_CHARGES(trap) <= 0) {
-		send_to_char("That trap is already sprung!\n\r", ch);
+	if(GET_TRAP_CHARGES(trap) <= 0)
+    {
+		send_to_char("Questa trappola e' gia' stata disarmata!\n\r", ch);
 		return(FALSE);
 	}
 	num = number(1,101);
-	if(num < ch->skills[SKILL_REMOVE_TRAP].learned) {
+	if(num < ch->skills[SKILL_REMOVE_TRAP].learned)
+    {
 		send_to_char("<Click>\n\r", ch);
-		act("$n disarms $p", FALSE, ch, trap, 0, TO_ROOM);
+		act("$n disarma $p.", FALSE, ch, trap, 0, TO_ROOM);
 		GET_TRAP_CHARGES(trap) = 0;
-		WAIT_STATE(ch, PULSE_VIOLENCE*3);
+		WAIT_STATE(ch, (PULSE_VIOLENCE * 3) - (CheckQuickness(ch) * 1.5));
 		return(TRUE);
 	}
-	else {
+	else
+        {
 		send_to_char("<Click>\n\r(uh oh)\n\r", ch);
-		act("$n attempts to disarm $p", FALSE, ch, trap, 0, TO_ROOM);
+		act("$n attiva $p.", FALSE, ch, trap, 0, TO_ROOM);
 		TriggerTrap(ch, trap);
 
 		return(TRUE);

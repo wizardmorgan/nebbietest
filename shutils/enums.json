@@ -2271,6 +2271,18 @@
             "ACID_DAMAGE": {
                 "value": 5,
                 "comment": ""
+            },
+            "BLUNT_DAMAGE": {
+                "value": 6,
+                "comment": ""
+            },
+            "PIERCE_DAMAGE": {
+                "value": 7,
+                "comment": ""
+            },
+            "SLASH_DAMAGE": {
+                "value": 8,
+                "comment": ""
             }
         },
         "e_opinion_op": {

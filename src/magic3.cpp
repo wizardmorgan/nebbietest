@@ -2254,7 +2254,7 @@ void spell_warp_weapon(byte level, struct char_data* ch,
 		ch, obj, 0, TO_CHAR);
 	act("$p viene $c0011spuntata$c0007 e $c0009deformata$c0007 dalla potenza dell'incantesimo di $n.",
 		FALSE, ch, obj, 0, TO_ROOM);
-	DamageOneItem(victim, BLOW_DAMAGE, obj);
+	DamageOneItem(victim, BLOW_DAMAGE, dice(20, 100), obj);
 
 	if(!IS_PC(victim))
 		if(!victim->specials.fighting) {

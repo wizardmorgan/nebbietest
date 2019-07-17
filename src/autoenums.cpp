@@ -685,6 +685,9 @@ e_damage_type encode_e_damage_type(std::string s,e_damage_type fallback) {
 	if (s == "ELEC_DAMAGE") return ELEC_DAMAGE;
 	if (s == "BLOW_DAMAGE") return BLOW_DAMAGE;
 	if (s == "ACID_DAMAGE") return ACID_DAMAGE;
+	if (s == "BLUNT_DAMAGE") return BLUNT_DAMAGE;
+	if (s == "PIERCE_DAMAGE") return PIERCE_DAMAGE;
+	if (s == "SLASH_DAMAGE") return SLASH_DAMAGE;
 	return fallback;
 }
 
@@ -702,6 +705,12 @@ std::string translate(const e_damage_type e) {
 		return "BLOW_DAMAGE";
 	case ACID_DAMAGE:
 		return "ACID_DAMAGE";
+	case BLUNT_DAMAGE:
+		return "BLUNT_DAMAGE";
+	case PIERCE_DAMAGE:
+		return "PIERCE_DAMAGE";
+	case SLASH_DAMAGE:
+		return "SLASH_DAMAGE";
 	default:
 		return "UNKNOWN";
 	}
@@ -714,6 +723,9 @@ bool enum_validate(const e_damage_type value) {
 		case ELEC_DAMAGE:
 		case BLOW_DAMAGE:
 		case ACID_DAMAGE:
+		case BLUNT_DAMAGE:
+		case PIERCE_DAMAGE:
+		case SLASH_DAMAGE:
 		return true;
 		default:
 		return false;

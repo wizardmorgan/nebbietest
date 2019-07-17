@@ -37,6 +37,15 @@ void cast_burning_hands(byte level, struct char_data* ch,const char* arg, int ty
 	case SPELL_TYPE_SCROLL:
 		spell_burning_hands(level, ch, 0, 0);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_burning_hands(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in burning hands!");
 		break;
@@ -94,6 +103,15 @@ void cast_chill_touch(byte level, struct char_data* ch,const char* arg, int type
 	case SPELL_TYPE_WAND:
 		spell_chill_touch(level, ch, victim, 0);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_chill_touch(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in chill touch!");
 		break;
@@ -109,6 +127,15 @@ void cast_shocking_grasp(byte level, struct char_data* ch,const char* arg, int t
 	case SPELL_TYPE_STAFF:
 		spell_shocking_grasp(level, ch, victim, 0);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_shocking_grasp(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in shocking grasp!");
 		break;
@@ -135,6 +162,15 @@ void cast_colour_spray(byte level, struct char_data* ch,const char* arg, int typ
 			spell_colour_spray(level, ch, victim, 0);
 		}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_colour_spray(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in colour spray!");
 		break;
@@ -151,6 +187,15 @@ void cast_earthquake(byte level, struct char_data* ch,const char* arg, int type,
 	case SPELL_TYPE_STAFF:
 		spell_earthquake(level, ch, 0, 0);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_earthquake(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in earthquake!");
 		break;
@@ -188,6 +233,15 @@ void cast_energy_drain(byte level, struct char_data* ch,const char* arg, int typ
 					spell_energy_drain(level, ch, victim, 0);
 				}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_energy_drain(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in energy drain!");
 		break;
@@ -204,6 +258,15 @@ void cast_fireball(byte level, struct char_data* ch,const char* arg, int type,
 	case SPELL_TYPE_STAFF:
 		spell_fireball(level, ch, 0, 0);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_fireball(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in fireball");
 		break;
@@ -245,6 +308,22 @@ void cast_harm(byte level, struct char_data* ch,const char* arg, int type,
                 }
 			}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                if(IsUndead(victim) && !IS_PC(victim))
+                {
+                    spell_heal(level, ch, victim, tar_obj);
+                }
+                else
+                {
+                    spell_harm(level, ch, victim, tar_obj);
+                }
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in harm!");
 		break;
@@ -271,6 +350,15 @@ void cast_lightning_bolt(byte level, struct char_data* ch,const char* arg, int t
 			spell_lightning_bolt(level, ch, victim, 0);
 		}
 		break;
+        case SPELL_TYPE_WEAPON:
+            if(tar_obj)
+            {
+                if(victim)
+                {
+                    spell_lightning_bolt(level, ch, victim, tar_obj);
+                }
+            }
+            break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in lightning bolt!");
 		break;
@@ -296,6 +384,15 @@ void cast_acid_blast(byte level, struct char_data* ch,const char* arg, int type,
 			spell_acid_blast(level, ch, victim, 0);
 		}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_acid_blast(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in acid blast!");
 		break;
@@ -310,6 +407,15 @@ void cast_cone_of_cold(byte level, struct char_data* ch,const char* arg, int typ
 	case SPELL_TYPE_WAND:
 		spell_cone_of_cold(level, ch, 0, 0);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_cone_of_cold(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR,"Serious screw-up in cone of cold!");
 		break;
@@ -324,6 +430,15 @@ void cast_ice_storm(byte level, struct char_data* ch,const char* arg, int type,
 	case SPELL_TYPE_WAND:
 		spell_ice_storm(level, ch, 0, 0);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_ice_storm(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR,"Serious screw-up in ice storm");
 		break;
@@ -349,6 +464,15 @@ void cast_meteor_swarm(byte level, struct char_data* ch,const char* arg, int typ
 			spell_meteor_swarm(level, ch, victim, 0);
 		}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_meteor_swarm(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in meteor swarm!");
 		break;
@@ -374,6 +498,15 @@ void cast_flamestrike(byte level, struct char_data* ch,const char* arg, int type
 			spell_flamestrike(level, ch, victim, 0);
 		}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_flamestrike(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in flamestrike!");
 		break;
@@ -399,6 +532,15 @@ void cast_magic_missile(byte level, struct char_data* ch,const char* arg, int ty
 			spell_magic_missile(level, ch, victim, 0);
 		}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_magic_missile(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in magic missile!");
 		break;
@@ -423,6 +565,15 @@ void cast_cause_light(byte level, struct char_data* ch,const char* arg, int type
 				spell_cause_light(level, ch, victim, 0);
 			}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_cause_light(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in cause light wounds!");
 		break;
@@ -454,6 +605,15 @@ void cast_cause_serious(byte level, struct char_data* ch,const char* arg, int ty
 				spell_cause_serious(level, ch, victim, 0);
 			}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_cause_serious(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in cause serious wounds!");
 		break;
@@ -492,6 +652,15 @@ void cast_cause_critic(byte level, struct char_data* ch,const char* arg, int typ
 				spell_cause_critical(level, ch, victim, 0);
 			}
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_cause_critical(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in cause critical!");
 		break;
@@ -551,6 +720,15 @@ void cast_incendiary_cloud(byte level, struct char_data* ch,const char* arg,
 	case SPELL_TYPE_SCROLL:
 		spell_incendiary_cloud(level, ch, 0, 0);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_incendiary_cloud(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR,"Serious screw-up in incendiary cloud!");
 		break;
@@ -567,6 +745,15 @@ void cast_prismatic_spray(byte level, struct char_data* ch,const char* arg,
 	case SPELL_TYPE_SCROLL:
 		spell_prismatic_spray(level, ch, 0, 0);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_prismatic_spray(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in prismatic spray!");
 		break;
@@ -597,6 +784,15 @@ void cast_disintegrate(byte level, struct char_data* ch,const char* arg, int typ
 	case SPELL_TYPE_SCROLL:
 		spell_disintegrate(level, ch,victim, tar_obj);
 		break;
+    case SPELL_TYPE_WEAPON:
+        if(tar_obj)
+        {
+            if(victim)
+            {
+                spell_disintegrate(level, ch, victim, tar_obj);
+            }
+        }
+        break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in cast_disintegrate");
 		break;

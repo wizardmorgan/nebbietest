@@ -8571,10 +8571,15 @@ int MaxLimited(int lev) {
 }
 
 int MaxDexForRace(struct char_data* ch) {
-	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO) {
+
+	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO)
+    {
 		return(25);
 	}
-	switch(GET_RACE(ch)) {
+
+    return RaceStuffs[GET_RACE(ch)].max[STAT_DEX];
+
+/*	switch(GET_RACE(ch)) {
 	case RACE_ELVEN:
 	case RACE_WILD_ELF:
 	case RACE_GOLD_ELF:
@@ -8596,14 +8601,19 @@ int MaxDexForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	}/* end switch */
+	} * end switch */
 }
 
 int MaxIntForRace(struct char_data* ch) {
-	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO) {
+
+	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO)
+    {
 		return(25);
 	}
-	switch(GET_RACE(ch)) {
+
+    return RaceStuffs[GET_RACE(ch)].max[STAT_INT];
+
+/*	switch(GET_RACE(ch)) {
 	case RACE_GOLD_ELF:
 	case RACE_DEMON:
 	case RACE_GOD:
@@ -8618,14 +8628,19 @@ int MaxIntForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	}/* end switch */
+	} * end switch */
 }
 
 int MaxWisForRace(struct char_data* ch) {
-	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO) {
+
+	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO)
+    {
 		return(25);
 	}
-	switch(GET_RACE(ch)) {
+
+    return RaceStuffs[GET_RACE(ch)].max[STAT_WIS];
+
+/*	switch(GET_RACE(ch)) {
 	case RACE_GOLD_ELF:
 	case RACE_WILD_ELF:
 	case RACE_GNOME:
@@ -8638,14 +8653,19 @@ int MaxWisForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	}/* end switch */
+	} * end switch */
 }
 
 int MaxConForRace(struct char_data* ch) {
-	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO) {
+
+    if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO)
+    {
 		return(25);
 	}
-	switch(GET_RACE(ch)) {
+
+    return RaceStuffs[GET_RACE(ch)].max[STAT_CON];
+
+/*	switch(GET_RACE(ch)) {
 	case RACE_HALF_ORC:
 	case RACE_DWARF:
 	case RACE_GOD:
@@ -8661,14 +8681,19 @@ int MaxConForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	}/* end switch */
+	} * end switch */
 }
 
 int MaxChrForRace(struct char_data* ch) {
-	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO) {
+
+	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO)
+    {
 		return(25);
 	}
-	switch(GET_RACE(ch)) {
+
+    return RaceStuffs[GET_RACE(ch)].max[STAT_CHR];
+
+/*	switch(GET_RACE(ch)) {
 	case RACE_HALF_ORC:
 	case RACE_ORC:
 	case RACE_DARK_ELF:
@@ -8682,16 +8707,19 @@ int MaxChrForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	}/* end switch */
+	} * end switch */
 }
 
 int MaxStrForRace(struct char_data* ch) {
 
-	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO) {
+	if(GetMaxLevel(ch) >= MAESTRO_DEL_CREATO)
+    {
 		return(25);
 	}
 
-	switch(GET_RACE(ch)) {
+    return RaceStuffs[GET_RACE(ch)].max[STAT_STR];
+
+/*	switch(GET_RACE(ch)) {
 	case RACE_TROLL:
 	case RACE_GOD:
 	case RACE_HALF_GIANT:
@@ -8706,7 +8734,7 @@ int MaxStrForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	}/* end switch */
+	} * end switch */
 }
 
 
@@ -8925,6 +8953,7 @@ int IsMagicSpell(int spell_num) {
 	case SKILL_DUAL_WIELD:
 	case SKILL_PSI_SHIELD:
 	case SKILL_EAVESDROP:
+    case SKILL_QUICKNESS:
 	case LANG_COMMON:
 	case LANG_ELVISH:
 	case LANG_HALFLING:
@@ -10401,5 +10430,38 @@ void WriteDbObj(FILE* f, int type, int limit, int loc)
     {
         extract_obj(obj);
     }
+}
+
+int CheckQuickness(struct char_data* ch)
+{
+    int percent, quick = 0;
+
+    if (ch->skills[SKILL_QUICKNESS].learned)
+    {
+        percent = number(1, 101);
+        
+        if(percent > MIN(100, ch->skills[SKILL_QUICKNESS].learned))
+        {
+            LearnFromMistake(ch, SKILL_QUICKNESS, 0, 95);
+        }
+        else
+        {
+            switch(HowManyClasses(ch))
+            {
+                case 1:
+                    quick = 8;
+                    break;
+                    
+                case 2:
+                    quick = 4;
+                    break;
+                    
+                default:
+                    quick = 2;
+                    break;
+            }
+        }
+    }
+    return quick;
 }
 } // namespace Alarmud

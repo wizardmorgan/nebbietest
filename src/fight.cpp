@@ -86,9 +86,9 @@ struct attack_hit_type attack_hit_text[] = {
    Gaia 7/2000 */
 
 struct attack_hit_type location_hit_text[] = {
-	{"sul corpo",               "sul corpo"             },  /* 0 */
-	{"sulle spalle",            "sulle spalle"          },  /* 1 */
-	{"in petto",                "in petto"              },  /* 2 */
+	{"sulla mano sinistra",     "sulla mano sinistra"   },  /* 0 */
+	{"sulla mano destra",       "sulla mano destra"     },  /* 1 */
+	{"sulla mano sinistra",     "sulla mano sinistra"   },  /* 2 */
 	{"sul collo",               "sul collo"             },  /* 3 */
 	{"sul collo",               "sul collo"             },  /* 4 */
 	{"sul corpo",               "sul corpo"             },  /* 5 */
@@ -103,7 +103,28 @@ struct attack_hit_type location_hit_text[] = {
 	{"sul polso sinistro",      "sul polso sinistro"    },  /* 14 */
 	{"sul polso destro",        "sul polso destro"      },  /* 15 */
 	{"sulla mano destra",       "sulla mano destra"     },  /* 16 */
-	{"sulla mano sinistra",     "sulla mano sinistra"   }   /* 17 */
+	{"sulla mano sinistra",     "sulla mano sinistra"   },  /* 17 */
+    {"sul corpo",               "sul corpo"             },  /* 18 */
+    {"sulle spalle",            "sulle spalle"          },  /* 19 */
+    {"in petto",                "in petto"              },  /* 20 */
+    {"sul corpo",               "sul corpo"             },  /* 21 - 0 */
+    {"sulle spalle",            "sulle spalle"          },  /* 22 - 1 */
+    {"in petto",                "in petto"              },  /* 23 - 2 */
+    {"sul collo",               "sul collo"             },  /* 24 - 3 */
+    {"sul collo",               "sul collo"             },  /* 25 - 4 */
+    {"sul corpo",               "sul corpo"             },  /* 26 - 5 */
+    {"alla testa",              "alla testa"            },  /* 27 - 6 */
+    {"su una zampa",            "su una zampa"          },  /* 28 - 7 */
+    {"su una zampa",            "su una zampa"          },  /* 29 - 8 */
+    {"sul corpo",               "sul corpo"             },  /* 30 - 9 */
+    {"sul dorso",               "sul dorso"             },  /* 31 - 10 */
+    {"sul dorso",               "sul dorso"             },  /* 32 - 11 */
+    {"dietro la schiena",       "dietro la schiena"     },  /* 33 - 12 */
+    {"nello stomaco",           "nello stomaco"         },  /* 34 - 13 */
+    {"su una zampa",            "su una zampa"          },  /* 35 - 14 */
+    {"su una zampa",            "su una zampa"          },  /* 36 - 15 */
+    {"sulla zampa destra",      "sulla zampa destra"    },  /* 37 - 16 */
+    {"sulla zampa sinistra",    "sulla zampa sinistra"  }   /* 38 - 17 */
 };
 
 /* Questa routine viene tolta dal damage message
@@ -131,7 +152,7 @@ struct attack_hit_type location_hit_text[] = {
 int Hit_Location(struct char_data* victim) {
 	int hitloc ;
 	int riuscita;
-	int abilita;
+	int abilita, i;
 	int mult = 0 ;
 
 	/* Check su PARRY e generate random hit location */
@@ -180,11 +201,17 @@ int Hit_Location(struct char_data* victim) {
 
 	/* make body/chest hits happen more often than the others */
 
-	if(hitloc !=0 && hitloc != 1 && hitloc != 2 && hitloc != 5) {
-		hitloc = number(0,17);
-	}
+    for(i = 0; i < 5; i++)
+    {
+        if(hitloc != 5)
+        {
+            hitloc = number(0,17);
+        }
 
-	/* make sure the mob has this body part first! */                                         if(!HasHands(victim)) {
+    }
+
+	/* make sure the mob has this body part first! */
+    if(!HasHands(victim)) {
 		hitloc = 0;    /* if not then just make it a body hit hitloc=0 */
 	}
 
@@ -1852,6 +1879,18 @@ void dam_message(int dam, struct char_data* ch, struct char_data* victim,
 	else {
 		snum = 13;
 	}
+
+    if(!HasHands(victim))
+    {
+        location += 21;
+    }
+    else
+    {
+        if(location == 5)
+        {
+            location = number(18, 20);
+        }
+    }
 
 	buf = replace_string(dam_weapons[snum].to_room, attack_hit_text[w_type].plural, attack_hit_text[w_type].singular,
 						 location_hit_text[location].plural,   location_hit_text[location].singular);
@@ -4571,25 +4610,47 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 }
 
 
-int DamageOneItem(struct char_data* ch, int dam_type, struct obj_data* obj) {
+int DamageOneItem(struct char_data* ch, int dam_type, int dam, struct obj_data* obj) {
 	int num;
 	char buf[256];
 
-	num = DamagedByAttack(obj, dam_type);
+    mudlog(LOG_CHECK, "damageoneitem su %s, damtype = %d, danno = %d", obj->short_description, dam_type, dam);
+	num = DamagedByAttack(obj, dam_type, dam);
 	if(num)
     {
-		sprintf(buf, "%s si %s.\n\r",obj->short_description, ItemDamType[dam_type-1]);
+        if(singular(obj))
+        {
+            sprintf(buf, "%s si %s.\n\r",obj->short_description, ItemDamType[(dam_type * 2) - 1]);
+        }
+        else
+        {
+            sprintf(buf, "%s si %s.\n\r",obj->short_description, ItemDamType[dam_type * 2]);
+        }
 		send_to_char(buf,ch);
 		if(num == -1)
         {   /* destroy object*/
+            if(ITEM_TYPE(obj) == ITEM_ARMOR)
+            {
+                obj->obj_flags.value[1] = 0;
+            }
+            else if(ITEM_TYPE(obj) == ITEM_WEAPON)
+            {
+                obj->obj_flags.value[2] = 1;
+            }
 			return(TRUE);
 		}
 		else
         {     /* "damage item"  (armor), (weapon) */
-			if(DamageItem(ch, obj, num))
+            if(IS_RARE(obj))
             {
-				return(TRUE);
-			}
+                num = (int) num / 10;
+            }
+            else
+            {
+                num = (int) num / 20;
+            }
+
+            DamageItem(ch, obj, num);
 		}
 	}
 	return(FALSE);
@@ -4661,7 +4722,7 @@ void MakeScrap(struct char_data* ch,struct char_data* v, struct obj_data* obj) {
 
 }
 
-void DamageAllStuff(struct char_data* ch, int dam_type) {
+void DamageAllStuff(struct char_data* ch, int dam_type, int dam) {
 	int j;
 	struct obj_data* obj, *next;
 
@@ -4673,7 +4734,7 @@ void DamageAllStuff(struct char_data* ch, int dam_type) {
 	for(j = 0; j < MAX_WEAR; j++) {
 		if(ch->equipment[j] && ch->equipment[j]->item_number>=0) {
 			obj = ch->equipment[j];
-			if(DamageOneItem(ch, dam_type, obj)) {
+			if(DamageOneItem(ch, dam_type, dam, obj)) {
 				/* TRUE == destroyed */
 				if((obj = unequip_char(ch,j))!=NULL)
                 {
@@ -4699,7 +4760,7 @@ void DamageAllStuff(struct char_data* ch, int dam_type) {
 	while(obj) {
 		next = obj->next_content;
 		if(obj->item_number >= 0) {
-			if(DamageOneItem(ch, dam_type, obj))
+			if(DamageOneItem(ch, dam_type, dam, obj))
             {
                 if(IS_OBJ_STAT2(obj, ITEM2_EDIT) || IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
                 {
@@ -4722,13 +4783,17 @@ int DamageItem(struct char_data* ch, struct obj_data* o, int num) {
 
 	if(ITEM_TYPE(o) == ITEM_ARMOR) {
 		o->obj_flags.value[0] -= num;
-		if(o->obj_flags.value[0] < 0) {
+		if(o->obj_flags.value[0] < 0)
+        {
+            o->obj_flags.value[0] = 0;
 			return(TRUE);
 		}
 	}
 	else if(ITEM_TYPE(o) == ITEM_WEAPON) {
 		o->obj_flags.value[2] -= num;
-		if(o->obj_flags.value[2] <= 0) {
+		if(o->obj_flags.value[2] <= 0)
+        {
+            o->obj_flags.value[2] = 1;
 			return(TRUE);
 		}
 	}
@@ -4920,8 +4985,114 @@ int oldItemSave(struct obj_data* i, int dam_type) {
 	}
 }
 
+int DamagedByAttack(struct obj_data* i, int dam_type, int dam)
+{
+    int val = 0, num = 0;
+    float dam_obj = 0.000;
+    
+    val = (int) i->obj_flags.hitp;
 
+    dam_obj = (float) dam / 1000;
+    mudlog(LOG_CHECK, "damagedbyattack su %s, damtype = %d, danno = %d, damobj = %.3f", i->short_description, dam_type, dam, dam_obj);
 
+    if(IS_OBJ_STAT(i, ITEM_METAL))
+    {
+        if(GetItemDamageType(dam_type) == ELEC_DAMAGE)
+        {
+            dam_obj *= 1.3;
+        }
+        else if(GetItemDamageType(dam_type) == BLUNT_DAMAGE || GetItemDamageType(dam_type) == PIERCE_DAMAGE || GetItemDamageType(dam_type) == SLASH_DAMAGE)
+        {
+            dam_obj *= 0.9;
+        }
+    }
+
+    if(IS_OBJ_STAT(i, ITEM_MINERAL))
+    {
+        if(GetItemDamageType(dam_type) == PIERCE_DAMAGE)
+        {
+            dam_obj *= 0.9;
+        }
+    }
+
+    if(IS_OBJ_STAT(i, ITEM_ORGANIC))
+    {
+        if(GetItemDamageType(dam_type) == FIRE_DAMAGE)
+        {
+            dam_obj *= 1.15;
+        }
+        else if(GetItemDamageType(dam_type) == ELEC_DAMAGE)
+        {
+            dam_obj *= 0.85;
+        }
+    }
+
+    if(IS_OBJ_STAT(i, ITEM_INVISIBLE))
+    {
+        dam_obj *= 0.98;
+    }
+
+    if(IS_OBJ_STAT(i, ITEM_MAGIC))
+    {
+        dam_obj *= 0.95;
+    }
+
+    if(IS_OBJ_STAT(i, ITEM_NODROP))
+    {
+        dam_obj *= 1.03;
+    }
+
+    if(IS_OBJ_STAT(i, ITEM_BLESS))
+    {
+        dam_obj *= 0.95;
+    }
+
+    if(IS_OBJ_STAT(i, ITEM_RESISTANT))
+    {
+        dam_obj *= 0.5;
+    }
+
+    if(IS_OBJ_STAT(i, ITEM_IMMUNE))
+    {
+        dam_obj *= 0.05;
+    }
+
+    if(IS_OBJ_STAT(i, ITEM_BRITTLE))
+    {
+        dam_obj  = i->obj_flags.hitpTot + 1;
+    }
+
+    if(GetItemDamageType(dam_type) > 5)
+    {
+        dam_type = BLOW_DAMAGE;
+    }
+
+    while(!ItemSave(i, dam_type))
+    {
+        num += 1;
+        if(num <= 10)
+        {
+            i->obj_flags.hitp -= dam_obj;
+            break;
+        }
+    }
+
+    i->obj_flags.hitp -= dam_obj;
+
+    if(i->obj_flags.hitp < 0)
+    {
+        mudlog(LOG_CHECK, "damagedbyattack dopo tutti i check su %s, damtype = %d, danno = %d, damobj = %.3f", i->short_description, dam_type, dam, dam_obj);
+        i->obj_flags.hitp = -1;
+        return(-1);
+    }
+
+    mudlog(LOG_CHECK, "damagedbyattack dopo tutti i check su %s, damtype = %d, danno = %d, damobj = %.3f", i->short_description, dam_type, dam, dam_obj);
+    num = val - (int)i->obj_flags.hitp;
+
+    return(num);
+}
+
+/* old DamagedByAttack
 int DamagedByAttack(struct obj_data* i, int dam_type) {
 	int num = 0;
 
@@ -4933,8 +5104,8 @@ int DamagedByAttack(struct obj_data* i, int dam_type) {
 			if(num > 75)
             {
 				return(num);
-			}  /* so anything with over 75 ac points will not be
-			destroyed */
+			}  * so anything with over 75 ac points will not be
+			destroyed *
 		}
 		return(num);
 	}
@@ -4949,7 +5120,7 @@ int DamagedByAttack(struct obj_data* i, int dam_type) {
 			return(-1);
 		}
 	}
-}
+} */
 
 int WeaponCheck(struct char_data* ch, struct char_data* v, int type, int dam) {
 	int Immunity, total, j;
@@ -5036,7 +5207,7 @@ void DamageStuff(struct char_data* v, int type, int dam, int location) {
 		num = location ; /* modified to be consistent with location Gaia (7/2000)
                           also the shield is now subject to easy breaking */
 		if(v->equipment[ num ]) {
-			if((type == TYPE_BLUDGEON && dam > 10) ||
+		/*	if((type == TYPE_BLUDGEON && dam > 10) ||
 					(type == TYPE_CRUSH && dam > 5) ||
 					(type == TYPE_SMASH && dam > 10) ||
 					(type == TYPE_BITE && dam > 15) ||
@@ -5044,8 +5215,9 @@ void DamageStuff(struct char_data* v, int type, int dam, int location) {
 					(type == TYPE_SLASH && dam > 30) ||
 					(type == TYPE_SMITE && dam > 10) ||
 					(type == TYPE_HIT && dam > 40) ||
-					(num == WEAR_SHIELD && dam > 1)) {
-				if(DamageOneItem(v, BLOW_DAMAGE, v->equipment[ num ])) {
+					(num == WEAR_SHIELD && dam > 1)) { */
+            mudlog(LOG_PLAYERS, "num = %d", num);
+				if(DamageOneItem(v, GetItemDamageType(type), dam, v->equipment[ num ])) {
 					if((obj = unequip_char(v, num)) != NULL)
                     {
                         if(IS_OBJ_STAT2(obj, ITEM2_EDIT) || IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
@@ -5059,7 +5231,7 @@ void DamageStuff(struct char_data* v, int type, int dam, int location) {
 					}
 				}
 			}
-		}
+	//	}
 	}
 	else {
 		dam_type = GetItemDamageType(type);
@@ -5068,7 +5240,7 @@ void DamageStuff(struct char_data* v, int type, int dam, int location) {
 				 * the chance of item damage decreases
 				 * or increases */
 			if(dam >= num) {
-				DamageAllStuff(v, dam_type);
+				DamageAllStuff(v, dam_type, dam);
 			}
 		}
 	}
@@ -5113,6 +5285,29 @@ int GetItemDamageType(int type) {
 	case SPELL_ACID_BLAST:
 	case TYPE_GENERIC_ACID:
 		return(ACID_DAMAGE);
+
+    case TYPE_BLUDGEON:
+    case TYPE_HIT:
+    case TYPE_CRUSH:
+    case TYPE_BITE:
+    case TYPE_SMASH:
+    case TYPE_SMITE:
+    case TYPE_BLAST:
+        return(BLUNT_DAMAGE);
+
+    case SKILL_BACKSTAB:
+    case TYPE_PIERCE:
+    case TYPE_STING:
+    case TYPE_STAB:
+    case TYPE_RANGE_WEAPON:
+        return(PIERCE_DAMAGE);
+            
+    case TYPE_SLASH:
+    case TYPE_WHIP:
+    case TYPE_CLEAVE:
+    case TYPE_CLAW:
+        return(SLASH_DAMAGE);
+
 	default:
 		return(0);
 		break;
@@ -5169,8 +5364,7 @@ void WeaponSpell(struct char_data* c, struct char_data* v,
 							num = 1;
 						}
 						iLevel = MIN(4, GET_LEVEL(c, BestMagicClass(c)) / 6);
-						(*spell_info[num].spell_pointer)(iLevel, c, "", SPELL_TYPE_WAND,
-														 v, 0);
+						(*spell_info[num].spell_pointer)(iLevel, c, "", SPELL_TYPE_WEAPON, v, weapon); // aggiungo l'oggetto da mandare alla funzione di cast e SPELL_TYPE_WEAPON
 					} /* was weapon spell */
 				} /* MAX_OBJ for */
 			} /* type check */

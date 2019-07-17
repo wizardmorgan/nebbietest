@@ -224,7 +224,7 @@ const char* spells[]= {
 	"dragon ride",
 	"mount",
 	"" /* SPELL_NO_MESSAGE*/,
-	"168 non implementata", // SALVO descr
+	"quickness",
 	"mantra", /*SKILL_MANTRA*/
 	"first aid",        /* 170 */
 	"sign language",
@@ -668,7 +668,7 @@ int check_falling(struct char_data* ch) {
 					FALSE,ch, 0, 0, TO_ROOM);
 
 				/* should damage all their stuff */
-				DamageAllStuff(ch, BLOW_DAMAGE);
+				DamageAllStuff(ch, BLOW_DAMAGE, GET_HIT(ch));
 
 				if(!IS_IMMORTAL(ch)) {
 					GET_HIT(ch) = 0;
@@ -690,7 +690,7 @@ int check_falling(struct char_data* ch) {
 				act("$n atterra con un risonante $c5009THUMP$c0007!", FALSE, ch, 0, 0, TO_ROOM);
 
 				/* should damage all their stuff */
-				DamageAllStuff(ch, BLOW_DAMAGE);
+				DamageAllStuff(ch, BLOW_DAMAGE, GET_HIT(ch));
 
 				return(TRUE);
 
@@ -722,7 +722,7 @@ int check_falling(struct char_data* ch) {
 				/*
 				 * should damage all their stuff
 				 */
-				DamageAllStuff(ch, BLOW_DAMAGE);
+				DamageAllStuff(ch, BLOW_DAMAGE, GET_HIT(ch));
 
 				return(TRUE);
 
@@ -738,7 +738,7 @@ int check_falling(struct char_data* ch) {
 				act("Schizzi di $c0001sangue$c0007 e pezzi di $c0013carne$c0007 si spargono ovunque.", FALSE, ch, 0, 0, TO_ROOM);
 
 				/* should damage all their stuff */
-				DamageAllStuff(ch, BLOW_DAMAGE);
+				DamageAllStuff(ch, BLOW_DAMAGE, GET_HIT(ch));
 
 				if(!IS_IMMORTAL(ch)) {
 					GET_HIT(ch) = 0;
@@ -760,7 +760,7 @@ int check_falling(struct char_data* ch) {
 				act("$n atterra con un risonante $c5009THUMP$c0007!", FALSE, ch, 0, 0, TO_ROOM);
 
 				/* should damage all their stuff */
-				DamageAllStuff(ch, BLOW_DAMAGE);
+				DamageAllStuff(ch, BLOW_DAMAGE, GET_HIT(ch));
 
 				return(TRUE);
 			}

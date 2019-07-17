@@ -2330,8 +2330,25 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
         obj->value_exp_edit = fread_number(f);
     }
 
-    obj->obj_flags.hitp = 100.0;
-    obj->obj_flags.hitpTot = 100.0;
+    obj->obj_flags.hitp = ObjectHitPoints[GET_ITEM_TYPE(obj)];
+    obj->obj_flags.hitpTot = ObjectHitPoints[GET_ITEM_TYPE(obj)];
+
+    if(GET_ITEM_TYPE(obj) == ITEM_WEAPON || GET_ITEM_TYPE(obj) == ITEM_FIREWEAPON)
+    {
+        obj->obj_flags.hitp     += obj->obj_flags.value[2] * 10;
+        obj->obj_flags.hitpTot  += obj->obj_flags.value[2] * 10;
+    }
+    else if(GET_ITEM_TYPE(obj) == ITEM_ARMOR)
+    {
+        obj->obj_flags.hitp     += obj->obj_flags.value[1] * 10;
+        obj->obj_flags.hitpTot  += obj->obj_flags.value[1] * 10;
+    }
+
+    if(IS_RARE(obj))
+    {
+        obj->obj_flags.hitp     *= 2;
+        obj->obj_flags.hitpTot  *= 2;
+    }
 
 	SetStatus("Reading forbidden string in read_obj_from_file", NULL);
 

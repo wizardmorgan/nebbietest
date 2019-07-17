@@ -86,7 +86,10 @@ void spell_magic_missile(byte level, struct char_data* ch,
 
 	dam = dice((static_cast<int>(level / 2) + 1), 4) + static_cast<int>(level / 2);
     mudlog(LOG_CHECK, "Damage prima dello spellpower: %d", dam);
-    dam += DAM_SP_BONUS(ch);
+    if(!obj)
+    {
+        dam += DAM_SP_BONUS(ch);
+    }
     mudlog(LOG_CHECK, "Damage dopo lo spellpower: %d", dam);
 
 	if(affected_by_spell(victim,SPELL_SHIELD)) {
@@ -1431,7 +1434,7 @@ void spell_heal(byte level, struct char_data* ch,
 //	alter_hit(victim,0);
 
 	if(GET_HIT(victim) >= hit_limit(victim)) {
-        healpoints = 100 - (GET_HIT(victim) - hit_limit(victim));
+        healpoints = healpoints - (GET_HIT(victim) - hit_limit(victim));
 
         if(GET_HIT(victim) == hit_limit(victim))
         {

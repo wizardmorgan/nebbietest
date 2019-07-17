@@ -176,6 +176,9 @@ l'array connected_types in constants.cpp
 ** ELEC_DAMAGE                                  =3
 ** BLOW_DAMAGE                                  =4
 ** ACID_DAMAGE                                  =5
+** BLUNT_DAMAGE                                 =6
+** PIERCE_DAMAGE                                =7
+** SLASH_DAMAGE                                 =8
 == Enumerations ==
 
 === enum e_events ===

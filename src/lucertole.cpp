@@ -592,7 +592,7 @@ ROOMSPECIAL_FUNC(Rampicante) {
 						send_to_char("Cadi verso il basso e ti schianti sul terreno!\n\r",
 									 ch);
 
-						DamageAllStuff(ch, BLOW_DAMAGE);
+						DamageAllStuff(ch, BLOW_DAMAGE, number(30, GET_HIT(ch)));
 					}
 
 					if(GET_HIT(ch) > 30) {

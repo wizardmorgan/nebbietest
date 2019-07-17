@@ -43,7 +43,7 @@ struct QuestItem {
 	const char* where;
 };
 
-struct TableReistPC
+struct TableResistPC
 {
     int racial_pc;
     int equip_pc;
@@ -53,6 +53,36 @@ struct TableReistPC
     const char* name;
 };
 
+struct RaceListTable
+{
+    int min[6];
+    int max[6];
+    int max_stat_points;
+    int statMaster;
+    int speak;
+    bool is_PC_race;
+    bool reincarnate;
+    int isHuge;     //  0 = not huge, 100 = huge,   es. troll 80
+    int damage;
+    int spellpower;
+    int hitroll;
+    int spellfail;
+    int hp;
+    int hp_reg;
+    int mana;
+    int mana_reg;
+    int move;
+    int move_reg;
+    int resistances[25];
+    int d_r_blunt;
+    int d_r_slash;
+    int d_r_pierce;
+    int d_r_magic;
+    unsigned long affect;
+    int innate_skill1;
+    int innate_skill2;
+    int innate_skill3;
+};
 /*
  * Achievements
  */

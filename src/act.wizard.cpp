@@ -1884,6 +1884,9 @@ ACTION_FUNC(do_stat) {
 					j->obj_flags.cost_per_day, j->obj_flags.timer);
 			send_to_char(buf, ch);
 
+            sprintf(buf, "$c0005Hit Points: $c0014%.3f$c0005/$c0014%.3f\n\r", j->obj_flags.hitp, j->obj_flags.hitpTot);
+            send_to_char(buf, ch);
+
             sprintf(buf, "$c0005Edited Exp: $c0014%ld$c0005, Edited Rune: $c0014%d\n\r", j->value_exp_edit, j->value_rune_edit);
             send_to_char(buf, ch);
 
@@ -4018,17 +4021,17 @@ void roll_abilities(struct char_data* ch) {
 	else {   /*NEW_ROLL, ch->desc->stat contiene i valori invece delle stat*/
 		mudlog(LOG_PLAYERS, "%s ha rollato con metodo: %c", GET_NAME(ch),
 			   Rollata);
-		ch->abilities.str = STAT_MIN_VAL + ch->desc->stat[0]
+		ch->abilities.str = STAT_MIN_VAL(ch, STAT_STR) + ch->desc->stat[0]
 							+ (Rollata = 'N' ? 0 : number(0, 2) - 1);
-		ch->abilities.intel = STAT_MIN_VAL + ch->desc->stat[1]
+		ch->abilities.intel = STAT_MIN_VAL(ch, STAT_INT) + ch->desc->stat[1]
 							  + (Rollata = 'N' ? 0 : number(0, 2) - 1);
-		ch->abilities.wis = STAT_MIN_VAL + ch->desc->stat[2]
+		ch->abilities.wis = STAT_MIN_VAL(ch, STAT_WIS) + ch->desc->stat[2]
 							+ (Rollata = 'N' ? 0 : number(0, 2) - 1);
-		ch->abilities.dex = STAT_MIN_VAL + ch->desc->stat[3]
+		ch->abilities.dex = STAT_MIN_VAL(ch, STAT_DEX) + ch->desc->stat[3]
 							+ (Rollata = 'N' ? 0 : number(0, 2) - 1);
-		ch->abilities.con = STAT_MIN_VAL + ch->desc->stat[4]
+		ch->abilities.con = STAT_MIN_VAL(ch, STAT_CON) + ch->desc->stat[4]
 							+ (Rollata = 'N' ? 0 : number(0, 2) - 1);
-		ch->abilities.chr = STAT_MIN_VAL + ch->desc->stat[5]
+		ch->abilities.chr = STAT_MIN_VAL(ch, STAT_CHR) + ch->desc->stat[5]
 							+ (Rollata = 'N' ? 0 : number(0, 2) - 1);
 	}
 #endif
@@ -5913,6 +5916,8 @@ void save_ghost_forcerent(struct char_data* ch)
     }
 
     char_to_store(ch, &tmp_store);
+    tmp_store.load_room = AUTO_RENT;
+
     sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(ch->player.name));
     if((fl = fopen(szFileName, "r+b")) == NULL)
     {
