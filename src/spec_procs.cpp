@@ -153,7 +153,7 @@ int GainLevel(struct char_data* ch, int iClass) {
 			return(TRUE);
 		}
 		else {
-			send_to_char("Non puoi avanzare oltre in questa classe\n\r", ch);
+			send_to_char("Non puoi avanzare oltre in questa classe.\n\r", ch);
 		}
 	}
 	else {
@@ -242,9 +242,15 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 	}
 
 	if(IS_NPC(ch)) {
-		act("$N ti dice 'Ti sembro un addestratore di animali ?'", FALSE,
-			ch, 0, guildmaster, TO_CHAR);
-		return(FALSE);
+        if(GET_SEX(guildmaster) == SEX_FEMALE)
+        {
+            act("$N ti dice 'Ti sembro una addestratrice di animali?'", FALSE, ch, 0, guildmaster, TO_CHAR);
+        }
+        else
+        {
+            act("$N ti dice 'Ti sembro un addestratore di animali?'", FALSE, ch, 0, guildmaster, TO_CHAR);
+        }
+        return(FALSE);
 	}
 
 	for(; *arg == ' '; arg++);
@@ -255,7 +261,7 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 				if(GET_LEVEL(ch,MAGE_LEVEL_IND) < GetMaxLevel(guildmaster)-10) {
 					if(GET_EXP(ch) <
 							titles[MAGE_LEVEL_IND][GET_LEVEL(ch, MAGE_LEVEL_IND)+1].exp) {
-						act("Non sei ancora pront$b\n\r", FALSE, ch, 0, guildmaster,
+						act("Non sei ancora pront$b.\n\r", FALSE, ch, 0, guildmaster,
 							TO_CHAR);
 						return FALSE;
 					}
@@ -265,7 +271,7 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 					}
 				}
 				else {
-					send_to_char("Non posso allenarti, devi cercare qualcun altro.\n\r",
+					send_to_char("Non posso insegnarti nulla, devi cercare qualcun altro.\n\r",
 								 ch);
 				}
 			}
@@ -273,7 +279,7 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 				if(GET_LEVEL(ch,SORCERER_LEVEL_IND) < GetMaxLevel(guildmaster)-10) {
 					if(GET_EXP(ch) < titles[SORCERER_LEVEL_IND]
 							[GET_LEVEL(ch, SORCERER_LEVEL_IND)+1].exp) {
-						act("Non sei ancora pront$b\n\r", FALSE, ch, 0, guildmaster,
+						act("Non sei ancora pront$b.\n\r", FALSE, ch, 0, guildmaster,
 							TO_CHAR);
 						return FALSE;
 					}
@@ -283,7 +289,7 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 					}
 				}
 				else {
-					send_to_char("Non posso allenarti, devi cercare qualcun altro.\n\r",
+					send_to_char("Non posso insegnarti nulla, devi cercare qualcun altro.\n\r",
 								 ch);
 				}
 			}
@@ -291,10 +297,9 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 		}
 		else if(cmd == CMD_PRACTICE) {
 			if(!*arg) {
-				sprintf(buf,"Hai a disposizione %d sessioni di pratica.\n\r",
-						ch->specials.spells_to_learn);
+				sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 				send_to_char(buf, ch);
-				send_to_char("Puoi praticare questi spells:\n\r", ch);
+				send_to_char("Puoi esercitarti in questi incantesimi:\n\r", ch);
 
 				for(max=1; max<=GET_LEVEL(ch,(HasClass(ch,CLASS_MAGIC_USER)) ? MAGE_LEVEL_IND :SORCERER_LEVEL_IND); max++) { // SALVO ordino le prac mageguild
 					for(i=0; *spells[i] != '\n'; i++) {
@@ -307,7 +312,7 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 									GET_LEVEL_CASTER(ch, MAGE_LEVEL_IND) &&
 									spell_info[ i + 1 ].min_level_magic <=
 									GetMaxLevel(guildmaster) - 10) {
-								sprintf(buf,"[%d] %s %s \n\r",
+								sprintf(buf,"[$c0015%d$c0007] %s %s \n\r",
 										spell_info[i+1].min_level_magic,
 										spells[i],how_good(ch->skills[i+1].learned));
 								send_to_char(buf, ch);
@@ -322,7 +327,7 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 									GET_LEVEL_CASTER(ch, SORCERER_LEVEL_IND) &&
 									spell_info[ i + 1 ].min_level_sorcerer <= // SALVO mi pare che qui non sia min_level_magic
 									GetMaxLevel(guildmaster) - 10) {
-								sprintf(buf,"[%d] %s %s \n\r",
+								sprintf(buf,"[$c0015%d$c0007] %s %s \n\r",
 										spell_info[ i + 1 ].min_level_sorcerer, // SALVO mi pare che qui non sia min_level_magic
 										spells[i],how_good(ch->skills[i+1].learned));
 								send_to_char(buf, ch);
@@ -368,7 +373,7 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 
 				if(ch->skills[ number ].learned >= 60) {
 					do_say(guildmaster,
-						   "Io non posso piu' insegnarti nulla su questa magia. "
+						   "Non posso piu' insegnarti nulla su questa magia. "
 						   "Puoi migliorare solo usandola.", 0);
 					return(TRUE);
 				}
@@ -392,7 +397,7 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 				ch->skills[ number ].learned += int_app[(int)GET_INT(ch) ].learn;
 
 				if(ch->skills[ number ].learned >= 95) {
-					act("Tu sei espert$b in questa materia.\n\r", FALSE, ch, 0, 0,
+					act("Sei espert$b in questa materia.\n\r", FALSE, ch, 0, 0,
 						TO_CHAR);
 				}
 				return TRUE;
@@ -402,11 +407,10 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 	/**** SALVO skills prince ****/
 	else if(IS_PRINCE(ch) && !HasClass(ch,CLASS_MAGIC_USER) && cmd !=CMD_GAIN) {
 		if(!*arg) {
-			sprintf(buf,"Hai ancora %d sessioni di pratica.\n\r",
-					ch->specials.spells_to_learn);
+			sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 			send_to_char(buf, ch);
-			send_to_char("Puoi praticare questa skills:\n\r", ch);
-			sprintf(buf,"[%d] %s %s \n\r",
+			send_to_char("Puoi imparare questo incantesimo:\n\r", ch);
+			sprintf(buf,"[$c0015%d$c0007] %s %s \n\r",
 					PRINCIPE,spells[SPELL_CHAIN_LIGHTNING-1],
 					how_good(ch->skills[SPELL_CHAIN_LIGHTNING].learned));
 			send_to_char(buf, ch);
@@ -415,22 +419,22 @@ MOBSPECIAL_FUNC(MageGuildMaster) {
 		for(; isspace(*arg); arg++);
 		number = old_search_block(arg,0,strlen(arg),spells,FALSE);
 		if(number == -1) {
-			send_to_char("Non conosco questa pratica...\n\r", ch);
+			send_to_char("Non conosco questo incantesimo...\n\r", ch);
 			return(TRUE);
 		}
 		if(number !=SPELL_CHAIN_LIGHTNING) {
-			send_to_char("Non posso insegnarti questa pratica...\n\r", ch);
+			send_to_char("Non posso insegnarti questo incantesimo...\n\r", ch);
 			return(TRUE);
 		}
 		if(ch->specials.spells_to_learn <= 0) {
-			send_to_char("Non hai pratiche a disposizione.\n\r", ch);
+			send_to_char("Non hai abbastanza sessioni di allenamento a disposizione.\n\r", ch);
 			return(TRUE);
 		}
 		if(ch->skills[number].learned >= 45) {
 			send_to_char("Non posso aiutarti a migliorati ancora.\n\r", ch);
 			return(TRUE);
 		}
-		send_to_char("Hai fatto pratica...\n\r", ch);
+		send_to_char("Ti alleni per un po'...\n\r", ch);
 		ch->specials.spells_to_learn--;
 
 
@@ -484,8 +488,14 @@ MOBSPECIAL_FUNC(ClericGuildMaster) {
 	}
 
 	if(IS_NPC(ch)) {
-		act("$N tells you 'What do i look like, an animal trainer?'", FALSE,
-			ch, 0, guildmaster, TO_CHAR);
+        if(GET_SEX(guildmaster) == SEX_FEMALE)
+        {
+            act("$N ti dice 'Ti sembro una addestratrice di animali?'", FALSE, ch, 0, guildmaster, TO_CHAR);
+        }
+        else
+        {
+            act("$N ti dice 'Ti sembro un addestratore di animali?'", FALSE, ch, 0, guildmaster, TO_CHAR);
+        }
 		return(FALSE);
 	}
 
@@ -514,16 +524,15 @@ MOBSPECIAL_FUNC(ClericGuildMaster) {
 #endif
 			}
 			else {
-				send_to_char("I cannot train you.. You must find another.\n\r",ch);
+				send_to_char("Non posso insegnarti nulla, devi trovare qualcun altro.\n\r",ch);
 			}
 			return(TRUE);
 		}
 
 		if(!*arg) {
-			sprintf(buf,"You have got %d practice sessions left.\n\r",
-					ch->specials.spells_to_learn);
+			sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 			send_to_char(buf, ch);
-			send_to_char("You can practice any of these spells:\n\r", ch);
+			send_to_char("Puoi esercitarti in questi incantesimi:\n\r", ch);
 			for(max=1; max<=GET_LEVEL(ch,CLERIC_LEVEL_IND); max++) { // SALVO ordino le prac clericguild
 				for(i=0; *spells[i] != '\n'; i++) {
 					if(spell_info[i+1].min_level_cleric != max) {
@@ -534,7 +543,7 @@ MOBSPECIAL_FUNC(ClericGuildMaster) {
 							 GET_LEVEL_CASTER(ch,CLERIC_LEVEL_IND)) &&
 							(spell_info[i+1].min_level_cleric <=
 							 GetMaxLevel(guildmaster)-10)) {
-						sprintf(buf,"[%d] %s %s \n\r",
+						sprintf(buf,"[$c0015%d$c0007] %s %s \n\r",
 								spell_info[i+1].min_level_cleric,spells[i],
 								how_good(ch->skills[i+1].learned));
 						send_to_char(buf, ch);
@@ -547,19 +556,19 @@ MOBSPECIAL_FUNC(ClericGuildMaster) {
 		number = old_search_block(arg,0,strlen(arg),spells,FALSE);
 		if(number == -1
 				|| (HasClass(ch,CLASS_CLERIC) && spell_info[ number ].min_level_cleric <1)) { // SALVO non si praccano quelle sconosciute
-			send_to_char("You do not know of this spell...\n\r", ch);
+			send_to_char("Non conosco questo tipo di incantesimo.\n\r", ch);
 			return(TRUE);
 		}
 		if(GET_LEVEL_CASTER(ch,CLERIC_LEVEL_IND) < spell_info[number].min_level_cleric) {
-			send_to_char("You do not know of this spell...\n\r", ch);
+			send_to_char("Non sei abbastanza potente per imparare questo incantesimo.\n\r", ch);
 			return(TRUE);
 		}
 		if(GetMaxLevel(guildmaster)-10 < spell_info[number].min_level_cleric) {
-			do_say(guildmaster, "I don't know of this spell.", 0);
+			do_say(guildmaster, "Non conosco questo incantesimo.", 0);
 			return(TRUE);
 		}
 		if(ch->specials.spells_to_learn <= 0) {
-			send_to_char("You do not seem to be able to practice now.\n\r", ch);
+			send_to_char("Non hai abbastanza sessioni di allenamento.\n\r", ch);
 			return(TRUE);
 		}
 		/* SALVO rimuovo questa procedura causa la memorizzazione non conteggiata, occhio rimane nei pc vecchi
@@ -572,10 +581,10 @@ MOBSPECIAL_FUNC(ClericGuildMaster) {
 		     }
 		*/
 		if(ch->skills[number].learned >= 45) {
-			send_to_char("You must use this spell to get any better.  I cannot train you further.\n\r", ch);
+			send_to_char("Non posso insegnarti altro, devi fare pratica per imparare meglio questo incantesimo.\n\r", ch);
 			return(TRUE);
 		}
-		send_to_char("You Practice for a while...\n\r", ch);
+		send_to_char("Ti alleni per un po'...\n\r", ch);
 		ch->specials.spells_to_learn--;
 
 		if(!IS_SET(ch->skills[number].flags, SKILL_KNOWN)) {
@@ -586,18 +595,17 @@ MOBSPECIAL_FUNC(ClericGuildMaster) {
 		ch->skills[ number ].learned += int_app[(int)GET_INT(ch) ].learn;
 
 		if(ch->skills[number].learned >= 95) {
-			send_to_char("You are now learned in this area.\n\r", ch);
+			act("Sei espert$b in questa materia.", FALSE, ch, 0, 0, TO_CHAR);
 		}
 		return(TRUE);
 	}
 	/**** SALVO skills prince ****/
 	else if(IS_PRINCE(ch) && !HasClass(ch, CLASS_CLERIC) && cmd !=CMD_GAIN) {
 		if(!*arg) {
-			sprintf(buf,"Hai ancora %d sessioni di pratica.\n\r",
-					ch->specials.spells_to_learn);
+			sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 			send_to_char(buf, ch);
-			send_to_char("Puoi praticare questa skills:\n\r", ch);
-			sprintf(buf,"[%d] %s %s \n\r",
+			send_to_char("Puoi imparare questo incantesimo:\n\r", ch);
+			sprintf(buf,"[$c0015%d$c0007] %s %s \n\r",
 					PRINCIPE,spells[SPELL_CURE_CRITIC-1],
 					how_good(ch->skills[SPELL_CURE_CRITIC].learned));
 			send_to_char(buf, ch);
@@ -606,22 +614,22 @@ MOBSPECIAL_FUNC(ClericGuildMaster) {
 		for(; isspace(*arg); arg++);
 		number = old_search_block(arg,0,strlen(arg),spells,FALSE);
 		if(number == -1) {
-			send_to_char("Non conosco questa pratica...\n\r", ch);
+			send_to_char("Non conosco questo incantesimo...\n\r", ch);
 			return(TRUE);
 		}
 		if(number !=SPELL_CURE_CRITIC) {
-			send_to_char("Non posso insegnarti questa pratica...\n\r", ch);
+			send_to_char("Non posso insegnarti questo incantesimo...\n\r", ch);
 			return(TRUE);
 		}
 		if(ch->specials.spells_to_learn <= 0) {
-			send_to_char("Non hai pratiche a disposizione.\n\r", ch);
+			send_to_char("Non hai abbastanza sessioni di allenamento a disposizione.\n\r", ch);
 			return(TRUE);
 		}
 		if(ch->skills[number].learned >= 45) {
-			send_to_char("Non posso aiutarti a migliorati ancora.\n\r", ch);
+			send_to_char("Non posso aiutarti a migliorati ancora, devi fare pratica.\n\r", ch);
 			return(TRUE);
 		}
-		send_to_char("Hai fatto pratica...\n\r", ch);
+		send_to_char("Ti alleni per un po'...\n\r", ch);
 		ch->specials.spells_to_learn--;
 
 
@@ -685,23 +693,28 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 	for(; *arg==' '; arg++); /* ditch spaces */
 	if(cmd == CMD_PRACTICE || cmd == CMD_GAIN) {
 		if(IS_NPC(ch)) {
-			act("$N tells you 'Cosa ti sembro, un ammaestratore di animali?'", FALSE,
-				ch, 0, guildmaster, TO_CHAR);
+            if(GET_SEX(guildmaster) == SEX_FEMALE)
+            {
+                act("$N ti dice 'Ti sembro una addestratrice di animali?'", FALSE, ch, 0, guildmaster, TO_CHAR);
+            }
+            else
+            {
+                act("$N ti dice 'Ti sembro un addestratore di animali?'", FALSE, ch, 0, guildmaster, TO_CHAR);
+            }
 			return(FALSE);
 		}
 		/**** SALVO skills prince            VVVVVVVVVVVVVVVVV ****/
 		if(!HasClass(ch, CLASS_THIEF) && !IS_PRINCE(ch)) {
-			send_to_char("Il ThiefGuildmaster dice 'Vattene via di qui!'\n\r",ch);
+			act("$N ti dice 'Vattene via di qui!'", FALSE, ch, 0, guildmaster, TO_CHAR);
 			return TRUE;
 		}
 		/**** SALVO skills prince ****/
 		else if(IS_PRINCE(ch) && !HasClass(ch, CLASS_THIEF) && cmd !=CMD_GAIN) {
 			if(!*arg) {
-				sprintf(buf,"Hai ancora %d sessioni di pratica.\n\r",
-						ch->specials.spells_to_learn);
+				sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 				send_to_char(buf, ch);
-				send_to_char("Puoi praticare questa skills:\n\r", ch);
-				sprintf(buf,"[%d] %s %s \n\r",
+				send_to_char("Puoi esercitarti in questa abilita':\n\r", ch);
+				sprintf(buf,"[$c0015%d$c0007] %s %s \n\r",
 						PRINCIPE,spells[SKILL_HIDE-1],
 						how_good(ch->skills[SKILL_HIDE].learned));
 				send_to_char(buf, ch);
@@ -710,15 +723,15 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 			for(; isspace(*arg); arg++);
 			number = old_search_block(arg,0,strlen(arg),spells,FALSE);
 			if(number == -1) {
-				send_to_char("Non conosco questa pratica...\n\r", ch);
+				send_to_char("Non conosco questa abilita'...\n\r", ch);
 				return(TRUE);
 			}
 			if(number !=SKILL_HIDE) {
-				send_to_char("Non posso insegnarti questa pratica...\n\r", ch);
+				send_to_char("Non posso insegnarti questa abilita'...\n\r", ch);
 				return(TRUE);
 			}
 			if(ch->specials.spells_to_learn <= 0) {
-				send_to_char("Non hai pratiche a disposizione.\n\r", ch);
+				send_to_char("Non hai abbastanza sessioni di pratiche a disposizione.\n\r", ch);
 				return(TRUE);
 			}
 			if(ch->skills[number].learned >= 45) {
@@ -751,7 +764,7 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 
 			if(GET_EXP(ch) <
 					titles[THIEF_LEVEL_IND][GET_LEVEL(ch, THIEF_LEVEL_IND)+1].exp) {
-				send_to_char("Non sei ancora in grado di apprendere questo.\n\r", ch);
+				act("Non sei ancora pront$b.", FALSE, ch, 0, 0, TO_CHAR);
 				return(FALSE);
 			}
 			else {
@@ -761,8 +774,7 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 		} /* end gain */
 
 		if(!arg || (strlen(arg) == 0)) {
-			sprintf(buf,"Hai %d sessioni di pratica.\n\r",
-					ch->specials.spells_to_learn);
+			sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 			send_to_char(buf,ch);
 
 			sprintf(buf," sneak           :  %s\n\r",how_good(ch->skills[SKILL_SNEAK].learned));
@@ -792,7 +804,8 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 		}
 		else {
 			number = old_search_block(arg,0,strlen(arg),n_skills,FALSE);
-			send_to_char("Il Maestro dei Ladri dice ",ch);
+            sprintf(buf, "%s dice ", guildmaster->player.short_descr);
+			send_to_char(buf, ch);
 
 			if(number == -1) {
 				send_to_char("'Non conosco questa abilita'.'\n\r", ch);
@@ -837,7 +850,7 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 
 			default:
 				mudlog(LOG_SYSERR, "Strangeness in Thief Guildmaster (%d)", number);
-				send_to_char("'Ack!  Mi sento male!'\n\r", ch);
+				send_to_char("'Aiuto! Mi sento male!'\n\r", ch);
 				return(TRUE);
 			} /* end switch */
 
@@ -845,17 +858,17 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 					&&sk_num!=SKILL_RETREAT
 					&&sk_num!=SKILL_TSPY
 					&&sk_num!=SKILL_EAVESDROP) {
-				send_to_char("'You must learn from practice and experience now.'\n\r", ch);
+				send_to_char("'Non posso insegnarti altro, devi imparare dalla pratica e dall'esperienza.'\n\r", ch);
 				return(TRUE);
 			}
 
 			if(ch->specials.spells_to_learn <= 0) {
 				send_to_char
-				("'You must first use the knowledge you already have.'\n\r",ch);
+				("'Non hai abbastanza sessioni di allenamento.'\n\r",ch);
 				return(FALSE);
 			}
 
-			send_to_char("'This is how you do it...'\n\r",ch);
+			send_to_char("'Ecco come si fa...'\n\r",ch);
 			ch->specials.spells_to_learn--;
 
 			if(!IS_SET(ch->skills[sk_num].flags, SKILL_KNOWN)) {
@@ -866,7 +879,8 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 			ch->skills[ sk_num ].learned += int_app[(int)GET_INT(ch) ].learn;
 
 			if(ch->skills[sk_num].learned >= 95) {
-				send_to_char("'You are now a master of this art.'\n\r", ch);
+				sprintf(buf, "'Adesso sei %s maestr%s in questa arte.'\n\r", SSLF(ch), UNUNA(ch));
+                send_to_char(buf, ch);
 			}
 			return(TRUE);
 		}
@@ -912,23 +926,28 @@ MOBSPECIAL_FUNC(WarriorGuildMaster) {
 	for(; *arg==' '; arg++); /* ditch spaces */
 	if(cmd==CMD_PRACTICE || cmd==CMD_GAIN) {
 		if(IS_NPC(ch)) {
-			act("$N tells you 'What do i look like, an animal trainer?'", FALSE,
-				ch, 0, guildmaster, TO_CHAR);
+            if(GET_SEX(guildmaster) == SEX_FEMALE)
+            {
+                act("$N ti dice 'Ti sembro una addestratrice di animali?'", FALSE, ch, 0, guildmaster, TO_CHAR);
+            }
+            else
+            {
+                act("$N ti dice 'Ti sembro un addestratore di animali?'", FALSE, ch, 0, guildmaster, TO_CHAR);
+            }
 			return(FALSE);
 		}
 		/**** SALVO skills prince            VVVVVVVVVVVVVVVVV ****/
 		if(!HasClass(ch, CLASS_WARRIOR) && !IS_PRINCE(ch)) {
-			send_to_char("The Warrior Guildmaster says 'Get out of here!'\n\r",ch);
+			act("$N ti dice 'Vattene via di qui!'", FALSE, ch, 0, guildmaster, TO_CHAR);
 			return(TRUE);
 		}
 		/**** SALVO skills prince ****/
 		else if(IS_PRINCE(ch) && !HasClass(ch, CLASS_WARRIOR) && cmd !=CMD_GAIN) {
 			if(!*arg) {
-				sprintf(buf,"Hai ancora %d sessioni di pratica.\n\r",
-						ch->specials.spells_to_learn);
+				sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 				send_to_char(buf, ch);
-				send_to_char("Puoi praticare questa skills:\n\r", ch);
-				sprintf(buf,"[%d] %s %s \n\r",
+				send_to_char("Puoi esercitarti in questa abilita':\n\r", ch);
+				sprintf(buf,"[$c0015%d$c0007] %s %s \n\r",
 						PRINCIPE,spells[SKILL_RESCUE-1],
 						how_good(ch->skills[SKILL_RESCUE].learned));
 				send_to_char(buf, ch);
@@ -937,22 +956,22 @@ MOBSPECIAL_FUNC(WarriorGuildMaster) {
 			for(; isspace(*arg); arg++);
 			number = old_search_block(arg,0,strlen(arg),spells,FALSE);
 			if(number == -1) {
-				send_to_char("Non conosco questa pratica...\n\r", ch);
+				send_to_char("Non conosco questa abilita'...\n\r", ch);
 				return(TRUE);
 			}
 			if(number !=SKILL_RESCUE) {
-				send_to_char("Non posso insegnarti questa pratica...\n\r", ch);
+				send_to_char("Non posso insegnarti questa abilita'...\n\r", ch);
 				return(TRUE);
 			}
 			if(ch->specials.spells_to_learn <= 0) {
-				send_to_char("Non hai pratiche a disposizione.\n\r", ch);
+				send_to_char("Non hai sessioni di allenamento a disposizione.\n\r", ch);
 				return(TRUE);
 			}
 			if(ch->skills[number].learned >= 45) {
-				send_to_char("Non posso aiutarti a migliorati ancora.\n\r", ch);
+				send_to_char("Non posso aiutarti a migliorati, devi fare pratica ed esperienza.\n\r", ch);
 				return(TRUE);
 			}
-			send_to_char("Hai fatto pratica...\n\r", ch);
+			send_to_char("Si fa cosi'!\n\r", ch);
 			ch->specials.spells_to_learn--;
 
 
@@ -972,13 +991,13 @@ MOBSPECIAL_FUNC(WarriorGuildMaster) {
 
 		if(cmd==CMD_GAIN) {
 			if(GET_LEVEL(ch,WARRIOR_LEVEL_IND) >= GetMaxLevel(guildmaster)-10) {
-				send_to_char("You must learn from another, I can no longer train you.\n\r",ch);
+                act("Devi andare da qualcun altro, non sono abbastanza espert$B per insegnarti ulteriormente.", FALSE, ch, 0, guildmaster, TO_CHAR);
 				return(TRUE);
 			}
 
 			if(GET_EXP(ch)<
 					titles[WARRIOR_LEVEL_IND][GET_LEVEL(ch, WARRIOR_LEVEL_IND)+1].exp) {
-				send_to_char("You are not yet ready to gain.\n\r", ch);
+				act("Non sei ancora pront$b.", FALSE, ch, 0, 0, TO_CHAR);
 				return(FALSE);
 			}
 			else {
@@ -989,8 +1008,7 @@ MOBSPECIAL_FUNC(WarriorGuildMaster) {
 
 
 		if(!arg || (strlen(arg) == 0)) {
-			sprintf(buf,"You have got %d practice sessions left.\n\r",
-					ch->specials.spells_to_learn);
+			sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 			send_to_char(buf,ch);
 
 			sprintf(buf," kick          :  %s\n\r",how_good(ch->skills[SKILL_KICK].learned));
@@ -1007,10 +1025,11 @@ MOBSPECIAL_FUNC(WarriorGuildMaster) {
 		}
 		else {
 			number = old_search_block(arg,0,strlen(arg),n_skills,FALSE);
-			send_to_char("The Warrior Guildmaster says ",ch);
+            sprintf(buf, "%s dice ", guildmaster->player.short_descr);
+            send_to_char(buf, ch);
 
 			if(number == -1) {
-				send_to_char("'I do not know of this skill.'\n\r", ch);
+				send_to_char("'Non ho mai sentito parlare di questa abilita'.'\n\r", ch);
 				return(TRUE);
 			}
 
@@ -1034,21 +1053,21 @@ MOBSPECIAL_FUNC(WarriorGuildMaster) {
 
 			default:
 				mudlog(LOG_SYSERR, "Strangeness in Warrior Guildmaster (%d)", number);
-				send_to_char("'Ack!  I feel sick!'\n\r", ch);
+				send_to_char("'Aiutatemi! Mi sento male!'\n\r", ch);
 				return(TRUE);
 			} /* end switch */
 
 			if(ch->skills[sk_num].learned > 45) {
-				send_to_char("'You must learn from practice and experience now.'\n\r", ch);
+				send_to_char("'Devi fare pratica ed esperienza per migliorarti!'\n\r", ch);
 				return(TRUE);
 			}
 
 			if(ch->specials.spells_to_learn <= 0) {
-				send_to_char("'You must first use the knowledge you already have.'\n\r",ch);
+				send_to_char("'Non hai abbastanza sessioni di allenamento.'\n\r",ch);
 				return(FALSE);
 			}
 
-			send_to_char("'This is how you do it...'\n\r",ch);
+			send_to_char("'Questo e' il modo corretto di farlo...'\n\r",ch);
 			ch->specials.spells_to_learn--;
 
 			if(!IS_SET(ch->skills[sk_num].flags, SKILL_KNOWN)) {
@@ -1059,7 +1078,8 @@ MOBSPECIAL_FUNC(WarriorGuildMaster) {
 			ch->skills[ sk_num ].learned += int_app[(int)GET_INT(ch) ].learn;
 
 			if(ch->skills[sk_num].learned >= 95) {
-				send_to_char("'You are now a master of this art.'\n\r", ch);
+                sprintf(buf, "'Adesso sei %s maestr%s in questa arte.'\n\r", SSLF(ch), UNUNA(ch));
+                send_to_char(buf, ch);
 			}
 			return(TRUE);
 		}

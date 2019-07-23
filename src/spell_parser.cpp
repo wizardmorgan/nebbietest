@@ -351,6 +351,8 @@ const char* spells[]= {
     "forge",
     "determine",
     "equilibrium",
+    "lust for power",
+    "lust for money",
 	"\n"
 };
 

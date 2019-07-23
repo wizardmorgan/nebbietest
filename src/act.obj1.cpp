@@ -833,6 +833,7 @@ int newstrlen(const char* p) {
 
 void truegivexp(struct char_data* ch, struct char_data* victim, int amount) {
 	char buf[300];
+    int lust;
 	/* Workaround, se si aggiusta gain_exp DEVE sparire il diviso howmanyclas*/
 	gain_exp(ch,-(amount/HowManyClasses(ch)));
 	sprintf(buf, "Dai %d xp a $N.", amount);
@@ -841,6 +842,20 @@ void truegivexp(struct char_data* ch, struct char_data* victim, int amount) {
 	amount*=(100-number(3,10));
 	sprintf(buf, "$n ti da' %d xp.", amount);
 	act(buf, FALSE, ch, NULL, victim, TO_VICT);
+    //  se possiede la skill 'lust for power' guadagna il 5% di Xp
+    if(victim->skills && victim->skills[SKILL_LUST_FOR_POWER].learned)
+    {
+        if(number(1,101) < victim->skills[SKILL_LUST_FOR_POWER].learned)
+        {
+            lust = amount / 100 * 5;
+            if(lust > 0)
+            {
+                sprintf(buf, "$c0003La tua brama di potere aumenta la tua esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                send_to_char(buf, victim);
+                amount += lust;
+            }
+        }
+    }
 	/* gain_exp(victim,amount); ERRORE GRAVE, corretto! */
 	GET_EXP(victim) += amount/HowManyClasses(victim) ;
 	return;

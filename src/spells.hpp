@@ -365,8 +365,10 @@ namespace Alarmud {
 #define SKILL_DETERMINE             293   /* ACIDUS 2003 skill determine established per determinazione teleport */
 #define SKILL_EQUILIBRIUM           294   /* ACIDUS 2003 skill better equilibrium per equilibrio nanesco */
 
+#define SKILL_LUST_FOR_POWER        295     //  abilita' passiva razziale uomini
+#define SKILL_LUST_FOR_MONEY        296     //  abilita' passiva razziale uomini
 
-#define MAX_EXIST_SPELL             294   /* max number of skills/spells/status */
+#define MAX_EXIST_SPELL             296   /* max number of skills/spells/status */
 
 
 

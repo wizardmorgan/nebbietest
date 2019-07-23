@@ -38,6 +38,9 @@ namespace Alarmud {
 #define EDITED_RESI(ch, type)   ((ch)->resistenze[EDIT_RESI][type])
 #define CHECK_RESI(ch, type)    ((ch)->resistenze[TOTAL_RESI][type])
 
+//  definizione temporanea della max race per la tabella
+#define max_race_table  (RACE_HALFLING + 1)
+
 #define RM_BLOOD(rm)   (real_roomp(rm)->blood)
 
 //#define TRUE  1

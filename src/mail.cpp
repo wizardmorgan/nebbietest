@@ -99,7 +99,7 @@ INSTALLATION INSTRUCTIONS
 
            d->str = 0;
            if (d->connected == CON_EXDSCR) {
-              SEND_TO_Q(MENU, d);
+              SEND_TO_Q(ParseAnsiColors(TRUE, MENU), d);
                 . . . . .
 
 END OF INSTALLATION INSTRUCTIONS

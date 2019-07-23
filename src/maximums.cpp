@@ -194,6 +194,12 @@ int mana_limit(struct char_data* ch) {
 		max=100;  /* barbarians only get 100 mana... */
 	}
 
+    //  Race bonus
+    if(GET_RACE(ch) < max_race_table)
+    {
+        max += RaceStuffs[GET_RACE(ch)].mana;
+    }
+
 	return(max);
 }
 
@@ -207,6 +213,11 @@ int hit_limit(struct char_data* ch) {
 		age2(ch, &ma);
 		max = (ch->points.max_hit) + (graf(ma.year, 2,4,17,14,8,-5,-15));
         max += GET_E_HIT(ch);
+        //  Race bonus
+        if(GET_RACE(ch) < max_race_table)
+        {
+            max += RaceStuffs[GET_RACE(ch)].hp;
+        }
 	}
 	else
     {
@@ -227,6 +238,11 @@ int move_limit(struct char_data* ch) {
 	if(IS_PC(ch)) {
 		max = 100 ;
         max += GET_E_MOVE(ch);
+        //  Race bonus
+        if(GET_RACE(ch) < max_race_table)
+        {
+            max += RaceStuffs[GET_RACE(ch)].move;
+        }
 	}
 	else {
 		max = ch->points.max_move;
@@ -309,6 +325,12 @@ int mana_gain(struct char_data* ch) {
 
     //  sommo il mana_gain editato
     gain += ch->specials.mana_gain_edit;
+
+    //  Race bonus
+    if(GET_RACE(ch) < max_race_table)
+    {
+        gain += RaceStuffs[GET_RACE(ch)].mana_reg;
+    }
 
 	if(IS_AFFECTED(ch, AFF_POISON)) {
 		gain >>= 2;
@@ -432,6 +454,12 @@ int hit_gain(struct char_data* ch) // Gaia 2001
 
     //  sommo l' hit_gain editato
     gain += ch->specials.hit_gain_edit;
+
+    //  Race bonus
+    if(GET_RACE(ch) < max_race_table)
+    {
+        gain += RaceStuffs[GET_RACE(ch)].hp_reg;
+    }
 
 	if(GET_COND(ch,FULL) == 0 || GET_COND(ch, THIRST) == 0) {
 		gain >>= 4;
@@ -566,6 +594,12 @@ int move_gain(struct char_data* ch)
 
     //  sommo il move_gain editato
     gain += ch->specials.move_gain_edit;
+
+    //  Race bonus
+    if(GET_RACE(ch) < max_race_table)
+    {
+        gain += RaceStuffs[GET_RACE(ch)].move_reg;
+    }
 
 	if(IS_AFFECTED(ch,AFF_POISON)) {
 		gain >>= 5;
@@ -776,9 +810,14 @@ void advance_level(struct char_data* ch, int iClass)
 		ch->points.max_hit += MAX(1, check_hp);
 	}
 
-	if(ch->specials.spells_to_learn < 100)
-		ch->specials.spells_to_learn +=
-			MAX(2, wis_app[(int)GET_RWIS(ch) ].bonus);
+	if(ch->specials.spells_to_learn < 150)          //  aumentato il limite a 150 sessioni di pratica
+    {
+		ch->specials.spells_to_learn += MAX(2, wis_app[(int)GET_RWIS(ch) ].bonus);
+        if(GET_RACE(ch) == RACE_HUMAN)
+        {
+            ch->specials.spells_to_learn += 2;
+        }
+    }
 	else {
 		send_to_char("Stai perdendo le sessioni di allenamento!", ch);
 	}
@@ -1088,7 +1127,7 @@ void gain_exp_rev(struct char_data* ch, int gain) {
 	int i;
 	char buf[256];
 	short chrace;
-	int nClassiNonMaxxate=0;
+	int nClassiNonMaxxate=0, lust;
 	save_char(ch,AUTO_RENT, 0);
 	gain=gain_corretto(ch,gain);
 	if(!IS_PC(ch) && ch->master && IS_AFFECTED(ch, AFF_CHARM)) {
@@ -1105,6 +1144,20 @@ void gain_exp_rev(struct char_data* ch, int gain) {
 
 	if(!IS_IMMORTAL(ch)) {
 		if(gain > 0) {
+            //  se possiede la skill 'lust for power' guadagna il 5% di Xp
+            if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+            {
+                if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                {
+                    lust = gain / 100 * 5;
+                    if(lust > 0)
+                    {
+                        sprintf(buf, "$c0003La tua brama di potere aumenta la tua esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                        send_to_char(buf, ch);
+                        gain += lust;
+                    }
+                }
+            }
 
 			if(GetMaxLevel(ch) == 1) {
 				gain *= 2;
@@ -1128,8 +1181,7 @@ void gain_exp_rev(struct char_data* ch, int gain) {
 						}
 						else if((GET_EXP(ch) + gain) >=
 								titles[ i ][ GET_LEVEL(ch, i) + 1].exp) {
-							sprintf(buf, "Sei abbastanza esperto per essere un %s\n\r",
-									GET_CLASS_TITLE(ch, i, GET_LEVEL(ch, i) + 1));
+                            sprintf(buf, "$c0011Sei abbastanza espert%s per essere %s %s.\n\r", SSLF(ch), UNUNA(ch), GET_CLASS_TITLE(ch, i, GET_LEVEL(ch, i) + 1));
 							send_to_char(buf, ch);
 							send_to_char("Devi passare dalla tua gilda per crescere di "
 										 "livello.\n\r", ch);
@@ -1171,6 +1223,22 @@ void gain_exp_rev(struct char_data* ch, int gain) {
 		}
 		else if(gain < 0) {
 			/*	 gain/=MAX(1,nClassiNonMaxxate); */
+
+            //  se possiede la skill 'lust for power' perde il 5% in meno di Xp
+            if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+            {
+                if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                {
+                    lust = gain / 100 * 5;
+                    if(lust > 0)
+                    {
+                        sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                        send_to_char(buf, ch);
+                        gain += lust;
+                    }
+                }
+            }
+
 			gain/=MAX(1,HowManyClasses(ch));
 			if(IS_PC(ch)) {
 				mudlog(LOG_PLAYERS, "%s ha perso %d punti di esperienza.",
@@ -1191,7 +1259,7 @@ void gain_exp(struct char_data* ch, int gain) {
 	 * Per le classi che hanno una razza maxxata, consente il gain completo
 	 * */
 
-	int i,q;
+	int i,q, lust;
 	char buf[256];
 	short chrace;
 	short nClassiNonMaxxate=0;
@@ -1211,6 +1279,20 @@ void gain_exp(struct char_data* ch, int gain) {
 
 	if(!IS_IMMORTAL(ch)) {
 		if(gain > 0) {
+            //  se possiede la skill 'lust for power' guadagna il 5% di Xp
+            if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+            {
+                if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                {
+                    lust = gain / 100 * 5;
+                    if(lust > 0)
+                    {
+                        sprintf(buf, "$c0003La tua brama di potere aumenta la tua esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                        send_to_char(buf, ch);
+                        gain += lust;
+                    }
+                }
+            }
 
 			if(GetMaxLevel(ch) == 1) {
 				gain *= 2;
@@ -1281,6 +1363,21 @@ void gain_exp(struct char_data* ch, int gain) {
 			}
 		}
 		else if(gain < 0) {
+            //  se possiede la skill 'lust for power' perde il 5% in meno di Xp
+            if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+            {
+                if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                {
+                    lust = gain / 100 * 5;
+                    if(lust > 0)
+                    {
+                        sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                        send_to_char(buf, ch);
+                        gain += lust;
+                    }
+                }
+            }
+
 			if(IS_PC(ch)) {
 				mudlog(LOG_PLAYERS, "%s ha perso %d punti di esperienza.", GET_NAME(ch), -gain);
 				mudlog(LOG_SYSERR, "PKill loss 2");

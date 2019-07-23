@@ -4006,11 +4006,11 @@ MOBSPECIAL_FUNC(Esattore) {
 	 * */
 	xp=abs(atoi(arg)/HowManyClasses(ch));
 	if(xp > GET_EXP(ch)) {
-		do_say(mob,"Non hai abbastanza esperienza",CMD_SAY);
+		do_say(mob,"Non hai abbastanza esperienza.",CMD_SAY);
 		return(FALSE);
 	}
 	GET_EXP(ch)-=(xp);
-	sprintf(buf,"%s ha donato %ld punti esperienza (per ogni classe) per la gloria del Clan",
+	sprintf(buf,"%s ha donato %ld punti esperienza (per ogni classe) per la gloria del Clan!",
 			GET_NAME(ch),xp);
 	do_shout(mob,buf,CMD_SAY);
 	return(TRUE);
@@ -5438,7 +5438,7 @@ MOBSPECIAL_FUNC(MobCaccia) {
     struct char_data* p;
     struct room_data* rp;
     int premio[3] = { 0 }; /* 0.coin, 1.xp, 2.rune */
-    int n,x;
+    int n,x, lust;
     char buf[MAX_STRING_LENGTH];
     
     if(!mob->specials.quest_ref) {
@@ -5548,6 +5548,20 @@ MOBSPECIAL_FUNC(MobCaccia) {
                                         sprintf(buf,"$c0011Ricevi %d monete d'oro!$c0007\n\r", premio[0]);
                                         break;
                                     case 1  :
+                                        //  se possiede la skill 'lust for power' guadagna il 5% di Xp
+                                        if(t->skills && t->skills[SKILL_LUST_FOR_POWER].learned)
+                                        {
+                                            if(number(1,101) < t->skills[SKILL_LUST_FOR_POWER].learned)
+                                            {
+                                                lust = premio[1] / 100 * 5;
+                                                if(lust > 0)
+                                                {
+                                                    sprintf(buf, "$c0003La tua brama di potere aumenta la tua esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                                                    send_to_char(buf, t);
+                                                    premio[1] += lust;
+                                                }
+                                            }
+                                        }
                                         GET_EXP(t) += premio[1]/HowManyClasses(t);
                                         sprintf(buf,"$c0011Ottieni %d punti esperienza!$c0007\n\r", premio[1]);
                                         break;
@@ -5681,7 +5695,7 @@ MOBSPECIAL_FUNC(MobSalvataggio) {
     struct affected_type* af;
     struct char_data* t;
     int premio[3] = { 0 }; /* 0.coin, 1.xp, 2.rune */
-    int x,n;
+    int x,n, lust;
     char buf[MAX_STRING_LENGTH];
     
     if(!mob) {
@@ -5842,6 +5856,20 @@ MOBSPECIAL_FUNC(MobSalvataggio) {
                                                     sprintf(buf,"$c0011Ricevi %d monete d'oro!$c0007\n\r", premio[0]);
                                                     break;
                                                 case 1  :
+                                                    //  se possiede la skill 'lust for power' guadagna il 5% di Xp
+                                                    if(t->skills && t->skills[SKILL_LUST_FOR_POWER].learned)
+                                                    {
+                                                        if(number(1,101) < t->skills[SKILL_LUST_FOR_POWER].learned)
+                                                        {
+                                                            lust = premio[1] / 100 * 5;
+                                                            if(lust > 0)
+                                                            {
+                                                                sprintf(buf, "$c0003La tua brama di potere aumenta la tua esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                                                                send_to_char(buf, t);
+                                                                premio[1] += lust;
+                                                            }
+                                                        }
+                                                    }
                                                     GET_EXP(t) += premio[1]/HowManyClasses(t);
                                                     sprintf(buf,"$c0011Ottieni %d punti esperienza!$c0007\n\r", premio[1]);
                                                     break;

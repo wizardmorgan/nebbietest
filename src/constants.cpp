@@ -8118,7 +8118,7 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         },
 
     //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
-        0,                  10,             LANG_COMMON,    FALSE,      FALSE,          0,
+        0,                  0,              LANG_COMMON,    FALSE,      FALSE,          0,
 
     //  damage, spellpower, hitroll,    spellfail,
         0,      0,          0,          0,
@@ -8139,8 +8139,16 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
     //  affect
         0,
         
-    //  innate_skill1,      innate_skill2,      innate_skill3
-        -1,                 -1,                 -1
+    //          innate_skill
+        {
+                            -1,                         -1,
+                            -1,                         -1,
+                            -1
+        },
+    //          skill_learn
+        {
+            0,      0,      0,      0,      0
+        }
     },
 
     //  RACE_HUMAN
@@ -8156,7 +8164,7 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         },
 
     //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
-        74,                 8,              LANG_COMMON,    TRUE,       TRUE,           0,
+        76,                 6,              LANG_COMMON,    TRUE,       TRUE,           0,
 
     //  damage, spellpower, hitroll,    spellfail,
         0,      0,          0,          0,
@@ -8177,11 +8185,19 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
     //  affect
         0,
 
-    //  innate_skill1,      innate_skill2,      innate_skill3
-        -1,                 -1,                 -1
+    //          innate_skill
+        {
+            SKILL_LUST_FOR_POWER,       SKILL_LUST_FOR_MONEY,
+                            -1,                         -1,
+                            -1
+        },
+    //          skill_learn
+        {
+            15,     25,     0,      0,      0
+        }
     },
 
-    //  RACE_HUMAN
+    //  RACE_
     {
     // min  str,    int,    wis,    dex,    con,    chr
         {
@@ -8194,7 +8210,7 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         },
 
     //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
-        74,                 8,              LANG_COMMON,    TRUE,       TRUE,           0,
+        74,                 5,              LANG_COMMON,    TRUE,       TRUE,           0,
 
     //  damage, spellpower, hitroll,    spellfail,
         0,      0,          0,          0,
@@ -8215,11 +8231,19 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
     //  affect
         0,
         
-    //  innate_skill1,      innate_skill2,      innate_skill3
-        -1,                 -1,                 -1
+    //          innate_skill
+        {
+                            -1,                         -1,
+                            -1,                         -1,
+                            -1
+        },
+        //          skill_learn
+        {
+            0,      0,      0,      0,      0
+        }
     },
 
-    //  RACE_HUMAN
+    //  RACE_
     {
     // min  str,    int,    wis,    dex,    con,    chr
         {
@@ -8232,7 +8256,7 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         },
 
         //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
-        74,                 8,              LANG_COMMON,    TRUE,       TRUE,           0,
+        74,                 5,              LANG_COMMON,    TRUE,       TRUE,           0,
         
         //  damage, spellpower, hitroll,    spellfail,
         0,      0,          0,          0,
@@ -8253,8 +8277,16 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         //  affect
         0,
         
-        //  innate_skill1,      innate_skill2,      innate_skill3
-        -1,                 -1,                 -1
+    //          innate_skill
+        {
+            -1,                         -1,
+            -1,                         -1,
+            -1
+        },
+        //          skill_learn
+        {
+            0,      0,      0,      0,      0
+        }
     },
 
     //  RACE_HALFLING
@@ -8270,7 +8302,7 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         },
 
     //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
-        73,                 8,              LANG_COMMON,    TRUE,       TRUE,           0,
+        73,                 5,              LANG_COMMON,    TRUE,       TRUE,           0,
         
         //  damage, spellpower, hitroll,    spellfail,
         0,      0,          0,          0,
@@ -8291,8 +8323,16 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         //  affect
         0,
         
-        //  innate_skill1,      innate_skill2,      innate_skill3
-        SKILL_QUICKNESS,        -1,                 -1
+    //          innate_skill
+        {
+            SKILL_QUICKNESS,                         -1,
+            -1,                         -1,
+            -1
+        },
+        //          skill_learn
+        {
+            35,      0,      0,      0,      0
+        }
     }
 };
 } // namespace Alarmud

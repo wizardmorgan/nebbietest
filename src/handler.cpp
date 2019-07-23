@@ -1131,6 +1131,17 @@ void affect_total(struct char_data* ch) {
     {
         ch->resistenze[TOTAL_RESI][i] = ResiTotal(ch, i);
     }
+    //  questo ciclo controlla se e' stato rimosso un affect di razza, in quel caso lo rimette
+    if(GET_RACE(ch) < max_race_table)  // per ora va fino alla razza halfling
+    {
+        for(i = 0; i < 32; i++)
+        {
+            if(!IS_AFFECTED(ch, 1 << i) && IS_SET(RaceStuffs[GET_RACE(ch)].affect, 1 << i))
+            {
+                SET_BIT(ch->specials.affected_by, 1 << i);
+            }
+        }
+    }
 }
 
 /* Insert an affect_type in a char_data structure
@@ -2566,7 +2577,7 @@ void extract_char_smarter(struct char_data* ch, long save_room) {
 
 	if(t_desc) {
 		t_desc->connected = CON_SLCT;
-		SEND_TO_Q(MENU, t_desc);
+		SEND_TO_Q(ParseAnsiColors(TRUE, MENU), t_desc);
 	}
 }
 

@@ -260,7 +260,7 @@ void spell_colour_spray(byte level, struct char_data* ch,
 void spell_energy_drain(byte level, struct char_data* ch,
 						struct char_data* victim, struct obj_data* obj) {
 	int dam;
-	int tmp;
+	int tmp, lust;
 	void set_title(struct char_data *ch);
 	void gain_exp(struct char_data *ch, int gain);
     char buf[MAX_STRING_LENGTH];
@@ -329,7 +329,23 @@ void spell_energy_drain(byte level, struct char_data* ch,
                     {
                         tmp = 15000;
                     }
-                    sprintf(buf, "$c0005Guadagni $c0013%d $c0005punti esperienza.\n\r", tmp);
+
+                    //  se possiede la skill 'lust for power' guadagna il 5% di Xp
+                    if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+                    {
+                        if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                        {
+                            lust = tmp / 100 * 5;
+                            if(lust > 0)
+                            {
+                                sprintf(buf, "$c0003La tua brama di potere aumenta la tua esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                                send_to_char(buf, ch);
+                                tmp += lust;
+                            }
+                        }
+                    }
+
+                    sprintf(buf, "$c0005Guadagni $c0013%d $c0005punt%s esperienza.\n\r", tmp, (tmp == 1 ? "o" : "i"));
                     send_to_char(buf, ch);
                     GET_EXP(ch)+=tmp;
                     GET_EXP(victim)-=tmp;
@@ -351,7 +367,23 @@ void spell_energy_drain(byte level, struct char_data* ch,
                     {
                         tmp = 1;
                     }
-                    sprintf(buf, "$c0005Hai perso $c0013%d $c0005punti esperienza.\n\r", tmp);
+
+                    //  se possiede la skill 'lust for power' perde il 5% in meno di Xp
+                    if(victim->skills && victim->skills[SKILL_LUST_FOR_POWER].learned)
+                    {
+                        if(number(1,101) < victim->skills[SKILL_LUST_FOR_POWER].learned)
+                        {
+                            lust = tmp / 100 * 5;
+                            if(lust > 0)
+                            {
+                                sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                                send_to_char(buf, victim);
+                                tmp += lust;
+                            }
+                        }
+                    }
+
+                    sprintf(buf, "$c0005Hai perso $c0013%d $c0005punt%s esperienza.\n\r", tmp, (tmp == 1 ? "o" : "i"));
                     send_to_char(buf, victim);
                     GET_EXP(victim) -= tmp;
 					/*if ( GET_EXP(victim)>=200000000 )

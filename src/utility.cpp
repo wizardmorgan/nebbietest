@@ -7445,6 +7445,84 @@ int getFreeAffSlot(struct obj_data* obj) {
 }
 
 void SetRacialStuff(struct char_data* mob) {
+    int i;
+
+    if(RaceStuffs[GET_RACE(mob)].is_PC_race == FALSE && GET_RACE(mob) < max_race_table)
+    {
+        mob->abilities.str   = MIN(RaceStuffs[GET_RACE(mob)].min[STAT_STR] + number(4, MAX(4, GetMaxLevel(mob) / 3)), RaceStuffs[GET_RACE(mob)].max[STAT_STR]);
+        if(GET_STR(mob) >= 18)
+        {
+            GET_ADD(mob) = 100;
+        }
+        mob->abilities.intel = MIN(RaceStuffs[GET_RACE(mob)].min[STAT_INT] + number(4, MAX(4, GetMaxLevel(mob) / 3)), RaceStuffs[GET_RACE(mob)].max[STAT_INT]);
+        mob->abilities.wis   = MIN(RaceStuffs[GET_RACE(mob)].min[STAT_WIS] + number(4, MAX(4, GetMaxLevel(mob) / 3)), RaceStuffs[GET_RACE(mob)].max[STAT_WIS]);
+        mob->abilities.dex   = MIN(RaceStuffs[GET_RACE(mob)].min[STAT_DEX] + number(4, MAX(4, GetMaxLevel(mob) / 3)), RaceStuffs[GET_RACE(mob)].max[STAT_DEX]);
+        mob->abilities.con   = MIN(RaceStuffs[GET_RACE(mob)].min[STAT_CON] + number(4, MAX(4, GetMaxLevel(mob) / 3)), RaceStuffs[GET_RACE(mob)].max[STAT_CON]);
+        mob->abilities.chr   = MIN(RaceStuffs[GET_RACE(mob)].min[STAT_CHR] + number(4, MAX(4, GetMaxLevel(mob) / 3)), RaceStuffs[GET_RACE(mob)].max[STAT_CHR]);
+    }
+    if(GET_RACE(mob) <= max_race_table)
+    {
+        mob->points.hitroll                 += RaceStuffs[GET_RACE(mob)].hitroll;
+        mob->points.damroll                 += RaceStuffs[GET_RACE(mob)].damage;
+        mob->specials.spellpower            += RaceStuffs[GET_RACE(mob)].spellpower;
+        mob->specials.spellfail             += RaceStuffs[GET_RACE(mob)].spellfail;
+
+        if(IS_NPC(mob))
+        {
+            mob->points.max_hit             += RaceStuffs[GET_RACE(mob)].hp;
+            mob->points.hit                  = mob->points.max_hit;
+        }
+
+        for(i = 0; i < 25; i++)
+        {
+            mob->resistenze[RACIAL_RESI][i] += RaceStuffs[GET_RACE(mob)].resistances[i];
+        }
+
+        mob->specials.dam_red_blunt         += RaceStuffs[GET_RACE(mob)].d_r_blunt;
+        mob->specials.dam_red_slash         += RaceStuffs[GET_RACE(mob)].d_r_slash;
+        mob->specials.dam_red_pierce        += RaceStuffs[GET_RACE(mob)].d_r_pierce;
+        mob->specials.dam_red_magic         += RaceStuffs[GET_RACE(mob)].d_r_magic;
+
+        for(i = 0; i < 32; i++)
+        {
+            if(!IS_AFFECTED(mob, 1 << i) && IS_SET(RaceStuffs[GET_RACE(mob)].affect, 1 << i))
+            {
+                SET_BIT(mob->specials.affected_by, 1 << i);
+            }
+        }
+
+        if(!mob->skills)
+        {
+            SpaceForSkills(mob);
+        }
+
+        // assegno le abilità innate
+        if(mob->skills)
+        {
+            for(i = 0; i < 5; i++)
+            {
+                if(RaceStuffs[GET_RACE(mob)].innate_skill[i] > -1)
+                {
+                    if(mob->skills[RaceStuffs[GET_RACE(mob)].innate_skill[i]].learned < RaceStuffs[GET_RACE(mob)].skill_learn[i])
+                    {
+                        mob->skills[RaceStuffs[GET_RACE(mob)].innate_skill[i]].learned = RaceStuffs[GET_RACE(mob)].skill_learn[i];
+                    }
+
+                    if(IS_NPC(mob))
+                    {
+                        mob->skills[RaceStuffs[GET_RACE(mob)].innate_skill[i]].learned = MIN(100, (mob->skills[RaceStuffs[GET_RACE(mob)].innate_skill[i]].learned * 2));
+                    }
+                    else
+                    {
+                        if(!IS_SET(mob->skills[RaceStuffs[GET_RACE(mob)].innate_skill[i]].flags, SKILL_KNOWN))
+                        {
+                            SET_BIT(mob->skills[RaceStuffs[GET_RACE(mob)].innate_skill[i]].flags, SKILL_KNOWN);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
 	switch(GET_RACE(mob)) {
 	case RACE_BIRD:
@@ -8577,9 +8655,12 @@ int MaxDexForRace(struct char_data* ch) {
 		return(25);
 	}
 
-    return RaceStuffs[GET_RACE(ch)].max[STAT_DEX];
+    if(GET_RACE(ch) < max_race_table)
+    {
+        return RaceStuffs[GET_RACE(ch)].max[STAT_DEX];
+    }
 
-/*	switch(GET_RACE(ch)) {
+	switch(GET_RACE(ch)) {
 	case RACE_ELVEN:
 	case RACE_WILD_ELF:
 	case RACE_GOLD_ELF:
@@ -8601,7 +8682,7 @@ int MaxDexForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	} * end switch */
+	}
 }
 
 int MaxIntForRace(struct char_data* ch) {
@@ -8611,9 +8692,12 @@ int MaxIntForRace(struct char_data* ch) {
 		return(25);
 	}
 
-    return RaceStuffs[GET_RACE(ch)].max[STAT_INT];
+    if(GET_RACE(ch) < max_race_table)
+    {
+        return RaceStuffs[GET_RACE(ch)].max[STAT_INT];
+    }
 
-/*	switch(GET_RACE(ch)) {
+	switch(GET_RACE(ch)) {
 	case RACE_GOLD_ELF:
 	case RACE_DEMON:
 	case RACE_GOD:
@@ -8628,7 +8712,7 @@ int MaxIntForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	} * end switch */
+	}
 }
 
 int MaxWisForRace(struct char_data* ch) {
@@ -8638,9 +8722,12 @@ int MaxWisForRace(struct char_data* ch) {
 		return(25);
 	}
 
-    return RaceStuffs[GET_RACE(ch)].max[STAT_WIS];
+    if(GET_RACE(ch) < max_race_table)
+    {
+        return RaceStuffs[GET_RACE(ch)].max[STAT_WIS];
+    }
 
-/*	switch(GET_RACE(ch)) {
+	switch(GET_RACE(ch)) {
 	case RACE_GOLD_ELF:
 	case RACE_WILD_ELF:
 	case RACE_GNOME:
@@ -8653,7 +8740,7 @@ int MaxWisForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	} * end switch */
+	}
 }
 
 int MaxConForRace(struct char_data* ch) {
@@ -8663,9 +8750,12 @@ int MaxConForRace(struct char_data* ch) {
 		return(25);
 	}
 
-    return RaceStuffs[GET_RACE(ch)].max[STAT_CON];
+    if(GET_RACE(ch) < max_race_table)
+    {
+        return RaceStuffs[GET_RACE(ch)].max[STAT_CON];
+    }
 
-/*	switch(GET_RACE(ch)) {
+	switch(GET_RACE(ch)) {
 	case RACE_HALF_ORC:
 	case RACE_DWARF:
 	case RACE_GOD:
@@ -8681,7 +8771,7 @@ int MaxConForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	} * end switch */
+	}
 }
 
 int MaxChrForRace(struct char_data* ch) {
@@ -8691,9 +8781,12 @@ int MaxChrForRace(struct char_data* ch) {
 		return(25);
 	}
 
-    return RaceStuffs[GET_RACE(ch)].max[STAT_CHR];
+    if(GET_RACE(ch) < max_race_table)
+    {
+        return RaceStuffs[GET_RACE(ch)].max[STAT_CHR];
+    }
 
-/*	switch(GET_RACE(ch)) {
+	switch(GET_RACE(ch)) {
 	case RACE_HALF_ORC:
 	case RACE_ORC:
 	case RACE_DARK_ELF:
@@ -8707,7 +8800,7 @@ int MaxChrForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	} * end switch */
+	}
 }
 
 int MaxStrForRace(struct char_data* ch) {
@@ -8717,9 +8810,12 @@ int MaxStrForRace(struct char_data* ch) {
 		return(25);
 	}
 
-    return RaceStuffs[GET_RACE(ch)].max[STAT_STR];
+    if(GET_RACE(ch) < max_race_table)
+    {
+        return RaceStuffs[GET_RACE(ch)].max[STAT_STR];
+    }
 
-/*	switch(GET_RACE(ch)) {
+	switch(GET_RACE(ch)) {
 	case RACE_TROLL:
 	case RACE_GOD:
 	case RACE_HALF_GIANT:
@@ -8734,7 +8830,7 @@ int MaxStrForRace(struct char_data* ch) {
 	default:
 		return(18);
 		break;
-	} * end switch */
+	}
 }
 
 
@@ -8850,6 +8946,13 @@ int IS_UNDERGROUND(struct char_data* ch) {
 void SetDefaultLang(struct char_data* ch) {
 	int i;
 
+    if(GET_RACE(ch) <= max_race_table)
+    {
+        ch->skills[RaceStuffs[GET_RACE(ch)].speak].learned = 95;
+        SET_BIT(ch->skills[RaceStuffs[GET_RACE(ch)].speak].flags,SKILL_KNOWN);
+        return;
+    }
+
 	switch(GET_RACE(ch)) {
 	case RACE_ELVEN:
 	case RACE_GOLD_ELF:
@@ -8954,6 +9057,8 @@ int IsMagicSpell(int spell_num) {
 	case SKILL_PSI_SHIELD:
 	case SKILL_EAVESDROP:
     case SKILL_QUICKNESS:
+    case SKILL_LUST_FOR_POWER:
+    case SKILL_LUST_FOR_MONEY:
 	case LANG_COMMON:
 	case LANG_ELVISH:
 	case LANG_HALFLING:
@@ -9696,10 +9801,9 @@ int ValueExpObj(struct obj_data* obj)
 
     vnumber = real_object(vnum);
     obj_original = read_object(vnumber, REAL);
-mudlog (LOG_CHECK, "oggetto caricato");
+
     for(i = 0; i < MAX_OBJ_AFFECT; i++)
     {
-        mudlog(LOG_CHECK, "valore = %d", valore);
         switch(obj->affected[i].location)
         {
             case APPLY_NONE:
@@ -9718,27 +9822,54 @@ mudlog (LOG_CHECK, "oggetto caricato");
             case APPLY_INT:
             case APPLY_WIS:
             case APPLY_CON:
-                valore += obj->affected[i].modifier * 1500;
-                break;
-
             case APPLY_CHR:
-                valore += obj->affected[i].modifier * 1000;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 3000;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 1500;
+                }
                 break;
 
             case APPLY_LEVEL:
             case APPLY_AGE:
             case APPLY_CHAR_WEIGHT:
             case APPLY_CHAR_HEIGHT:
+                break;
+
             case APPLY_MANA:
-                valore += obj->affected[i].modifier * 150;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 300;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 150;
+                }
                 break;
 
             case APPLY_HIT:
-                valore += obj->affected[i].modifier * 300;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 300;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 150;
+                }
                 break;
 
             case APPLY_MOVE:
-                valore += obj->affected[i].modifier * 100;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 200;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 100;
+                }
                 break;
 
             case APPLY_GOLD:
@@ -9750,12 +9881,26 @@ mudlog (LOG_CHECK, "oggetto caricato");
                 break;
 
             case APPLY_HITROLL:
-                valore += obj->affected[i].modifier * 4500;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 9000;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 4500;
+                }
                 break;
                 
             case APPLY_DAMROLL:
             case APPLY_SPELLPOWER:
-                valore += obj->affected[i].modifier * 10000;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 20000;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 10000;
+                }
                 break;
                 
             case APPLY_SAVING_PARA:
@@ -9882,8 +10027,14 @@ mudlog (LOG_CHECK, "oggetto caricato");
 
             case APPLY_HITNDAM:
             case APPLY_HITNSP:
-                mudlog(LOG_CHECK, "hit and dam/sp");
-                valore += obj->affected[i].modifier * 14500;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 29000;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 14500;
+                }
                 break;
 
             case APPLY_WEAPON_SPELL:
@@ -9909,15 +10060,36 @@ mudlog (LOG_CHECK, "oggetto caricato");
                 break;
 
             case APPLY_MANA_REGEN:
-                valore += obj->affected[i].modifier * 300;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 300;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 150;
+                }
                 break;
                 
             case APPLY_HIT_REGEN:
-                valore += obj->affected[i].modifier * 300;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 300;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 150;
+                }
                 break;
                 
             case APPLY_MOVE_REGEN:
-                valore += obj->affected[i].modifier * 200;
+                if(obj->affected[i].modifier < 0)
+                {
+                    valore += obj->affected[i].modifier * 400;
+                }
+                else
+                {
+                    valore += obj->affected[i].modifier * 200;
+                }
                 break;
 
             case APPLY_MOD_THIRST:
@@ -9978,27 +10150,54 @@ mudlog (LOG_CHECK, "oggetto caricato");
             case APPLY_INT:
             case APPLY_WIS:
             case APPLY_CON:
-                valore_originale += obj_original->affected[i].modifier * 1500;
-                break;
-
             case APPLY_CHR:
-                valore_originale += obj_original->affected[i].modifier * 1000;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 3000;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 1500;
+                }
                 break;
 
             case APPLY_LEVEL:
             case APPLY_AGE:
             case APPLY_CHAR_WEIGHT:
             case APPLY_CHAR_HEIGHT:
+                break;
+
             case APPLY_MANA:
-                valore_originale += obj_original->affected[i].modifier * 150;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 300;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 150;
+                }
                 break;
 
             case APPLY_HIT:
-                valore_originale += obj_original->affected[i].modifier * 300;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 600;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 300;
+                }
                 break;
 
             case APPLY_MOVE:
-                valore_originale += obj_original->affected[i].modifier * 100;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 200;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 100;
+                }
                 break;
 
             case APPLY_GOLD:
@@ -10010,12 +10209,26 @@ mudlog (LOG_CHECK, "oggetto caricato");
                 break;
 
             case APPLY_HITROLL:
-                valore_originale += obj_original->affected[i].modifier * 4500;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 9000;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 4500;
+                }
                 break;
 
             case APPLY_DAMROLL:
             case APPLY_SPELLPOWER:
-                valore_originale += obj_original->affected[i].modifier * 10000;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 20000;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 10000;
+                }
                 break;
 
             case APPLY_SAVING_PARA:
@@ -10142,7 +10355,14 @@ mudlog (LOG_CHECK, "oggetto caricato");
 
             case APPLY_HITNDAM:
             case APPLY_HITNSP:
-                valore_originale += obj_original->affected[i].modifier * 14500;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 29000;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 14500;
+                }
                 break;
 
             case APPLY_WEAPON_SPELL:
@@ -10168,15 +10388,36 @@ mudlog (LOG_CHECK, "oggetto caricato");
                 break;
 
             case APPLY_MANA_REGEN:
-                valore_originale += obj_original->affected[i].modifier * 300;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 600;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 300;
+                }
                 break;
 
             case APPLY_HIT_REGEN:
-                valore_originale += obj_original->affected[i].modifier * 300;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 600;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 300;
+                }
                 break;
 
             case APPLY_MOVE_REGEN:
-                valore_originale += obj_original->affected[i].modifier * 200;
+                if(obj_original->affected[i].modifier < 0)
+                {
+                    valore_originale += obj_original->affected[i].modifier * 400;
+                }
+                else
+                {
+                    valore_originale += obj_original->affected[i].modifier * 200;
+                }
                 break;
 
             case APPLY_MOD_THIRST:
@@ -10223,8 +10464,6 @@ mudlog (LOG_CHECK, "oggetto caricato");
     {
         differenza *= 1.5;
     }
-
-    mudlog (LOG_CHECK, "valore = %d, originale = %d, differenza %d", valore, valore_originale, differenza);
 
     extract_obj(obj_original);
     return differenza;

@@ -3087,7 +3087,7 @@ void store_to_char(struct char_file_u* st, struct char_data* ch) {
     mudlog(LOG_SAVE, "<-MMana/MHits after edit: %d/%d", GET_MAX_MANA(ch), GET_MAX_HIT(ch));
 
 	/* Specials */
-	ch->specials.spells_to_learn = st->spells_to_learn;
+    ch->specials.spells_to_learn = (st->spells_to_learn < 0 ? 127 - st->spells_to_learn : st->spells_to_learn);
 	ch->specials.alignment = st->alignment;
 
 	ch->specials.act = st->act;
@@ -3301,7 +3301,7 @@ void char_to_store(struct char_data* ch, struct char_file_u* st) {
 	st->points = ch->points;
 
 	st->alignment = ch->specials.alignment;
-	st->spells_to_learn = ch->specials.spells_to_learn;
+    st->spells_to_learn = (ch->specials.spells_to_learn > 127 ? 127 - ch->specials.spells_to_learn : ch->specials.spells_to_learn);
     if(!IS_SET(ch->specials.act, PLR_NEW_EQ))
     {
         SET_BIT(ch->specials.act, PLR_NEW_EQ);

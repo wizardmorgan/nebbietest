@@ -44,22 +44,40 @@ ACTION_FUNC(do_ripudia) {
 	char tmp[80];
 	struct char_data* victim=NULL;
 	only_argument(arg, tmp);
+    int amount, lust;
 
 	if(*tmp) {
 		victim = get_char_room_vis(ch, tmp);
 	}
 	if(!victim) {
 		if (!IS_VASSALLOOF(ch,tmp)) {
-			act("Capisco la concitazione.... ma non ne sei vassall$b!!",
+			act("Capisco la concitazione... ma non ne sei vassall$b!!",
 				TRUE,ch,NULL,NULL,TO_CHAR);
 		}
 		else {
 			free(GET_PRINCE(ch));
 			GET_PRINCE(ch)= (char*) NULL;
-			act("Beh... a quanto sembra il coraggio non e' il tuo forte....\n\r"
-				"in ogni modo.... adesso sei liber$b",
+			act("Beh... a quanto sembra il coraggio non e' il tuo forte...\n\r"
+				"in ogni modo... adesso sei liber$b",
 				TRUE,ch,NULL,NULL,TO_CHAR);
-			GET_EXP(ch)-=((int)GET_EXP(ch)/100*5);
+
+            amount = ((int)GET_EXP(ch) / 100 * 5);
+            //  se possiede la skill 'lust for power' perde il 5% in meno di Xp
+            if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+            {
+                if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                {
+                    char buf[256];
+                    lust = amount / 100 * 5;
+                    if(lust > 0)
+                    {
+                        sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                        send_to_char(buf, ch);
+                        amount += lust;
+                    }
+                }
+            }
+			GET_EXP(ch)-= amount;
 		}
 		return;
 	}
@@ -70,7 +88,7 @@ ACTION_FUNC(do_ripudia) {
 	}
 	if(IS_VASSALLOOF(ch,GET_NAME(victim))) {
 		if IS_POLY(ch) {
-			send_to_char("Non puoi farlo in qeusta forma\n\r",ch);
+			send_to_char("Non puoi farlo in queusta forma.\n\r",ch);
 			return;
 		}
 		act("Guardi negli occhi $N e rompi il tuo giuramento di fedelta'!",
@@ -84,7 +102,7 @@ ACTION_FUNC(do_ripudia) {
 	}
 	else if(IS_PRINCEOF(GET_NAME(ch),victim)) {
 		if IS_POLY(victim) {
-			send_to_char("Non puoi farlo in qeusta forma.\n\r",victim);
+			send_to_char("Non puoi farlo in questa forma.\n\r",victim);
 			return;
 		}
 		act("Guardi negli occhi $N e l$B scacci dal tuo casato!",

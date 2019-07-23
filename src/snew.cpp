@@ -821,8 +821,8 @@ ACTION_FUNC(do_setalign) {
 	long gold;
 	gold=MAX(0,(GetMaxLevel(ch)-1) * 20000 * HowManyClasses(ch));
 	if(GET_EXP(ch)< gold) {
-		send_to_char("Non hai abbastanza esperienza per cambiare align\n\r",ch);
-		send_to_char("Gli allineamenti possibili sono solo Evil, Neutral e Good\n\r",ch);
+		send_to_char("Non hai abbastanza esperienza per cambiare il tuo allineamento.\n\r",ch);
+		send_to_char("Gli allineamenti possibili sono solo $c0009Evil$c0007, $c0010Neutral$c0007 e $c0014Good$c0007.\n\r", ch);
 	}
 	else {
 		oldalign=GET_ALIGNMENT(ch);
@@ -836,7 +836,7 @@ ACTION_FUNC(do_setalign) {
 			GET_ALIGNMENT(ch)=1000;
 		}
 		else {
-			send_to_char("Gli allineamenti possibili sono solo Evil, Neutral e Good\n\r",ch);
+			send_to_char("Gli allineamenti possibili sono solo $c0009Evil$c0007, $c0010Neutral$c0007 e $c0014Good$c0007.\n\r", ch);
 		}
 		if(oldalign != GET_ALIGNMENT(ch)) {
 			GET_EXP(ch)-=gold;

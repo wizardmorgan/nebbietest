@@ -162,7 +162,7 @@ void string_add(struct descriptor_data* d, char* str) {
 		}
 		d->str = 0;
 		if(d->connected == CON_EXDSCR)        {
-			SEND_TO_Q(MENU, d);
+			SEND_TO_Q(ParseAnsiColors(TRUE, MENU), d);
 			d->connected = CON_SLCT;
 		}
 	}

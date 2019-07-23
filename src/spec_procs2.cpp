@@ -1907,7 +1907,7 @@ MOBSPECIAL_FUNC(ninja_master) {
 
 MOBSPECIAL_FUNC(RepairGuy) {
 	char obj_name[80], vict_name[80], buf[MAX_INPUT_LENGTH];
-	int cost, ave, iVNum;
+	int cost, ave, iVNum, lust;
     long expCost = 0;
 	struct char_data* vict;
 	struct obj_data* obj;
@@ -2183,7 +2183,7 @@ MOBSPECIAL_FUNC(RepairGuy) {
 
         if(riparabile)
         {
-            expCost = ValueExpObj(obj) / 20;
+            expCost = ValueExpObj(obj) * 500;
 
             switch(HowManyClasses(ch))
             {
@@ -2191,7 +2191,7 @@ MOBSPECIAL_FUNC(RepairGuy) {
                     break;
 
                 case 2:
-                    expCost = expCost * 2 / HowManyClasses(ch);
+                    expCost = expCost * 1.5 / HowManyClasses(ch);
                     break;
 
                 default:
@@ -2222,8 +2222,12 @@ MOBSPECIAL_FUNC(RepairGuy) {
         }
 
 		/* make all the correct tests to make sure that everything is kosher */
-
-		if(ITEM_TYPE(obj) == ITEM_ARMOR && obj->obj_flags.value[1] > 0 && ok)
+        if(ITEM_TYPE(obj) == ITEM_ARMOR && obj->obj_flags.value[1] == 0 && !pers_on(ch, obj))
+        {
+            act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_CHAR);
+            act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_ROOM);
+        }
+		else if(ITEM_TYPE(obj) == ITEM_ARMOR && ok)
         {
 			if(obj->obj_flags.hitpTot > obj->obj_flags.hitp)
             {
@@ -2258,13 +2262,28 @@ MOBSPECIAL_FUNC(RepairGuy) {
 				else
                 {
 					GET_GOLD(ch) -= cost;
-                    if(cost > 0)
+                    if(cost > 1000)
                     {
                         riparato = TRUE;
                     }
 
                     if(riparabile)
                     {
+                        //  se possiede la skill 'lust for power' costa il 5% in meno di Xp
+                        if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+                        {
+                            if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                            {
+                                lust = expCost / 100 * 5;
+                                if(lust > 0)
+                                {
+                                    sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                                    send_to_char(buf, ch);
+                                    expCost -= lust;
+                                }
+                            }
+                        }
+
                         sprintf(buf, "Dai a $N %d monete d'oro e %ld punti esperienza.", cost, expCost);
                         act(buf, TRUE, ch, NULL, vict, TO_CHAR);
                         act("$n da' alcune monete e dei punti esperienza a $N.", TRUE, ch, obj, vict, TO_ROOM);
@@ -2380,13 +2399,28 @@ MOBSPECIAL_FUNC(RepairGuy) {
                     else
                     {
                         GET_GOLD(ch) -= cost;
-                        if(cost > 0)
+                        if(cost > 1000)
                         {
                             riparato = TRUE;
                         }
                         
                         if(riparabile)
                         {
+                            //  se possiede la skill 'lust for power' costa il 5% in meno di Xp
+                            if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+                            {
+                                if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                                {
+                                    lust = expCost / 100 * 5;
+                                    if(lust > 0)
+                                    {
+                                        sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                                        send_to_char(buf, ch);
+                                        expCost -= lust;
+                                    }
+                                }
+                            }
+
                             sprintf(buf, "Dai a $N %d monete d'oro e %ld punti esperienza.", cost, expCost);
                             act(buf, TRUE, ch, NULL, vict, TO_CHAR);
                             act("$n da' alcune monete e dei punti esperienza a $N.", TRUE, ch, obj, vict, TO_ROOM);
@@ -2473,13 +2507,28 @@ MOBSPECIAL_FUNC(RepairGuy) {
 				}
 				else {
 					GET_GOLD(ch) -= cost;
-                    if(cost > 0)
+                    if(cost > 1000)
                     {
                         riparato = TRUE;
                     }
 
                     if(riparabile)
                     {
+                        //  se possiede la skill 'lust for power' costa il 5% in meno di Xp
+                        if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+                        {
+                            if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                            {
+                                lust = expCost / 100 * 5;
+                                if(lust > 0)
+                                {
+                                    sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                                    send_to_char(buf, ch);
+                                    expCost -= lust;
+                                }
+                            }
+                        }
+
                         sprintf(buf, "Dai a $N %d monete d'oro e %ld punti esperienza.", cost, expCost);
                         act(buf, TRUE, ch, NULL, vict, TO_CHAR);
                         act("$n da' alcune monete e dei punti esperienza a $N.", TRUE, ch, obj, vict, TO_ROOM);
@@ -6066,14 +6115,14 @@ ROOMSPECIAL_FUNC(druid_challenge_prep_room) {
 
 	chal = real_roomp(ch->in_room+1);
 	if(!chal) {
-		send_to_char("The challenge room is gone.. please contact a god\n\r", ch);
+		send_to_char("Qualcosa non va nella stanza della sfida, per favore contatta un Dio.\n\r", ch);
 		return(TRUE);
 	}
 
 	if(cmd == CMD_NOD) {
 
 		if(!HasClass(ch, CLASS_DRUID)) {
-			send_to_char("You're no druid\n\r", ch);
+			send_to_char("Cosa pensi di essere, un druido?\n\r", ch);
 			return(FALSE);
 		}
 		if(GET_LEVEL(ch, DRUID_LEVEL_IND)>=BARONE) {
@@ -6082,18 +6131,18 @@ ROOMSPECIAL_FUNC(druid_challenge_prep_room) {
 		}
 
 		if(GET_LEVEL(ch, DRUID_LEVEL_IND) < 10) {
-			send_to_char("You have no business here, kid.\n\r", ch);
+			send_to_char("Torna quando avrai raggiunto il nono livello.\n\r", ch);
 			return(FALSE);
 		}
 
 		if(GET_EXP(ch) <= titles[DRUID_LEVEL_IND]
 				[GET_LEVEL(ch, DRUID_LEVEL_IND)+1].exp-100) {
-			send_to_char("You cannot advance now\n\r", ch);
+            act("Non sei ancora pront$b.", FALSE, ch, NULL, NULL, TO_CHAR);
 			return(TRUE);
 		}
 
 		if(chal->river_speed != 0) {
-			send_to_char("The challenge room is busy.. please wait\n\r", ch);
+			send_to_char("La stanza della sfida e' occupata, devi attendere un po'.\n\r", ch);
 			return(TRUE);
 		}
 		for(i=0; i<MAX_WEAR; i++) {
@@ -6106,15 +6155,15 @@ ROOMSPECIAL_FUNC(druid_challenge_prep_room) {
 			extract_obj(ch->carrying);
 		}
 
-		send_to_char("You are taken into the combat room.\n\r", ch);
-		act("$n is ushered into the combat room", FALSE, ch, 0, 0, TO_ROOM);
+		act("Vieni accompagnat$b alla stanza da combattimento.", FALSE, ch, 0, 0, TO_CHAR);
+		act("$n viene accompagnat$b alla stanza da combattimento.", FALSE, ch, 0, 0, TO_ROOM);
 		newr = ch->in_room+1;
 		char_from_room(ch);
 		char_to_room(ch, newr);
 		/* load the mob at the same lev as char */
 		mob = read_mobile(DRUID_MOB+GET_LEVEL(ch, DRUID_LEVEL_IND)-10, VIRTUAL);
 		if(!mob) {
-			send_to_char("The fight is called off.  go home\n\r", ch);
+			send_to_char("Nessun druido ha avuto il coraggio di sfidarti, per favore contatta un Dio.\n\r", ch);
 			return(TRUE);
 		}
 		char_to_room(mob, ch->in_room);
@@ -6154,7 +6203,7 @@ ROOMSPECIAL_FUNC(druid_challenge_room) {
 
 	if(cmd == CMD_FLEE) {
 		/* this person just lost */
-		send_to_char("You lose\n\r",ch);
+		send_to_char("Hai perso.\n\r",ch);
 		if(IS_PC(ch)) {
 			if(IS_NPC(ch)) {
 				do_return(ch,"",0);
@@ -6166,7 +6215,7 @@ ROOMSPECIAL_FUNC(druid_challenge_room) {
 				afterloss=GET_EXP(ch)-afterloss;
 				GET_EXP(ch)=GET_EXP(ch)-afterloss/2;
 			}
-			send_to_char("Go home\n\r", ch);
+			send_to_char("Torna a casa.\n\r", ch);
 			char_from_room(ch);
 			char_to_room(ch, rm-1);
 			me->river_speed = 0;
@@ -6251,7 +6300,7 @@ ROOMSPECIAL_FUNC(monk_challenge_room) {
 
 	if(cmd == CMD_FLEE) {
 		/* this person just lost */
-		send_to_char("You lose\n\r",ch);
+		send_to_char("Hai perso.\n\r",ch);
 		if(IS_PC(ch)) {
 			if(IS_NPC(ch)) {
 				do_return(ch,"",0);
@@ -6263,7 +6312,7 @@ ROOMSPECIAL_FUNC(monk_challenge_room) {
 				afterloss=GET_EXP(ch)-afterloss;
 				GET_EXP(ch)=GET_EXP(ch)-afterloss/2;
 			}
-			send_to_char("Go home\n\r", ch);
+			send_to_char("Torna a casa.\n\r", ch);
 			char_from_room(ch);
 			char_to_room(ch, rm-1);
 
@@ -6339,14 +6388,14 @@ ROOMSPECIAL_FUNC(monk_challenge_prep_room) {
 
 	chal = real_roomp(ch->in_room+1);
 	if(!chal) {
-		send_to_char("The challenge room is gone.. please contact a god\n\r", ch);
+		send_to_char("Qualcosa non va nella stanza della sfida, per favore contatta un Dio.\n\r", ch);
 		return(TRUE);
 	}
 
 	if(cmd == CMD_NOD) {
 
 		if(!HasClass(ch, CLASS_MONK)) {
-			send_to_char("You're no monk\n\r", ch);
+			send_to_char("Bene, ora pensi di essere un monaco?\n\r", ch);
 			return(FALSE);
 		}
 		if(GET_LEVEL(ch, MONK_LEVEL_IND)>=BARONE) {
@@ -6355,18 +6404,18 @@ ROOMSPECIAL_FUNC(monk_challenge_prep_room) {
 		}
 
 		if(GET_LEVEL(ch, MONK_LEVEL_IND) < 10) {
-			send_to_char("You have no business here, kid.\n\r", ch);
+			send_to_char("Torna quando avrai raggiunto il nono livello.\n\r", ch);
 			return(FALSE);
 		}
 
 		if(GET_EXP(ch) <= titles[MONK_LEVEL_IND]
 				[GET_LEVEL(ch, MONK_LEVEL_IND)+1].exp-100) {
-			send_to_char("You cannot advance now\n\r", ch);
+			act("Non sei ancora pront$b.", FALSE, ch, NULL, NULL, TO_CHAR);
 			return(TRUE);
 		}
 
 		if(chal->river_speed != 0) {
-			send_to_char("The challenge room is busy.. please wait\n\r", ch);
+			send_to_char("La stanza della sfida e' occupata, devi attendere un po'.\n\r", ch);
 			return(TRUE);
 		}
 		for(i=0; i<MAX_WEAR; i++) {
@@ -6379,15 +6428,15 @@ ROOMSPECIAL_FUNC(monk_challenge_prep_room) {
 			extract_obj(ch->carrying);
 		}
 
-		send_to_char("You are taken into the combat room.\n\r", ch);
-		act("$n is ushered into the combat room", FALSE, ch, 0, 0, TO_ROOM);
+        act("Vieni accompagnat$b alla stanza da combattimento.", FALSE, ch, 0, 0, TO_CHAR);
+        act("$n viene accompagnat$b alla stanza da combattimento.", FALSE, ch, 0, 0, TO_ROOM);
 		newr = ch->in_room+1;
 		char_from_room(ch);
 		char_to_room(ch, newr);
 		/* load the mob at the same lev as char */
 		mob = read_mobile(MONK_MOB+GET_LEVEL(ch, MONK_LEVEL_IND)-10, VIRTUAL);
 		if(!mob) {
-			send_to_char("The fight is called off.  go home\n\r", ch);
+			send_to_char("Nessun monaco ha avuto il coraggio di sfidarti, per favore contatta un Dio.\n\r", ch);
 			return(TRUE);
 		}
 		char_to_room(mob, ch->in_room);
@@ -7284,24 +7333,29 @@ MOBSPECIAL_FUNC(barbarian_guildmaster) {
 
 	if(cmd == CMD_PRACTICE || cmd == CMD_GAIN) {
 		if(IS_NPC(ch)) {
-			act("$N ti dice 'Ti sembro forse un addestratore di animali ?'.",
-				TRUE, ch, 0, mob, TO_CHAR);
+            if(GET_SEX(mob) == SEX_FEMALE)
+            {
+                act("$N ti dice 'Ti sembro una addestratrice di animali?'", FALSE, ch, 0, mob, TO_CHAR);
+            }
+            else
+            {
+                act("$N ti dice 'Ti sembro un addestratore di animali?'", FALSE, ch, 0, mob, TO_CHAR);
+            }
 			return(FALSE);
 		}
 		/**** SALVO skills prince                  VVVVVVVVVVVVVVVVV ****/
 		if(!HasClass(ch, CLASS_BARBARIAN) && !IS_PRINCE(ch)) {
-			act("$N ti dice 'Io non insegno ai pagani!'.", TRUE, ch, 0, mob,
+			act("$N ti dice 'Io non insegno ai pagani!'", TRUE, ch, 0, mob,
 				TO_CHAR);
 			return(TRUE);
 		}
 		/**** SALVO skills prince ****/
 		else if(IS_PRINCE(ch) && !HasClass(ch, CLASS_BARBARIAN) && cmd !=CMD_GAIN) {
 			if(!*arg) {
-				sprintf(buf,"Hai ancora %d sessioni di pratica.\n\r",
-						ch->specials.spells_to_learn);
+                sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 				send_to_char(buf, ch);
-				send_to_char("Puoi praticare questa skills:\n\r", ch);
-				sprintf(buf,"[%d] %s %s \n\r",
+				send_to_char("Puoi esercitarti in queste abilita':\n\r", ch);
+				sprintf(buf,"[$c0015%d$c0007] %s %s \n\r",
 						PRINCIPE,spells[SKILL_HUNT-1],
 						how_good(ch->skills[SKILL_HUNT].learned));
 				send_to_char(buf, ch);
@@ -7310,22 +7364,22 @@ MOBSPECIAL_FUNC(barbarian_guildmaster) {
 			for(; isspace(*arg); arg++);
 			number = old_search_block(arg,0,strlen(arg),spells,FALSE);
 			if(number == -1) {
-				send_to_char("Non conosco questa pratica...\n\r", ch);
+				send_to_char("Non conosco questa abilita'...\n\r", ch);
 				return(TRUE);
 			}
 			if(number !=SKILL_HUNT) {
-				send_to_char("Non posso insegnarti questa pratica...\n\r", ch);
+				send_to_char("Non posso insegnarti questa abilita'...\n\r", ch);
 				return(TRUE);
 			}
 			if(ch->specials.spells_to_learn <= 0) {
-				send_to_char("Non hai pratiche a disposizione.\n\r", ch);
+				send_to_char("Non hai sessioni di allenamento a disposizione.\n\r", ch);
 				return(TRUE);
 			}
 			if(ch->skills[number].learned >= 45) {
 				send_to_char("Non posso aiutarti a migliorati ancora.\n\r", ch);
 				return(TRUE);
 			}
-			send_to_char("Hai fatto pratica...\n\r", ch);
+			send_to_char("Ti alleni per un po'...\n\r", ch);
 			ch->specials.spells_to_learn--;
 
 
@@ -7345,7 +7399,7 @@ MOBSPECIAL_FUNC(barbarian_guildmaster) {
 
 		if(cmd==CMD_GAIN) {
 			if(GetMaxLevel(ch) >= MAX_MORT) {
-				act("$N ti dice 'Devi imparare da qualcun altro adessso'.",
+				act("$N ti dice 'Devi imparare da qualcun altro adesso.'",
 					TRUE, ch, 0, mob, TO_CHAR);
 				return(FALSE);
 			} /* to high a level, can't immort them! */
@@ -7353,7 +7407,7 @@ MOBSPECIAL_FUNC(barbarian_guildmaster) {
 			if(GET_EXP(ch) <
 					titles[ BARBARIAN_LEVEL_IND ]
 					[ GET_LEVEL(ch, BARBARIAN_LEVEL_IND) + 1 ].exp) {
-				act("$N ti dice 'Non sei ancora pronto per il nuovo livello'.",
+				act("$N ti dice 'Non sei ancora pront$b per il nuovo livello.'",
 					TRUE, ch, 0, mob, TO_CHAR);
 				return(FALSE);
 			}
@@ -7364,8 +7418,7 @@ MOBSPECIAL_FUNC(barbarian_guildmaster) {
 		} /* end gain */
 
 		if(!arg || (strlen(arg) == 0)) {
-			sprintf(buf,"You have got %d practice sessions left.\n\r",
-					ch->specials.spells_to_learn);
+			sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
 			send_to_char(buf,ch);
 			sprintf(buf," disarm           :  %s\n\r",how_good(ch->skills[SKILL_DISARM].learned));
 			send_to_char(buf,ch);
@@ -7408,10 +7461,11 @@ MOBSPECIAL_FUNC(barbarian_guildmaster) {
 		}
 		else {
 			number = old_search_block(arg,0,strlen(arg),n_skills,FALSE);
-			send_to_char("The Barbarian master says ",ch);
+            sprintf(buf, "%s dice ", mob->player.short_descr);
+            send_to_char(buf, ch);
 
 			if(number == -1) {
-				send_to_char("'I do not know of this skill.'\n\r", ch);
+				send_to_char("'Non conosco questa abilita'.'\n\r", ch);
 				return(TRUE);
 			}
 
@@ -7473,21 +7527,21 @@ MOBSPECIAL_FUNC(barbarian_guildmaster) {
 				break;
 			default:
 				mudlog(LOG_SYSERR, "Strangeness in Barbarian (%d)", number);
-				send_to_char("'Ack!  I feel sick!'\n\r", ch);
+				send_to_char("'Aiuto! Mi sento male!'\n\r", ch);
 				return(TRUE);
 			}
 		}
 
 		if(sk_num == SKILL_HUNT || sk_num == SKILL_DODGE) {
 			if(ch->skills[sk_num].learned >= 95) {
-				send_to_char
-				("'You are a master of this art, I can teach you no more.'\n\r",ch);
+                sprintf(buf, "'Sei %s maestr%s in questa arte, non osso insegnarti altro.'\n\r", SSLF(ch), UNUNA(ch));
+				send_to_char(buf, ch);
 				return(TRUE);
 			}
 		}
 		else {
 			if(ch->skills[sk_num].learned > 45) {
-				send_to_char("'You must learn from practice and experience now.'\n\r", ch);
+				send_to_char("'Non posso insegnarti altro, devi imparare dalla pratica e dall'esperienza.'\n\r", ch);
 				SET_BIT(ch->skills[sk_num].flags, SKILL_KNOWN);
 				return(TRUE);
 			}
@@ -7495,11 +7549,11 @@ MOBSPECIAL_FUNC(barbarian_guildmaster) {
 
 		if(ch->specials.spells_to_learn <= 0) {
 			send_to_char
-			("'You must first use the knowledge you already have.'\n\r",ch);
+			("'Non hai abbastanza sessioni di allenamento.'\n\r",ch);
 			return(FALSE);
 		}
 
-		send_to_char("'I will now show you the ways of our people...'\n\r",ch);
+		send_to_char("'Ti mostrero' quello che insegnamo alla nostra gente...'\n\r",ch);
 		ch->specials.spells_to_learn--;
 
 		if(!IS_SET(ch->skills[sk_num].flags, SKILL_KNOWN)) {
@@ -7510,7 +7564,8 @@ MOBSPECIAL_FUNC(barbarian_guildmaster) {
 		ch->skills[ sk_num ].learned += int_app[(int)GET_INT(ch) ].learn;
 
 		if(ch->skills[sk_num].learned >= 95) {
-			send_to_char("'You are now a master of this art.'\n\r", ch);
+            sprintf(buf, "'Adesso sei %s maestr%s in questa arte.'\n\r", SSLF(ch), UNUNA(ch));
+            send_to_char(buf, ch);
 		}
 		return(TRUE);
 	}
@@ -8147,7 +8202,7 @@ MOBSPECIAL_FUNC(PaladinGuildmaster) {
 
 
 		if(!*arg) {
-			sprintf(buf,"Hai a disposizione %d sezioni di pratica.\n\r",
+			sprintf(buf,"Hai a disposizione %d sessioni di pratica.\n\r",
 					ch->specials.spells_to_learn);
 			send_to_char(buf, ch);
 			send_to_char("Puoi imparare questi skills:\n\r", ch);
@@ -8212,7 +8267,7 @@ MOBSPECIAL_FUNC(PaladinGuildmaster) {
 	/**** SALVO skills prince ****/
 	else if(IS_PRINCE(ch) && !HasClass(ch, CLASS_PALADIN) && cmd !=CMD_GAIN) {
 		if(!*arg) {
-			sprintf(buf,"Hai a disposizione %d sezioni di pratica.\n\r",
+			sprintf(buf,"Hai a disposizione %d sessioni di pratica.\n\r",
 					ch->specials.spells_to_learn);
 			send_to_char(buf, ch);
 			send_to_char("Puoi imparare questa skills:\n\r", ch);

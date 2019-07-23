@@ -4536,10 +4536,10 @@ a umani molto brutti. Non ancora certi di dove vivere questi ragazzi
 possono essere molto pericolosi o molto utili.
 
 #
-HUMAN
+HUMAN UOMINI
 
-Guardati nello specchio.
 Gli umani sono mediamente versati in tutto, e non eccellono in nessun campo.
+Possono fare qualsiasi professione.
 
 #
 HALFOGRE HALF-OGRE
@@ -5597,6 +5597,60 @@ per i piu' piccoli si trova in una foresta ad ovest di Myst
 per gli expert essa risiede nei pressi di New Thalos
 per Master, Adept, Lord e Principi  la mitica Scala Nera e' nascosta
 tra i ghiacciai del profondo Nord.
+
+#
+"LUST FOR POWER" "SETE DI POTERE"
+
+| Sintassi          : Nessuna, e' una abilita' passiva
+| Razza             : Uomini
+| Costo             : -
+| Tipo di danno     : -
+| Danno             : -
+| Durata            : -
+| Lag               : -
+| Spellfail         : -
+| Area effetto      : -
+| Tiro Salvezza     : -
+| Allineamento      : -
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Gli uomini hanno da sempre bramato il potere tra i popoli delle Nebbie e, nel corso
+|  dei secoli, hanno affinato questa abilita': i personaggi di razza umana possono 
+|  guadagnare il 5% di esperienza in piu' rispetto alle altre razze inoltre, nel caso di
+|  morte del personaggio, la perdita di esperienza e' diminuita del 5%.
+|
+|__________________________________________________________________________________________
+
+Vedi anche: UOMINI, SETE DI DENARO
+
+#
+"LUST FOR MONEY" "SETE DI DENARO"
+
+| Sintassi          : Nessuna, e' una abilita' passiva
+| Razza             : Uomini
+| Costo             : -
+| Tipo di danno     : -
+| Danno             : -
+| Durata            : -
+| Lag               : -
+| Spellfail         : -
+| Area effetto      : -
+| Tiro Salvezza     : -
+| Allineamento      : -
+|__________________________________________________________________________________________
+|
+| Effetto:
+|
+|  Gli uomini sono considerati degli ottimi mercanti ed anche molto abili nel riconoscere
+|  il valore delle cose: i personaggi di razza umana riescono a mercanteggiare abilmente 
+|  e possono ottenere uno sconto del 10% dal prezzo degli oggetti dai negozianti ed ad
+|  aumentare il guadagno, sempre del 10%, di monete quando sono loro a vendere.
+|
+|__________________________________________________________________________________________
+
+Vedi anche: UOMINI, SETE DI POTERE
 
 #~
 

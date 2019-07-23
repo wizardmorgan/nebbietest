@@ -79,9 +79,8 @@ struct RaceListTable
     int d_r_pierce;
     int d_r_magic;
     unsigned long affect;
-    int innate_skill1;
-    int innate_skill2;
-    int innate_skill3;
+    int innate_skill[5];
+    int skill_learn[5];
 };
 /*
  * Achievements
@@ -677,7 +676,7 @@ struct char_special_data {
 	ubyte pmask;            /* poof mask                           */
 	ubyte position;         /* Standing or ...                        */
 	ubyte default_pos;      /* Default position for NPC              */
-	byte spells_to_learn;  /* How many can you learn yet this level*/
+	sh_int spells_to_learn;  /* How many can you learn yet this level*/
 	ubyte carry_items;      /* Number of items carried              */
 	char last_direction;   /* The last direction the monster went */
 	unsigned sev;          /* log severety level for gods */
