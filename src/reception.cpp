@@ -2688,7 +2688,10 @@ void old_chst_to_chst(struct char_file_u_3040* ch_st_3040, struct char_file_u* c
     ch_st->points       = ch_st_3040->points;
     for(i = 0; i < MAX_3040_SKILLS; i++)
     {
-        ch_st->skills[i] = ch_st_3040->skills[i];
+        ch_st->skills[i].learned = ch_st_3040->skills[i].learned;
+        ch_st->skills[i].flags = ch_st_3040->skills[i].flags;
+        ch_st->skills[i].special = ch_st_3040->skills[i].special;
+        ch_st->skills[i].nummem = ch_st_3040->skills[i].nummem;
     }
     for(i = MAX_3040_SKILLS; i < MAX_SKILLS; i++)
     {

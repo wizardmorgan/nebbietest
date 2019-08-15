@@ -6426,6 +6426,14 @@ int IsGiantish(struct char_data* ch) {
 }
 
 int IsSmall(struct char_data* ch) {
+    if(GET_RACE(ch) < max_race_table)
+    {
+        if(RaceStuffs[GET_RACE(ch)].isHuge < 0)
+        {
+            return(TRUE);
+        }
+        return(FALSE);
+    }
 	switch(GET_RACE(ch)) {
 	case RACE_SMURF:
 	case RACE_GNOME:
@@ -6440,6 +6448,10 @@ int IsSmall(struct char_data* ch) {
 }
 
 int IsGiant(struct char_data* ch) {
+    if(GET_RACE(ch) < max_race_table)
+    {
+        return((number(1,100) > RaceStuffs[GET_RACE(ch)].isHuge));
+    }
 	switch(GET_RACE(ch)) {
 	case RACE_GIANT:
 	case RACE_GIANT_HILL   :
@@ -7518,6 +7530,10 @@ void SetRacialStuff(struct char_data* mob) {
                         {
                             SET_BIT(mob->skills[RaceStuffs[GET_RACE(mob)].innate_skill[i]].flags, SKILL_KNOWN);
                         }
+                        if(!IS_SET(mob->skills[RaceStuffs[GET_RACE(mob)].innate_skill[i]].flags, SKILL_KNOWN_RACIAL) && !IS_LANGUAGE(RaceStuffs[GET_RACE(mob)].innate_skill[i]))
+                        {
+                            SET_BIT(mob->skills[RaceStuffs[GET_RACE(mob)].innate_skill[i]].flags, SKILL_KNOWN_RACIAL);
+                        }
                     }
                 }
             }
@@ -8213,6 +8229,8 @@ int HasWBits(struct char_data* ch, int bits) {
 }
 
 void LearnFromMistake(struct char_data* ch, int sknum, int silent, int max) {
+    int i;
+
 	if(!ch->skills) {
 		return;
 	}
@@ -8233,6 +8251,18 @@ void LearnFromMistake(struct char_data* ch, int sknum, int silent, int max) {
 	else {
 		max = MIN(max, 95);
 	}
+
+    if(IS_SET(ch->skills[ sknum ].flags, SKILL_KNOWN_RACIAL) && !IS_IMMORTAL(ch))
+    {
+        for (i = 0; i < 5; i++)
+        {
+            if(RaceStuffs[GET_RACE(ch)].innate_skill[i] == sknum)
+            {
+                max = RaceStuffs[GET_RACE(ch)].max_skill_learn[i];
+                break;
+            }
+        }
+    }
 
 	if(ch->skills[ sknum ].learned < max && ch->skills[ sknum ].learned > 0) {
 		if(number(1, 101) > ch->skills[ sknum ].learned / 2) {
@@ -8946,7 +8976,7 @@ int IS_UNDERGROUND(struct char_data* ch) {
 void SetDefaultLang(struct char_data* ch) {
 	int i;
 
-    if(GET_RACE(ch) <= max_race_table)
+    if(GET_RACE(ch) < max_race_table)
     {
         ch->skills[RaceStuffs[GET_RACE(ch)].speak].learned = 95;
         SET_BIT(ch->skills[RaceStuffs[GET_RACE(ch)].speak].flags,SKILL_KNOWN);
@@ -8993,103 +9023,106 @@ int IsMagicSpell(int spell_num) {
 
 	/* using non magic items, since everything else is almost magic */
 	/* lot smaller switch this way */
-	switch(spell_num) {
-	case SKILL_BACKSTAB:
-	case SKILL_SNEAK:
-	case SKILL_HIDE:
-	case SKILL_PICK_LOCK:
-	case SKILL_KICK:
-	case SKILL_BASH:
-	case SKILL_RESCUE:
-	case SKILL_FIRST_AID:
-	case SKILL_SIGN:
-	case SKILL_RIDE:
-	case SKILL_SWITCH_OPP:
-	case SKILL_DODGE:
-	case SKILL_REMOVE_TRAP:
-	case SKILL_RETREAT:
-	case SKILL_QUIV_PALM:
-	case SKILL_SAFE_FALL:
-	case SKILL_FEIGN_DEATH:
-	case SKILL_HUNT:
-	case SKILL_FIND_TRAP:
-	case SKILL_SPRING_LEAP:
-	case SKILL_DISARM:
-	case SKILL_EVALUATE:
-	case SKILL_SPY:
-	case SKILL_DOORBASH:
-	case SKILL_SWIM:
-	case SKILL_CONS_UNDEAD:
-	case SKILL_CONS_VEGGIE:
-	case SKILL_CONS_DEMON:
-	case SKILL_CONS_ANIMAL:
-	case SKILL_CONS_REPTILE:
-	case SKILL_CONS_PEOPLE:
-	case SKILL_CONS_GIANT:
-	case SKILL_CONS_OTHER:
-	case SKILL_DISGUISE:
-	case SKILL_CLIMB:
-	case SKILL_BERSERK:
-	case SKILL_TAN:
-	case SKILL_AVOID_BACK_ATTACK:
-	case SKILL_FIND_FOOD:
-	case SKILL_FIND_WATER:
-	case SPELL_PRAYER:
-	case SKILL_MEMORIZE:
-	case SKILL_BELLOW:
-	case SKILL_DOORWAY:
-	case SKILL_PORTAL:
-	case SKILL_SUMMON:
-	case SKILL_INVIS:
-	case SKILL_CANIBALIZE:
-	case SKILL_FLAME_SHROUD:
-	case SKILL_AURA_SIGHT:
-	case SKILL_GREAT_SIGHT:
-	case SKILL_PSIONIC_BLAST:
-	case SKILL_HYPNOSIS:
-	case SKILL_MEDITATE:
-	case SKILL_SCRY:
-	case SKILL_ADRENALIZE:
-	case SKILL_RATION:
-	case SKILL_HOLY_WARCRY:
-	case SKILL_HEROIC_RESCUE:
-	case SKILL_DUAL_WIELD:
-	case SKILL_PSI_SHIELD:
-	case SKILL_EAVESDROP:
-    case SKILL_QUICKNESS:
-    case SKILL_LUST_FOR_POWER:
-    case SKILL_LUST_FOR_MONEY:
-	case LANG_COMMON:
-	case LANG_ELVISH:
-	case LANG_HALFLING:
-	case LANG_DWARVISH:
-	case LANG_ORCISH:
-	case LANG_GIANTISH:
-	case LANG_OGRE:
-	case LANG_GNOMISH:
-	case SKILL_ESP:                                /* end skills */
+	switch(spell_num)
+    {
+        case SKILL_BACKSTAB:
+        case SKILL_SNEAK:
+        case SKILL_HIDE:
+        case SKILL_PICK_LOCK:
+        case SKILL_KICK:
+        case SKILL_BASH:
+        case SKILL_RESCUE:
+        case SKILL_FIRST_AID:
+        case SKILL_SIGN:
+        case SKILL_RIDE:
+        case SKILL_SWITCH_OPP:
+        case SKILL_DODGE:
+        case SKILL_REMOVE_TRAP:
+        case SKILL_RETREAT:
+        case SKILL_QUIV_PALM:
+        case SKILL_SAFE_FALL:
+        case SKILL_FEIGN_DEATH:
+        case SKILL_HUNT:
+        case SKILL_FIND_TRAP:
+        case SKILL_SPRING_LEAP:
+        case SKILL_DISARM:
+        case SKILL_EVALUATE:
+        case SKILL_SPY:
+        case SKILL_DOORBASH:
+        case SKILL_SWIM:
+        case SKILL_CONS_UNDEAD:
+        case SKILL_CONS_VEGGIE:
+        case SKILL_CONS_DEMON:
+        case SKILL_CONS_ANIMAL:
+        case SKILL_CONS_REPTILE:
+        case SKILL_CONS_PEOPLE:
+        case SKILL_CONS_GIANT:
+        case SKILL_CONS_OTHER:
+        case SKILL_DISGUISE:
+        case SKILL_CLIMB:
+        case SKILL_BERSERK:
+        case SKILL_TAN:
+        case SKILL_AVOID_BACK_ATTACK:
+        case SKILL_FIND_FOOD:
+        case SKILL_FIND_WATER:
+        case SPELL_PRAYER:
+        case SKILL_MEMORIZE:
+        case SKILL_BELLOW:
+        case SKILL_DOORWAY:
+        case SKILL_PORTAL:
+        case SKILL_SUMMON:
+        case SKILL_INVIS:
+        case SKILL_CANIBALIZE:
+        case SKILL_FLAME_SHROUD:
+        case SKILL_AURA_SIGHT:
+        case SKILL_GREAT_SIGHT:
+        case SKILL_PSIONIC_BLAST:
+        case SKILL_HYPNOSIS:
+        case SKILL_MEDITATE:
+        case SKILL_SCRY:
+        case SKILL_ADRENALIZE:
+        case SKILL_RATION:
+        case SKILL_HOLY_WARCRY:
+        case SKILL_HEROIC_RESCUE:
+        case SKILL_DUAL_WIELD:
+        case SKILL_PSI_SHIELD:
+        case SKILL_EAVESDROP:
+        case SKILL_QUICKNESS:
+        case SKILL_LUST_FOR_POWER:
+        case SKILL_LUST_FOR_MONEY:
+        case SKILL_DETECT_HIDDEN:
+        case SKILL_BLOW_KNEE:
+        case LANG_COMMON:
+        case LANG_ELVISH:
+        case LANG_HALFLING:
+        case LANG_DWARVISH:
+        case LANG_ORCISH:
+        case LANG_GIANTISH:
+        case LANG_OGRE:
+        case LANG_GNOMISH:
+        case SKILL_ESP:                                /* end skills */
 
-	case TYPE_HIT:                                /* weapon types here */
-	case TYPE_BLUDGEON:
-	case TYPE_PIERCE:
-	case TYPE_SLASH:
-	case TYPE_WHIP:
-	case TYPE_CLAW:
-	case TYPE_BITE:
-	case TYPE_STING:
-	case TYPE_CRUSH:
-	case TYPE_CLEAVE:
-	case TYPE_STAB:
-	case TYPE_SMASH:
-	case TYPE_SMITE:
-	case TYPE_BLAST:
-	case TYPE_SUFFERING:
-	case TYPE_RANGE_WEAPON:
-		tmp = FALSE;        /* these are NOT magical! */
+        case TYPE_HIT:                                /* weapon types here */
+        case TYPE_BLUDGEON:
+        case TYPE_PIERCE:
+        case TYPE_SLASH:
+        case TYPE_WHIP:
+        case TYPE_CLAW:
+        case TYPE_BITE:
+        case TYPE_STING:
+        case TYPE_CRUSH:
+        case TYPE_CLEAVE:
+        case TYPE_STAB:
+        case TYPE_SMASH:
+        case TYPE_SMITE:
+        case TYPE_BLAST:
+        case TYPE_SUFFERING:
+        case TYPE_RANGE_WEAPON:
+            tmp = FALSE;        /* these are NOT magical! */
 		break;
 
-	default:
-		tmp = TRUE; /* default to IS MAGIC */
+        default:
+            tmp = TRUE; /* default to IS MAGIC */
 		break;
 	} /* end switch */
 
@@ -10673,13 +10706,11 @@ void WriteDbObj(FILE* f, int type, int limit, int loc)
 
 int CheckQuickness(struct char_data* ch)
 {
-    int percent, quick = 0;
+    int quick = 0;
 
-    if (ch->skills[SKILL_QUICKNESS].learned)
+    if(ch->skills && ch->skills[SKILL_QUICKNESS].learned)
     {
-        percent = number(1, 101);
-        
-        if(percent > MIN(100, ch->skills[SKILL_QUICKNESS].learned))
+        if(number(1, 101) > MIN(100, ch->skills[SKILL_QUICKNESS].learned))
         {
             LearnFromMistake(ch, SKILL_QUICKNESS, 0, 95);
         }
@@ -10702,5 +10733,21 @@ int CheckQuickness(struct char_data* ch)
         }
     }
     return quick;
+}
+
+bool CheckDetectHidden(struct char_data* ch)
+{
+    if(ch->skills && ch->skills[SKILL_DETECT_HIDDEN].learned)
+    {
+        if(number(1,101) < ch->skills[SKILL_DETECT_HIDDEN].learned)
+        {
+            return TRUE;
+        }
+        else
+        {
+            LearnFromMistake(ch, SKILL_DETECT_HIDDEN, 1, 60);
+        }
+    }
+    return FALSE;
 }
 } // namespace Alarmud

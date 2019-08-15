@@ -44,6 +44,7 @@ namespace Alarmud {
 void get(struct char_data* ch, struct obj_data* obj_object,
 		 struct obj_data* sub_object) {
 	char buffer[ 256 ];
+    int greed = 0;
 
 	/* if it is a limited items check if the PC EGO is
 	   strong enough to control all the limited items
@@ -77,13 +78,32 @@ void get(struct char_data* ch, struct obj_data* obj_object,
 			obj_from_room(obj_object);
 			obj_to_char(obj_object, ch);
 		}
-		if(obj_object->obj_flags.type_flag == ITEM_MONEY &&
-				obj_object->obj_flags.value[0] >= 1) {
+		if(obj_object->obj_flags.type_flag == ITEM_MONEY && obj_object->obj_flags.value[0] >= 1)
+        {
 			obj_from_char(obj_object);
 			if(obj_object->obj_flags.value[0] > 1)
-				sprintf(buffer, "C'erano %d monete.\n\r",
-						obj_object->obj_flags.value[ 0 ]);
-			else {
+            {
+                if(ch->skills && ch->skills[SKILL_GREED_FOR_GOLD].learned && !IS_SET(obj_object->obj_flags.extra_flags2, ITEM2_MONEY_DROPPED))
+                {
+                    if(number(1,101) < ch->skills[SKILL_GREED_FOR_GOLD].learned)
+                    {
+                        greed = obj_object->obj_flags.value[ 0 ] * 10 / 100;
+                        if(greed > 0)
+                        {
+                            sprintf(buffer, "$c0003La tua cupidigia ti permette di trovare $c0015%d$c0003 monet%s d'oro in piu'.\n\r", greed, (greed == 1 ? "a" : "e"));
+                            send_to_char(buffer, ch);
+                            obj_object->obj_flags.value[ 0 ] += greed;
+                        }
+                    }
+                    else
+                    {
+                        LearnFromMistake(ch, SKILL_GREED_FOR_GOLD, 0, 95);
+                    }
+                }
+				sprintf(buffer, "C'erano %d monete.\n\r", obj_object->obj_flags.value[ 0 ]);
+            }
+			else
+            {
 				sprintf(buffer, "C'era una miserabile moneta.\n\r");
 			}
 			send_to_char(buffer, ch);
@@ -557,6 +577,10 @@ ACTION_FUNC(do_drop) {
 				else {
 
 					tmp_object = create_money(amount);
+                    if(!IS_SET(tmp_object->obj_flags.extra_flags2, ITEM2_MONEY_DROPPED))
+                    {
+                        SET_BIT(tmp_object->obj_flags.extra_flags2, ITEM2_MONEY_DROPPED);
+                    }
 					obj_to_room(tmp_object, ch->in_room);
 					GET_GOLD(ch) -= amount;
 					if(amount == 1) {

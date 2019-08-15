@@ -1477,6 +1477,7 @@ void assign_command_pointers() {
 	AddCommand( "immolate",             do_immolation,      CMD_IMMOLATION,             POSITION_FIGHTING,  TUTTI                   );
 	AddCommand( "SetTest",              do_imptest,         CMD_IMPTEST,                POSITION_DEAD,      MAESTRO_DEL_CREATO      );
     AddCommand( "checkachie",           do_checkachielevel, CMD_CHECKACHIELEVEL,        POSITION_DEAD,      TUTTI                   );
+    AddCommand( "blowknee",             do_blowknee,        CMD_BLOWKNEE,               POSITION_FIGHTING,  TUTTI                   );  /*  505 */
 }
 
 

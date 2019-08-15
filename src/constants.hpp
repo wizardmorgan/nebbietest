@@ -203,6 +203,8 @@ extern const char* att_kick_hit_room[];
 extern int ObjectHitPoints[E_ITEM_TYPE_COUNT];
 
 extern struct RaceListTable RaceStuffs[5];
+
+extern struct RaceTeacherTable RaceTeacherList[5];
 } // namespace Alarmud
 #endif
 

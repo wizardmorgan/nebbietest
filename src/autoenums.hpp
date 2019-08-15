@@ -128,6 +128,7 @@ Bitvector for 'extra_flags2'*/
 	constexpr unsigned long ITEM2_NO_PRINCE                              =32; /*prince can't use the item*/
 	constexpr unsigned long ITEM2_ONLY_PRINCE                            =64; /*only prince can use the item*/
 	constexpr unsigned long ITEM2_DESTROYED                              =128; /*destroyed item*/
+	constexpr unsigned long ITEM2_MONEY_DROPPED                          =256; /*money dropped item*/
 // Flag type: E_ITEM_FLAG -- start
 /*
 Bitvector for 'extra_flags'*/
@@ -300,6 +301,7 @@ skill_data flags*/
 	constexpr unsigned long SKILL_KNOWN_PALADIN                          =512; /*need to make byte flags, to long or int flags in char_skill_data*/
 	constexpr unsigned long SKILL_KNOWN_RANGER                           =1024; /*need to make byte flags, to long or int flags in char_skill_data*/
 	constexpr unsigned long SKILL_KNOWN_PSI                              =2048; /*need to make byte flags, to long or int flags in char_skill_data*/
+	constexpr unsigned long SKILL_KNOWN_RACIAL                           =4096;
 // Flag type: E_SYS_FLAGS -- start
 /*
 system flags defined on the fly and by wizards for this boot*/

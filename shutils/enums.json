@@ -3580,6 +3580,10 @@
             "SKILL_KNOWN_PSI": {
                 "value": 2048,
                 "comment": "need to make byte flags, to long or int flags in char_skill_data\n"
+            },
+            "SKILL_KNOWN_RACIAL": {
+                "value": 4096,
+                "comment": ""
             }
         },
         "e_user_flags": {
@@ -4076,6 +4080,10 @@
             "ITEM2_DESTROYED": {
                 "value": 128,
                 "comment": "destroyed item"
+            },
+            "ITEM2_MONEY_DROPPED": {
+                "value": 256,
+                "comment": "money dropped item"
             }
         }
     }

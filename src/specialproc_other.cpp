@@ -228,8 +228,8 @@ struct OtherSpecialProcEntry otherproc[] = {
 	{ "zombie_master",(genericspecial_func) zombie_master },
 	{ "ItemGiven",(genericspecial_func) ItemGiven },  // SALVO 2006 Quest fisse
 	{ "ItemPut",(genericspecial_func)ItemPut },  // SALVO 2006 Quest fisse
-//  Nuovi maestri abilità di razza
-    { "HalflingTeacher", (genericspecial_func) HalflingTeacher },
+//  Nuovo maestro abilità di razza
+    { "RacialTeacher", (genericspecial_func) RacialTeacher },
 //  Quest Nilmys
     //  oggetti
     { "urna_nilmys", (genericspecial_func) urna_nilmys },
@@ -245,4 +245,3 @@ struct OtherSpecialProcEntry otherproc[] = {
 	{ "zFineprocedure", NULL },
 };
 } // namespace Alarmud
-

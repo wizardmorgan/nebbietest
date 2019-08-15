@@ -510,6 +510,7 @@ namespace Alarmud {
 #define CMD_IMMOLATION	        502 //Flyp 20180128 --> canibalize per demoni
 #define CMD_IMPTEST             503 //Alar, enables test mode
 #define CMD_CHECKACHIELEVEL     504 //Montero check on achievement table
+#define CMD_BLOWKNEE            505
 //  free 505-508
 #define MAX_CMD_LIST            509
 } // namespace Alarmud

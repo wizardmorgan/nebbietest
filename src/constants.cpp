@@ -378,6 +378,12 @@ const char* spell_wear_off_msg[] = {
 	/*  292 SKILL_FORGE                 */  "!forge!",
 	/*  293 SKILL_DETERMINE             */  "!determine!",
 	/*  294 SKILL_EQUILIBRIUM           */  "!equilibrium!",
+    /*  295 SKILL_LUST_FOR_POWER        */  "!lust_for_power!",
+    /*  296 SKILL_LUST_FOR_MONEY        */  "!lust_for_money!",
+    /*  297 SKILL_DETECT_HIDDEN         */  "!detect_hidden!",
+    /*  298 SKILL_GREED_FOR_GOLD        */  "!greed_for_gold!",
+    /*  299 SKILL_BLOW_KNEE             */  "$c0010Ti senti piu' agile.",
+    /*  300 SKILL_RACIAL_SKILL          */  "$c0009Puoi usare di nuovo la tua abilita' razziale.",
                                             "\n"
 };
 /*Messaggio per la stanza quando una spell/skill scade*/
@@ -677,6 +683,12 @@ const char* spell_wear_off_room_msg[] = {
     /*  292 SKILL_FORGE                 */  "!forge!",
     /*  293 SKILL_DETERMINE             */  "!determine!",
     /*  294 SKILL_EQUILIBRIUM           */  "!equilibrium!",
+    /*  295 SKILL_LUST_FOR_POWER        */  "!lust_for_power!",
+    /*  296 SKILL_LUST_FOR_MONEY        */  "!lust_for_money!",
+    /*  297 SKILL_DETECT_HIDDEN         */  "!detect_hidden!",
+    /*  298 SKILL_GREED_FOR_GOLD        */  "!greed_for_gold!",
+    /*  299 SKILL_BLOW_KNEE             */  "$c0011$n sembra piu' agile.",
+    /*  300 SKILL_RACIAL_SKILL          */  "",
                                             "\n"
 };
 /* Messaggio di preavviso di fine spell*/
@@ -976,6 +988,12 @@ const char* spell_wear_off_soon_msg[] = {
     /*  292 SKILL_FORGE                 */  "!forge!",
     /*  293 SKILL_DETERMINE             */  "!determine!",
     /*  294 SKILL_EQUILIBRIUM           */  "!equilibrium!",
+    /*  295 SKILL_LUST_FOR_POWER        */  "!lust_for_power!",
+    /*  296 SKILL_LUST_FOR_MONEY        */  "!lust_for_money!",
+    /*  297 SKILL_DETECT_HIDDEN         */  "!detect_hidden!",
+    /*  298 SKILL_GREED_FOR_GOLD        */  "!greed_for_gold!",
+    /*  299 SKILL_BLOW_KNEE             */  "",
+    /*  300 SKILL_RACIAL_SKILL          */  "$c0011Tra poco potrai usare di nuovo la tua abilita' razziale.",
                                             "\n"
 };
 
@@ -1275,6 +1293,12 @@ const char* spell_wear_off_soon_room_msg[] = {
     /*  292 SKILL_FORGE                 */  "!forge!",
     /*  293 SKILL_DETERMINE             */  "!determine!",
     /*  294 SKILL_EQUILIBRIUM           */  "!equilibrium!",
+    /*  295 SKILL_LUST_FOR_POWER        */  "!lust_for_power!",
+    /*  296 SKILL_LUST_FOR_MONEY        */  "!lust_for_money!",
+    /*  297 SKILL_DETECT_HIDDEN         */  "!detect_hidden!",
+    /*  298 SKILL_GREED_FOR_GOLD        */  "!greed_for_gold!",
+    /*  299 SKILL_BLOW_KNEE             */  "",
+    /*  300 SKILL_RACIAL_SKILL          */  "",
                                             "\n"
 
 };
@@ -2669,6 +2693,7 @@ const char* extra_bits2[] = {
     "NO-PRINCE",
     "ONLY-PRINCE",
     "DESTROYED",
+    "MONEY-DROPPED",
     "\n"
 };
     
@@ -3854,6 +3879,12 @@ const char* spell_desc[] = {
     /*  292 SKILL_FORGE                 */  "!forge!",
     /*  293 SKILL_DETERMINE             */  "!determine!",
     /*  294 SKILL_EQUILIBRIUM           */  "!equilibrium!",
+    /*  295 SKILL_LUST_FOR_POWER        */  "!lust_for_power!",
+    /*  296 SKILL_LUST_FOR_MONEY        */  "!lust_for_money!",
+    /*  297 SKILL_DETECT_HIDDEN         */  "!detect_hidden!",
+    /*  298 SKILL_GREED_FOR_GOLD        */  "!greed_for_gold!",
+    /*  299 SKILL_BLOW_KNEE             */  "",
+    /*  300 SKILL_RACIAL_SKILL          */  "",
                                             "\n"
 };
 
@@ -8072,7 +8103,7 @@ float bash_reaction[] =
     9       // 25
 };
 
-int ObjectHitPoints[E_ITEM_TYPE_COUNT]
+int ObjectHitPoints[E_ITEM_TYPE_COUNT] =
 {
        0,   //  ITEM_NONE
      100,   //  ITEM_LIGHT
@@ -8103,9 +8134,67 @@ int ObjectHitPoints[E_ITEM_TYPE_COUNT]
      100    //  ITEM_ROCK
 };
 
-struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
+struct RaceTeacherTable RaceTeacherList[max_race_table] =
+{   //  race,   n_skill,    skill[10]
+    {   //  RACE_HALFBREED
+        0,
+        {
+            -1,                             -1,
+            -1,                             -1,
+            -1,                             -1,
+            -1,                             -1,
+            -1,                             -1
+        }
+    },
+
+    {   //  RACE_HUMAN
+        3,
+        {
+            LANG_COMMON,                    SKILL_LUST_FOR_MONEY,
+            SKILL_LUST_FOR_POWER,           -1,
+            -1,                             -1,
+            -1,                             -1,
+            -1,                             -1
+        }
+    },
+
+    {   //  RACE_ELVEN
+        3,
+        {
+            LANG_COMMON,                    LANG_ELVISH,
+            SKILL_DETECT_HIDDEN,            -1,
+            -1,                             -1,
+            -1,                             -1,
+            -1,                             -1
+        }
+    },
+
+    {   //  RACE_DWARF
+        5,
+        {
+            LANG_COMMON,                    LANG_DWARVISH,
+            SKILL_BLOW_KNEE,                SKILL_DETECT_HIDDEN,
+            SKILL_GREED_FOR_GOLD,           -1,
+            -1,                             -1,
+            -1,                             -1
+        }
+    },
+
+    {   //  RACE_HALFLING
+        1,
+        {
+            SKILL_QUICKNESS,                -1,
+            -1,                             -1,
+            -1,                             -1,
+            -1,                             -1,
+            -1,                             -1
+        }
+    }
+};
+
+struct RaceListTable RaceStuffs[max_race_table] =  // mettere MAX_RACE (anche su .hpp)
 {
-    //  RACE_HALFBREED
+                //  RACE_HALFBREED
     {
     // min  str,    int,    wis,    dex,    con,    chr
         {
@@ -8128,9 +8217,9 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         
     //  resistances
         {
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0
+              0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+              0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+              0,      0,      0,      0,      0
         },
         
     //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
@@ -8145,13 +8234,19 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
                             -1,                         -1,
                             -1
         },
+
     //          skill_learn
+        {
+            0,      0,      0,      0,      0
+        },
+
+        //          max_skill_learn
         {
             0,      0,      0,      0,      0
         }
     },
 
-    //  RACE_HUMAN
+                //  RACE_HUMAN
     {
     // min  str,    int,    wis,    dex,    con,    chr
         {
@@ -8174,9 +8269,9 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
 
     //  resistances
         {
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0
+              0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+              0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+              0,      0,      0,      0,      0
         },
 
     //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
@@ -8191,101 +8286,119 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
                             -1,                         -1,
                             -1
         },
+
     //          skill_learn
         {
             15,     25,     0,      0,      0
+        },
+
+    //          max_skill_learn
+        {
+            50,     75,     0,      0,      0
         }
     },
 
-    //  RACE_
+                //  RACE_ELVEN  -   moon elf    -
     {
     // min  str,    int,    wis,    dex,    con,    chr
         {
-            6,      6,      6,      6,      6,      6
+            4,      8,      6,      8,      4,      6
         },
 
     // max  str,    int,    wis,    dex,    con,    chr
         {
-            18,     18,     18,     18,     18,     18
+            18,     18,     18,     19,     17,     18
         },
 
     //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
-        74,                 5,              LANG_COMMON,    TRUE,       TRUE,           0,
+        73,                 5,              LANG_ELVISH,    TRUE,       TRUE,           0,
 
     //  damage, spellpower, hitroll,    spellfail,
-        0,      0,          0,          0,
-        
+        -1,     3,          0,          -20,
+
     //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
-        0,      0,          0,      0,          0,      0,
-        
+        0,      0,          30,     15,         0,      0,
+
     //  resistances
         {
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0
+              0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+            100,     20,      0,      0,      0,      0,      0,      0,      0,      0,
+              0,      0,      0,      0,      0
         },
-        
+
     //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
         0,          0,          0,          0,
-        
+
     //  affect
-        0,
-        
+        AFF_INFRAVISION,
+
     //          innate_skill
         {
-                            -1,                         -1,
-                            -1,                         -1,
-                            -1
+            SKILL_DETECT_HIDDEN,        LANG_COMMON,
+            -1,                         -1,
+            -1
         },
+
         //          skill_learn
         {
-            0,      0,      0,      0,      0
+            10,     50,      0,      0,      0
+        },
+
+        //          max_skill_learn
+        {
+            50,     95,      0,      0,      0
         }
     },
 
-    //  RACE_
+                //  RACE_DWARF
     {
     // min  str,    int,    wis,    dex,    con,    chr
         {
-            6,      6,      6,      6,      6,      6
+            6,      6,      6,      6,      8,      4
         },
 
     // max  str,    int,    wis,    dex,    con,    chr
         {
-            18,     18,     18,     18,     18,     18
+            18,     18,     18,     17,     20,     17
         },
 
-        //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
-        74,                 5,              LANG_COMMON,    TRUE,       TRUE,           0,
-        
-        //  damage, spellpower, hitroll,    spellfail,
+    //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
+        72,                 5,              LANG_DWARVISH,  TRUE,       TRUE,           -1,
+
+    //  damage, spellpower, hitroll,    spellfail,
         0,      0,          0,          0,
-        
-        //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
-        0,      0,          0,      0,          0,      0,
-        
-        //  resistances
+
+    //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
+        0,      0,          0,      0,          -10,    0,
+
+    //  resistances
         {
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0
+              5,      5,      0,      0,      0,      0,      0,      0,     25,      0,
+              0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+              0,      0,      0,      0,      0
         },
-        
-        //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
-        0,          0,          0,          0,
-        
-        //  affect
-        0,
-        
+
+    //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
+        1,          1,          0,          2,
+
+    //  affect
+        AFF_INFRAVISION,
+
     //          innate_skill
         {
-            -1,                         -1,
-            -1,                         -1,
+            SKILL_DETECT_HIDDEN,        SKILL_GREED_FOR_GOLD,
+            LANG_COMMON,                SKILL_BLOW_KNEE,
             -1
         },
+
         //          skill_learn
         {
-            0,      0,      0,      0,      0
+            10,      1,     35,      1,      0
+        },
+
+        //          max_skill_learn
+        {
+            59,     50,     95,      95,      0
         }
     },
 
@@ -8302,7 +8415,7 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         },
 
     //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
-        73,                 5,              LANG_COMMON,    TRUE,       TRUE,           0,
+        73,                 5,              LANG_COMMON,    TRUE,       TRUE,           -1,
         
         //  damage, spellpower, hitroll,    spellfail,
         0,      0,          0,          0,
@@ -8312,9 +8425,9 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
         
         //  resistances
         {
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
-            0,      0,      0,      0,      0
+              0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+              0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+              0,      0,      0,      0,      0
         },
         
         //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
@@ -8329,9 +8442,13 @@ struct RaceListTable RaceStuffs[5]   // mettere MAX_RACE (anche su .hpp)
             -1,                         -1,
             -1
         },
-        //          skill_learn
+    //          skill_learn
         {
             35,      0,      0,      0,      0
+        },
+    //          max_skill_learn
+        {
+            95,      0,      0,      0,      0
         }
     }
 };

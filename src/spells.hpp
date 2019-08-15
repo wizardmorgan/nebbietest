@@ -367,8 +367,12 @@ namespace Alarmud {
 
 #define SKILL_LUST_FOR_POWER        295     //  abilita' passiva razziale uomini
 #define SKILL_LUST_FOR_MONEY        296     //  abilita' passiva razziale uomini
+#define SKILL_DETECT_HIDDEN         297     //  abilita' passiva razziale elfi e nani
+#define SKILL_GREED_FOR_GOLD        298     //  abilita' passiva razziale nani
+#define SKILL_BLOW_KNEE             299     //  abilita' passiva razziale nani
+#define RACIAL_SKILL                300     //  cooldown generico per le abilità di razza
 
-#define MAX_EXIST_SPELL             296   /* max number of skills/spells/status */
+#define MAX_EXIST_SPELL             300   /* max number of skills/spells/status */
 
 
 

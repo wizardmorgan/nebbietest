@@ -6807,6 +6807,25 @@ void do_miner(struct char_data* ch) {
 
 			//Testo se esce un metallo (e semmai quale), una pietra preziosa o un mob
 			percent = number(1,100);
+
+            // I nani hanno maggiore possibilità che esca qualcosa di buono...
+            if(GET_RACE(ch) == RACE_DARK_DWARF || GET_RACE(ch) == RACE_DWARF)
+            {
+                if(percent < 90)
+                {
+                    percent += number(1, 10);
+                }
+                // ... e minore possibilità di avere brutti incontri
+                if(percent == 99 && number(1, 100) > 70)
+                {
+                    percent = 100;
+                }
+                if(percent > 100)
+                {
+                    percent = 100;
+                }
+            }
+
 			if(percent <= 30) {
 				r_num = real_object(19500);    //rame
 			}
@@ -6851,6 +6870,13 @@ void do_miner(struct char_data* ch) {
 			//in questo caso cerco tra le tabelle di pietre preziose
 			if(percent == 100) {
 				percent = number(1,100);
+
+                // I nani hanno maggiore possibilità che esca qualcosa di buono
+                if(GET_RACE(ch) == RACE_DARK_DWARF || GET_RACE(ch) == RACE_DWARF)
+                {
+                    percent += number(1, 10);
+                }
+
 				if(percent <= 50) {
 					blocco = 1;
 				}
@@ -6868,6 +6894,21 @@ void do_miner(struct char_data* ch) {
 				}
 
 				percent = number(1,100);
+
+                // I nani hanno maggiore possibilità che esca qualcosa di buono...
+                if(GET_RACE(ch) == RACE_DARK_DWARF || GET_RACE(ch) == RACE_DWARF)
+                {
+                    if(percent < 90)
+                    {
+                        percent += number(1, 10);
+                    }
+                    // ... e minore possibilità di avere brutti incontri
+                    if(percent > 80 && blocco == 5 && number(1, 100) > 70)
+                    {
+                        percent = number(1, 80);
+                    }
+                }
+
 				switch(blocco) {
 				case 1:
 					if(percent <= 10) {
@@ -8352,5 +8393,167 @@ ACTION_FUNC(do_forge) {
 		WAIT_STATE(ch, PULSE_VIOLENCE*3);
 	}
 
+}
+
+ACTION_FUNC(do_blowknee)
+{
+    struct char_data* victim;
+    char name[256];
+    int percent = 0;
+    int dam = 0;
+    struct affected_type af;
+    room_data* pRoom = real_roomp(ch->in_room);
+    int location = 5;
+
+    if(GET_RACE(ch) != RACE_DWARF && !IS_IMMORTAL(ch))
+    {
+        send_to_char("Solo i nani possono farlo!\n\r", ch);
+        return;
+    }
+
+    if(!ch->skills)
+    {
+        return;
+    }
+
+    if(affected_by_spell(ch, RACIAL_SKILL))
+    {
+        send_to_char("Puoi usare questa abilita' solo una volta al giorno!\n\r", ch);
+        return;
+    }
+
+    if(check_peaceful(ch,"C'e' troppa pace qui per essere violenti.\n\r"))
+    {
+        return;
+    }
+
+    if(pRoom->sector_type == SECT_UNDERWATER)
+    {
+        send_to_char("Non riesci a colpire con forza sott'acqua.\n\r", ch);
+        return;
+    }
+
+    only_argument(arg, name);
+
+    if(!(victim = get_char_room_vis(ch, name)))
+    {
+        if(ch->specials.fighting)
+        {
+            victim = ch->specials.fighting;
+        }
+        else
+        {
+            send_to_char("Chi vuoi colpire?\n\r", ch);
+            return;
+        }
+    }
+
+    if(victim == ch)
+    {
+        act("Molto spiritos$b...", FALSE, ch, NULL, NULL, TO_CHAR);
+        return;
+    }
+
+    if(MOUNTED(victim))
+    {
+        send_to_char("Non puoi colpire la cavalcatura di qualcun altro!\n\r", ch);
+        return;
+    }
+
+    if(MOUNTED(ch))
+    {
+        send_to_char("Non puoi colpire nessuno mentre cavalchi!\n\r", ch);
+        return;
+    }
+
+    if(ch->attackers > 5)
+    {
+        send_to_char("Non c'e' abbastanza spazio!\n\r",ch);
+        return;
+    }
+
+    if(victim->attackers >= 6)
+    {
+        send_to_char("Non riesci ad avvicinarti abbastanza!\n\r", ch);
+        return;
+    }
+
+    if(GET_MOVE(ch) < 20)
+    {
+        send_to_char("Non hai abbastanza energia per farlo.\n\r",ch);
+        return;
+    }
+
+    percent = number(1, 101);
+
+    GET_MOVE(ch) -= 20;
+    alter_move(ch, 0);
+
+    if(percent > MIN(100, ch->skills[ SKILL_BLOW_KNEE ].learned))
+    {
+        if(GET_POS(victim) > POSITION_DEAD)
+        {
+            if(damage(ch, victim, 0, SKILL_BLOW_KNEE, location) == SubjectDead)
+            {
+                return;
+            }
+
+            if(HasHands(ch) || IS_SET(ch->specials.act,ACT_POLYSELF))
+            {
+                GET_POS(ch) = POSITION_SITTING;
+            }
+        }
+        LearnFromMistake(ch, SKILL_BLOW_KNEE, 0, 95);
+
+        if(CheckEquilibrium(ch))
+        {
+            WAIT_STATE(ch, PULSE_VIOLENCE * 1);
+        }
+        else
+        {
+            WAIT_STATE(ch, PULSE_VIOLENCE * 2);
+        }
+    }
+    else
+    {
+        af.type      = SKILL_BLOW_KNEE;
+        af.duration  = (IS_IMMORTAL(ch) ? 0 : 24);
+        af.modifier  = 0;
+        af.location  = APPLY_NONE;
+        af.bitvector = 0;
+        affect_to_char(ch, &af);
+
+        if(!CheckMirror(victim))
+        {
+            if(GET_POS(victim) > POSITION_DEAD)
+            {
+                dam = GET_CON(ch) + number(1, 4);
+
+                if(damage(ch, victim, dam, SKILL_BLOW_KNEE, location) != VictimDead)
+                {
+                    if(CheckEquilibrium(victim))
+                    {
+                        WAIT_STATE(victim, PULSE_VIOLENCE * 2);
+                    }
+                    else
+                    {
+                        WAIT_STATE(victim, PULSE_VIOLENCE * 3);
+                    }
+
+                    if(HasHands(victim) || IS_SET(victim->specials.act,ACT_POLYSELF)) {
+                        GET_POS(victim) = POSITION_SITTING;
+
+                        af.type      = SKILL_BLOW_KNEE;
+                        af.duration  = number(1, 4);
+                        af.modifier  = -2;
+                        af.location  = APPLY_DEX;
+                        af.bitvector = 0;
+                        affect_join(victim, &af, TRUE, FALSE);
+                    }
+                }
+            }
+            WAIT_STATE(ch, PULSE_VIOLENCE * 2);
+        }
+    }
 }
 } // namespace Alarmud

@@ -39,6 +39,7 @@ void restringReward(struct obj_data* obj, int obj_slot_number, int max_name, int
 void CheckAchie(struct char_data* ch, int achievement_type, int achievement_class);
 
 FILE* MakeZoneFile(struct char_data* c, int zone);
+bool CheckDetectHidden(struct char_data* ch) ;
 bool CheckPrac(int classe, int id, int liv);
 struct time_info_data real_time_passed(time_t t2, time_t t1);
 bool ThereIsPCInRoom(long lRoom);

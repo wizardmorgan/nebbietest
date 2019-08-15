@@ -2778,7 +2778,7 @@ ACTION_FUNC(do_set) {
 				sprintf(buf, "Non esiste uno skill con il numero %d.\n\r", parm);
 			}
 			else if(mob->skills)
-				sprintf(buf, "Il valore dei flags dello skills %d e' %d.\n\r",
+				sprintf(buf, "Il valore dei flags dello skills %d e' %ld.\n\r",
 						parm, mob->skills[parm].flags);
 			else
 				sprintf(buf, "%s non ha spazio per gli skills.\n\r",
@@ -4152,6 +4152,12 @@ void do_start(struct char_data* ch) {
 	}
 	SetDefaultLang(ch); /* the skill */
 
+    if(GET_RACE(ch) < max_race_table)
+    {
+        ch->player.speaks = RaceStuffs[GET_RACE(ch)].speak;
+    }
+    else
+    {
 	/* set default speaking language */
 	switch(GET_RACE(ch)) {
 	case RACE_DARK_ELF:
@@ -4189,6 +4195,7 @@ void do_start(struct char_data* ch) {
 		ch->player.speaks = SPEAK_COMMON;
 		break;
 	} /* end race switch */
+    }
 
 	/* set default to null */
 	GET_SPECFLAGS(ch) = 0;
@@ -4267,7 +4274,7 @@ void do_start(struct char_data* ch) {
 	GET_COND(ch,FULL) = 24;
 	GET_COND(ch,DRUNK) = 0;
 
-	ch->points.gold = 500; /* newbies starts with 150 coins */
+	ch->points.gold = 1000; /* newbies starts with 1000 coins */
 
 	ch->player.time.played = 0;
 	ch->player.time.logon = time(0);
@@ -6357,7 +6364,8 @@ ACTION_FUNC(do_osave) {
     if(*field2)
     {
         vnum2 = atoi(field2);
-        if(vnum < 1 || vnum > 99999) {
+        if(vnum2 < 1 || vnum2 > 99999)
+        {
             send_to_char("Il secondo valore non e' corretto.\n\r", ch);
             return;
         }

@@ -2975,7 +2975,7 @@ int load_char(const char* name, struct char_file_u* char_element) {
 
 /* copy data from the file structure to a char struct */
 void store_to_char(struct char_file_u* st, struct char_data* ch) {
-	int i;
+	int i, j;
 	int max;
 
 	GET_SEX(ch) = st->sex;
@@ -3061,7 +3061,20 @@ void store_to_char(struct char_file_u* st, struct char_data* ch) {
 		max = 95;
 	}
 
-	for(i = 0; i <= MAX_SKILLS - 1; i++) {
+	for(i = 0; i <= MAX_SKILLS - 1; i++)
+    {
+        if(IS_SET(st->skills[ i ].flags, SKILL_KNOWN_RACIAL) && !IS_IMMORTAL(ch))
+        {
+            for (j = 0; j < 5; j++)
+            {
+                if(RaceStuffs[GET_RACE(ch)].innate_skill[j] == i)
+                {
+                    max = RaceStuffs[GET_RACE(ch)].max_skill_learn[j];
+                    break;
+                }
+            }
+        }
+
 		ch->skills[i].flags = st->skills[i].flags;
 		ch->skills[i].special = st->skills[i].special;
 		ch->skills[i].nummem = st->skills[i].nummem;
@@ -5245,7 +5258,7 @@ int CheckSpellPowerFlags(struct obj_data* obj)
         malus = 101;
     }
 
-    mudlog(LOG_CHECK, "malus e' %d", malus);
+    mudlog(LOG_CHECK, "malus di %s e' %d", obj->short_description, malus);
     return malus;
 }
 

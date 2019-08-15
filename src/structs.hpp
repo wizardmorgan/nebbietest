@@ -53,6 +53,12 @@ struct TableResistPC
     const char* name;
 };
 
+struct RaceTeacherTable
+{
+    int n_skill;
+    int skill[10];
+};
+
 struct RaceListTable
 {
     int min[6];
@@ -81,6 +87,7 @@ struct RaceListTable
     unsigned long affect;
     int innate_skill[5];
     int skill_learn[5];
+    int max_skill_learn[5];
 };
 /*
  * Achievements
@@ -778,7 +785,7 @@ struct char_special_data {
 #define SKILL_UNDEFINED2          4
 
 /* Used in CHAR_FILE_U *DO*NOT*CHANGE* */
-struct char_skill_data {
+struct old_char_skill_data {
 	ubyte learned;           /* % chance for success 0 = not learned   */
 
 	/* change to int or long */
@@ -787,6 +794,14 @@ struct char_skill_data {
 	byte nummem;            /* number of times this spell is memorized */
 };
 
+struct char_skill_data {
+    ubyte learned;           /* % chance for success 0 = not learned   */
+
+    /* change to int or long */
+    long flags;             /* SKILL KNOWN? bit settings               */
+    byte special;           /* spell/skill specializations             */
+    byte nummem;            /* number of times this spell is memorized */
+};
 
 
 /* Used in CHAR_FILE_U *DO*NOT*CHANGE* */
@@ -970,7 +985,7 @@ struct char_file_u_3040 {
     sh_int load_room;            /* Which room to place char in  */
     struct char_ability_data abilities; // No pointers inside, same size on 32 and 64 bit
     struct char_point_data points; // No pointers inside, same size on 32 and 64 bit
-    struct char_skill_data skills[MAX_3040_SKILLS]; // No pointers inside, same size on 32 and 64 bit
+    struct old_char_skill_data skills[MAX_3040_SKILLS]; // No pointers inside, same size on 32 and 64 bit
     struct affected_type_u affected[MAX_AFFECT];
     /* specials */
     byte spells_to_learn;

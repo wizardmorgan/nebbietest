@@ -4546,28 +4546,36 @@ MOBSPECIAL_FUNC(miner_teacher) {
 	return FALSE;
 }
 
-MOBSPECIAL_FUNC(HalflingTeacher)
+MOBSPECIAL_FUNC(RacialTeacher)
 {
+    struct char_data* teacher;
     char buf[256];
-    const static char* n_skills[] =
-    {
-        "quickness",
-        "\n",
-    };
-
     int number=0;
-    int charge, sk_num;
+    int charge, sk_num, i, max = 1;
+    bool found = FALSE;
 
-    if(!AWAKE(ch))
+    if(type != EVENT_COMMAND || cmd != CMD_PRACTICE)
+    {
+        return FALSE;
+    }
+    
+    teacher = FindMobInRoomWithFunction(ch->in_room, reinterpret_cast<genericspecial_func>(RacialTeacher));
+    
+    if(!teacher)
+    {
+        return FALSE;
+    }
+
+    if(!AWAKE(teacher))
     {
         return(FALSE);
     }
 
     if(!cmd)
     {
-        if(ch->specials.fighting)
+        if(teacher->specials.fighting)
         {
-            return(fighter(ch, cmd, arg, mob, type));
+            return(fighter(ch, cmd, arg, teacher, type));
         }
         return(FALSE);
     }
@@ -4582,71 +4590,96 @@ MOBSPECIAL_FUNC(HalflingTeacher)
         return(FALSE);
     }
 
+    if(!IS_IMMORTAL(ch))
+    {
+        if(GET_RACE(ch) != GET_RACE(teacher))
+        {
+            sprintf(buf, "$N ti dice: 'Non puoi imparare questa abilita', non sei di certo un %s.'", RaceName[GET_RACE(teacher)]);
+            act(buf, TRUE, ch, NULL, teacher, TO_CHAR);
+            return(TRUE);
+        }
+    }
+
     for(; *arg==' '; arg++); /* ditch spaces */
 
-    if(cmd==CMD_PRACTICE)
+    if(cmd == CMD_PRACTICE)
     {
         if(!arg || (strlen(arg) == 0))
         {
-            sprintf(buf, "Ti posso insegnare questa abilita':\n quickness %s\n\r", how_good(ch->skills[SKILL_QUICKNESS].learned));
+            sprintf(buf,"Hai a disposizione $c0015%d$c0007 session%s di allenamento.\n\r", ch->specials.spells_to_learn, (ch->specials.spells_to_learn == 1 ? "e" : "i"));
             send_to_char(buf, ch);
+            sprintf(buf, "Come %s puoi imparare quest%s abilita':\n\r", RaceName[GET_RACE(teacher)], (RaceTeacherList[GET_RACE(teacher)].n_skill == 1 ? "a" : "e"));
+            send_to_char(buf, ch);
+            for(i = 0; i < RaceTeacherList[GET_RACE(teacher)].n_skill; i++)
+            {
+                sprintf(buf, " %-20s %-30s \n\r", spells[RaceTeacherList[GET_RACE(teacher)].skill[i] - 1], how_good(ch->skills[RaceTeacherList[GET_RACE(teacher)].skill[i]].learned));
+                send_to_char(buf, ch);
+            }
             return(TRUE);
         }
         else
         {
-            number = old_search_block(arg, 0, strlen(arg), n_skills, FALSE);
+            number = old_search_block(arg, 0, strlen(arg), spells, FALSE);
 
             if(number == -1)
             {
-                act("$N ti dice: 'Non conosco questa abilita'.'", TRUE, ch, NULL, mob, TO_CHAR);
+                act("$N ti dice: 'Non conosco questa abilita'.'", TRUE, ch, NULL, teacher, TO_CHAR);
+                return(TRUE);
+            }
+
+            sk_num = number;
+
+            for(i = 0; i < RaceTeacherList[GET_RACE(teacher)].n_skill; i++)
+            {
+                if(RaceTeacherList[GET_RACE(teacher)].skill[i] == sk_num)
+                {
+                    found = TRUE;
+                }
+            }
+
+            if(!found)
+            {
+                act("$N ti dice: 'Non conosco questa abilita'.'", TRUE, ch, NULL, teacher, TO_CHAR);
                 return(TRUE);
             }
 
             charge = GetMaxLevel(ch) * COSTO_LEZIONI;
-
-            switch(number)
-            {
-                case 0:
-                case 1:
-                    sk_num = SKILL_QUICKNESS;
-                    break;
-                default:
-                    mudlog(LOG_SYSERR, "Strangeness in HalflingTeacher (%d)", number);
-                    send_to_char("'Ack!  I feel faint!'\n\r", ch);
-                    return(FALSE);
-            }
-        }
-
-        if(!IS_IMMORTAL(ch))
-        {
-            if((sk_num == SKILL_QUICKNESS)  && !(GET_RACE(ch) == RACE_HALFLING))
-            {
-                sprintf(buf, "$N ti dice: 'Non posso di certo insegnare ad avere riflessi rapidi ad %s %s.'", UNUNA(ch), RaceName[GET_RACE(ch)]);
-                act(buf, TRUE, ch, NULL, mob, TO_CHAR);
-                return(TRUE);
-            }
         }
 
         if(GET_GOLD(ch) < charge)
         {
-            act("$N ti dice: 'Ah, ma non hai abbastanza soldi.'", TRUE, ch, NULL, mob, TO_CHAR);
+            act("$N ti dice: 'Ah, ma non hai abbastanza soldi.'", TRUE, ch, NULL, teacher, TO_CHAR);
             return(TRUE);
         }
 
-        if(ch->skills[ sk_num ].learned >= 90)
+        for(i = 0; i < 5; i++)
         {
-            act("$N ti dice: 'Sei maestr$b in quest'arte. Non posso insegnarti piu' nulla.'", TRUE, ch, NULL, mob, TO_CHAR);
+            if(RaceStuffs[GET_RACE(ch)].innate_skill[i] == sk_num)
+            {
+                max = RaceStuffs[GET_RACE(ch)].max_skill_learn[i];
+                break;
+            }
+        }
+
+        if(IS_LANGUAGE(sk_num))
+        {
+            max = 95;
+        }
+
+        if(ch->skills[ sk_num ].learned >= max)
+        {
+            act("$N ti dice: 'Sei maestr$b in quest'arte. Non posso insegnarti piu' nulla.'", TRUE, ch, NULL, teacher, TO_CHAR);
             return(TRUE);
         }
 
         if(ch->specials.spells_to_learn <= 0)
         {
-            act("$N ti dice: 'Devi prima guadagnarti qualche sessione di pratica.'", TRUE, ch, NULL, mob, TO_CHAR);
+            act("$N ti dice: 'Devi prima guadagnarti qualche sessione di allenamento.'", TRUE, ch, NULL, teacher, TO_CHAR);
             return(TRUE);
         }
 
         GET_GOLD(ch) -= charge;
-        act("$N ti dice 'Ecco, si fa cosi'!'", TRUE, ch, NULL, mob, TO_CHAR);
+        act("$N ti dice 'Ecco, si fa cosi'!'", TRUE, ch, NULL, teacher, TO_CHAR);
 
         ch->specials.spells_to_learn--;
         ch->skills[ sk_num ].learned += int_app[(int)GET_INT(ch) ].learn;
@@ -4655,10 +4688,15 @@ MOBSPECIAL_FUNC(HalflingTeacher)
         {
             SET_BIT(ch->skills[sk_num].flags, SKILL_KNOWN);
         }
-
-        if(ch->skills[sk_num].learned >= 90)
+        if(!IS_SET(ch->skills[sk_num].flags, SKILL_KNOWN_RACIAL))
         {
-            act("$N ti dice: 'Ora sei maestr$b in quest'arte'.", TRUE, ch, 0, mob, TO_CHAR);
+            SET_BIT(ch->skills[sk_num].flags, SKILL_KNOWN_RACIAL);
+        }
+
+        if(ch->skills[sk_num].learned >= max)
+        {
+            act("$N ti dice: 'Ora sei maestr$b in quest'arte.'", TRUE, ch, 0, teacher, TO_CHAR);
+            ch->skills[sk_num].learned = max;
         }
         return TRUE;
     }
@@ -8435,6 +8473,11 @@ MOBSPECIAL_FUNC(MobIdent)
         }
 
         if(!IS_NPC(vict))
+        {
+            return(FALSE);
+        }
+
+        if(vict != mobident)
         {
             return(FALSE);
         }

@@ -256,7 +256,8 @@ int move_limit(struct char_data* ch) {
 	max -= (graf(ma.year, -4,0,2,6,10,14,18));
 
 
-
+    if(GET_RACE(ch) >= max_race_table)
+    {
 	if(GET_RACE(ch) == RACE_DWARF || GET_RACE(ch) == RACE_GNOME) {
 		max -= 35;
 	}
@@ -278,6 +279,7 @@ int move_limit(struct char_data* ch) {
 	else if(GET_RACE(ch) == RACE_HALF_OGRE) {
 		max +=50        ;
 	}
+    }
 
 	max += ch->points.max_move;  /* move bonus */
 
@@ -599,6 +601,31 @@ int move_gain(struct char_data* ch)
     if(GET_RACE(ch) < max_race_table)
     {
         gain += RaceStuffs[GET_RACE(ch)].move_reg;
+
+        if(real_roomp(ch->in_room))
+        {
+        if(real_roomp(ch->in_room)->sector_type == SECT_FOREST)
+        {
+            if(GET_RACE(ch) == RACE_ELVEN)
+            {
+                gain += 20;
+            }
+        }
+        else if(real_roomp(ch->in_room)->sector_type == SECT_HILLS)
+        {
+            if(GET_RACE(ch) == RACE_DWARF)
+            {
+                gain += 20;
+            }
+        }
+        else if(real_roomp(ch->in_room)->sector_type == SECT_MOUNTAIN)
+        {
+            if(GET_RACE(ch) == RACE_DWARF)
+            {
+                gain += 20;
+            }
+        }
+        }
     }
 
 	if(IS_AFFECTED(ch,AFF_POISON)) {

@@ -353,6 +353,10 @@ const char* spells[]= {
     "equilibrium",
     "lust for power",
     "lust for money",
+    "detect hidden",
+    "greed for gold",
+    "blow to the knee",
+    "racial ability",
 	"\n"
 };
 
@@ -591,6 +595,7 @@ int SPELL_LEVEL(struct char_data* ch, int sn) {
 
 
 void SpellWearOffSoon(int s, struct char_data* ch) {
+    struct affected_type* af;
 
 	if(s > MAX_SKILLS+10) {
 		return;
@@ -600,13 +605,56 @@ void SpellWearOffSoon(int s, struct char_data* ch) {
         return;
     }
 
-	if(spell_wear_off_soon_msg[s] && *spell_wear_off_soon_msg[s]) {
-		act(spell_wear_off_soon_msg[s], FALSE, ch, NULL, NULL, TO_CHAR);
+    if(IS_RACIAL_SKILL(s))
+    {
+        for(af = ch->affected; af; af = af->next)
+        {
+            if(IS_RACIAL_SKILL(af->type) && s == af->type)
+            {
+                if(af->location == APPLY_NONE)
+                {
+                    act("$c0011Tra poco potrai usare di nuovo la tua abilita' razziale.", FALSE, ch, NULL, NULL, TO_CHAR);
+                }
+                else
+                {
+                    if(spell_wear_off_soon_msg[s] && *spell_wear_off_soon_msg[s])
+                    {
+                        act(spell_wear_off_soon_msg[s], FALSE, ch, NULL, NULL, TO_CHAR);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        if(spell_wear_off_soon_msg[s] && *spell_wear_off_soon_msg[s])
+        {
+            act(spell_wear_off_soon_msg[s], FALSE, ch, NULL, NULL, TO_CHAR);
+        }
 	}
 
-	if(spell_wear_off_soon_room_msg[s] && *spell_wear_off_soon_room_msg[s] &&
-			(IS_NPC(ch) || !IS_SET(ch->specials.act, PLR_STEALTH))) {
-		act(spell_wear_off_soon_room_msg[s], TRUE, ch, 0, 0, TO_ROOM);
+    if(IS_RACIAL_SKILL(s))
+    {
+        for(af = ch->affected; af; af = af->next)
+        {
+            if(IS_RACIAL_SKILL(af->type) && s == af->type)
+            {
+                if(af->location != APPLY_NONE)
+                {
+                    if(spell_wear_off_soon_room_msg[s] && *spell_wear_off_soon_room_msg[s] && (IS_NPC(ch) || !IS_SET(ch->specials.act, PLR_STEALTH)))
+                    {
+                        act(spell_wear_off_soon_room_msg[s], TRUE, ch, NULL, NULL, TO_ROOM);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        if(spell_wear_off_soon_room_msg[s] && *spell_wear_off_soon_room_msg[s] && (IS_NPC(ch) || !IS_SET(ch->specials.act, PLR_STEALTH)))
+        {
+            act(spell_wear_off_soon_room_msg[s], TRUE, ch, 0, 0, TO_ROOM);
+        }
 	}
 
 }
@@ -831,6 +879,7 @@ void check_decharm(struct char_data* ch) {
 
 void SpellWearOff(int s, struct char_data* ch) {
     char buf[128];
+    struct affected_type* af;
 
 	if(s > MAX_SKILLS+10) {
 		return;
@@ -842,18 +891,61 @@ void SpellWearOff(int s, struct char_data* ch) {
         GET_POS(ch) = POSITION_RESTING;
     }
 
-	if(spell_wear_off_msg[s] && *spell_wear_off_msg[s]) {
-		act(spell_wear_off_msg[s], FALSE, ch, NULL, NULL, TO_CHAR);
-	}
+    if(IS_RACIAL_SKILL(s))
+    {
+        for(af = ch->affected; af; af = af->next)
+        {
+            if(IS_RACIAL_SKILL(af->type) && s == af->type)
+            {
+                if(af->location == APPLY_NONE)
+                {
+                    act("$c0009Puoi usare di nuovo la tua abilita' razziale.", FALSE, ch, NULL, NULL, TO_CHAR);
+                }
+                else
+                {
+                    if(spell_wear_off_msg[s] && *spell_wear_off_msg[s])
+                    {
+                        act(spell_wear_off_msg[s], FALSE, ch, NULL, NULL, TO_CHAR);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        if(spell_wear_off_msg[s] && *spell_wear_off_msg[s])
+        {
+            act(spell_wear_off_msg[s], FALSE, ch, NULL, NULL, TO_CHAR);
+        }
+    }
 
     if(s == SPELL_PARALYSIS || s == SPELL_ENTANGLE || s == SKILL_DAIMOKU)
     {
         GET_POS(ch) = POSITION_STUNNED;
     }
 
-	if(spell_wear_off_room_msg[s] && *spell_wear_off_room_msg[s] &&
-			(IS_NPC(ch) || !IS_SET(ch->specials.act, PLR_STEALTH))) {
-		act(spell_wear_off_room_msg[s], TRUE, ch, 0, 0, TO_ROOM);
+    if(IS_RACIAL_SKILL(s))
+    {
+        for(af = ch->affected; af; af = af->next)
+        {
+            if(IS_RACIAL_SKILL(af->type) && s == af->type)
+            {
+                if(af->location != APPLY_NONE)
+                {
+                    if(spell_wear_off_room_msg[s] && *spell_wear_off_room_msg[s] && (IS_NPC(ch) || !IS_SET(ch->specials.act, PLR_STEALTH)))
+                    {
+                        act(spell_wear_off_room_msg[s], TRUE, ch, NULL, NULL, TO_ROOM);
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        if(spell_wear_off_room_msg[s] && *spell_wear_off_room_msg[s] && (IS_NPC(ch) || !IS_SET(ch->specials.act, PLR_STEALTH)))
+        {
+            act(spell_wear_off_room_msg[s], TRUE, ch, NULL, NULL, TO_ROOM);
+        }
 	}
 
     if(s == STATUS_QUEST) {

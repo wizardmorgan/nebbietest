@@ -3249,6 +3249,12 @@ int CalcThaco(struct char_data* ch, struct char_data* victim) {
 		calc_thaco += berserkthaco(ch);
 	}
 
+    // le razze huge hanno difficoltà a colpire razze piccole
+    if(IsGiantish(ch) && IsSmall(victim))
+    {
+        calc_thaco += 4;
+    }
+
 	/* you get -4 to hit a mob if your evil and he has */
 	/* prot from evil */
 	if(victim) {
@@ -4536,6 +4542,7 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 	case TYPE_BLUDGEON:
 	case TYPE_HIT:
 	case SKILL_KICK:
+    case SKILL_BLOW_KNEE:
 	case TYPE_CRUSH:
 	case TYPE_BITE:
 	case TYPE_SMASH:

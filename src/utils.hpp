@@ -41,6 +41,11 @@ namespace Alarmud {
 //  definizione temporanea della max race per la tabella
 #define max_race_table  (RACE_HALFLING + 1)
 
+#define IS_LANGUAGE(skill)  (skill == LANG_COMMON   ? 1 : skill == LANG_ELVISH  ? 1 : skill == LANG_HALFLING ? 1 :  \
+                             skill == LANG_DWARVISH ? 1 : skill == LANG_ORCISH  ? 1 : skill == LANG_GIANTISH ? 1 :  \
+                             skill == LANG_OGRE     ? 1 : skill == LANG_GNOMISH ? 1 : 0)
+
+#define IS_RACIAL_SKILL(skill)  (skill == SKILL_BLOW_KNEE ? 1 : 0)
 #define RM_BLOOD(rm)   (real_roomp(rm)->blood)
 
 //#define TRUE  1

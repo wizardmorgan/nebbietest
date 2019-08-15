@@ -191,7 +191,7 @@ void show_obj_to_char(struct obj_data* object, struct char_data* ch, int mode) {
         {
             strcat(buffer,"$c0011 (inutilizzabile)$c0007");
         }
-        else
+        else if(object->description && *object->description)
         {
             if(IS_OBJ_STAT(object, ITEM_INVISIBLE))
             {
@@ -888,7 +888,7 @@ void show_char_to_char(struct char_data* i, struct char_data* ch, int mode) {
             RemColorString(buffer2);
             CAP(buffer2);
         }
-        
+
 		if(IS_AFFECTED(i, AFF_SANCTUARY))
         {
 			if(!IS_AFFECTED(i, AFF_GLOBE_DARKNESS))
@@ -1329,7 +1329,7 @@ void show_mult_char_to_char(struct char_data* i, struct char_data* ch,
             RemColorString(buffer2);
             CAP(buffer2);
         }
-        
+
         if(IS_AFFECTED(i, AFF_SANCTUARY))
         {
             if(!IS_AFFECTED(i, AFF_GLOBE_DARKNESS))
@@ -1340,7 +1340,7 @@ void show_mult_char_to_char(struct char_data* i, struct char_data* ch,
                 act(buffer, FALSE, i, 0, ch, TO_VICT);
             }
         }
-        
+
         if(IS_AFFECTED(i, AFF_GROWTH))
         {
             sprintf(buffer,"$c0003");
@@ -1348,7 +1348,7 @@ void show_mult_char_to_char(struct char_data* i, struct char_data* ch,
             strcat(buffer, " e' enorme!");
             act(buffer, FALSE, i, 0, ch, TO_VICT);
         }
-        
+
         if(IS_AFFECTED(i, AFF_FIRESHIELD))
         {
             if(!IS_AFFECTED(i, AFF_GLOBE_DARKNESS))
@@ -1359,7 +1359,7 @@ void show_mult_char_to_char(struct char_data* i, struct char_data* ch,
                 act(buffer, FALSE, i, 0, ch, TO_VICT);
             }
         }
-        
+
         if(IS_AFFECTED(i, AFF_GLOBE_DARKNESS))
         {
             sprintf(buffer,"$c0008");
@@ -1367,7 +1367,7 @@ void show_mult_char_to_char(struct char_data* i, struct char_data* ch,
             strcat(buffer, " e' avvolt$b nell'oscurita'!");
             act(buffer, FALSE, i, 0, ch, TO_VICT);
         }
-        
+
 	}
 	else if(mode == 1) {
 		if(i->player.description) {
@@ -1528,49 +1528,31 @@ void list_char_to_char(struct char_data* list, struct char_data* ch,
 /* Added by Mike Wilson 9/23/93 */
 
 void list_exits_in_room(struct char_data* ch) {
-	int door,seeit=FALSE;
+	int door;
 	char buf[MAX_STRING_LENGTH],buf2[MAX_STRING_LENGTH];
 	struct room_direction_data*        exitdata;
 
 	*buf = '\0';
 
-	for(door = 0; door <= 5; door++) {
+	for(door = 0; door <= 5; door++)
+    {
 		exitdata = EXIT(ch,door);
-		if(exitdata) {
-			if(real_roomp(exitdata->to_room)) {
-				if(GET_RACE(ch) == RACE_ELVEN ||
-						GET_RACE(ch) == RACE_GOLD_ELF ||
-						GET_RACE(ch) == RACE_WILD_ELF ||
-						GET_RACE(ch) == RACE_SEA_ELF)
-					/* elves can see secret doors 1-3 on d6 */
-				{
-					seeit=(number(1,6)<=3);
-				}
-				else if(GET_RACE(ch)==RACE_HALF_ELVEN)
-					/* half-elves can see exits, not as good as full */
-				{
-					seeit=(number(1,6)<=2);
-				}
-				else if(GET_RACE(ch)==RACE_DWARF ||
-						GET_RACE(ch)==RACE_DARK_DWARF) {
-					seeit=(number(1,12)<=7);
-				}
-				/* I nani le vedono meglio di tutti!!!! */
-				else {
-					seeit=FALSE;
-				}
-
-				if(exitdata->to_room != NOWHERE || IS_IMMORTAL(ch)) {
-					if((!IS_SET(exitdata->exit_info, EX_CLOSED) ||
-							IS_IMMORTAL(ch)) ||
-							(IS_SET(exitdata->exit_info, EX_SECRET) && seeit)) {
+		if(exitdata)
+        {
+			if(real_roomp(exitdata->to_room))
+            {
+				if(exitdata->to_room != NOWHERE || IS_IMMORTAL(ch))
+                {
+					if((!IS_SET(exitdata->exit_info, EX_CLOSED) || IS_IMMORTAL(ch)) || (IS_SET(exitdata->exit_info, EX_SECRET) && CheckDetectHidden(ch)))
+                    {
 						snprintf(buf2, MAX_STRING_LENGTH-1," %s", listexits[ door ]);
 						strcat(buf,buf2);
-						if(IS_SET(exitdata->exit_info, EX_CLOSED) && IS_IMMORTAL(ch)) {
+						if(IS_SET(exitdata->exit_info, EX_CLOSED) && IS_IMMORTAL(ch))
+                        {
 							strcat(buf, " (chiuso)");
 						}
-						if(IS_SET(exitdata->exit_info, EX_SECRET) && (seeit ||
-								IS_IMMORTAL(ch))) {
+						if(IS_SET(exitdata->exit_info, EX_SECRET) && (CheckDetectHidden(ch) || IS_IMMORTAL(ch)))
+                        {
 							strcat(buf, " $c5009(segreto)$c0007");    /* blink red */
 						}
 					} /* exit */
@@ -2271,7 +2253,7 @@ ACTION_FUNC(do_checkachielevel)
         } */
 
         send_to_char("Inizio a scrivere il Database Oggetti su file.\n\n", ch);
-        
+
         for(int i = 34030; i < 35000; i++)
         {
             if((f = fopen(DB_EDIT_FILE, "at")) == NULL) {
@@ -2829,7 +2811,7 @@ ACTION_FUNC(do_achievements)
                         }
                     }
                 }
-                
+
                 if(!trovato)
                 {
                     send_to_char("Quell'achievement esiste solo nella tua fantasia...\n\r", ch);
@@ -5161,13 +5143,13 @@ void owhere(struct char_data* ch, char* nome)
     int        number = 0, count = 0;
     struct string_block        sb;
  //   string sb_rent_pg;
-    
+
     only_argument(nome, name);
 
     int N_oggetto = atoi(name);
-    
+
     init_string_block(&sb);
-    
+
     for(k = object_list; k; k = k->next)
     {
         if(isname(name, k->name) && CAN_SEE_OBJ(ch, k))
@@ -5188,7 +5170,7 @@ void owhere(struct char_data* ch, char* nome)
             }
         }
     }
-    
+
     count++;
     bool found = FALSE;
     struct stringa_valore sb_count;
@@ -5209,7 +5191,7 @@ void owhere(struct char_data* ch, char* nome)
             number = -1;
         }
     }
-    
+
     if((number < 0 || number >= top_of_objt) && !*sb.data)
     {
         send_to_char("Non trovo niente del genere da nessuna parte.\n\r", ch);
@@ -5313,12 +5295,12 @@ ACTION_FUNC(do_where) {
 
 	for(i = character_list; i; i = i->next) {
 		if(isname(name, i->player.name) && CAN_SEE(ch, i)) {
-            
+
             if(!IS_PC(i) && affected_by_spell(i,STATUS_QUEST) && GetMaxLevel(ch) < IMMORTALE) {
                 act("Non si bara! ;)\n\r", FALSE, ch, 0, ch, TO_CHAR);
                 break;
             }
-            
+
 			if((i->in_room != NOWHERE) &&
 					((GetMaxLevel(ch)>=IMMORTALE) || (real_roomp(i->in_room)->zone ==
 							real_roomp(ch->in_room)->zone))) {
@@ -7123,4 +7105,3 @@ struct char_data* get_char_linear(struct char_data* ch,const char* arg, int* rf,
 	return NULL;
 }
 } // namespace Alarmud
-
