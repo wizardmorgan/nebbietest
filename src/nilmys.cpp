@@ -739,6 +739,7 @@ MOBSPECIAL_FUNC(Boris_Ivanhoe)
             {
                 do_say(boris, "Se per qualsiasi ragione qualcun'altro volesse guidarci fino alla vittoria, mi dica di seguirlo ed io lo faro'!", 0);
                 do_say(boris, "Inoltre, se qualcuno volesse ritirarsi, deve dirmi che vuole tornare a casa!", 0);
+                do_say(boris, "Umag ha aperto un passaggio dalla cripta per tornare qui piu' velocemente in caso di necessita'.", 0);
                 if(!IS_PC(ch) && ch->master == NULL)
                 {
                     boris->generic = 4;
@@ -977,6 +978,11 @@ MOBSPECIAL_FUNC(Umag_Ulbar)
 
 void BorisDeath(struct char_data* umag)
 {
+    struct obj_data* portale;
+
+    portale = read_object(real_object(FAREWELL_PORTAL), REAL);
+    obj_to_room(portale, 9012);
+
     switch(umag->commandp)
     {
         case 1:
@@ -1050,8 +1056,8 @@ void GiveRewardNilmys(struct char_data* boris, struct char_data* ch)
     act("$n ti da' $p.", FALSE, boris, coin, ch, TO_VICT);
     act("$n da' $p a $N.", FALSE, boris, coin, ch, TO_NOTVICT);
 
-    act("$c0013Tu dici a $N$c0013 'Ricordati $N$c0013, potrai scambiare sei monete di Nilmys con un premio.'\n\r", FALSE, boris, NULL, ch, TO_CHAR);
-    act("$c0013[$c0015$n$c0015]$c0013 ti dice 'Ricordati $N$c0013, potrai scambiare sei monete di Nilmys con un premio.'\n\r", FALSE, boris, NULL, ch, TO_VICT);
+    act("$c0013Tu dici a $N$c0013 'Ricordati $N$c0013, potrai scambiare tre monete di Nilmys con un premio.'\n\r", FALSE, boris, NULL, ch, TO_CHAR);
+    act("$c0013[$c0015$n$c0015]$c0013 ti dice 'Ricordati $N$c0013, potrai scambiare tre monete di Nilmys con un premio.'\n\r", FALSE, boris, NULL, ch, TO_VICT);
     act("$c0013[$c0015$n$c0015]$c0013 dice qualcosa a $N$c0013.\n\r", FALSE, boris, NULL, ch, TO_NOTVICT);
 
     GET_RUNEDEI(ch) += rune;
@@ -1102,6 +1108,8 @@ void CheckBorisRoom(struct char_data* boris)
         case BORIS_HOME:
             if(boris->generic == 0)
             {
+                struct room_data* rp;
+
                 send_to_room("\n\r$c0015[$c0005Boris Ivanhoe Gudonov$c0015] dice:\n\r", BORIS_HOME);
                 send_to_room("$c0015 'Ora che ci siete abbiamo qualche speranza. Abbiamo interrotto il rituale di Garebeth, colui che viaggia tra i piani.\n\r", BORIS_HOME);
                 send_to_room("$c0015  Stava per evocare Arkhat, il dio divoratore, ma aveva bisogno di una parte di ognuno degli Stanislav,\n\r  la famiglia che eoni fa lo confino' li' dove risiede ora.\n\r", BORIS_HOME);
@@ -1110,6 +1118,11 @@ void CheckBorisRoom(struct char_data* boris)
                 send_to_room("$c0015  Alcuni dei miei compagni sono feriti, gli altri devono restare a proteggere Iskra.\n\r", BORIS_HOME);
                 send_to_room("$c0015  Solo voi potete aiutarci.\n\r", BORIS_HOME);
                 send_to_room("$c0015  Chiunque di voi comandi o sia colui che guida in battaglia il gruppo mi annuisca e io lo seguiro'.\n\r$c0015  Vi raccontero' tutto lungo la strada.'\n\r\n\r", BORIS_HOME);
+
+                rp = real_roomp(9133);
+                CREATE(rp->dir_option[2], struct room_direction_data, 1);
+                rp->dir_option[2]->exit_info = 0;
+                rp->dir_option[2]->to_room = BORIS_HOME;
             }
             else
             {
@@ -1579,7 +1592,7 @@ void CheckBorisRoom(struct char_data* boris)
 
                     case 41:
                         send_to_room("\n\r", boris->in_room);
-                        do_say(boris, "Ci vogliono 6 monete, non una di piu' non una di meno, per ottenere finalmente il vostro premio!", 0);
+                        do_say(boris, "Ci vogliono 3 monete, non una di piu' non una di meno, per ottenere finalmente il vostro premio!", 0);
                         send_to_room("\n\r", boris->in_room);
                         break;
 
@@ -1854,7 +1867,7 @@ bool CheckUguikRoom(struct char_data* uguik, struct char_data* boris)
                 
                 if(oggetto)
                 {
-                    if((boris)->master->in_room == uguik->in_room)
+                    if((boris)->master->in_room == uguik->in_room && CAN_SEE(uguik, (boris)->master))
                     {
                         sprintf(buf, "ampolla %s", GET_NAME((boris)->master));
                         do_give(uguik, buf, 0);
@@ -1869,7 +1882,7 @@ bool CheckUguikRoom(struct char_data* uguik, struct char_data* boris)
                     oggetto = read_object(real_object(NILMYS_FLASK), REAL);
                     obj_to_char(oggetto, uguik);
                     
-                    if((boris)->master->in_room == uguik->in_room)
+                    if((boris)->master->in_room == uguik->in_room && CAN_SEE(uguik, (boris)->master))
                     {
                         sprintf(buf, "ampolla %s", GET_NAME((boris)->master));
                         do_give(uguik, buf, 0);
@@ -2646,7 +2659,7 @@ ROOMSPECIAL_FUNC(reward_giver)
     }
     else if(cmd == CMD_BUY)
     {
-        for(i = 0; i < 6; i++)
+        for(i = 0; i < 3; i++)
         {
             coin = get_obj_in_list_vis(ch, obj_index[real_object(NILMYS_COIN)].name, ch->carrying);
 
@@ -2679,7 +2692,7 @@ ROOMSPECIAL_FUNC(reward_giver)
             else
             {
                 act("Mi dispiace ma non hai abbastanza monete con te!", FALSE, ch, NULL, NULL, TO_CHAR);
-                //  ha meno di 6 monete, le restituisco al proprietario
+                //  ha meno di 3 monete, le restituisco al proprietario
                 if(count > 0)
                 {
                     for(j = 0; j < count; j++)
@@ -2703,7 +2716,7 @@ ROOMSPECIAL_FUNC(reward_giver)
         return FALSE;
     }
 
-    if(count == 6)
+    if(count == 3)
     {
         premio = number(1, 100);
         switch(mob_index[shopper->nr].iVNum)
@@ -2890,8 +2903,8 @@ ROOMSPECIAL_FUNC(reward_giver)
         reward = read_object(real_object(rnum), REAL);
         SetPersonOnSave(ch, reward);
 
-        act("\n\r$c0015$N$c0015 ti da' sei monete di Nilmys.", FALSE, shopper, NULL, ch, TO_CHAR);
-        act("\n\r$c0015Dai sei monete di Nilmys a $n$c0015.", FALSE, shopper, NULL, ch, TO_VICT);
+        act("\n\r$c0015$N$c0015 ti da' tre monete di Nilmys.", FALSE, shopper, NULL, ch, TO_CHAR);
+        act("\n\r$c0015Dai tre monete di Nilmys a $n$c0015.", FALSE, shopper, NULL, ch, TO_VICT);
         act("\n\r$c0015$N$c0015 da' alcune monete di Nilmys a $n$c0015.", FALSE, shopper, NULL, ch, TO_NOTVICT);
 
         act("\n\r$c0011Consegni $p$c0011 a $N$c0011.", FALSE, shopper, reward, ch, TO_CHAR);

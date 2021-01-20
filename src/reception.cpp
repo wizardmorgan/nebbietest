@@ -67,16 +67,26 @@ void add_obj_cost(struct char_data* ch, struct char_data* re,
 				send_to_char(buf, ch);
 			}
 			ItemType=(GET_ITEM_TYPE(obj));
-			switch(ItemType) {
-			case ITEM_FOOD:
-			case ITEM_DRINKCON:
-				RentItem--;
+			switch(ItemType)
+            {
+                case ITEM_FOOD:
+                case ITEM_DRINKCON:
+                case ITEM_M_GEM:
+                case ITEM_M_MINERAL:
+                case ITEM_BAR:
+                case ITEM_POTION:
+                    RentItem--;
 				/* FALLTHRU */
-			default:
-				cost->no_carried++;
-				RentItem++;
-				break;
-			}
+
+                default:
+                    cost->no_carried++;
+                    if(TANNED(obj))
+                    {
+                        RentItem--;
+                    }
+                    RentItem++;
+                    break;
+            }
 
 			add_obj_cost(ch, re, obj->contains, cost);
 			add_obj_cost(ch, re, obj->next_content, cost);
@@ -89,7 +99,7 @@ void add_obj_cost(struct char_data* ch, struct char_data* re,
 			else {
 #if NODUPLICATES
 #else
-				act("$p non puo` essere salvato.",FALSE,ch,obj,0,TO_CHAR);
+				act("$p non puo' essere salvato.",FALSE,ch,obj,0,TO_CHAR);
 #endif
 				cost->ok = FALSE;
 
@@ -256,8 +266,7 @@ bool recep_offer(struct char_data* ch,  struct char_data* receptionist,
 
 	if(receptionist) {
 #if ALAR_RENT
-		snprintf(buf, sizeof(buf)-1,"$n ti dice 'Hai con te %d oggett%c escluso le vettovaglie.'",
-				RentItem,RentItem>1?'i':'o');
+		snprintf(buf, sizeof(buf)-1,"$n ti dice 'Hai con te %d oggett%c escluso le vettovaglie e materiali vari.'", RentItem,RentItem > 1 ? 'i' : RentItem == 0 ? 'i' : 'o');
 		act(buf,FALSE,receptionist,0,ch,TO_VICT);
 		snprintf(buf, sizeof(buf)-1,"$n ti dice 'Il che significa %s$c0007 del %d%%!'",
 				sconto>0?"$c0001una maggiorazione":"$c0010uno sconto",
@@ -282,13 +291,13 @@ bool recep_offer(struct char_data* ch,  struct char_data* receptionist,
 			if(forcerent > 1000000) {
 				GET_GOLD(ch)=-5000000;
 				cost->total_cost=1000000;
-				snprintf(buf,sizeof(buf)-1,"$n ti dice 'Poiche` hai barato.....  prenotando  %d giorni, "
+				snprintf(buf,sizeof(buf)-1,"$n ti dice 'Poiche' hai barato... prenotando %d giorni, "
 						"ci rimetti anche la camicia.",
 						forcerent);
 				mudlog(LOG_CHECK,"%s ci ha provato e ora ha %d coins.",GET_NAME(ch),GET_GOLD(ch));
 			}
 			else {
-				snprintf(buf,sizeof(buf)-1,"$n ti dice 'Poiche` hai prenotato per %d giorni, "
+				snprintf(buf,sizeof(buf)-1,"$n ti dice 'Poiche' hai prenotato per %d giorni, "
 						"$c0001 ti costa SUBITO$c0007 $c0015%d$c0007 monete.",
 						forcerent,cost->total_cost);
 			}
@@ -307,7 +316,7 @@ bool recep_offer(struct char_data* ch,  struct char_data* receptionist,
 			snprintf(buf, sizeof(buf)-1,"$n ti dice 'Hai %d oggetti rari. Cosa vuoi fare? Aprire un supermarket?'",
 					limited_items);
 		else if(limited_items >= 10)
-			snprintf(buf, sizeof(buf)-1,"$n ti dice 'WOW! Hai %d oggetti  rari. Pensi di essere sol$b a giocare?!?'",
+			snprintf(buf, sizeof(buf)-1,"$n ti dice 'WOW! Hai %d oggetti rari. Pensi di essere sol$b a giocare?!?'",
 					limited_items);
 
 		act(buf,FALSE,receptionist,0,ch,TO_VICT);
@@ -317,7 +326,7 @@ bool recep_offer(struct char_data* ch,  struct char_data* receptionist,
 				FALSE,receptionist,0,ch,TO_VICT);
 
 			if(GetMaxLevel(ch) >=IMMORTALE) {
-				act("$n ti dice 'Va beh... visto che sei Immortale... suppongo vada bene cosi`",
+				act("$n ti dice 'Va beh... visto che sei Immortale... suppongo vada bene cosi'",
 					FALSE,receptionist,0,ch,TO_VICT);
 				cost->total_cost = 0;
 			}
@@ -424,8 +433,8 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st) {
 			if((obj = read_object(st->objects[i].item_number, VIRTUAL)) !=
 					NULL) {
 #if LIMITED_ITEMS
-				/* Se l` oggetto costa al rent, e` considerato raro, e percio` viene
-				 * gia` contato nella procedura CountLimitedItems. Questo dovrebbe
+				/* Se l' oggetto costa al rent, e' considerato raro, e percio' viene
+				 * gia' contato nella procedura CountLimitedItems. Questo dovrebbe
 				 * risolvere il problema degli oggetti rari che non ripoppano come
 				 * dovrebbero.
 				 */
@@ -454,7 +463,7 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st) {
 				obj->obj_flags.bitvector    = st->objects[i].bitvector;
                 obj->obj_flags.hitp         = st->objects[i].hitp;
                 obj->obj_flags.hitpTot      = st->objects[i].hitpTot;
-                
+
 
 				SetStatus(STATUS_OTCFREESTRING, NULL);
 
@@ -542,18 +551,18 @@ void obj_store_to_char_old(struct char_data* ch, struct obj_file_u_old* st) {
     struct obj_data* in_obj[64],*last_obj = NULL;
     int tmp_cur_depth=0;
     int i, j, iRealObjNumber;
-    
+
     void obj_to_char(struct obj_data *object, struct char_data *ch);
-    
+
     for(i = 0; i < 64; i++) {
         in_obj[ i ] = NULL;
     }
-    
+
     SetStatus(STATUS_OTCBEFORELOOP, NULL);
-    
+
     for(i=0; i<st->number; i++) {
         SetStatus(STATUS_OTCREALOBJECT, NULL);
-        
+
         if(st->objects[i].item_number > 0 &&
            (iRealObjNumber = real_object(st->objects[i].item_number)) > -1) {
             SetStatus(STATUS_OTCREADOBJECT, NULL);
@@ -571,7 +580,7 @@ void obj_store_to_char_old(struct char_data* ch, struct obj_file_u_old* st) {
                 }
 #endif
                 SetStatus(STATUS_OTCCOPYVALUE, NULL);
-                
+
                 obj->obj_flags.value[0] = st->objects[i].value[0];
                 obj->obj_flags.value[1] = st->objects[i].value[1];
                 obj->obj_flags.value[2] = st->objects[i].value[2];
@@ -588,9 +597,9 @@ void obj_store_to_char_old(struct char_data* ch, struct obj_file_u_old* st) {
                 obj->obj_flags.weight       = st->objects[i].weight;
                 obj->obj_flags.timer        = st->objects[i].timer;
                 obj->obj_flags.bitvector    = st->objects[i].bitvector;
-                
+
                 SetStatus(STATUS_OTCFREESTRING, NULL);
-                
+
                 if(obj->name) {
                     free(obj->name);
                 }
@@ -600,27 +609,27 @@ void obj_store_to_char_old(struct char_data* ch, struct obj_file_u_old* st) {
                 if(obj->description) {
                     free(obj->description);
                 }
-                
+
                 SetStatus(STATUS_OTCALLOCSTRING, NULL);
-                
+
                 obj->name = (char*)malloc(strlen(st->objects[i].name)+1);
                 obj->short_description = (char*)malloc(strlen(st->objects[i].sd)+1);
                 obj->description = (char*)malloc(strlen(st->objects[i].desc)+1);
-                
+
                 SetStatus(STATUS_OTCCOPYSTRING, NULL);
-                
+
                 strcpy(obj->name, st->objects[i].name);
                 strcpy(obj->short_description, st->objects[i].sd);
                 strcpy(obj->description, st->objects[i].desc);
-                
+
                 SetStatus(STATUS_OTCCOPYAFFECT, NULL);
-                
+
                 for(j=0; j<MAX_OBJ_AFFECT; j++) {
                     obj->affected[j] = st->objects[i].affected[j];
                 }
-                
+
                 SetStatus(STATUS_OTCBAGTREE, NULL);
-                
+
                 /* item restoring */
                 if(st->objects[i].depth > 60) {
                     mudlog(LOG_SYSERR, "weird! object have depth >60.");
@@ -641,7 +650,7 @@ void obj_store_to_char_old(struct char_data* ch, struct obj_file_u_old* st) {
                                "weird! object depth > current depth but not last_obj in "
                                "obj_store_to_char_old (reception.c).");
                     }
-                    
+
                     in_obj[ tmp_cur_depth++ ] = last_obj;
                 }
                 else if(st->objects[i].depth<tmp_cur_depth) {
@@ -709,8 +718,8 @@ void old_obj_store_to_char(struct char_data* ch, struct old_obj_file_u* st)
             if((obj = read_object(st->objects[i].item_number, VIRTUAL)) !=
                 NULL) {
 #if LIMITED_ITEMS
-                /* Se l` oggetto costa al rent, e` considerato raro, e percio` viene
-                 * gia` contato nella procedura CountLimitedItems. Questo dovrebbe
+                /* Se l' oggetto costa al rent, e' considerato raro, e percio' viene
+                 * gia' contato nella procedura CountLimitedItems. Questo dovrebbe
                  * risolvere il problema degli oggetti rari che non ripoppano come
                  * dovrebbero.
                  */
@@ -847,7 +856,7 @@ void load_char_objs(struct char_data* ch, bool ghost) {
 
     if(IS_SET(ch->specials.act, PLR_EQ_HP))
     {
-        
+
         if(!ReadObjs(fl, &st))
         {
             mudlog(LOG_PLAYERS, "No objects found");
@@ -918,7 +927,7 @@ void load_char_objs(struct char_data* ch, bool ghost) {
 		found = TRUE;
 	}
 	else {
-		char buf[ 81 ];
+		char buf[ 120 ];
 		if(ch->in_room == NOWHERE) {
 			mudlog(LOG_PLAYERS, "%s reconnecting after autorent", GET_NAME(ch));
 		}
@@ -932,66 +941,101 @@ void load_char_objs(struct char_data* ch, bool ghost) {
 #endif
 
 		mudlog(LOG_PLAYERS, "Char ran up charges of %ld gold in rent", timegold);
-		snprintf(buf,sizeof(buf)-1, "Il conto della pensione e` di %ld monete.\n\r", timegold);
+		snprintf(buf,sizeof(buf)-1, "Il conto della pensione e' di %ld monete.\n\r", timegold);
 		send_to_char(buf, ch);
-		snprintf(buf, sizeof(buf)-1,"%d monete al giorno.\n\r", st.total_cost);   // Gaia 2001
+		snprintf(buf, sizeof(buf)-1,"Il costo e' di %d monete al giorno.\n\r", st.total_cost);   // Gaia 2001
 		send_to_char(buf, ch); // Gaia 2001
         if(!ghost)
         {
             GET_GOLD(ch) -= timegold;
         }
+
+		GET_GOLD(ch) -= timegold;
+
+#if BANK_RENT
+        // rent con gold presi dalla banca: va testato, per ora lo tengo disattivo
+        if(GET_GOLD(ch) < 0)
+        {
+            snprintf(buf, sizeof(buf)-1,"Dato che hai finito i soldi con te ho prelevato %d monete dal direttamente dal tuo conto in banca.\n\r", -(GET_GOLD(ch)));
+            send_to_char(buf, ch);
+
+            GET_BANK(ch) += GET_GOLD(ch);
+
+            if(GET_BANK(ch) < 0)
+            {
+                GET_GOLD(ch) = GET_BANK(ch);
+                GET_BANK(ch) = 0;
+            }
+            else
+            {
+                GET_GOLD(ch) = 0;
+            }
+        }
+#endif
 		found = TRUE;
 		/* inizia modifica Robin hood Gaia 2001*/
-		constexpr int mega=1000000;
-		bool robin=false;
-		if(GET_GOLD(ch) <= 3*mega)  {
-			robin=(number(1,100)<2);
+		constexpr int mega = 1000000;
+		bool robin = false;
+		if(GET_GOLD(ch) <= 3 * mega)
+        {
+			robin = (number(1, 1000) < 2);
 		}
-		else  if(GET_GOLD(ch) <=  4 * mega) {
-			robin=(number(1,100)<2);
+		else if(GET_GOLD(ch) <= 4 * mega)
+        {
+			robin = (number(1, 100) < 5);
 		}
-		else if(GET_GOLD(ch) <= 8 * mega) {
-			robin=(number(1,100)<5);
+		else if(GET_GOLD(ch) <= 8 * mega)
+        {
+			robin = (number(1, 100) < 11);
 		}
-		else if(GET_GOLD(ch) <= 10 * mega) {
-			robin=(number(1,100)<31);
+		else if(GET_GOLD(ch) <= 10 * mega)
+        {
+			robin = (number(1, 100) < 31);
 		}
-		else if(GET_GOLD(ch) <= 50 * mega) {
-			robin=(number(1,100)<41);
+		else if(GET_GOLD(ch) <= 50 * mega)
+        {
+			robin = (number(1, 100) < 41);
 		}
-		else if(GET_GOLD(ch) <=  100 * mega) {
-			robin=(number(1,100)<51);
+		else if(GET_GOLD(ch) <= 100 * mega)
+        {
+			robin = (number(1, 100) < 51);
 		}
-		else if(GET_GOLD(ch) <=  100 * mega) {
-			robin=(number(1,100)<51);
+		else if(GET_GOLD(ch) <= 110 * mega)
+        {
+			robin = (number(1, 100) < 61);
 		}
-		else if(GET_GOLD(ch) <=  110 * mega) {
-			robin=(number(1,100)<61);
+		else if(GET_GOLD(ch) <= 120 * mega)
+        {
+			robin = (number(1, 100) < 71);
 		}
-		else if(GET_GOLD(ch) <=  120 * mega) {
-			robin=(number(1,100)<71);
+		else if(GET_GOLD(ch) <= 150 * mega)
+        {
+			robin = (number(1, 100) < 81);
 		}
-		else if(GET_GOLD(ch) <=  150 * mega) {
-			robin=(number(1,100)<81);
+		else if(GET_GOLD(ch) <=  999 * mega)
+        {
+			robin = (number(1, 100) < 91);
 		}
-		else if(GET_GOLD(ch) <=  999 * mega) {
-			robin=(number(1,100)<91);
+		else
+        {
+			robin = (number(1, 100) < 100);
 		}
-		else  {
-			robin=(number(1,100)<100);
-		}
-		if(robin) {
-			mudlog(LOG_PLAYERS, "Robin ruba a %s %d ", GET_NAME(ch),GET_GOLD(ch));
-			GET_GOLD(ch)/=2;
-			send_to_char("Mentre stavi riposando qualcuno si e' introdotto nella tua stanza  e ha rubato meta` dei tuoi soldi!!!\n\rForse farti vedere con tutto quel denaro addosso non e' stata una buona idea...\n\r",
-						 ch);
+		if(robin)
+        {
+#if ROBIN_HOOD
+            mudlog(LOG_PLAYERS, "Robin ruba a %s %d ", GET_NAME(ch),GET_GOLD(ch));
+            GET_GOLD(ch)/=2;
+            send_to_char("$c0009Mentre stavi riposando qualcuno si e' introdotto nella tua stanza ed ha rubato meta' dei tuoi soldi!!!\n\r$c0009Forse farti vedere con tutto quel denaro addosso non e' stata una buona idea...\n\r", ch);
+#else
+                send_to_char("$c0009$c0009Mentre stavi riposando qualcuno si e' introdotto nella tua stanza.\n\rForse farti vedere con tutto quel denaro addosso non e' stata una buona idea...\n\r\n\r$c0015Per fortuna non ha preso nessuna delle tue cose... almeno per questa volta...\n\r", ch);
+#endif
 		}
 		/* termine modifica Robin hood */
 		if(GET_GOLD(ch) < -5000) {
 			mudlog(LOG_PLAYERS, "** %s badly ran out of money in rent **",
 				   GET_NAME(ch));
 			send_to_char("$c0011Hai finito i soldi. "
-						 "La tua roba e` stata venduta\n\r", ch);
+						 "La tua roba e' stata venduta\n\r", ch);
 			GET_GOLD(ch) = 0;
 			found = FALSE;
 		}
@@ -1184,7 +1228,7 @@ void obj_to_store(struct obj_data* obj, struct obj_file_u* st,
 			obj_from_obj(obj);
 		}
 #if LIMITED_ITEMS
-		/* Se lo oggetto e` raro, non ne deve essere decrementato il numero
+		/* Se lo oggetto e' raro, non ne deve essere decrementato il numero
 		 * presente nel mondo. Questo dovrebbe risolvere il problema di alcuni
 		 * oggetti rari che non ripoppano.
 		 */
@@ -1265,7 +1309,11 @@ void save_obj(struct char_data* ch, struct obj_cost* cost, int bDelete) {
 	int i;
 
 	st.number = 0;
-	st.gold_left = GET_GOLD(ch);
+#if BANK_RENT
+    st.gold_left = GET_GOLD(ch) + GET_BANK(ch);
+#else
+    st.gold_left = GET_GOLD(ch);
+#endif
 
 	st.total_cost = cost->total_cost;
 	st.last_update = time(0);
@@ -1321,14 +1369,14 @@ bool ToonVersion(const char* name)
     struct char_file_u_3040 ch_st_3040;
     struct stat fileinfo;
     char szFileName[41];
-    
+
     snprintf(szFileName, sizeof(szFileName)-1,"%s/%s.dat", PLAYERS_DIR, lower(name));
-    
+
     if((pCharFile = fopen(szFileName, "r+")) != NULL)
     {
         mudlog(LOG_CHECK, "ho trovato il pg");
         stat(szFileName, &fileinfo);
-        
+
         if(fileinfo.st_size == PG_DAT_SIZE_V_3_5)
         {
             mudlog(LOG_CHECK, "il file size e' 3040");
@@ -1512,6 +1560,9 @@ void update_obj_file() {
                                             mudlog(LOG_PLAYERS, "Dumping %s from object file.", ch_st.name);
                                             mudlog(LOG_PLAYERS,"  Total cost: %d Days %ld Gold left %d", st.total_cost, days_passed, st.gold_left);
                                             ch_st.points.gold = 0;
+#if BANK_RENT
+                                            ch_st.points.bankgold = 0;  // metto anche i gold della banca a 0
+#endif
                                             ch_st.load_room = NOWHERE;
 
                                             rewind(pCharFile);
@@ -1602,14 +1653,14 @@ void st_old_to_st(struct obj_file_u_old* st_old, struct obj_file_u* st)
 {
     int i, j, iRealObjNumber;
     obj_data* obj;
-    
+
     strcpy(st->owner, st_old->owner);
     st->gold_left       = st_old->gold_left;
     st->total_cost      = st_old->total_cost;
     st->last_update     = st_old->last_update;
     st->minimum_stay    = st_old->minimum_stay;
     st->number          = st_old->number;
-    
+
     for(i = 0; i < st_old->number; i++)
     {
         if(st_old->objects[i].item_number > 0 &&
@@ -1659,16 +1710,16 @@ void st_old_to_st(struct obj_file_u_old* st_old, struct obj_file_u* st)
             st->objects[i].free2         = 0;
             st->objects[i].free3         = 0;
             st->objects[i].free4         = 0;
-            
+
             strcpy(st->objects[i].name, st_old->objects[ i ].name);
             strcpy(st->objects[i].sd, st_old->objects[ i ].sd);
             strcpy(st->objects[i].desc, st_old->objects[ i ].desc);
             strcpy(st->objects[i].free5, " ");
             strcpy(st->objects[i].free6, " ");
-            
+
             st->objects[i].wearpos       = st_old->objects[i].wearpos;
             st->objects[i].depth         = st_old->objects[i].depth;
-            
+
             for(j=0; j<MAX_OBJ_AFFECT; j++)
             {
                 st->objects[i].affected[j] = st_old->objects[i].affected[j];
@@ -1860,7 +1911,7 @@ int receptionist(struct char_data* ch, int cmd, char* arg, struct char_data* mob
 			}
 
 			extract_char(ch);
-			/* you don`t delete CHARACTERS when you extract them */
+			/* you don't delete CHARACTERS when you extract them */
 			save_char(ch, save_room, 0);
 			ch->in_room = save_room;
 
@@ -2004,7 +2055,7 @@ int creceptionist(struct char_data* ch, int cmd, char* arg, struct char_data* mo
 			}
 
 			extract_char(ch);
-			/* you don`t delete CHARACTERS when you extract them */
+			/* you don't delete CHARACTERS when you extract them */
 			save_char(ch, save_room, 0);
 			ch->in_room = save_room;
 

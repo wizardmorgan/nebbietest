@@ -48,6 +48,12 @@ namespace Alarmud {
 #define IS_RACIAL_SKILL(skill)  (skill == SKILL_BLOW_KNEE ? 1 : 0)
 #define RM_BLOOD(rm)   (real_roomp(rm)->blood)
 
+#define TANNED(obj)     ((   obj_index[obj->item_number].iVNum == TAN_BAG || obj_index[obj->item_number].iVNum == TAN_SHIELD       \
+                          || obj_index[obj->item_number].iVNum == TAN_JACKET || obj_index[obj->item_number].iVNum == TAN_BOOTS      \
+                          || obj_index[obj->item_number].iVNum == TAN_GLOVES || obj_index[obj->item_number].iVNum == TAN_LEGGINGS   \
+                          || obj_index[obj->item_number].iVNum == TAN_SLEEVES || obj_index[obj->item_number].iVNum == TAN_HELMET    \
+                          || obj_index[obj->item_number].iVNum == TAN_ARMOR) ? TRUE : FALSE)
+
 //#define TRUE  1
 
 //#define FALSE 0

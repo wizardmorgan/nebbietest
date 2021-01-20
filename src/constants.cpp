@@ -2620,6 +2620,9 @@ const char* item_types[] = {
     "BOARD",
     "TREE",
     "ROCK",
+    "MINED GEM",
+    "MINED MINERAL",
+    "BAR",
 	"\n"
 };
 
@@ -4447,7 +4450,7 @@ const char* att_kick_miss_room[] = {
 	"$n tenta di colpire $N con una pedata nel sedere, fallendo ridicolmente.",
 	"$N ride del goffo tentativo di $n di colpirlo nello stomaco con un calcio.",
 	"$n tenta di colpire $N con una pedata che rimbalza sulla corazza di scaglie.",
-	"$n s'ammacca il piede tentanto di prendere a calci $N.",
+	"$n s'ammacca il piede tentando di prendere a calci $N.",
 	"$N evita l'insidioso calcio di $n.",
 	"Il calcio di $n manca $N per le sue piccole dimensioni.",
 	"$n non riesce a centrare $N all'inguine, e si ammacca l'alluce.",
@@ -7986,7 +7989,7 @@ struct ClassAchieTable AchievementsList[MAX_ACHIE_CLASSES][MAX_ACHIE_TYPE] = {
             0,                                                      LEV_BEGINNER,                               3
         },
         {   //  93
-            GROUP_PLANAR,                                           "creatura planare uccisa",                  "creature planare uccise",
+            GROUP_PLANAR,                                           "creatura planare uccisa",                  "creature planari uccise",
             "Ognuno a casa sua",                                    10,
             "Killing Planner",                                      100,
             "Tu... non puoi... passare",                            1000,

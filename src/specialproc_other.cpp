@@ -230,6 +230,8 @@ struct OtherSpecialProcEntry otherproc[] = {
 	{ "ItemPut",(genericspecial_func)ItemPut },  // SALVO 2006 Quest fisse
 //  Nuovo maestro abilità di razza
     { "RacialTeacher", (genericspecial_func) RacialTeacher },
+//  Mob Editor
+    { "RentEditor", (genericspecial_func) RentEditor },
 //  Quest Nilmys
     //  oggetti
     { "urna_nilmys", (genericspecial_func) urna_nilmys },
