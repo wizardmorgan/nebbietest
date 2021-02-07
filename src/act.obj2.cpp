@@ -232,7 +232,7 @@ ACTION_FUNC(do_drink) {
 
 
 ACTION_FUNC(do_eat) {
-	char buf[100];
+	char buf[MAX_INPUT_LENGTH];
 	int j, num;
 	struct obj_data* temp;
 	struct affected_type af;
@@ -363,7 +363,7 @@ ACTION_FUNC(do_pour) {
 		act("Non c'e' abbastanza spazio.",FALSE,ch,0,0,TO_CHAR);
 		return;
 	}
-    
+
     switch(from_obj->obj_flags.value[2])
     {
         case 0:
@@ -522,7 +522,7 @@ ACTION_FUNC(do_sip) {
 
 ACTION_FUNC(do_taste) {
 	struct affected_type af;
-	char tmp[80];
+	char tmp[MAX_INPUT_LENGTH];
 	struct obj_data* temp;
 
 	one_argument(arg,tmp);
@@ -1640,4 +1640,3 @@ ACTION_FUNC(do_remove) {
 	check_falling(ch);
 }
 } // namespace Alarmud
-

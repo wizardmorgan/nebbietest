@@ -191,7 +191,7 @@ struct XpAchieTable
     int lev_9_xp;
     int lev_10_xp;
 };
-    
+
 #define MIN_GLOB_TRACK_LEV 31   /* mininum level for global track */
 /*
 **  Site locking stuff.. written by Scot Gardner
@@ -220,7 +220,7 @@ struct XpAchieTable
 #define LIM_ITEM_COST_MIN 20000     /* mininum cost of a lim. item
                                      *  makes it a limited item... */
 
-#define MAX_LIM_ITEMS 18            /* max number of limited items you can
+#define MAX_LIM_ITEMS 21            /* max number of limited items you can
                                      * rent with */
 
 #define MIN_COST_ITEM_EGO 10000     /* minimo costo sotto il quale non viene
@@ -615,7 +615,7 @@ struct char_player_data {
 	char* title;        /* PC / NPC s title                     */
 	char* sounds;       /* Sound that the monster makes (in room) */
 	char* distant_snds; /* Sound that the monster makes (other) */
-    
+
 	int iClass;         /* PC s class or NPC alignment          */
 	int hometown;       /* PC s Hometown (zone)                 */
 
@@ -894,7 +894,7 @@ struct char_data {
 	long lStartRoom;
 	long AgeModifier;
 	struct event* points_event[3];   /* events for regening H/M/V */
-	
+
     char* lastpkill; // last player killed, used also for destroy checks
     char* lastmkill; // last mob killed, used also for quest checks
     sh_int resistenze[5][25];  // [raziale/eq/edit/spell/totale] [resistenze ai tipi di danni da -100 a +100]
@@ -1272,4 +1272,3 @@ struct wizlistgen {
 
 } // namespace Alarmud
 #endif
-

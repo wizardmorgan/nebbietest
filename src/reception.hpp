@@ -47,4 +47,3 @@ bool ToonVersion(const char* name) ;
 void old_chst_to_chst(struct char_file_u_3040* old_ch_st, struct char_file_u* ch_st) ;
 } // namespace Alarmud
 #endif // __RECEPTION_HPP
-

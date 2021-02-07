@@ -41,7 +41,7 @@
 namespace Alarmud {
 
 ACTION_FUNC(do_ripudia) {
-	char tmp[80];
+	char tmp[MAX_INPUT_LENGTH];
 	struct char_data* victim=NULL;
 	only_argument(arg, tmp);
     int amount, lust;
@@ -119,7 +119,7 @@ ACTION_FUNC(do_ripudia) {
 
 
 ACTION_FUNC(do_associa) {
-	char tmp[80];
+	char tmp[MAX_INPUT_LENGTH];
 	long costobase=500000;
 	long costo;
 	struct char_data* victim=NULL;
@@ -215,7 +215,7 @@ ACTION_FUNC(do_vomita) {
 }
 
 ACTION_FUNC(do_hit) {
-	char tmp[80];
+	char tmp[MAX_INPUT_LENGTH];
 	struct char_data* victim;
 
 	if(check_peaceful(ch,
@@ -1402,7 +1402,7 @@ ACTION_FUNC(do_support) {
 	}
 
 	if(ch->specials.fighting == victim) {
-		send_to_char("Non mi sembra una grande idea\n\r",ch);
+		send_to_char("Non mi sembra una grande idea.\n\r",ch);
 		return;
 	}
 
@@ -1549,7 +1549,7 @@ ACTION_FUNC(do_assist) {
 
 ACTION_FUNC(do_kick) {
 	struct char_data* victim;
-	char name[80];
+	char name[MAX_INPUT_LENGTH];
 	int dam;
 	byte percent;
 	int location = 5;    /* Gaia 2001 */
@@ -1675,7 +1675,7 @@ ACTION_FUNC(do_kick) {
    indirizzati sullo scudo. Gaia( 7/2000 ) */
 
 ACTION_FUNC(do_parry) {
-	char name[100];
+	char name[MAX_INPUT_LENGTH];
 	struct char_data* victim;
 
 	if(check_peaceful(ch,
@@ -1731,7 +1731,7 @@ ACTION_FUNC(do_parry) {
 ACTION_FUNC(do_wimp) {
 
 	/* sets the character in wimpy mode.  */
-	char name[80];
+	char name[MAX_INPUT_LENGTH];
 	short value;
 	only_argument(arg, name);
 	if(!*name) {
@@ -1756,7 +1756,7 @@ ACTION_FUNC(do_wimp) {
 
 ACTION_FUNC(do_shoot) {
 #if 0
-	char tmp[80],dirstr[80],name[80];
+	char tmp[MAX_INPUT_LENGTH],dirstr[MAX_INPUT_LENGTH],name[MAX_INPUT_LENGTH];
 	char buf[255];
 	struct char_data* victim;
 	struct room_data* this_room,*to_room,*next_room;
@@ -2313,7 +2313,7 @@ void kick_messages(struct char_data* ch, struct char_data* victim, int damage) {
 
 ACTION_FUNC(do_berserk) {
 	int skillcheck=0;
-	char name[100];
+	char name[MAX_INPUT_LENGTH];
 	struct char_data* victim;
 
 	if((!ch->skills) && IS_PC(ch)) {
@@ -2718,7 +2718,7 @@ ACTION_FUNC(do_weapon_load) {
 
 ACTION_FUNC(do_fire) {
 	struct obj_data* fw, *ms;
-	char tmp[MAX_STRING_LENGTH];
+	char tmp[MAX_INPUT_LENGTH];
 	struct char_data* targ;
 	int tdir, rng, dr;
 

@@ -51,6 +51,7 @@ ACTION_FUNC(do_osave) ;
 ACTION_FUNC(do_passwd) ;
 ACTION_FUNC(do_personalize) ;
 ACTION_FUNC(do_purge) ;
+ACTION_FUNC(do_refund) ;
 ACTION_FUNC(do_register) ;
 ACTION_FUNC(do_removehost) ;
 ACTION_FUNC(do_reroll) ;
@@ -97,4 +98,3 @@ stringa_valore find_obj(struct char_data* ch, ush_int vnumber, int count);
 void save_ghost_forcerent(struct char_data* ch);
 } // namespace Alarmud
 #endif // _ACT_WIZARD_HPP
-

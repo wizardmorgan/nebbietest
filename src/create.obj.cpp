@@ -337,7 +337,7 @@ void ChangeObjWear(struct char_data* ch, const char* arg, int type) {
 
 
 ACTION_FUNC(do_oedit) {
-	char name[20];
+	char name[MAX_INPUT_LENGTH];
 	struct obj_data* obj;
 	int i;
 
