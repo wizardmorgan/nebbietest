@@ -2252,12 +2252,22 @@ ACTION_FUNC(do_checkachielevel)
             return;
         } */
 
-        send_to_char("Inizio a scrivere il Database Oggetti su file.\n\n", ch);
+        send_to_char("Inizio a scrivere il Database degli Edit su file.\n\n", ch);
+
+				if((f = fopen(DB_EDIT_FILE, "wt")) == NULL) {
+						send_to_char("Can't write to disk now... try later.\n\r", ch);
+						return;
+				}
+				else
+				{
+					fprintf(f, "Database degli Edit di Nebbie\n");
+					fclose(f);
+				}
 
         for(int i = 34030; i < 35000; i++)
         {
             if((f = fopen(DB_EDIT_FILE, "at")) == NULL) {
-                send_to_char("Can't write to disk now..try later.\n\r", ch);
+                send_to_char("Can't write to disk now... try later.\n\r", ch);
                 return;
             }
             WriteDbObj(f, 28, i, 0);
@@ -2305,10 +2315,20 @@ ACTION_FUNC(do_checkachielevel)
         sprintf(buf2, "Inizio a scrivere il Database Oggetti %s%s%s.\n\n", (type == 27 ? "Completo" : ""), (type == 27 ? "" : "di tipo "), (type == 27 ? "" : item_types[type]));
         send_to_char(buf2, ch);
 
+				if((f = fopen(buf, "wt")) == NULL) {
+						send_to_char("Can't write to disk now... try later.\n\r", ch);
+						return;
+				}
+				else
+				{
+					fprintf(f, "%s\n", buf2);
+					fclose(f);
+				}
+
         for(int i = low; i < high; i++)
         {
             if((f = fopen(buf, "at")) == NULL) {
-                send_to_char("Can't write to disk now..try later.\n\r", ch);
+                send_to_char("Can't write to disk now... try later.\n\r", ch);
                 return;
             }
             WriteDbObj(f, type, i, location);

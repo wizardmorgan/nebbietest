@@ -2699,7 +2699,7 @@ const char* extra_bits2[] = {
     "MONEY-DROPPED",
     "\n"
 };
-    
+
 const char* room_bits[] = {
 	"DARK",
 	"DEATH",
@@ -3891,7 +3891,7 @@ const char* spell_desc[] = {
                                             "\n"
 };
 
-    
+
 /* Requiem: queste fan parte del diku, le terrei in cantiere per un eventuale implementazione
  rispetto i gain, e renderli un po' piu' complicati richiedendo il completamento
  della quest oltre agli xp */
@@ -4136,7 +4136,7 @@ const char* QuestKind [] = {
     "\0"
 
 };
-    
+
 const char* NameGenStart [] = {
 "A",
 "Ab",
@@ -4325,7 +4325,7 @@ const char* NameGenEnd [] = {
 "\0"
 };
 
-    
+
 const char* att_kick_kill_ch[] = {
 	"Il tuo calcio sfonda il torace di $N causandone la morte immediata.",
 	"Il tuo calcio distrugge un braccio a $N e gli sfonda la cassa toracica.",
@@ -8134,7 +8134,10 @@ int ObjectHitPoints[E_ITEM_TYPE_COUNT] =
      100,   //  ITEM_AUDIO
     1000,   //  ITEM_BOARD
     1000,   //  ITEM_TREE
-     100    //  ITEM_ROCK
+     100,   //  ITEM_ROCK
+		 100,		//	ITEM_M_GEM
+		 100,		//	ITEM_M_MINERAL
+		 100		//	ITEM_BAR
 };
 
 struct RaceTeacherTable RaceTeacherList[max_race_table] =
@@ -8214,23 +8217,23 @@ struct RaceListTable RaceStuffs[max_race_table] =  // mettere MAX_RACE (anche su
 
     //  damage, spellpower, hitroll,    spellfail,
         0,      0,          0,          0,
-        
+
     //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
         0,      0,          0,      0,          0,      0,
-        
+
     //  resistances
         {
               0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
               0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
               0,      0,      0,      0,      0
         },
-        
+
     //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
         0,          0,          0,          0,
-        
+
     //  affect
         0,
-        
+
     //          innate_skill
         {
                             -1,                         -1,
@@ -8419,26 +8422,26 @@ struct RaceListTable RaceStuffs[max_race_table] =  // mettere MAX_RACE (anche su
 
     //  max_stat_points,    statMaster,     speak,          is_PC_race, reincarnate,    isHuge,
         73,                 5,              LANG_COMMON,    TRUE,       TRUE,           -1,
-        
+
         //  damage, spellpower, hitroll,    spellfail,
         0,      0,          0,          0,
-        
+
         //  hp,     hp_reg,     mana,   mana_reg,   move,   move_reg,
         0,      0,          0,      0,          0,      0,
-        
+
         //  resistances
         {
               0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
               0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
               0,      0,      0,      0,      0
         },
-        
+
         //  d_r_blunt,  d_r_slash,  d_r_pierce, d_r_magic,
         0,          0,          0,          0,
-        
+
         //  affect
         0,
-        
+
     //          innate_skill
         {
             SKILL_QUICKNESS,                         -1,
@@ -8456,4 +8459,3 @@ struct RaceListTable RaceStuffs[max_race_table] =  // mettere MAX_RACE (anche su
     }
 };
 } // namespace Alarmud
-

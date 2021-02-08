@@ -339,7 +339,7 @@ void shopping_buy(char* arg, struct char_data* ch,
             {
                 obj_to_char(temp1, ch);
 				send_to_char("Hai fatto un affare, era l'ultimo pezzo.'\n\r", ch);
-				// GET_GOLD(ch) += actualcost;  
+				// GET_GOLD(ch) += actualcost;
                 //sprintf(buf, "$N ti restituisce %d monete d'oro.", (int) actualcost * num);
                 //act(buf, FALSE, ch, NULL, keeper, TO_CHAR);
 				return;
@@ -559,7 +559,7 @@ void shopping_list(char* arg, struct char_data* ch,
                                 sprintf(articolo, "del ");
                                 break;
                         }
-						sprintf(buf3,"%s %s %s", temp1->short_description, articolo, drinks[temp1->obj_flags.value[2]]);
+						sprintf(buf3,"%s %s%s", temp1->short_description, articolo, drinks[temp1->obj_flags.value[2]]);
                     }
 					else {
 						sprintf(buf3,"%s",(temp1->short_description));
@@ -814,4 +814,3 @@ void assign_the_shopkeepers() {
 }
 
 } // namespace Alarmud
-

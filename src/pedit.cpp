@@ -780,8 +780,8 @@ MOBSPECIAL_FUNC(RentEditor)
                 }
 
                 mudlog(LOG_PLAYERS, "Rent on vnum %d decrease from %d to %d gold coins. Owner: %s, MobEditor: %s", iVNum, (obj->obj_flags.cost_per_day + 1000), obj->obj_flags.cost_per_day, GET_NAME(ch), GET_NAME(derent));
-                // write_obj_to_file(obj, f, obj->char_vnum);
-                write_obj_to_file(obj, f);
+                write_obj_to_file(obj, f, obj->char_vnum);
+                // write_obj_to_file(obj, f);
                 fclose(f);
 
                 sprintf(buf, "%s ha diminuito il rent sull'oggetto vnum %d di 1000 monete d'oro da %s.\n\rOra paga %d monete d'oro di rent.\n\r", GET_NAME(ch), iVNum, GET_NAME(derent), obj->obj_flags.cost_per_day);

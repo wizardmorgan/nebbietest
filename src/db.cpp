@@ -2228,6 +2228,7 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
 	long bc = 0L;
 	char chk[161];
 	struct extra_descr_data* new_descr;
+	void name_to_drinkcon(struct obj_data *obj,int type);
 
 	obj->name = fread_string(f);
 
@@ -2260,6 +2261,113 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
 	obj->obj_flags.cost = fread_number(f);
 	obj->obj_flags.cost_per_day = fread_number(f);
 
+  if(obj->obj_flags.type_flag == ITEM_DRINKCON)
+	{
+		if(!obj->name)
+		{
+			obj->name = (char*) strdup(drinknames[obj->obj_flags.value[2]]);
+		}
+		else if(strstr(obj->name, drinknames[obj->obj_flags.value[2]]))
+		{
+			char str[MAX_STRING_LENGTH], word[50];
+			int j, ls, lw, temp, check = 0, doIncrement, isSpace;
+
+			sprintf(str, "%s", obj->name);
+			sprintf(word, "%s", drinknames[obj->obj_flags.value[2]]);
+
+    	ls = strlen(str);
+    	lw = strlen(word);
+
+    	for(i = 0; i < ls; i++)
+    	{
+        temp = i;
+      	doIncrement = 0;
+
+      	for(j = 0; j < lw; j++)
+      	{
+          if(str[i] == word[j])
+          {
+            if(temp > 0 && (temp + lw) < ls)
+            {
+              if(str[temp - 1] == ' ' && str[temp + lw] == ' ')
+                doIncrement = 1;
+            }
+            else if(temp == 0 && (temp + lw) < ls)
+            {
+              if(str[temp + lw] == ' ')
+                doIncrement = 1;
+            }
+            else if(temp > 0 && (temp + lw) == ls)
+            {
+              if(str[temp - 1] == ' ')
+              	doIncrement = 1;
+            }
+
+            if(doIncrement == 1)
+            	i++;
+            else
+              break;
+          }
+        }
+
+        check = i - temp;
+
+        if(check == lw)
+        {
+          i = temp;
+          for(j = i; j < (ls - lw); j++)
+            str[j] = str[j + lw];
+          ls = ls - lw;
+          i = temp;
+          str[j] = '\0';
+        }
+    	}
+
+    	ls = strlen(str);
+    	i = 0;
+
+    	while(str[i] != '\0')
+    	{
+        isSpace = 0;
+        if(str[i] == ' ' && str[i + 1] == ' ')
+        {
+          for(j = i; j < (ls - 1); j++)
+          {
+            str[j] = str[j + 1];
+            isSpace = 1;
+          }
+      	}
+        if(i == 0 && str[i] == ' ')
+        {
+          for(j = i; j < (ls - 1); j++)
+          {
+            str[j] = str[j + 1];
+            isSpace = 1;
+        	}
+      	}
+      	if(isSpace == 0)
+        	i++;
+      	else
+      	{
+        	str[j] = '\0';
+        	ls--;
+      	}
+    	}
+
+			if(str[strlen(str)-1] == ' ')
+			{
+				str[strlen(str)-1] = '\0';
+			}
+
+			free(obj->name);
+			obj->name = (char*) strdup(str);
+			name_to_drinkcon(obj, obj->obj_flags.value[2]);
+		}
+		else //if(obj->obj_flags.value[3]] != DRINK_PERM)
+		{
+			name_to_drinkcon(obj, obj->obj_flags.value[2]);
+		}
+	}
 	/* *** extra descriptions *** */
 
 	obj->ex_description = 0;
@@ -2363,7 +2471,7 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
 	}
 
 	SetStatus("Returning from read_obj_from_file", "None");
-
+	//mudlog(LOG_WORLD, "ho finito di leggere %s", obj->short_description);
 	return bc;
 }
 
@@ -5230,7 +5338,7 @@ ACTION_FUNC(do_WorldSave) {
 /* Mob related handy functions */
 int CheckSpellPowerFlags(struct obj_data* obj)
 {
-    int malus = 69;
+    int malus = 69, iVNum;
 
     if(IS_SET(obj->obj_flags.extra_flags, ITEM_ANTI_CLERIC))
     {
@@ -5258,7 +5366,8 @@ int CheckSpellPowerFlags(struct obj_data* obj)
         malus = 101;
     }
 
-    mudlog(LOG_CHECK, "malus di %s e' %d", obj->short_description, malus);
+iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
+    mudlog(LOG_CHECK, "malus di %s (%d) e' %d", obj->short_description, iVNum, malus);
     return malus;
 }
 
@@ -5289,5 +5398,3 @@ int NewMobMov(struct char_data* mob)
 }
 
 }
-
-
