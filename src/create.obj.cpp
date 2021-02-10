@@ -385,10 +385,16 @@ ACTION_FUNC(do_oedit) {
 	ch->specials.oedit = OBJ_MAIN_MENU;
 	ch->desc->connected = CON_OBJ_EDITING;
 
-    if(!IS_SET(ch->specials.objedit->obj_flags.extra_flags2, ITEM2_EDIT))
-    {
-        SET_BIT(ch->specials.objedit->obj_flags.extra_flags2, ITEM2_EDIT);
-    }
+	if(IS_SET(ch->specials.objedit->obj_flags.extra_flags2, ITEM2_EDIT))
+	{
+		ch->specials.objedit->value_exp_edit	=	ValueExpObj(obj) * 10000;
+		ch->specials.objedit->value_rune_edit =	ValueRuneObj(obj);
+	}
+
+  if(!IS_SET(ch->specials.objedit->obj_flags.extra_flags2, ITEM2_EDIT))
+  {
+    SET_BIT(ch->specials.objedit->obj_flags.extra_flags2, ITEM2_EDIT);
+  }
 
 	act("$n inizia a $c0009p$c0010l$c0011a$c0012$c0013s$c0014m$c0009a$c0010r$c0011e$c0007 la materia.", FALSE, ch, 0, 0, TO_ROOM);
 	GET_POS(ch)=POSITION_SLEEPING;
@@ -414,7 +420,7 @@ void UpdateObjMenu(struct char_data* ch) {
     {
         send_to_char("\n\r\n\r", ch);
     }
-	sprintf(buf, "Object Name: %s", obj->name);
+	sprintf(buf, "Object Name: %s          Object Edited Value: %ld exp, %d rune", obj->name, obj->value_exp_edit, obj->value_rune_edit);
 	send_to_char(buf, ch);
     if(ch->term != VT100)
     {
@@ -430,9 +436,41 @@ void UpdateObjMenu(struct char_data* ch) {
 
 void ObjEdit(struct char_data* ch, const char* arg) {
 	if(ch->specials.oedit == OBJ_MAIN_MENU) {
-		if(!*arg || *arg == '\n') {
+		if(!*arg || *arg == '\n')
+		{
+			char buf[255];
+			long exp = 0;
+			int rune = 0;
+
+			exp 	= ch->specials.objedit->value_exp_edit;
+			rune 	= ch->specials.objedit->value_rune_edit;
+			ch->specials.objedit->value_exp_edit	=	ValueExpObj(ch->specials.objedit) * 10000;
+			ch->specials.objedit->value_rune_edit	=	ValueRuneObj(ch->specials.objedit);
+
 			ch->desc->connected = CON_PLYNG;
 			act("$n smette di $c0009p$c0010l$c0011a$c0012$c0013s$c0014m$c0009a$c0010r$c0011e$c0007 la materia.", FALSE, ch, 0, 0, TO_ROOM);
+
+			if(ch->specials.objedit->value_exp_edit > exp || ch->specials.objedit->value_rune_edit > rune)
+			{
+				if(ch->specials.objedit->value_exp_edit > exp)
+				{
+					sprintf(buf, "Il valore totale degli edit e' di %ld punti esperienza", ch->specials.objedit->value_exp_edit - exp);
+					if(ch->specials.objedit->value_rune_edit > rune)
+					{
+						sprintf(buf, "%s e %d run%s.\n\r", buf, ch->specials.objedit->value_rune_edit - rune, (ch->specials.objedit->value_rune_edit - rune == 1 ? "a" : "e"));
+					}
+					else
+					{
+						sprintf(buf, "%s.\n\r", buf);
+					}
+				}
+				else
+				{
+					sprintf(buf, "Il valore totale degli edit e' di %d run%s.\n\r", ch->specials.objedit->value_rune_edit - rune, (ch->specials.objedit->value_rune_edit - rune == 1 ? "a" : "e"));
+				}
+				send_to_char(buf, ch);
+			}
+
 			GET_POS(ch)=POSITION_STANDING;
 			return;
 		}

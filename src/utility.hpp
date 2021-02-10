@@ -20,6 +20,7 @@ int ResiTotal(struct char_data* ch, int type);
 int converti_numero(unsigned long n);
 bool CheckOneStat(struct char_data* ch, int statCh, int skill, struct char_data* victim, int statVictim);
 int ValueExpObj(struct obj_data* obj);
+int ValueRuneObj(struct obj_data* obj);
 void WriteDbObj(FILE* f, int type, int limit, int loc);
 
     // Achievements stuff
@@ -208,4 +209,3 @@ T tonumber(std::string source,T fallback) {
 
 } // namespace Alarmud
 #endif
-

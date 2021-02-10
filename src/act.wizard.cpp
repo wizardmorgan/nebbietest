@@ -6665,7 +6665,7 @@ ACTION_FUNC(do_osave) {
     }
     else
     {
-        vnum2 = vnum;
+        vnum2 = obj->char_vnum;
     }
 
 	/* check for valid VNUM in this zone */

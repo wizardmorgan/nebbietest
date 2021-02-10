@@ -546,14 +546,6 @@ MOBSPECIAL_FUNC(EditMaster) {
 	return (FALSE);
 }
 
-#define PAY_RUNE    1
-#define PAY_EXP     2
-#define PAY_GOLD    4
-
-#define PRICE_RUNE  1
-#define PRICE_EXP   2000000
-#define PRICE_GOLD  300000
-
 MOBSPECIAL_FUNC(RentEditor)
 {
     char obj_name[80], vict_name[80], spec_buf[256], buf[MAX_STRING_LENGTH];

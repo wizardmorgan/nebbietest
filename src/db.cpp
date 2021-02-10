@@ -2425,18 +2425,22 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
 
     if(*chk == 'F')
     {
+			mudlog(LOG_CHECK, "leggo F ");
         obj->obj_flags.extra_flags2 = fread_number(f);
-    }
-
-    if(*chk == 'R')
-    {
-        obj->value_rune_edit = fread_number(f);
+				fscanf(f, " %160s \n", chk);
     }
 
     if(*chk == 'X')
     {
         obj->value_exp_edit = fread_number(f);
+				fscanf(f, " %160s \n", chk);
     }
+
+		if(*chk == 'R')
+		{
+				obj->value_rune_edit = fread_number(f);
+				fscanf(f, " %160s \n", chk);
+		}
 
     obj->obj_flags.hitp = ObjectHitPoints[GET_ITEM_TYPE(obj)];
     obj->obj_flags.hitpTot = ObjectHitPoints[GET_ITEM_TYPE(obj)];
@@ -2513,6 +2517,12 @@ void write_obj_to_file(struct obj_data* obj, FILE* f, long vnumber) {
         fprintf(f, "F\n");
         fprintf(f, "%d\n", obj->obj_flags.extra_flags2);
     }
+
+		if(IS_OBJ_STAT2(obj, ITEM2_EDIT))
+		{
+			obj->value_exp_edit 	=	ValueExpObj(obj) * 10000;
+			obj->value_rune_edit 	=	ValueRuneObj(obj);
+		}
 
     if(obj->value_exp_edit)
     {

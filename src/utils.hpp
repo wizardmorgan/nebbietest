@@ -34,6 +34,15 @@ namespace Alarmud {
 #define OBJ_RESI_PIERCE     111
 #define OBJ_SPY             112
 
+//  renteditor's stuff
+#define PAY_RUNE    1
+#define PAY_EXP     2
+#define PAY_GOLD    4
+
+#define PRICE_RUNE  1
+#define PRICE_EXP   2000000
+#define PRICE_GOLD  300000
+
 //  resistenze
 #define EDITED_RESI(ch, type)   ((ch)->resistenze[EDIT_RESI][type])
 #define CHECK_RESI(ch, type)    ((ch)->resistenze[TOTAL_RESI][type])
@@ -550,4 +559,3 @@ inline struct room_data* real_roomp(long lVNum) {
 
 } // namespace Alarmud
 #endif
-

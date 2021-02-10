@@ -1908,91 +1908,102 @@ MOBSPECIAL_FUNC(ninja_master) {
 MOBSPECIAL_FUNC(RepairGuy) {
 	char obj_name[80], vict_name[80], buf[MAX_INPUT_LENGTH];
 	int cost, ave, iVNum, lust;
-    long expCost = 0;
+  long expCost = 0;
 	struct char_data* vict;
 	struct obj_data* obj;
-    bool riparato = FALSE, riparabile = FALSE, ok = FALSE;
+  bool riparato = FALSE, riparabile = FALSE, ok = FALSE;
 	/* special procedure for this mob/obj       */
 
-	if(!AWAKE(ch)) {
+	if(!AWAKE(ch))
+	{
 		return(FALSE);
 	}
 
-	if(IS_NPC(ch)) {
-		if(cmd == CMD_GIVE) {
+	if(IS_NPC(ch))
+	{
+		if(cmd == CMD_GIVE)
+		{
 			arg=one_argument(arg,obj_name);
-			if(!*obj_name) {
+			if(!*obj_name)
+			{
 				return(FALSE);
 			}
-			if(!(obj = get_obj_in_list_vis(ch, obj_name, ch->carrying))) {
+			if(!(obj = get_obj_in_list_vis(ch, obj_name, ch->carrying)))
+			{
 				return(FALSE);
 			}
 			arg=one_argument(arg, vict_name);
-			if(!*vict_name) {
+			if(!*vict_name)
+			{
 				return(FALSE);
 			}
-			if(!(vict = get_char_room_vis(ch, vict_name))) {
+			if(!(vict = get_char_room_vis(ch, vict_name)))
+			{
 				return(FALSE);
 			}
-			if(!IS_NPC(vict)) {
+			if(!IS_NPC(vict))
+			{
 				return(FALSE);
 			}
-			if(mob_index[vict->nr].func == reinterpret_cast<genericspecial_func>(RepairGuy)) {
+			if(mob_index[vict->nr].func == reinterpret_cast<genericspecial_func>(RepairGuy))
+			{
 				send_to_char("Nah, you really wouldn't want to do that.",ch);
 				return(TRUE);
 			}
 		}
-		else {
+		else
+		{
 			return(FALSE);
 		}
 	}
 
 
-	if(cmd == CMD_GIVE) {  /* give */
+	if(cmd == CMD_GIVE)
+	{  /* give */
 		/* determine the correct obj */
 		arg=one_argument(arg,obj_name);
 		if(!*obj_name)
-        {
-		//	send_to_char("Give what?\n\r",ch);
+    {
+		//	send_to_char("Give what?\n\r",ch);	non serve, lo fa già il comando dato che la procedura è 'FALSE'
 			return(FALSE);
 		}
 		if(!(obj = get_obj_in_list_vis(ch, obj_name, ch->carrying)))
-        {
-            send_to_char("Cosa vuoi dare a chi?\n\r", ch);
+    {
+      send_to_char("Cosa vuoi dare a chi?\n\r", ch);
 			return(TRUE);
 		}
 		arg=one_argument(arg, vict_name);
 		if(!*vict_name)
-        {
-		//	send_to_char("To who?\n\r",ch);
+    {
+		//	send_to_char("To who?\n\r",ch);		non serve, lo fa già il comando dato che la procedura è 'FALSE'
 			return(FALSE);
 		}
 		if(!(vict = get_char_room_vis(ch, vict_name)))
-        {
+    {
 		//	send_to_char("To who?\n\r",ch);
 			return(FALSE);
 		}
 
 		if(vict->specials.fighting)
-        {
+    {
 			send_to_char("Non mentre sta combattendo!\n\r",ch);
 			return(TRUE);
 		}
 
 		/* the target is the repairman, or an NPC */
 		if(!IS_NPC(vict))
-        {
+    {
 			return(FALSE);
 		}
 
 		if(mob_index[vict->nr].func == reinterpret_cast<genericspecial_func>(RepairGuy))
-        {
+    {
 			/* we have the repair guy, and we can give him the stuff */
 			act("Dai $p a $N.",TRUE,ch,obj,vict,TO_CHAR);
 			act("$n da $p a $N.",TRUE,ch,obj,vict,TO_ROOM);
 		}
 		else
-        {
+    {
 			return(FALSE);
 		}
 
@@ -2004,12 +2015,12 @@ MOBSPECIAL_FUNC(RepairGuy) {
 		iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
 
 		if(iVNum < 1)
-        {
+    {
 			act("$N dice 'Riparalo tu!'", TRUE, ch, 0, vict, TO_CHAR);
 			act("$N dice 'Riparalo tu!'", TRUE, ch, 0, vict, TO_ROOM);
-            act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
-            act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
-            return(TRUE);
+      act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
+      act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
+      return(TRUE);
 		}
 
         /*
@@ -2025,548 +2036,549 @@ MOBSPECIAL_FUNC(RepairGuy) {
          *  Lvl 59 --> wand + staff + potion + scroll
          *  Lvl 60 --> all the item type
          */
-        switch(ITEM_TYPE(obj))
-        {
-            case ITEM_LIGHT:
-                if(GetMaxLevel(vict) == 56 || GetMaxLevel(vict) == 58 || GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_POTION:
-            case ITEM_SCROLL:
-                if(GetMaxLevel(vict) >= 59)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_WAND:
-            case ITEM_STAFF:
-                if(GetMaxLevel(vict) == 55 || GetMaxLevel(vict) >= 59)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_WEAPON:
-                if(GetMaxLevel(vict) == 52 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_FIREWEAPON:
-            case ITEM_MISSILE:
-                if(GetMaxLevel(vict) == 52 || GetMaxLevel(vict) == 58 || GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_TREASURE:
-                if(GetMaxLevel(vict) == 54 || GetMaxLevel(vict) == 58 || GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_OTHER:
-                if(GetMaxLevel(vict) == 54 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_ARMOR:
-                if(GetMaxLevel(vict) <= 51 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_WORN:
-                if(GetMaxLevel(vict) == 53 || GetMaxLevel(vict) == 58 || GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_CONTAINER:
-                if(GetMaxLevel(vict) == 53 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            case ITEM_AUDIO:
-                if(GetMaxLevel(vict) == 56 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
-
-            default:
-                if(GetMaxLevel(vict) == 60)
-                {
-                    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
-                    {
-                        riparabile = TRUE;
-                    }
-                    ok = TRUE;
-                }
-                break;
+    switch(ITEM_TYPE(obj))
+    {
+			case ITEM_LIGHT:
+      	if(GetMaxLevel(vict) == 56 || GetMaxLevel(vict) == 58 || GetMaxLevel(vict) == 60)
+      	{
+        	if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+        	{
+          	riparabile = TRUE;
+        	}
+        	ok = TRUE;
         }
+      	break;
 
-        if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED) && ValueExpObj(obj) == 0 && !IS_IMMORTALE(ch))
+      case ITEM_POTION:
+			case ITEM_SCROLL:
+      	if(GetMaxLevel(vict) >= 59)
         {
-            act("$N dice 'Mi dispiace, non sono in grado di riparare $p, solo gli Dei possono aiutarti.'", TRUE, ch, obj, vict, TO_CHAR);
-            act("$N dice 'Mi dispiace, non sono in grado di riparare $p, solo gli Dei possono aiutarti.'", TRUE, ch, obj, vict, TO_ROOM);
-            act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
-            act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
-            return(TRUE);
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+            riparabile = TRUE;
+          }
+          ok = TRUE;
         }
+      	break;
 
-        if(IS_OBJ_STAT2(obj, ITEM2_PERSONAL) && !IS_IMMORTAL(ch) && !pers_on(ch, obj) && IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+			case ITEM_WAND:
+			case ITEM_STAFF:
+      	if(GetMaxLevel(vict) == 55 || GetMaxLevel(vict) >= 59)
         {
-            act("$N dice 'Mi dispiace, non posso riparare $p, non ti appartiene!'", TRUE, ch, obj, vict, TO_CHAR);
-            act("$N dice 'Mi dispiace, non posso riparare $p, non ti appartiene!'", TRUE, ch, obj, vict, TO_ROOM);
-            act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
-            act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
-            return(TRUE);
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+            riparabile = TRUE;
+          }
+          ok = TRUE;
         }
+        break;
 
-        if(riparabile)
+      case ITEM_WEAPON:
+        if(GetMaxLevel(vict) == 52 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
         {
-            expCost = ValueExpObj(obj) * 500;
-
-            switch(HowManyClasses(ch))
-            {
-                case 1:
-                    break;
-
-                case 2:
-                    expCost = expCost * 1.5 / HowManyClasses(ch);
-                    break;
-
-                default:
-                    expCost = expCost * 2 / HowManyClasses(ch);
-                    break;
-            }
-
-            if(IS_IMMORTALE(ch))
-            {
-                expCost = 1;
-            }
-
-            if(expCost > GET_EXP(ch))
-            {
-                do_say(vict, "Non hai abbastanza esperienza!", CMD_SAY);
-                act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
-                act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
-                return(TRUE);
-            }
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+						riparabile = TRUE;
+          }
+          ok = TRUE;
         }
-        else if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED) && !riparabile)
+        break;
+
+      case ITEM_FIREWEAPON:
+      case ITEM_MISSILE:
+        if(GetMaxLevel(vict) == 52 || GetMaxLevel(vict) == 58 || GetMaxLevel(vict) == 60)
         {
-            act("$N dice 'Mi dispiace, non sono in grado di riparare $p.'", TRUE, ch, obj, vict, TO_CHAR);
-            act("$N dice 'Mi dispiace, non sono in grado di riparare $p.'", TRUE, ch, obj, vict, TO_ROOM);
-            act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
-            act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
-            return(TRUE);
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+            riparabile = TRUE;
+          }
+          ok = TRUE;
         }
+        break;
+
+      case ITEM_TREASURE:
+        if(GetMaxLevel(vict) == 54 || GetMaxLevel(vict) == 58 || GetMaxLevel(vict) == 60)
+        {
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+            riparabile = TRUE;
+          }
+          ok = TRUE;
+        }
+				break;
+
+      case ITEM_OTHER:
+        if(GetMaxLevel(vict) == 54 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
+        {
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+            riparabile = TRUE;
+          }
+          ok = TRUE;
+        }
+        break;
+
+      case ITEM_ARMOR:
+      	if(GetMaxLevel(vict) <= 51 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
+        {
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+            riparabile = TRUE;
+          }
+          ok = TRUE;
+        }
+        break;
+
+      case ITEM_WORN:
+      	if(GetMaxLevel(vict) == 53 || GetMaxLevel(vict) == 58 || GetMaxLevel(vict) == 60)
+        {
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+            riparabile = TRUE;
+          }
+          ok = TRUE;
+        }
+        break;
+
+      case ITEM_CONTAINER:
+        if(GetMaxLevel(vict) == 53 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
+        {
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+          	riparabile = TRUE;
+          }
+          ok = TRUE;
+        }
+        break;
+
+      case ITEM_AUDIO:
+        if(GetMaxLevel(vict) == 56 || GetMaxLevel(vict) == 57 || GetMaxLevel(vict) == 60)
+        {
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+            riparabile = TRUE;
+          }
+          ok = TRUE;
+        }
+        break;
+
+      default:
+      	if(GetMaxLevel(vict) == 60)
+        {
+          if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+          {
+            riparabile = TRUE;
+          }
+          ok = TRUE;
+        }
+        break;
+    }
+
+    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED) && ValueExpObj(obj) == 0 && !IS_IMMORTALE(ch))
+    {
+      act("$N dice 'Mi dispiace, non sono in grado di riparare $p, solo gli Dei possono aiutarti.'", TRUE, ch, obj, vict, TO_CHAR);
+      act("$N dice 'Mi dispiace, non sono in grado di riparare $p, solo gli Dei possono aiutarti.'", TRUE, ch, obj, vict, TO_ROOM);
+      act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
+      act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
+      return(TRUE);
+    }
+
+  	if(IS_OBJ_STAT2(obj, ITEM2_PERSONAL) && !IS_IMMORTAL(ch) && !pers_on(ch, obj) && IS_OBJ_STAT2(obj, ITEM2_DESTROYED))
+    {
+      act("$N dice 'Mi dispiace, non posso riparare $p, non ti appartiene!'", TRUE, ch, obj, vict, TO_CHAR);
+      act("$N dice 'Mi dispiace, non posso riparare $p, non ti appartiene!'", TRUE, ch, obj, vict, TO_ROOM);
+      act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
+      act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
+      return(TRUE);
+		}
+
+    if(riparabile)
+    {
+      expCost = ValueExpObj(obj) * 500;
+
+      switch(HowManyClasses(ch))
+      {
+        case 1:
+          break;
+
+        case 2:
+          expCost = expCost * 1.5 / HowManyClasses(ch);
+          break;
+
+        default:
+					expCost = expCost * 2 / HowManyClasses(ch);
+          break;
+      }
+
+      if(IS_IMMORTALE(ch))
+      {
+        expCost = 1;
+      }
+
+      if(expCost > GET_EXP(ch))
+      {
+        do_say(vict, "Non hai abbastanza esperienza!", CMD_SAY);
+        act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
+        act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
+        return(TRUE);
+      }
+    }
+    else if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED) && !riparabile)
+    {
+      act("$N dice 'Mi dispiace, non sono in grado di riparare $p.'", TRUE, ch, obj, vict, TO_CHAR);
+      act("$N dice 'Mi dispiace, non sono in grado di riparare $p.'", TRUE, ch, obj, vict, TO_ROOM);
+      act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
+      act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
+      return(TRUE);
+  	}
 
 		/* make all the correct tests to make sure that everything is kosher */
-        if(ITEM_TYPE(obj) == ITEM_ARMOR && obj->obj_flags.value[1] == 0 && !pers_on(ch, obj))
-        {
-            act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_CHAR);
-            act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_ROOM);
-        }
+    if(ITEM_TYPE(obj) == ITEM_ARMOR && obj->obj_flags.value[1] == 0 && !pers_on(ch, obj))
+    {
+      act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_CHAR);
+			act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_ROOM);
+    }
 		else if(ITEM_TYPE(obj) == ITEM_ARMOR && ok)
-        {
+    {
 			if(obj->obj_flags.hitpTot > obj->obj_flags.hitp)
-            {
+      {
 				/* get the value of the object */
 				cost = obj->obj_flags.cost;
-                if(GetMaxLevel(vict) > 25)
-                { /* super repair guy */
-                    cost *= 2;
-                }
+        if(GetMaxLevel(vict) > 25)
+        { /* super repair guy */
+          cost *= 2;
+        }
 				/* divide by hitpTot   */
-				cost /= obj->obj_flags.hitpTot;
+					cost /= obj->obj_flags.hitpTot;
 				/* then cost = difference between hitpTot and hitp */
-				cost = cost * (obj->obj_flags.hitpTot - obj->obj_flags.hitp) * 50;
+					cost = cost * (obj->obj_flags.hitpTot - obj->obj_flags.hitp) * 50;
 
-				if(cost > GET_GOLD(ch))
-                {
-					if(check_soundproof(ch))
-                    {
-						act("$N scuote la testa.\n\r",
-							TRUE, ch, 0, vict, TO_ROOM);
-						act("$N scuote la testa.\n\r",
-							TRUE, ch, 0, vict, TO_CHAR);
+					if(cost > GET_GOLD(ch))
+          {
+						if(check_soundproof(ch))
+            {
+							act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_ROOM);
+							act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_CHAR);
+						}
+						else
+            {
+							act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'", TRUE, ch, 0, vict, TO_ROOM);
+							act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'", TRUE, ch, 0, vict, TO_CHAR);
+						}
 					}
 					else
-                    {
-						act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'",
-							TRUE, ch, 0, vict, TO_ROOM);
-						act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'",
-							TRUE, ch, 0, vict, TO_CHAR);
-					}
-				}
-				else
+          {
+						GET_GOLD(ch) -= cost;
+            if(cost > 1000)
+            {
+              riparato = TRUE;
+            }
+
+            if(riparabile)
+            {
+              //  se possiede la skill 'lust for power' costa il 5% in meno di Xp
+              if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+              {
+                if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
                 {
-					GET_GOLD(ch) -= cost;
-                    if(cost > 1000)
-                    {
-                        riparato = TRUE;
-                    }
+                  lust = expCost / 100 * 5;
+                  if(lust > 0)
+                  {
+                  	sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                    send_to_char(buf, ch);
+                    expCost -= lust;
+                  }
+                }
+              }
 
-                    if(riparabile)
-                    {
-                        //  se possiede la skill 'lust for power' costa il 5% in meno di Xp
-                        if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
-                        {
-                            if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
-                            {
-                                lust = expCost / 100 * 5;
-                                if(lust > 0)
-                                {
-                                    sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
-                                    send_to_char(buf, ch);
-                                    expCost -= lust;
-                                }
-                            }
-                        }
+              sprintf(buf, "Dai a $N %d monete d'oro e %ld punti esperienza.", cost, expCost);
+              act(buf, TRUE, ch, NULL, vict, TO_CHAR);
+              act("$n da' alcune monete e dei punti esperienza a $N.", TRUE, ch, obj, vict, TO_ROOM);
+            }
+            else
+            {
+              sprintf(buf, "Dai a $N %d monete d'oro.", cost);
+              act(buf, TRUE, ch, NULL, vict, TO_CHAR);
+              act("$n da' alcune monete a $N.", TRUE, ch, obj, vict, TO_ROOM);
+            }
 
-                        sprintf(buf, "Dai a $N %d monete d'oro e %ld punti esperienza.", cost, expCost);
-                        act(buf, TRUE, ch, NULL, vict, TO_CHAR);
-                        act("$n da' alcune monete e dei punti esperienza a $N.", TRUE, ch, obj, vict, TO_ROOM);
-                    }
-                    else
-                    {
-                        sprintf(buf, "Dai a $N %d monete d'oro.", cost);
-                        act(buf, TRUE, ch, NULL, vict, TO_CHAR);
-                        act("$n da' alcune monete a $N.", TRUE, ch, obj, vict, TO_ROOM);
-                    }
+						/* fix the armor */
+						act("$N armeggia con $p.",TRUE,ch,obj,vict,TO_ROOM);
+						act("$N armeggia con $p.",TRUE,ch,obj,vict,TO_CHAR);
+						if(GetMaxLevel(vict) > 25)
+            {
+							obj->obj_flags.value[0] = obj->obj_flags.value[1];
+              obj->obj_flags.hitp     = obj->obj_flags.hitpTot;
 
-					/* fix the armor */
-					act("$N armeggia con $p.",TRUE,ch,obj,vict,TO_ROOM);
-					act("$N armeggia con $p.",TRUE,ch,obj,vict,TO_CHAR);
-					if(GetMaxLevel(vict) > 25)
-                    {
-						obj->obj_flags.value[0] = obj->obj_flags.value[1];
-                        obj->obj_flags.hitp     = obj->obj_flags.hitpTot;
-
-                        if(riparabile)
-                        {
-                            GET_EXP(ch)-= expCost;
-                            REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_DESTROYED);
-                            mudlog(LOG_PLAYERS, "%s paid %ld exp (for each class) for the repair of %s", GET_NAME(ch), expCost, obj->short_description);
-                        }
-					}
-					else
-                    {
-						ave = MAX(obj->obj_flags.value[0], (obj->obj_flags.value[0] + obj->obj_flags.value[1]) /2);
-						obj->obj_flags.value[0] = ave;
+              if(riparabile)
+              {
+                GET_EXP(ch)-= expCost;
+                REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_DESTROYED);
+                mudlog(LOG_PLAYERS, "%s paid %ld exp (for each class) for the repair of %s", GET_NAME(ch), expCost, obj->short_description);
+              }
+						}
+						else
+            {
+							ave = MAX(obj->obj_flags.value[0], (obj->obj_flags.value[0] + obj->obj_flags.value[1]) /2);
+							obj->obj_flags.value[0] = ave;
 				//		obj->obj_flags.value[1] = ave;
-                        ave = MAX(obj->obj_flags.hitp, (obj->obj_flags.hitp + obj->obj_flags.hitpTot) / 2);
-                        obj->obj_flags.hitp     = ave;
+              ave = MAX(obj->obj_flags.hitp, (obj->obj_flags.hitp + obj->obj_flags.hitpTot) / 2);
+              obj->obj_flags.hitp     = ave;
 					}
 					if(check_soundproof(ch))
-                    {
+          {
 						act("$N fa un grande sorriso.",TRUE,ch,0,vict,TO_ROOM);
 						act("$N fa un grande sorriso.",TRUE,ch,0,vict,TO_CHAR);
 					}
-					else {
+					else
+					{
 						act("$N dice 'Tutto a posto!'",TRUE,ch,0,vict,TO_ROOM);
 						act("$N dice 'Tutto a posto!'",TRUE,ch,0,vict,TO_CHAR);
 					}
 				}
 			}
-			else {
-				if(check_soundproof(ch)) {
-					act("$N alza le spalle.",
-						TRUE,ch,0,vict,TO_ROOM);
-					act("$N alza le spalle.",
-						TRUE,ch,0,vict,TO_CHAR);
+			else
+			{
+				if(check_soundproof(ch))
+				{
+					act("$N alza le spalle.", TRUE,ch,0,vict,TO_ROOM);
+					act("$N alza le spalle.", TRUE,ch,0,vict,TO_CHAR);
 				}
-				else {
-					act("$N dice 'La tua armatura sembra a posto per me.'",
-						TRUE,ch,0,vict,TO_ROOM);
-					act("$N dice 'La tua armatura sembra a posto per me.'",
-						TRUE,ch,0,vict,TO_CHAR);
+				else
+				{
+					act("$N dice 'La tua armatura sembra a posto per me.'", TRUE,ch,0,vict,TO_ROOM);
+					act("$N dice 'La tua armatura sembra a posto per me.'", TRUE,ch,0,vict,TO_CHAR);
 				}
 			}
 		}
-        else if(ITEM_TYPE(obj) == ITEM_ARMOR && obj->obj_flags.value[1] == 0)
-        {
-            act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_CHAR);
-            act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_ROOM);
-        }
+    else if(ITEM_TYPE(obj) == ITEM_ARMOR && obj->obj_flags.value[1] == 0)
+    {
+      act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_CHAR);
+      act("$N dice 'Mi dispiace ma non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_ROOM);
+		}
 		else
-        {
+    {
 			if((GetMaxLevel(vict) < 25 || (ITEM_TYPE(obj) != ITEM_WEAPON)) && !ok)
-            {
+      {
 				if(check_soundproof(ch))
-                {
+        {
 					act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_ROOM);
 					act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_CHAR);
 				}
 				else
-                {
+        {
 					if(ITEM_TYPE(obj) != ITEM_ARMOR)
-                    {
+          {
 						act("$N dice 'Non e' un'armatura.'",TRUE,ch,0,vict,TO_ROOM);
 						act("$N dice 'Non e' un'armatura.'",TRUE,ch,0,vict,TO_CHAR);
 					}
 					else
-                    {
+          {
 						act("$N dice 'Non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_CHAR);
 						act("$N dice 'Non riesco a riparare $p!'", TRUE, ch, obj, vict, TO_ROOM);
 					}
 				}
 			}
-            else if(ok && ITEM_TYPE(obj) != ITEM_WEAPON && ITEM_TYPE(obj) != ITEM_ARMOR)
+      else if(ok && ITEM_TYPE(obj) != ITEM_WEAPON && ITEM_TYPE(obj) != ITEM_ARMOR)
+      {
+        if(obj->obj_flags.hitpTot > obj->obj_flags.hitp)
+        {
+          /* get the value of the object */
+          cost = obj->obj_flags.cost;
+          /* divide by hitpTot   */
+          cost /= obj->obj_flags.hitpTot;
+          /* then cost = difference between hitpTot and hitp */
+          cost = cost * (obj->obj_flags.hitpTot - obj->obj_flags.hitp) * 100;
+
+          if(cost > GET_GOLD(ch))
+          {
+            if(check_soundproof(ch))
             {
-                if(obj->obj_flags.hitpTot > obj->obj_flags.hitp)
-                {
-                    /* get the value of the object */
-                    cost = obj->obj_flags.cost;
-                    /* divide by hitpTot   */
-                    cost /= obj->obj_flags.hitpTot;
-                    /* then cost = difference between hitpTot and hitp */
-                    cost = cost * (obj->obj_flags.hitpTot - obj->obj_flags.hitp) * 100;
-
-                    if(cost > GET_GOLD(ch))
-                    {
-                        if(check_soundproof(ch))
-                        {
-                            act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_ROOM);
-                            act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_CHAR);
-                        }
-                        else
-                        {
-                            act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'", TRUE, ch, 0, vict, TO_ROOM);
-                            act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'", TRUE, ch, 0, vict, TO_CHAR);
-                        }
-                    }
-                    else
-                    {
-                        GET_GOLD(ch) -= cost;
-                        if(cost > 1000)
-                        {
-                            riparato = TRUE;
-                        }
-                        
-                        if(riparabile)
-                        {
-                            //  se possiede la skill 'lust for power' costa il 5% in meno di Xp
-                            if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
-                            {
-                                if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
-                                {
-                                    lust = expCost / 100 * 5;
-                                    if(lust > 0)
-                                    {
-                                        sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
-                                        send_to_char(buf, ch);
-                                        expCost -= lust;
-                                    }
-                                }
-                            }
-
-                            sprintf(buf, "Dai a $N %d monete d'oro e %ld punti esperienza.", cost, expCost);
-                            act(buf, TRUE, ch, NULL, vict, TO_CHAR);
-                            act("$n da' alcune monete e dei punti esperienza a $N.", TRUE, ch, obj, vict, TO_ROOM);
-                        }
-                        else
-                        {
-                            sprintf(buf, "Dai a $N %d monete d'oro.", cost);
-                            act(buf, TRUE, ch, NULL, vict, TO_CHAR);
-                            act("$n da' alcune monete a $N.", TRUE, ch, obj, vict, TO_ROOM);
-                        }
-
-                        /* fix the object */
-                        act("$N armeggia con $p.", TRUE, ch, obj, vict, TO_ROOM);
-                        act("$N armeggia con $p.", TRUE, ch, obj, vict, TO_CHAR);
-
-                        obj->obj_flags.hitp     = obj->obj_flags.hitpTot;
-
-                        if(riparabile)
-                        {
-                            GET_EXP(ch)-= expCost;
-                            REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_DESTROYED);
-                            mudlog(LOG_PLAYERS, "%s paid %ld exp (for each class) for the repair of %s", GET_NAME(ch), expCost, obj->short_description);
-                        }
-
-                        if(check_soundproof(ch))
-                        {
-                            act("$N fa un grande sorriso.", TRUE, ch, NULL, vict, TO_ROOM);
-                            act("$N fa un grande sorriso.", TRUE, ch, NULL, vict, TO_CHAR);
-                        }
-                        else
-                        {
-                            act("$N dice 'Tutto a posto!'", TRUE, ch, NULL, vict, TO_ROOM);
-                            act("$N dice 'Tutto a posto!'", TRUE, ch, NULL, vict, TO_CHAR);
-                        }
-                    }
-                }
-                else
-                {
-                    if(check_soundproof(ch))
-                    {
-                        act("$N alza le spalle.", TRUE, ch, NULL, vict, TO_ROOM);
-                        act("$N alza le spalle.", TRUE, ch, NULL, vict, TO_CHAR);
-                    }
-                    else
-                    {
-                        act("$N dice 'La tua armatura sembra a posto per me.'", TRUE, ch, NULL, vict, TO_ROOM);
-                        act("$N dice 'La tua armatura sembra a posto per me.'", TRUE, ch, NULL, vict, TO_CHAR);
-                    }
-                }
+              act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_ROOM);
+              act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_CHAR);
             }
-			else
+            else
             {
-                /* weapon repair.  expensive!   */
+              act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'", TRUE, ch, 0, vict, TO_ROOM);
+              act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'", TRUE, ch, 0, vict, TO_CHAR);
+            }
+          }
+          else
+          {
+            GET_GOLD(ch) -= cost;
+            if(cost > 1000)
+            {
+              riparato = TRUE;
+            }
+
+            if(riparabile)
+            {
+            	//  se possiede la skill 'lust for power' costa il 5% in meno di Xp
+              if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+              {
+                if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+                {
+                  lust = expCost / 100 * 5;
+                  if(lust > 0)
+                  {
+                    sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                  	send_to_char(buf, ch);
+                    expCost -= lust;
+                  }
+								}
+              }
+
+              sprintf(buf, "Dai a $N %d monete d'oro e %ld punti esperienza.", cost, expCost);
+              act(buf, TRUE, ch, NULL, vict, TO_CHAR);
+              act("$n da' alcune monete e dei punti esperienza a $N.", TRUE, ch, obj, vict, TO_ROOM);
+            }
+            else
+            {
+              sprintf(buf, "Dai a $N %d monete d'oro.", cost);
+              act(buf, TRUE, ch, NULL, vict, TO_CHAR);
+              act("$n da' alcune monete a $N.", TRUE, ch, obj, vict, TO_ROOM);
+            }
+
+            /* fix the object */
+            act("$N armeggia con $p.", TRUE, ch, obj, vict, TO_ROOM);
+            act("$N armeggia con $p.", TRUE, ch, obj, vict, TO_CHAR);
+
+            obj->obj_flags.hitp     = obj->obj_flags.hitpTot;
+
+            if(riparabile)
+            {
+              GET_EXP(ch)-= expCost;
+              REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_DESTROYED);
+              mudlog(LOG_PLAYERS, "%s paid %ld exp (for each class) for the repair of %s", GET_NAME(ch), expCost, obj->short_description);
+            }
+
+          	if(check_soundproof(ch))
+            {
+              act("$N fa un grande sorriso.", TRUE, ch, NULL, vict, TO_ROOM);
+              act("$N fa un grande sorriso.", TRUE, ch, NULL, vict, TO_CHAR);
+            }
+            else
+            {
+              act("$N dice 'Tutto a posto!'", TRUE, ch, NULL, vict, TO_ROOM);
+              act("$N dice 'Tutto a posto!'", TRUE, ch, NULL, vict, TO_CHAR);
+            }
+          }
+        }
+        else
+        {
+          if(check_soundproof(ch))
+          {
+          	act("$N alza le spalle.", TRUE, ch, NULL, vict, TO_ROOM);
+            act("$N alza le spalle.", TRUE, ch, NULL, vict, TO_CHAR);
+          }
+          else
+          {
+            act("$N dice 'La tua armatura sembra a posto per me.'", TRUE, ch, NULL, vict, TO_ROOM);
+            act("$N dice 'La tua armatura sembra a posto per me.'", TRUE, ch, NULL, vict, TO_CHAR);
+          }
+        }
+      }
+			else
+      {
+        /* weapon repair.  expensive!   */
 				struct obj_data* pNew;
 
-                /* get the value of the object */
-                cost = obj->obj_flags.cost;
-                /* divide by hitpTot   */
-                cost /= obj->obj_flags.hitpTot;
-                /* then cost = difference between hitpTot and hitp */
-                cost = cost * (obj->obj_flags.hitpTot - obj->obj_flags.hitp) * 100;
+        /* get the value of the object */
+        cost = obj->obj_flags.cost;
+        /* divide by hitpTot   */
+        cost /= obj->obj_flags.hitpTot;
+        /* then cost = difference between hitpTot and hitp */
+        cost = cost * (obj->obj_flags.hitpTot - obj->obj_flags.hitp) * 100;
 
 				pNew = read_object(obj->item_number, REAL);
 
 		//		cost *= (pNew->obj_flags.value[2] - obj->obj_flags.value[2]);
-				if(cost < 0) {
+				if(cost < 0)
+				{
 					cost = 0;
 				}
 
-				if(cost > GET_GOLD(ch)) {
-					if(check_soundproof(ch)) {
-						act("$N scuote la testa.\n\r",
-							TRUE, ch, 0, vict, TO_ROOM);
-						act("$N scuote la testa.\n\r",
-							TRUE, ch, 0, vict, TO_CHAR);
+				if(cost > GET_GOLD(ch))
+				{
+					if(check_soundproof(ch))
+					{
+						act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_ROOM);
+						act("$N scuote la testa.\n\r", TRUE, ch, 0, vict, TO_CHAR);
 					}
-					else {
-						act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'",
-							TRUE, ch, 0, vict, TO_ROOM);
-						act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'",
-							TRUE, ch, 0, vict, TO_CHAR);
+					else
+					{
+						act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'", TRUE, ch, 0, vict, TO_ROOM);
+						act("$N dice 'Mi dispiace ma non hai abbastanza soldi.'", TRUE, ch, 0, vict, TO_CHAR);
 						extract_obj(pNew);
 					}
 				}
-				else {
+				else
+				{
 					GET_GOLD(ch) -= cost;
-                    if(cost > 1000)
-                    {
-                        riparato = TRUE;
-                    }
+          if(cost > 1000)
+          {
+            riparato = TRUE;
+          }
 
-                    if(riparabile)
-                    {
-                        //  se possiede la skill 'lust for power' costa il 5% in meno di Xp
-                        if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
-                        {
-                            if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
-                            {
-                                lust = expCost / 100 * 5;
-                                if(lust > 0)
-                                {
-                                    sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
-                                    send_to_char(buf, ch);
-                                    expCost -= lust;
-                                }
-                            }
-                        }
+          if(riparabile)
+          {
+            //  se possiede la skill 'lust for power' costa il 5% in meno di Xp
+            if(ch->skills && ch->skills[SKILL_LUST_FOR_POWER].learned)
+            {
+              if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
+              {
+                lust = expCost / 100 * 5;
+                if(lust > 0)
+                {
+                  sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                  send_to_char(buf, ch);
+                  expCost -= lust;
+                }
+              }
+						}
 
-                        sprintf(buf, "Dai a $N %d monete d'oro e %ld punti esperienza.", cost, expCost);
-                        act(buf, TRUE, ch, NULL, vict, TO_CHAR);
-                        act("$n da' alcune monete e dei punti esperienza a $N.", TRUE, ch, obj, vict, TO_ROOM);
-                    }
-                    else
-                    {
-                        sprintf(buf, "Dai a $N %d monete d'oro.", cost);
-                        act(buf, TRUE, ch, NULL, vict, TO_CHAR);
-                        act("$n da' alcune monete a $N.", TRUE, ch, obj, vict, TO_ROOM);
-                    }
+            sprintf(buf, "Dai a $N %d monete d'oro e %ld punti esperienza.", cost, expCost);
+            act(buf, TRUE, ch, NULL, vict, TO_CHAR);
+            act("$n da' alcune monete e dei punti esperienza a $N.", TRUE, ch, obj, vict, TO_ROOM);
+          }
+          else
+          {
+            sprintf(buf, "Dai a $N %d monete d'oro.", cost);
+            act(buf, TRUE, ch, NULL, vict, TO_CHAR);
+            act("$n da' alcune monete a $N.", TRUE, ch, obj, vict, TO_ROOM);
+          }
 
 					/* fix the weapon */
 					act("$N armeggia con $p.",TRUE,ch,obj,vict,TO_ROOM);
 					act("$N armeggia con $p.",TRUE,ch,obj,vict,TO_CHAR);
 
-                    obj->obj_flags.hitp     = obj->obj_flags.hitpTot;
+          obj->obj_flags.hitp     = obj->obj_flags.hitpTot;
 
-                    if(riparabile)
-                    {
-                        GET_EXP(ch)-= expCost;
-                        REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_DESTROYED);
-                        mudlog(LOG_PLAYERS, "%s paid %ld exp (for each class) for the repair of %s", GET_NAME(ch), expCost, obj->short_description);
-                    }
+          if(riparabile)
+          {
+            GET_EXP(ch)-= expCost;
+            REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_DESTROYED);
+            mudlog(LOG_PLAYERS, "%s paid %ld exp (for each class) for the repair of %s", GET_NAME(ch), expCost, obj->short_description);
+          }
 
-					if(obj->obj_flags.value[2] <= pNew->obj_flags.value[2]) {
+					if(obj->obj_flags.value[2] <= pNew->obj_flags.value[2])
+					{
 						obj->obj_flags.value[2] = pNew->obj_flags.value[2];
 					}
-					else {
+					else
+					{
 						act("$N sembra confus$B...\n\r", TRUE, ch, 0, vict, TO_CHAR);
 					}
 
 					extract_obj(pNew);
 
-					if(check_soundproof(ch)) {
+					if(check_soundproof(ch))
+					{
 						act("$N fa un grande sorriso.",TRUE,ch,0,vict,TO_ROOM);
 						act("$N fa un grande sorriso.",TRUE,ch,0,vict,TO_CHAR);
 					}
-					else {
+					else
+					{
 						act("$N dice 'Fatto!'",TRUE,ch,0,vict,TO_ROOM);
 						act("$N dice 'Fatto!'",TRUE,ch,0,vict,TO_CHAR);
 					}
@@ -2574,34 +2586,36 @@ MOBSPECIAL_FUNC(RepairGuy) {
 			}
 		}
 
-        if(riparato)
+    if(riparato)
+    {
+    	// Repair Achievement
+      if(IS_POLY(ch))
+      {
+        ch->desc->original->specials.achievements[OTHER_ACHIE][ACHIE_REPAIR] += 1;
+        if(!IS_SET(ch->desc->original->specials.act,PLR_ACHIE))
         {
-        // Repair Achievement
-            if(IS_POLY(ch))
-            {
-                ch->desc->original->specials.achievements[OTHER_ACHIE][ACHIE_REPAIR] += 1;
-                if(!IS_SET(ch->desc->original->specials.act,PLR_ACHIE))
-                {
-                    SET_BIT(ch->desc->original->specials.act, PLR_ACHIE);
-                }
-            }
-            else
-            {
-                ch->specials.achievements[OTHER_ACHIE][ACHIE_REPAIR] += 1;
-                if(!IS_SET(ch->specials.act,PLR_ACHIE))
-                {
-                    SET_BIT(ch->specials.act, PLR_ACHIE);
-                }
-            }
-            CheckAchie(ch, ACHIE_REPAIR, OTHER_ACHIE);
+          SET_BIT(ch->desc->original->specials.act, PLR_ACHIE);
         }
+      }
+      else
+      {
+        ch->specials.achievements[OTHER_ACHIE][ACHIE_REPAIR] += 1;
+        if(!IS_SET(ch->specials.act,PLR_ACHIE))
+      	{
+          SET_BIT(ch->specials.act, PLR_ACHIE);
+        }
+      }
+      CheckAchie(ch, ACHIE_REPAIR, OTHER_ACHIE);
+    }
 
 		act("$N ti da' $p.",TRUE,ch,obj,vict,TO_CHAR);
 		act("$N da' $p a $n.",TRUE,ch,obj,vict,TO_ROOM);
 		return(TRUE);
 	}
-	else {
-		if(cmd) {
+	else
+	{
+		if(cmd)
+		{
 			return FALSE;
 		}
 		return(fighter(ch, cmd, arg,mob,type));
@@ -4558,9 +4572,9 @@ MOBSPECIAL_FUNC(RacialTeacher)
     {
         return FALSE;
     }
-    
+
     teacher = FindMobInRoomWithFunction(ch->in_room, reinterpret_cast<genericspecial_func>(RacialTeacher));
-    
+
     if(!teacher)
     {
         return FALSE;
@@ -8776,4 +8790,3 @@ MOBSPECIAL_FUNC(mage_specialist_guildmaster) {
 }
 
 } // namespace Alarmud
-

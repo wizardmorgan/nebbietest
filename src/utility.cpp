@@ -9709,7 +9709,7 @@ int ResiTotal(struct char_data* ch, int type)
   //          if(IS_PC(ch))
   //              mudlog(LOG_PLAYERS, "Ho trovato su %s l'edit resi(%s) maggiore/uguale a %d quindi equip resi e' ora pari a %d", GET_NAME(ch), MaxResisPC[type].name, MaxResisPC[type].edit_pc, racial_resi);
         }
-        else if(edit_resi <= MaxResisPC[type].edit_pc)
+        else if(edit_resi < MaxResisPC[type].edit_pc)
         {
             if((equip_resi + edit_resi) >= MaxResisPC[type].edit_pc)
             {
@@ -9818,6 +9818,37 @@ bool CheckOneStat(struct char_data* ch, int statCh, int skill, struct char_data*
     }
 
     return FALSE;
+}
+
+//  Valore delle rune spese sull'oggetto
+int ValueRuneObj(struct obj_data* obj)
+{
+    struct obj_data* obj_original;
+    int valore = 0, valore_originale = 0, differenza;
+    int vnumber, vnum;
+
+    vnum = static_cast<int>(obj->char_vnum);
+    if(vnum <= 0)
+    {
+        return 0;
+    }
+
+    vnumber = real_object(vnum);
+    obj_original = read_object(vnumber, REAL);
+
+    valore            = ceil(static_cast<float>(obj->obj_flags.cost_per_day)           / static_cast<float>(1000)) * PRICE_RUNE;
+    valore_originale  = ceil(static_cast<float>(obj_original->obj_flags.cost_per_day)  / static_cast<float>(1000)) * PRICE_RUNE;
+
+    differenza = valore_originale - valore;
+
+    extract_obj(obj_original);
+
+    if(differenza < 0)
+    {
+      differenza = 0;
+    }
+
+    return differenza;
 }
 
 int ValueExpObj(struct obj_data* obj)
@@ -10498,6 +10529,17 @@ int ValueExpObj(struct obj_data* obj)
         differenza *= 1.5;
     }
 
+    //  calcolo il valore del costo di rent
+    valore            = ceil(static_cast<float>(obj->obj_flags.cost_per_day)          / static_cast<float>(1000)) * (PRICE_EXP / 10000);
+    valore_originale  = ceil(static_cast<float>(obj_original->obj_flags.cost_per_day) / static_cast<float>(1000)) * (PRICE_EXP / 10000);
+
+    differenza += valore_originale - valore;
+
+    if(differenza < 0)
+    {
+      differenza = 0;
+    }
+
     extract_obj(obj_original);
     return differenza;
 }
@@ -10563,7 +10605,7 @@ void WriteDbObj(FILE* f, int type, int limit, int loc)
             if(static_cast<int>(obj->char_vnum) > 0)
             {
                 int exp = 0, exp_d = 0, Bexp = 0, Bexp_d = 0, Texp = 0, Texp_d = 0, Bval = 0, Tval = 0;
-                obj->value_exp_edit = ValueExpObj(obj) * 10000;
+
                 if(obj->value_exp_edit > 0)
                 {
                     exp = int(obj->value_exp_edit / 1000000);
@@ -10577,6 +10619,8 @@ void WriteDbObj(FILE* f, int type, int limit, int loc)
                 }
 
                 sprintf(buf, "Valore Mono: %d,%d MegaXP, Valore Bi: %d,%d MegaXP, Valore Tri: %d,%d MegaXP.", exp, exp_d, Bexp, Bexp_d, Texp, Texp_d);
+                fprintf(f, "%s\n", buf);
+                sprintf(buf, "Rune Spese: %d", obj->value_rune_edit);
                 fprintf(f, "%s\n", buf);
             }
         }

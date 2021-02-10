@@ -2607,7 +2607,7 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
                             // da togliere il commento se attivi gli achievement per ogni razza
                             // ch->desc->original->specials.achievements[RACESLAYER_ACHIE][GET_RACE(victim)] += 1;
                         }
-                        
+
                         if(GET_RACE(victim) != RACE_GOLEM && GET_RACE(victim) != RACE_GOD)
                         {
                             ch->desc->original->specials.achievements[RACESLAYER_ACHIE][race_achievement(GET_RACE(victim))] += 1;
@@ -2628,7 +2628,7 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
                             // da togliere il commento se attivi gli achievement per ogni razza
                             // ch->specials.achievements[RACESLAYER_ACHIE][GET_RACE(victim)] += 1;
                         }
-                        
+
                         if(GET_RACE(victim) != RACE_GOLEM && GET_RACE(victim) != RACE_GOD)
                         {
                             ch->specials.achievements[RACESLAYER_ACHIE][race_achievement(GET_RACE(victim))] += 1;
@@ -2666,7 +2666,7 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
                                 }
                             }
                             CheckAchie(ch, ACHIE_PKILL_WIN, OTHER_ACHIE);
-                            
+
                             if(IS_POLY(victim))
                             {
                                 victim->desc->original->specials.achievements[OTHER_ACHIE][ACHIE_PKILL_LOSS] += 1;
@@ -2722,12 +2722,12 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
                 ch->lastmkill = strdup(GET_NAME(victim));
 
                 // Achievement stuff
-                
+
             // Bosskill Achievement
                 if(n_bosskill(mob_index[victim->nr].iVNum, BOSSKILL_ACHIE) > -1)
                 {
                     struct char_data* tmp;
-                    
+
                     for(tmp = real_roomp(ch->in_room)->people; tmp; tmp=tmp->next_in_room)
                     {
                         if(IS_PC(tmp) && in_group(tmp, ch))
@@ -2752,7 +2752,7 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
                         }
                     }
                 }
-                
+
             // Quest Achievement
                 if(CheckMobQuest(mob_index[victim->nr].iVNum) > -1)
                 {
@@ -2993,7 +2993,7 @@ DamageResult damage(struct char_data* ch, struct char_data* victim,
 
             CheckAchie(ch, ACHIE_THIEF_1, CLASS_ACHIE);
         }
-        
+
     }
 
 
@@ -3250,7 +3250,7 @@ int CalcThaco(struct char_data* ch, struct char_data* victim) {
 	}
 
     // le razze huge hanno difficoltà a colpire razze piccole
-    if(IsGiantish(ch) && IsSmall(victim))
+    if(IsGiant(ch) && IsSmall(victim))
     {
         calc_thaco += 4;
     }
@@ -4810,7 +4810,7 @@ int DamageItem(struct char_data* ch, struct obj_data* o, int num) {
 int ItemSave(struct obj_data* i, int dam_type)
 {
     int num, j, val = 1;
-    
+
     /* obj fails save automatically it brittle */
     if(IS_OBJ_STAT(i,ITEM_BRITTLE))
     {
@@ -4902,7 +4902,7 @@ int ItemSave(struct obj_data* i, int dam_type)
         {
             return(FALSE);
         }
-        
+
         if(num >= 20)
         {
             return(TRUE);
@@ -4917,11 +4917,11 @@ int ItemSave(struct obj_data* i, int dam_type)
         {
             return(FALSE);
         }
-        
+
         val -= 1;
         mudlog(LOG_PLAYERS, "oggetto %s - num = %d ora val = %d a fine ciclo", i->short_description, num, val);
     } while (val > 0);
-    
+
     return(FALSE);
 }
 
@@ -4996,7 +4996,7 @@ int DamagedByAttack(struct obj_data* i, int dam_type, int dam)
 {
     int val = 0, num = 0;
     float dam_obj = 0.000;
-    
+
     val = (int) i->obj_flags.hitp;
 
     dam_obj = (float) dam / 1000;
@@ -5308,7 +5308,7 @@ int GetItemDamageType(int type) {
     case TYPE_STAB:
     case TYPE_RANGE_WEAPON:
         return(PIERCE_DAMAGE);
-            
+
     case TYPE_SLASH:
     case TYPE_WHIP:
     case TYPE_CLEAVE:
@@ -5930,4 +5930,3 @@ void increase_blood(int rm) {
 }
 
 } // namespace Alarmud
-

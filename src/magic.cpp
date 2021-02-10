@@ -563,7 +563,7 @@ void spell_earthquake(byte level, struct char_data* ch,
 			}
 			else
             {
-				act("Per poco non cadi facendoti male!!\n\r", FALSE, ch, 0, tmp_victim, TO_VICT);
+				act("Per poco non cadi facendoti male!\n\r", FALSE, ch, 0, tmp_victim, TO_VICT);
 			}
 		}
 		else
@@ -672,7 +672,7 @@ void spell_harm(byte level, struct char_data* ch,
 		}
 	}
 	dam = MIN(dam, (100 + damsp));
-    
+
     mudlog(LOG_CHECK, "Damage prima dello spellpower = max 100, dopo lo spellpower: %d", dam);
 
 	if(IS_PC(ch) && IS_PC(victim) && !IS_IMMORTAL(ch)) {
@@ -2987,7 +2987,6 @@ void spell_identify(byte level, struct char_data* ch,
         {
             int exp = 0;
             int exp_d = 0;
-            obj->value_exp_edit = ValueExpObj(obj) * 10000;
             if(obj->value_exp_edit > 0)
             {
                 exp = int(obj->value_exp_edit / 1000000);
@@ -3560,4 +3559,3 @@ void spell_disintegrate(byte level, struct char_data* ch,  struct char_data* vic
 }
 
 } // namespace Alarmud
-
