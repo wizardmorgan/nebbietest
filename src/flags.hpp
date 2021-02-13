@@ -318,6 +318,12 @@ logDefineStatus(NOTRACK)
 logDefineStatus(OLD_EXP)
 #endif
 
+#ifndef NO_SPELLPOWER
+#define NO_SPELLPOWER			true
+#else
+logDefineStatus(NO_SPELLPOWER)
+#endif
+
 #ifndef PREVENT_PKILL
 #define PREVENT_PKILL		true
 #else
@@ -361,4 +367,3 @@ logDefineStatus(USE_SQLITE)
 #endif
 } // namespace Alarmud
 #endif /* __FLAGS_HPP_ */
-

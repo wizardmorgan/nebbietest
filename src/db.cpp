@@ -5348,7 +5348,7 @@ ACTION_FUNC(do_WorldSave) {
 /* Mob related handy functions */
 int CheckSpellPowerFlags(struct obj_data* obj)
 {
-    int malus = 69, iVNum;
+    int malus = 69;
 
     if(IS_SET(obj->obj_flags.extra_flags, ITEM_ANTI_CLERIC))
     {
@@ -5376,8 +5376,11 @@ int CheckSpellPowerFlags(struct obj_data* obj)
         malus = 101;
     }
 
-iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
-    mudlog(LOG_CHECK, "malus di %s (%d) e' %d", obj->short_description, iVNum, malus);
+#if NO_SPELLPOWER
+		malus = 101;
+#endif
+
+    mudlog(LOG_CHECK, "malus di %s e' %d", obj->short_description, malus);
     return malus;
 }
 
