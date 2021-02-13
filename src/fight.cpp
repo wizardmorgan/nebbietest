@@ -5079,7 +5079,7 @@ int DamagedByAttack(struct obj_data* i, int dam_type, int dam)
         num += 1;
         if(num <= 10)
         {
-            i->obj_flags.hitp -= dam_obj;
+            dam_obj += dam_obj;
             break;
         }
     }
