@@ -385,12 +385,6 @@ ACTION_FUNC(do_oedit) {
 	ch->specials.oedit = OBJ_MAIN_MENU;
 	ch->desc->connected = CON_OBJ_EDITING;
 
-	if(IS_SET(ch->specials.objedit->obj_flags.extra_flags2, ITEM2_EDIT))
-	{
-		ch->specials.objedit->value_exp_edit	=	ValueExpObj(obj) * 10000;
-		ch->specials.objedit->value_rune_edit =	ValueRuneObj(obj);
-	}
-
   if(!IS_SET(ch->specials.objedit->obj_flags.extra_flags2, ITEM2_EDIT))
   {
     SET_BIT(ch->specials.objedit->obj_flags.extra_flags2, ITEM2_EDIT);
@@ -410,17 +404,19 @@ ACTION_FUNC(do_oedit) {
 void UpdateObjMenu(struct char_data* ch) {
 	char buf[255];
 	struct obj_data* obj;
+	struct ExpValue diff;
 
 	obj = ch->specials.objedit;
+	diff = CheckDiffValue(obj);
 
 	send_to_char(VT_HOMECLR, ch);
 	sprintf(buf, VT_CURSPOS, 1, 1);
 	send_to_char(buf, ch);
-    if(ch->term != VT100)
-    {
-        send_to_char("\n\r\n\r", ch);
-    }
-	sprintf(buf, "Object Name: %s          Object Edited Value: %ld exp, %d rune", obj->name, obj->value_exp_edit, obj->value_rune_edit);
+  if(ch->term != VT100)
+  {
+    send_to_char("\n\r\n\r", ch);
+  }
+	sprintf(buf, "Object Name: %s          Object Original Edit Value: %ld (derent %ld) exp, %d rune", obj->name, diff.valore, diff.derent, diff.rune);
 	send_to_char(buf, ch);
     if(ch->term != VT100)
     {
@@ -439,35 +435,42 @@ void ObjEdit(struct char_data* ch, const char* arg) {
 		if(!*arg || *arg == '\n')
 		{
 			char buf[255];
-			long exp = 0;
-			int rune = 0;
+			struct obj_data* obj_old = ch->specials.objedit;
+			struct ExpValue old_diff = CheckDiffValue(obj_old), new_diff, diff;
+			struct ExpValue new_obj;
 
-			exp 	= ch->specials.objedit->value_exp_edit;
-			rune 	= ch->specials.objedit->value_rune_edit;
-			ch->specials.objedit->value_exp_edit	=	ValueExpObj(ch->specials.objedit) * 10000;
-			ch->specials.objedit->value_rune_edit	=	ValueRuneObj(ch->specials.objedit);
+			new_obj																= CheckValueObj(ch->specials.objedit);
+			ch->specials.objedit->value_exp				= new_obj.valore * 10000;
+			ch->specials.objedit->value_rune			= new_obj.rune;
+			ch->specials.objedit->value_exp_total	= (new_obj.valore + new_obj.derent) * 10000;
+			new_diff															= CheckDiffValue(ch->specials.objedit);
+			diff.valore														= new_diff.valore - old_diff.valore < 0 ? 0 : new_diff.valore - old_diff.valore;
+			diff.rune															= new_diff.rune - old_diff.rune < 0 ? 0 : new_diff.rune - old_diff.rune;
+			diff.derent														= new_diff.derent - old_diff.derent < 0 ? 0 : new_diff.derent - old_diff.derent;
 
 			ch->desc->connected = CON_PLYNG;
 			act("$n smette di $c0009p$c0010l$c0011a$c0012$c0013s$c0014m$c0009a$c0010r$c0011e$c0007 la materia.", FALSE, ch, 0, 0, TO_ROOM);
 
-			if(ch->specials.objedit->value_exp_edit > exp || ch->specials.objedit->value_rune_edit > rune)
+			if(diff.valore > 0 || diff.rune > 0 || diff.derent > 0)
 			{
-				if(ch->specials.objedit->value_exp_edit > exp)
+				sprintf(buf, "Sono stati spesi");
+				if(diff.valore > 0)
 				{
-					sprintf(buf, "Il valore totale degli edit e' di %ld punti esperienza", ch->specials.objedit->value_exp_edit - exp);
-					if(ch->specials.objedit->value_rune_edit > rune)
-					{
-						sprintf(buf, "%s e %d run%s.\n\r", buf, ch->specials.objedit->value_rune_edit - rune, (ch->specials.objedit->value_rune_edit - rune == 1 ? "a" : "e"));
-					}
-					else
-					{
-						sprintf(buf, "%s.\n\r", buf);
-					}
+					sprintf(buf, "%s %ld punti esperienza per gli edit", buf, diff.valore);
 				}
-				else
+				if(diff.derent > 0)
 				{
-					sprintf(buf, "Il valore totale degli edit e' di %d run%s.\n\r", ch->specials.objedit->value_rune_edit - rune, (ch->specials.objedit->value_rune_edit - rune == 1 ? "a" : "e"));
+					if(diff.valore > 0)
+					{
+						sprintf(buf, "%s,", buf);
+					}
+					sprintf(buf, "%s %ld punti esperienza per il derent", buf, diff.derent);
 				}
+				if(diff.rune > 0)
+				{
+					sprintf(buf, "%s e %d run%s", buf, diff.rune, (diff.rune == 1 ? "a" : "e"));
+				}
+				sprintf(buf, "%s.\n\r", buf);
 				send_to_char(buf, ch);
 			}
 

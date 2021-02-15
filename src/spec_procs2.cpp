@@ -1907,10 +1907,11 @@ MOBSPECIAL_FUNC(ninja_master) {
 
 MOBSPECIAL_FUNC(RepairGuy) {
 	char obj_name[80], vict_name[80], buf[MAX_INPUT_LENGTH];
-	int cost, ave, iVNum, lust;
-  long expCost = 0;
+	int cost, ave, iVNum;
+  long expCost = 0, lust = 0;
 	struct char_data* vict;
 	struct obj_data* obj;
+	struct ExpValue diff;
   bool riparato = FALSE, riparabile = FALSE, ok = FALSE;
 	/* special procedure for this mob/obj       */
 
@@ -2174,7 +2175,8 @@ MOBSPECIAL_FUNC(RepairGuy) {
         break;
     }
 
-    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED) && ValueExpObj(obj) == 0 && !IS_IMMORTALE(ch))
+		diff = CheckDiffValue(obj);
+    if(IS_OBJ_STAT2(obj, ITEM2_DESTROYED) && diff.valore == 0 && !IS_IMMORTALE(ch))
     {
       act("$N dice 'Mi dispiace, non sono in grado di riparare $p, solo gli Dei possono aiutarti.'", TRUE, ch, obj, vict, TO_CHAR);
       act("$N dice 'Mi dispiace, non sono in grado di riparare $p, solo gli Dei possono aiutarti.'", TRUE, ch, obj, vict, TO_ROOM);
@@ -2194,9 +2196,10 @@ MOBSPECIAL_FUNC(RepairGuy) {
 
     if(riparabile)
     {
-      expCost = ValueExpObj(obj) * 500;
+      expCost = static_cast<long>(diff.valore / 4);
 
-      switch(HowManyClasses(ch))
+// non dovrebbe controllare il numero delle classi
+/*      switch(HowManyClasses(ch))
       {
         case 1:
           break;
@@ -2208,11 +2211,11 @@ MOBSPECIAL_FUNC(RepairGuy) {
         default:
 					expCost = expCost * 2 / HowManyClasses(ch);
           break;
-      }
+      } */
 
       if(IS_IMMORTALE(ch))
       {
-        expCost = 1;
+        expCost = 0;
       }
 
       if(expCost > GET_EXP(ch))
@@ -2281,10 +2284,10 @@ MOBSPECIAL_FUNC(RepairGuy) {
               {
                 if(number(1,101) < ch->skills[SKILL_LUST_FOR_POWER].learned)
                 {
-                  lust = expCost / 100 * 5;
+                  lust = static_cast<long>(expCost / 100 * 5);
                   if(lust > 0)
                   {
-                  	sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                  	sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%ld$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
                     send_to_char(buf, ch);
                     expCost -= lust;
                   }
@@ -2421,7 +2424,7 @@ MOBSPECIAL_FUNC(RepairGuy) {
                   lust = expCost / 100 * 5;
                   if(lust > 0)
                   {
-                    sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                    sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%ld$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
                   	send_to_char(buf, ch);
                     expCost -= lust;
                   }
@@ -2530,7 +2533,7 @@ MOBSPECIAL_FUNC(RepairGuy) {
                 lust = expCost / 100 * 5;
                 if(lust > 0)
                 {
-                  sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%d$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
+                  sprintf(buf, "$c0003La tua brama di potere riduce la tua perdita di esperienza di $c0015%ld$c0003 punt%s.\n\r", lust, (lust == 1 ? "o" : "i"));
                   send_to_char(buf, ch);
                   expCost -= lust;
                 }

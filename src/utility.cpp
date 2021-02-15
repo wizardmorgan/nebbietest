@@ -9851,901 +9851,609 @@ int ValueRuneObj(struct obj_data* obj)
     return differenza;
 }
 
-int ValueExpObj(struct obj_data* obj)
+ExpValue CheckDiffValue(struct obj_data* obj)
 {
-    struct obj_data* obj_original;
-    int valore = 0, valore_originale = 0, differenza;
-    int i, vnumber, vnum;
+  int iVNum, r_num;
+  struct obj_data* original;
+  struct ExpValue differenza;
 
-    vnum = static_cast<int>(obj->char_vnum);
-    if(vnum <= 0)
+  iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
+
+  if(iVNum != static_cast<int>(obj->char_vnum) && IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
+  {
+    iVNum = static_cast<int>(obj->char_vnum);
+    if(iVNum <= 0)
     {
-        return 0;
+      iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
     }
+  }
 
-    vnumber = real_object(vnum);
-    obj_original = read_object(vnumber, REAL);
+  r_num = real_object(iVNum);
+  original = read_object(r_num, REAL);
 
-    for(i = 0; i < MAX_OBJ_AFFECT; i++)
+  differenza.valore = obj->value_exp - original->value_exp < 0 ? 0 : obj->value_exp - original->value_exp;
+  differenza.derent = (original->value_exp_total - original->value_exp) - (obj->value_exp_total - obj->value_exp) < 0 ? 0 : (original->value_exp_total - original->value_exp) - (obj->value_exp_total - obj->value_exp);
+  differenza.rune   = original->value_rune - obj->value_rune < 0 ? 0 : original->value_rune - obj->value_rune;
+
+  if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && !IS_OBJ_STAT(original, ITEM_IMMUNE) && differenza.valore > 0)
+  {
+    differenza.valore *= 1.5;
+  }
+
+  extract_obj(original);
+
+  return differenza;
+}
+
+ExpValue CheckValueObj(struct obj_data* obj)
+{
+  int valore = 0, i, rune = 0, derent = 0;
+
+  for(i = 0; i < MAX_OBJ_AFFECT; i++)
+  {
+    switch(obj->affected[i].location)
     {
-        switch(obj->affected[i].location)
+      case APPLY_NONE:
+      case APPLY_SEX:
+        break;
+
+      case APPLY_AFF2:
+        if(IS_SET(obj->affected[i].modifier, AFF2_DANGER_SENSE))
         {
-            case APPLY_NONE:
-            case APPLY_SEX:
-                break;
-
-            case APPLY_AFF2:
-                if(IS_SET(obj->affected[i].modifier, AFF2_DANGER_SENSE))
-                {
-                    valore += 15000;
-                }
-                break;
-
-            case APPLY_STR:
-            case APPLY_DEX:
-            case APPLY_INT:
-            case APPLY_WIS:
-            case APPLY_CON:
-            case APPLY_CHR:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 3000;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 1500;
-                }
-                break;
-
-            case APPLY_LEVEL:
-            case APPLY_AGE:
-            case APPLY_CHAR_WEIGHT:
-            case APPLY_CHAR_HEIGHT:
-                break;
-
-            case APPLY_MANA:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 300;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 150;
-                }
-                break;
-
-            case APPLY_HIT:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 300;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 150;
-                }
-                break;
-
-            case APPLY_MOVE:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 200;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 100;
-                }
-                break;
-
-            case APPLY_GOLD:
-            case APPLY_EXP:
-                break;
-
-            case APPLY_AC:
-                valore -= obj->affected[i].modifier * 100;
-                break;
-
-            case APPLY_HITROLL:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 9000;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 4500;
-                }
-                break;
-
-            case APPLY_DAMROLL:
-            case APPLY_SPELLPOWER:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 20000;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 10000;
-                }
-                break;
-
-            case APPLY_SAVING_PARA:
-            case APPLY_SAVING_ROD:
-            case APPLY_SAVING_PETRI:
-            case APPLY_SAVING_BREATH:
-            case APPLY_SAVING_SPELL:
-            case APPLY_SAVE_ALL:
-                break;
-
-            case APPLY_IMMUNE:
-            {
-                if(IS_SET(obj->affected[i].modifier, IMM_ACID))
-                {
-                    valore += 7500;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_ELEC))
-                {
-                    valore += 15000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_FIRE))
-                {
-                    valore += 10000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_COLD))
-                {
-                    valore += 7500;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_ENERGY))
-                {
-                    valore += 15000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_DRAIN))
-                {
-                    valore += 3000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_HOLD))
-                {
-                    valore += 7500;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_POISON))
-                {
-                    valore += 3000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_HOLY))
-                {
-                    valore += 15000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_SLASH))
-                {
-                    valore += 15000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_PIERCE))
-                {
-                    valore += 15000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_BLUNT))
-                {
-                    valore += 30000;
-                }
-            }
-                break;
-
-            case APPLY_SUSC:
-                break;
-
-            case APPLY_M_IMMUNE:
-            {
-                if(IS_SET(obj->affected[i].modifier, IMM_DRAIN))
-                {
-                    valore += 10000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_CHARM))
-                {
-                    valore += 6000;
-                }
-                if(IS_SET(obj->affected[i].modifier, IMM_POISON))
-                {
-                    valore += 10000;
-                }
-            }
-                break;
-
-            case APPLY_SPELL:
-            {
-                if(IS_SET(obj->affected[i].modifier, AFF_INVISIBLE))
-                {
-                    valore += 3000;
-                }
-                if(IS_SET(obj->affected[i].modifier, AFF_TELEPATHY))
-                {
-                    valore += 5000;
-                }
-                if(IS_SET(obj->affected[i].modifier, AFF_WATERBREATH))
-                {
-                    valore += 5000;
-                }
-                if(IS_SET(obj->affected[i].modifier, AFF_TRUE_SIGHT))
-                {
-                    valore += 5000;
-                }
-                if(IS_SET(obj->affected[i].modifier, AFF_SCRYING))
-                {
-                    valore += 15000;
-                }
-                if(IS_SET(obj->affected[i].modifier, AFF_PROTECT_FROM_EVIL))
-                {
-                    valore += 5000;
-                }
-                if(IS_SET(obj->affected[i].modifier, AFF_SENSE_LIFE))
-                {
-                    valore += 5000;
-                }
-                if(IS_SET(obj->affected[i].modifier, AFF_FLYING))
-                {
-                    valore += 5000;
-                }
-                if(IS_SET(obj->affected[i].modifier, AFF_GLOBE_DARKNESS))
-                {
-                    valore += 5000;
-                }
-            }
-                break;
-
-            case APPLY_HITNDAM:
-            case APPLY_HITNSP:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 29000;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 14500;
-                }
-                break;
-
-            case APPLY_WEAPON_SPELL:
-            case APPLY_EAT_SPELL:
-            case APPLY_BACKSTAB:
-            case APPLY_KICK:
-            case APPLY_SNEAK:
-            case APPLY_HIDE:
-            case APPLY_BASH:
-            case APPLY_PICK:
-            case APPLY_STEAL:
-            case APPLY_TRACK:
-                break;
-
-            case APPLY_SPELLFAIL:
-            case APPLY_HASTE:
-            case APPLY_SLOW:
-            case APPLY_ATTACKS:
-            case APPLY_FIND_TRAPS:
-            case APPLY_RIDE:
-            case APPLY_RACE_SLAYER:
-            case APPLY_ALIGN_SLAYER:
-                break;
-
-            case APPLY_MANA_REGEN:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 300;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 150;
-                }
-                break;
-
-            case APPLY_HIT_REGEN:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 300;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 150;
-                }
-                break;
-
-            case APPLY_MOVE_REGEN:
-                if(obj->affected[i].modifier < 0)
-                {
-                    valore += obj->affected[i].modifier * 400;
-                }
-                else
-                {
-                    valore += obj->affected[i].modifier * 200;
-                }
-                break;
-
-            case APPLY_MOD_THIRST:
-            case APPLY_MOD_HUNGER:
-            case APPLY_MOD_DRUNK:
-            case APPLY_T_STR:
-            case APPLY_T_INT:
-            case APPLY_T_DEX:
-            case APPLY_T_WIS:
-            case APPLY_T_CON:
-            case APPLY_T_CHR:
-            case APPLY_T_HPS:
-            case APPLY_T_MOVE:
-            case APPLY_T_MANA:
-            case APPLY_RESI_FIRE:
-            case APPLY_RESI_COLD:
-            case APPLY_RESI_ELEC:
-            case APPLY_RESI_ENERGY:
-            case APPLY_RESI_BLUNT:
-            case APPLY_RESI_PIERCE:
-            case APPLY_RESI_SLASH:
-            case APPLY_RESI_ACID:
-            case APPLY_RESI_POISON:
-            case APPLY_RESI_DRAIN:
-            case APPLY_RESI_SLEEP:
-            case APPLY_RESI_CHARM:
-            case APPLY_RESI_HOLD:
-            case APPLY_RESI_NONMAG:
-            case APPLY_RESI_PLUS1:
-            case APPLY_RESI_PLUS2:
-            case APPLY_RESI_PLUS3:
-            case APPLY_RESI_PLUS4:
-            case APPLY_RESI_HOLY:
-                break;
-
-            default:
-                break;
+          valore += 15000;
         }
-    }
+        break;
 
-    for(i = 0; i < MAX_OBJ_AFFECT; i++)
-    {
-        switch(obj_original->affected[i].location)
+      case APPLY_STR:
+      case APPLY_DEX:
+      case APPLY_INT:
+      case APPLY_WIS:
+      case APPLY_CON:
+      case APPLY_CHR:
+        if(obj->affected[i].modifier < 0)
         {
-            case APPLY_NONE:
-            case APPLY_SEX:
-                break;
-
-            case APPLY_AFF2:
-                if(IS_SET(obj_original->affected[i].modifier, AFF2_DANGER_SENSE))
-                {
-                    valore_originale += 15000;
-                }
-                break;
-
-            case APPLY_STR:
-            case APPLY_DEX:
-            case APPLY_INT:
-            case APPLY_WIS:
-            case APPLY_CON:
-            case APPLY_CHR:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 3000;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 1500;
-                }
-                break;
-
-            case APPLY_LEVEL:
-            case APPLY_AGE:
-            case APPLY_CHAR_WEIGHT:
-            case APPLY_CHAR_HEIGHT:
-                break;
-
-            case APPLY_MANA:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 300;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 150;
-                }
-                break;
-
-            case APPLY_HIT:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 600;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 300;
-                }
-                break;
-
-            case APPLY_MOVE:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 200;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 100;
-                }
-                break;
-
-            case APPLY_GOLD:
-            case APPLY_EXP:
-                break;
-
-            case APPLY_AC:
-                valore_originale -= obj_original->affected[i].modifier * 100;
-                break;
-
-            case APPLY_HITROLL:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 9000;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 4500;
-                }
-                break;
-
-            case APPLY_DAMROLL:
-            case APPLY_SPELLPOWER:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 20000;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 10000;
-                }
-                break;
-
-            case APPLY_SAVING_PARA:
-            case APPLY_SAVING_ROD:
-            case APPLY_SAVING_PETRI:
-            case APPLY_SAVING_BREATH:
-            case APPLY_SAVING_SPELL:
-            case APPLY_SAVE_ALL:
-                break;
-
-            case APPLY_IMMUNE:
-            {
-                if(IS_SET(obj_original->affected[i].modifier, IMM_ACID))
-                {
-                    valore_originale += 7500;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_ELEC))
-                {
-                    valore_originale += 15000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_FIRE))
-                {
-                    valore_originale += 10000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_COLD))
-                {
-                    valore_originale += 7500;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_ENERGY))
-                {
-                    valore_originale += 15000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_DRAIN))
-                {
-                    valore_originale += 3000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_HOLD))
-                {
-                    valore_originale += 7500;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_POISON))
-                {
-                    valore_originale += 3000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_HOLY))
-                {
-                    valore_originale += 15000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_SLASH))
-                {
-                    valore_originale += 15000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_PIERCE))
-                {
-                    valore_originale += 15000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_BLUNT))
-                {
-                    valore_originale += 30000;
-                }
-            }
-                break;
-
-            case APPLY_SUSC:
-                break;
-
-            case APPLY_M_IMMUNE:
-            {
-                if(IS_SET(obj_original->affected[i].modifier, IMM_DRAIN))
-                {
-                    valore_originale += 10000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_CHARM))
-                {
-                    valore_originale += 6000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, IMM_POISON))
-                {
-                    valore_originale += 10000;
-                }
-            }
-                break;
-
-            case APPLY_SPELL:
-            {
-                if(IS_SET(obj_original->affected[i].modifier, AFF_INVISIBLE))
-                {
-                    valore_originale += 3000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, AFF_TELEPATHY))
-                {
-                    valore_originale += 5000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, AFF_WATERBREATH))
-                {
-                    valore_originale += 5000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, AFF_TRUE_SIGHT))
-                {
-                    valore_originale += 5000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, AFF_SCRYING))
-                {
-                    valore_originale += 15000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, AFF_PROTECT_FROM_EVIL))
-                {
-                    valore_originale += 5000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, AFF_SENSE_LIFE))
-                {
-                    valore_originale += 5000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, AFF_FLYING))
-                {
-                    valore_originale += 5000;
-                }
-                if(IS_SET(obj_original->affected[i].modifier, AFF_GLOBE_DARKNESS))
-                {
-                    valore_originale += 5000;
-                }
-            }
-                break;
-
-            case APPLY_HITNDAM:
-            case APPLY_HITNSP:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 29000;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 14500;
-                }
-                break;
-
-            case APPLY_WEAPON_SPELL:
-            case APPLY_EAT_SPELL:
-            case APPLY_BACKSTAB:
-            case APPLY_KICK:
-            case APPLY_SNEAK:
-            case APPLY_HIDE:
-            case APPLY_BASH:
-            case APPLY_PICK:
-            case APPLY_STEAL:
-            case APPLY_TRACK:
-                break;
-
-            case APPLY_SPELLFAIL:
-            case APPLY_HASTE:
-            case APPLY_SLOW:
-            case APPLY_ATTACKS:
-            case APPLY_FIND_TRAPS:
-            case APPLY_RIDE:
-            case APPLY_RACE_SLAYER:
-            case APPLY_ALIGN_SLAYER:
-                break;
-
-            case APPLY_MANA_REGEN:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 600;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 300;
-                }
-                break;
-
-            case APPLY_HIT_REGEN:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 600;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 300;
-                }
-                break;
-
-            case APPLY_MOVE_REGEN:
-                if(obj_original->affected[i].modifier < 0)
-                {
-                    valore_originale += obj_original->affected[i].modifier * 400;
-                }
-                else
-                {
-                    valore_originale += obj_original->affected[i].modifier * 200;
-                }
-                break;
-
-            case APPLY_MOD_THIRST:
-            case APPLY_MOD_HUNGER:
-            case APPLY_MOD_DRUNK:
-            case APPLY_T_STR:
-            case APPLY_T_INT:
-            case APPLY_T_DEX:
-            case APPLY_T_WIS:
-            case APPLY_T_CON:
-            case APPLY_T_CHR:
-            case APPLY_T_HPS:
-            case APPLY_T_MOVE:
-            case APPLY_T_MANA:
-            case APPLY_RESI_FIRE:
-            case APPLY_RESI_COLD:
-            case APPLY_RESI_ELEC:
-            case APPLY_RESI_ENERGY:
-            case APPLY_RESI_BLUNT:
-            case APPLY_RESI_PIERCE:
-            case APPLY_RESI_SLASH:
-            case APPLY_RESI_ACID:
-            case APPLY_RESI_POISON:
-            case APPLY_RESI_DRAIN:
-            case APPLY_RESI_SLEEP:
-            case APPLY_RESI_CHARM:
-            case APPLY_RESI_HOLD:
-            case APPLY_RESI_NONMAG:
-            case APPLY_RESI_PLUS1:
-            case APPLY_RESI_PLUS2:
-            case APPLY_RESI_PLUS3:
-            case APPLY_RESI_PLUS4:
-            case APPLY_RESI_HOLY:
-                break;
-
-            default:
-                break;
+          valore += obj->affected[i].modifier * 3000;
         }
+        else
+        {
+          valore += obj->affected[i].modifier * 1500;
+        }
+        break;
+
+      case APPLY_LEVEL:
+      case APPLY_AGE:
+      case APPLY_CHAR_WEIGHT:
+      case APPLY_CHAR_HEIGHT:
+        break;
+
+      case APPLY_MANA:
+        if(obj->affected[i].modifier < 0)
+        {
+          valore += obj->affected[i].modifier * 300;
+        }
+        else
+        {
+          valore += obj->affected[i].modifier * 150;
+        }
+        break;
+
+      case APPLY_HIT:
+        if(obj->affected[i].modifier < 0)
+        {
+          valore += obj->affected[i].modifier * 300;
+        }
+        else
+        {
+          valore += obj->affected[i].modifier * 150;
+        }
+        break;
+
+      case APPLY_MOVE:
+        if(obj->affected[i].modifier < 0)
+        {
+          valore += obj->affected[i].modifier * 200;
+        }
+        else
+        {
+          valore += obj->affected[i].modifier * 100;
+        }
+        break;
+
+      case APPLY_GOLD:
+      case APPLY_EXP:
+        break;
+
+      case APPLY_AC:
+        valore -= obj->affected[i].modifier * 100;
+        break;
+
+      case APPLY_HITROLL:
+        if(obj->affected[i].modifier < 0)
+        {
+          valore += obj->affected[i].modifier * 9000;
+        }
+        else
+        {
+          valore += obj->affected[i].modifier * 4500;
+        }
+        break;
+
+      case APPLY_DAMROLL:
+#if NO_SPELLPOWER
+      case APPLY_SPELLPOWER:
+#endif
+        if(obj->affected[i].modifier < 0)
+        {
+          valore += obj->affected[i].modifier * 20000;
+        }
+        else
+        {
+          valore += obj->affected[i].modifier * 10000;
+        }
+        break;
+
+      case APPLY_SAVING_PARA:
+      case APPLY_SAVING_ROD:
+      case APPLY_SAVING_PETRI:
+      case APPLY_SAVING_BREATH:
+      case APPLY_SAVING_SPELL:
+      case APPLY_SAVE_ALL:
+        break;
+
+      case APPLY_IMMUNE:
+        {
+          if(IS_SET(obj->affected[i].modifier, IMM_ACID))
+          {
+            valore += 7500;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_ELEC))
+          {
+            valore += 15000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_FIRE))
+          {
+            valore += 10000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_COLD))
+          {
+            valore += 7500;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_ENERGY))
+          {
+            valore += 15000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_DRAIN))
+          {
+            valore += 3000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_HOLD))
+          {
+            valore += 7500;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_POISON))
+          {
+            valore += 3000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_HOLY))
+          {
+            valore += 15000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_SLASH))
+          {
+            valore += 15000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_PIERCE))
+          {
+            valore += 15000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_BLUNT))
+          {
+            valore += 30000;
+          }
+        }
+        break;
+
+      case APPLY_SUSC:
+        break;
+
+      case APPLY_M_IMMUNE:
+        {
+          if(IS_SET(obj->affected[i].modifier, IMM_DRAIN))
+          {
+            valore += 10000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_CHARM))
+          {
+            valore += 6000;
+          }
+          if(IS_SET(obj->affected[i].modifier, IMM_POISON))
+          {
+            valore += 10000;
+          }
+        }
+        break;
+
+      case APPLY_SPELL:
+        {
+          if(IS_SET(obj->affected[i].modifier, AFF_INVISIBLE))
+          {
+            valore += 3000;
+          }
+          if(IS_SET(obj->affected[i].modifier, AFF_TELEPATHY))
+          {
+            valore += 5000;
+          }
+          if(IS_SET(obj->affected[i].modifier, AFF_WATERBREATH))
+          {
+            valore += 5000;
+          }
+          if(IS_SET(obj->affected[i].modifier, AFF_TRUE_SIGHT))
+          {
+            valore += 5000;
+          }
+          if(IS_SET(obj->affected[i].modifier, AFF_SCRYING))
+          {
+            valore += 15000;
+          }
+          if(IS_SET(obj->affected[i].modifier, AFF_PROTECT_FROM_EVIL))
+          {
+            valore += 5000;
+          }
+          if(IS_SET(obj->affected[i].modifier, AFF_SENSE_LIFE))
+          {
+            valore += 5000;
+          }
+          if(IS_SET(obj->affected[i].modifier, AFF_FLYING))
+          {
+            valore += 5000;
+          }
+          if(IS_SET(obj->affected[i].modifier, AFF_GLOBE_DARKNESS))
+          {
+            valore += 5000;
+          }
+        }
+        break;
+
+      case APPLY_HITNDAM:
+#if NO_SPELLPOWER
+      case APPLY_HITNSP:
+#endif
+        if(obj->affected[i].modifier < 0)
+        {
+          valore += obj->affected[i].modifier * 29000;
+        }
+        else
+        {
+          valore += obj->affected[i].modifier * 14500;
+        }
+        break;
+
+      case APPLY_WEAPON_SPELL:
+      case APPLY_EAT_SPELL:
+      case APPLY_BACKSTAB:
+      case APPLY_KICK:
+      case APPLY_SNEAK:
+      case APPLY_HIDE:
+      case APPLY_BASH:
+      case APPLY_PICK:
+      case APPLY_STEAL:
+      case APPLY_TRACK:
+        break;
+
+      case APPLY_SPELLFAIL:
+      case APPLY_HASTE:
+      case APPLY_SLOW:
+      case APPLY_ATTACKS:
+      case APPLY_FIND_TRAPS:
+      case APPLY_RIDE:
+      case APPLY_RACE_SLAYER:
+      case APPLY_ALIGN_SLAYER:
+        break;
+
+      case APPLY_MANA_REGEN:
+        if(obj->affected[i].modifier < 0)
+        {
+          valore += obj->affected[i].modifier * 300;
+        }
+        else
+        {
+          valore += obj->affected[i].modifier * 150;
+        }
+        break;
+
+      case APPLY_HIT_REGEN:
+        if(obj->affected[i].modifier < 0)
+        {
+          valore += obj->affected[i].modifier * 300;
+        }
+        else
+        {
+          valore += obj->affected[i].modifier * 150;
+        }
+        break;
+
+      case APPLY_MOVE_REGEN:
+        if(obj->affected[i].modifier < 0)
+        {
+          valore += obj->affected[i].modifier * 400;
+        }
+        else
+        {
+          valore += obj->affected[i].modifier * 200;
+        }
+        break;
+
+      case APPLY_MOD_THIRST:
+      case APPLY_MOD_HUNGER:
+      case APPLY_MOD_DRUNK:
+      case APPLY_T_STR:
+      case APPLY_T_INT:
+      case APPLY_T_DEX:
+      case APPLY_T_WIS:
+      case APPLY_T_CON:
+      case APPLY_T_CHR:
+      case APPLY_T_HPS:
+      case APPLY_T_MOVE:
+      case APPLY_T_MANA:
+      case APPLY_RESI_FIRE:
+      case APPLY_RESI_COLD:
+      case APPLY_RESI_ELEC:
+      case APPLY_RESI_ENERGY:
+      case APPLY_RESI_BLUNT:
+      case APPLY_RESI_PIERCE:
+      case APPLY_RESI_SLASH:
+      case APPLY_RESI_ACID:
+      case APPLY_RESI_POISON:
+      case APPLY_RESI_DRAIN:
+      case APPLY_RESI_SLEEP:
+      case APPLY_RESI_CHARM:
+      case APPLY_RESI_HOLD:
+      case APPLY_RESI_NONMAG:
+      case APPLY_RESI_PLUS1:
+      case APPLY_RESI_PLUS2:
+      case APPLY_RESI_PLUS3:
+      case APPLY_RESI_PLUS4:
+      case APPLY_RESI_HOLY:
+        break;
+
+      default:
+        break;
     }
+  }
 
-    differenza = valore - valore_originale;
+  derent  = ceil(static_cast<float>(obj->obj_flags.cost_per_day) / static_cast<float>(1000)) * (PRICE_EXP / 10000);
+  rune    = ceil(static_cast<float>(obj->obj_flags.cost_per_day) / static_cast<float>(1000)) *  PRICE_RUNE;
 
-    if(IS_OBJ_STAT(obj, ITEM_IMMUNE))
-    {
-        differenza *= 1.5;
-    }
+  ExpValue ValoreEdit =
+  {
+    valore, derent, rune
+  };
 
-    //  calcolo il valore del costo di rent
-    valore            = ceil(static_cast<float>(obj->obj_flags.cost_per_day)          / static_cast<float>(1000)) * (PRICE_EXP / 10000);
-    valore_originale  = ceil(static_cast<float>(obj_original->obj_flags.cost_per_day) / static_cast<float>(1000)) * (PRICE_EXP / 10000);
-
-    differenza += valore_originale - valore;
-
-    if(differenza < 0)
-    {
-      differenza = 0;
-    }
-
-    extract_obj(obj_original);
-    return differenza;
+  return ValoreEdit;
 }
 
 void WriteDbObj(FILE* f, int type, int limit, int loc)
 {
-    char buf[256], buf2[256];
-    int i, j, vnumber, iVNum;
-    struct obj_data* obj;
-    bool found;
+  char buf[256], buf2[256];
+  int i, j, vnumber, iVNum;
+  struct obj_data* obj;
+  struct ExpValue diff;
+  bool found;
 
-    j = limit;
+  j = limit;
 
-    if((j > 34029 && j < 35000) && type < 28)
-    {
-            return;
-    }
+  if((j > 34029 && j < 35000) && type < 28)
+  {
+    return;
+  }
 
-    vnumber = real_object(j);
-    if(vnumber < 0 || vnumber > 99999)
-    {
-        return;
-    }
+  vnumber = real_object(j);
+  if(vnumber < 0 || vnumber > 99999)
+  {
+    return;
+  }
 //  mudlog(LOG_PLAYERS, "inizio a scrivere l'oggetto numero %d", j);
-    obj = read_object(vnumber, REAL);
-    if((obj->obj_flags.type_flag == type || type >= 27) && (IS_SET(obj->obj_flags.wear_flags, (1 << loc)) || loc == 0))
+  obj = read_object(vnumber, REAL);
+  diff = CheckDiffValue(obj);
+
+  if((obj->obj_flags.type_flag == type || type >= 27) && (IS_SET(obj->obj_flags.wear_flags, (1 << loc)) || loc == 0))
+  {
+    fprintf(f, "#%d\n", j);
+    sprintf(buf, "Oggetto: '%s', Tipo di Oggetto ", obj->name);
+    sprinttype(GET_ITEM_TYPE(obj),item_types,buf2);
+    strcat(buf,buf2);
+    fprintf(f, "%s\n", buf);
+
+    if(type == 28)
     {
-        fprintf(f, "#%d\n", j);
-        sprintf(buf, "Oggetto: '%s', Tipo di Oggetto ", obj->name);
-        sprinttype(GET_ITEM_TYPE(obj),item_types,buf2);
-        strcat(buf,buf2);
-        fprintf(f, "%s\n", buf);
-
-        if(type == 28)
-        {
-            iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
-            fprintf(f," V-Number Originario: %d %s\n", static_cast<int>(obj->char_vnum), (iVNum == static_cast<int>(obj->char_vnum) ? "CONTROLLARE" : ""));
-        }
-
-        fprintf(f, "Indossabile su: ");
-        sprintbit((unsigned) obj->obj_flags.wear_flags, wear_bits, buf2);
-        sprintf(buf, "%s", buf2);
-        fprintf(f, "%s\n", buf);
-
-        if(obj->obj_flags.bitvector)
-        {
-            sprintf(buf, "L'oggetto dona le seguenti abilita':  ");
-            sprintbit(static_cast<unsigned>(obj->obj_flags.bitvector),affected_bits,buf2);
-            strcat(buf, buf2);
-            fprintf(f, "%s\n", buf);
-        }
-
-        sprintf(buf,"L'oggetto e': ");
-        sprintbit2(static_cast<unsigned>(obj->obj_flags.extra_flags),extra_bits,static_cast<unsigned>(obj->obj_flags.extra_flags2),extra_bits2,buf2);
-        strcat(buf, buf2);
-        fprintf(f, "%s\n", buf);
-
-        sprintf(buf,"Peso: %d, Valore: %d, Costo di rent: %d %s", obj->obj_flags.weight, obj->obj_flags.cost, obj->obj_flags.cost_per_day, obj->obj_flags.cost >= LIM_ITEM_COST_MIN ? "[RARO]" : " ");
-        fprintf(f, "%s\n", buf);
-
-        if(type == 28)
-        {
-            if(static_cast<int>(obj->char_vnum) > 0)
-            {
-                int exp = 0, exp_d = 0, Bexp = 0, Bexp_d = 0, Texp = 0, Texp_d = 0, Bval = 0, Tval = 0;
-
-                if(obj->value_exp_edit > 0)
-                {
-                    exp = int(obj->value_exp_edit / 1000000);
-                    exp_d = int((obj->value_exp_edit - (exp * 1000000)) / 10000);
-                    Bval = obj->value_exp_edit * 1.5;
-                    Tval = obj->value_exp_edit * 2;
-                    Bexp = int(Bval / 1000000);
-                    Bexp_d = int((Bval - (Bexp * 1000000)) / 10000);
-                    Texp = int(Tval / 1000000);
-                    Texp_d = int((Tval - (Texp * 1000000)) / 10000);
-                }
-
-                sprintf(buf, "Valore Mono: %d,%d MegaXP, Valore Bi: %d,%d MegaXP, Valore Tri: %d,%d MegaXP.", exp, exp_d, Bexp, Bexp_d, Texp, Texp_d);
-                fprintf(f, "%s\n", buf);
-                sprintf(buf, "Rune Spese: %d", obj->value_rune_edit);
-                fprintf(f, "%s\n", buf);
-            }
-        }
-
-        switch(GET_ITEM_TYPE(obj))
-        {
-            case ITEM_SCROLL :
-            case ITEM_POTION :
-                sprintf(buf, "Livello %d dell'incantesimo:\n", obj->obj_flags.value[0]);
-                fprintf(f, "%s\n", buf);
-                if(obj->obj_flags.value[1] >= 1)
-                {
-                    sprinttype(obj->obj_flags.value[1]-1,spells,buf2);
-                    sprintf(buf, "%s", buf2);
-                    fprintf(f, "%s\n", buf);
-                }
-                if(obj->obj_flags.value[2] >= 1)
-                {
-                    sprinttype(obj->obj_flags.value[2]-1,spells,buf2);
-                    sprintf(buf, "%s", buf2);
-                    fprintf(f, "%s\n", buf);
-                }
-                if(obj->obj_flags.value[3] >= 1)
-                {
-                    sprinttype(obj->obj_flags.value[3]-1,spells,buf2);
-                    sprintf(buf, "%s", buf2);
-                    fprintf(f, "%s\n", buf);
-                }
-                break;
-
-            case ITEM_WAND :
-            case ITEM_STAFF :
-                sprintf(buf, "Ha %d cariche totali, con %d cariche rimanenti.", obj->obj_flags.value[1], obj->obj_flags.value[2]);
-                fprintf(f, "%s\n", buf);
-                sprintf(buf, "Livello %d dell'incantesimo:", obj->obj_flags.value[0]);
-                fprintf(f, "%s\n", buf);
-                if(obj->obj_flags.value[3] >= 1)
-                {
-                    sprinttype(obj->obj_flags.value[3]-1,spells,buf2);
-                    strcat(buf, buf2);
-                    fprintf(f, "%s\n", buf);
-                }
-                break;
-
-            case ITEM_WEAPON :
-                sprintf(buf, "Dado di danno: '%dd%d'", obj->obj_flags.value[1], obj->obj_flags.value[2]);
-                fprintf(f, "%s\n", buf);
-                sprinttype(obj->obj_flags.value[3],aszWeaponType,buf2);
-                sprintf(buf,"Tipo di danno: '%s'", buf2);
-                fprintf(f, "%s\n", buf);
-                break;
-
-            case ITEM_ARMOR :
-                sprintf(buf, "AC-apply di %d.", obj->obj_flags.value[0]);
-                fprintf(f, "%s\n", buf);
-                break;
-
-            default:
-                break;
-        }
-
-        found = FALSE;
-
-        for(i=0; i<MAX_OBJ_AFFECT; i++)
-        {
-            if((obj->affected[i].location != APPLY_NONE) && (obj->affected[i].modifier != 0) && (obj->affected[i].location !=APPLY_SKIP))
-            {
-                if(!found)
-                {
-                    sprintf(buf, "Caratteristiche: ");
-                    fprintf(f, "%s\n", buf);
-                    found = TRUE;
-                }
-
-                sprinttype(obj->affected[i].location,apply_types,buf2);
-                sprintf(buf,"    Ti puo' dare : %s by ", buf2);
-                fprintf(f, "%s", buf);
-
-                switch(obj->affected[i].location)
-                {
-                    case APPLY_M_IMMUNE:
-                    case APPLY_IMMUNE:
-                    case APPLY_SUSC:
-                        sprintbit(obj->affected[i].modifier,immunity_names,buf2);
-                        sprintf(buf, "%s", buf2);
-                        break;
-                    case APPLY_ATTACKS:
-                        sprintf(buf,"%f", static_cast<double>(obj->affected[i].modifier / 10));
-                        break;
-                    case APPLY_WEAPON_SPELL:
-                    case APPLY_EAT_SPELL:
-                        sprintf(buf,"%s", spells[obj->affected[i].modifier-1]);
-                        break;
-                    case APPLY_SPELL:
-                        sprintbit(obj->affected[i].modifier,affected_bits, buf2);
-                        sprintf(buf, "%s", buf2);
-                        break;
-                    case APPLY_AFF2:
-                        sprintbit(obj->affected[i].modifier,affected_bits2, buf2);
-                        sprintf(buf, "%s", buf2);
-                        break;
-                    case APPLY_RACE_SLAYER:
-                        sprintf(buf, "%s", RaceName[ obj->affected[i].modifier ]);
-                        break;
-                    case APPLY_ALIGN_SLAYER:
-                        sprintbit(static_cast<unsigned>(obj->affected[i].modifier), gaszAlignSlayerBits, buf2);
-                        sprintf(buf, "%s", buf2);
-                        break;
-                    default:
-                        sprintf(buf,"%d", obj->affected[i].modifier);
-                        break;
-                }
-                fprintf(f, "%s\n", buf);
-            }
-        }
-
-        fprintf(f, "\n");
-
-        extract_obj(obj);
-        mudlog(LOG_PLAYERS, "ho finito di scrivere l'oggetto numero %d", j);
+      iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
+      fprintf(f," V-Number Originario: %d %s\n", static_cast<int>(obj->char_vnum), (iVNum == static_cast<int>(obj->char_vnum) ? "CONTROLLARE" : ""));
     }
-    else
+
+    fprintf(f, "Indossabile su: ");
+    sprintbit((unsigned) obj->obj_flags.wear_flags, wear_bits, buf2);
+    sprintf(buf, "%s", buf2);
+    fprintf(f, "%s\n", buf);
+
+    if(obj->obj_flags.bitvector)
     {
-        extract_obj(obj);
+      sprintf(buf, "L'oggetto dona le seguenti abilita':  ");
+      sprintbit(static_cast<unsigned>(obj->obj_flags.bitvector),affected_bits,buf2);
+      strcat(buf, buf2);
+      fprintf(f, "%s\n", buf);
     }
+
+    sprintf(buf,"L'oggetto e': ");
+    sprintbit2(static_cast<unsigned>(obj->obj_flags.extra_flags),extra_bits,static_cast<unsigned>(obj->obj_flags.extra_flags2),extra_bits2,buf2);
+    strcat(buf, buf2);
+    fprintf(f, "%s\n", buf);
+
+    sprintf(buf,"Peso: %d, Valore: %d, Costo di rent: %d %s", obj->obj_flags.weight, obj->obj_flags.cost, obj->obj_flags.cost_per_day, obj->obj_flags.cost >= LIM_ITEM_COST_MIN ? "[RARO]" : " ");
+    fprintf(f, "%s\n", buf);
+
+    if(type == 28)
+    {
+      if(diff.valore + diff.rune + diff.derent > 0)
+      {
+        int exp = 0, exp_d = 0, Bexp = 0, Bexp_d = 0, Texp = 0, Texp_d = 0, Bval = 0, Tval = 0;
+
+        if(diff.valore > 0)
+        {
+          exp     = static_cast<int>(diff.valore / 1000000);
+          exp_d   = static_cast<int>((diff.valore - (exp * 1000000)) / 10000);
+          Bval    = static_cast<long>(diff.valore * 1.5);
+          Tval    = static_cast<long>(diff.valore * 2);
+          Bexp    = static_cast<int>(Bval / 1000000);
+          Bexp_d  = static_cast<int>((Bval - (Bexp * 1000000)) / 10000);
+          Texp    = static_cast<int>(Tval / 1000000);
+          Texp_d  = static_cast<int>((Tval - (Texp * 1000000)) / 10000);
+        }
+        sprintf(buf, "Edit Valore Mono: %d,%d MegaXP, Valore Bi: %d,%d MegaXP, Valore Tri: %d,%d MegaXP.", exp, exp_d, Bexp, Bexp_d, Texp, Texp_d);
+        fprintf(f, "%s\n", buf);
+
+        if(diff.derent > 0)
+        {
+          exp   = static_cast<int>(diff.derent / 1000000);
+          exp_d = static_cast<int>((diff.derent - (exp * 1000000)) / 10000);
+        }
+        else
+        {
+          exp   = 0;
+          exp_d = 0;
+        }
+        sprintf(buf, "Derent Exp Spesi: %d,%d MegaXP, Rune Spese: %d", exp, exp_d, diff.rune);
+        fprintf(f, "%s\n", buf);
+      }
+    }
+
+    switch(GET_ITEM_TYPE(obj))
+    {
+      case ITEM_SCROLL :
+      case ITEM_POTION :
+        sprintf(buf, "Livello %d dell'incantesimo:\n", obj->obj_flags.value[0]);
+        fprintf(f, "%s\n", buf);
+        if(obj->obj_flags.value[1] >= 1)
+        {
+          sprinttype(obj->obj_flags.value[1]-1,spells,buf2);
+          sprintf(buf, "%s", buf2);
+          fprintf(f, "%s\n", buf);
+        }
+        if(obj->obj_flags.value[2] >= 1)
+        {
+          sprinttype(obj->obj_flags.value[2]-1,spells,buf2);
+          sprintf(buf, "%s", buf2);
+          fprintf(f, "%s\n", buf);
+        }
+        if(obj->obj_flags.value[3] >= 1)
+        {
+          sprinttype(obj->obj_flags.value[3]-1,spells,buf2);
+          sprintf(buf, "%s", buf2);
+          fprintf(f, "%s\n", buf);
+        }
+        break;
+
+      case ITEM_WAND :
+      case ITEM_STAFF :
+        sprintf(buf, "Ha %d cariche totali, con %d cariche rimanenti.", obj->obj_flags.value[1], obj->obj_flags.value[2]);
+        fprintf(f, "%s\n", buf);
+        sprintf(buf, "Livello %d dell'incantesimo:", obj->obj_flags.value[0]);
+        fprintf(f, "%s\n", buf);
+        if(obj->obj_flags.value[3] >= 1)
+        {
+          sprinttype(obj->obj_flags.value[3]-1,spells,buf2);
+          strcat(buf, buf2);
+          fprintf(f, "%s\n", buf);
+        }
+        break;
+
+      case ITEM_WEAPON :
+        sprintf(buf, "Dado di danno: '%dd%d'", obj->obj_flags.value[1], obj->obj_flags.value[2]);
+        fprintf(f, "%s\n", buf);
+        sprinttype(obj->obj_flags.value[3],aszWeaponType,buf2);
+        sprintf(buf,"Tipo di danno: '%s'", buf2);
+        fprintf(f, "%s\n", buf);
+        break;
+
+      case ITEM_ARMOR :
+        sprintf(buf, "AC-apply di %d.", obj->obj_flags.value[0]);
+        fprintf(f, "%s\n", buf);
+        break;
+
+      default:
+        break;
+    }
+
+    found = FALSE;
+
+    for(i=0; i<MAX_OBJ_AFFECT; i++)
+    {
+      if((obj->affected[i].location != APPLY_NONE) && (obj->affected[i].modifier != 0) && (obj->affected[i].location !=APPLY_SKIP))
+      {
+        if(!found)
+        {
+          sprintf(buf, "Caratteristiche: ");
+          fprintf(f, "%s\n", buf);
+          found = TRUE;
+        }
+
+        sprinttype(obj->affected[i].location,apply_types,buf2);
+        sprintf(buf,"    Ti puo' dare : %s by ", buf2);
+        fprintf(f, "%s", buf);
+
+        switch(obj->affected[i].location)
+        {
+          case APPLY_M_IMMUNE:
+          case APPLY_IMMUNE:
+          case APPLY_SUSC:
+            sprintbit(obj->affected[i].modifier,immunity_names,buf2);
+            sprintf(buf, "%s", buf2);
+            break;
+
+          case APPLY_ATTACKS:
+            sprintf(buf,"%f", static_cast<double>(obj->affected[i].modifier / 10));
+            break;
+
+          case APPLY_WEAPON_SPELL:
+          case APPLY_EAT_SPELL:
+            sprintf(buf,"%s", spells[obj->affected[i].modifier-1]);
+            break;
+
+          case APPLY_SPELL:
+            sprintbit(obj->affected[i].modifier,affected_bits, buf2);
+            sprintf(buf, "%s", buf2);
+            break;
+
+          case APPLY_AFF2:
+            sprintbit(obj->affected[i].modifier,affected_bits2, buf2);
+            sprintf(buf, "%s", buf2);
+            break;
+
+          case APPLY_RACE_SLAYER:
+            sprintf(buf, "%s", RaceName[ obj->affected[i].modifier ]);
+            break;
+
+          case APPLY_ALIGN_SLAYER:
+            sprintbit(static_cast<unsigned>(obj->affected[i].modifier), gaszAlignSlayerBits, buf2);
+            sprintf(buf, "%s", buf2);
+            break;
+
+          default:
+            sprintf(buf,"%d", obj->affected[i].modifier);
+            break;
+        }
+        fprintf(f, "%s\n", buf);
+      }
+    }
+
+    fprintf(f, "\n");
+
+    extract_obj(obj);
+    mudlog(LOG_PLAYERS, "ho finito di scrivere l'oggetto numero %d", j);
+  }
+  else
+  {
+    extract_obj(obj);
+  }
 }
 
 int CheckQuickness(struct char_data* ch)

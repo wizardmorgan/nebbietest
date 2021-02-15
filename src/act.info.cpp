@@ -6081,20 +6081,27 @@ ACTION_FUNC(do_value) {
 			 obj->obj_flags.cost >= LIM_ITEM_COST_MIN ? "[RARO]" : " ");
 	send_to_char(buf, ch);
 
-    if(IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
+  if(IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
+  {
+    int exp = 0, exp_d = 0, derent = 0, derent_d = 0;
+		struct ExpValue differenza = CheckDiffValue(obj);
+
+    if(differenza.valore > 0)
     {
-        int exp = 0;
-        int exp_d = 0;
-        if(obj->value_exp_edit > 0)
-        {
-            exp = int(obj->value_exp_edit / 1000000);
-            exp_d = int((obj->value_exp_edit - (exp * 1000000)) / 10000);
-        }
-        if(obj->value_exp_edit > 0 || obj->value_rune_edit > 0)
-        {
-            snprintf(buf,999,"Sono stati spesi : %d,%d MegaXP, e %d Rune degli Dei.\n\r", exp, exp_d, obj->value_rune_edit);
-        }
+      exp = static_cast<int>(differenza.valore / 1000000);
+      exp_d = static_cast<int>((differenza.valore - (exp * 1000000)) / 10000);
     }
+		if(differenza.derent > 0)
+    {
+      derent = static_cast<int>(differenza.derent / 1000000);
+      derent_d = static_cast<int>((differenza.derent - (derent * 1000000)) / 10000);
+    }
+    if(differenza.valore > 0 || differenza.rune > 0 || differenza.derent > 0)
+    {
+      snprintf(buf,999,"Sono stati spesi : %d,%d MegaXP per gli edit, %d Rune degli Dei e %d,%d MegaXP per il derent.\n\r", exp, exp_d, differenza.rune, derent, derent_d);
+    }
+		send_to_char(buf, ch);
+  }
 
 	if(ITEM_TYPE(obj) == ITEM_WEAPON) {
 		snprintf(buf, 999,"Valore di danno: '%dD%d'\n\r",

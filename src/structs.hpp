@@ -192,6 +192,13 @@ struct XpAchieTable
     int lev_10_xp;
 };
 
+struct ExpValue
+{
+  long valore;
+  long derent;
+  int rune;
+};
+
 #define MIN_GLOB_TRACK_LEV 31   /* mininum level for global track */
 /*
 **  Site locking stuff.. written by Scot Gardner
@@ -480,9 +487,9 @@ struct obj_data {
 	struct obj_data* next;         /* For the object list            */
 	char* szForbiddenWearToChar;   /* messaggi da visualizzare quando  */
 	char* szForbiddenWearToRoom;   /* si tenta di indossare un oggetto */
-    long value_exp_edit;  /* valore dell'edit in punti esperienza */
-    int value_rune_edit;  /* valore dell'edit in rune degli dei */
-    long value_exp;       /* valore dell'oggetto in punti esperienza */
+  long value_exp;  							/* valore in punti esperienza */
+  int value_rune;  							/* valore in rune degli dei */
+  long value_exp_total;       	/* valore totale in punti esperienza */
 	/* proibito.                        */
 	int iGeneric;                  /* Valore generico a disposizione delle
                                   * procedure speciali */
@@ -994,7 +1001,7 @@ struct char_file_u_3040 {
     unsigned int affected_by2;
     unsigned int last_logon;  /* Time (in secs) of last logon */
     unsigned int    act;        /* ACT Flags                    */
-    
+
     /* char data */
     char name[20];
     char authcode[7];  /* codice di autorizzazione */

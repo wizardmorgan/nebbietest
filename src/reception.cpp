@@ -415,6 +415,7 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st) {
 	struct obj_data* in_obj[64],*last_obj = NULL;
 	int tmp_cur_depth=0;
 	int i, j, iRealObjNumber;
+	struct ExpValue obj_caricato;
 
 	void obj_to_char(struct obj_data *object, struct char_data *ch);
 
@@ -450,20 +451,19 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st) {
 				obj->obj_flags.value[2] = st->objects[i].value[2];
 				obj->obj_flags.value[3] = st->objects[i].value[3];
 				obj->obj_flags.extra_flags  = st->objects[i].extra_flags;
-                if(IS_SET(ch->specials.act,PLR_NEW_EQ))
-                {
-                    obj->obj_flags.extra_flags2 = st->objects[i].extra_flags2;
-                }
-                else
-                {
-                    obj->obj_flags.extra_flags2 = 0;
-                }
+        if(IS_SET(ch->specials.act,PLR_NEW_EQ))
+        {
+          obj->obj_flags.extra_flags2 = st->objects[i].extra_flags2;
+        }
+        else
+        {
+          obj->obj_flags.extra_flags2 = 0;
+        }
 				obj->obj_flags.weight       = st->objects[i].weight;
 				obj->obj_flags.timer        = st->objects[i].timer;
 				obj->obj_flags.bitvector    = st->objects[i].bitvector;
-                obj->obj_flags.hitp         = st->objects[i].hitp;
-                obj->obj_flags.hitpTot      = st->objects[i].hitpTot;
-
+        obj->obj_flags.hitp         = st->objects[i].hitp;
+        obj->obj_flags.hitpTot      = st->objects[i].hitpTot;
 
 				SetStatus(STATUS_OTCFREESTRING, NULL);
 
@@ -495,6 +495,11 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st) {
 					obj->affected[j] = st->objects[i].affected[j];
 				}
 
+				obj_caricato 					= CheckValueObj(obj);
+				obj->value_exp 				= obj_caricato.valore * 10000;
+				obj->value_rune				= obj_caricato.rune;
+				obj->value_exp_total	= (obj_caricato.valore + obj_caricato.derent) * 10000;
+				
 				SetStatus(STATUS_OTCBAGTREE, NULL);
 
 				/* item restoring */

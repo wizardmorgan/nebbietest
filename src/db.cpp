@@ -2176,7 +2176,7 @@ void clone_obj_to_obj(struct obj_data* obj, struct obj_data* osrc) {
 
 	obj->obj_flags.type_flag = osrc->obj_flags.type_flag;
 	obj->obj_flags.extra_flags = osrc->obj_flags.extra_flags;
-    obj->obj_flags.extra_flags2 = osrc->obj_flags.extra_flags2;
+  obj->obj_flags.extra_flags2 = osrc->obj_flags.extra_flags2;
 	obj->obj_flags.wear_flags = osrc->obj_flags.wear_flags;
 	obj->obj_flags.value[0] = osrc->obj_flags.value[0];
 	obj->obj_flags.value[1] = osrc->obj_flags.value[1];
@@ -2185,11 +2185,11 @@ void clone_obj_to_obj(struct obj_data* obj, struct obj_data* osrc) {
 	obj->obj_flags.weight = osrc->obj_flags.weight;
 	obj->obj_flags.cost = osrc->obj_flags.cost;
 	obj->obj_flags.cost_per_day = osrc->obj_flags.cost_per_day;
-    obj->obj_flags.hitp = osrc->obj_flags.hitp;
-    obj->obj_flags.hitpTot = osrc->obj_flags.hitpTot;
-//    obj->value_exp_edit = osrc->value_exp_edit;
-//    obj->value_rune_edit = osrc->value_rune_edit;
-
+  obj->obj_flags.hitp = osrc->obj_flags.hitp;
+  obj->obj_flags.hitpTot = osrc->obj_flags.hitpTot;
+	obj->value_exp 				= osrc->value_exp;
+	obj->value_rune				= osrc->value_rune;
+	obj->value_exp_total	= osrc->value_exp_total;
 	/* *** extra descriptions *** */
 
 	obj->ex_description = 0;
@@ -2229,6 +2229,7 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
 	char chk[161];
 	struct extra_descr_data* new_descr;
 	void name_to_drinkcon(struct obj_data *obj,int type);
+	struct ExpValue obj_caricato;
 
 	obj->name = fread_string(f);
 
@@ -2423,44 +2424,38 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
 		obj->affected[i].modifier = 0;
 	}
 
-    if(*chk == 'F')
-    {
-			mudlog(LOG_CHECK, "leggo F ");
-        obj->obj_flags.extra_flags2 = fread_number(f);
-				fscanf(f, " %160s \n", chk);
-    }
+  if(*chk == 'F')
+  {
+    obj->obj_flags.extra_flags2 = fread_number(f);
+		fscanf(f, " %160s \n", chk);
+  }
 
-    if(*chk == 'X')
-    {
-        obj->value_exp_edit = fread_number(f);
-				fscanf(f, " %160s \n", chk);
-    }
+//	assegno il valore all'oggetto
+	obj_caricato 					= CheckValueObj(obj);
+	obj->value_exp 				= obj_caricato.valore * 10000;
+	obj->value_rune				= obj_caricato.rune;
+	obj->value_exp_total	= (obj_caricato.valore + obj_caricato.derent) * 10000;
 
-		if(*chk == 'R')
-		{
-				obj->value_rune_edit = fread_number(f);
-				fscanf(f, " %160s \n", chk);
-		}
+// 	assegno gli hp all'oggetto
+  obj->obj_flags.hitp = ObjectHitPoints[GET_ITEM_TYPE(obj)];
+  obj->obj_flags.hitpTot = ObjectHitPoints[GET_ITEM_TYPE(obj)];
 
-    obj->obj_flags.hitp = ObjectHitPoints[GET_ITEM_TYPE(obj)];
-    obj->obj_flags.hitpTot = ObjectHitPoints[GET_ITEM_TYPE(obj)];
+	if(GET_ITEM_TYPE(obj) == ITEM_WEAPON || GET_ITEM_TYPE(obj) == ITEM_FIREWEAPON)
+	{
+		obj->obj_flags.hitp     += obj->obj_flags.value[2] * 10;
+		obj->obj_flags.hitpTot  += obj->obj_flags.value[2] * 10;
+	}
+	else if(GET_ITEM_TYPE(obj) == ITEM_ARMOR)
+	{
+		obj->obj_flags.hitp     += obj->obj_flags.value[1] * 10;
+		obj->obj_flags.hitpTot  += obj->obj_flags.value[1] * 10;
+	}
 
-    if(GET_ITEM_TYPE(obj) == ITEM_WEAPON || GET_ITEM_TYPE(obj) == ITEM_FIREWEAPON)
-    {
-        obj->obj_flags.hitp     += obj->obj_flags.value[2] * 10;
-        obj->obj_flags.hitpTot  += obj->obj_flags.value[2] * 10;
-    }
-    else if(GET_ITEM_TYPE(obj) == ITEM_ARMOR)
-    {
-        obj->obj_flags.hitp     += obj->obj_flags.value[1] * 10;
-        obj->obj_flags.hitpTot  += obj->obj_flags.value[1] * 10;
-    }
-
-    if(IS_RARE(obj))
-    {
-        obj->obj_flags.hitp     *= 2;
-        obj->obj_flags.hitpTot  *= 2;
-    }
+  if(IS_RARE(obj))
+  {
+    obj->obj_flags.hitp     *= 2;
+    obj->obj_flags.hitpTot  *= 2;
+	}
 
 	SetStatus("Reading forbidden string in read_obj_from_file", NULL);
 
@@ -2475,7 +2470,7 @@ int read_obj_from_file(struct obj_data* obj, FILE* f) {
 	}
 
 	SetStatus("Returning from read_obj_from_file", "None");
-	//mudlog(LOG_WORLD, "ho finito di leggere %s", obj->short_description);
+
 	return bc;
 }
 
@@ -2516,24 +2511,6 @@ void write_obj_to_file(struct obj_data* obj, FILE* f, long vnumber) {
     {
         fprintf(f, "F\n");
         fprintf(f, "%d\n", obj->obj_flags.extra_flags2);
-    }
-
-		if(IS_OBJ_STAT2(obj, ITEM2_EDIT))
-		{
-			obj->value_exp_edit 	=	ValueExpObj(obj) * 10000;
-			obj->value_rune_edit 	=	ValueRuneObj(obj);
-		}
-
-    if(obj->value_exp_edit)
-    {
-        fprintf(f, "X\n");
-        fprintf(f, "%ld\n", obj->value_exp_edit);
-    }
-
-    if(obj->value_rune_edit)
-    {
-        fprintf(f, "R\n");
-        fprintf(f, "%d\n", obj->value_rune_edit);
     }
 
 	if(obj->szForbiddenWearToChar) {

@@ -2896,7 +2896,7 @@ void sprintbit(unsigned long, char* [], char*);
 void spell_identify(byte level, struct char_data* ch,
 					struct char_data* victim, struct obj_data* obj) {
 	char buf[256], buf2[256], col1[10], col2[10], col3[10];
-	int i, color[2], vnum;
+	int i, color[2];
 	bool found;
 
 	struct time_info_data age(struct char_data *ch);
@@ -2966,38 +2966,27 @@ void spell_identify(byte level, struct char_data* ch,
 				obj->obj_flags.cost >= LIM_ITEM_COST_MIN ? "[RARO]" : " ");
 		send_to_char(buf, ch);
 
- /*       if(IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
-        {
-            int exp = 0;
-            int exp_d = 0;
-            if(obj->value_exp_edit > 0)
-            {
-                exp = int(obj->value_exp_edit / 1000000);
-                exp_d = int((obj->value_exp_edit - (exp * 1000000)) / 10000);
-            }
-            if(obj->value_exp_edit > 0 || obj->value_rune_edit > 0)
-            {
-                sprintf(buf, "%sSono stati spesi: %s%d%s,%s%d%s MegaXP, e %s%d%s Rune degli Dei.\n\r", col1, col2, exp, col1, col2, exp_d, col1, col2, obj->value_rune_edit, col1);
-                send_to_char(buf, ch);
-            }
-        } */
+		if(IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
+		{
+				int exp = 0, exp_d = 0, derent = 0, derent_d = 0;
+				struct ExpValue differenza = CheckDiffValue(obj);
 
-        vnum = static_cast<int>(obj->char_vnum);
-        if(vnum > 0)
-        {
-            int exp = 0;
-            int exp_d = 0;
-            if(obj->value_exp_edit > 0)
-            {
-                exp = int(obj->value_exp_edit / 1000000);
-                exp_d = int((obj->value_exp_edit - (exp * 1000000)) / 10000);
-            }
-            if(obj->value_exp_edit > 0 || obj->value_rune_edit > 0)
-            {
-                sprintf(buf, "%sSono stati spesi: %s%d,%d%s MegaXP, e %s%d%s Rune degli Dei.\n\r", col1, col2, exp, exp_d, col1, col2, obj->value_rune_edit, col1);
-                send_to_char(buf, ch);
-            }
-        }
+				if(differenza.valore > 0)
+				{
+						exp = static_cast<int>(differenza.valore / 1000000);
+						exp_d = static_cast<int>((differenza.valore - (exp * 1000000)) / 10000);
+				}
+				if(differenza.derent > 0)
+				{
+						derent = static_cast<int>(differenza.derent / 1000000);
+						derent_d = static_cast<int>((differenza.derent - (derent * 1000000)) / 10000);
+				}
+				if(differenza.valore > 0 || differenza.rune > 0 || differenza.derent > 0)
+				{
+						sprintf(buf,"%sSono stati spesi : %s%d,%d%s MegaXP per gli edit, %s%d%s Rune degli Dei e %s%d,%d%s MegaXP per il derent.\n\r", col1, col2, exp, exp_d, col1, col2, differenza.rune, col1, col2, derent, derent_d, col1);
+						send_to_char(buf, ch);
+				}
+		}
 
 		switch(GET_ITEM_TYPE(obj)) {
 		case ITEM_SCROLL :

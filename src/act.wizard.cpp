@@ -1187,10 +1187,11 @@ ACTION_FUNC(do_stat) {
 	struct char_data* k = 0;
 	struct obj_data* j = 0;
 	struct obj_data* j2 = 0;
-    struct obj_data* tmpW = 0;
-    struct obj_data* tmpV = 0;
+	struct obj_data* tmpW = 0;
+	struct obj_data* tmpV = 0;
 	struct extra_descr_data* desc;
 	struct follow_type* fol;
+	struct ExpValue diff;
 	int i, iVNum;
 	int i2;
 	int count = 1;
@@ -1813,15 +1814,16 @@ ACTION_FUNC(do_stat) {
 			return;
 		}
 		/* stat on object - prima fa il check in inventario poi nel mondo */
-        else if((tmpV = (struct obj_data*) get_obj_in_list_vis(ch, arg1, ch->carrying)) || (tmpW = (struct obj_data*) get_obj_vis_world(ch, arg1, &count))) {
-            if(!tmpV)
-            {
-                j = tmpW;
-            }
-            else
-            {
-                j = tmpV;
-            }
+    else if((tmpV = (struct obj_data*) get_obj_in_list_vis(ch, arg1, ch->carrying)) || (tmpW = (struct obj_data*) get_obj_vis_world(ch, arg1, &count)))
+		{
+      if(!tmpV)
+      {
+        j = tmpW;
+      }
+      else
+      {
+        j = tmpV;
+      }
 
 			iVNum = (j->item_number >= 0) ? obj_index[j->item_number].iVNum : 0;
 			sprintf(buf,
@@ -1872,23 +1874,26 @@ ACTION_FUNC(do_stat) {
 			strcat(buf, "\n\r");
 			send_to_char(buf, ch);
 
-            send_to_char("$c0005Extra flags2: $c0014", ch);
-            sprintbit((unsigned) j->obj_flags.extra_flags2, extra_bits2, buf2);
-            sprintf(buf, "$c0014");
-            strcat(buf, buf2);
-            strcat(buf, "\n\r");
-            send_to_char(buf, ch);
+      send_to_char("$c0005Extra flags2: $c0014", ch);
+      sprintbit((unsigned) j->obj_flags.extra_flags2, extra_bits2, buf2);
+      sprintf(buf, "$c0014");
+      strcat(buf, buf2);
+      strcat(buf, "\n\r");
+      send_to_char(buf, ch);
 
 			sprintf(buf, "$c0005Weight: $c0014%d$c0005, Value: $c0014%d$c0005, Cost/day: $c0014%d$c0005, Timer: $c0014%d\n\r",
 					j->obj_flags.weight, j->obj_flags.cost,
 					j->obj_flags.cost_per_day, j->obj_flags.timer);
 			send_to_char(buf, ch);
 
-            sprintf(buf, "$c0005Hit Points: $c0014%.3f$c0005/$c0014%.3f\n\r", j->obj_flags.hitp, j->obj_flags.hitpTot);
-            send_to_char(buf, ch);
+      sprintf(buf, "$c0005Hit Points: $c0014%.3f$c0005/$c0014%.3f\n\r", j->obj_flags.hitp, j->obj_flags.hitpTot);
+      send_to_char(buf, ch);
 
-            sprintf(buf, "$c0005Edited Exp: $c0014%ld$c0005, Edited Rune: $c0014%d\n\r", j->value_exp_edit, j->value_rune_edit);
-            send_to_char(buf, ch);
+			sprintf(buf, "$c0005Obj Value Exp: $c0014%ld$c0005\n\r", j->value_exp);
+      send_to_char(buf, ch);
+			diff = CheckDiffValue(j);
+      sprintf(buf, "$c0005Edited Exp: $c0014%ld$c0005, Edited Rune: $c0014%d, $c0005Derent Exp: $c0014%ld\n\r", diff.valore, diff.rune, diff.derent);
+      send_to_char(buf, ch);
 
 			strcpy(buf, "$c0005In room: $c0005");
 			if(j->in_room == NOWHERE) {
@@ -2098,7 +2103,6 @@ ACTION_FUNC(do_ooedit) {
 			"cost   = item cost to rent per day\n\r"
 			"value  = Item value if sold    | timer    = item timer\n\r"
 			"type   = item type             | weight   = item weight\n\r"
-            "edexp  = amount of exp edited  | edrune   = amount of rune edited\n\r"
 			"v0     = value[0] of item      | v1       = value[1] of item\n\r"
 			"v2     = value[2] of item      | v3       = value[3] of item\n\r"
 			"aff1   = special affect 1 (syntax is: oedit aff1 <modifer> <type>)\n\r"
@@ -2179,23 +2183,12 @@ ACTION_FUNC(do_ooedit) {
 			return;
 		} /* end exflags */
 
-        if(!strcmp(field, "exflags2")) {
-            arg = one_argument(arg, parmstr);
-            j->obj_flags.extra_flags2 = atol(parmstr);
-            return;
-        } /* end exflags2 */
-
-        if(!strcmp(field, "edexp")) {
-            arg = one_argument(arg, parmstr);
-            j->value_exp_edit = atol(parmstr);
-            return;
-        } /* end exflags2 */
-
-        if(!strcmp(field, "edrune")) {
-            arg = one_argument(arg, parmstr);
-            j->value_rune_edit = atol(parmstr);
-            return;
-        } /* end exflags2 */
+    if(!strcmp(field, "exflags2"))
+		{
+      arg = one_argument(arg, parmstr);
+      j->obj_flags.extra_flags2 = atol(parmstr);
+      return;
+    } /* end exflags2 */
 
 		if(!strcmp(field, "weight")) {
 			arg = one_argument(arg, parmstr);
