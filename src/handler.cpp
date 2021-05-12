@@ -1131,16 +1131,18 @@ void affect_total(struct char_data* ch) {
     {
         ch->resistenze[TOTAL_RESI][i] = ResiTotal(ch, i);
     }
-    //  questo ciclo controlla se e' stato rimosso un affect di razza, in quel caso lo rimette
+    //  se dispellati/rimossi per qualche ragione assegno di nuovo gli affect di razza
     if(GET_RACE(ch) < max_race_table)  // per ora va fino alla razza halfling
     {
-        for(i = 0; i < 32; i++)
-        {
-            if(!IS_AFFECTED(ch, 1 << i) && IS_SET(RaceStuffs[GET_RACE(ch)].affect, 1 << i))
-            {
-                SET_BIT(ch->specials.affected_by, 1 << i);
-            }
-        }
+		ch->specials.affected_by |= RaceStuffs[GET_RACE(ch)].affect;
+// ciao ciclo ciao
+//        for(i = 0; i < 32; i++)
+//        {
+//            if(!IS_AFFECTED(ch, 1 << i) && IS_SET(RaceStuffs[GET_RACE(ch)].affect, 1 << i))
+//            {
+//                SET_BIT(ch->specials.affected_by, 1 << i);
+//            }
+//        }
     }
 }
 
@@ -3101,4 +3103,3 @@ void AddAffects(struct char_data* ch, struct obj_data* o) {
 	}
 }
 } // namespace Alarmud
-
