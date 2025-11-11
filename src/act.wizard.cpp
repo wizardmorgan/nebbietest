@@ -291,80 +291,65 @@ ACTION_FUNC(do_imptest) {
 }
 
 ACTION_FUNC(do_passwd) {
-	/*   int player_i, pos;*/
-	char name[30], npasswd[20], pass[20], buf[256];
-	char szFileName[50];
-	struct char_data* victim;
-	struct char_file_u tmp_store;
-	int count = 1;
-	FILE* fl;
-
-	/*  sets the specified user's password. */
-	/*  get user's name: */
+	char name[30], npasswd[20], buf[256];
+	
 	sprintf(buf, "Invocato come %d.\n\r", cmd);
 	send_to_char(buf, ch);
 
 	arg = one_argument(arg, name);
 	arg = one_argument(arg, npasswd);
 
-	/*   Look up character */
-
-	if((cmd == CMD_SAVE) || load_char(name, &tmp_store)) {
-		if(cmd == CMD_SAVE) {
-			victim = get_char_vis_world(ch, name, &count);
-			if(!victim || !IS_PC(victim)) {
-				sprintf(buf, "Devi prima ghostare %s.\n\r", name);
-				send_to_char(buf, ch);
-				return;
-			}
-			sprintf(buf, "Saving %s\n\r", GET_NAME(victim));
-			send_to_char(buf, ch);
-			load_char(name, &tmp_store);
-			sprintf(buf, "Crypted pwd1 is %s\n\r", tmp_store.pwd);
-			send_to_char(buf, ch);
-			bzero(pass, sizeof(pass));
-			strncpy(pass, tmp_store.pwd, sizeof(pass) - 1);
-			char_to_store(victim, &tmp_store);
-			bzero(tmp_store.pwd, sizeof(tmp_store.pwd));
-			strncpy(tmp_store.pwd, pass, sizeof(tmp_store.pwd) - 1);
-			sprintf(buf, "Crypted pwd2 is %s\n\r", tmp_store.pwd);
-			send_to_char(buf, ch);
-		}
-		else if(cmd == CMD_CHPWD) {
-			/*  encrypt new password. */
-			if(!*npasswd || strlen(npasswd) > 10 || strlen(npasswd) < 5) {
-				send_to_char("Illegal password\n\r", ch);
-				return;
-			}
-			bzero(pass, sizeof(pass));
-			strncpy(pass, (char*) crypt(npasswd, tmp_store.name),
-					sizeof(pass) - 1);
-
-			/*  put new password in place of old password */
-			strncpy(tmp_store.pwd, pass, sizeof(tmp_store.pwd) - 1);
-		}
-
-		/*   save char to file */
-		sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(name));
-		if((fl = fopen(szFileName, "w+b")) == NULL) {
-			mudlog(LOG_ERROR, "Cannot open file %s for saving player.",
-				   szFileName);
+	// Sirio
+	// La logica CMD_SAVE era specifica per salvare i PG "ghost" su file
+	// e non è direttamente traducibile senza rivedere anche il do_ghost.
+	// Ci concentriamo sulla modifica della password (CMD_CHPWD).
+	if (cmd == CMD_CHPWD) {
+		
+		if (!*npasswd || strlen(npasswd) > 10 || strlen(npasswd) < 5) {
+			send_to_char("Password illegale (min 5, max 10 caratteri).\n\r", ch);
 			return;
 		}
-		fwrite(&tmp_store, sizeof(tmp_store), 1, fl);
-		fclose(fl);
-		if(cmd == CMD_CHPWD) {
-			sprintf(buf, "OK, password for %s changed to %s"
-					"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\r\n", name,
-					npasswd);
+
+		try {
+			// 1. Carica il personaggio (toon) dal database usando il nome
+			// usiamo 'string(name)' per convertire il char*
+			toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(name));
+
+			// 2. Controlla se il personaggio è stato trovato nel DB
+			if (!pg || !pg->id) {
+				send_to_char("Non ho trovato quel personaggio nel database.\n\r", ch);
+				// Potresti voler controllare anche la vecchia logica qui per sicurezza
+				// ma l'obiettivo è migrare.
+				return;
+			}
+
+			// 3. Cripta la nuova password (usando il nome come salt, come prima)
+			string new_crypted_pass = crypt(npasswd, pg->name.c_str());
+
+			// 4. Aggiorna il campo password nell'oggetto 'toon'
+			pg->password = new_crypted_pass;
+
+			// 5. Salva l'oggetto aggiornato nel database
+			if (Sql::update(*pg)) { // Sql::update è definito in Sql.hpp
+				sprintf(buf, "OK, password del database per %s cambiata in %s.\n\r", name, npasswd);
+				send_to_char(buf, ch);
+				mudlog(LOG_PLAYERS, "%s ha cambiato la password DB di %s.", GET_NAME(ch), name);
+			} else {
+				send_to_char("Errore durante l'aggiornamento del database.\n\r", ch);
+				mudlog(LOG_SYSERR, "Errore Sql::update in do_passwd per %s", name);
+			}
+
+		} catch (const odb::exception& e) {
+			mudlog(LOG_SYSERR, "Errore ODB in do_passwd: %s", e.what());
+			send_to_char("Si è verificato un errore critico con il database.\n\r", ch);
+		} catch (const std::exception& e) {
+			mudlog(LOG_SYSERR, "Errore generico in do_passwd: %s", e.what());
+			send_to_char("Si è verificato un errore generico.\n\r", ch);
 		}
-		else if(cmd == CMD_SAVE) {
-			sprintf(buf, "OK, %s saved\r\n", name);
-		}
-		send_to_char(buf, ch);
-	}
-	else {
-		send_to_char("I don't recognize that name\n\r", ch);
+	
+	} else if (cmd == CMD_SAVE) {
+		send_to_char("La logica 'save' di questo comando è obsoleta e deve essere rimossa o aggiornata.\n\r", ch);
+		send_to_char("Aggiornamento password saltato.\n\r", ch);
 	}
 }
 
