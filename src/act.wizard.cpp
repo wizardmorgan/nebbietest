@@ -4596,9 +4596,16 @@ ACTION_FUNC(do_immort) {
 
 // sintassi: refund nome_pg data(formato aaaammgg) orario(m/p/s) all/eq/pg/achie
 ACTION_FUNC(do_refund) {
-	char GodDir[100], tar_buf[256], name[100], date[16], time[16], type[16], FileName[80];
+    /* Buffer aumentati per percorsi lunghi e comandi di sistema */
+	char GodDir[100], tar_buf[512], name[100], date[16], time[16], type[16], FileName[256];
 	int valore = 0, i, found = -1, refund = 0;
 	FILE* fl;
+
+    /* Buffer per il comando 'find' e per il risultato */
+    char find_cmd[512];
+    char source_path[512];
+    FILE* pipe;
+
 
 	if(cmd == 0)
 	{
@@ -4610,87 +4617,71 @@ ACTION_FUNC(do_refund) {
 	arg = one_argument(arg, time);
 	only_argument(arg, type);
 
+    mudlog(LOG_PLAYERS, "do_refund: Invocato con NOME=%s, DATA=%s, ORA=%s, TIPO=%s", name, date, time, type);
+
 	if(!*name || !*date || !*time || !*type)
 	{
 		send_to_char("Hai dimenticato qualcosa!\n\r", ch);
 		send_to_char("La sintassi corretta e':\n\r$c0015refund nome_pg data(formato $c0009aaaammgg$c0015) orario($c0009m$c0015/$c0009p$c0015/$c0009s$c0015) $c0009all$c0015/$c0009eq$c0015/$c0009pg$c0015/$c0009achie$c0007\n\r", ch);
+        mudlog(LOG_PLAYERS, "do_refund: Argomenti mancanti. Uscita.");
 		return;
 	}
 
+    // --- (validazione input, invariata) ---
 	if(strlen(date) != 8 || atoi(date) < 0 || atoi(date) >29999999 )
 	{
 		send_to_char("Il formato da usare per la data e' $c0009aaaa$c0015mm$c0011gg$c0007!\n\r", ch);
+        mudlog(LOG_PLAYERS, "do_refund: Formato data errato: %s", date);
 		return;
 	}
-
 	if(!strcmp(time, "m") || !strcmp(time, "p") || !strcmp(time, "s"))
 	{
-		if(!strcmp(time, "m"))
-		{
-			SET_BIT(valore, REFUND_MORNING);
-		}
-		else if(!strcmp(time, "p"))
-		{
-			SET_BIT(valore, REFUND_NOON);
-		}
-		else if(!strcmp(time, "s"))
-		{
-			SET_BIT(valore, REFUND_EVENING);
-		}
+		if(!strcmp(time, "m")) { SET_BIT(valore, REFUND_MORNING); }
+		else if(!strcmp(time, "p")) { SET_BIT(valore, REFUND_NOON); }
+		else if(!strcmp(time, "s")) { SET_BIT(valore, REFUND_EVENING); }
 	}
 	else
 	{
 		send_to_char("Quale vuoi recuperare? Quello della $c0009m$c0007attina, del $c0009p$c0007omeriggio o della $c0009s$c0007era?\n\r", ch);
-		send_to_char("La sintassi corretta e':\n\rrefund nome_pg data(formato aaaammgg) orario($c0009m$c0007/$c0009p$c0007/$c0009s$c0007) all/eq/pg/achie$c0007\n\r", ch);
+        mudlog(LOG_PLAYERS, "do_refund: Formato ora errato: %s", time);
 		return;
 	}
-
 	if(!strcmp(type, "all") || !strcmp(type, "pg") || !strcmp(type, "eq") || !strcmp(type, "achie"))
 	{
-		if(!strcmp(type, "all"))
-		{
-			SET_BIT(valore, REFUND_ALL);
-		}
-		else if(!strcmp(type, "pg"))
-		{
-			SET_BIT(valore, REFUND_PG);
-		}
-		else if(!strcmp(type, "eq"))
-		{
-			SET_BIT(valore, REFUND_EQ);
-		}
-		else if(!strcmp(type, "achie"))
-		{
-			SET_BIT(valore, REFUND_ACHIE);
-		}
+		if(!strcmp(type, "all")) { SET_BIT(valore, REFUND_ALL); }
+		else if(!strcmp(type, "pg")) { SET_BIT(valore, REFUND_PG); }
+		else if(!strcmp(type, "eq")) { SET_BIT(valore, REFUND_EQ); }
+		else if(!strcmp(type, "achie")) { SET_BIT(valore, REFUND_ACHIE); }
 	}
 	else
 	{
 		send_to_char("Puoi scegliere di recuperare o tutto o l'equipaggiamento o i dati del personaggio oppure gli achievements!\n\r", ch);
-		send_to_char("La sintassi corretta e':\n\rrefund nome_pg data(formato aaaammgg) orario(m/p/s) $c0009all$c0007/$c0009eq$c0007/$c0009pg$c0007/$c0009achie$c0007\n\r", ch);
+        mudlog(LOG_PLAYERS, "do_refund: Tipo refund errato: %s", type);
 		return;
 	}
+    
+    mudlog(LOG_PLAYERS, "do_refund: Valore bitmask parsato: %d", valore);
 
 // creo la directory temporanea con il nome del dio
 	sprintf(GodDir, "%sBackup", ch->player.name);
 	sprintf(tar_buf, "mkdir %s", GodDir);
 	system(tar_buf);
-	mudlog(LOG_PLAYERS, "Created %s temp's directory.", GodDir);
+	mudlog(LOG_PLAYERS, "do_refund: Eseguito: %s", tar_buf);
 
 // cerco lo zip del rent e lo unzippo nella cartella temporanea
 	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_EQ) || IS_SET(valore, REFUND_ACHIE))
 	{
+        mudlog(LOG_PLAYERS, "do_refund: Inizio ricerca file RENT/ACHIE.");
 		for(i = 0; i < 10; i++)
 		{
 			sprintf(FileName, "%srent%s.%s%d.zip", BACKUP_DIR, date, IS_SET(valore, REFUND_MORNING) ? "043" : IS_SET(valore, REFUND_NOON) ? "113" : "183", i);
-			if((fl = fopen(FileName, "r")) == NULL)
-			{
-				continue;
-			}
+            mudlog(LOG_PLAYERS, "do_refund: Tento fopen di: %s", FileName);
+			if((fl = fopen(FileName, "r")) == NULL) { continue; }
 			else
 			{
 				found = i;
 				fclose(fl);
+                mudlog(LOG_PLAYERS, "do_refund: Trovato file: %s", FileName);
 				break;
 			}
 		}
@@ -4699,16 +4690,19 @@ ACTION_FUNC(do_refund) {
 		{
 			send_to_char("Ok. I files di rent sono stati copiati nella directory temporanea.\n\r", ch);
 			sprintf(tar_buf, "tar xzf %srent%s.%s%d.zip -C %s", BACKUP_DIR, date, IS_SET(valore, REFUND_MORNING) ? "043" : IS_SET(valore, REFUND_NOON) ? "113" : "183", found, GodDir);
-			system(tar_buf);
-			mudlog(LOG_PLAYERS, "Rent's files generated on %s temp's directory.", GodDir);
-			found = -1;
+			mudlog(LOG_PLAYERS, "do_refund: Eseguo estrazione RENT: %s", tar_buf);
+            system(tar_buf);
+			mudlog(LOG_PLAYERS, "do_refund: Estrazione RENT completata.", GodDir);
+			found = -1; // Resetto per il prossimo blocco
 		}
 		else
 		{
+            const char* ora_str = IS_SET(valore, REFUND_MORNING) ? "043" : (IS_SET(valore, REFUND_NOON) ? "113" : "183");
+            mudlog(LOG_PLAYERS, "do_refund: File backup RENT non trovato. Percorso base: %srent%s.%sX.zip", BACKUP_DIR, date, ora_str);
 			send_to_char("Non riesco a trovare il file di backup rent per questa data ed orario.\n\r", ch);
 			sprintf(tar_buf, "rm -r %s", GodDir);
 			system(tar_buf);
-			mudlog(LOG_PLAYERS, "Deleted %s temp's directory.", GodDir);
+			mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
 			return;
 		}
 	}
@@ -4716,17 +4710,17 @@ ACTION_FUNC(do_refund) {
 // cerco lo zip dei pg e lo unzippo nella cartella temporanea
 	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore,REFUND_PG))
 	{
+        mudlog(LOG_PLAYERS, "do_refund: Inizio ricerca file PG.");
 		for(i = 0; i < 10; i++)
 		{
 			sprintf(FileName, "%spg%s.%s%d.zip", BACKUP_DIR, date, IS_SET(valore, REFUND_MORNING) ? "043" : IS_SET(valore, REFUND_NOON) ? "113" : "183", i);
-			if((fl = fopen(FileName, "r")) == NULL)
-			{
-				continue;
-			}
+            mudlog(LOG_PLAYERS, "do_refund: Tento fopen di: %s", FileName);
+			if((fl = fopen(FileName, "r")) == NULL) { continue; }
 			else
 			{
 				found = i;
 				fclose(fl);
+                mudlog(LOG_PLAYERS, "do_refund: Trovato file: %s", FileName);
 				break;
 			}
 		}
@@ -4735,15 +4729,18 @@ ACTION_FUNC(do_refund) {
 		{
 			send_to_char("Ok. I files dei pg sono stati copiati nella directory temporanea.\n\r", ch);
 			sprintf(tar_buf, "tar xzf %spg%s.%s%d.zip -C %s", BACKUP_DIR, date, IS_SET(valore, REFUND_MORNING) ? "043" : IS_SET(valore, REFUND_NOON) ? "113" : "183", found, GodDir);
+            mudlog(LOG_PLAYERS, "do_refund: Eseguo estrazione PG: %s", tar_buf);
 			system(tar_buf);
-			mudlog(LOG_PLAYERS, "Players' files generated on %s temp's directory.", GodDir);
+			mudlog(LOG_PLAYERS, "do_refund: Estrazione PG completata.");
 		}
 		else
 		{
+            const char* ora_str = IS_SET(valore, REFUND_MORNING) ? "043" : (IS_SET(valore, REFUND_NOON) ? "113" : "183");
+            mudlog(LOG_PLAYERS, "do_refund: File backup PG non trovato. Percorso base: %spg%s.%sX.zip", BACKUP_DIR, date, ora_str);
 			send_to_char("Non riesco a trovare il file di backup pg per questa data ed orario.\n\r", ch);
 			sprintf(tar_buf, "rm -r %s", GodDir);
 			system(tar_buf);
-			mudlog(LOG_PLAYERS, "Deleted %s temp's directory.", GodDir);
+			mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
 			return;
 		}
 	}
@@ -4761,23 +4758,36 @@ ACTION_FUNC(do_refund) {
 	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_EQ))
 	{
 		found --;
-		sprintf(FileName, "%s/lib/rent/%s", GodDir, lower(name));
-		if((fl = fopen(FileName, "r+")) == NULL)
+        
+        /* --- MODIFICA: USO 'find' PER TROVARE IL FILE --- */
+        sprintf(find_cmd, "find %s -name %s -type f 2>/dev/null", GodDir, lower(name));
+        mudlog(LOG_PLAYERS, "do_refund: Cerco file RENT con: %s", find_cmd);
+        pipe = popen(find_cmd, "r");
+        
+		if(!pipe || fgets(source_path, sizeof(source_path), pipe) == NULL)
 		{
+            mudlog(LOG_PLAYERS, "do_refund: FALLITO. Comando 'find' non ha trovato file RENT per %s.", name);
+            if(pipe) pclose(pipe);
 			if(found == 0)
 			{
 				sprintf(tar_buf, "Qualcosa e' andato storto: non ho trovato il file dell'equipaggiamento per %s.\n\r", name);
 				send_to_char(tar_buf, ch);
 				sprintf(tar_buf, "rm -r %s", GodDir);
 				system(tar_buf);
+                mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
 				return;
 			}
 		}
 		else
 		{
-			fclose(fl);
+            pclose(pipe);
+            source_path[strcspn(source_path, "\n")] = 0; // Rimuovo il newline
+            mudlog(LOG_PLAYERS, "do_refund: OK. Trovato file sorgente RENT in: %s", source_path);
+
 			SET_BIT(refund, REFUND_EQ);
-			sprintf(tar_buf, "cp -f %s rent/%s", FileName, name);
+            /* Percorso DESTINAZIONE (assoluto) */
+			sprintf(tar_buf, "cp -f %s %s/%s", source_path, RENT_DIR, name);
+            mudlog(LOG_PLAYERS, "do_refund: Eseguo copia RENT: %s", tar_buf);
 			system(tar_buf);
 			sprintf(tar_buf, "Il file dell'equipaggiamento di %s e' stato recuperato.\n\r", name);
 			send_to_char(tar_buf, ch);
@@ -4788,23 +4798,38 @@ ACTION_FUNC(do_refund) {
 	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_PG))
 	{
 		found --;
-		sprintf(FileName, "%s/lib/players/%s.dat", GodDir, lower(name));
-		if((fl = fopen(FileName, "r+")) == NULL)
+        
+        /* --- MODIFICA: USO 'find' PER TROVARE IL FILE --- */
+        char file_to_find[100];
+        sprintf(file_to_find, "%s.dat", lower(name));
+        sprintf(find_cmd, "find %s -name %s -type f 2>/dev/null", GodDir, file_to_find);
+        mudlog(LOG_PLAYERS, "do_refund: Cerco file PG con: %s", find_cmd);
+        pipe = popen(find_cmd, "r");
+		
+        if(!pipe || fgets(source_path, sizeof(source_path), pipe) == NULL)
 		{
+            mudlog(LOG_PLAYERS, "do_refund: FALLITO. Comando 'find' non ha trovato file PG per %s.", name);
+            if(pipe) pclose(pipe);
 			if(found == 0)
 			{
 				sprintf(tar_buf, "Qualcosa e' andato storto: non ho trovato il file del personaggio per %s.\n\r", name);
 				send_to_char(tar_buf, ch);
 				sprintf(tar_buf, "rm -r %s", GodDir);
 				system(tar_buf);
+                mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
 				return;
 			}
 		}
 		else
 		{
-			fclose(fl);
+            pclose(pipe);
+            source_path[strcspn(source_path, "\n")] = 0; // Rimuovo il newline
+            mudlog(LOG_PLAYERS, "do_refund: OK. Trovato file sorgente PG in: %s", source_path);
+
 			SET_BIT(refund, REFUND_PG);
-			sprintf(tar_buf, "cp -f %s players/%s.dat", FileName, name);
+            /* Percorso DESTINAZIONE (assoluto) */
+			sprintf(tar_buf, "cp -f %s %s/%s.dat", source_path, PLAYERS_DIR, name);
+            mudlog(LOG_PLAYERS, "do_refund: Eseguo copia PG: %s", tar_buf);
 			system(tar_buf);
 			sprintf(tar_buf, "Il file dei dati del personaggio di %s e' stato recuperato.\n\r", name);
 			send_to_char(tar_buf, ch);
@@ -4815,34 +4840,50 @@ ACTION_FUNC(do_refund) {
 	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_ACHIE))
 	{
 		found --;
-		sprintf(FileName, "%s/lib/rent/%s.aux", GodDir, lower(name));
-		if((fl = fopen(FileName, "r+")) == NULL)
+
+        /* --- MODIFICA: USO 'find' PER TROVARE IL FILE --- */
+        char file_to_find[100];
+        sprintf(file_to_find, "%s.aux", lower(name));
+        sprintf(find_cmd, "find %s -name %s -type f 2>/dev/null", GodDir, file_to_find);
+        mudlog(LOG_PLAYERS, "do_refund: Cerco file ACHIE with: %s", find_cmd);
+        pipe = popen(find_cmd, "r");
+		
+        if(!pipe || fgets(source_path, sizeof(source_path), pipe) == NULL)
 		{
+            mudlog(LOG_PLAYERS, "do_refund: FALLITO. Comando 'find' non ha trovato file ACHIE per %s.", name);
+            if(pipe) pclose(pipe);
 			if(found == 0)
 			{
 				sprintf(tar_buf, "Qualcosa e' andato storto: non ho trovato il file degli achievements per %s.\n\r", name);
 				send_to_char(tar_buf, ch);
 				sprintf(tar_buf, "rm -r %s", GodDir);
 				system(tar_buf);
+                mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
 				return;
 			}
 		}
 		else
 		{
-			fclose(fl);
+            pclose(pipe);
+            source_path[strcspn(source_path, "\n")] = 0; // Rimuovo il newline
+            mudlog(LOG_PLAYERS, "do_refund: OK. Trovato file sorgente ACHIE in: %s", source_path);
+
 			SET_BIT(refund, REFUND_ACHIE);
-			sprintf(tar_buf, "cp -f %s rent/%s.aux", FileName, name);
+            /* Percorso DESTINAZIONE (assoluto) */
+			sprintf(tar_buf, "cp -f %s %s/%s.aux", source_path, RENT_DIR, name);
+            mudlog(LOG_PLAYERS, "do_refund: Eseguo copia ACHIE: %s", tar_buf);
 			system(tar_buf);
 			sprintf(tar_buf, "Il file degli achievements di %s e' stato recuperato.\n\r", name);
 			send_to_char(tar_buf, ch);
 			mudlog(LOG_PLAYERS, "%s has refunded achievements' file on %s.", GET_NAME(ch), name);
 		}
 	}
-
+    
 	if(found > 0)
 	{
-		if(refund < 14)
+		if(refund < 14) // Controlla la nota nella versione precedente
 		{
+            mudlog(LOG_PLAYERS, "do_refund: Blocco errori 'found > 0', refund bitmask = %d", refund);
 			if(!IS_SET(refund, REFUND_EQ))
 			{
 				sprintf(tar_buf, "Non ho trovato il file dell'equipaggiamento per %s.\n\r", name);
@@ -4873,7 +4914,7 @@ ACTION_FUNC(do_refund) {
 	// alla fine di tutto elimino la directory temporanea che ho creato con il nome del dio
 	sprintf(tar_buf, "rm -r %s", GodDir);
 	system(tar_buf);
-	mudlog(LOG_PLAYERS, "Deleted %s temp's directory.", GodDir);
+	mudlog(LOG_PLAYERS, "do_refund: Pulizia finale directory temp: %s", tar_buf);
 
 	return;
 }
