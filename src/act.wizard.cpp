@@ -55,6 +55,7 @@
 #include "spec_procs.hpp"
 #include "magicutils.hpp"
 #include "Sql.hpp"
+#include "odb/account-odb.hxx" // Header generato da ODB per le query
 namespace Alarmud {
 
 char EasySummon = true;
@@ -175,7 +176,7 @@ void wizRegister(struct char_data* ch, std::vector<string> &parts) {
 		boost::format fmt("Parts: %d\r\n");
 		fmt % parts.size();
 		send_to_char(fmt.str().c_str(),ch);
-		if(false and parts[0] == "account") { //disabled
+		if(parts[0] == "account") { //enabled for testing - 'if(false and' rimossi)
 			if(parts.size() < 4) {
 				throw invalid_argument(
 					"Usa 'register account <email> <nome cognome>'");
@@ -6528,7 +6529,76 @@ ACTION_FUNC(do_god_interven) {
 	}
 }
 
-ACTION_FUNC(do_nuke) {
+/*ACTION_FUNC(do_nuke) {  <-- Sirio - commento vecchia funzione per non perderne traccia
+	struct char_data* victim;
+	char buf[254], tmp[254];
+
+	if(IS_NPC(ch)) {
+		return;
+	}
+
+	arg = one_argument(arg, tmp);*/ /* victim name */
+
+	/*if(tmp[0] == '\0') {
+		send_to_char("Nuke whom?! (nuke <name>)\n\r", ch);
+		return;
+	}
+
+	if(!(victim = get_char(tmp))) {
+		send_to_char("No-one by that name in the world.\n\r", ch);
+		return;
+	}
+
+	if(victim->in_room != ch->in_room) {
+		send_to_char("That person is not in the same room as you.\n\r", ch);
+		return;
+	}
+
+	if(IS_NPC(victim)) {
+		send_to_char("Not on NPC's.\n\r", ch);
+		return;
+	}
+
+	if(GetMaxLevel(victim) >= GetMaxLevel(ch)) {
+		send_to_char("You can't nuke them!!\n\r", ch);
+		sprintf(buf, "%s tried to nuke you!\n\r", GET_NAME(ch));
+		send_to_char(buf, victim);
+		return;
+	}
+	else {
+
+		mudlog(LOG_PLAYERS, "%s just nuked %s!", GET_NAME(ch), GET_NAME(victim));
+		act("$n calls forth the wrath of the gods and destroys $N!", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$n reaches into $N and pulls out a fighting soul!", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$N dies quickly without much a fight.", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$n reaches into your chest and pulls your soul out, you die forever!", FALSE, ch, 0, victim, TO_VICT);
+		act("You rip the heart and soul from $N condeming $M to instant death.", FALSE, ch, 0, victim, TO_CHAR);
+
+		do_purge(ch, GET_NAME(victim), 0);
+		Registered toon(GET_NAME(victim));
+		toon.del();
+		sprintf(buf, "rm -f %s/%s.*", PLAYERS_DIR, lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		sprintf(buf, "rm -f %s/%s.dead", PLAYERS_DIR,
+				lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		sprintf(buf, "rm -f %s/%s.deaths", PLAYERS_DIR,
+				lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		sprintf(buf, "rm -f %s/%s.aux", RENT_DIR, lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		sprintf(buf, "rm -f %s/%s", RENT_DIR, lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		send_to_char("Nuked.\n\r", ch);
+	}
+}*/
+
+ACTION_FUNC(do_nuke) { 		// SIrio - Riscritto nuke per usare il DB e prevenire incongruenze nel file .dat
 	struct char_data* victim;
 	char buf[254], tmp[254];
 
@@ -6565,41 +6635,69 @@ ACTION_FUNC(do_nuke) {
 		return;
 	}
 	else {
-		mudlog(LOG_PLAYERS, "%s just nuked %s!", GET_NAME(ch),
-			   GET_NAME(victim));
-		act("$n calls forth the wrath of the gods and destroys $N!", FALSE,
-			ch, 0, victim, TO_NOTVICT);
-		act("$n reaches into $N and pulls out a fighting soul!", FALSE, ch,
-			0, victim, TO_NOTVICT);
-		act("$N dies quickly without much a fight.", FALSE, ch, 0, victim,
-			TO_NOTVICT);
-		act(
-			"$n reaches into your chest and pulls your soul out, you die forever!",
-			FALSE, ch, 0, victim, TO_VICT);
-		act(
-			"You rip the heart and soul from $N condeming $M to instant death.",
-			FALSE, ch, 0, victim, TO_CHAR);
+        // Salvo il nome prima che 'victim' venga distrutto da do_purge
+        char victim_name[80];
+        strncpy(victim_name, GET_NAME(victim), sizeof(victim_name) - 1);
+        victim_name[sizeof(victim_name) - 1] = '\0'; // Assicura terminazione nulla
+		mudlog(LOG_PLAYERS, "%s just nuked %s!", GET_NAME(ch), victim_name);
+        act("$n calls forth the wrath of the gods and destroys $N!", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$n reaches into $N and pulls out a fighting soul!", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$N dies quickly without much a fight.", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$n reaches into your chest and pulls your soul out, you die forever!", FALSE, ch, 0, victim, TO_VICT);
+		act("You rip the heart and soul from $N condeming $M to instant death.", FALSE, ch, 0, victim, TO_CHAR);
 
-		do_purge(ch, GET_NAME(victim), 0);
-		Registered toon(GET_NAME(victim));
-		toon.del();
-		sprintf(buf, "rm -f %s/%s.*", PLAYERS_DIR, lower(GET_NAME(victim)));
+        // 1. Rimuove il personaggio dal mondo di gioco
+		do_purge(ch, victim_name, 0);
+
+        // 2. NUOVA LOGICA DB: Cancella il record dalla tabella 'toon'
+        try {
+            toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(victim_name));
+
+            if (!pg || !pg->id) {
+                send_to_char("Personaggio non trovato nel database (ma purgato dal gioco).\n\r", ch);
+                mudlog(LOG_SYSERR, "do_nuke: %s purgato ma non trovato nel DB.", victim_name);
+            } else {
+                // Cancella il record
+                if (Sql::erase(*pg)) {
+                    send_to_char("Record del database cancellato.\n\r", ch);
+                    mudlog(LOG_PLAYERS, "Record DB per %s cancellato.", victim_name);
+                } else {
+                    send_to_char("ERRORE: Impossibile cancellare il record dal database.\n\r", ch);
+                    mudlog(LOG_SYSERR, "do_nuke: Fallito Sql::erase per %s.", victim_name);
+                }
+            }
+        } catch (const odb::exception& e) {
+            mudlog(LOG_SYSERR, "Errore ODB in do_nuke: %s", e.what());
+            send_to_char("Si è verificato un errore critico con il database durante il nuke.\n\r", ch);
+        }
+
+        // 3. LOGICA FILE (Completa)
+        // CANCELLIAMO TUTTI I FILE LEGACY ASSOCIATI AL PG
+
+        // File .dat (per il login fallback)
+		sprintf(buf, "rm -f %s/%s.dat", PLAYERS_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
-		sprintf(buf, "rm -f %s/%s.dead", PLAYERS_DIR,
-				lower(GET_NAME(victim)));
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+
+        // File .dead (quello che hai visto)
+		sprintf(buf, "rm -f %s/%s.dead", PLAYERS_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
-		sprintf(buf, "rm -f %s/%s.deaths", PLAYERS_DIR,
-				lower(GET_NAME(victim)));
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+
+        // File .deaths (presumibilmente esiste anche questo)
+		sprintf(buf, "rm -f %s/%s.deaths", PLAYERS_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
-		sprintf(buf, "rm -f %s/%s.aux", RENT_DIR, lower(GET_NAME(victim)));
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+
+        // 4. LOGICA RENT (MANTENUTA)
+        // Manteniamo la cancellazione dei file di RENT (inventario)
+		sprintf(buf, "rm -f %s/%s.aux", RENT_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
-		sprintf(buf, "rm -f %s/%s", RENT_DIR, lower(GET_NAME(victim)));
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+		sprintf(buf, "rm -f %s/%s", RENT_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+
 		send_to_char("Nuked.\n\r", ch);
 	}
 }
@@ -6702,7 +6800,7 @@ ACTION_FUNC(do_force_rent) {
 	} /* higher than presons level */
 }
 
-void save_ghost_forcerent(struct char_data* ch)
+/*void save_ghost_forcerent(struct char_data* ch)  <-- commentata per inserire la nuova funzione che scrive prima sul db
 {
     struct char_file_u tmp_store;
     FILE* fl;
@@ -6730,9 +6828,54 @@ void save_ghost_forcerent(struct char_data* ch)
     fwrite(&tmp_store, sizeof(struct char_file_u), 1, fl);
     fclose(fl);
 
+}*/
+
+	void save_ghost_forcerent(struct char_data* ch)
+{
+	struct char_file_u tmp_store;
+	FILE* fl;
+	char szFileName[200];
+
+	if(!IS_SET(ch->specials.act,PLR_NEW_EQ))
+	{
+		SET_BIT(ch->specials.act,PLR_NEW_EQ);
+	}
+
+	char_to_store(ch, &tmp_store);
+	tmp_store.load_room = AUTO_RENT;
+
+	/* === INIZIO MODIFICA: Recupera Password dal DB prima di salvare su File === */
+	// Questo impedisce che il file .dat venga salvato con una password vuota o corrotta
+	try {
+		toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(GET_NAME(ch)));
+		if (pg && pg->id) {
+			// Copiamo la password sicura dal DB nella struttura che sta per essere scritta su file
+			strncpy(tmp_store.pwd, pg->password.c_str(), 10);
+			// Non serve aggiornare il DB qui (Sql::update) perché il fantasma non cambia password/livelli
+		} else {
+			mudlog(LOG_SYSERR, "save_ghost_forcerent: ATTENZIONE PG %s non trovato nel DB!", GET_NAME(ch));
+		}
+	} catch (const odb::exception& e) {
+		mudlog(LOG_SYSERR, "save_ghost_forcerent: Errore DB fetch: %s", e.what());
+	}
+	/* === FINE MODIFICA === */
+
+	sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(ch->player.name));
+	if((fl = fopen(szFileName, "r+b")) == NULL)
+	{
+		if((fl = fopen(szFileName, "wb")) == NULL)
+		{
+			mudlog(LOG_ERROR, "Cannot create file %s for saving player.", szFileName);
+			return;
+		}
+	}
+
+	rewind(fl);
+	fwrite(&tmp_store, sizeof(struct char_file_u), 1, fl);
+	fclose(fl);
 }
 
-ACTION_FUNC(do_ghost) {
+/*ACTION_FUNC(do_ghost) {
 	char find_name[80];
 	struct char_file_u tmp_store;
 	struct char_data* tmp_ch, *vict;
@@ -6755,6 +6898,83 @@ ACTION_FUNC(do_ghost) {
 	}
 
 	if(load_char(find_name, &tmp_store)) {
+		CREATE(tmp_ch, struct char_data, 1);
+		clear_char(tmp_ch);
+		store_to_char(&tmp_store, tmp_ch);
+		reset_char(tmp_ch);
+		load_char_objs(tmp_ch, TRUE);
+		save_ghost_forcerent(tmp_ch);*/       // salvo il pg senza desc
+//send_to_char("stop5\n\r",ch);
+//return;
+		/*save_char(tmp_ch, AUTO_RENT, 0);
+		tmp_ch->next = character_list;
+		character_list = tmp_ch;
+		tmp_ch->specials.tick = plr_tick_count++;
+
+		if(plr_tick_count == PLR_TICK_WRAP) {
+			plr_tick_count = 0;
+		}
+
+		char_to_room(tmp_ch, ch->in_room);
+
+		tmp_ch->desc = NULL;
+
+		act("$n calls forth the soul of $N and they come.", FALSE, ch, 0,
+			tmp_ch,
+			TO_ROOM);
+		act("The soul of $N rises forth from the mortal lands.", FALSE, ch,
+			0, tmp_ch, TO_ROOM);
+
+		act("You call forth the soul of $N.", FALSE, ch, 0, tmp_ch,
+			TO_CHAR);
+		send_to_char("Be sure to forcerent them when done!\n\r", ch);
+	}
+	else {
+		send_to_char("That person does not exist.\n\r", ch);
+	}
+}*/
+
+ACTION_FUNC(do_ghost) {		// ghost aggiornato per usare il DB
+	char find_name[80];
+	struct char_file_u tmp_store;
+	struct char_data* tmp_ch, *vict;
+
+	if(!IS_PC(ch)) {
+		return;
+	}
+
+	one_argument(arg, find_name);
+
+	if(find_name[0] == '\0') {
+		send_to_char("Ghost play who?? (ghost <name>)\n\r", ch);
+		return;
+	}
+
+	if((vict = get_char(find_name))) {
+		send_to_char("Person is online, cannot control the living.\n\r",
+					 ch);
+		return;
+	}
+
+	if(load_char(find_name, &tmp_store)) {
+	/* === INIZIO MODIFICA: Sincronizza DB -> File Struct (Ghost) === */
+        try {
+            toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(find_name));
+            if (pg && pg->id) {
+                // Sovrascrivi la password letta da file con quella (vera) del DB
+                strncpy(tmp_store.pwd, pg->password.c_str(), 10);
+
+                // Opzionale: Sincronizza anche il titolo se necessario
+                if (pg->title.length() > 0) {
+                    strncpy(tmp_store.title, pg->title.c_str(), sizeof(tmp_store.title) - 1);
+                }
+
+                mudlog(LOG_PLAYERS, "do_ghost: Dati sincronizzati dal DB per %s", find_name);
+            }
+        } catch (const odb::exception& e) {
+            mudlog(LOG_SYSERR, "do_ghost: Errore DB sync: %s", e.what());
+        }
+        /* === FINE MODIFICA === */
 		CREATE(tmp_ch, struct char_data, 1);
 		clear_char(tmp_ch);
 		store_to_char(&tmp_store, tmp_ch);
