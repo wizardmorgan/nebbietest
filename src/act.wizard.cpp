@@ -4990,6 +4990,27 @@ ACTION_FUNC(do_refund) {
 		return;
 	}
 
+	/* === INIZIO CONTROLLO SICUREZZA DB === Controllo nel DB che il personaggio sia presente per non ripristinare un pg Nukato*/
+	try {
+		// Verifichiamo se il personaggio esiste nel database
+		toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(name));
+
+		if (!pg || !pg->id) {
+			send_to_char("$c0009ERRORE SICUREZZA:$c0007 Il personaggio non esiste nel Database (probabilmente Nukato).\n\r", ch);
+			send_to_char("Non puoi fare refund su un fantasma. Questo causerebbe corruzione della password.\n\r", ch);
+			send_to_char("$c0011SOLUZIONE:$c0007 Se vuoi ripristinarlo:\n\r", ch);
+			send_to_char("1. Crea il personaggio normalmente (login nuovo).\n\r", ch);
+			send_to_char("2. Fai il refund su quel personaggio appena creato.\n\r", ch);
+			mudlog(LOG_PLAYERS, "do_refund: BLOCCATO tentativo di refund su PG inesistente nel DB: %s", name);
+			return;
+		}
+	} catch (const odb::exception& e) {
+		mudlog(LOG_SYSERR, "do_refund: Errore controllo DB: %s", e.what());
+		send_to_char("Errore database durante il controllo di sicurezza.\n\r", ch);
+		return;
+	}
+	/* === FINE CONTROLLO SICUREZZA DB === */
+
     // --- (validazione input, invariata) ---
 	if(strlen(date) != 8 || atoi(date) < 0 || atoi(date) >29999999 )
 	{
