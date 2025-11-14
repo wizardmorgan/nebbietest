@@ -42,6 +42,8 @@
 #include "regen.hpp"
 #include "script.hpp"
 #include "Sql.hpp"
+#include "odb/account-odb.hxx" //Sirio per gestione registrazione pg su db
+#include "multiclass.hpp" //Sirio per gestione registrazione pg su db
 
 namespace Alarmud {
 
@@ -3303,6 +3305,42 @@ void save_char(struct char_data* ch, sh_int load_room, int bonus) {
 
 	rewind(fl);
 	fwrite(&st, sizeof(struct char_file_u), 1, fl);
+	/* === BLOCCO SINCRONIZZAZIONE DB === */
+	if (IS_PC(ch) || IS_SET(ch->specials.act, ACT_POLYSELF)) {
+
+		// Se il PG è polimorfato, assicurati di prendere il nome originale
+		char_data* ch_to_sync = (IS_POLY(ch) ? ch->desc->original : ch);
+
+		if (ch_to_sync) {
+			try {
+				// Cerca il PG nel DB
+				toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(GET_NAME(ch_to_sync)));
+
+				// Se esiste, aggiorna i suoi dati
+				if (pg && pg->id) {
+					// Sincronizza i dati critici
+
+					// 1. Sincronizza la password (usando 'st')
+					pg->password = string(st.pwd);
+
+					// 2. Sincronizza titolo e livello (usando 'st')
+					pg->title = string(st.title);
+					pg->level = st.level[BestClassIND(ch_to_sync)];
+
+					// 3. Aggiorna il DB
+					Sql::update(*pg);
+					mudlog(LOG_SAVE, "Record 'toon' per %s sincronizzato.", GET_NAME(ch_to_sync));
+
+				} else {
+					// Questo non dovrebbe accadere se la Soluzione 1 (in interpreter.cpp) è implementata
+					mudlog(LOG_SYSERR, "save_char: Impossibile trovare %s nel DB 'toon' per la sincronizzazione.", GET_NAME(ch_to_sync));
+				}
+			} catch (const odb::exception& e) {
+				mudlog(LOG_SYSERR, "Errore ODB in save_char (sincronizzazione): %s", e.what());
+			}
+		}
+	}
+	/* === FINE BLOCCO === */
 	fclose(fl);
 
 }
