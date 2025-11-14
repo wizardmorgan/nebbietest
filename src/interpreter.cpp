@@ -40,6 +40,7 @@
 #include "act.other.hpp"
 #include "act.social.hpp"
 #include "act.wizard.hpp"
+#include "multiclass.hpp"	//aggiunto per la nuova gestiopne del salvataggio pwd toon alla creazione
 #include "breath.hpp"
 #include "comm.hpp"
 #include "create.hpp"
@@ -2381,11 +2382,11 @@ NANNY_FUNC(con_qclass) {
 			/*
 			  ** now that classes are set, initialize
 			  */
-			init_char(d->character);
+			//init_char(d->character);  <-- commentato per implementare il nuovo meccanismo di salvataggio pwd del toon
 
 			/* crea i files relativi a char */
 
-			save_char(d->character, AUTO_RENT, 0);
+			//save_char(d->character, AUTO_RENT, 0);  <-- commentato per implementare il nuovo meccanismo di salvataggio pwd del toon
 
 			if(HasClass(d->character,CLASS_MAGIC_USER)) {
 				SEND_TO_Q(RU_SORCERER, d);
@@ -2760,7 +2761,58 @@ NANNY_FUNC(con_pwdnrm) {
 	return true;
 }
 NANNY_FUNC(con_register) {
-	if(d->AccountData.authorized) {
+	if(d->justCreated) {
+		// --- INIZIO NUOVA LOGICA DI CREAZIONE ---
+		// 1. Inizializza il personaggio (spostato da con_qclass)
+		// Questo imposta livelli=1, HP, mana, stats, ecc.
+		init_char(d->character);
+		StartLevels(d->character);
+
+		try {
+			// 2. Crea e popola il record del database 'toon'
+			toonPtr pg = boost::make_shared<toon>();
+			pg->name = GET_NAME(d->character);
+
+			// d->pwd è il char[11] che contiene la password criptata
+			// (impostato in con_pwdcnf)
+			pg->password = string(d->pwd);
+
+			pg->title = (GET_TITLE(d->character) ? GET_TITLE(d->character) : "");
+			pg->level = GetMaxLevel(d->character); // Sarà 1
+			pg->lastlogin = boost::posix_time::from_time_t(time(nullptr)); // Ora
+			pg->lasthost = d->host;
+
+			// Associa l'account se l'utente è ga' loggato
+			if(d->AccountData.authorized) {
+				pg->owner_id = d->AccountData.id;
+			}
+
+			// 3. Salva nel DB (FONTE PRIMARIA)
+			if (!Sql::save(*pg)) {
+				mudlog(LOG_SYSERR, "Errore Sql::save in con_register per %s", pg->name.c_str());
+				SEND_TO_Q("Errore critico nella creazione del personaggio sul DB.\n\r", d);
+				close_socket(d);
+				return false;
+			} else {
+				mudlog(LOG_CONNECT, "Nuovo record 'toon' creato per %s.", pg->name.c_str());
+			}
+
+		} catch (const odb::exception& e) {
+			mudlog(LOG_SYSERR, "Errore ODB in con_register: %s", e.what());
+			SEND_TO_Q("Errore ODB nella creazione del personaggio.\n\r", d);
+			close_socket(d);
+			return false;
+		}
+
+		// 4. Ora salva il file .dat (per compatibilita' con refund/ghost)
+		save_char(d->character, AUTO_RENT, 0);
+		mudlog(LOG_CONNECT, "Nuovo file .dat (sincronizzato) creato per %s.", GET_NAME(d->character));
+
+		// --- FINE NUOVA LOGICA DI CREAZIONE ---
+
+	} else if(d->AccountData.authorized) {
+		// Questa è la vecchia logica di 'con_register',
+		// per associare PG *esistenti* all'account.
 		boost::format fmt(R"(UPDATE toon SET owner_id =%d WHERE name="%s")");
 		fmt % d->AccountData.id % d->AccountData.choosen;
 		try {
