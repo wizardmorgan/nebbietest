@@ -129,10 +129,11 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 # LOGICA CONDIZIONALE PER L'OTTIMIZZAZIONE:
 if (NOT "$ENV{DOCKER_BUILD}" STREQUAL "")
-	# Docker: Disabilita l'ottimizzazione (-O0) per l'asserzione E definisce la macro env_vagrant
-	message(STATUS "DOCKER BUILD: Setting CXX flags to -O0 and defining env_vagrant.")
-	set(CMAKE_CXX_FLAGS "-std=c++11 -ggdb3 -pipe -pg -O0 -Denv_vagrant")
-	set(CMAKE_C_FLAGS "-std=c++11 -ggdb3 -pipe -pg -O0 -Denv_vagrant")
+	# Docker: Disabilita l'ottimizzazione (-O0), definisce env_vagrant,
+	# e AGGIUNGE -DNDEBUG per disattivare le istruzioni assert() (handler.cpp crash).
+	message(STATUS "DOCKER BUILD: Setting CXX flags to -O0, defining env_vagrant, and disabling assertions (NDEBUG).")
+	set(CMAKE_CXX_FLAGS "-std=c++11 -ggdb3 -pipe -pg -O0 -Denv_vagrant -DNDEBUG")
+	set(CMAKE_C_FLAGS "-std=c++11 -ggdb3 -pipe -pg -O0 -Denv_vagrant -DNDEBUG")
 else()
 	# Vagrant/Locale: Usa i flag di ottimizzazione originali (compatibilità)
 	message(STATUS "VAGRANT BUILD: Using original optimization flags.")
