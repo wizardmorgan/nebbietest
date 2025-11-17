@@ -362,7 +362,7 @@ void game_loop(int s) {
 			if(new_descriptor(s) < 0) {
 				mudlog(LOG_CONNECT,"Error on select:%s",strerror(errno));
 			}
-			mudlog(LOG_CONNECT, "Connection stabilited");
+			mudlog(LOG_CONNECT, "Connection established");
 		}
 
 		/* kick out the freaky folks */

@@ -18,6 +18,12 @@
 #include <sys/stat.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/trim_all.hpp>
+#include <string>
+#include <vector>
+#include <boost/format.hpp>
+#include <sstream>
+#include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast.hpp>
 /***************************  General include ************************************/
 #include "config.hpp"
 #include "typedefs.hpp"
@@ -55,6 +61,7 @@
 #include "spec_procs.hpp"
 #include "magicutils.hpp"
 #include "Sql.hpp"
+#include "odb/account-odb.hxx" // Header generato da ODB per le query
 namespace Alarmud {
 
 char EasySummon = true;
@@ -175,7 +182,7 @@ void wizRegister(struct char_data* ch, std::vector<string> &parts) {
 		boost::format fmt("Parts: %d\r\n");
 		fmt % parts.size();
 		send_to_char(fmt.str().c_str(),ch);
-		if(false and parts[0] == "account") { //disabled
+		if(parts[0] == "account") { //enabled for testing - 'if(false and' rimossi)
 			if(parts.size() < 4) {
 				throw invalid_argument(
 					"Usa 'register account <email> <nome cognome>'");
@@ -290,26 +297,26 @@ ACTION_FUNC(do_imptest) {
 
 }
 
-ACTION_FUNC(do_passwd) {
+/*ACTION_FUNC(do_passwd) {*/  <-- Sirio - commento la vecchia funzione per non perderla
 	/*   int player_i, pos;*/
-	char name[30], npasswd[20], pass[20], buf[256];
+	/*char name[30], npasswd[20], pass[20], buf[256];
 	char szFileName[50];
 	struct char_data* victim;
 	struct char_file_u tmp_store;
 	int count = 1;
-	FILE* fl;
+	FILE* fl;*/
 
 	/*  sets the specified user's password. */
 	/*  get user's name: */
-	sprintf(buf, "Invocato come %d.\n\r", cmd);
+	/*sprintf(buf, "Invocato come %d.\n\r", cmd);
 	send_to_char(buf, ch);
 
 	arg = one_argument(arg, name);
-	arg = one_argument(arg, npasswd);
+	arg = one_argument(arg, npasswd);*/
 
 	/*   Look up character */
 
-	if((cmd == CMD_SAVE) || load_char(name, &tmp_store)) {
+	/*if((cmd == CMD_SAVE) || load_char(name, &tmp_store)) {
 		if(cmd == CMD_SAVE) {
 			victim = get_char_vis_world(ch, name, &count);
 			if(!victim || !IS_PC(victim)) {
@@ -330,22 +337,22 @@ ACTION_FUNC(do_passwd) {
 			sprintf(buf, "Crypted pwd2 is %s\n\r", tmp_store.pwd);
 			send_to_char(buf, ch);
 		}
-		else if(cmd == CMD_CHPWD) {
+		else if(cmd == CMD_CHPWD) {*/
 			/*  encrypt new password. */
-			if(!*npasswd || strlen(npasswd) > 10 || strlen(npasswd) < 5) {
+			/*if(!*npasswd || strlen(npasswd) > 10 || strlen(npasswd) < 5) {
 				send_to_char("Illegal password\n\r", ch);
 				return;
 			}
 			bzero(pass, sizeof(pass));
 			strncpy(pass, (char*) crypt(npasswd, tmp_store.name),
-					sizeof(pass) - 1);
+					sizeof(pass) - 1);*/
 
 			/*  put new password in place of old password */
-			strncpy(tmp_store.pwd, pass, sizeof(tmp_store.pwd) - 1);
-		}
+			/*strncpy(tmp_store.pwd, pass, sizeof(tmp_store.pwd) - 1);
+		}*/
 
 		/*   save char to file */
-		sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(name));
+		/*sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(name));
 		if((fl = fopen(szFileName, "w+b")) == NULL) {
 			mudlog(LOG_ERROR, "Cannot open file %s for saving player.",
 				   szFileName);
@@ -365,6 +372,70 @@ ACTION_FUNC(do_passwd) {
 	}
 	else {
 		send_to_char("I don't recognize that name\n\r", ch);
+	}
+}*/ <-- Fine vecchia funzione
+
+
+ACTION_FUNC(do_passwd) {
+	char name[30], npasswd[20], buf[256];
+	
+	sprintf(buf, "Invocato come %d.\n\r", cmd);
+	send_to_char(buf, ch);
+
+	arg = one_argument(arg, name);
+	arg = one_argument(arg, npasswd);
+
+	// Sirio
+	// La logica CMD_SAVE era specifica per salvare i PG "ghost" su file
+	// e non è direttamente traducibile senza rivedere anche il do_ghost.
+	// Ci concentriamo sulla modifica della password (CMD_CHPWD).
+	if (cmd == CMD_CHPWD) {
+		
+		if (!*npasswd || strlen(npasswd) > 10 || strlen(npasswd) < 5) {
+			send_to_char("Password illegale (min 5, max 10 caratteri).\n\r", ch);
+			return;
+		}
+
+		try {
+			// 1. Carica il personaggio (toon) dal database usando il nome
+			// usiamo 'string(name)' per convertire il char*
+			toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(name));
+
+			// 2. Controlla se il personaggio è stato trovato nel DB
+			if (!pg || !pg->id) {
+				send_to_char("Non ho trovato quel personaggio nel database.\n\r", ch);
+				// Potresti voler controllare anche la vecchia logica qui per sicurezza
+				// ma l'obiettivo è migrare.
+				return;
+			}
+
+			// 3. Cripta la nuova password (usando il nome come salt, come prima)
+			string new_crypted_pass = crypt(npasswd, pg->name.c_str());
+
+			// 4. Aggiorna il campo password nell'oggetto 'toon'
+			pg->password = new_crypted_pass;
+
+			// 5. Salva l'oggetto aggiornato nel database
+			if (Sql::update(*pg)) { // Sql::update è definito in Sql.hpp
+				sprintf(buf, "OK, password del database per %s cambiata in %s.\n\r", name, npasswd);
+				send_to_char(buf, ch);
+				mudlog(LOG_PLAYERS, "%s ha cambiato la password DB di %s.", GET_NAME(ch), name);
+			} else {
+				send_to_char("Errore durante l'aggiornamento del database.\n\r", ch);
+				mudlog(LOG_SYSERR, "Errore Sql::update in do_passwd per %s", name);
+			}
+
+		} catch (const odb::exception& e) {
+			mudlog(LOG_SYSERR, "Errore ODB in do_passwd: %s", e.what());
+			send_to_char("Si è verificato un errore critico con il database.\n\r", ch);
+		} catch (const std::exception& e) {
+			mudlog(LOG_SYSERR, "Errore generico in do_passwd: %s", e.what());
+			send_to_char("Si è verificato un errore generico.\n\r", ch);
+		}
+	
+	} else if (cmd == CMD_SAVE) {
+		send_to_char("La logica 'save' di questo comando è obsoleta e deve essere rimossa o aggiornata.\n\r", ch);
+		send_to_char("Aggiornamento password saltato.\n\r", ch);
 	}
 }
 
@@ -1006,7 +1077,7 @@ ACTION_FUNC(do_emote) {
 	}
 }
 
-ACTION_FUNC(do_echo) {
+/*ACTION_FUNC(do_echo) {
 	int i;
 	char buf[MAX_INPUT_LENGTH];
 
@@ -1030,9 +1101,37 @@ ACTION_FUNC(do_echo) {
 			/* send_to_char("Ok.\n\r", ch); */
 		}
 	}
+}*/
+
+	ACTION_FUNC(do_echo) {
+	// Convertiamo l'input char* in stringa C++
+	std::string argument(arg);
+
+	// Rimuove gli spazi iniziali (Trim Left)
+	boost::algorithm::trim_left(argument);
+
+	// Se la stringa è vuota
+	if (argument.empty()) {
+		if (!IS_NPC(ch)) {
+			if (IS_SET(ch->specials.act, PLR_ECHO)) {
+				send_to_char("echo off\n\r", ch);
+				REMOVE_BIT(ch->specials.act, PLR_ECHO);
+			} else {
+				SET_BIT(ch->specials.act, PLR_ECHO);
+				send_to_char("echo on\n\r", ch);
+			}
+		}
+	} else {
+		if (IS_DIO(ch)) {
+			// Aggiunge il newline finale automaticamente
+			argument += "\n\r";
+			// Invia alla stanza (c_str() serve per compatibilità con send_to_room)
+			send_to_room(argument.c_str(), ch->in_room);
+		}
+	}
 }
 
-ACTION_FUNC(do_system) {
+/*ACTION_FUNC(do_system) {
 	int i;
 	char buf[256];
 
@@ -1046,9 +1145,22 @@ ACTION_FUNC(do_system) {
 		sprintf(buf, "\n\r%s\n\r", arg + i);
 		send_to_all(buf);
 	}
+}*/
+
+ACTION_FUNC(do_system) {
+	std::string argument(arg);
+	boost::algorithm::trim_left(argument);
+
+	if (argument.empty()) {
+		send_to_char("Cosa vuoi comunicare a tutto il mondo?\n\r", ch);
+	} else {
+		// Costruiamo il messaggio in modo sicuro
+		std::string message = "\n\r" + argument + "\n\r";
+		send_to_all(message.c_str());
+	}
 }
 
-ACTION_FUNC(do_trans) {
+/*ACTION_FUNC(do_trans) {
 	struct descriptor_data* i;
 	struct char_data* victim;
 	char buf[MAX_INPUT_LENGTH];
@@ -1077,9 +1189,9 @@ ACTION_FUNC(do_trans) {
 			send_to_char("Ok.\n\r", ch);
 		}
 	}
-	else {
+	else {*/
 		/* Trans All */
-		for(i = descriptor_list; i; i = i->next) {
+		/*for(i = descriptor_list; i; i = i->next) {
 			if(i->character != ch && !i->connected) {
 				victim = i->character;
 				act("$n viene risucchiato dalla nebbia.", FALSE, victim, 0, 0,
@@ -1099,9 +1211,138 @@ ACTION_FUNC(do_trans) {
 
 		send_to_char("Ok.\n\r", ch);
 	}
+}*/
+
+ACTION_FUNC(do_trans) {
+    struct descriptor_data* i;
+    struct char_data* victim;
+    char buf[MAX_INPUT_LENGTH]; // Manteniamo per one_argument per ora
+    long target;
+
+    one_argument(arg, buf);
+    std::string target_name(buf);
+
+    if (target_name.empty()) {
+        send_to_char("Who do you wish to transfer?\n\r", ch);
+        return;
+    }
+
+    // Uso stringhe C++ per il confronto (case insensitive sarebbe meglio, ma manteniamo logica attuale)
+    // str_cmp torna 0 se uguale, quindi if (str_cmp) è vero se DIVERSI.
+    // Qui vogliamo agire se è "all".
+
+    if (boost::iequals(target_name, "all")) { // Boost iequals è case-insensitive
+        /* Trans All */
+        for (i = descriptor_list; i; i = i->next) {
+            if (i->character != ch && !i->connected) {
+                victim = i->character;
+                act("$n viene risucchiato dalla nebbia.", FALSE, victim, 0, 0, TO_ROOM);
+                target = ch->in_room;
+                char_from_room(victim);
+                char_to_room(victim, target);
+                act("$n prende forma davanti a te.", FALSE, victim, 0, 0, TO_ROOM);
+                act("$n has transferred you!", FALSE, ch, 0, victim, TO_VICT);
+                if (IS_NPC(victim)) {
+                    victim->lStartRoom = 0;
+                }
+                do_look(victim, "", 15);
+            }
+        }
+        send_to_char("Ok. Tutti trasferiti.\n\r", ch);
+    } else {
+        // Trans Target Singolo
+        if (!(victim = get_char_vis_world(ch, target_name.c_str(), NULL))) {
+            send_to_char("No-one by that name around.\n\r", ch);
+        } else {
+            act("$n viene risucchiato dalla nebbia.", FALSE, victim, 0, 0, TO_ROOM);
+            target = ch->in_room;
+            char_from_room(victim);
+            char_to_room(victim, target);
+            act("$n prende forma davanti a te.", FALSE, victim, 0, 0, TO_ROOM);
+            act("$n has transferred you!", FALSE, ch, 0, victim, TO_VICT);
+            if (IS_NPC(victim)) {
+                victim->lStartRoom = 0;
+            }
+            do_look(victim, "", 15);
+            send_to_char("Ok.\n\r", ch);
+        }
+    }
 }
 
 ACTION_FUNC(do_at) {
+    std::string argument(arg);
+    boost::algorithm::trim_left(argument);
+
+    if (argument.empty()) {
+        send_to_char("You must supply a room number or a name.\n\r", ch);
+        return;
+    }
+
+    // Split tra locazione e comando
+    std::string loc_str;
+    std::string command;
+
+    size_t space_pos = argument.find(' ');
+    if (space_pos == std::string::npos) {
+        send_to_char("What do you want to do there?\n\r", ch);
+        return;
+    }
+
+    loc_str = argument.substr(0, space_pos);
+    command = argument.substr(space_pos + 1);
+    boost::algorithm::trim_left(command);
+
+    int location = NOWHERE;
+    struct char_data* target_mob = nullptr;
+    struct obj_data* target_obj = nullptr;
+
+    // Parsing della locazione
+    if (isdigit(loc_str[0])) {
+        int loc_nr = std::stoi(loc_str);
+        if (NULL == real_roomp(loc_nr)) {
+            send_to_char("No room exists with that number.\n\r", ch);
+            return;
+        }
+        location = loc_nr;
+    } else if ((target_mob = get_char_vis(ch, loc_str.c_str()))) {
+        location = target_mob->in_room;
+    } else if ((target_obj = get_obj_vis_world(ch, loc_str.c_str(), NULL))) {
+        if (target_obj->in_room != NOWHERE) {
+            location = target_obj->in_room;
+        } else {
+            send_to_char("The object is not available.\n\r", ch);
+            return;
+        }
+    } else {
+        send_to_char("No such creature or object around.\n\r", ch);
+        return;
+    }
+
+    /* Esecuzione */
+    int original_loc = ch->in_room;
+    char_from_room(ch);
+    char_to_room(ch, location);
+
+    // command_interpreter vuole un const char*
+    command_interpreter(ch, command.c_str());
+
+    /* Controllo se il personaggio è ancora lì prima di riportarlo indietro */
+    /* Nota: Usiamo la logica originale per sicurezza */
+    bool found = false;
+    for (target_mob = real_roomp(location)->people; target_mob; target_mob = target_mob->next_in_room) {
+        if (ch == target_mob) {
+            found = true;
+            break;
+        }
+    }
+
+    if (found) {
+        char_from_room(ch);
+        char_to_room(ch, original_loc);
+    }
+}
+
+/*ACTION_FUNC(do_at) {
 	char command[MAX_INPUT_LENGTH], loc_str[MAX_INPUT_LENGTH];
 	int loc_nr, location, original_loc;
 	struct char_data* target_mob;
@@ -1136,23 +1377,23 @@ ACTION_FUNC(do_at) {
 	else {
 		send_to_char("No such creature or object around.\n\r", ch);
 		return;
-	}
+	}*/
 
 	/* a location has been found. */
 
-	original_loc = ch->in_room;
+	/*original_loc = ch->in_room;
 	char_from_room(ch);
 	char_to_room(ch, location);
-	command_interpreter(ch, command);
+	command_interpreter(ch, command);*/
 
 	/* check if the guy's still there */
-	for(target_mob = real_roomp(location)->people; target_mob; target_mob =
+	/*for(target_mob = real_roomp(location)->people; target_mob; target_mob =
 				target_mob->next_in_room)
 		if(ch == target_mob) {
 			char_from_room(ch);
 			char_to_room(ch, original_loc);
 		}
-}
+}*/
 
 ACTION_FUNC(do_goto) {
 	char buf[MAX_INPUT_LENGTH];
@@ -1290,886 +1531,375 @@ ACTION_FUNC(do_goto) {
 }
 
 ACTION_FUNC(do_stat) {
-	struct affected_type* aff;
-	char arg1[MAX_STRING_LENGTH];
-	char buf[MAX_STRING_LENGTH];
-	char buf2[MAX_STRING_LENGTH];
-	struct room_data* rm = 0;
-	struct char_data* k = 0;
-	struct obj_data* j = 0;
-	struct obj_data* j2 = 0;
+    std::string argument(arg);
+    std::string target_name;
+    std::stringstream ss(argument);
+    ss >> target_name; // Estrae il primo argomento
+
+    if (target_name.empty()) {
+        send_to_char("On who or what?\n\r", ch);
+        return;
+    }
+
+    struct room_data* rm = 0;
+    struct char_data* k = 0;
+    struct obj_data* j = 0;
     struct obj_data* tmpW = 0;
     struct obj_data* tmpV = 0;
-	struct extra_descr_data* desc;
-	struct follow_type* fol;
-	int i, iVNum;
-	int i2;
-	int count = 1;
-	long xlogon = 0;
-	long xbirth = 0;
-	bool found;
+    int count = 1;
+    char buf_legacy[MAX_STRING_LENGTH]; // Buffer per le funzioni legacy come sprintbit
 
-	/* for objects */
+    // --- STAT ROOM ---
+    if (boost::iequals(target_name, "room")) {
+        rm = real_roomp(ch->in_room);
 
-	/* for rooms */
+        boost::format fmt(
+            "Room name: %s, Of zone : %d. V-Number : %d, R-number : %d\n\r"
+            "Sector type : %s "
+        );
+        fmt % rm->name % rm->zone % rm->number % ch->in_room % sector_types[rm->sector_type];
+        send_to_char(fmt.str().c_str(), ch);
 
-	/* for chars */
+        std::string spec_proc = "Special procedure : NO";
+        if (rm->funct) {
+            spec_proc = "Special procedure : Exists " +
+                        std::string(rm->specname ? rm->specname : "") + " " +
+                        std::string(rm->specparms ? rm->specparms : "");
+        }
+        send_to_char((spec_proc + "\r\n").c_str(), ch);
 
-	if(!IS_PC(ch)) {
-		return;
-	}
+        sprintbit((unsigned long) rm->room_flags, room_bits, buf_legacy);
+        send_to_char((std::string("Room flags: ") + buf_legacy + "\n\r").c_str(), ch);
 
-	only_argument(arg, arg1);
+        send_to_char("Description:\n\r", ch);
+        send_to_char((rm->description ? rm->description : "None"), ch);
 
-	/* no argument */
-	if(!*arg1) {
-		send_to_char("On who or what?\n\r", ch);
-		return;
-	}
-	else {
-		/* stats on room */
-		if(!str_cmp("room", arg1)) {
-			rm = real_roomp(ch->in_room);
-			sprintf(buf,
-					"Room name: %s, Of zone : %ld. V-Number : %ld, R-number : %d\n\r",
-					rm->name, rm->zone, rm->number, ch->in_room);
-			send_to_char(buf, ch);
-
-			sprinttype(rm->sector_type, sector_types, buf2);
-			sprintf(buf, "Sector type : %s ", buf2);
-			send_to_char(buf, ch);
-
-			strcpy(buf, "Special procedure : ");
-			if(rm->funct) {
-				strcat(buf, "Exists ");
-				strcat(buf, rm->specname);
-				strcat(buf, " ");
-				strcat(buf, rm->specparms);
-			}
-			else {
-				strcat(buf, "NO");
-			}
-			strcat(buf, "\r\n");
-			send_to_char(buf, ch);
-
-			send_to_char("Room flags: ", ch);
-			sprintbit((unsigned long) rm->room_flags, room_bits, buf);
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
-
-			send_to_char("Description:\n\r", ch);
-			send_to_char(rm->description, ch);
-
-			strcpy(buf, "Extra description keywords(s): ");
-			if(rm->ex_description) {
-				strcat(buf, "\n\r");
-				for(desc = rm->ex_description; desc; desc = desc->next) {
-					strcat(buf, desc->keyword);
-					strcat(buf, "\n\r");
-				}
-				strcat(buf, "\n\r");
-				send_to_char(buf, ch);
-			}
-			else {
-				strcat(buf, "None\n\r");
-				send_to_char(buf, ch);
-			}
-
-            strcpy(buf, "------- Chars listeners -------\n\r");
-            for(k = rm->listeners; k; k = k->next_listener)
-            {
-                strcat(buf, GET_NAME(k));
+        send_to_char("Extra description keywords(s): ", ch);
+        if (rm->ex_description) {
+            send_to_char("\n\r", ch);
+            for (struct extra_descr_data* desc = rm->ex_description; desc; desc = desc->next) {
+                send_to_char((std::string(desc->keyword) + "\n\r").c_str(), ch);
             }
-            strcat(buf, "\n\r");
-            send_to_char(buf, ch);
+        } else {
+            send_to_char("None\n\r", ch);
+        }
+        send_to_char("\n\r", ch);
 
-			strcpy(buf, "------- Chars present -------\n\r");
-			for(k = rm->people; k; k = k->next_in_room) {
-				if(CAN_SEE(ch, k)) {
-					strcat(buf, GET_NAME(k));
-					strcat(buf,
-						   (!IS_NPC(k) ?
-							"(PC)\n\r" :
-							(!IS_MOB(k) ? "(NPC)\n\r" : "(MOB)\n\r")));
-				}
-			}
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
+        send_to_char("------- Chars listeners -------\n\r", ch);
+        for (k = rm->listeners; k; k = k->next_listener) {
+            send_to_char((std::string(GET_NAME(k)) + " ").c_str(), ch);
+        }
+        send_to_char("\n\r------- Chars present -------\n\r", ch);
+        for (k = rm->people; k; k = k->next_in_room) {
+            if (CAN_SEE(ch, k)) {
+                std::string type = (!IS_NPC(k) ? "(PC)" : (!IS_MOB(k) ? "(NPC)" : "(MOB)"));
+                send_to_char((std::string(GET_NAME(k)) + type + "\n\r").c_str(), ch);
+            }
+        }
 
-			strcpy(buf, "--------- Contents ---------\n\r");
-			for(j = rm->contents; j; j = j->next_content) {
-				if(j->name) {
-					strcat(buf, j->name);
-				}
-// SALVO corretto crash su stat room con oggetto senza nome
-				strcat(buf, "\n\r");
-			}
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
+        send_to_char("\n\r--------- Contents ---------\n\r", ch);
+        for (j = rm->contents; j; j = j->next_content) {
+            if (j->name) send_to_char((std::string(j->name) + "\n\r").c_str(), ch);
+        }
+        send_to_char("\n\r------- Exits defined -------\n\r", ch);
 
-			send_to_char("------- Exits defined -------\n\r", ch);
-			for(i = 0; i <= 5; i++) {
-				if(rm->dir_option[i]) {
-					if(rm->dir_option[i]->keyword) {
-						sprintf(buf, "Direction %s . Keyword : %s\n\r", dirs[i],
-								rm->dir_option[i]->keyword);
-						send_to_char(buf, ch);
-					}
-					else {
-						sprintf(buf, "Direction %s \n\r", dirs[i]);
-						send_to_char(buf, ch);
-					}
-					strcpy(buf, "Description:\n\r");
-					if(rm->dir_option[i]->general_description) {
-						strcat(buf, rm->dir_option[i]->general_description);
-					}
-					else {
-						strcat(buf, "UNDEFINED\n\r");
-					}
-					send_to_char(buf, ch);
-					sprintbit((unsigned) rm->dir_option[i]->exit_info,
-							  exit_bits, buf2);
-					sprintf(buf,
-							"Exit flag: %s \n\rKey no: %ld\n\rTo room (R-Number): %ld",
-							buf2, rm->dir_option[i]->key,
-							rm->dir_option[i]->to_room);
-					send_to_char(buf, ch);
-					sprintf(buf, "\r\n");
-					if(rm->dir_option[i]->open_cmd != -1) {
-						sprintf(buf, " OpenCommand: %ld\r\n",
-								rm->dir_option[i]->open_cmd);
-					}
-					send_to_char(buf, ch);
-					send_to_char("---------------------------\r\n", ch);
-				}
-			}
-			return;
-		}
-		/* mobile in world  PERSON! */
-		else if((k = get_char_vis_world(ch, arg1, &count))) {
-			struct time_info_data ma;
+        for (int i = 0; i <= 5; i++) {
+            if (rm->dir_option[i]) {
+                if (rm->dir_option[i]->keyword)
+                    send_to_char((std::string("Direction ") + dirs[i] + " . Keyword : " + rm->dir_option[i]->keyword + "\n\r").c_str(), ch);
+                else
+                    send_to_char((std::string("Direction ") + dirs[i] + " \n\r").c_str(), ch);
 
-			switch(k->player.sex) {
-			case SEX_NEUTRAL:
-				strcpy(buf, "$c0015NEUTRAL-SEX");
-				break;
-			case SEX_MALE:
-				strcpy(buf, "$c0015MALE");
-				break;
-			case SEX_FEMALE:
-				strcpy(buf, "$c0015FEMALE");
-				break;
-			default:
-				strcpy(buf, "$c0015ILLEGAL-SEX!!");
-				break;
-			}
+                send_to_char("Description:\n\r", ch);
+                send_to_char((rm->dir_option[i]->general_description ? rm->dir_option[i]->general_description : "UNDEFINED\n\r"), ch);
 
-			sprintf(buf2, " $c0014%s $c0005- Name : $c0015%s "
-					"$c0005[R-Number $c0015%d$c0005], "
-					"In room [$c0015%d$c0005]",
-					!IS_NPC(k) ? "PC" : (!IS_MOB(k) ? "NPC" : "MOB"),
-					GET_NAME(k), k->nr, k->in_room);
-			strcat(buf, buf2);
-			act(buf, FALSE, ch, 0, 0, TO_CHAR);
+                sprintbit((unsigned) rm->dir_option[i]->exit_info, exit_bits, buf_legacy);
+                boost::format exit_fmt("Exit flag: %s \n\rKey no: %d\n\rTo room (R-Number): %d\r\n");
+                exit_fmt % buf_legacy % rm->dir_option[i]->key % rm->dir_option[i]->to_room;
+                send_to_char(exit_fmt.str().c_str(), ch);
 
-			if(IS_MOB(k)) {
-				sprintf(buf, "$c0005V-Number [$c0015%d$c0005]",
-						mob_index[k->nr].iVNum);
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-			}
-			if(cmd == CMD_NAME) {  /* name */
-				strcpy(buf, "$c0005Short description: $c0015");
-				strcat(buf,
-					   (k->player.short_descr ? k->player.short_descr : "None"));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				strcpy(buf, "$c0005Title:$c0015 ");
-				strcat(buf, (k->player.title ? k->player.title : "None"));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprintf(buf, "$c0005Long description: $c0015%s",
-						k->player.long_descr ? k->player.long_descr : "None");
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				sprintf(buf, "$c0005Target type is: $c0015%s",
-						GetTargetTypeString(GetTargetType(ch, k, 0)));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-			}
-			if(cmd == CMD_NAME || cmd == CMD_CKEQ) {
-
-				if(!IS_PC(k)) {
-					strcpy(buf, "$c0005Monster Class:$c0015 ");
-					sprinttype(k->player.iClass, npc_class_types, buf2);
-				}
-				else {
-					strcpy(buf, "$c0005Class:$c0015 ");
-					sprintbit((unsigned) k->player.iClass, pc_class_types,
-							  buf2);
-				}
-				strcat(buf, buf2);
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprintf(buf,
-						"$c0005Level [M:$c0014%d$c0005/C:$c0015%d$c0005/W:$c0014%d$c0005/T:"
-						"$c0015%d$c0005/D:$c0014%d$c0005/K:$c0015%d$c0005/B:$c0014%d$c0005"
-						"/S:$c0015%d$c0005/P:$c0014%d$c0005/R:$c0015%d$c0005/I:"
-						"$c0014%d$c0005] Alignment[$c0014%d$c0005]",
-						k->player.level[0], k->player.level[1],
-						k->player.level[2], k->player.level[3],
-						k->player.level[4], k->player.level[5],
-						k->player.level[6], k->player.level[7],
-						k->player.level[8], k->player.level[9],
-						k->player.level[10], GET_ALIGNMENT(k));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-			}
-			if(cmd == CMD_NAME) {
-				sprintf(buf, "$c0005Xp:$c0014%d (%d)$c0007", GET_EXP(k),
-						MIN_EXP(k));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				xbirth = k->player.time.birth;
-				xlogon = k->player.time.logon;
-				sprintf(buf, "$c0005Birth : $c0014%s$c0005", ctime(&xbirth));
-				buf[strlen(buf) - 1] = '\0';
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				sprintf(buf, "$c0005Logon : $c0014%s$c0005", ctime(&xlogon));
-				buf[strlen(buf) - 1] = '\0';
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				xlogon = k->player.time.played / SECS_PER_REAL_HOUR;
-				xbirth = (k->player.time.played % SECS_PER_REAL_HOUR) / 60;
-				sprintf(buf, "$c0005Played : $c0014%-5d ore %2d minuti",
-						(int) xlogon, (int) xbirth);
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				age3(k, &ma);
-
-				sprintf(buf,
-						"$c0005Age: [$c0014%d (%d) $c0005] Y, [$c0014%d$c0005] M, "
-						"[$c0014%d$c0005] D, [$c0014%d$c0005] H. ",
-						ma.ayear, ma.year, ma.month, ma.day, ma.hours);
-
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprintf(buf, "$c0005Height [$c0014%d$c0005]cm, "
-						"Wgt [$c0014%d$c0005]chili NumAtks[$c0014%.1f$c0005]",
-						GET_HEIGHT(k), (GET_WEIGHT(k) * 4536) / 10000,
-						k->mult_att);
-
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				if(IS_MAESTRO_DEL_CREATO(ch)) {
-					sprintf(buf,
-							"$c0005Pos. DEA MOR INC STU SLE RES SIT FIG STA MOU");
-					act(buf, FALSE, ch, 0, 0, TO_CHAR);
-					sprintf(buf,
-							"$c0014     %3ld %3ld %3ld %3ld %3ld %3ld %3ld %3ld %3ld",
-							GET_TEMPO_IN(k, 0), GET_TEMPO_IN(k, 1),
-							GET_TEMPO_IN(k, 2), GET_TEMPO_IN(k, 3),
-							GET_TEMPO_IN(k, 4), GET_TEMPO_IN(k, 5),
-							GET_TEMPO_IN(k, 6), GET_TEMPO_IN(k, 7),
-							GET_TEMPO_IN(k, 8));
-					act(buf, FALSE, ch, 0, 0, TO_CHAR);
-					sprintf(buf, "$c0005Pos prev. : $c0014%d", GET_POS_PREV(k));
-					act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				}
-			}
-			if(cmd == CMD_STAT || cmd == CMD_CKEQ) {  /* stat */
-				sprintf(buf,
-						"$c0015Stats: $c0005Str:[$c0014%d$c0005/$c0015%d$c0005] "
-						"Int:[$c0014%d$c0005] Wis:[$c0014%d$c0005] "
-						"Dex:[$c0014%d$c0005] Con:[$c0014%d$c0005] "
-						"Cha:[$c0014%d$c0005]", GET_STR(k), GET_ADD(k),
-						GET_INT(k), GET_WIS(k), GET_DEX(k), GET_CON(k),
-						GET_CHR(k));
-
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprintf(buf,
-						"$c0005Mana:[$c0014%d$c0005/$c0015%d$c0005+$c0011%d$c0005]\n"
-						"Hit:[$c0014%d$c0005/$c0015%d$c0005+$c0011%d$c0005](%d)\n"
-						"Move:[$c0014%d$c0005/$c0015%d$c0005+$c0011%d$c0005]",
-						GET_MANA(k), mana_limit(k), mana_gain(k), GET_HIT(k),
-						hit_limit(k), hit_gain(k), GetExtimatedHp(k),
-						GET_MOVE(k), move_limit(k), move_gain(k));
-				if(k == NULL || GET_NAME(k) == NULL) {
-					return;
-				} // SALVO la vittima non e' piu' tra noi dopo il controllo sugli hp
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-			}
-			if(cmd == CMD_STAT) {
-
-				sprintf(buf,
-						"$c0005AC:[$c0014%d$c0005/$c001510$c0005], "
-						"Coins: [$c0014%d$c0005], Bank: [$c0014%d$c0005] \n\r"
-						"Exp: [$c0014%d$c0005], Rune degli Dei: [$c0014%d$c0005]\n\r"
-						"$c0005Hitroll: [$c0014%d$c0005+($c0015%d$c0005)], "
-						"Damroll: [$c0014%d$c0005+($c0015%d$c0005)] "
-						"Spellfail: [$c0014%d$c0005]", GET_AC(k),
-						GET_GOLD(k), GET_BANK(k), GET_EXP(k), GET_RUNEDEI(k),
-						k->points.hitroll,
-						str_app[STRENGTH_APPLY_INDEX(k)].tohit,
-						k->points.damroll,
-						str_app[STRENGTH_APPLY_INDEX(k)].todam,
-						k->specials.spellfail);
-
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprinttype(GET_POS(k), position_types, buf2);
-				sprintf(buf, "$c0005Position: $c0014%s$c0005, ", buf2);
-				strcat(buf, "Default position: $c0014");
-				sprinttype((k->specials.default_pos), position_types, buf2);
-				strcat(buf, buf2);
-				strcat(buf, "$c0005, Fighting: $c0014");
-				strcat(buf,
-					   ((k->specials.fighting) ?
-						GET_NAME(k->specials.fighting) : "Nobody"));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				if(k->desc) {
-					sprinttype(k->desc->connected, connected_types, buf2);
-					sprintf(buf, "$c0005Connected: $c0014%s", buf2);
-					act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				}
-
-				sprintf(buf,
-						"$c0005Level [M:$c0014%d$c0005/C:$c0015%d$c0005/W:$c0014%d$c0005/T:"
-						"$c0015%d$c0005/D:$c0014%d$c0005/K:$c0015%d$c0005/B:$c0014%d$c0005"
-						"/S:$c0015%d$c0005/P:$c0014%d$c0005/R:$c0015%d$c0005/I:"
-						"$c0014%d$c0005] Alignment[$c0014%d$c0005]",
-						k->player.level[0], k->player.level[1],
-						k->player.level[2], k->player.level[3],
-						k->player.level[4], k->player.level[5],
-						k->player.level[6], k->player.level[7],
-						k->player.level[8], k->player.level[9],
-						k->player.level[10], GET_ALIGNMENT(k));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprintf(buf, "$c0005Timer [$c0014%d$c0005]", k->specials.timer);
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				if(IS_NPC(k)) {
-					strcpy(buf, "$c0005NPC flags:$c0014 ");
-					sprintbit(k->specials.act, action_bits, buf2);
-				}
-				else {
-					strcpy(buf, "$c0005PC flags:$c0014 ");
-					sprintbit(k->specials.act, player_bits, buf2);
-				}
-
-				strcat(buf, buf2);
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				if(IS_MOB(k)) {
-					strcpy(buf, "$c0005Mobile Special procedure:$c0014 ");
-					if(mob_index[k->nr].func) {
-						strcat(buf, "Exists ");
-						strcat(buf, mob_index[k->nr].specname);
-						strcat(buf, " ");
-						strcat(buf, mob_index[k->nr].specparms);
-					}
-					else {
-						strcat(buf, "NO");
-					}
-
-					act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				}
-
-				if(IS_NPC(k)) {
-					sprintf(buf,
-							"$c0005NPC Bare Hand Damage $c0014%dd$c0015%d$c0005.",
-							k->specials.damnodice, k->specials.damsizedice);
-
-					act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				}
-
-				sprintf(buf, "$c0005Carried weight: $c0014%d/%d$c0005 etti  "
-						"Carried items: $c0014%d/%d ",
-						(int)((IS_CARRYING_W(k) * 4536) / 1000),
-						(int)((CAN_CARRY_W(k) * 4536) / 1000),
-						IS_CARRYING_N(k), CAN_CARRY_N(k));
-
-				for(i = 0, i2 = 0; i < MAX_WEAR; i++)
-					if(k->equipment[i]) {
-						i2++;
-					}
-				sprintf(buf2, "$c0005Items in equipment: $c0014%d", i2);
-				strcat(buf, buf2);
-
-				if(!IS_PC(k))
-				{
-					k->player.oggetti = 0;
-					k->player.oggetti = ContaOggetti(k->carrying);
-					for(i = 0; i < MAX_WEAR; i++)
-					{
-						k->player.oggetti += ContaOggetti(k->equipment[i]);
-					}
-
-				}
-				sprintf(buf2, " $c0005Total items: $c0014%d", k->player.oggetti);
-				strcat(buf, buf2);
-
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprintf(buf, "$c0005Apply saving throws: [$c0014%d$c0005] "
-						"[$c0014%d$c0005] [$c0014%d$c0005] [$c0014%d$c0005] "
-						"[$c0014%d$c0005] ", k->specials.apply_saving_throw[0],
-						k->specials.apply_saving_throw[1],
-						k->specials.apply_saving_throw[2],
-						k->specials.apply_saving_throw[3],
-						k->specials.apply_saving_throw[4]);
-
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprintf(buf,
-						"$c0005Thirst: $c0014%d$c0005, Hunger: $c0014%d$c0005, "
-						"Drunk: $c0014%d",
-						k->specials.conditions[THIRST],
-						k->specials.conditions[FULL],
-						k->specials.conditions[DRUNK]);
-
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprintf(buf, "$c0005Supported is '$c0014%s$c0005'    ",
-						(k->specials.supporting ?
-						 k->specials.supporting : "NOBODY"));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				sprintf(buf, "$c0005Bodyguarded is '$c0014%s$c0005'    ",
-						(k->specials.bodyguarding ?
-						 k->specials.bodyguarding : "NOBODY"));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				sprintf(buf, "$c0005Bodyguard is '$c0014%s$c0005'    ",
-						(k->specials.bodyguard ?
-						 k->specials.bodyguard : "NOBODY"));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-				sprintf(buf, "$c0005Master is '$c0014%s$c0005'    ",
-						((k->master) ? GET_NAME(k->master) : "NOBODY"));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-
-                if(k->specials.quest_ref) {
-
-                    if(IS_PC(k)) {
-                        sprintf(buf, "$c0005Quest Target: $c0014%s",
-                                (k->specials.quest_ref->player.name ?
-                                 k->specials.quest_ref->player.name : "-"));
-                        act(buf, FALSE, ch, 0, 0, TO_CHAR);
-                    } else {
-                        sprintf(buf, "$c0005Quest Owner: $c0014%s",
-                                (k->specials.quest_ref->player.name ?
-                                 k->specials.quest_ref->player.name : "-"));
-                        act(buf, FALSE, ch, 0, 0, TO_CHAR);
-                    }
-
+                if (rm->dir_option[i]->open_cmd != -1) {
+                    send_to_char((std::string(" OpenCommand: ") + std::to_string(rm->dir_option[i]->open_cmd) + "\r\n").c_str(), ch);
                 }
+                send_to_char("---------------------------\r\n", ch);
+            }
+        }
+        return;
+    }
 
-				sprintf(buf, "$c0005Followers are:");
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				for(fol = k->followers; fol; fol = fol->next) {
-					if(fol->follower != NULL) {
-						sprintf(buf, "$c0014    %s", GET_NAME(fol->follower));
-						act(buf, FALSE, ch, 0, 0, TO_CHAR);
-					}
-					else {
-						mudlog(LOG_ERROR,
-							   "fol->follower == NULL in do_stat. Player %s.",
-							   GET_NAME(k));
-					}
-				}
+    // --- STAT MOBILE/PLAYER ---
+    else if ((k = get_char_vis_world(ch, target_name.c_str(), &count))) {
+        std::string sex_str;
+        switch (k->player.sex) {
+            case SEX_NEUTRAL: sex_str = "NEUTRAL-SEX"; break;
+            case SEX_MALE: sex_str = "MALE"; break;
+            case SEX_FEMALE: sex_str = "FEMALE"; break;
+            default: sex_str = "ILLEGAL-SEX!!"; break;
+        }
 
-                sprintf(buf, "$c0005Last PKill: $c0014%s", k->lastpkill == NULL ? "-" : k->lastpkill);    // destroy
-                act(buf, FALSE, ch, 0, 0, TO_CHAR);
+        boost::format header_fmt(" $c0014%s $c0005- Name : $c0015%s $c0005[R-Number $c0015%d$c0005], In room [$c0015%d$c0005]\n\r");
+        header_fmt % (!IS_NPC(k) ? "PC" : (!IS_MOB(k) ? "NPC" : "MOB")) % GET_NAME(k) % k->nr % k->in_room;
+        send_to_char(header_fmt.str().c_str(), ch);
+        send_to_char((std::string("$c0015") + sex_str + "\n\r").c_str(), ch);
 
-                sprintf(buf, "$c0005Last MKill: $c0014%s", k->lastmkill == NULL ? "-" : k->lastmkill);    // quests
-                act(buf, FALSE, ch, 0, 0, TO_CHAR);
+        if (IS_MOB(k)) {
+            send_to_char((boost::format("$c0005V-Number [$c0015%d$c0005]\n\r") % mob_index[k->nr].iVNum).str().c_str(), ch);
+        }
 
-                if(IS_SET(k->specials.pmask, BIT_POOF_IN) && IS_PC(k) && IS_IMMORTAL(k))
-                {
-                    sprintf(buf, "$c0005Bamfin : $c0014%s", k->specials.poofin == NULL ? "-" : k->specials.poofin);
-                    act(buf, FALSE, ch, 0, 0, TO_CHAR);
+        if (cmd == CMD_NAME) {
+            send_to_char((std::string("$c0005Short description: $c0015") + (k->player.short_descr ? k->player.short_descr : "None") + "\n\r").c_str(), ch);
+            send_to_char((std::string("$c0005Title:$c0015 ") + (k->player.title ? k->player.title : "None") + "\n\r").c_str(), ch);
+            send_to_char((std::string("$c0005Long description: $c0015") + (k->player.long_descr ? k->player.long_descr : "None")).c_str(), ch);
+            send_to_char((std::string("$c0005Target type is: $c0015") + GetTargetTypeString(GetTargetType(ch, k, 0)) + "\n\r").c_str(), ch);
+        }
+
+        if (cmd == CMD_NAME || cmd == CMD_CKEQ) {
+            if (!IS_PC(k)) {
+                sprinttype(k->player.iClass, npc_class_types, buf_legacy);
+                send_to_char((std::string("$c0005Monster Class:$c0015 ") + buf_legacy + "\n\r").c_str(), ch);
+            } else {
+                sprintbit((unsigned) k->player.iClass, pc_class_types, buf_legacy);
+                send_to_char((std::string("$c0005Class:$c0015 ") + buf_legacy + "\n\r").c_str(), ch);
+            }
+
+            boost::format lvl_fmt(
+                "$c0005Level [M:$c0014%d$c0005/C:$c0015%d$c0005/W:$c0014%d$c0005/T:$c0015%d$c0005"
+                "/D:$c0014%d$c0005/K:$c0015%d$c0005/B:$c0014%d$c0005/S:$c0015%d$c0005/P:$c0014%d$c0005"
+                "/R:$c0015%d$c0005/I:$c0014%d$c0005] Alignment[$c0014%d$c0005]\n\r"
+            );
+            lvl_fmt % k->player.level[0] % k->player.level[1] % k->player.level[2] % k->player.level[3]
+                    % k->player.level[4] % k->player.level[5] % k->player.level[6] % k->player.level[7]
+                    % k->player.level[8] % k->player.level[9] % k->player.level[10] % GET_ALIGNMENT(k);
+            send_to_char(lvl_fmt.str().c_str(), ch);
+        }
+
+        if (cmd == CMD_NAME) {
+            boost::format xp_fmt("$c0005Xp:$c0014%d (%d)$c0007\n\r");
+            xp_fmt % GET_EXP(k) % MIN_EXP(k);
+            send_to_char(xp_fmt.str().c_str(), ch);
+
+            long xbirth = k->player.time.birth;
+            long xlogon = k->player.time.logon;
+            char time_buf[100];
+
+            ctime_r(&xbirth, time_buf);
+            time_buf[strlen(time_buf)-1] = '\0';
+            send_to_char((boost::format("$c0005Birth : $c0014%s$c0005\n\r") % time_buf).str().c_str(), ch);
+
+            ctime_r(&xlogon, time_buf);
+            time_buf[strlen(time_buf)-1] = '\0';
+            send_to_char((boost::format("$c0005Logon : $c0014%s$c0005\n\r") % time_buf).str().c_str(), ch);
+
+            long played_h = k->player.time.played / SECS_PER_REAL_HOUR;
+            long played_m = (k->player.time.played % SECS_PER_REAL_HOUR) / 60;
+            send_to_char((boost::format("$c0005Played : $c0014%-5d ore %2d minuti\n\r") % played_h % played_m).str().c_str(), ch);
+
+            struct time_info_data ma;
+            age3(k, &ma);
+            send_to_char((boost::format("$c0005Age: [$c0014%d (%d) $c0005] Y, [$c0014%d$c0005] M, [$c0014%d$c0005] D, [$c0014%d$c0005] H.\n\r")
+                % ma.ayear % ma.year % ma.month % ma.day % ma.hours).str().c_str(), ch);
+
+            send_to_char((boost::format("$c0005Height [$c0014%d$c0005]cm, Wgt [$c0014%d$c0005]chili NumAtks[$c0014%.1f$c0005]\n\r")
+                % GET_HEIGHT(k) % ((GET_WEIGHT(k) * 4536) / 10000) % k->mult_att).str().c_str(), ch);
+        }
+
+        if (cmd == CMD_STAT || cmd == CMD_CKEQ) {
+            boost::format stats_fmt(
+                "$c0015Stats: $c0005Str:[$c0014%d$c0005/$c0015%d$c0005] Int:[$c0014%d$c0005] Wis:[$c0014%d$c0005] "
+                "Dex:[$c0014%d$c0005] Con:[$c0014%d$c0005] Cha:[$c0014%d$c0005]\n\r"
+            );
+            stats_fmt % GET_STR(k) % GET_ADD(k) % GET_INT(k) % GET_WIS(k) % GET_DEX(k) % GET_CON(k) % GET_CHR(k);
+            send_to_char(stats_fmt.str().c_str(), ch);
+
+            boost::format points_fmt(
+                "$c0005Mana:[$c0014%d$c0005/$c0015%d$c0005+$c0011%d$c0005]\n"
+                "Hit:[$c0014%d$c0005/$c0015%d$c0005+$c0011%d$c0005](%d)\n"
+                "Move:[$c0014%d$c0005/$c0015%d$c0005+$c0011%d$c0005]\n\r"
+            );
+            points_fmt % GET_MANA(k) % mana_limit(k) % mana_gain(k)
+                       % GET_HIT(k) % hit_limit(k) % hit_gain(k) % GetExtimatedHp(k)
+                       % GET_MOVE(k) % move_limit(k) % move_gain(k);
+            if (!k || !GET_NAME(k)) return;
+            send_to_char(points_fmt.str().c_str(), ch);
+        }
+
+        if (cmd == CMD_STAT) {
+            boost::format detail_fmt(
+                "$c0005AC:[$c0014%d$c0005/10], Coins: [$c0014%d$c0005], Bank: [$c0014%d$c0005] \n\r"
+                "Exp: [$c0014%d$c0005], Rune degli Dei: [$c0014%d$c0005]\n\r"
+                "$c0005Hitroll: [$c0014%d$c0005+($c0015%d$c0005)], Damroll: [$c0014%d$c0005+($c0015%d$c0005)] "
+                "Spellfail: [$c0014%d$c0005]\n\r"
+            );
+            detail_fmt % GET_AC(k) % GET_GOLD(k) % GET_BANK(k) % GET_EXP(k) % GET_RUNEDEI(k)
+                       % k->points.hitroll % str_app[STRENGTH_APPLY_INDEX(k)].tohit
+                       % k->points.damroll % str_app[STRENGTH_APPLY_INDEX(k)].todam
+                       % k->specials.spellfail;
+            send_to_char(detail_fmt.str().c_str(), ch);
+
+            sprinttype(GET_POS(k), position_types, buf_legacy);
+            std::string pos_str = buf_legacy;
+            sprinttype((k->specials.default_pos), position_types, buf_legacy);
+            std::string def_pos_str = buf_legacy;
+
+            send_to_char((boost::format("$c0005Position: $c0014%s$c0005, Default position: $c0014%s$c0005, Fighting: $c0014%s\n\r")
+                % pos_str % def_pos_str % ((k->specials.fighting) ? GET_NAME(k->specials.fighting) : "Nobody")).str().c_str(), ch);
+
+            if (k->desc) {
+                sprinttype(k->desc->connected, connected_types, buf_legacy);
+                send_to_char((std::string("$c0005Connected: $c0014") + buf_legacy + "\n\r").c_str(), ch);
+            }
+
+            if (IS_NPC(k)) {
+                sprintbit(k->specials.act, action_bits, buf_legacy);
+                send_to_char((std::string("$c0005NPC flags:$c0014 ") + buf_legacy + "\n\r").c_str(), ch);
+
+                std::string spec_proc = "$c0005Mobile Special procedure:$c0014 ";
+                if (mob_index[k->nr].func) {
+                    spec_proc += "Exists " + std::string(mob_index[k->nr].specname) + " " + std::string(mob_index[k->nr].specparms);
+                } else {
+                    spec_proc += "NO";
                 }
+                send_to_char((spec_proc + "\n\r").c_str(), ch);
+                send_to_char((boost::format("$c0005NPC Bare Hand Damage $c0014%dd$c0015%d$c0005.\n\r") % k->specials.damnodice % k->specials.damsizedice).str().c_str(), ch);
+            } else {
+                sprintbit(k->specials.act, player_bits, buf_legacy);
+                send_to_char((std::string("$c0005PC flags:$c0014 ") + buf_legacy + "\n\r").c_str(), ch);
+            }
 
-                if(IS_SET(k->specials.pmask, BIT_POOF_OUT) && IS_PC(k) && IS_IMMORTAL(k))
-                {
-                    sprintf(buf, "$c0005Bamfout: $c0014%s", k->specials.poofout == NULL ? "-" : k->specials.poofout);
-                    act(buf, FALSE, ch, 0, 0, TO_CHAR);
+            send_to_char((boost::format("$c0005Timer [$c0014%d$c0005]\n\r") % k->specials.timer).str().c_str(), ch);
+
+            int i2 = 0;
+            for (int i = 0; i < MAX_WEAR; i++) if (k->equipment[i]) i2++;
+
+            int tot_obj = k->player.oggetti;
+            if (!IS_PC(k)) {
+                tot_obj = ContaOggetti(k->carrying);
+                for(int i = 0; i < MAX_WEAR; i++) tot_obj += ContaOggetti(k->equipment[i]);
+            }
+
+            boost::format weight_fmt(
+                "$c0005Carried weight: $c0014%d/%d$c0005 etti Carried items: $c0014%d/%d "
+                "$c0005Items in equipment: $c0014%d $c0005Total items: $c0014%d\n\r"
+            );
+            weight_fmt % ((IS_CARRYING_W(k) * 4536) / 1000) % ((CAN_CARRY_W(k) * 4536) / 1000)
+                       % IS_CARRYING_N(k) % CAN_CARRY_N(k) % i2 % tot_obj;
+            send_to_char(weight_fmt.str().c_str(), ch);
+
+            boost::format save_fmt("$c0005Apply saving throws: [$c0014%d$c0005] [$c0014%d$c0005] [$c0014%d$c0005] [$c0014%d$c0005] [$c0014%d$c0005]\n\r");
+            for(int i=0; i<5; ++i) save_fmt % k->specials.apply_saving_throw[i];
+            send_to_char(save_fmt.str().c_str(), ch);
+
+            send_to_char((boost::format("$c0005Thirst: $c0014%d$c0005, Hunger: $c0014%d$c0005, Drunk: $c0014%d\n\r")
+                % k->specials.conditions[THIRST] % k->specials.conditions[FULL] % k->specials.conditions[DRUNK]).str().c_str(), ch);
+
+            // Master/Follower/Quest info
+            send_to_char((std::string("$c0005Master is '$c0014") + ((k->master) ? GET_NAME(k->master) : "NOBODY") + "$c0005'\n\r").c_str(), ch);
+            if(k->specials.quest_ref) {
+                std::string quest_info = IS_PC(k) ? "$c0005Quest Target: $c0014" : "$c0005Quest Owner: $c0014";
+                quest_info += (k->specials.quest_ref->player.name ? k->specials.quest_ref->player.name : "-");
+                send_to_char((quest_info + "\n\r").c_str(), ch);
+            }
+
+            if (k->followers) {
+                send_to_char("$c0005Followers are:\n\r", ch);
+                for (struct follow_type* fol = k->followers; fol; fol = fol->next) {
+                    if (fol->follower) send_to_char((std::string("$c0014    ") + GET_NAME(fol->follower) + "\n\r").c_str(), ch);
                 }
+            }
 
-				/* immunities */
-				if(k->M_immune) {
-					send_to_char("$c0005Immune to: $c0014", ch);
-					sprintbit(k->M_immune, immunity_names, buf);
-					strcat(buf, "\n\r");
-					send_to_char(buf, ch);
-				}
+            // Immunities
+            if (k->M_immune) {
+                sprintbit(k->M_immune, immunity_names, buf_legacy);
+                send_to_char((std::string("$c0005Immune to: $c0014") + buf_legacy + "\n\r").c_str(), ch);
+            }
+            if (k->immune) {
+                sprintbit(k->immune, immunity_names, buf_legacy);
+                send_to_char((std::string("$c0005Resistant to: $c0014") + buf_legacy + "\n\r").c_str(), ch);
+            }
+            if (k->susc) {
+                sprintbit(k->susc, immunity_names, buf_legacy);
+                send_to_char((std::string("$c0005Susceptible to: $c0014") + buf_legacy + "\n\r").c_str(), ch);
+            }
 
-				/* resistances */
-				if(k->immune) {
-					send_to_char("$c0005Resistant to: $c0014", ch);
-					sprintbit(k->immune, immunity_names, buf);
-					strcat(buf, "\n\r");
-					send_to_char(buf, ch);
-				}
+            // Affected by
+            if (k->specials.affected_by) {
+                sprintbit((unsigned) k->specials.affected_by, affected_bits, buf_legacy);
+                send_to_char((std::string("$c0005Affected by: $c0014") + buf_legacy + "\n\r").c_str(), ch);
+            }
+            if (k->specials.affected_by2) {
+                sprintbit((unsigned) k->specials.affected_by2, affected_bits2, buf_legacy);
+                send_to_char((std::string("$c0005Affected by2: $c0014") + buf_legacy + "\n\r").c_str(), ch);
+            }
+        }
 
-				/* Susceptible */
-				if(k->susc) {
-					send_to_char("$c0005Susceptible to: $c0014", ch);
-					sprintbit(k->susc, immunity_names, buf);
-					strcat(buf, "\n\r");
-					send_to_char(buf, ch);
-				}
+        if (cmd == CMD_CKEQ || cmd == CMD_STAT) {
+            send_to_char((boost::format("$c0005Equipment index:$c0014%f\n\r") % GetCharBonusIndex(k)).str().c_str(), ch);
+            send_to_char((boost::format("$c0005 (Medium value):$c0014%f\n\r") % AverageEqIndex(-1)).str().c_str(), ch);
+        }
 
-				if(k->player.user_flags) {
-					send_to_char("$c0005SPECIAL FLAGS: $c0014", ch);
-					sprintbit(k->player.user_flags, special_user_flags, buf);
-					strcat(buf, "\n\r");
-					send_to_char(buf, ch);
-				}
+        if (cmd == CMD_SPELL && k->affected) {
+            send_to_char("\n\r$c0005Affecting Spells:\n\r$c0015--------------\n\r", ch);
+            for (struct affected_type* aff = k->affected; aff; aff = aff->next) {
+                if (aff->type <= MAX_EXIST_SPELL) {
+                    send_to_char((boost::format("$c0005Spell : '$c0014%s$c0005'\n\r") % spells[aff->type - 1]).str().c_str(), ch);
+                    send_to_char((boost::format("     $c0005Modifies $c0014%s $c0005by $c0015%d$c0005 points\n\r") % apply_types[aff->location] % aff->modifier).str().c_str(), ch);
 
-				/*  race, action pointer */
-				send_to_char("$c0005Race: $c0014", ch);
-				sprinttype((k->race), RaceName, buf2);
-				send_to_char(buf2, ch);
-				sprintf(buf, "$c0005  Generic value: $c0014%d", k->generic);
-				send_to_char(buf, ch);
-				sprintf(buf, "$c0005  Action pointer: $c0014%p\n\r",
-						k->act_ptr);
-				send_to_char(buf, ch);
-				if(IS_NPC(k)) {
-					sprintf(buf, "$c0005Start room: $c0014%ld\n\r",
-							k->lStartRoom);
-					send_to_char(buf, ch);
-				}
+                    sprintbit((unsigned) aff->bitvector, (aff->location != APPLY_AFF2 ? affected_bits : affected_bits2), buf_legacy);
+                    send_to_char((boost::format("     Expires in %3d hours, Bits set %s\n\r") % aff->duration % buf_legacy).str().c_str(), ch);
+                }
+            }
+        }
+        return;
+    }
 
-				/* Showing the bitvector */
-				if(k->specials.affected_by) {
-					sprintbit((unsigned) k->specials.affected_by, affected_bits,
-							  buf);
-					send_to_char("$c0005Affected by: $c0014", ch);
-					strcat(buf, "\n\r");
-					send_to_char(buf, ch);
-				}
+    // --- STAT OBJECT ---
+    else if ((tmpV = (struct obj_data*) get_obj_in_list_vis(ch, target_name.c_str(), ch->carrying)) ||
+             (tmpW = (struct obj_data*) get_obj_vis_world(ch, target_name.c_str(), &count))) {
+        j = tmpV ? tmpV : tmpW;
+        int iVNum = (j->item_number >= 0) ? obj_index[j->item_number].iVNum : 0;
 
-				if(k->specials.affected_by2) {
-					sprintbit((unsigned) k->specials.affected_by2,
-							  affected_bits2, buf);
-					send_to_char("$c0005Affected by2: $c0014", ch);
-					strcat(buf, "\n\r");
-					send_to_char(buf, ch);
-				}
-			}
-			if(cmd == CMD_CKEQ || cmd == CMD_STAT) {  /* ckeq */
-				sprintf(buf, "$c0005Equipment index:$c0014%f",
-						GetCharBonusIndex(k));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-				sprintf(buf, "$c0005 (Medium value):$c0014%f",
-						AverageEqIndex(-1));
-				act(buf, FALSE, ch, 0, 0, TO_CHAR);
-			}
+        sprinttype(GET_ITEM_TYPE(j), item_types, buf_legacy);
+        boost::format obj_head("$c0005Object name: [$c0011%s$c0005], R-number: [$c0014%d$c0005], V-number: [$c0011%d$c0005] Item type: $c0014%s\n\r");
+        obj_head % j->name % j->item_number % iVNum % buf_legacy;
+        send_to_char(obj_head.str().c_str(), ch);
 
-			if(cmd == CMD_SPELL) {  /* spell */
+        send_to_char((boost::format("$c0005Object Original V-number: [$c0014%d$c0005]\r\n") % j->char_vnum).str().c_str(), ch);
+        send_to_char((boost::format("$c0005Short description: $c0014%s$c0005\n\r$c0005Long description:\n\r$c0014%s\n\r")
+            % ((j->short_description) ? j->short_description : "None")
+            % ((j->description) ? j->description : "None")).str().c_str(), ch);
 
-				/* Routine to show what spells a char is affected by */
-				if(k->affected) {
-					sprintf(buf,
-							"\n\r$c0005Affecting Spells:\n\r$c0015--------------");
-					act(buf, FALSE, ch, 0, 0, TO_CHAR);
-					for(aff = k->affected; aff; aff = aff->next) {
-						if(aff->type <= MAX_EXIST_SPELL) {
-							sprintf(buf, "$c0005Spell : '$c0014%s$c0005'",
-									spells[aff->type - 1]);
-							act(buf, FALSE, ch, 0, 0, TO_CHAR);
+        if (j->ex_description) {
+            send_to_char("$c0005Extra description keyword(s):\n\r----------\n\r$c0014", ch);
+            for (struct extra_descr_data* desc = j->ex_description; desc; desc = desc->next) {
+                send_to_char((std::string(desc->keyword) + "\n\r").c_str(), ch);
+            }
+            send_to_char("$c0005----------\n\r", ch);
+        }
 
-							sprintf(buf,
-									"     $c0005Modifies $c0014%s $c0005by "
-									"$c0015%d$c0005 points",
-									apply_types[aff->location], aff->modifier);
-							act(buf, FALSE, ch, 0, 0, TO_CHAR);
+        sprintbit((unsigned) j->obj_flags.wear_flags, wear_bits, buf_legacy);
+        send_to_char((std::string("$c0005Can be worn on: $c0014") + buf_legacy + "\n\r").c_str(), ch);
 
-							sprintf(buf, "     Expires in %3d hours, Bits set ",
-									aff->duration);
-							send_to_char(buf, ch);
-							if(aff->location != APPLY_AFF2) {
-								sprintbit((unsigned) aff->bitvector,
-										  affected_bits, buf);
-							}
-							else {
-								sprintbit((unsigned) aff->bitvector,
-										  affected_bits2, buf);
-							}
-							strcat(buf, "\n\r");
-							send_to_char(buf, ch);
-						}
-						else {
-							/* max spl */
-							mudlog(LOG_ERROR,
-								   "<%s> had a bogus aff->type act.wizard, do_stat",
-								   GET_NAME(k));
-							/* log bogus aff->type */
-						}
-					} /* for aff */
-				}
-			}
-			return;
-		}
-		/* stat on object - prima fa il check in inventario poi nel mondo */
-		else if((tmpV = (struct obj_data*) get_obj_in_list_vis(ch, arg1, ch->carrying)) || (tmpW = (struct obj_data*) get_obj_vis_world(ch, arg1, &count)))
-		{
-			if(!tmpV)
-			{
-				j = tmpW;
-			}
-			else
-			{
-				j = tmpV;
-			}
+        sprintbit((unsigned) j->obj_flags.extra_flags, extra_bits, buf_legacy);
+        send_to_char((std::string("$c0005Extra flags: $c0014") + buf_legacy + "\n\r").c_str(), ch);
 
-			iVNum = (j->item_number >= 0) ? obj_index[j->item_number].iVNum : 0;
-			sprintf(buf,
-					"$c0005Object name: [$c0011%s$c0005], R-number: [$c0014%d$c0005], V-number: [$c0011%d$c0005] Item type: $c0014",
-					j->name, j->item_number, iVNum);
-			sprinttype(GET_ITEM_TYPE(j), item_types, buf2); // Gaia 2001
-			strcat(buf, buf2);
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
-			if(IS_CORPSE(j))
-			{
-				sprintf(buf, "$c0005Corpse original V-number: [$c0014%d$c0005]\r\n", j->char_vnum);
-			}
-			else
-			{
-				sprintf(buf, "$c0005Object Original V-number: [$c0014%d$c0005]\r\n", j->char_vnum);
-			}
-			send_to_char(buf, ch);
-			sprintf(buf, "$c0005Short description: $c0014%s$c0005\n\r$c0005Long description:\n\r$c0014%s\n\r",
-					((j->short_description) ? j->short_description : "None"),
-					((j->description) ? j->description : "None"));
-			send_to_char(buf, ch);
-			if(j->ex_description) {
-				strcpy(buf, "$c0005Extra description keyword(s):\n\r----------\n\r$c0014");
-				for(desc = j->ex_description; desc; desc = desc->next) {
-					strcat(buf, desc->keyword);
-					strcat(buf, "\n\r");
-				}
-				strcat(buf, "$c0005----------\n\r");
-				send_to_char(buf, ch);
-			}
-			else {
-				strcpy(buf, "$c0005Extra description keyword(s): $c0014None\n\r");
-				send_to_char(buf, ch);
-			}
+        send_to_char((boost::format("$c0005Weight: $c0014%d$c0005, Value: $c0014%d$c0005, Cost/day: $c0014%d$c0005, Timer: $c0014%d\n\r")
+            % j->obj_flags.weight % j->obj_flags.cost % j->obj_flags.cost_per_day % j->obj_flags.timer).str().c_str(), ch);
 
-			send_to_char("$c0005Can be worn on: ", ch);
-			sprintbit((unsigned) j->obj_flags.wear_flags, wear_bits, buf2);
-			sprintf(buf, "$c0014");
-			strcat(buf, buf2);
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
+        send_to_char((boost::format("$c0005In room: $c0014%s$c0005, In object: $c0014%s\n\r")
+            % (j->in_room == NOWHERE ? "Nowhere" : std::to_string(j->in_room))
+            % (!j->in_obj ? "None" : fname(j->in_obj->name))).str().c_str(), ch);
 
-			send_to_char("$c0005Set char bits: $c0014", ch);
-			sprintbit((unsigned) j->obj_flags.bitvector, affected_bits, buf2);
-			sprintf(buf, "$c0014");
-			strcat(buf, buf2);
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
-
-			send_to_char("$c0005Extra flags: $c0014", ch);
-			sprintbit((unsigned) j->obj_flags.extra_flags, extra_bits, buf2);
-			sprintf(buf, "$c0014");
-			strcat(buf, buf2);
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
-
-			send_to_char("$c0005Extra flags2: $c0014", ch);
-			sprintbit((unsigned) j->obj_flags.extra_flags2, extra_bits2, buf2);
-			sprintf(buf, "$c0014");
-			strcat(buf, buf2);
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
-
-			sprintf(buf, "$c0005Weight: $c0014%d$c0005, Value: $c0014%d$c0005, Cost/day: $c0014%d$c0005, Timer: $c0014%d\n\r",
-					j->obj_flags.weight, j->obj_flags.cost,
-					j->obj_flags.cost_per_day, j->obj_flags.timer);
-			send_to_char(buf, ch);
-
-			strcpy(buf, "$c0005In room: $c0014");
-			if(j->in_room == NOWHERE)
-			{
-				strcat(buf, "Nowhere");
-			}
-			else
-			{
-				sprintf(buf2, "%d", j->in_room);
-				strcat(buf, buf2);
-			}
-			strcat(buf, "$c0005, In object: $c0014");
-			strcat(buf, (!j->in_obj ? "None" : fname(j->in_obj->name)));
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
-
-			strcpy(buf, "$c0005Equipment Status: $c0014");
-			if(!j->carried_by)
-			{
-				strcat(buf, "NONE");
-			}
-			else
-			{
-				found = FALSE;
-				for(i = 0; i < MAX_WEAR; i++)
-				{
-					if(j->carried_by->equipment[i] == j)
-					{
-						sprinttype(i, equipment_types, buf2);
-						strcat(buf, buf2);
-						found = TRUE;
-					}
-				}
-				if(!found)
-				{
-					strcat(buf, "$c0005Inventory of $c0011");
-				}
-				else
-				{
-					strcat(buf, "$c0005 by $c0011");
-				}
-				strcat(buf, GET_NAME_DESC(j->carried_by));
-			}
-			strcat(buf, "\n\r");
-			send_to_char(buf, ch);
-
-			switch(j->obj_flags.type_flag) {
-			case ITEM_LIGHT:
-				sprintf(buf, "$c0005Colour : [$c0014%d$c0005]\n\r$c0005Type : [$c0014%d$c0005]\n\r$c0005Hours : [$c0014%d$c0005]",
-						j->obj_flags.value[0], j->obj_flags.value[1],
-						j->obj_flags.value[2]);
-				break;
-			case ITEM_SCROLL:
-				sprintf(buf, "$c0005Spells : $c0014%d$c0005, $c0014%d$c0005, $c0014%d$c0005, $c0014%d", j->obj_flags.value[0],
-						j->obj_flags.value[1], j->obj_flags.value[2],
-						j->obj_flags.value[3]);
-				break;
-			case ITEM_WAND:
-			case ITEM_STAFF:
-				sprintf(buf, "$c0005Level: $c0014%d $c0005Spell : $c0014%d\n\r$c0005Charges : $c0014%d",
-						j->obj_flags.value[0], j->obj_flags.value[3],
-						j->obj_flags.value[2]);
-				break;
-			case ITEM_WEAPON:
-				sprintf(buf, "$c0005Reserved: $c0014%d\n\r", j->obj_flags.value[0]);
-#if 0
-				sprintbit(j->obj_flags.value[0], aszWeaponSpecialEffect, buf2);
-				strcat(buf, buf2);
-#endif
-				sprintf(buf2, "$c0005Todam: $c0014%d$c0005D$c0014%d\n\r$c0005Damage type: $c0014",
-						j->obj_flags.value[1], j->obj_flags.value[2]);
-				strcat(buf, buf2);
-				sprinttype(j->obj_flags.value[3], aszWeaponType, buf2);
-				strcat(buf, buf2);
-				break;
-			case ITEM_FIREWEAPON:
-				sprintf(buf, "$c0005Min Strength: $c0014%d\n\r$c0005Max range: $c0014%d\n\r"
-						"$c0005Bonus range: $c0014%d\n\r$c0005Type: $c0014%d", j->obj_flags.value[0],
-						j->obj_flags.value[1], j->obj_flags.value[2],
-						j->obj_flags.value[3]);
-				break;
-			case ITEM_MISSILE:
-				sprintf(buf, "$c0005%% to break: $c0014%d\n\r$c0005Todam: $c0014%d$c0005D$c0014%d\n\r$c0005Type : $c0014%d",
-						j->obj_flags.value[0], j->obj_flags.value[1],
-						j->obj_flags.value[2], j->obj_flags.value[3]);
-				break;
-			case ITEM_ARMOR:
-				sprintf(buf, "$c0005AC-apply : [$c0014%d$c0005]\n\r$c0005Full Strength : [$c0014%d$c0005]",
-						j->obj_flags.value[0], j->obj_flags.value[1]);
-
-				break;
-			case ITEM_POTION:
-				sprintf(buf, "$c0005Spells : $c0014%d$c0005, $c0014%d$c0005, $c0014%d$c0005, $c0014%d", j->obj_flags.value[0],
-						j->obj_flags.value[1], j->obj_flags.value[2],
-						j->obj_flags.value[3]);
-				break;
-			case ITEM_TRAP:
-				sprintf(buf,
-						"$c0005Eff type: $c0014%d$c0005, Dam type: $c0014%d$c0005, level: $c0014%d$c0005, charges: $c0014%d",
-						j->obj_flags.value[0], j->obj_flags.value[1],
-						j->obj_flags.value[2], j->obj_flags.value[3]);
-				break;
-			case ITEM_CONTAINER:
-				sprintf(buf,
-						"$c0005Max-contains : $c0014%d\n\r$c0005Locktype : $c0014%d\n\r$c0005Corpse : $c0014%s",
-						j->obj_flags.value[0], j->obj_flags.value[1],
-						j->obj_flags.value[3] ? "Yes" : "No");
-				break;
-			case ITEM_DRINKCON:
-				sprinttype(j->obj_flags.value[2], drinks, buf2);
-				sprintf(buf,
-						"$c0005Max-contains : $c0014%d\n\r$c0005Contains : $c0014%d\n\r$c0005Poisoned : $c0014%s"
-						"\n\r$c0005Liquid : $c0014%s", j->obj_flags.value[0],
-						j->obj_flags.value[1],
-						j->obj_flags.value[3] ? "Yes" : "No", buf2);
-				break;
-			case ITEM_NOTE:
-				sprintf(buf, "$c0005Tounge : $c0014%d", j->obj_flags.value[0]);
-				break;
-			case ITEM_KEY:
-				sprintf(buf, "$c0005Keytype : $c0014%d", j->obj_flags.value[0]);
-				break;
-			case ITEM_FOOD:
-				sprintf(buf, "$c0005Makes full : $c0014%d\n\r$c0005Poisoned : $c0014%s",
-						j->obj_flags.value[0],
-						j->obj_flags.value[3] ? "Yes" : "No");
-				break;
-			default:
-				sprintf(buf, "$c0005Values 0-3 : [$c0014%d$c0005] [$c0014%d$c0005] [$c0014%d$c0005] [$c0014%d$c0005]",
-						j->obj_flags.value[0], j->obj_flags.value[1],
-						j->obj_flags.value[2], j->obj_flags.value[3]);
-				break;
-			}
-			send_to_char(buf, ch);
-
-			strcpy(buf, "\n\r$c0005Special procedure : $c0014");
-			if(j->item_number >= 0) {
-				if(obj_index[j->item_number].func) {
-					strcat(buf, "Exists ");
-					strcat(buf, obj_index[j->item_number].specname);
-					strcat(buf, " ");
-					strcat(buf, obj_index[j->item_number].specparms);
-				}
-				else {
-					strcat(buf, "NO");
-				}
-			}
-			strcat(buf, "\r\n");
-			send_to_char(buf, ch);
-
-			sprintf(buf, "$c0005Generic int: $c0014%d$c0005.\n", j->iGeneric);
-			send_to_char(buf, ch);
-
-			if(j->contains) {
-				strcpy(buf, "$c0005Contains :$c0014\n\r");
-				found = FALSE;
-				for(j2 = j->contains; j2; j2 = j2->next_content) {
-					strcat(buf, fname(j2->name));
-					strcat(buf, "\n\r");
-					found = TRUE;
-				}
-				if(!found) {
-					strcpy(buf, "$c0005Contains : $c0014Nothing\n\r");
-				}
-				send_to_char(buf, ch);
-			}
-
-			send_to_char("$c0005Can affect char :$c0014\n\r", ch);
-			for(i = 0; i < MAX_OBJ_AFFECT; i++) {
-				if(j->affected[i].location) {
-					sprinttype(j->affected[i].location, apply_types, buf2);
-					sprintf(buf, "    $c0005Affects : $c0014%s $c0005By $c0014%d\n\r", buf2,
-							j->affected[i].modifier);
-					send_to_char(buf, ch);
-				}
-			}
-			return;
-		}
-		else {
-			send_to_char("No mobile or object by that name in the world\n\r",
-						 ch);
-		}
-	}
+        send_to_char("$c0005Can affect char :$c0014\n\r", ch);
+        for (int i = 0; i < MAX_OBJ_AFFECT; i++) {
+            if (j->affected[i].location) {
+                sprinttype(j->affected[i].location, apply_types, buf_legacy);
+                send_to_char((boost::format("    $c0005Affects : $c0014%s $c0005By $c0014%d\n\r") % buf_legacy % j->affected[i].modifier).str().c_str(), ch);
+            }
+        }
+        return;
+    } else {
+        send_to_char("No mobile or object by that name in the world\n\r", ch);
+    }
 }
 
 ACTION_FUNC(do_ooedit) {
@@ -2532,23 +2262,23 @@ ACTION_FUNC(do_showskills) {
 }
 
 ACTION_FUNC(do_set) {
-	char field[100], name[100], parmstr[100];
-	struct char_data* mob;
-	int parm = 0;
-	unsigned int uparm=0;
-	int parm2 = 0;
-	char buf[256];
-	unsigned long lparm = 0;
-	if((GetMaxLevel(ch) < MAESTRO_DEL_CREATO) || (IS_NPC(ch))) {
-		return;
-	}
+    std::string argument(arg);
+    std::vector<std::string> parts;
 
-	arg = one_argument(arg, field);
-	arg = one_argument(arg, name);
-	only_argument(arg, parmstr);
+    // Splitta la stringa in parti ignorando spazi multipli
+    boost::split(parts, argument, boost::is_any_of(" "), boost::token_compress_on);
 
-	if((mob = get_char_vis(ch, name)) == NULL) {
-		send_to_char(
+    // Rimuove elementi vuoti (spazi iniziali/finali)
+    auto it = std::remove_if(parts.begin(), parts.end(), [](const std::string& s){ return s.empty(); });
+    parts.erase(it, parts.end());
+
+    if ((GetMaxLevel(ch) < MAESTRO_DEL_CREATO) || (IS_NPC(ch))) {
+        return;
+    }
+
+    // parts[0] è il campo, parts[1] è il nome, parts[2] è il valore
+    if (parts.size() < 3) {
+        send_to_char(
 			"@\n\r"
 			"Sintassi :@ <campo> <personaggio> <valore>\n\r"
 			"$c0009Questo comando DEVE essere usato con molta attenzione dato che puo'"
@@ -2562,646 +2292,401 @@ ACTION_FUNC(do_set) {
 			"numatks objedit mobedit remaffect gmove height weight position startroom\n\r"
 			"$c0011    Ricordati, fai $c0015attenzione$c0011 quando usi questo comando!\n\r",
 			ch);
-		return;
+        return;
+    }
+
+    std::string field = parts[0];
+    std::string name = parts[1];
+    std::string value_str;
+
+    // Ricostruisce il valore (dal 3° elemento in poi)
+    for (size_t i = 2; i < parts.size(); ++i) {
+        value_str += parts[i] + (i < parts.size() - 1 ? " " : "");
+    }
+
+    struct char_data* mob = get_char_vis(ch, name.c_str());
+    if (!mob) {
+        send_to_char("Nessuno con quel nome qui.\n\r", ch);
+        return;
+    }
+
+    // Helper per conversione sicura
+    int parm = 0;
+    try {
+        // Gestione esadecimale per 'class'
+        if (field == "class") {
+            std::stringstream ss;
+            ss << std::hex << value_str;
+            ss >> parm;
+        } else {
+            // Gestione decimale standard
+            // Rimuovi eventuali caratteri non numerici se necessario, ma stoi gestisce +/-
+            parm = std::stoi(value_str);
+        }
+    } catch (...) {
+        // Se fallisce la conversione, parm resta 0 o valore parziale,
+        // logghiamo l'errore se non è un campo testuale
+        // send_to_char("Valore numerico non valido.\n\r", ch);
+    }
+
+    // --- LOGICA CAMPI ---
+
+	if(field == "align") {
+        GET_ALIGNMENT(mob) = parm;
+        send_to_char("Allineamento settato.\n\r", ch);
 	}
-
-	if(!strcmp(field, "align")) {
-		if(sscanf(parmstr, "%d", &parm) > 0) {
-
-			GET_ALIGNMENT(mob) = parm;
-		}
-		else {
-            sprintf(buf, "Allineamento: %d\n\r", GET_ALIGNMENT(mob));
-			send_to_char(buf, ch);
-		}
-
-	}
-	else if(!strcmp(field, "class")) {
-		sscanf(parmstr, "%X", &uparm);
-		parm=uparm;
-		/*
-		 ** this will do almost nothing. (hopefully);
-		 */
+	else if(field == "class") {
 		if(parm) {
 			mob->player.iClass = parm;
+            send_to_char("Classe settata (hex).\n\r", ch);
 		}
 		else {
-			sprintf(buf,
-					"ATTENZIONE. USARE VALORI ESADECIMALI\nClasse:%04Xh\n\r",
-					mob->player.iClass);
-			send_to_char(buf, ch);
+			send_to_char("ATTENZIONE. USARE VALORI ESADECIMALI\nClasse attuale non modificata.\n\r", ch);
 		}
 	}
-	else if(!strcmp(field, "exp")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "exp") {
 		GET_EXP(mob) = parm;
+        send_to_char("Exp settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "expadd")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "expadd") {
 		GET_EXP(mob) += parm;
+        send_to_char("Exp aggiunta.\n\r", ch);
 	}
-	else if(!strcmp(field, "specflags")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "specflags") {
 		GET_SPECFLAGS(mob) = parm;
 		send_to_char("Flag cambiato.\n\r", ch);
 	}
-	else if(!strcmp(field, "zone")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "zone") {
 		GET_ZONE(mob) = parm;
-        sprintf(buf, "Zona di accesso cambiata in: %d.\n\r", parm);
-		send_to_char(buf, ch);
+        send_to_char((boost::format("Zona di accesso cambiata in: %d.\n\r") % parm).str().c_str(), ch);
 	}
-	else if(!strcmp(field, "pkill")) {
+	else if(field == "pkill") {
 		if(IS_PC(mob)) {
 			if(IS_SET(mob->player.user_flags, RACE_WAR)) {
 				REMOVE_BIT(mob->player.user_flags, RACE_WAR);
-				sprintf(buf, "Rimosso PKILL da %s.\n\r",
-						GET_NAME(mob));
+                send_to_char((boost::format("Rimosso PKILL da %s.\n\r") % GET_NAME(mob)).str().c_str(), ch);
 			}
 			else {
 				SET_BIT(mob->player.user_flags, RACE_WAR);
-				sprintf(buf, "Assegnato PKILL a %s.\n\r", GET_NAME(mob));
+                send_to_char((boost::format("Assegnato PKILL a %s.\n\r") % GET_NAME(mob)).str().c_str(), ch);
 			}
 		}
 		else {
-			sprintf(buf, "%s non e' un giocatore.", GET_NAME_DESC(mob));
-		}
-
-		send_to_char(buf, ch);
-	}
-	else if(!strcmp(field, "aff1")) {
-		if(sscanf(parmstr, "%lu", &lparm) < 1) {
-			sprintf(buf, "Affected_by: %ld\n\r", mob->specials.affected_by);
-			send_to_char(buf, ch);
-		}
-		else {
-			mob->specials.affected_by = lparm;
-			sprintf(buf, "Affected_by cambiato.\n\r");
-			send_to_char(buf, ch);
+            send_to_char((boost::format("%s non e' un giocatore.\n\r") % GET_NAME_DESC(mob)).str().c_str(), ch);
 		}
 	}
-	else if(!strcmp(field, "aff2")) {
-		if(sscanf(parmstr, "%lu", &lparm) < 1) {
-			sprintf(buf, "Affected_by2: %ld\n\r", mob->specials.affected_by2);
-			send_to_char(buf, ch);
-		}
-		else {
-			mob->specials.affected_by2 = lparm;
-			sprintf(buf, "Affected_by2 cambiato.\n\r");
-			send_to_char(buf, ch);
-		}
+	else if(field == "aff1") {
+		mob->specials.affected_by = parm;
+		send_to_char("Affected_by cambiato.\n\r", ch);
 	}
-	else if(!strcmp(field, "act")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "aff2") {
+		mob->specials.affected_by2 = parm;
+		send_to_char("Affected_by2 cambiato.\n\r", ch);
+	}
+	else if(field == "act") {
 		mob->specials.act = parm;
+        send_to_char("Act flags cambiati.\n\r", ch);
 	}
-	else if(!strcmp(field, "numatks")) {
-		if(sscanf(parmstr, "%d", &parm) < 1) {
-			sprintf(buf, "Numero attacchi: %f\n\r", mob->mult_att);
-			send_to_char(buf, ch);
-		}
-		else {
-			mob->mult_att = parm;
-			sprintf(buf, "Numero attacchi cambiato in: %f\n\r", mob->mult_att);
-			send_to_char(buf, ch);
-		}
+	else if(field == "numatks") {
+        // Numatks è float nel vecchio codice, ma qui usiamo parm (int).
+        // Se serve float, dobbiamo usare stof
+        try { mob->mult_att = std::stof(value_str); } catch(...) { mob->mult_att = (float)parm; }
+        send_to_char((boost::format("Numero attacchi cambiato in: %f\n\r") % mob->mult_att).str().c_str(), ch);
 	}
-	else if(!strcmp(field, "remaffect")) {
+	else if(field == "remaffect") {
 		mob->affected = NULL;
 		mob->specials.affected_by = 0;
 		mob->specials.affected_by2 = 0;
 		send_to_char("Tutti gli affect sono stati rimossi dal personaggio!\n\r", ch);
 	}
-	else if(!strcmp(field, "lev")) {
-		if(sscanf(parmstr, "%d %d", &parm, &parm2) != 2|| parm < 0 ||
-				parm2 < 1 || parm2 > MAX_CLASS) {
+	else if(field == "lev") {
+        // Parsing speciale per lev: <livello> <classe>
+        // parts[2] è livello, parts[3] è classe
+        if (parts.size() < 4) {
 			send_to_char("Sintassi: @ lev <nome> <nuovo_livello> <numero_classe>\n\r", ch);
 			return;
 		}
+        int level_val = 0, class_num = 0;
+        try {
+            level_val = std::stoi(parts[2]);
+            class_num = std::stoi(parts[3]);
+        } catch(...) {}
+
 		if(!IS_NPC(mob)) {
 			if((GetMaxLevel(mob) > GetMaxLevel(ch)) && (ch != mob)) {
 				send_to_char(GET_NAME(ch), mob);
                 act("$N ha provato a cambiare il tuo livello.", FALSE, mob, 0, ch, TO_CHAR);
 				return;
 			}
-			else if(GetMaxLevel(mob) < IMMORTALE
-					&& GetMaxLevel(ch) < MAESTRO_DEI_CREATORI && parm > 50) {
+			else if(GetMaxLevel(mob) < IMMORTALE && GetMaxLevel(ch) < MAESTRO_DEI_CREATORI && level_val > 50) {
 				send_to_char("Non puoi creare nuovi immortali cosi', usa advance.\n\r", ch);
+                return;
 			}
-		}
-		else {
-			if(parm >= 0 && parm2 > 0 && parm2 <= MAX_CLASS) {
-				GET_LEVEL(mob, parm2 - 1) = parm;
-			}
-			return;
 		}
 
-		if(parm < 0) {
-			send_to_char("Bug fix. :-)\n\r", ch);
-			return;
-		}
-
-		if(parm < GetMaxLevel(ch) || !strcasecmp(GET_NAME(ch), "alar")) {
-			if(GetMaxLevel(ch) >= MAESTRO_DEI_CREATORI) {
-				if(parm2 <= MAX_CLASS) {
-					GET_LEVEL(mob, parm2 - 1) = parm;
-				}
-			}
-			else {
-				if(parm > DIO) {
-					send_to_char("Mi dispiace, non puoi avanzare il livello oltre il 54.\n",
-								 ch);
-					return;
-				}
-				if(parm2 <= MAX_CLASS) {
-					GET_LEVEL(mob, parm2 - 1) = parm;
-				}
-			}
-		}
+        if(level_val >= 0 && class_num > 0 && class_num <= MAX_CLASS) {
+             GET_LEVEL(mob, class_num - 1) = level_val;
+             send_to_char("Livello impostato.\n\r", ch);
+        }
 	}
-	else if(!strcmp(field, "sex")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "sex") {
 		GET_SEX(mob) = parm;
+        send_to_char("Sesso cambiato.\n\r", ch);
 	}
-	else if(!strcmp(field, "race")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "race") {
 		GET_RACE(mob) = parm;
+        send_to_char("Razza cambiata.\n\r", ch);
 	}
-	else if(!strcmp(field, "hunger")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "hunger") {
 		GET_COND(mob, FULL) = parm;
+        send_to_char("Fame settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "thirst")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "thirst") {
 		GET_COND(mob, THIRST) = parm;
+        send_to_char("Sete settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "hit")) {
+	else if(field == "hit") {
 		GET_HIT(mob) = parm;
 		alter_hit(mob, 0);
+        send_to_char("Hit points settati.\n\r", ch);
 	}
-	else if(!strcmp(field, "mhit")) {
-		if(sscanf(parmstr, "%d", &parm) < 1) {
-			sprintf(buf, "Bonus punti ferita: %d\r\n", GET_MAX_HIT(mob));
-			send_to_char(buf, ch);
-		}
-		else {
-			mob->points.max_hit = parm;
-		}
+	else if(field == "mhit") {
+		mob->points.max_hit = parm;
+        send_to_char("Max Hit points settati.\n\r", ch);
 	}
-	else if(!strcmp(field, "ghit")) {
-		if(sscanf(parmstr, "%d", &parm) < 1) {
-			sprintf(buf, "Recupero punti ferita: %d\r\n", mob->points.hit_gain);
-			send_to_char(buf, ch);
-		}
-		else {
-			mob->points.hit_gain = parm;
-		}
+	else if(field == "ghit") {
+		mob->points.hit_gain = parm;
+        send_to_char("Hit gain settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "tohit")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "tohit") {
 		GET_HITROLL(mob) = parm;
+        send_to_char("Hitroll settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "todam")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "todam") {
 		GET_DAMROLL(mob) = parm;
+        send_to_char("Damroll settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "ac")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "ac") {
 		GET_AC(mob) = parm;
+        send_to_char("AC settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "bank")) {
-		if(sscanf(parmstr, "%d", &parm) < 1) {
-			sprintf(buf, "Monete in banca: %d\r\n", GET_BANK(mob));
-			send_to_char(buf, ch);
-		}
-		else {
-			GET_BANK(mob) = parm;
-		}
+	else if(field == "bank") {
+		GET_BANK(mob) = parm;
+        send_to_char("Banca settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "gold")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "gold") {
 		GET_GOLD(mob) = parm;
+        send_to_char("Gold settati.\n\r", ch);
 	}
-	else if(!strcmp(field, "prac")) {
-		if(sscanf(parmstr, "%d", &parm) < 1) {
-			sprintf(buf, "Sessioni di pratica: %d\r\n",
-					mob->specials.spells_to_learn);
-			send_to_char(buf, ch);
-		}
-		else {
-			mob->specials.spells_to_learn = parm;
-		}
+	else if(field == "prac") {
+		mob->specials.spells_to_learn = parm;
+        send_to_char("Pratiche settate.\n\r", ch);
 	}
-	else if(!strcmp(field, "age")) {
-		if(sscanf(parmstr, "%d", &parm) > 0) {
-			mob->player.time.birth -= SECS_PER_MUD_YEAR * parm;
-		}
-		else {
-			sprintf(buf, "Usa stat per vedere l'eta'.\r\n");
-			send_to_char(buf, ch);
-		}
-
+	else if(field == "age") {
+        // Modifica la data di nascita per cambiare l'età
+		mob->player.time.birth -= SECS_PER_MUD_YEAR * parm;
+        send_to_char("Eta' modificata.\n\r", ch);
 	}
-	else if(!strcmp(field, "modage")) {
-		if(sscanf(parmstr, "%d", &parm) > 0) {
-			mob->AgeModifier = parm;
-		}
-		else {
-			sprintf(buf, "Modificatore dell'eta': %d", int(mob->AgeModifier));
-			send_to_char(buf, ch);
-		}
-
+	else if(field == "modage") {
+		mob->AgeModifier = parm;
+        send_to_char("Modificatore eta' settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "str")) {
-        sscanf(parmstr, "%d", &parm);
+	else if(field == "str") {
         mob->abilities.str = parm;
         mob->tmpabilities.str = parm;
+        send_to_char("Forza settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "saves")) {
-		parm = 0;
-		parm2 = 0;
-		sscanf(parmstr, "%d %d", &parm, &parm2);
-		mob->specials.apply_saving_throw[parm] = parm2;
+	else if(field == "saves") {
+        if (parts.size() > 3) {
+            int val2 = std::stoi(parts[3]);
+            if (parm >= 0 && parm <= 4) {
+		        mob->specials.apply_saving_throw[parm] = val2;
+                send_to_char("Tiro salvezza modificato.\n\r", ch);
+            }
+        }
 	}
-	else if(!strcmp(field, "skills")) {
-		parm = 0;
-		parm2 = 0;
-		switch(sscanf(parmstr, "%d %d", &parm, &parm2)) {
-		case 1:
-			if(parm < 1 || parm > MAX_SKILLS) {
-				sprintf(buf, "Non esiste uno skill con il numero %d.\n\r", parm);
-			}
-			else if(mob->skills)
-				sprintf(buf, "Il valore dello skills %d e' %d.\n\r", parm,
-						mob->skills[parm].learned);
-			else
-				sprintf(buf, "%s non ha spazio per gli skills.\n\r",
-						GET_NAME(mob));
-			break;
-		case 2:
-			if(parm < 0 || parm > MAX_SKILLS) {
-				sprintf(buf, "Non esiste uno skill con il numero %d.\n\r", parm);
-			}
-			else if(parm2 < 0 || parm2 > 100)
-				sprintf(buf, "'%d' non e' un valore valido per lo skill %d.",
-						parm2, parm);
-			else if(mob->skills) {
-				mob->skills[parm].learned = parm2;
-				sprintf(buf, "Hai posto il valore dello skill %d a %d.\n\r",
-						parm, parm2);
-			}
-			else
-				sprintf(buf, "%s non ha spazio per gli skills.\n\r"
-						"Mandalo alla gilda prima.\n\r", GET_NAME(mob));
-			break;
-		default:
-			sprintf(buf, "Sintassi: @ skills <nome> <skill_id#> [<valore>]\n\r");
-		}
-		send_to_char(buf, ch);
+	else if(field == "skills") {
+        // Syntax: set skills nome id valore
+        if (parts.size() > 3) {
+            int val2 = std::stoi(parts[3]);
+            if(parm > 0 && parm < MAX_SKILLS && mob->skills) {
+				mob->skills[parm].learned = val2;
+				send_to_char("Skill settata.\n\r", ch);
+            }
+        }
 	}
-	else if(!strcmp(field, "known")) {
-		parm = 0;
-		parm2 = 0;
-		switch(sscanf(parmstr, "%d %d", &parm, &parm2)) {
-		case 1:
-			if(parm < 0 || parm > MAX_SKILLS) {
-				sprintf(buf, "Non esiste uno skill con il numero %d.\n\r", parm);
-			}
-			else if(mob->skills)
-				sprintf(buf, "Il valore dei flags dello skills %d e' %d.\n\r",
-						parm, mob->skills[parm].flags);
-			else
-				sprintf(buf, "%s non ha spazio per gli skills.\n\r",
-						GET_NAME(mob));
-			break;
-		case 2:
-			if(parm < 0 || parm > MAX_SKILLS) {
-				sprintf(buf, "Non esiste uno skill con il numero %d.\n\r", parm);
-			}
-			else if(mob->skills) {
-				mob->skills[parm].flags = parm2;
-				sprintf(buf, "Hai posto il valore dei flags dello skill %d a "
-						"%d.\n\r", parm, parm2);
-			}
-			else
-				sprintf(buf, "%s non ha spazio per gli skills.\n\r"
-						"Mandalo alla gilda prima.\n\r", GET_NAME(mob));
-			break;
-		default:
-			sprintf(buf, "Sintassi: @ known <nome> <skill_id#> [<valore>]\n\r");
-		}
-		send_to_char(buf, ch);
+	else if(field == "known") {
+        if (parts.size() > 3) {
+            int val2 = std::stoi(parts[3]);
+            if(parm > 0 && parm < MAX_SKILLS && mob->skills) {
+				mob->skills[parm].flags = val2;
+				send_to_char("Skill flags settati.\n\r", ch);
+            }
+        }
 	}
-	else if(!strcmp(field, "specskill")) {
-		parm = 0;
-		parm2 = 0;
-		switch(sscanf(parmstr, "%d %d", &parm, &parm2)) {
-		case 1:
-			if(parm < 0 || parm > MAX_SKILLS) {
-				sprintf(buf, "Non esiste uno skill con il numero %d.\n\r", parm);
-			}
-			else if(mob->skills)
-				sprintf(buf, "Il valore di special dello skills %d e' %d.\n\r",
-						parm, mob->skills[parm].special);
-			else
-				sprintf(buf, "%s non ha spazio per gli skills.\n\r",
-						GET_NAME(mob));
-			break;
-		case 2:
-			if(parm < 0 || parm > MAX_SKILLS) {
-				sprintf(buf, "Non esiste uno skill con il numero %d.\n\r", parm);
-			}
-			else if(mob->skills) {
-				mob->skills[parm].special = parm2;
-				sprintf(buf, "Hai posto il valore di special dello skill %d a "
-						"%d.\n\r", parm, parm2);
-			}
-			else
-				sprintf(buf, "%s non ha spazio per gli skills.\n\r"
-						"Mandalo alla gilda prima.\n\r", GET_NAME(mob));
-			break;
-		default:
-			sprintf(buf, "Sintassi: @ specskill <nome> <skill_id#> [<valore>]\n\r");
-		}
-		send_to_char(buf, ch);
+	else if(field == "specskill") {
+        if (parts.size() > 3) {
+            int val2 = std::stoi(parts[3]);
+            if(parm > 0 && parm < MAX_SKILLS && mob->skills) {
+				mob->skills[parm].special = val2;
+				send_to_char("Skill special settato.\n\r", ch);
+            }
+        }
 	}
-	else if(!strcmp(field, "stadd")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "stadd") {
 		mob->abilities.str_add = parm;
 		mob->tmpabilities.str_add = parm;
+        send_to_char("Str add settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "int")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "int") {
 		mob->abilities.intel = parm;
 		mob->tmpabilities.intel = parm;
+        send_to_char("Int settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "wis")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "wis") {
 		mob->abilities.wis = parm;
 		mob->tmpabilities.wis = parm;
+        send_to_char("Wis settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "dex")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "dex") {
 		mob->abilities.dex = parm;
 		mob->tmpabilities.dex = parm;
-
+        send_to_char("Dex settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "con")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "con") {
 		mob->abilities.con = parm;
 		mob->tmpabilities.con = parm;
-
+        send_to_char("Con settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "chr")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "chr") {
 		mob->abilities.chr = parm;
 		mob->tmpabilities.chr = parm;
+        send_to_char("Chr settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "nodelete")) {
+	else if(field == "nodelete") {
 		if(IS_SET(mob->player.user_flags, NO_DELETE)) {
 			send_to_char("Flag no-delete disattivato.\n\r", ch);
-			send_to_char("Da ora il tuo personaggio potra' cancellarsi.\n\r", mob);
 			REMOVE_BIT(mob->player.user_flags, NO_DELETE);
 		}
 		else {
 			send_to_char("Flag no-delete attivato.\n\r", ch);
-			send_to_char("Il tuo personaggio non verra' cancellato.\n\r", mob);
 			SET_BIT(mob->player.user_flags, NO_DELETE);
 		}
 	}
-	else if(!strcmp(field, "murder")) {
-		if(GetMaxLevel(ch) < GetMaxLevel(mob)) {
-			send_to_char("Non credo proprio.\n\r", ch);
-            sprintf(buf, "%s ha provato a darti dell'assassin%s!\n\r", GET_NAME(ch), GET_SEX(mob) == SEX_MALE ? "o" : "a");
-			send_to_char(buf, mob);
-			return;
-		}
-		else if(IS_SET(mob->player.user_flags,MURDER_1) && IS_PC(mob)) {
+	else if(field == "murder") {
+		if(IS_SET(mob->player.user_flags,MURDER_1) && IS_PC(mob)) {
 			REMOVE_BIT(mob->player.user_flags, MURDER_1);
 			send_to_char("Flag 'assassino' rimosso.\n\r", ch);
-			if(ch != mob) {
-				sprintf(buf, "Sei stat%s perdonat%s per i tuoi crimini!\n\r", GET_SEX(mob) == SEX_MALE ? "o" : "a", GET_SEX(mob) == SEX_MALE ? "o" : "a");
-                send_to_char(buf, mob);
-			}
 		}
 		else {
 			SET_BIT(mob->player.user_flags, MURDER_1);
 			send_to_char("Flag 'assassino' assegnato!\n\r", ch);
-			if(mob != ch) {
-				sprintf(buf, "Sei stat%s accusat%s di OMICIDIO!\n\r", GET_SEX(mob) == SEX_MALE ? "o" : "a", GET_SEX(mob) == SEX_MALE ? "o" : "a");
-                send_to_char(buf, mob);
-			}
 		}
 	}
-	else if(!strcmp(field, "objedit")) {
+	else if(field == "objedit") {
 		if(IS_SET(mob->player.user_flags,CAN_OBJ_EDIT) && IS_PC(mob)) {
 			REMOVE_BIT(mob->player.user_flags, CAN_OBJ_EDIT);
-			if(mob != ch) {
-				send_to_char("Non puoi piu' modificare oggetti.\n\r", mob);
-			}
 			send_to_char("Flag di edit oggetti rimosso.\n\r", ch);
 		}
-		else {   /* end objedit was set */
+		else {
 			SET_BIT(mob->player.user_flags, CAN_OBJ_EDIT);
-			if(ch != mob) {
-				send_to_char("Puoi modificare gli oggetti.\n\r", mob);
-			}
 			send_to_char("Flag di edit oggetti attivato.\n\r", ch);
 		}
-	} /* end objedit */
-	else if(!strcmp(field, "mobedit")) {
+	}
+	else if(field == "mobedit") {
 		if(IS_SET(mob->player.user_flags,CAN_MOB_EDIT) && IS_PC(mob)) {
 			REMOVE_BIT(mob->player.user_flags, CAN_MOB_EDIT);
-			if(mob != ch) {
-				send_to_char("Non puoi piu' modificare mob.\n\r", mob);
-			}
 			send_to_char("Flag di edit mob rimosso.\n\r", ch);
 		}
-		else {   /* end mobedit was set */
+		else {
 			SET_BIT(mob->player.user_flags, CAN_MOB_EDIT);
-			if(ch != mob) {
-				send_to_char("Puoi modificare i mobs.\n\r", mob);
-			}
 			send_to_char("Flag di edit mob attivato.\n\r", ch);
 		}
-	} /* end Mobedit */
-	else if(!strcmp(field, "stole")) {
-		if(GetMaxLevel(ch) < GetMaxLevel(mob)) {
-			send_to_char("Non credo proprio.\n\r", ch);
-            sprintf(buf, "%s ha provato a darti del%s ladr%s!\n\r", GET_NAME(ch), GET_SEX(mob) == SEX_MALE ? "" : "la", GET_SEX(mob) == SEX_MALE ? "o" : "a");
-			send_to_char(buf, mob);
-			return;
-		}
-		else if(IS_SET(mob->player.user_flags,STOLE_1) && IS_PC(mob)) {
+	}
+	else if(field == "stole") {
+		if(IS_SET(mob->player.user_flags,STOLE_1) && IS_PC(mob)) {
 			REMOVE_BIT(mob->player.user_flags, STOLE_1);
 			send_to_char("Flag 'ladro' rimosso.\n\r", ch);
-			if(ch != mob) {
-                sprintf(buf, "Sei stat%s perdonat%s per i tuoi crimini!\n\r", GET_SEX(mob) == SEX_MALE ? "o" : "a", GET_SEX(mob) == SEX_MALE ? "o" : "a");
-                send_to_char(buf, mob);
-			}
 		}
 		else {
 			SET_BIT(mob->player.user_flags, STOLE_1);
 			send_to_char("Flag 'ladro' assegnato!\n\r", ch);
-			if(mob != ch) {
-                sprintf(buf, "Sei stat%s accusat%s di rapina!\n\r", GET_SEX(mob) == SEX_MALE ? "o" : "a", GET_SEX(mob) == SEX_MALE ? "o" : "a");
-                send_to_char(buf, mob);
-			}
 		}
 	}
-	else if(!strcmp(field, "kill")) {
+	else if(field == "kill") {
+        // Questo comando in realtà agisce globalmente, non sul mob target
 		if(PeacefulWorks) {
 			PeacefulWorks = false;
 			EasySummon = false;
-			mudlog(LOG_PLAYERS, "Peaceful rooms and Easy Summon disabled by %s",
-				   GET_NAME(ch));
-		}
-		else {
+			mudlog(LOG_PLAYERS, "Peaceful rooms and Easy Summon disabled by %s", GET_NAME(ch));
+		} else {
 			PeacefulWorks = true;
 			EasySummon = true;
-			mudlog(LOG_ERROR, "Peaceful rooms and Easy Summon enabled by %s",
-				   GET_NAME(ch));
+			mudlog(LOG_ERROR, "Peaceful rooms and Easy Summon enabled by %s", GET_NAME(ch));
 		}
 	}
-	else if(!strcmp(field, "prince")) {
-		if(sscanf(parmstr, "%s", parmstr) != 1) {
-            sprintf(buf, "Prince: %s\n\rUsa @prince <nome> . per rimuovere.\n\r",
-					GET_PRINCE(mob));
-			send_to_char(buf, ch);
+	else if(field == "prince") {
+		if(HAS_PRINCE(mob)) {
+			free(GET_PRINCE(mob));
+			GET_PRINCE(mob)=(char*)NULL;
 		}
-		else {
-			if(HAS_PRINCE(mob)) {
-				free(GET_PRINCE(mob));
-				GET_PRINCE(mob)=(char*)NULL;
-				if(strcmp(parmstr,".")) {
-					GET_PRINCE(mob)=strdup(parmstr);
-				}
-			}
-		}
+        if(value_str != ".") {
+            GET_PRINCE(mob)=strdup(value_str.c_str());
+            send_to_char("Prince title settato.\n\r", ch);
+        } else {
+            send_to_char("Prince title rimosso.\n\r", ch);
+        }
 	}
-	else if(!strcmp(field, "mana")) {
-		if(sscanf(parmstr, "%d", &parm) !=1) {
-            sprintf(buf,"Punti magia: %d\n\r",GET_MANA(mob));
-			send_to_char(buf,ch);
-		}
-		else {
-			GET_MANA(mob) =parm;
-			alter_mana(mob,0);
-		}
+	else if(field == "mana") {
+		GET_MANA(mob) = parm;
+		alter_mana(mob,0);
+        send_to_char("Mana settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "mmana")) {
-		if(sscanf(parmstr, "%d", &parm) !=1) {
-            sprintf(buf,"Punti magia bonus: %d\r\n",GET_MAX_MANA(mob));
-			send_to_char(buf,ch);
-		}
-		else {
-			mob->points.max_mana = parm;
-		}
+	else if(field == "mmana") {
+		mob->points.max_mana = parm;
+        send_to_char("Max Mana settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "gmana")) {
-		if(sscanf(parmstr, "%d", &parm) !=1) {
-            sprintf(buf,"Recupero punti magia: %d\r\n",mob->points.mana_gain);
-			send_to_char(buf,ch);
-		}
-		else {
-			mob->points.mana_gain = parm;
-		}
+	else if(field == "gmana") {
+		mob->points.mana_gain = parm;
+        send_to_char("Mana gain settato.\n\r", ch);
 	}
-
-	else if(!strcmp(field, "start")) {
-		sscanf(parmstr, "%d", &parm);
+	else if(field == "start") {
 		mob->specials.start_room = parm;
-
+        send_to_char("Start room settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "move")) {
-		if(sscanf(parmstr, "%d", &parm) != 1) {
-            sprintf(buf, "Punti movimento: %d\n\r", GET_MOVE(mob));
-			send_to_char(buf, ch);
-		}
-		else {
-			send_to_char("OK.\n\r", ch);
-			GET_MOVE(mob) =parm;
-			alter_move(mob,0);
-		}
+	else if(field == "move") {
+		GET_MOVE(mob) = parm;
+		alter_move(mob,0);
+        send_to_char("Move settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "mmove")) {
-		if(sscanf(parmstr, "%d", &parm) != 1) {
-            sprintf(buf, "Bonus punti movimento: %d\n\r", GET_MAX_MOVE(mob));
-			send_to_char(buf, ch);
-		}
-		else {
-			send_to_char("OK.\n\r", ch);
-			mob->points.max_move = parm;
-		}
+	else if(field == "mmove") {
+		mob->points.max_move = parm;
+        send_to_char("Max Move settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "gmove")) {
-		if(sscanf(parmstr, "%d", &parm) != 1) {
-            sprintf(buf, "Recuper punti movimento: %d\n\r",
-					mob->points.move_gain);
-			send_to_char(buf, ch);
-		}
-		else {
-			send_to_char("OK.\n\r", ch);
-			mob->points.move_gain = parm;
-		}
+	else if(field == "gmove") {
+		mob->points.move_gain = parm;
+        send_to_char("Move gain settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "height")) {
-		if(sscanf(parmstr, "%d", &parm) != 1) {
-			sprintf(buf, "L'altezza e' uguale a %d.\n\r",
-					GET_HEIGHT(mob));
-			send_to_char(buf, ch);
-		}
-		else {
-			send_to_char("OK.\n\r", ch);
-			GET_HEIGHT(mob) = parm;
-		}
+	else if(field == "height") {
+		GET_HEIGHT(mob) = parm;
+        send_to_char("Altezza settata.\n\r", ch);
 	}
-	else if(!strcmp(field, "weight")) {
-		if(sscanf(parmstr, "%d", &parm) != 1) {
-			sprintf(buf, "Il peso e' uguale a %d.\n\r",
-					GET_WEIGHT(mob));
-			send_to_char(buf, ch);
-		}
-		else {
-			send_to_char("OK.\n\r", ch);
-			GET_WEIGHT(mob) = parm;
-		}
+	else if(field == "weight") {
+		GET_WEIGHT(mob) = parm;
+        send_to_char("Peso settato.\n\r", ch);
 	}
-	else if(!strcmp(field, "position")) {
-		if(sscanf(parmstr, "%d", &parm) != 1) {
-			sprintf(buf, "La sua posizione e': %d\n\r", GET_POS(mob));
-			send_to_char(buf, ch);
-		}
-		else if(parm < 0 || parm > 9) {
-			send_to_char("Posizione non valida. Ecco l'elenco:\r"
-						 "0 Dead\r"
-						 "1 Mortally wounded\r"
-						 "2 Incapacitated\r"
-						 "3 Stunned\r"
-						 "4 Sleeping\r"
-						 "5 Resting\r"
-						 "6 Sitting\r"
-						 "7 Fighting\r"
-						 "8 Standing\r"
-						 "9 Mounted\r", ch);
-		}
-		else {
-			send_to_char("OK.\n\r", ch);
+	else if(field == "position") {
+		if(parm >= 0 && parm <= 9) {
 			GET_POS(mob) = parm;
-		}
+            send_to_char("Posizione settata.\n\r", ch);
+		} else {
+            send_to_char("Posizione invalida (0-9).\n\r", ch);
+        }
 	}
-	else if(!strcmp(field, "startroom")) {
-		if(sscanf(parmstr, "%d", &parm) != 1) {
-			sprintf(buf, "Il numero della stanza di partenza e': %ld\n\r",
-					mob->lStartRoom);
-			send_to_char(buf, ch);
-		}
-		else if(parm < 0) {
-			send_to_char("Il numero della stanza deve essere maggiore di 0.\r\n", ch);
-		}
-		else {
+	else if(field == "startroom") {
+		if(parm >= 0) {
 			mob->lStartRoom = parm;
-			send_to_char("OK.\n\r", ch);
+			send_to_char("Start room (long) settata.\n\r", ch);
 		}
 	}
 	else {
@@ -4609,8 +4094,7 @@ ACTION_FUNC(do_immort) {
 #define REFUND_EVENING	64
 #define BACKUP_DIR			"/home/nebbie/Run/release/backups/"
 
-// sintassi: refund nome_pg data(formato aaaammgg) orario(m/p/s) all/eq/pg/achie
-ACTION_FUNC(do_refund) {
+/*ACTION_FUNC(do_refund) {    <-- Sirio - commento la vecchia funzione per non perderla
 	char GodDir[100], tar_buf[256], name[100], date[16], time[16], type[16], FileName[80];
 	int valore = 0, i, found = -1, refund = 0;
 	FILE* fl;
@@ -4684,16 +4168,16 @@ ACTION_FUNC(do_refund) {
 		send_to_char("Puoi scegliere di recuperare o tutto o l'equipaggiamento o i dati del personaggio oppure gli achievements!\n\r", ch);
 		send_to_char("La sintassi corretta e':\n\rrefund nome_pg data(formato aaaammgg) orario(m/p/s) $c0009all$c0007/$c0009eq$c0007/$c0009pg$c0007/$c0009achie$c0007\n\r", ch);
 		return;
-	}
+	}*/
 
 // creo la directory temporanea con il nome del dio
-	sprintf(GodDir, "%sBackup", ch->player.name);
+	/*sprintf(GodDir, "%sBackup", ch->player.name);
 	sprintf(tar_buf, "mkdir %s", GodDir);
 	system(tar_buf);
-	mudlog(LOG_PLAYERS, "Created %s temp's directory.", GodDir);
+	mudlog(LOG_PLAYERS, "Created %s temp's directory.", GodDir);*/
 
 // cerco lo zip del rent e lo unzippo nella cartella temporanea
-	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_EQ) || IS_SET(valore, REFUND_ACHIE))
+	/*if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_EQ) || IS_SET(valore, REFUND_ACHIE))
 	{
 		for(i = 0; i < 10; i++)
 		{
@@ -4726,10 +4210,10 @@ ACTION_FUNC(do_refund) {
 			mudlog(LOG_PLAYERS, "Deleted %s temp's directory.", GodDir);
 			return;
 		}
-	}
+	}*/
 
 // cerco lo zip dei pg e lo unzippo nella cartella temporanea
-	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore,REFUND_PG))
+	/*if(IS_SET(valore, REFUND_ALL) || IS_SET(valore,REFUND_PG))
 	{
 		for(i = 0; i < 10; i++)
 		{
@@ -4770,10 +4254,10 @@ ACTION_FUNC(do_refund) {
 	else
 	{
 		found = 1;
-	}
+	}*/
 
 // copia dei files
-	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_EQ))
+	/*if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_EQ))
 	{
 		found --;
 		sprintf(FileName, "%s/lib/rent/%s", GodDir, lower(name));
@@ -4883,12 +4367,358 @@ ACTION_FUNC(do_refund) {
 			send_to_char(tar_buf, ch);
 			mudlog(LOG_PLAYERS, "All the files are refunded on %s.", name);
 		}
+	}*/
+
+	// alla fine di tutto elimino la directory temporanea che ho creato con il nome del dio
+	/*sprintf(tar_buf, "rm -r %s", GodDir);
+	system(tar_buf);
+	mudlog(LOG_PLAYERS, "Deleted %s temp's directory.", GodDir);
+
+	return;
+}*/ <-- Fine vecchia funzione
+
+// sintassi: refund nome_pg data(formato aaaammgg) orario(m/p/s) all/eq/pg/achie
+ACTION_FUNC(do_refund) {
+    /* Buffer aumentati per percorsi lunghi e comandi di sistema */
+	char GodDir[100], tar_buf[512], name[100], date[16], time[16], type[16], FileName[256];
+	int valore = 0, i, found = -1, refund = 0;
+	FILE* fl;
+
+    /* Buffer per il comando 'find' e per il risultato */
+    char find_cmd[512];
+    char source_path[512];
+    FILE* pipe;
+
+
+	if(cmd == 0)
+	{
+		return;
+	}
+
+	arg = one_argument(arg, name);
+	arg = one_argument(arg, date);
+	arg = one_argument(arg, time);
+	only_argument(arg, type);
+
+    mudlog(LOG_PLAYERS, "do_refund: Invocato con NOME=%s, DATA=%s, ORA=%s, TIPO=%s", name, date, time, type);
+
+	if(!*name || !*date || !*time || !*type)
+	{
+		send_to_char("Hai dimenticato qualcosa!\n\r", ch);
+		send_to_char("La sintassi corretta e':\n\r$c0015refund nome_pg data(formato $c0009aaaammgg$c0015) orario($c0009m$c0015/$c0009p$c0015/$c0009s$c0015) $c0009all$c0015/$c0009eq$c0015/$c0009pg$c0015/$c0009achie$c0007\n\r", ch);
+        mudlog(LOG_PLAYERS, "do_refund: Argomenti mancanti. Uscita.");
+		return;
+	}
+
+	/* === INIZIO CONTROLLO SICUREZZA DB === Controllo nel DB che il personaggio sia presente per non ripristinare un pg Nukato*/
+	try {
+		// Verifichiamo se il personaggio esiste nel database
+		toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(name));
+
+		if (!pg || !pg->id) {
+			send_to_char("$c0009ERRORE SICUREZZA:$c0007 Il personaggio non esiste nel Database (probabilmente Nukato).\n\r", ch);
+			send_to_char("Non puoi fare refund su un fantasma. Questo causerebbe corruzione della password.\n\r", ch);
+			send_to_char("$c0011SOLUZIONE:$c0007 Se vuoi ripristinarlo:\n\r", ch);
+			send_to_char("1. Crea il personaggio normalmente (login nuovo).\n\r", ch);
+			send_to_char("2. Fai il refund su quel personaggio appena creato.\n\r", ch);
+			mudlog(LOG_PLAYERS, "do_refund: BLOCCATO tentativo di refund su PG inesistente nel DB: %s", name);
+			return;
+		}
+	} catch (const odb::exception& e) {
+		mudlog(LOG_SYSERR, "do_refund: Errore controllo DB: %s", e.what());
+		send_to_char("Errore database durante il controllo di sicurezza.\n\r", ch);
+		return;
+	}
+	/* === FINE CONTROLLO SICUREZZA DB === */
+
+    // --- (validazione input, invariata) ---
+	if(strlen(date) != 8 || atoi(date) < 0 || atoi(date) >29999999 )
+	{
+		send_to_char("Il formato da usare per la data e' $c0009aaaa$c0015mm$c0011gg$c0007!\n\r", ch);
+        mudlog(LOG_PLAYERS, "do_refund: Formato data errato: %s", date);
+		return;
+	}
+	if(!strcmp(time, "m") || !strcmp(time, "p") || !strcmp(time, "s"))
+	{
+		if(!strcmp(time, "m")) { SET_BIT(valore, REFUND_MORNING); }
+		else if(!strcmp(time, "p")) { SET_BIT(valore, REFUND_NOON); }
+		else if(!strcmp(time, "s")) { SET_BIT(valore, REFUND_EVENING); }
+	}
+	else
+	{
+		send_to_char("Quale vuoi recuperare? Quello della $c0009m$c0007attina, del $c0009p$c0007omeriggio o della $c0009s$c0007era?\n\r", ch);
+        mudlog(LOG_PLAYERS, "do_refund: Formato ora errato: %s", time);
+		return;
+	}
+	if(!strcmp(type, "all") || !strcmp(type, "pg") || !strcmp(type, "eq") || !strcmp(type, "achie"))
+	{
+		if(!strcmp(type, "all")) { SET_BIT(valore, REFUND_ALL); }
+		else if(!strcmp(type, "pg")) { SET_BIT(valore, REFUND_PG); }
+		else if(!strcmp(type, "eq")) { SET_BIT(valore, REFUND_EQ); }
+		else if(!strcmp(type, "achie")) { SET_BIT(valore, REFUND_ACHIE); }
+	}
+	else
+	{
+		send_to_char("Puoi scegliere di recuperare o tutto o l'equipaggiamento o i dati del personaggio oppure gli achievements!\n\r", ch);
+        mudlog(LOG_PLAYERS, "do_refund: Tipo refund errato: %s", type);
+		return;
+	}
+    
+    mudlog(LOG_PLAYERS, "do_refund: Valore bitmask parsato: %d", valore);
+
+// creo la directory temporanea con il nome del dio
+	sprintf(GodDir, "%sBackup", ch->player.name);
+	sprintf(tar_buf, "mkdir %s", GodDir);
+	system(tar_buf);
+	mudlog(LOG_PLAYERS, "do_refund: Eseguito: %s", tar_buf);
+
+// cerco lo zip del rent e lo unzippo nella cartella temporanea
+	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_EQ) || IS_SET(valore, REFUND_ACHIE))
+	{
+        mudlog(LOG_PLAYERS, "do_refund: Inizio ricerca file RENT/ACHIE.");
+		for(i = 0; i < 10; i++)
+		{
+			sprintf(FileName, "%srent%s.%s%d.zip", BACKUP_DIR, date, IS_SET(valore, REFUND_MORNING) ? "043" : IS_SET(valore, REFUND_NOON) ? "113" : "183", i);
+            mudlog(LOG_PLAYERS, "do_refund: Tento fopen di: %s", FileName);
+			if((fl = fopen(FileName, "r")) == NULL) { continue; }
+			else
+			{
+				found = i;
+				fclose(fl);
+                mudlog(LOG_PLAYERS, "do_refund: Trovato file: %s", FileName);
+				break;
+			}
+		}
+
+		if(found > -1)
+		{
+			send_to_char("Ok. I files di rent sono stati copiati nella directory temporanea.\n\r", ch);
+			sprintf(tar_buf, "tar xzf %srent%s.%s%d.zip -C %s", BACKUP_DIR, date, IS_SET(valore, REFUND_MORNING) ? "043" : IS_SET(valore, REFUND_NOON) ? "113" : "183", found, GodDir);
+			mudlog(LOG_PLAYERS, "do_refund: Eseguo estrazione RENT: %s", tar_buf);
+            system(tar_buf);
+			mudlog(LOG_PLAYERS, "do_refund: Estrazione RENT completata.", GodDir);
+			found = -1; // Resetto per il prossimo blocco
+		}
+		else
+		{
+            const char* ora_str = IS_SET(valore, REFUND_MORNING) ? "043" : (IS_SET(valore, REFUND_NOON) ? "113" : "183");
+            mudlog(LOG_PLAYERS, "do_refund: File backup RENT non trovato. Percorso base: %srent%s.%sX.zip", BACKUP_DIR, date, ora_str);
+			send_to_char("Non riesco a trovare il file di backup rent per questa data ed orario.\n\r", ch);
+			sprintf(tar_buf, "rm -r %s", GodDir);
+			system(tar_buf);
+			mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
+			return;
+		}
+	}
+
+// cerco lo zip dei pg e lo unzippo nella cartella temporanea
+	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore,REFUND_PG))
+	{
+        mudlog(LOG_PLAYERS, "do_refund: Inizio ricerca file PG.");
+		for(i = 0; i < 10; i++)
+		{
+			sprintf(FileName, "%spg%s.%s%d.zip", BACKUP_DIR, date, IS_SET(valore, REFUND_MORNING) ? "043" : IS_SET(valore, REFUND_NOON) ? "113" : "183", i);
+            mudlog(LOG_PLAYERS, "do_refund: Tento fopen di: %s", FileName);
+			if((fl = fopen(FileName, "r")) == NULL) { continue; }
+			else
+			{
+				found = i;
+				fclose(fl);
+                mudlog(LOG_PLAYERS, "do_refund: Trovato file: %s", FileName);
+				break;
+			}
+		}
+
+		if(found > -1)
+		{
+			send_to_char("Ok. I files dei pg sono stati copiati nella directory temporanea.\n\r", ch);
+			sprintf(tar_buf, "tar xzf %spg%s.%s%d.zip -C %s", BACKUP_DIR, date, IS_SET(valore, REFUND_MORNING) ? "043" : IS_SET(valore, REFUND_NOON) ? "113" : "183", found, GodDir);
+            mudlog(LOG_PLAYERS, "do_refund: Eseguo estrazione PG: %s", tar_buf);
+			system(tar_buf);
+			mudlog(LOG_PLAYERS, "do_refund: Estrazione PG completata.");
+		}
+		else
+		{
+            const char* ora_str = IS_SET(valore, REFUND_MORNING) ? "043" : (IS_SET(valore, REFUND_NOON) ? "113" : "183");
+            mudlog(LOG_PLAYERS, "do_refund: File backup PG non trovato. Percorso base: %spg%s.%sX.zip", BACKUP_DIR, date, ora_str);
+			send_to_char("Non riesco a trovare il file di backup pg per questa data ed orario.\n\r", ch);
+			sprintf(tar_buf, "rm -r %s", GodDir);
+			system(tar_buf);
+			mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
+			return;
+		}
+	}
+
+	if(IS_SET(valore, REFUND_ALL))
+	{
+		found = 4;
+	}
+	else
+	{
+		found = 1;
+	}
+
+// copia dei files
+	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_EQ))
+	{
+		found --;
+        
+        /* --- MODIFICA: USO 'find' PER TROVARE IL FILE --- */
+        sprintf(find_cmd, "find %s -name %s -type f 2>/dev/null", GodDir, lower(name));
+        mudlog(LOG_PLAYERS, "do_refund: Cerco file RENT con: %s", find_cmd);
+        pipe = popen(find_cmd, "r");
+        
+		if(!pipe || fgets(source_path, sizeof(source_path), pipe) == NULL)
+		{
+            mudlog(LOG_PLAYERS, "do_refund: FALLITO. Comando 'find' non ha trovato file RENT per %s.", name);
+            if(pipe) pclose(pipe);
+			if(found == 0)
+			{
+				sprintf(tar_buf, "Qualcosa e' andato storto: non ho trovato il file dell'equipaggiamento per %s.\n\r", name);
+				send_to_char(tar_buf, ch);
+				sprintf(tar_buf, "rm -r %s", GodDir);
+				system(tar_buf);
+                mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
+				return;
+			}
+		}
+		else
+		{
+            pclose(pipe);
+            source_path[strcspn(source_path, "\n")] = 0; // Rimuovo il newline
+            mudlog(LOG_PLAYERS, "do_refund: OK. Trovato file sorgente RENT in: %s", source_path);
+
+			SET_BIT(refund, REFUND_EQ);
+            /* Percorso DESTINAZIONE (assoluto) */
+			sprintf(tar_buf, "cp -f %s %s/%s", source_path, RENT_DIR, name);
+            mudlog(LOG_PLAYERS, "do_refund: Eseguo copia RENT: %s", tar_buf);
+			system(tar_buf);
+			sprintf(tar_buf, "Il file dell'equipaggiamento di %s e' stato recuperato.\n\r", name);
+			send_to_char(tar_buf, ch);
+			mudlog(LOG_PLAYERS, "%s has refunded equipment's file on %s.", GET_NAME(ch), name);
+		}
+	}
+
+	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_PG))
+	{
+		found --;
+        
+        /* --- MODIFICA: USO 'find' PER TROVARE IL FILE --- */
+        char file_to_find[100];
+        sprintf(file_to_find, "%s.dat", lower(name));
+        sprintf(find_cmd, "find %s -name %s -type f 2>/dev/null", GodDir, file_to_find);
+        mudlog(LOG_PLAYERS, "do_refund: Cerco file PG con: %s", find_cmd);
+        pipe = popen(find_cmd, "r");
+		
+        if(!pipe || fgets(source_path, sizeof(source_path), pipe) == NULL)
+		{
+            mudlog(LOG_PLAYERS, "do_refund: FALLITO. Comando 'find' non ha trovato file PG per %s.", name);
+            if(pipe) pclose(pipe);
+			if(found == 0)
+			{
+				sprintf(tar_buf, "Qualcosa e' andato storto: non ho trovato il file del personaggio per %s.\n\r", name);
+				send_to_char(tar_buf, ch);
+				sprintf(tar_buf, "rm -r %s", GodDir);
+				system(tar_buf);
+                mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
+				return;
+			}
+		}
+		else
+		{
+            pclose(pipe);
+            source_path[strcspn(source_path, "\n")] = 0; // Rimuovo il newline
+            mudlog(LOG_PLAYERS, "do_refund: OK. Trovato file sorgente PG in: %s", source_path);
+
+			SET_BIT(refund, REFUND_PG);
+            /* Percorso DESTINAZIONE (assoluto) */
+			sprintf(tar_buf, "cp -f %s %s/%s.dat", source_path, PLAYERS_DIR, name);
+            mudlog(LOG_PLAYERS, "do_refund: Eseguo copia PG: %s", tar_buf);
+			system(tar_buf);
+			sprintf(tar_buf, "Il file dei dati del personaggio di %s e' stato recuperato.\n\r", name);
+			send_to_char(tar_buf, ch);
+			mudlog(LOG_PLAYERS, "%s has refunded data's file on %s.", GET_NAME(ch), name);
+		}
+	}
+
+	if(IS_SET(valore, REFUND_ALL) || IS_SET(valore, REFUND_ACHIE))
+	{
+		found --;
+
+        /* --- MODIFICA: USO 'find' PER TROVARE IL FILE --- */
+        char file_to_find[100];
+        sprintf(file_to_find, "%s.aux", lower(name));
+        sprintf(find_cmd, "find %s -name %s -type f 2>/dev/null", GodDir, file_to_find);
+        mudlog(LOG_PLAYERS, "do_refund: Cerco file ACHIE with: %s", find_cmd);
+        pipe = popen(find_cmd, "r");
+		
+        if(!pipe || fgets(source_path, sizeof(source_path), pipe) == NULL)
+		{
+            mudlog(LOG_PLAYERS, "do_refund: FALLITO. Comando 'find' non ha trovato file ACHIE per %s.", name);
+            if(pipe) pclose(pipe);
+			if(found == 0)
+			{
+				sprintf(tar_buf, "Qualcosa e' andato storto: non ho trovato il file degli achievements per %s.\n\r", name);
+				send_to_char(tar_buf, ch);
+				sprintf(tar_buf, "rm -r %s", GodDir);
+				system(tar_buf);
+                mudlog(LOG_PLAYERS, "do_refund: Pulizia directory temp: %s", tar_buf);
+				return;
+			}
+		}
+		else
+		{
+            pclose(pipe);
+            source_path[strcspn(source_path, "\n")] = 0; // Rimuovo il newline
+            mudlog(LOG_PLAYERS, "do_refund: OK. Trovato file sorgente ACHIE in: %s", source_path);
+
+			SET_BIT(refund, REFUND_ACHIE);
+            /* Percorso DESTINAZIONE (assoluto) */
+			sprintf(tar_buf, "cp -f %s %s/%s.aux", source_path, RENT_DIR, name);
+            mudlog(LOG_PLAYERS, "do_refund: Eseguo copia ACHIE: %s", tar_buf);
+			system(tar_buf);
+			sprintf(tar_buf, "Il file degli achievements di %s e' stato recuperato.\n\r", name);
+			send_to_char(tar_buf, ch);
+			mudlog(LOG_PLAYERS, "%s has refunded achievements' file on %s.", GET_NAME(ch), name);
+		}
+	}
+    
+	if(found > 0)
+	{
+		if(refund < 14) // Controlla la nota nella versione precedente
+		{
+            mudlog(LOG_PLAYERS, "do_refund: Blocco errori 'found > 0', refund bitmask = %d", refund);
+			if(!IS_SET(refund, REFUND_EQ))
+			{
+				sprintf(tar_buf, "Non ho trovato il file dell'equipaggiamento per %s.\n\r", name);
+				send_to_char(tar_buf, ch);
+				mudlog(LOG_PLAYERS, "%s can't refund equipment's file on %s.", GET_NAME(ch), name);
+			}
+			if(!IS_SET(refund, REFUND_PG))
+			{
+				sprintf(tar_buf, "Non ho trovato il file del personaggio per %s.\n\r", name);
+				send_to_char(tar_buf, ch);
+				mudlog(LOG_PLAYERS, "%s can't refund data's file on %s.", GET_NAME(ch), name);
+			}
+			if(!IS_SET(refund, REFUND_ACHIE))
+			{
+				sprintf(tar_buf, "Non ho trovato il file degli achievements per %s.\n\r", name);
+				send_to_char(tar_buf, ch);
+				mudlog(LOG_PLAYERS, "%s can't refund achievements file on %s.", GET_NAME(ch), name);
+			}
+		}
+		else
+		{
+			sprintf(tar_buf, "Il refund di %s e' andato a buon fine, tutti i file sono stati copiati.\n\r", name);
+			send_to_char(tar_buf, ch);
+			mudlog(LOG_PLAYERS, "All the files are refunded on %s.", name);
+		}
 	}
 
 	// alla fine di tutto elimino la directory temporanea che ho creato con il nome del dio
 	sprintf(tar_buf, "rm -r %s", GodDir);
 	system(tar_buf);
-	mudlog(LOG_PLAYERS, "Deleted %s temp's directory.", GodDir);
+	mudlog(LOG_PLAYERS, "do_refund: Pulizia finale directory temp: %s", tar_buf);
 
 	return;
 }
@@ -6140,7 +5970,76 @@ ACTION_FUNC(do_god_interven) {
 	}
 }
 
-ACTION_FUNC(do_nuke) {
+/*ACTION_FUNC(do_nuke) {  <-- Sirio - commento vecchia funzione per non perderne traccia
+	struct char_data* victim;
+	char buf[254], tmp[254];
+
+	if(IS_NPC(ch)) {
+		return;
+	}
+
+	arg = one_argument(arg, tmp);*/ /* victim name */
+
+	/*if(tmp[0] == '\0') {
+		send_to_char("Nuke whom?! (nuke <name>)\n\r", ch);
+		return;
+	}
+
+	if(!(victim = get_char(tmp))) {
+		send_to_char("No-one by that name in the world.\n\r", ch);
+		return;
+	}
+
+	if(victim->in_room != ch->in_room) {
+		send_to_char("That person is not in the same room as you.\n\r", ch);
+		return;
+	}
+
+	if(IS_NPC(victim)) {
+		send_to_char("Not on NPC's.\n\r", ch);
+		return;
+	}
+
+	if(GetMaxLevel(victim) >= GetMaxLevel(ch)) {
+		send_to_char("You can't nuke them!!\n\r", ch);
+		sprintf(buf, "%s tried to nuke you!\n\r", GET_NAME(ch));
+		send_to_char(buf, victim);
+		return;
+	}
+	else {
+
+		mudlog(LOG_PLAYERS, "%s just nuked %s!", GET_NAME(ch), GET_NAME(victim));
+		act("$n calls forth the wrath of the gods and destroys $N!", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$n reaches into $N and pulls out a fighting soul!", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$N dies quickly without much a fight.", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$n reaches into your chest and pulls your soul out, you die forever!", FALSE, ch, 0, victim, TO_VICT);
+		act("You rip the heart and soul from $N condeming $M to instant death.", FALSE, ch, 0, victim, TO_CHAR);
+
+		do_purge(ch, GET_NAME(victim), 0);
+		Registered toon(GET_NAME(victim));
+		toon.del();
+		sprintf(buf, "rm -f %s/%s.*", PLAYERS_DIR, lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		sprintf(buf, "rm -f %s/%s.dead", PLAYERS_DIR,
+				lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		sprintf(buf, "rm -f %s/%s.deaths", PLAYERS_DIR,
+				lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		sprintf(buf, "rm -f %s/%s.aux", RENT_DIR, lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		sprintf(buf, "rm -f %s/%s", RENT_DIR, lower(GET_NAME(victim)));
+		system(buf);
+		mudlog(LOG_PLAYERS, buf);
+		send_to_char("Nuked.\n\r", ch);
+	}
+}*/
+
+ACTION_FUNC(do_nuke) { 		// SIrio - Riscritto nuke per usare il DB e prevenire incongruenze nel file .dat
 	struct char_data* victim;
 	char buf[254], tmp[254];
 
@@ -6177,41 +6076,69 @@ ACTION_FUNC(do_nuke) {
 		return;
 	}
 	else {
-		mudlog(LOG_PLAYERS, "%s just nuked %s!", GET_NAME(ch),
-			   GET_NAME(victim));
-		act("$n calls forth the wrath of the gods and destroys $N!", FALSE,
-			ch, 0, victim, TO_NOTVICT);
-		act("$n reaches into $N and pulls out a fighting soul!", FALSE, ch,
-			0, victim, TO_NOTVICT);
-		act("$N dies quickly without much a fight.", FALSE, ch, 0, victim,
-			TO_NOTVICT);
-		act(
-			"$n reaches into your chest and pulls your soul out, you die forever!",
-			FALSE, ch, 0, victim, TO_VICT);
-		act(
-			"You rip the heart and soul from $N condeming $M to instant death.",
-			FALSE, ch, 0, victim, TO_CHAR);
+        // Salvo il nome prima che 'victim' venga distrutto da do_purge
+        char victim_name[80];
+        strncpy(victim_name, GET_NAME(victim), sizeof(victim_name) - 1);
+        victim_name[sizeof(victim_name) - 1] = '\0'; // Assicura terminazione nulla
+		mudlog(LOG_PLAYERS, "%s just nuked %s!", GET_NAME(ch), victim_name);
+        act("$n calls forth the wrath of the gods and destroys $N!", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$n reaches into $N and pulls out a fighting soul!", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$N dies quickly without much a fight.", FALSE, ch, 0, victim, TO_NOTVICT);
+		act("$n reaches into your chest and pulls your soul out, you die forever!", FALSE, ch, 0, victim, TO_VICT);
+		act("You rip the heart and soul from $N condeming $M to instant death.", FALSE, ch, 0, victim, TO_CHAR);
 
-		do_purge(ch, GET_NAME(victim), 0);
-		Registered toon(GET_NAME(victim));
-		toon.del();
-		sprintf(buf, "rm -f %s/%s.*", PLAYERS_DIR, lower(GET_NAME(victim)));
+        // 1. Rimuove il personaggio dal mondo di gioco
+		do_purge(ch, victim_name, 0);
+
+        // 2. NUOVA LOGICA DB: Cancella il record dalla tabella 'toon'
+        try {
+            toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(victim_name));
+
+            if (!pg || !pg->id) {
+                send_to_char("Personaggio non trovato nel database (ma purgato dal gioco).\n\r", ch);
+                mudlog(LOG_SYSERR, "do_nuke: %s purgato ma non trovato nel DB.", victim_name);
+            } else {
+                // Cancella il record
+                if (Sql::erase(*pg)) {
+                    send_to_char("Record del database cancellato.\n\r", ch);
+                    mudlog(LOG_PLAYERS, "Record DB per %s cancellato.", victim_name);
+                } else {
+                    send_to_char("ERRORE: Impossibile cancellare il record dal database.\n\r", ch);
+                    mudlog(LOG_SYSERR, "do_nuke: Fallito Sql::erase per %s.", victim_name);
+                }
+            }
+        } catch (const odb::exception& e) {
+            mudlog(LOG_SYSERR, "Errore ODB in do_nuke: %s", e.what());
+            send_to_char("Si è verificato un errore critico con il database durante il nuke.\n\r", ch);
+        }
+
+        // 3. LOGICA FILE (Completa)
+        // CANCELLIAMO TUTTI I FILE LEGACY ASSOCIATI AL PG
+
+        // File .dat (per il login fallback)
+		sprintf(buf, "rm -f %s/%s.dat", PLAYERS_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
-		sprintf(buf, "rm -f %s/%s.dead", PLAYERS_DIR,
-				lower(GET_NAME(victim)));
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+
+        // File .dead (quello che hai visto)
+		sprintf(buf, "rm -f %s/%s.dead", PLAYERS_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
-		sprintf(buf, "rm -f %s/%s.deaths", PLAYERS_DIR,
-				lower(GET_NAME(victim)));
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+
+        // File .deaths (presumibilmente esiste anche questo)
+		sprintf(buf, "rm -f %s/%s.deaths", PLAYERS_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
-		sprintf(buf, "rm -f %s/%s.aux", RENT_DIR, lower(GET_NAME(victim)));
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+
+        // 4. LOGICA RENT (MANTENUTA)
+        // Manteniamo la cancellazione dei file di RENT (inventario)
+		sprintf(buf, "rm -f %s/%s.aux", RENT_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
-		sprintf(buf, "rm -f %s/%s", RENT_DIR, lower(GET_NAME(victim)));
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+		sprintf(buf, "rm -f %s/%s", RENT_DIR, lower(victim_name));
 		system(buf);
-		mudlog(LOG_PLAYERS, buf);
+		mudlog(LOG_PLAYERS, "Nuke (Cleanup): %s", buf);
+
 		send_to_char("Nuked.\n\r", ch);
 	}
 }
@@ -6314,7 +6241,7 @@ ACTION_FUNC(do_force_rent) {
 	} /* higher than presons level */
 }
 
-void save_ghost_forcerent(struct char_data* ch)
+/*void save_ghost_forcerent(struct char_data* ch)  <-- commentata per inserire la nuova funzione che scrive prima sul db
 {
     struct char_file_u tmp_store;
     FILE* fl;
@@ -6342,9 +6269,54 @@ void save_ghost_forcerent(struct char_data* ch)
     fwrite(&tmp_store, sizeof(struct char_file_u), 1, fl);
     fclose(fl);
 
+}*/
+
+	void save_ghost_forcerent(struct char_data* ch)
+{
+	struct char_file_u tmp_store;
+	FILE* fl;
+	char szFileName[200];
+
+	if(!IS_SET(ch->specials.act,PLR_NEW_EQ))
+	{
+		SET_BIT(ch->specials.act,PLR_NEW_EQ);
+	}
+
+	char_to_store(ch, &tmp_store);
+	tmp_store.load_room = AUTO_RENT;
+
+	/* === INIZIO MODIFICA: Recupera Password dal DB prima di salvare su File === */
+	// Questo impedisce che il file .dat venga salvato con una password vuota o corrotta
+	try {
+		toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(GET_NAME(ch)));
+		if (pg && pg->id) {
+			// Copiamo la password sicura dal DB nella struttura che sta per essere scritta su file
+			strncpy(tmp_store.pwd, pg->password.c_str(), 10);
+			// Non serve aggiornare il DB qui (Sql::update) perché il fantasma non cambia password/livelli
+		} else {
+			mudlog(LOG_SYSERR, "save_ghost_forcerent: ATTENZIONE PG %s non trovato nel DB!", GET_NAME(ch));
+		}
+	} catch (const odb::exception& e) {
+		mudlog(LOG_SYSERR, "save_ghost_forcerent: Errore DB fetch: %s", e.what());
+	}
+	/* === FINE MODIFICA === */
+
+	sprintf(szFileName, "%s/%s.dat", PLAYERS_DIR, lower(ch->player.name));
+	if((fl = fopen(szFileName, "r+b")) == NULL)
+	{
+		if((fl = fopen(szFileName, "wb")) == NULL)
+		{
+			mudlog(LOG_ERROR, "Cannot create file %s for saving player.", szFileName);
+			return;
+		}
+	}
+
+	rewind(fl);
+	fwrite(&tmp_store, sizeof(struct char_file_u), 1, fl);
+	fclose(fl);
 }
 
-ACTION_FUNC(do_ghost) {
+/*ACTION_FUNC(do_ghost) {
 	char find_name[80];
 	struct char_file_u tmp_store;
 	struct char_data* tmp_ch, *vict;
@@ -6367,6 +6339,83 @@ ACTION_FUNC(do_ghost) {
 	}
 
 	if(load_char(find_name, &tmp_store)) {
+		CREATE(tmp_ch, struct char_data, 1);
+		clear_char(tmp_ch);
+		store_to_char(&tmp_store, tmp_ch);
+		reset_char(tmp_ch);
+		load_char_objs(tmp_ch, TRUE);
+		save_ghost_forcerent(tmp_ch);*/       // salvo il pg senza desc
+//send_to_char("stop5\n\r",ch);
+//return;
+		/*save_char(tmp_ch, AUTO_RENT, 0);
+		tmp_ch->next = character_list;
+		character_list = tmp_ch;
+		tmp_ch->specials.tick = plr_tick_count++;
+
+		if(plr_tick_count == PLR_TICK_WRAP) {
+			plr_tick_count = 0;
+		}
+
+		char_to_room(tmp_ch, ch->in_room);
+
+		tmp_ch->desc = NULL;
+
+		act("$n calls forth the soul of $N and they come.", FALSE, ch, 0,
+			tmp_ch,
+			TO_ROOM);
+		act("The soul of $N rises forth from the mortal lands.", FALSE, ch,
+			0, tmp_ch, TO_ROOM);
+
+		act("You call forth the soul of $N.", FALSE, ch, 0, tmp_ch,
+			TO_CHAR);
+		send_to_char("Be sure to forcerent them when done!\n\r", ch);
+	}
+	else {
+		send_to_char("That person does not exist.\n\r", ch);
+	}
+}*/
+
+ACTION_FUNC(do_ghost) {		// ghost aggiornato per usare il DB
+	char find_name[80];
+	struct char_file_u tmp_store;
+	struct char_data* tmp_ch, *vict;
+
+	if(!IS_PC(ch)) {
+		return;
+	}
+
+	one_argument(arg, find_name);
+
+	if(find_name[0] == '\0') {
+		send_to_char("Ghost play who?? (ghost <name>)\n\r", ch);
+		return;
+	}
+
+	if((vict = get_char(find_name))) {
+		send_to_char("Person is online, cannot control the living.\n\r",
+					 ch);
+		return;
+	}
+
+	if(load_char(find_name, &tmp_store)) {
+	/* === INIZIO MODIFICA: Sincronizza DB -> File Struct (Ghost) === */
+        try {
+            toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(find_name));
+            if (pg && pg->id) {
+                // Sovrascrivi la password letta da file con quella (vera) del DB
+                strncpy(tmp_store.pwd, pg->password.c_str(), 10);
+
+                // Opzionale: Sincronizza anche il titolo se necessario
+                if (pg->title.length() > 0) {
+                    strncpy(tmp_store.title, pg->title.c_str(), sizeof(tmp_store.title) - 1);
+                }
+
+                mudlog(LOG_PLAYERS, "do_ghost: Dati sincronizzati dal DB per %s", find_name);
+            }
+        } catch (const odb::exception& e) {
+            mudlog(LOG_SYSERR, "do_ghost: Errore DB sync: %s", e.what());
+        }
+        /* === FINE MODIFICA === */
 		CREATE(tmp_ch, struct char_data, 1);
 		clear_char(tmp_ch);
 		store_to_char(&tmp_store, tmp_ch);
