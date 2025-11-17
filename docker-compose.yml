@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: mud_mysql_db
+    # Credenziali per il database MUD (adattate dalla configurazione MUD standard)
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: alarmud
+      MYSQL_USER: alarmud
+      MYSQL_PASSWORD: alarmudpassword
+    ports:
+      - "3306:3306" # Porta standard MySQL
+    volumes:
+      - db_data:/var/lib/mysql # Persistenza dei dati del DB
+
+  builder:
+    # Usa il Dockerfile definito sopra
+    build: .
+    container_name: mud_builder_env
+    # Mappa la cartella del tuo codice (`.`) dentro la cartella di lavoro `/app`
+    volumes:
+      - .:/app
+      - mud_data:/mudroot # Persistenza dei file di gioco (lib/players, lib/objects)
+    # Assicura che il builder veda il database
+    depends_on:
+      - db
+    # Espone le porte del MUD e Telnet (così puoi connetterti dal tuo Mac)
+    ports:
+      - "4000:4000"
+      - "23:23"
+    tty: true
+
+volumes:
+  db_data:
+  mud_data:
