@@ -2948,6 +2948,19 @@ There is a bunch of scraps here, piled up into a very very very small heap~
 13 0 1|16384
 5 0 0 0 
 1 0 0
+#1101
+chela ossidiana glabrezu cacaodemon~
+una chela d'ossidiana~
+Una chela d'ossidiana incisa con rune demoniache giace qui.~
+~
+8 64|131072 1|16384
+0 0 0 0
+1 2000 0
+E
+chela ossidiana rune~
+La superficie nera riflette una luce innaturale. Sembra adatta ad un rituale
+di evocazione demoniaca.
+~
 #1103
 pane sciapo~
 uno sfilatino di pane sciapo~
@@ -6881,6 +6894,44 @@ A
 41 -5
 A
 50 15
+#5105
+piuma pece vrock cacaodemon~
+una piuma intrisa di pece~
+Una piuma nera, pesante di pece rappresa, giace qui.~
+~
+8 64|131072 1|16384
+0 0 0 0
+1 500 0
+E
+piuma pece~
+La piuma sembra appartenere a qualcosa di troppo grande per essere un uccello
+comune. Un odore acre di zolfo le resta appiccicato.
+~
+#5107
+bracciale serpenti marilith cacaodemon~
+un bracciale a sei serpenti~
+Un bracciale formato da sei piccoli serpenti metallici e' qui.~
+~
+8 64|131072 1|16384
+0 0 0 0
+1 8000 0
+E
+bracciale serpenti~
+Ogni serpente stringe la coda del successivo. Le scaglie sono fredde al tatto,
+ma pulsano come se fossero vive.
+~
+#5113
+maschera suina avorio nalfeshnee cacaodemon~
+una maschera suina d'avorio~
+Una pesante maschera d'avorio dalle fattezze suine giace qui.~
+~
+8 64|131072 1|16384
+0 0 0 0
+1 4000 0
+E
+maschera suina avorio~
+Le zanne incise sulla maschera sono scheggiate e annerite da un fumo antico.
+~
 #5197
 black onyx key~
 a black onyx key~
@@ -6906,6 +6957,18 @@ An opal potion rests here~
 10 0 1|16384
 15 36 43 28 
 1 10000 5000
+#21014
+lingua rospo essiccata hezrou cacaodemon~
+una lingua di rospo essiccata~
+Una lingua di rospo secca e ricoperta di polvere grigiastra e' qui.~
+~
+8 64|131072 1|16384
+0 0 0 0
+1 1000 0
+E
+lingua rospo essiccata~
+E' dura come cuoio vecchio e conserva un disgustoso sentore di palude.
+~
 #24900
 wheel wagonwheel~
 a wagonwheel~
@@ -8461,6 +8524,19 @@ A diamond key lies here in the dirt.~
 E
 diamond key~
 You see nothing special.
+~
+#27002
+frammento frusta infuocata balor cacaodemon~
+un frammento di frusta infuocata~
+Un frammento di cuoio carbonizzato brucia senza consumarsi.~
+~
+8 64|131072 1|16384
+0 0 0 0
+1 16000 0
+E
+frammento frusta infuocata~
+Il frammento scotta come brace viva. Piccole faville rosse corrono lungo le
+crepe del cuoio carbonizzato.
 ~
 #35000
 sword blade black dawnkeeper~
