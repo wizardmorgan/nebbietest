@@ -4,99 +4,94 @@
 
 ### Product overview
 
-Nebbie Arcane is an Italian text-based MUD server. The primary deliverable is the `myst` binary plus world data under `mudroot/lib`. Players connect via Telnet on port **4000** (default). MySQL 8 (`nebbie` database) runs inside the same Docker container as the game server.
+Nebbie Arcane is an Italian text-based MUD server. The primary deliverable is the **`myst`** binary plus world data under `mudroot/lib`. Players connect via Telnet on port **4000** (default). MySQL 8 stores accounts in the **`nebbie`** database (`root` / `secret`).
 
-See `README.md` for the canonical Docker and Vagrant workflows.
+See `README.md` for canonical Docker and Vagrant workflows.
 
-### Services
+### Recommended: native toolchain (Vagrant-equivalent)
 
-| Service | Required | How to run |
-|---------|----------|------------|
-| Docker daemon | Yes | See **Docker daemon** below |
-| `nebbieserver` container | Yes | `./docker-run.sh up -d` (after image build) |
-| MySQL 8 | Bundled | Started by `docker-entrypoint.sh` inside the container |
-| `mudroot/lib` world data | Yes | `./getworldlocal` (repo root `myst.*` files) or `./getworld` (SSH to prod) |
+Cursor Cloud VMs should be provisioned like **`scripts/vagrant-provision-noble.sh`** (Ubuntu 24.04 Noble):
 
-There is no npm/pnpm/Python app server or separate web frontend in this repo.
+| Component | Expected version / config |
+|-----------|---------------------------|
+| **GCC/G++/cc/c++** | **12** (default via `update-alternatives`, not Clang) |
+| **ODB** | **2.5.0** via `scripts/install-odb-toolchain.sh` (build2/bpkg → `/usr/local`) |
+| **MySQL** | 8.x, `root` / `secret`, database **`nebbie`** |
+| **Libs** | Boost, log4cxx, curlpp, libconfig++, sqlite (apt dev packages) |
 
-### Docker daemon
+**Do not install apt ODB 2.4 packages** (`odb`, `libodb-dev`, …). The provision script removes them if present.
 
-Cloud VMs may not run systemd as PID 1. If `docker ps` fails with a socket permission or connection error:
+#### One-time / full reprovision
 
 ```bash
-sudo dockerd > /tmp/dockerd.log 2>&1 &
+sudo bash scripts/cursor-cloud-provision-noble.sh
 ```
 
-Use `sudo ./docker-run.sh …` until the `ubuntu` user’s `docker` group membership is active in the shell. After a fresh Docker install, `sudo usermod -aG docker ubuntu` is applied once in the VM snapshot.
+Idempotent markers under `/var/lib/nebbie/` (`apt-base-installed`, `odb-toolchain-installed`). Log: `/var/log/nebbie-cursor-cloud-provision.log`.
 
-### First-time setup
+This script mirrors Vagrant/Docker: apt deps → GCC 12 as default (including `cc`/`c++`) → ODB 2.5 build → `~/Confs/vagrant.conf` → MySQL + `nebbie` → `./getworldlocal` → `./build.sh vagrant`.
+
+First ODB build can take **10–20 minutes** (fetch from `pkg.cppget.org`). Swap is attempted but skipped if unavailable in the VM.
+
+#### Day-to-day (native)
 
 ```bash
-./getworldlocal          # copy myst.{mob,obj,wld,...} into mudroot/lib
+./getworldlocal                    # refresh mudroot/lib from repo myst.*
+./build.sh vagrant                 # rebuild myst (or ./quick.sh after first build)
+# Start MySQL if not running (see below)
+cd mudroot && ./myst -P 4000 -d lib
+```
+
+**MySQL without systemd** (common in Cloud VMs):
+
+```bash
+sudo bash -c 'MYSQL_RUN_DIR=/var/run/mysqld; mkdir -p $MYSQL_RUN_DIR /var/log/mysql; chown -R mysql:mysql /var/lib/mysql $MYSQL_RUN_DIR; rm -f $MYSQL_RUN_DIR/mysqld.pid; su -s /bin/bash mysql -c "/usr/sbin/mysqld --bind-address=127.0.0.1 --datadir=/var/lib/mysql --socket=$MYSQL_RUN_DIR/mysqld.sock --pid-file=$MYSQL_RUN_DIR/mysqld.pid --log-error=/var/log/mysql/error.log" &'
+sleep 3
+mysqladmin ping -h 127.0.0.1 -uroot -psecret
+```
+
+Runtime config: `~/Confs/vagrant.conf` (created by provision script).
+
+#### Verify native setup
+
+```bash
+gcc --version    # 12.x
+cc --version     # must be gcc-12, not clang
+odb --version    # ODB compiler ... 2.5.0
+mysql -h 127.0.0.1 -uroot -psecret -e "SHOW DATABASES LIKE 'nebbie';"
+test -x mudroot/myst && nc -w 3 127.0.0.1 4000   # Italian login prompt
+```
+
+### Optional: Docker workflow
+
+Docker bundles the same toolchain inside `nebbieserver`. Useful for parity testing but **not required** when the native stack is provisioned.
+
+```bash
+sudo dockerd > /tmp/dockerd.log 2>&1 &    # if docker daemon not running
+./getworldlocal
 sudo ./docker-run.sh build
 sudo ./docker-run.sh up -d
 ```
 
-The Docker image build compiles `myst` inside Ubuntu 24.04 with GCC 12 and the ODB toolchain (`scripts/install-odb-toolchain.sh`). Expect the first build to take several minutes (network fetch to `pkg.cppget.org` plus full C++ compile).
-
-### Fresh MySQL database caveat
-
-On a **first run** with an empty `./mysql_data` volume, `./docker-run.sh up` can exit because `docker-entrypoint.sh` applies `docs/schema-s1-toon-migration-flags.sql` before ODB has created the `toon` table (`set -e` aborts on the SQL error). MySQL and the `nebbie` database are still initialized under `./mysql_data`.
-
-**Workaround** (start MySQL + `myst` without the failing migration step):
-
-```bash
-sudo docker rm -f nebbieserver 2>/dev/null
-sudo docker run -d --name nebbieserver \
-  --entrypoint bash \
-  -v "$PWD/mudroot/lib:/app/mudroot/lib" \
-  -v "$PWD/mysql_data:/var/lib/mysql" \
-  -p 127.0.0.1:4000:4000 \
-  -p 127.0.0.1:4001:4001 \
-  -p 127.0.0.1:4002:4002 \
-  workspace-nebbieserver \
-  -c 'set -e
-MYSQL_DATA_DIR="/var/lib/mysql"; MYSQL_RUN_DIR="/var/run/mysqld"
-mkdir -p ${MYSQL_RUN_DIR} /var/log/mysql
-chown -R mysql:mysql ${MYSQL_DATA_DIR} ${MYSQL_RUN_DIR} /var/log/mysql
-rm -f ${MYSQL_RUN_DIR}/mysqld.pid
-su -s /bin/bash mysql -c "/usr/sbin/mysqld --bind-address=0.0.0.0 --datadir=${MYSQL_DATA_DIR} --socket=${MYSQL_RUN_DIR}/mysqld.sock --pid-file=${MYSQL_RUN_DIR}/mysqld.pid --log-error=/var/log/mysql/error.log" &
-for i in $(seq 1 60); do mysqladmin ping -h 127.0.0.1 -P 3306 --protocol=TCP -uroot -psecret >/dev/null 2>&1 && break; sleep 1; done
-exec su -l vagrant -c "cd /app && /app/mudroot/myst -P 4000 -d mudroot/lib"'
-```
-
-After ODB creates account tables on first boot, optional S1 DDL can be applied with `./scripts/apply-schema-s1.sh` from inside the container or via `docker exec`.
-
-### Day-to-day commands
-
-| Action | Command |
-|--------|---------|
-| Start server | `sudo ./docker-run.sh up -d` |
-| Stop server | `sudo ./docker-run.sh down` |
-| View logs | `sudo docker logs -f nebbieserver` |
-| Custom port | `SERVER_PORT=4001 sudo ./docker-run.sh up -d` |
-| Rebuild image | `sudo ./docker-run.sh build` |
-
-### Verify the server
-
-```bash
-nc -w 3 127.0.0.1 4000    # expect Italian login prompt
-sudo docker logs nebbieserver | tail -5   # expect "Entering game loop on port 4000"
-```
+**Fresh MySQL volume caveat:** `./docker-run.sh up` can exit on first run when `docker-entrypoint.sh` applies `docs/schema-s1-toon-migration-flags.sql` before the `toon` table exists. Prefer native MySQL + `./myst` on Cloud VMs, or use the custom entrypoint workaround documented in git history / prior PR notes.
 
 ### Build / lint / tests
 
 | Check | Command | Notes |
 |-------|---------|-------|
-| **Build (canonical)** | `sudo ./docker-run.sh build` | Full compile inside Docker; matches CI intent |
-| **Build (native / Vagrant)** | `./build.sh vagrant` | Requires host ODB toolchain (`scripts/install-odb-toolchain.sh`) |
+| **Build (native)** | `./build.sh vagrant` | Primary after Cloud provision |
+| **Build (Docker)** | `sudo ./docker-run.sh build` | Full compile inside container |
 | **Quick rebuild** | `./quick.sh` | Incremental make after initial CMake build |
-| **Style** | `cmake --build build --target style` | Uses bundled `./astyle` (after `build.sh`) |
-| **Static analysis** | `cmake --build build --target checkcpp` | Requires `cppcheck` and `cppcheck-htmlreport` |
-| **Automated tests** | None in CI | `.travis.yml` only runs `./build.sh` |
+| **Style** | `cmake --build build --target style` | Bundled `./astyle` |
+| **Static analysis** | `cmake --build build --target checkcpp` | Requires `cppcheck` |
+| **Automated tests** | None | `.travis.yml` only runs `./build.sh` |
 
-There is no unit-test suite; validation is compile + run the Telnet server.
+### VM update script (session startup)
 
-### Alternative: Vagrant
+Runs `./getworldlocal` only. System packages and ODB are installed once via `scripts/cursor-cloud-provision-noble.sh` (VM snapshot), not on every agent session.
 
-`vagrant up` provisions Ubuntu 24.04 Noble with the same toolchain (`scripts/vagrant-provision-noble.sh`). Requires VirtualBox and is not used in Cloud Agent VMs; prefer Docker here.
+### Gotchas
+
+- **`cc`/`c++` → Clang**: Cloud images may default to LLVM. Provision script forces `gcc-12`/`g++-12` for all four commands; CMake fails with `cannot find -lstdc++` if `c++` is still Clang.
+- **Port 4000 conflict**: Stop Docker `nebbieserver` before running native `./myst`.
+- **S1 DDL**: `./scripts/apply-schema-s1.sh` after ODB creates `toon`; entrypoint skips migration when `toon` is absent (native provision matches Vagrant).
