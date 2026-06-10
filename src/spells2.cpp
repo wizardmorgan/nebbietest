@@ -2796,12 +2796,12 @@ void cast_conjure_elemental(byte level, struct char_data* ch, const char* arg, i
 #define DEMON_TYPE_V     24
 #define DEMON_TYPE_VI    25
 
-#define TYPE_VI_ITEM     27002
-#define TYPE_V_ITEM      5107
-#define TYPE_IV_ITEM     5113
-#define TYPE_III_ITEM    1101
-#define TYPE_II_ITEM     21014
-#define TYPE_I_ITEM      5105
+#define TYPE_I_ITEM      39990
+#define TYPE_II_ITEM     39991
+#define TYPE_III_ITEM    39992
+#define TYPE_IV_ITEM     39993
+#define TYPE_V_ITEM      39994
+#define TYPE_VI_ITEM     39995
 
 void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
