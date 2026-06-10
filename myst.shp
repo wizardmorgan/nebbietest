@@ -1,3 +1,119 @@
+#1100~
+8121
+1111
+1112
+-1
+-1
+1.1
+0.95
+17
+17
+17
+0
+0
+%s Mi spiace, ma al momento l'ho finito~
+%s Scusa, controlla meglio.~
+%s Guarda che questo e' un emporio, non un mercato.~
+%s Naah, troppo caro per me.~
+%s Uhm, sara' meglio che tu controlla il tuo portamonete.~
+%s Ecco, per te sono solo%d. monete d'oro.~
+%s Ecco qui %d monete d'oro.~
+1
+0
+1118
+0
+1129
+0
+24
+0
+24
+#1101~
+1103
+-1
+-1
+-1
+-1
+1.5
+0.5
+0
+0
+0
+0
+0
+%s Questo e' un panificio.~
+%s Non compro niente!~
+%s Non compro niente!~
+%s Non compro niente!~
+%s Non faccio credito.~
+%s Sono %d monete d'oro.  Non te ne pentirai, vedrai.~
+%s Ecco %d monete.~
+0
+0
+1119
+0
+1116
+0
+24
+0
+24
+#1102~
+1118
+1119
+-1
+-1
+-1
+1
+1
+0
+0
+0
+0
+0
+%s Mi spiace ma vendo solo da bere.~
+%s I've never heard of that.  Tell me more about it.~
+%s I'm sorry - I don't buy that sort of thing.~
+%s Looks like I don't have enough gold.~
+%s Torna quando potrai pagare.~
+%s Ecco, sono solo %d monete. Buona giornata.~
+%s Bug.  Please report.~
+1
+0
+1130
+0
+1106
+0
+24
+0
+24
+#1103~
+1118
+1119
+-1
+-1
+-1
+1
+1
+0
+0
+0
+0
+0
+%s Mi spiace ma non la vendo quella roba li'.~
+%s Say what?~
+%s I don't buy.~
+%s I can't afford that.~
+%s Non si fa credito qui.~
+%s In totale fanno %d monete d'oro.~
+%s Bug.  Please report.~
+1
+0
+1133
+0
+1115
+0
+24
+0
+24
 #1518~
 1551
 1552
@@ -433,125 +549,38 @@
 28
 0
 0
-#3013~
-3010
-6013
+#4200~
+4249
+4253
+4251
+4252
 -1
--1
--1
-1
-1
-17
-19
+1.5
+0.5
 0
 0
 0
-%s Dont got any of those right now, member!~
-%s Sorry man, i dont buy.. i just sell beer and grub!~
-%s Sorry man, i dont buy.. i just sell beer and grub!~
-%s Sorry man, i dont buy.. i just sell beer and grub!~
-%s What do you think this is? Get some cash and we'll talk!~
-%s No problem.. %d coins.~
-%s Alright.. Heh.. %d coins.~
-0
-1
-700
-0
-708
-0
-28
 0
 0
-#3014~
-3004
-3003
-3000
-3001
-3002
-1.3
-0.4
-5
-6
-7
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
 0
 0
-%s Guarda che questo e' un'osteria~
-%s Non compro niente, vai a farti un giro~
-%s Non compro niente, vai a farti un giro~
-%s Non compro niente, vai a farti un giro~
-%s Niente credito, gira al largo !~
-%s Sono %d monete.~
-%s Ecco %d monete.~
+4260
 0
+4355
 0
-3007
-0
-8663
-0
-28
-0
-0
-#3016~
-3010
-6013
--1
--1
--1
-1
-0.1
-17
-19
-0
-0
-0
-%s Dont got any of those right now, member!~
-%s Sorry man, i dont buy.. i just sell beer and grub!~
-%s Sorry man, i dont buy.. i just sell beer and grub!~
-%s Sorry man, i dont buy.. i just sell beer and grub!~
-%s What do you think this is? Get some cash and we'll talk!~
-%s No problem.. %d coins.~
-%s Alright.. Heh.. %d coins.~
-0
-1
-700
-0
-708
-0
-28
-0
-0
-#3017~
-8121
-1111
-1112
--1
--1
-1.1
-0.95
-17
-17
-17
-0
-0
-%s Mi spiace, ma al momento l'ho finito~
-%s Scusa, controlla meglio.~
-%s Guarda che questo e' un emporio, non un mercato.~
-%s Naah, troppo caro per me.~
-%s Uhm, sara' meglio che tu controlla il tuo portamonete.~
-%s Ecco, per te sono solo%d. monete d'oro.~
-%s Ecco qui %d monete d'oro.~
-1
-0
-1118
-0
-1129
-0
+13
+14
 24
-0
-24
-#3018~
-1103
--1
+#4201~
+4250
+4219
 -1
 -1
 -1
@@ -562,168 +591,168 @@
 0
 0
 0
-%s Questo e' un panificio.~
-%s Non compro niente!~
-%s Non compro niente!~
-%s Non compro niente!~
-%s Non faccio credito.~
-%s Sono %d monete d'oro.  Non te ne pentirai, vedrai.~
-%s Ecco %d monete.~
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
 0
 0
-1119
+4261
 0
-1116
+4356
 0
+13
+14
 24
+#4202~
+4203
+4204
+4206
+4210
+-1
+1.5
+0.5
+7
+5
 0
+0
+0
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
+0
+1
+4262
+0
+4353
+1
+13
+14
 24
-#3019~
-1118
-1119
+#4203~
+4260
+4261
+4262
+4263
 -1
--1
--1
+1.5
+0.5
+0
+0
+0
+0
+0
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
+0
 1
-1
+4264
 0
+4350
 0
-0
-0
-0
-%s Mi spiace ma vendo solo da bere.~
-%s I've never heard of that.  Tell me more about it.~
-%s I'm sorry - I don't buy that sort of thing.~
-%s Looks like I don't have enough gold.~
-%s Torna quando potrai pagare.~
-%s Ecco, sono solo %d monete. Buona giornata.~
-%s Bug.  Please report.~
-1
-0
-1130
-0
-1106
-0
+13
+14
 24
+#4204~
+4202
+4208
+-1
+-1
+-1
+1.5
+0.5
+9
 0
+0
+0
+0
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
+0
+1
+4266
+0
+4354
+0
+13
+14
 24
-#3020~
-1118
-1119
+#4205~
+4259
+4258
 -1
 -1
 -1
-1
-1
+1.5
+0.5
 0
 0
 0
 0
 0
-%s Mi spiace ma non la vendo quella roba li'.~
-%s Say what?~
-%s I don't buy.~
-%s I can't afford that.~
-%s Non si fa credito qui.~
-%s In totale fanno %d monete d'oro.~
-%s Bug.  Please report.~
-1
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
 0
-1133
 0
-1115
+4268
 0
+4357
+0
+13
+14
 24
-0
-24
-#3024~
-3010
-3013
+#4206~
+4257
+4256
+4255
+4254
 -1
--1
--1
-1
-1
+1.5
+0.5
 0
 0
 0
 0
 0
-%s I`m afrad we're right out of that, %s~
-%s We never have that at this hour, %s~
-%s I'm sorry, but I already have plenty to sell, %s~
-%s Nope, sorry %s, don't have the money.~
-%s I'm afraid I can't take credit, %s~
-%s Your total comes to %d coins.~
-%s Bug.  Please report.~
-1
-0
-11015
-0
-11019
-0
-24
-0
-24
-#3600~
-3667
-3668
-3669
--1
--1
-1.1
-1
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
 0
 0
+4269
 0
-0
-0
-%s Never heard of that one.~
-%s I don't buy.~
-%s I don't buy.~
-%s I don't buy.~
-%s The bank is around the corner.~
-%s There ya go... %d coins please.~
-%s bug %d.~
-1
-1
-3605
-0
-3602
-0
-28
-0
-0
-#3601~
-3664
-3665
--1
--1
--1
-1.1
-1
-0
-0
-0
-0
-0
-%s I've never heard of that kind of fish.~
-%s I don't buy.~
-%s I don't buy.~
-%s I don't buy.~
-%s I'm sorry, but i have no scraps today.~
-%s I'll wrap that up for you. %d coins please.~
-%s bug %d~
-1
-1
-3618
-0
-3632
-0
-28
-0
-0
-#5771~
+4411
+9
+13
+14
+20
+#5700~
 5709
 -1
 -1
@@ -736,13 +765,13 @@
 15
 0
 0
-%s Sono desolato.. venduto proprio un attimo fa'!~
-%s E entro quando potresti procurartelo?~
-%s No effendi... non credo di poterti favorire~
-%s Oh effendi... mi spiace ma non posso permettermi questa cifra~
+%s Sono desolato... venduto proprio un attimo fa'!~
+%s Ed entro quando potresti procurartelo?~
+%s No effendi... non credo di poterti favorire.~
+%s Oh effendi... mi spiace ma non posso permettermi questa cifra.~
 %s Stai scherzando? Vuoi rovinarmi?~
 %s Derubato ancora una volta... solo %d monete!~
-%s Per Allah! Mia moglie mi bastonera'.....%d monete!!~
+%s Per Allah! Mia moglie mi bastonera'... tieni %d monete!!~
 1
 0
 5718
@@ -752,12 +781,99 @@
 14
 14
 24
-#9601~
+#6200~
+715
+717
+-1
+-1
+-1
+1.5
+0.5
+2
+3
+10
+4
+0
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
+1
+0
+6244
+0
+6243
+9
+13
+14
+20
+#8000~
+8636
+8635
+-1
+-1
+-1
+1.5
+0.5
+8
+10
+0
+0
+0
+%s Hey amico non ce l'ho ma te la posso procurare...domani.~
+%s Si? cosa vorresti vendermi esattamente? io non vedo niente del genere, mi prendi in giro?~
+%s Ma per chi mi hai preso, non compro quella roba!~
+%s Hey amico, non ho i soldi ora ma se me lo lasci, un giorno te lo paghero'!~
+%s Forse mi stai prendendo in giro? Ti sembro un tipo da prendere in giro?.~
+%s %d, ma guarda che prezzo ti ho fatto, praticamente regalato!~
+%s Tieni queste %d monete e stai attento a come spenderle.~
+0
+0
+8635
+0
+8643
+0
+13
+14
+24
+#8001~
+3004
+3003
+3000
+3001
+3002
+1.3
+0.4
+5
+6
+7
+0
+0
+%s Guarda che questo e' un'osteria.~
+%s Non compro niente, vai a farti un giro.~
+%s Non compro niente, vai a farti un giro.~
+%s Non compro niente, vai a farti un giro.~
+%s Niente credito, gira al largo!~
+%s Sono %d monete.~
+%s Ecco %d monete.~
+0
+0
+3007
+0
+8663
+0
+28
+0
+0
+#9600~
 9605
 3084
 3074
-10
 3089
+-1
 1.5
 0.75
 9
@@ -781,7 +897,7 @@
 13
 14
 24
-#9602~
+#9601~
 9618
 9619
 9623
@@ -810,7 +926,7 @@
 13
 14
 24
-#9603~
+#9602~
 9612
 9617
 -1
@@ -839,7 +955,7 @@
 13
 14
 24
-#9604~
+#9603~
 9620
 9621
 -1
@@ -868,36 +984,210 @@
 13
 14
 24
-#12041~
-3061
--1
--1
--1
+#9800~
+9833
+9834
+9835
+9846
 -1
 1.3
-0.9
+0.5
+17
 0
 0
 0
 0
-0
-%s Mi spiace ma non ho quel tipo di imbarcazione.~
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
 %s Non mi sembra che Lei abbia nulla del genere.~
 %s Mi dispiace ma non tratto l'usato.~
 %s Mi dispiace ma non ho abbastanza denaro al momento.~
 %s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
 %s Per sole %d monete, lei ha fatto un ottimo affare.~
 %s Ecco a lei %d monete.~
+1
 2
-2
-12041
+9808
 0
-729
-9
-13
+9824
+7
 14
-20
-#13402~
+14
+22
+#9801~
+9816
+9817
+9818
+-1
+-1
+1.3
+0.5
+19
+0
+0
+0
+0
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
+1
+2
+9816
+0
+9828
+7
+14
+14
+22
+#9802~
+9842
+9843
+9844
+-1
+-1
+1.3
+0.5
+0
+0
+0
+0
+0
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
+1
+2
+9834
+0
+9808
+7
+14
+14
+22
+#9803~
+9838
+9839
+9841
+9840
+-1
+1.3
+0.5
+0
+0
+0
+0
+0
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
+1
+2
+9832
+0
+9806
+7
+14
+14
+22
+#9804~
+9836
+9837
+-1
+-1
+-1
+1.3
+0.5
+0
+0
+0
+0
+0
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
+0
+2
+9850
+0
+9841
+7
+14
+14
+22
+#9805~
+9820
+9821
+-1
+-1
+-1
+1.3
+0.5
+0
+0
+0
+0
+0
+%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
+%s Non mi sembra che Lei abbia nulla del genere.~
+%s Mi dispiace ma non tratto l'usato.~
+%s Mi dispiace ma non ho abbastanza denaro al momento.~
+%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
+%s Per sole %d monete, lei ha fatto un ottimo affare.~
+%s Ecco a lei %d monete.~
+0
+0
+9837
+0
+9840
+7
+14
+14
+22
+#11000~
+3010
+3013
+-1
+-1
+-1
+1
+1
+0
+0
+0
+0
+0
+%s I'm afraid we're right out of that, %s~
+%s We never have that at this hour, %s~
+%s I'm sorry, but I already have plenty to sell, %s~
+%s Nope, sorry %s, don't have the money.~
+%s I'm afraid I can't take credit, %s~
+%s Your total comes to %d coins.~
+%s Bug.  Please report.~
+1
+0
+11015
+0
+11019
+0
+24
+0
+24
+#13400~
 3667
 3668
 3669
@@ -910,13 +1200,13 @@
 0
 0
 0
-%s Mi spiace, non tratto quella roba~
-%s Non compro niente~
-%s Non compro niente~
-%s Non compro niente~
+%s Mi spiace, non tratto quella roba.~
+%s Non compro niente.~
+%s Non compro niente.~
+%s Non compro niente.~
 %s Sei sordo o cosa?? - Niente CREDITO!~
-%s Dunque, sono - say %d coins.~
-%s Oups - %d a minor bug - please report!~
+%s Dunque, sono %d monete.~
+%s Ops - %d a minor bug - please report!~
 0
 0
 3605
@@ -926,7 +1216,7 @@
 28
 0
 0
-#13432~
+#13401~
 3664
 3665
 -1
@@ -939,13 +1229,13 @@
 0
 0
 0
-%s Mi spiace, non tratto quella roba~
-%s Non compro niente~
-%s Non compro niente~
-%s Non compro niente~
-%s Sei sordo o cosa?? - NIENTE CREDITO!~
-%s Sono - say %d coins.~
-%s Oups - %d a minor bug - please report!~
+%s Mi spiace, non tratto quella roba.~
+%s Non compro niente.~
+%s Non compro niente.~
+%s Non compro niente.~
+%s Sei sordo o cosa? - NIENTE CREDITO!~
+%s Ecco qua per %d monete.~
+%s Ops - %d a minor bug - please report!~
 0
 0
 3690
@@ -1332,7 +1622,7 @@
 28
 0
 0
-#13701~
+#13700~
 13706
 -1
 -1
@@ -1361,7 +1651,7 @@
 13
 14
 24
-#15401~
+#15400~
 15401
 -1
 -1
@@ -1390,7 +1680,7 @@
 13
 14
 20
-#15402~
+#15401~
 15401
 -1
 -1
@@ -1419,7 +1709,7 @@
 13
 14
 20
-#15403~
+#15402~
 15418
 -1
 -1
@@ -1448,7 +1738,7 @@
 13
 14
 20
-#15404~
+#15403~
 15418
 -1
 -1
@@ -1477,7 +1767,7 @@
 13
 14
 20
-#15405~
+#15404~
 15418
 -1
 -1
@@ -1506,7 +1796,7 @@
 13
 14
 20
-#15406~
+#15405~
 15401
 -1
 -1
@@ -1535,7 +1825,7 @@
 13
 14
 20
-#15407~
+#15406~
 15401
 -1
 -1
@@ -1577,7 +1867,7 @@
 0
 0
 0
-%s Pardon, could you speak up ?~
+%s Pardon, could you speak up?~
 %s You don't have that! Stop pulling my leg.~
 %s What kind of shop did the sign say? Go away.~
 %s I don't feel like doing business today.~
@@ -1753,7 +2043,7 @@
 0
 %s Hey? What was that you were asking for?~
 %s I'm sorry...looks like you've lost that.~
-%s Oh, I don't think I need that. Try someplace ese.~
+%s Oh, I don't think I need that. Try someplace else.~
 %s I'm sorry, I can't afford that. There's a recession you know!~
 %s Well, you seem nice, but I really need the cash first.~
 %s Here you go! Hope you enjoy it. Nice buy for %d coins!~
@@ -1767,7 +2057,7 @@
 12
 13
 24
-#17301~
+#17300~
 17316
 17317
 17318
@@ -1796,7 +2086,7 @@
 13
 14
 24
-#17302~
+#17301~
 3052
 3050
 -1
@@ -1970,36 +2260,7 @@
 28
 0
 0
-#28008~
-1965
-1966
-3050
-3051
-3052
-1.25
-0.15
-2
-3
-4
-10
-0
-%s Eh, I haven't got exactly that item.~
-%s Where do you see have that?~
-%s I don't buy such items.~
-%s Find someone else, that is to expensive for me!~
-%s HA! You can't afford it!~
-%s That'll be %d coins, thanks.~
-%s I'll give ya about %d coins for it.~
-0
-0
-12037
-0
-11499
-4
-11
-13
-21
-#32101~
+#32100~
 32101
 32117
 32118
@@ -2013,12 +2274,12 @@
 0
 0
 %s Sei CECATO???? fai list~
-%s Mi prendi in giro? O cerchi rogna??~
-%s Non me ne frega un TUBO di questa schifezza.. tienila tu!!!~
+%s Mi prendi in giro? O cerchi rogna?~
+%s Non me ne frega un TUBO di questa schifezza... tienila tu!!!~
 %s Non mi interessa quella schifezza! Vattene via stupido esserucolo!~
-%s Miserabile squattrinato vattene via prima che ti accoppi !!!!~
-%s Per %d monete ti ho rifilato UNA FREGATURA BESTIALE!!! HAHAHAHAHAHA~
-%s Eccoti %d ... hai preso una gran fregatura a vendermelo hahaahahah~
+%s Miserabile squattrinato vattene via prima che ti accoppi!!!!~
+%s Per %d monete ti ho rifilato UNA FREGATURA BESTIALE!!! HAHAHAHAHAHA!~
+%s Eccoti %d monete... hai preso una gran fregatura a vendermelo hahahahaha!~
 0
 1
 32123
@@ -2028,208 +2289,5 @@
 13
 14
 22
-#4200~
-4249
-4253
-4251
-4252
--1
-1.5
-0.5
-0
-0
-0
-0
-0
-%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
-%s Non mi sembra che Lei abbia nulla del genere.~
-%s Mi dispiace ma non tratto l'usato.~
-%s Mi dispiace ma non ho abbastanza denaro al momento.~
-%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
-%s Per sole %d monete, lei ha fatto un ottimo affare.~
-%s Ecco a lei %d monete.~
-0
-0
-4260
-0
-4355
-0
-13
-14
-24
-#4201~
-4250
-4219
--1
--1
--1
-1.5
-0.5
-0
-0
-0
-0
-0
-%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
-%s Non mi sembra che Lei abbia nulla del genere.~
-%s Mi dispiace ma non tratto l'usato.~
-%s Mi dispiace ma non ho abbastanza denaro al momento.~
-%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
-%s Per sole %d monete, lei ha fatto un ottimo affare.~
-%s Ecco a lei %d monete.~
-0
-0
-4261
-0
-4356
-0
-13
-14
-24
-#4202~
-4203
-4204
-4206
-4210
--1
-1.5
-0.5
-7
-5
-0
-0
-0
-%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
-%s Non mi sembra che Lei abbia nulla del genere.~
-%s Mi dispiace ma non tratto l'usato.~
-%s Mi dispiace ma non ho abbastanza denaro al momento.~
-%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
-%s Per sole %d monete, lei ha fatto un ottimo affare.~
-%s Ecco a lei %d monete.~
-0
-1
-4262
-0
-4353
-1
-13
-14
-24
-#4203~
-4260
-4261
-4262
-4263
--1
-1.5
-0.5
-0
-0
-0
-0
-0
-%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
-%s Non mi sembra che Lei abbia nulla del genere.~
-%s Mi dispiace ma non tratto l'usato.~
-%s Mi dispiace ma non ho abbastanza denaro al momento.~
-%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
-%s Per sole %d monete, lei ha fatto un ottimo affare.~
-%s Ecco a lei %d monete.~
-0
-1
-4264
-0
-4350
-0
-13
-14
-24
-#4204~
-4202
-4208
--1
--1
--1
-1.5
-0.5
-9
-0
-0
-0
-0
-%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
-%s Non mi sembra che Lei abbia nulla del genere.~
-%s Mi dispiace ma non tratto l'usato.~
-%s Mi dispiace ma non ho abbastanza denaro al momento.~
-%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
-%s Per sole %d monete, lei ha fatto un ottimo affare.~
-%s Ecco a lei %d monete.~
-0
-1
-4266
-0
-4354
-0
-13
-14
-24
-#4205~
-4259
-4258
--1
--1
--1
-1.5
-0.5
-0
-0
-0
-0
-0
-%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
-%s Non mi sembra che Lei abbia nulla del genere.~
-%s Mi dispiace ma non tratto l'usato.~
-%s Mi dispiace ma non ho abbastanza denaro al momento.~
-%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
-%s Per sole %d monete, lei ha fatto un ottimo affare.~
-%s Ecco a lei %d monete.~
-0
-0
-4268
-0
-4357
-0
-13
-14
-24
-#4206~
-4257
-4256
-4255
-4254
--1
-1.5
-0.5
-0
-0
-0
-0
-0
-%s Ah no, guardi! Io quelle cose li' non le vendo proprio!~
-%s Non mi sembra che Lei abbia nulla del genere.~
-%s Mi dispiace ma non tratto l'usato.~
-%s Mi dispiace ma non ho abbastanza denaro al momento.~
-%s Forse dovrebbe orientarsi su qualcosa di meno costoso.~
-%s Per sole %d monete, lei ha fatto un ottimo affare.~
-%s Ecco a lei %d monete.~
-0
-0
-4269
-0
-4411
-9
-13
-14
-20
 
 $~
