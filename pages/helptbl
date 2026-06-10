@@ -2224,13 +2224,38 @@ sono immuni all'acido.
 #
 "CACAODEMON"
 
-Questo spell e' circondata di mistero. L'unica cosa sicura e' che
-puo' essere usata cosi':
+Cacaodemon e' un oscuro rituale di evocazione: non richiama una creatura
+qualsiasi, ma tenta di vincolare per breve tempo un servitore abissale.
+La formula richiede di indicare la potenza del patto, da uno a sei:
 
 	cast 'cacaodemon' one
-		"
-		"
+	cast 'cacaodemon' two
+	cast 'cacaodemon' three
+	cast 'cacaodemon' four
+	cast 'cacaodemon' five
 	cast 'cacaodemon' six
+
+Ogni grado pretende un'offerta diversa. L'offerta deve essere impugnata
+o tenuta in mano al momento del lancio: senza di essa il rituale non trova
+un punto d'appoggio e l'evocazione non avviene.
+
+Le offerte richieste non sono oggetti comuni. Cercale tra cose annerite
+dal fumo, reliquie di palude, frammenti duri come vetro nero, maschere
+bestiali, monili serpentini e resti che ardono senza consumarsi. Se
+l'offerta non e' quella gradita al grado invocato, il demone non risponde.
+
+Quando il rito riesce, l'offerta viene consumata oppure, nelle mani di un
+chierico malvagio molto potente, perde parte del proprio valore rituale e
+puo' essere riutilizzata finche' conserva abbastanza forza.
+
+La creatura evocata emerge nella stanza e segue l'evocatore come un
+seguace soggiogato. La durata del vincolo dipende dal carisma di chi lancia
+l'incantesimo. Se hai gia' troppi seguaci ammaliati, la creatura puo'
+rifiutare di unirsi alla tua schiera.
+
+Il rituale non funziona nei luoghi in cui le evocazioni sono interdette.
+Usarlo ha natura apertamente empia e puo' macchiare ulteriormente l'anima
+di chi non e' gia' protetto dalla propria potenza.
 
 #
 "CONE OF COLD"
