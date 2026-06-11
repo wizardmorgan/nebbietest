@@ -2224,6 +2224,13 @@ sono immuni all'acido.
 #
 "CACAODEMON"
 
+Sintassi    : cast 'cacaodemon' <one|two|three|four|five|six>
+Accumulazione: -
+Durata      : Varia, dipende dal carisma del caster
+Livello     : Level 30 mage, level 29 cleric, level 30 sorcerer.
+Save        : Nessuno
+Costo di lancio: 50 mana
+
 Cacaodemon e' un oscuro rituale di evocazione: non richiama una creatura
 qualsiasi, ma tenta di vincolare per breve tempo un servitore abissale.
 La formula richiede di indicare la potenza del patto, da uno a sei:
