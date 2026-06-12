@@ -2796,12 +2796,12 @@ void cast_conjure_elemental(byte level, struct char_data* ch, const char* arg, i
 #define DEMON_TYPE_V     24
 #define DEMON_TYPE_VI    25
 
-#define TYPE_VI_ITEM     27002
-#define TYPE_V_ITEM      5107
-#define TYPE_IV_ITEM     5113
-#define TYPE_III_ITEM    1101
-#define TYPE_II_ITEM     21014
-#define TYPE_I_ITEM      5105
+#define TYPE_I_ITEM      39990
+#define TYPE_II_ITEM     39991
+#define TYPE_III_ITEM    39992
+#define TYPE_IV_ITEM     39993
+#define TYPE_V_ITEM      39994
+#define TYPE_VI_ITEM     39995
 
 void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
@@ -2810,40 +2810,39 @@ void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type
 	struct obj_data* sac;
 	struct char_data* el;
 	int held = FALSE, wielded = FALSE;
-	send_to_char("Provi ad evocare un demone ma fallisci... Probabilmente l'incantesimo e' impossibile da lanciare...\n\r",ch);
-	return;
+
 	one_argument(arg,buffer);
 
 	if(NoSummon(ch)) {
 		return;
 	}
 
-	if(!str_cmp(buffer, "uno")) {
+	if(!str_cmp(buffer, "one") || !str_cmp(buffer, "uno") || !str_cmp(buffer, "1")) {
 		mob = DEMON_TYPE_I;
 		obj = TYPE_I_ITEM;
 	}
-	else if(!str_cmp(buffer, "due")) {
+	else if(!str_cmp(buffer, "two") || !str_cmp(buffer, "due") || !str_cmp(buffer, "2")) {
 		mob = DEMON_TYPE_II;
 		obj = TYPE_II_ITEM;
 	}
-	else if(!str_cmp(buffer, "tre")) {
+	else if(!str_cmp(buffer, "three") || !str_cmp(buffer, "tre") || !str_cmp(buffer, "3")) {
 		mob = DEMON_TYPE_III;
 		obj = TYPE_III_ITEM;
 	}
-	else if(!str_cmp(buffer, "quattro")) {
+	else if(!str_cmp(buffer, "four") || !str_cmp(buffer, "quattro") || !str_cmp(buffer, "4")) {
 		mob = DEMON_TYPE_IV;
 		obj = TYPE_IV_ITEM;
 	}
-	else if(!str_cmp(buffer, "cinque")) {
+	else if(!str_cmp(buffer, "five") || !str_cmp(buffer, "cinque") || !str_cmp(buffer, "5")) {
 		mob = DEMON_TYPE_V;
 		obj = TYPE_V_ITEM;
 	}
-	else if(!str_cmp(buffer, "sei")) {
+	else if(!str_cmp(buffer, "six") || !str_cmp(buffer, "sei") || !str_cmp(buffer, "6")) {
 		mob = DEMON_TYPE_VI;
 		obj = TYPE_VI_ITEM;
 	}
 	else {
-		send_to_char("It seems that all demons of that type are currently in the service of others.\n\r", ch);
+		send_to_char("You must choose a demon type from one to six.\n\r", ch);
 		return;
 	}
 
@@ -2859,7 +2858,7 @@ void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type
 		}
 	}
 	if(ch->equipment[HOLD]) {
-		if(ch->equipment[WIELD]->item_number >= 0 &&
+		if(ch->equipment[HOLD]->item_number >= 0 &&
 				obj_index[ch->equipment[HOLD]->item_number].iVNum == obj) {
 			held = TRUE;
 		}

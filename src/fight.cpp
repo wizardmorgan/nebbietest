@@ -38,6 +38,7 @@
 #include "opinion.hpp"
 #include "reception.hpp"
 #include "regen.hpp"
+#include "procarea.hpp"
 #include "spell_parser.hpp"
 #include "toon_migration.hpp"
 
@@ -731,7 +732,9 @@ void make_corpse(struct char_data* ch, int killedbytype) {
 	object_list_new_owner(corpse, 0);
 
 	obj_to_room(corpse, ch->in_room);
-
+	if(!IS_NPC(ch)) {
+		procarea_relocate_pc_corpse_to_temple(ch, corpse);
+	}
 
 	/* this must be set before dispel_magic, because if they */
 	/* are flying and in a fly zone then the mud will crash  */
@@ -1018,7 +1021,17 @@ void raw_kill(struct char_data* ch,int killedbytype) {
 	 */
 	make_corpse(ch,killedbytype);
 	zero_rent(ch);
-	extract_char(ch);
+	if(IS_NPC(ch)) {
+		procarea_on_mob_death(ch);
+		extract_char(ch);
+	}
+	else {
+		const long save_room =
+			procarea_is_generated_room(ch->in_room) ?
+				PROCAREA_DARKSTAR_TEMPLE :
+				static_cast<long>(NOWHERE);
+		extract_char_smarter(ch, save_room);
+	}
 }
 
 int clan_gain(struct char_data* ch,int gain) {
@@ -2009,6 +2022,8 @@ int DamageTrivia(struct char_data* ch, struct char_data* v,
 	 * Testo anche hold e totale oggetti portati
 	 */
 	WEARING_N(ch,dummy,result);
+	const unsigned carried =
+		static_cast<unsigned>(IS_CARRYING_N(ch)) + static_cast<unsigned>(result);
 	if(HasClass(ch,CLASS_MONK) &&
 			!((ch->equipment[WIELD]) &&
 			  (ch->equipment[WIELD]->obj_flags.type_flag == ITEM_WEAPON)
@@ -2016,7 +2031,7 @@ int DamageTrivia(struct char_data* ch, struct char_data* v,
 			!((ch->equipment[HOLD]) &&
 			  (ch->equipment[HOLD]->obj_flags.type_flag == ITEM_WEAPON)
 			 ) &&
-			((IS_CARRYING_N(ch)+result)<(MONK_MAX_RENT +5))
+			(carried < static_cast<unsigned>(MONK_MAX_RENT) + 5u)
 	  ) {
 		classe=CLASS_MONK;
 	}

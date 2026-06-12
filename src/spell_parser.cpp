@@ -1713,47 +1713,64 @@ ACTION_FUNC(do_cast) {
 				}
 			}
 			/* Controllo sui livelli */
-			/* Trova il livello spell corrispondente */
+			/* Tra le classi idonee, usa il requisito minore */
+			caster_level = -1;
+			spell_level = IMMORTALE;
 			if((slev=spell_info[spl].min_level_magic) <=
-					(tlev=GET_LEVEL(ch,MAGE_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,MAGE_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_sorcerer) <=
-					(tlev=GET_LEVEL(ch,SORCERER_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,SORCERER_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_cleric) <=
-					(tlev=GET_LEVEL(ch,CLERIC_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,CLERIC_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_paladin) <=
-					(tlev=GET_LEVEL(ch,PALADIN_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,PALADIN_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_ranger) <=
-					(tlev=GET_LEVEL(ch,RANGER_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,RANGER_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_psi) <=
-					(tlev=GET_LEVEL(ch,PSI_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,PSI_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_druid) <=
 					(tlev=GET_LEVEL(ch, DRUID_LEVEL_IND))) {
-				caster_level=tlev;
-				spell_level=slev;
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if(caster_level>10) {
 				caster_level-=(HowManyClasses(ch)-1);
