@@ -46,6 +46,7 @@
 #include "odb/account-odb.hxx" //Sirio per gestione registrazione pg su db
 #include "multiclass.hpp" //Sirio per gestione registrazione pg su db
 #include "toon_migration.hpp"
+#include "procarea.hpp"
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -596,6 +597,9 @@ void boot_db() {
 
 	mudlog(LOG_CHECK, "Loading rooms.");
 	boot_world();
+
+	mudlog(LOG_CHECK, "Boot procarea static rooms.");
+	procarea_boot_darkstar_temple();
 
 	mudlog(LOG_CHECK, "Loading saved rooms.");
 	boot_saved_rooms();
@@ -3854,9 +3858,17 @@ void store_to_char(struct char_file_u* st, struct char_data* ch) {
 		GET_COND(ch, i) = st->conditions[i];
 	}
 
+	/* Replace persisted affects (avoid stacking on repeated store_to_char). */
+	while(ch->affected) {
+		affect_remove(ch, ch->affected);
+	}
+
 	/* Add all spell effects */
 	for(i = 0; i < MAX_AFFECT; i++) {
 		if(st->affected[i].type) {
+			if(affected_by_spell(ch, st->affected[i].type)) {
+				continue;
+			}
 			/* Inside file, we had to save a fake structure because reserving space for the pointer was architecture dependend
 			 * Now, we copy the data in a temporary structure.
 			 * Fortunately, the passed value will be copied so we dont need to allocate memory
