@@ -32,6 +32,7 @@
 #include "regen.hpp"
 #include "spell_parser.hpp"
 #include "maximums.hpp"
+#include "proc_cacaodemon.hpp"
 
 namespace Alarmud {
 
@@ -2557,6 +2558,9 @@ void spell_cacaodemon(byte level, struct char_data* ch,
 			GET_ALIGNMENT(ch)-=5;
 		}
 	}
+	// --- INIZIO INTEGRAZIONE PROCEDURALE ---
+    Alarmud::proc_modify_cacaodemon(ch, victim, level);
+    // --- FINE INTEGRAZIONE PROCEDURALE ---
 	char_to_room(victim, ch->in_room);
 
 	act("Con una risata $c0001malvagia$c0007 $N emerge dal $c0008fumo$c0007!", TRUE, ch, 0, victim, TO_NOTVICT);
