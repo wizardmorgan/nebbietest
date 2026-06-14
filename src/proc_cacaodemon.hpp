@@ -12,10 +12,8 @@ namespace Alarmud {
 // Modifica proceduralmente il mob appena allocato dall'engine prima del piazzamento
 void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, int spell_level);
 
-// Procedure speciali create ex-novo per le tre tipologie di evocazione
-int spec_cacaodemon_good(struct char_data* ch, void* me, int cmd, const char* arg);
-int spec_cacaodemon_neutral(struct char_data* ch, void* me, int cmd, const char* arg);
-int spec_cacaodemon_evil(struct char_data* ch, void* me, int cmd, const char* arg);
+// Special proc unica: smista il comportamento in base all'allineamento del demone
+MOBSPECIAL_FUNC(spec_cacaodemon);
 
 } // namespace Alarmud
 

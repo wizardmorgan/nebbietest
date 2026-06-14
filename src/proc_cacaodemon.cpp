@@ -16,6 +16,8 @@
 #include "spells.hpp"
 #include "magic.hpp"
 #include "fight.hpp"
+#include "snew.hpp"
+#include "act.comm.hpp"
 #include "proc_cacaodemon.hpp"
 #include <cstdio>
 #include <cstring>
@@ -29,7 +31,6 @@ extern struct index_data *mob_index;
 
 namespace {
 
-// Estraiamo il valore EQ in gioco iterando sui player connessi
 float calc_world_eq_index() {
     float total_eq = 0.0f;
     int pc_count = 0;
@@ -41,7 +42,9 @@ float calc_world_eq_index() {
         }
     }
 
-    if (pc_count == 0) return 1.0f; 
+    if (pc_count == 0) {
+        return 1.0f;
+    }
     return total_eq / static_cast<float>(pc_count);
 }
 
@@ -82,89 +85,115 @@ DemonStrings generate_evil_strings(int magnitude) {
     }
 }
 
-} // namespace anonimo
+int cacaodemon_magnitude_from_vnum(int vnum) {
+    if (vnum >= 20 && vnum <= 25) {
+        return vnum - 19;
+    }
+    return 1;
+}
 
-int spec_cacaodemon_good(struct char_data* ch, void* me, int cmd, const char* arg) {
-    struct char_data* demon = static_cast<struct char_data*>(me);
-    if (!demon || !demon->specials.fighting || cmd != 0) return FALSE;
-
+bool cacaodemon_good_tick(struct char_data* demon) {
     struct char_data* master = demon->master;
-    if (!master || master->in_room != demon->in_room) return FALSE;
+    if (!master || master->in_room != demon->in_room) {
+        return false;
+    }
 
     int chance = number(1, 100);
     if (chance > 80) {
         if (GET_HIT(master) < (GET_MAX_HIT(master) / 2)) {
             act("$n irradia una luce dorata che avvolge $N!", FALSE, demon, nullptr, master, TO_NOTVICT);
             act("$n ti tocca e le tue ferite si rimarginano!", FALSE, demon, nullptr, master, TO_VICT);
-            GET_HIT(master) = std::min(GET_MAX_HIT(master), GET_HIT(master) + dice(4, 10) + demon->points.level);
+            GET_HIT(master) = std::min(GET_MAX_HIT(master), GET_HIT(master) + dice(4, 10) + GetMaxLevel(demon));
             update_pos(master);
-            return TRUE;
+            return true;
         } else if (!IS_AFFECTED(master, AFF_SANCTUARY) && chance > 90) {
             act("$n intona un canto celestiale per proteggere $N.", FALSE, demon, nullptr, master, TO_NOTVICT);
             send_to_char("Senti un'aura sacra che ti protegge!\n\r", master);
-            master->points.armor -= 20; 
-            return TRUE;
+            master->points.armor -= 20;
+            return true;
         }
     }
-    return FALSE;
+    return false;
 }
 
-int spec_cacaodemon_neutral(struct char_data* ch, void* me, int cmd, const char* arg) {
-    struct char_data* demon = static_cast<struct char_data*>(me);
-    if (!demon || !demon->specials.fighting || cmd != 0) return FALSE;
-
+bool cacaodemon_neutral_tick(struct char_data* demon) {
     if (number(1, 100) > 85) {
         act("\n\r$n solleva i pugni massicci e li schianta al suolo con forza devastante!", FALSE, demon, nullptr, nullptr, TO_ROOM);
         send_to_room("L'onda d'urto del COLPO SISMICO vi travolge!\n\r", demon->in_room);
-        
+
         struct char_data* next_vict = nullptr;
         for (struct char_data* vict = real_roomp(demon->in_room)->people; vict; vict = next_vict) {
             next_vict = vict->next_in_room;
             if (vict != demon && vict != demon->master && !is_same_group(vict, demon)) {
-                int damage_amount = dice(GET_LEVEL(demon, WARRIOR_LEVEL_IND) / 2, 8);
+                int damage_amount = dice(GetMaxLevel(demon) / 2, 8);
                 damage(demon, vict, damage_amount, TYPE_BLAST);
             }
         }
-        return TRUE;
+        return true;
     }
-    return FALSE;
+    return false;
 }
 
-int spec_cacaodemon_evil(struct char_data* ch, void* me, int cmd, const char* arg) {
-    struct char_data* demon = static_cast<struct char_data*>(me);
-    if (!demon || !demon->specials.fighting || cmd != 0) return FALSE;
-
+bool cacaodemon_evil_tick(struct char_data* demon) {
     struct char_data* victim = demon->specials.fighting;
+    if (!victim) {
+        return false;
+    }
+
     int chance = number(1, 100);
     if (chance > 85) {
         act("$n affonda gli artigli d'ombra nel petto di $N!", FALSE, demon, nullptr, victim, TO_NOTVICT);
         act("$n ti strappa l'energia vitale!", FALSE, demon, nullptr, victim, TO_VICT);
-        
-        int drain = dice(4, 12) + (demon->points.level / 2);
+
+        int drain = dice(4, 12) + (GetMaxLevel(demon) / 2);
         damage(demon, victim, drain, TYPE_UNDEFINED);
         GET_HIT(demon) = std::min(GET_MAX_HIT(demon), GET_HIT(demon) + drain);
-        return TRUE;
+        return true;
     } else if (chance > 75 && !IS_AFFECTED(victim, AFF_POISON)) {
         act("$n sputa un ichore nero e corrosivo su $N!", FALSE, demon, nullptr, victim, TO_NOTVICT);
         act("Il veleno demoniaco ti entra in circolo!", FALSE, demon, nullptr, victim, TO_VICT);
-        
+
         struct affected_type af;
         af.type = SPELL_POISON;
         af.duration = 2;
         af.modifier = -2;
         af.location = APPLY_STR;
         af.bitvector = AFF_POISON;
-        affect_join(victim, &af, false, false, false, false);
-        return TRUE;
+        affect_join(victim, &af, FALSE, FALSE);
+        return true;
     }
-    return FALSE;
+    return false;
+}
+
+} // namespace anonimo
+
+MOBSPECIAL_FUNC(spec_cacaodemon) {
+    if (cmd) {
+        return FALSE;
+    }
+
+    struct char_data* demon = mob;
+    if (!demon || !demon->specials.fighting) {
+        return FALSE;
+    }
+
+    int align = GET_ALIGNMENT(demon);
+    if (align >= 350) {
+        return cacaodemon_good_tick(demon) ? TRUE : FALSE;
+    }
+    if (align <= -350) {
+        return cacaodemon_evil_tick(demon) ? TRUE : FALSE;
+    }
+    return cacaodemon_neutral_tick(demon) ? TRUE : FALSE;
 }
 
 void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, int spell_level) {
-    if (!demon || !caster) return;
+    if (!demon || !caster) {
+        return;
+    }
 
-    // Poiche' la firma base passa il livello, calcoliamo la magnitudo a blocchi (1-6)
-    int magnitude = std::clamp((spell_level / 10), 1, 6);
+    int magnitude = cacaodemon_magnitude_from_vnum(GET_MOB_VNUM(demon));
+    magnitude = std::clamp(magnitude, 1, 6);
 
     float world_eq_avg = calc_world_eq_index();
     float eq_factor = std::max(1.0f, world_eq_avg / 100.0f);
@@ -172,26 +201,30 @@ void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, i
 
     int align = GET_ALIGNMENT(caster);
     DemonStrings strings;
-    void* spec_proc_to_assign = nullptr;
 
     if (align >= 350) {
         strings = generate_good_strings(magnitude);
-        spec_proc_to_assign = reinterpret_cast<void*>(spec_cacaodemon_good);
         GET_ALIGNMENT(demon) = 1000;
     } else if (align <= -350) {
         strings = generate_evil_strings(magnitude);
-        spec_proc_to_assign = reinterpret_cast<void*>(spec_cacaodemon_evil);
         GET_ALIGNMENT(demon) = -1000;
     } else {
         strings = generate_neutral_strings(magnitude);
-        spec_proc_to_assign = reinterpret_cast<void*>(spec_cacaodemon_neutral);
         GET_ALIGNMENT(demon) = 0;
     }
 
-    if (demon->player.name) free(demon->player.name);
-    if (demon->player.short_descr) free(demon->player.short_descr);
-    if (demon->player.long_descr) free(demon->player.long_descr);
-    if (demon->player.description) free(demon->player.description);
+    if (demon->player.name) {
+        free(demon->player.name);
+    }
+    if (demon->player.short_descr) {
+        free(demon->player.short_descr);
+    }
+    if (demon->player.long_descr) {
+        free(demon->player.long_descr);
+    }
+    if (demon->player.description) {
+        free(demon->player.description);
+    }
 
     demon->player.name = strdup(strings.keywords);
     demon->player.short_descr = strdup(strings.short_desc);
@@ -213,16 +246,16 @@ void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, i
     demon->points.damroll = static_cast<sbyte>(magnitude * 2 + static_cast<int>(power_index / 50.0f));
     demon->points.hitroll = static_cast<sbyte>(magnitude * 2 + static_cast<int>(power_index / 50.0f));
 
-    if (magnitude >= 4) SET_BIT(demon->specials.affected_by, AFF_SANCTUARY);
-    if (magnitude == 6) SET_BIT(demon->specials.affected_by, AFF_FIRESHIELD);
-
-    if (mob_index[demon->nr].func) {
-        demon->specials.store_prog = spec_proc_to_assign; 
-    } else {
-        mob_index[demon->nr].func = spec_proc_to_assign;
+    if (magnitude >= 4) {
+        SET_BIT(demon->specials.affected_by, AFF_SANCTUARY);
+    }
+    if (magnitude == 6) {
+        SET_BIT(demon->specials.affected_by, AFF_FIRESHIELD);
     }
 
-    mudlog(LOG_CHECK, "proc_cacaodemon: Modificata creatura liv %d, Mag %d, HP %d per %s (PI %.2f)", 
+    mob_index[demon->nr].func = reinterpret_cast<genericspecial_func>(spec_cacaodemon);
+
+    mudlog(LOG_CHECK, "proc_cacaodemon: Modificata creatura liv %d, Mag %d, HP %d per %s (PI %.2f)",
            final_level, magnitude, demon->points.max_hit, GET_NAME(caster), power_index);
 }
 
