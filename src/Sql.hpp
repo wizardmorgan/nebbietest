@@ -85,14 +85,14 @@ public:
 				return boost::make_shared<T>();
 			}
 			auto i = r.begin();
-			const T& row = *i;
+			T row = *i;
 			if(++i != r.end()) {
 				mudlog(LOG_SYSERR,
 					   "Sql::getOne: query returned multiple rows for %s, using first match",
 					   typeid(T).name());
 			}
 			t.commit();
-			return boost::make_shared<T>(row);
+			return boost::make_shared<T>(std::move(row));
 		}
 		catch (odb::exception &e) {
 			mudlog(LOG_SYSERR, "Sql::getOne: %s", e.what());
