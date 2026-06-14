@@ -213,6 +213,11 @@ chown "${CLOUD_USER}:${CLOUD_USER}" "/home/${CLOUD_USER}/Confs/vagrant.conf"
 echo "==> MySQL + database nebbie"
 start_mysql
 
+if [ -x "${WORKSPACE}/scripts/link-dev-toons-to-account.sh" ]; then
+	echo "==> Associazione PG dev -> wizmorgan@gmail.com (se presenti)"
+	bash "${WORKSPACE}/scripts/link-dev-toons-to-account.sh" || true
+fi
+
 echo "==> World data"
 if [ -x "${WORKSPACE}/getworldlocal" ]; then
 	sudo -iu "$CLOUD_USER" "${WORKSPACE}/getworldlocal"

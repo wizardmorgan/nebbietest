@@ -254,6 +254,7 @@ void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, i
     }
 
     mob_index[demon->nr].func = reinterpret_cast<genericspecial_func>(spec_cacaodemon);
+    mob_index[demon->nr].specname = "spec_cacaodemon";
 
     mudlog(LOG_CHECK, "proc_cacaodemon: Modificata creatura liv %d, Mag %d, HP %d per %s (PI %.2f)",
            final_level, magnitude, demon->points.max_hit, GET_NAME(caster), power_index);

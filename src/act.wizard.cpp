@@ -1892,9 +1892,11 @@ void stat_character(struct char_data* ch, struct char_data* k, int cmd) {
 			std::string mob_spec = "$c0005Mobile Special procedure:$c0014 ";
 			if(mob_index[k->nr].func) {
 				mob_spec += "Exists ";
-				mob_spec += mob_index[k->nr].specname;
+				mob_spec += mob_index[k->nr].specname ?
+					mob_index[k->nr].specname : "";
 				mob_spec += " ";
-				mob_spec += mob_index[k->nr].specparms;
+				mob_spec += mob_index[k->nr].specparms ?
+					mob_index[k->nr].specparms : "";
 			}
 			else {
 				mob_spec += "NO";
@@ -2296,9 +2298,11 @@ void stat_object(struct char_data* ch, struct obj_data* j) {
 	std::string spec = "\n\r$c0005Special procedure : $c0014";
 	if(j->item_number >= 0 && obj_index[j->item_number].func) {
 		spec += "Exists ";
-		spec += obj_index[j->item_number].specname;
+		spec += obj_index[j->item_number].specname ?
+			obj_index[j->item_number].specname : "";
 		spec += " ";
-		spec += obj_index[j->item_number].specparms;
+		spec += obj_index[j->item_number].specparms ?
+			obj_index[j->item_number].specparms : "";
 	}
 	else {
 		spec += "NO";
