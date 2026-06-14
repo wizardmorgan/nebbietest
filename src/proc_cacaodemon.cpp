@@ -31,21 +31,24 @@ extern struct index_data *mob_index;
 
 namespace {
 
-float calc_world_eq_index() {
-    float total_eq = 0.0f;
-    int pc_count = 0;
+CacaodemonWorldEq calc_world_eq_snapshot() {
+	CacaodemonWorldEq out {};
+	float total_eq = 0.0f;
 
-    for (struct char_data* i = character_list; i != nullptr; i = i->next) {
-        if (!IS_NPC(i) && GetCharBonusIndex(i) > 0) {
-            total_eq += GetCharBonusIndex(i);
-            pc_count++;
-        }
-    }
+	for(struct char_data* i = character_list; i != nullptr; i = i->next) {
+		if(!IS_NPC(i) && GetCharBonusIndex(i) > 0) {
+			total_eq += GetCharBonusIndex(i);
+			out.online_pc_count++;
+		}
+	}
 
-    if (pc_count == 0) {
-        return 1.0f;
-    }
-    return total_eq / static_cast<float>(pc_count);
+	if(out.online_pc_count == 0) {
+		out.world_eq_avg = 1.0f;
+	} else {
+		out.world_eq_avg = total_eq / static_cast<float>(out.online_pc_count);
+	}
+	out.eq_factor = std::max(1.0f, out.world_eq_avg / 100.0f);
+	return out;
 }
 
 struct DemonStrings {
@@ -238,13 +241,6 @@ DemonStrings generate_evil_strings(int magnitude) {
     return pick_random_variant(kEvilHigh, sizeof(kEvilHigh) / sizeof(kEvilHigh[0]));
 }
 
-int cacaodemon_magnitude_from_vnum(int vnum) {
-    if (vnum >= 20 && vnum <= 25) {
-        return vnum - 19;
-    }
-    return 1;
-}
-
 bool cacaodemon_good_tick(struct char_data* demon) {
     struct char_data* master = demon->master;
     if (!master || master->in_room != demon->in_room) {
@@ -320,6 +316,26 @@ bool cacaodemon_evil_tick(struct char_data* demon) {
 
 } // namespace anonimo
 
+CacaodemonWorldEq cacaodemon_world_eq_snapshot() {
+	return calc_world_eq_snapshot();
+}
+
+float cacaodemon_power_index(int spell_level, int magnitude,
+		const CacaodemonWorldEq* metrics) {
+	const CacaodemonWorldEq local =
+		metrics ? *metrics : calc_world_eq_snapshot();
+	const int mag = std::clamp(magnitude, 1, 6);
+	const int lvl = std::max(1, spell_level);
+	return static_cast<float>(lvl * mag) * local.eq_factor;
+}
+
+int cacaodemon_magnitude_from_vnum(int vnum) {
+	if(vnum >= 20 && vnum <= 25) {
+		return vnum - 19;
+	}
+	return 1;
+}
+
 MOBSPECIAL_FUNC(spec_cacaodemon) {
     if (cmd) {
         return FALSE;
@@ -348,9 +364,9 @@ void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, i
     int magnitude = cacaodemon_magnitude_from_vnum(GET_MOB_VNUM(demon));
     magnitude = std::clamp(magnitude, 1, 6);
 
-    float world_eq_avg = calc_world_eq_index();
-    float eq_factor = std::max(1.0f, world_eq_avg / 100.0f);
-    float power_index = (spell_level * magnitude) * eq_factor;
+    const CacaodemonWorldEq world_eq = calc_world_eq_snapshot();
+    const float power_index =
+        cacaodemon_power_index(spell_level, magnitude, &world_eq);
 
     int align = GET_ALIGNMENT(caster);
     DemonStrings strings;
