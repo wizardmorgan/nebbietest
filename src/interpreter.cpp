@@ -1263,6 +1263,7 @@ void assign_command_pointers() {
   AddCommand( "associate",            do_associa,         CMD_ASSOCIA,                POSITION_STANDING,  PRINCIPE                );  /*  235 */
 	AddCommand( "attribute",            do_attribute,       CMD_ATTRIBUTE,              POSITION_DEAD,      5                       );
 	AddCommand( "world",                do_world,           CMD_WORLD,                  POSITION_DEAD,      TUTTI                   );
+	AddCommand( "powerindex",           do_powerindex,      CMD_POWERINDEX,             POSITION_RESTING,   IMMORTALE               );
 	AddCommand( "allspells",            do_spells,          CMD_ALLSPELLS,              POSITION_DEAD,      TUTTI                   );
 	AddCommand( "breath",               do_breath,          CMD_BREATH,                 POSITION_FIGHTING,  1                       );
 	AddCommand( "show",                 do_show,            CMD_SHOW,                   POSITION_DEAD,      DIO_MINORE              );  /*  240 */

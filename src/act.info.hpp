@@ -67,6 +67,7 @@ ACTION_FUNC(do_wizhelp) ;
 ACTION_FUNC(do_wizlist) ;
 ACTION_FUNC(do_wiznews) ;
 ACTION_FUNC(do_world) ;
+ACTION_FUNC(do_powerindex) ;
 char* find_ex_description(const char* word, const struct extra_descr_data* list) ;
 struct char_data* get_char_linear(struct char_data* ch,const char* arg, int* rf, int* df);
 struct obj_data* get_object_in_equip_vis(struct char_data* ch,const char* arg, struct obj_data* equipment[], int* j) ;

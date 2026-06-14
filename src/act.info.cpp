@@ -49,6 +49,8 @@
 #include "modify.hpp"
 #include "multiclass.hpp"
 #include "parser.hpp"
+#include "proc_cacaodemon.hpp"
+#include "power_index.hpp"
 #include "signals.hpp"
 #include "skills.hpp"
 #include "snew.hpp"
@@ -5255,11 +5257,142 @@ ACTION_FUNC(do_world) {
 	/****/
 	{
 		std::ostringstream o;
-		o << std::fixed << std::setprecision(6);
-		o << "$c0005Valore medio dell'eq in gioco        : $c0015" << AverageEqIndex(-1);
+		o << std::fixed << std::setprecision(2);
+		o << "$c0005Valore medio EQ storico (rent)     : $c0015" << AverageEqIndex(-1);
 		worldCharLine(o.str());
 	}
+	{
+		const PowerIndexWorldEq world_eq = power_index_world_snapshot();
+		{
+			std::ostringstream o;
+			o << std::fixed << std::setprecision(2);
+			o << "$c0005EQ medio online (PG mortali)       : $c0015"
+			  << world_eq.world_eq_avg << "$c0005  ($c0015" << world_eq.online_pc_count
+			  << "$c0005 PG con equip index > 0)";
+			worldCharLine(o.str());
+		}
+		{
+			std::ostringstream o;
+			o << std::fixed << std::setprecision(2);
+			o << "$c0005Fattore EQ mondo (cap " << POWER_INDEX_EQ_FACTOR_CAP
+			  << ")       : $c0015" << world_eq.eq_factor;
+			worldCharLine(o.str());
+		}
+		if(GetMaxLevel(ch) >= IMMORTALE) {
+			const float pi_ref = compute_power_index(40, 1, &world_eq);
+			std::ostringstream o;
+			o << std::fixed << std::setprecision(2);
+			o << "$c0005PI di riferimento (liv.40, scala 1): $c0015" << pi_ref
+			  << "$c0005  ($c0007wizhelp powerindex$c0005)";
+			worldCharLine(o.str());
+		}
+	}
 
+}
+
+ACTION_FUNC(do_powerindex) {
+	if(ch == nullptr) {
+		mudlog(LOG_SYSERR, "ch==nullptr in do_powerindex (act.info.cpp)");
+		return;
+	}
+	if(IS_NPC(ch)) {
+		return;
+	}
+	if(GetMaxLevel(ch) < IMMORTALE) {
+		return;
+	}
+
+	char spell_buf[MAX_INPUT_LENGTH];
+	char mag_buf[MAX_INPUT_LENGTH];
+	arg = one_argument(arg, spell_buf);
+	arg = one_argument(arg, mag_buf);
+
+	int spell_level = 40;
+	int magnitude = 0;
+
+	if(*spell_buf) {
+		if(!isdigit(*spell_buf)) {
+			send_to_char(
+				"Sintassi: powerindex [<livello_incantesimo> [<scala>]]\n\r"
+				"Senza argomenti usa livello 40 e mostra PI per scale 1-6.\n\r"
+				"La scala e' un moltiplicatore libero (es. grado cacaodemon).\n\r",
+				ch);
+			return;
+		}
+		spell_level = atoi(spell_buf);
+	}
+	if(*mag_buf) {
+		if(!isdigit(*mag_buf)) {
+			send_to_char(
+				"Sintassi: powerindex [<livello_incantesimo> [<scala>]]\n\r",
+				ch);
+			return;
+		}
+		magnitude = atoi(mag_buf);
+	}
+
+	spell_level = std::clamp(spell_level, 1, 60);
+	if(magnitude != 0) {
+		magnitude = std::clamp(magnitude, 1, 99);
+	}
+
+	const PowerIndexWorldEq world_eq = power_index_world_snapshot();
+	const float self_eq = GetCharBonusIndex(ch);
+
+	std::ostringstream out;
+	out << std::fixed << std::setprecision(2);
+	out << "$c0005Power index$c0007\n\r";
+	out << "$c0005EQ medio online$c0007 (PG mortali, equip index > 0): $c0015"
+		<< world_eq.world_eq_avg << "$c0007";
+	out << "  ($c0015" << world_eq.online_pc_count << "$c0007 PG)\n\r";
+	out << "$c0005Fattore EQ mondo$c0007 (cap " << POWER_INDEX_EQ_FACTOR_CAP
+		<< "): $c0015" << world_eq.eq_factor << "$c0007\n\r";
+	const float caster_factor = self_eq > 0.0f
+		? power_index_eq_factor_from_avg(self_eq)
+		: POWER_INDEX_EQ_FACTOR_FLOOR;
+	out << "$c0005Fattore EQ caster$c0007 (cap " << POWER_INDEX_EQ_FACTOR_CAP
+		<< "): $c0015" << caster_factor << "$c0007\n\r";
+	out << "$c0005Fattore EQ cacaodemon$c0007 (70% mondo + 30% caster): $c0015"
+		<< cacaodemon_eq_factor(ch) << "$c0007\n\r";
+	out << "$c0005Il tuo equipment index$c0007: $c0015" << self_eq << "$c0007\n\r";
+	out << "$c0005Valore medio storico (rent)$c0007: $c0015"
+		<< AverageEqIndex(-1) << "$c0007"
+		<< "  $c0007(medio XP/rent; non entra nel PI)\n\r";
+
+	if(world_eq.online_pc_count > 0) {
+		out << "$c0005PG mortali nel calcolo$c0007:\n\r";
+		for(struct char_data* i = character_list; i != nullptr; i = i->next) {
+			if(IS_NPC(i) || IS_IMMORTAL(i)) {
+				continue;
+			}
+			const float eq = GetCharBonusIndex(i);
+			if(eq <= 0.0f) {
+				continue;
+			}
+			out << "  $c0011" << GET_NAME(i) << "$c0007: $c0015" << eq << "$c0007\n\r";
+		}
+	}
+
+	if(magnitude != 0) {
+		out << "\n\r$c0005Power index generico$c0007 (livello " << spell_level
+			<< ", scala " << magnitude << "): $c0015"
+			<< compute_power_index(spell_level, magnitude, &world_eq) << "$c0007\n\r";
+		out << "$c0005Power index cacaodemon$c0007 (blend caster): $c0015"
+			<< cacaodemon_power_index(ch, spell_level, magnitude) << "$c0007\n\r";
+	} else {
+		out << "\n\r$c0005Power index generico per livello incantesimo $c0015" << spell_level
+			<< "$c0007 (scale 1-6, es. tier cacaodemon):\n\r";
+		for(int scale = 1; scale <= 6; ++scale) {
+			const float pi = compute_power_index(spell_level, scale, &world_eq);
+			const float pi_caca = cacaodemon_power_index(ch, spell_level, scale);
+			out << "  Scala " << scale << ": generico $c0015" << pi
+				<< "$c0007, cacaodemon $c0015" << pi_caca << "$c0007\n\r";
+		}
+		out << "$c0005Mana cacaodemon (grado 6)$c0007: $c0015"
+			<< cacaodemon_mana_cost(ch, 6) << "$c0007\n\r";
+	}
+
+	send_to_char(out.str().c_str(), ch);
 }
 
 ACTION_FUNC(do_attribute) {
