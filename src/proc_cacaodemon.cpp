@@ -55,34 +55,187 @@ struct DemonStrings {
     const char* detailed_desc;
 };
 
+DemonStrings pick_random_variant(const DemonStrings* pool, int count) {
+    if (!pool || count <= 0) {
+        return { "creatura evocata", "una Creatura Evocata",
+                 "Una creatura evocata attende ordini.\n\r",
+                 "Generata dal rituale del cacaodemon." };
+    }
+    return pool[number(0, count - 1)];
+}
+
+// Buono, magnitudine 1-2
+static const DemonStrings kGoodLow[] = {
+    { "spirito celeste guardiano", "uno Spirito Celeste",
+      "Uno Spirito Celeste armato di lancia di luce fluttua qui.\n\r",
+      "Una figura radiosa di pura energia positiva, evocata per proteggere." },
+    { "sentinella alba sacra", "una Sentinella dell'Alba",
+      "Una Sentinella dell'Alba veglia immobile, circondata da un alone dorato.\n\r",
+      "Le sue braccia sembrano fatte di luce solida; ogni passo lascia scintille benigne." },
+    { "guerriero luce minore", "un Guerriero di Luce",
+      "Un giovane Guerriero di Luce compare dal fumo, pronto a servire.\n\r",
+      "Non parla: comunica con sguardi limpidi e gesti precisi, come un soldato celeste." },
+    { "angelo custode frammento", "un Frammento di Angelo Custode",
+      "Un Frammento di Angelo Custode ruota lentamente nell'aria.\n\r",
+      "Emana calore e profumo d'incenso; sembra un pezzo di un coro piu' vasto." },
+};
+
+// Buono, magnitudine 3-4
+static const DemonStrings kGoodMid[] = {
+    { "arconte giustizia", "un Arconte della Giustizia",
+      "Un possente Arconte della Giustizia scruta l'orizzonte.\n\r",
+      "Le sue ali di luce solida illuminano l'oscurita'. Emana un'aura rassicurante." },
+    { "paladino astrale evocato", "un Paladino Astrale",
+      "Un Paladino Astrale avanza con passo misurato, scudo e spada di luce.\n\r",
+      "La sua armatura e' incisa con rune che pulsano a ritmo di preghiera." },
+    { "serafino guerriero", "un Serafino Guerriero",
+      "Un Serafino Guerriero fluttua brandendo una spada di fuoco bianco.\n\r",
+      "Tre paia d'ali lo sostengono; la sua voce risuona come campane lontane." },
+    { "campione solare", "un Campione Solare",
+      "Un Campione Solare si erge dal fumo, corona di raggi intorno al volto.\n\r",
+      "Dove guarda, le ombre indietreggiano; e' chiaro che e' stato chiamato per punire il male." },
+};
+
+// Buono, magnitudine 5-6
+static const DemonStrings kGoodHigh[] = {
+    { "avatar dominus luce", "l'Avatar della Luce",
+      "Un Avatar della Luce Assoluta si erge maestoso, pronto al giudizio.\n\r",
+      "L'incarnazione della purezza. Non ha volto, solo un bagliore accecante che brucia le ombre." },
+    { "manifestazione sol invictus", "la Manifestazione del Sole Invictus",
+      "La Manifestazione del Sole Invictus riempie la stanza di luce pura.\n\r",
+      "Ogni fibra del suo corpo e' un raggio concentrato; la sola presenza purifica l'aria." },
+    { "giudice celeste supremo", "il Giudice Celeste",
+      "Il Giudice Celeste materializza una bilancia di luce e una spada di cristallo.\n\r",
+      "Non chiede pieta': pesa le anime con sguardo imperturbabile." },
+    { "dominus aurora", "il Dominus dell'Aurora",
+      "Il Dominus dell'Aurora dissolve il fumo nero in una brezza profumata.\n\r",
+      "Sembra nato dal confine tra sogno e giorno; la sua voce e' un coro di mille preghiere." },
+};
+
+// Neutro, magnitudine 1-2
+static const DemonStrings kNeutralLow[] = {
+    { "costrutto pietra runica", "un Costrutto di Pietra Runica",
+      "Un Costrutto di Pietra Runica attende ordini immobile.\n\r",
+      "Animato dalla magia grigia dell'equilibrio, non prova emozioni ne' stanchezza." },
+    { "golem argilla sigillata", "un Golem d'Argilla Sigillata",
+      "Un Golem d'Argilla Sigillata si alza dal pavimento, rune ancora umide.\n\r",
+      "Le sue giunture scricchiolano appena; obbedisce con precisione meccanica." },
+    { "servitore bronzo antico", "un Servitore di Bronzo",
+      "Un Servitore di Bronzo verdeggiante attende con mani incrociate.\n\r",
+      "I suoi occhi sono due gemme opache; e' stato forgiato per durare secoli." },
+    { "automaton cristallo opaco", "un Automaton di Cristallo",
+      "Un Automaton di Cristallo opaco fluttua a mezz'aria, immobile.\n\r",
+      "All'interno del torso si vedono ingranaggi magici che girano senza rumore." },
+};
+
+// Neutro, magnitudine 3-4
+static const DemonStrings kNeutralMid[] = {
+    { "golem ferro astrale", "un Golem di Ferro Astrale",
+      "Un colossale Golem di Ferro Astrale fa tremare il suolo ad ogni passo.\n\r",
+      "Le articolazioni di questo titano metallico brillano di energia cosmica neutrale." },
+    { "colosso runico errante", "un Colosso Runico",
+      "Un Colosso Runico emerge dal fumo, piastre di metallo incise a spirale.\n\r",
+      "Ogni runa pulsa con lo stesso ritmo del battito del suo evocatore." },
+    { "guardiano marmo vivente", "un Guardiano di Marmo",
+      "Un Guardiano di Marmo vivente blocca l'accesso con un muro di spalle.\n\r",
+      "La pietra e' fredda al tatto ma calda di mana contenuta." },
+    { "titano equilibrio", "un Titano dell'Equilibrio",
+      "Un Titano dell'Equilibrio si materializza, alto quanto un portone.\n\r",
+      "Non distingue amici e nemici finche' non riceve ordini precisi." },
+};
+
+// Neutro, magnitudine 5-6
+static const DemonStrings kNeutralHigh[] = {
+    { "spirito equilibrio primordiale", "uno Spirito dell'Equilibrio",
+      "Uno Spirito Primordiale dell'Equilibrio fonde in se' gravita' e vuoto.\n\r",
+      "Una tempesta di forza cinetica controllata. La sua semplice presenza distorce lo spazio attorno." },
+    { "entita ordine assoluto", "un'Entita' dell'Ordine",
+      "Un'Entita' dell'Ordine Assoluto flutua come un eclissi immobile.\n\r",
+      "Attorno a lei il tempo sembra scorrere piu' lento; e' la personificazione della neutralita'." },
+    { "constructo cosmos", "un Constructo del Cosmos",
+      "Un Constructo del Cosmos e' composto da anelli di luce e ombra intrecciati.\n\r",
+      "Ogni movimento e' calcolato al millimetro; e' una macchina cosmica di guerra." },
+    { "sentinella vuoto grigio", "la Sentinella del Vuoto Grigio",
+      "La Sentinella del Vuoto Grigio piega leggermente la luce attorno a se'.\n\r",
+      "Non ha volto ne' voce: esiste solo per ristabilire l'equilibrio spezzato." },
+};
+
+// Malvagio, magnitudine 1-2
+static const DemonStrings kEvilLow[] = {
+    { "orrore ceneri demone", "un Orrore delle Ceneri",
+      "Un Orrore formato da ceneri e sussurri striscia sul pavimento.\n\r",
+      "Dita adunche e vuoti dove dovrebbero esserci gli occhi. Odora di carne bruciata." },
+    { "larva abisso viscida", "una Larva dell'Abisso",
+      "Una Larva dell'Abisso si strappa fuori dal fumo con un verso viscoso.\n\r",
+      "La pelle luccica di ichor nero; lascia una scia che brucia le pietre." },
+    { "imp corruzione", "un Imp della Corruzione",
+      "Un Imp della Corruzione sghignazza, artigli pronti a graffiare.\n\r",
+      "Piccolo ma vorace: i suoi occhi rossi non battono mai le palpebre." },
+    { "ombra famelica", "un'Ombra Famelica",
+      "Un'Ombra Famelica si stacca dal fumo e si arrampica sulle pareti.\n\r",
+      "Assorbe luce e calore; sussurra insulti in lingue dimenticate." },
+};
+
+// Malvagio, magnitudine 3-4
+static const DemonStrings kEvilMid[] = {
+    { "mietitore abisso demone", "un Mietitore dell'Abisso",
+      "Un Mietitore dell'Abisso fluttua brandendo una falce di fiamme nere.\n\r",
+      "Il vero volto della morte. Catene spettrali avvolgono il suo mantello lacero." },
+    { "carnefice infernale", "un Carnefice Infernale",
+      "Un Carnefice Infernale trascina catene che sferragliano da sole.\n\r",
+      "La maschera di ferro e' macchiata di sangue secco; ride senza gioia." },
+    { "demone scaglie nere", "un Demone dalle Scaglie Nere",
+      "Un Demone dalle Scaglie Nere sbuca dal fumo sbuffando zolfo.\n\r",
+      "Le corna sono spezzate ma ancora letali; ogni passo lascia impronte bruciacchiate." },
+    { "predatore notte profonda", "un Predatore della Notte Profonda",
+      "Un Predatore della Notte Profonda si avvolge in ali oleose.\n\r",
+      "I suoi artigli gocciolano veleno; attende solo un cenno per scattare." },
+};
+
+// Malvagio, magnitudine 5-6
+static const DemonStrings kEvilHigh[] = {
+    { "signore corruzione cacaodemon", "il Signore della Corruzione",
+      "Il Signore della Corruzione piega la realta' con la sua empia presenza.\n\r",
+      "Un Cacaodemon di magnitudo suprema. Sette occhi iniettati di sangue ti fissano promettendo agonia." },
+    { "principe fiamme nere", "il Principe delle Fiamme Nere",
+      "Il Principe delle Fiamme Nere incendia l'aria senza calore, solo dolore.\n\r",
+      "La sua corona e' fatta di ossa fuse; parla con voce di terremoto lontano." },
+    { "arconte abisso antico", "l'Arconte dell'Abisso Antico",
+      "L'Arconte dell'Abisso Antico dissolve il fumo in urla soffocate.\n\r",
+      "Porta segni di battaglie cosmiche; ogni cicatrice pulsa di odio concentrato." },
+    { "cacaodemon primordiale", "un Cacaodemon Primordiale",
+      "Un Cacaodemon Primordiale emerge distorto, troppo grande per lo spazio.\n\r",
+      "La realta' scricchiola attorno a lui; e' la forma che il patto richiama quando niente altro basta." },
+};
+
 DemonStrings generate_good_strings(int magnitude) {
     if (magnitude <= 2) {
-        return { "spirito celeste guardiano", "uno Spirito Celeste", "Uno Spirito Celeste armato di lancia di luce fluttua qui.\n\r", "Una figura radiosa di pura energia positiva, evocata per proteggere." };
-    } else if (magnitude <= 4) {
-        return { "arconte giustizia", "un Arconte della Giustizia", "Un possente Arconte della Giustizia scruta l'orizzonte.\n\r", "Le sue ali di luce solida illuminano l'oscurita'. Emana un'aura rassicurante." };
-    } else {
-        return { "avatar dominus luce", "l'Avatar della Luce", "Un Avatar della Luce Assoluta si erge maestoso, pronto al giudizio.\n\r", "L'incarnazione della purezza. Non ha volto, solo un bagliore accecante che brucia le ombre." };
+        return pick_random_variant(kGoodLow, sizeof(kGoodLow) / sizeof(kGoodLow[0]));
     }
+    if (magnitude <= 4) {
+        return pick_random_variant(kGoodMid, sizeof(kGoodMid) / sizeof(kGoodMid[0]));
+    }
+    return pick_random_variant(kGoodHigh, sizeof(kGoodHigh) / sizeof(kGoodHigh[0]));
 }
 
 DemonStrings generate_neutral_strings(int magnitude) {
     if (magnitude <= 2) {
-        return { "costrutto pietra runica", "un Costrutto di Pietra Runica", "Un Costrutto di Pietra Runica attende ordini immobile.\n\r", "Animato dalla magia grigia dell'equilibrio, non prova emozioni ne' stanchezza." };
-    } else if (magnitude <= 4) {
-        return { "golem ferro astrale", "un Golem di Ferro Astrale", "Un colossale Golem di Ferro Astrale fa tremare il suolo ad ogni passo.\n\r", "Le articolazioni di questo titano metallico brillano di energia cosmica neutrale." };
-    } else {
-        return { "spirito equilibrio primordiale", "uno Spirito dell'Equilibrio", "Uno Spirito Primordiale dell'Equilibrio fonde in se' gravita' e vuoto.\n\r", "Una tempesta di forza cinetica controllata. La sua semplice presenza distorce lo spazio attorno." };
+        return pick_random_variant(kNeutralLow, sizeof(kNeutralLow) / sizeof(kNeutralLow[0]));
     }
+    if (magnitude <= 4) {
+        return pick_random_variant(kNeutralMid, sizeof(kNeutralMid) / sizeof(kNeutralMid[0]));
+    }
+    return pick_random_variant(kNeutralHigh, sizeof(kNeutralHigh) / sizeof(kNeutralHigh[0]));
 }
 
 DemonStrings generate_evil_strings(int magnitude) {
     if (magnitude <= 2) {
-        return { "orrore ceneri demone", "un Orrore delle Ceneri", "Un Orrore formato da ceneri e sussurri striscia sul pavimento.\n\r", "Dita adunche e vuoti dove dovrebbero esserci gli occhi. Odora di carne bruciata." };
-    } else if (magnitude <= 4) {
-        return { "mietitore abisso demone", "un Mietitore dell'Abisso", "Un Mietitore dell'Abisso fluttua brandendo una falce di fiamme nere.\n\r", "Il vero volto della morte. Catene spettrali avvolgono il suo mantello lacero." };
-    } else {
-        return { "signore corruzione cacaodemon", "il Signore della Corruzione", "Il Signore della Corruzione piega la realta' con la sua empia presenza.\n\r", "Un Cacaodemon di magnitudo suprema. Sette occhi iniettati di sangue ti fissano promettendo agonia." };
+        return pick_random_variant(kEvilLow, sizeof(kEvilLow) / sizeof(kEvilLow[0]));
     }
+    if (magnitude <= 4) {
+        return pick_random_variant(kEvilMid, sizeof(kEvilMid) / sizeof(kEvilMid[0]));
+    }
+    return pick_random_variant(kEvilHigh, sizeof(kEvilHigh) / sizeof(kEvilHigh[0]));
 }
 
 int cacaodemon_magnitude_from_vnum(int vnum) {
@@ -256,8 +409,8 @@ void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, i
     mob_index[demon->nr].func = reinterpret_cast<genericspecial_func>(spec_cacaodemon);
     mob_index[demon->nr].specname = "spec_cacaodemon";
 
-    mudlog(LOG_CHECK, "proc_cacaodemon: Modificata creatura liv %d, Mag %d, HP %d per %s (PI %.2f)",
-           final_level, magnitude, demon->points.max_hit, GET_NAME(caster), power_index);
+    mudlog(LOG_CHECK, "proc_cacaodemon: Modificata creatura liv %d, Mag %d, HP %d, forma '%s' per %s (PI %.2f)",
+           final_level, magnitude, demon->points.max_hit, strings.short_desc, GET_NAME(caster), power_index);
 }
 
 } // namespace Alarmud
