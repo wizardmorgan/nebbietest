@@ -16,6 +16,9 @@
 #include "spells.hpp"
 #include "magic.hpp"
 #include "fight.hpp"
+#include "handler.hpp"
+#include "interpreter.hpp"
+#include "multiclass.hpp"
 #include "snew.hpp"
 #include "act.comm.hpp"
 #include "proc_cacaodemon.hpp"
@@ -427,6 +430,204 @@ void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, i
 
     mudlog(LOG_CHECK, "proc_cacaodemon: Modificata creatura liv %d, Mag %d, HP %d, forma '%s' per %s (PI %.2f)",
            final_level, magnitude, demon->points.max_hit, strings.short_desc, GET_NAME(caster), power_index);
+}
+
+namespace {
+
+bool cacaodemon_guard_name_matches(const char* assigned, struct char_data* guard) {
+	return assigned && guard && GET_NAME(guard) &&
+	       !strcasecmp(assigned, GET_NAME(guard));
+}
+
+void clear_bodyguard_link(struct char_data* victim, struct char_data* guard) {
+	if(!victim || !guard || !victim->specials.bodyguard) {
+		return;
+	}
+	if(!cacaodemon_guard_name_matches(victim->specials.bodyguard, guard)) {
+		return;
+	}
+	free(victim->specials.bodyguard);
+	victim->specials.bodyguard = nullptr;
+}
+
+void clear_bodyguarding_target(struct char_data* guard, struct char_data* victim) {
+	if(!guard || !victim || !guard->specials.bodyguarding) {
+		return;
+	}
+	if(strcasecmp(guard->specials.bodyguarding, GET_NAME(victim))) {
+		return;
+	}
+	free(guard->specials.bodyguarding);
+	guard->specials.bodyguarding = nullptr;
+}
+
+void detach_old_bodyguard_of_victim(struct char_data* victim) {
+	if(!victim || !victim->specials.bodyguard) {
+		return;
+	}
+	struct char_data* old_guard = get_char(victim->specials.bodyguard);
+	if(old_guard) {
+		clear_bodyguarding_target(old_guard, victim);
+	}
+	free(victim->specials.bodyguard);
+	victim->specials.bodyguard = nullptr;
+}
+
+void set_victim_bodyguard(struct char_data* guard, struct char_data* victim) {
+	if(!guard || !victim || guard == victim || !GET_NAME(guard)) {
+		return;
+	}
+	detach_old_bodyguard_of_victim(victim);
+	victim->specials.bodyguard = strdup(GET_NAME(guard));
+}
+
+void set_bodyguard_pair(struct char_data* guard, struct char_data* victim) {
+	if(!guard || !victim || guard == victim || !GET_NAME(guard) || !GET_NAME(victim)) {
+		return;
+	}
+	if(guard->specials.bodyguarding) {
+		struct char_data* old_victim = get_char(guard->specials.bodyguarding);
+		if(old_victim) {
+			clear_bodyguard_link(old_victim, guard);
+		}
+		free(guard->specials.bodyguarding);
+		guard->specials.bodyguarding = nullptr;
+	}
+	set_victim_bodyguard(guard, victim);
+	guard->specials.bodyguarding = strdup(GET_NAME(victim));
+}
+
+bool cacaodemon_protects_victim(struct char_data* demon, struct char_data* victim) {
+	return demon && victim && HAS_BODYGUARD(victim) &&
+	       cacaodemon_guard_name_matches(GET_BODYGUARD(victim), demon);
+}
+
+int cacaodemon_count_unprotected(struct char_data* demon, struct char_data* master) {
+	int missing = 0;
+	if(!cacaodemon_protects_victim(demon, master)) {
+		missing++;
+	}
+	if(GetMaxLevel(demon) > 49) {
+		return missing;
+	}
+	for(struct char_data* t = character_list; t != nullptr; t = t->next) {
+		if(IS_NPC(t) || t == master || t == demon) {
+			continue;
+		}
+		if(!is_same_group(master, t)) {
+			continue;
+		}
+		if(!cacaodemon_protects_victim(demon, t)) {
+			missing++;
+		}
+	}
+	return missing;
+}
+
+void cacaodemon_strip_group_bodyguard(struct char_data* demon, struct char_data* master) {
+	for(struct char_data* t = character_list; t != nullptr; t = t->next) {
+		if(IS_NPC(t) || t == master || t == demon) {
+			continue;
+		}
+		if(!is_same_group(master, t)) {
+			continue;
+		}
+		clear_bodyguard_link(t, demon);
+	}
+}
+
+} // namespace
+
+bool is_cacaodemon(const struct char_data* mob) {
+	if(!mob || !IS_NPC(mob) || mob->nr < 0) {
+		return false;
+	}
+	const char* spec = mob_index[mob->nr].specname;
+	return spec && !strcmp(spec, "spec_cacaodemon");
+}
+
+void cacaodemon_assign_bodyguard(struct char_data* demon, struct char_data* master) {
+	if(!demon || !master || !is_cacaodemon(demon) || !GET_NAME(demon)) {
+		return;
+	}
+
+	set_bodyguard_pair(demon, master);
+
+	if(GetMaxLevel(demon) > 49) {
+		cacaodemon_strip_group_bodyguard(demon, master);
+		return;
+	}
+
+	for(struct char_data* t = character_list; t != nullptr; t = t->next) {
+		if(IS_NPC(t) || t == master || t == demon) {
+			continue;
+		}
+		if(!is_same_group(master, t)) {
+			continue;
+		}
+		set_victim_bodyguard(demon, t);
+	}
+}
+
+bool cacaodemon_is_vigila_order(const std::string& command) {
+	char line[MAX_INPUT_LENGTH];
+	char word[MAX_INPUT_LENGTH];
+	if(command.empty() || command.size() >= MAX_INPUT_LENGTH) {
+		return false;
+	}
+	std::snprintf(line, sizeof(line), "%s", command.c_str());
+	one_argument(line, word);
+	if(!*word) {
+		return false;
+	}
+	if(!strcasecmp(word, "vigila") || !strcasecmp(word, "guardia") ||
+			!strcasecmp(word, "proteggi")) {
+		return true;
+	}
+	if(!strcasecmp(word, "bodyguard")) {
+		one_argument(line, word);
+		return !*word;
+	}
+	return false;
+}
+
+bool cacaodemon_order_vigila(struct char_data* master, struct char_data* demon,
+		const std::string& command) {
+	if(!cacaodemon_is_vigila_order(command)) {
+		return false;
+	}
+	if(!master || !demon || !is_cacaodemon(demon)) {
+		return false;
+	}
+	if(demon->master != master || !IS_AFFECTED(demon, AFF_CHARM)) {
+		send_to_char("Non e' un tuo cacaodemon sotto incantesimo.\n\r", master);
+		return true;
+	}
+
+	const int missing = cacaodemon_count_unprotected(demon, master);
+	cacaodemon_assign_bodyguard(demon, master);
+
+	if(missing > 0) {
+		act("$n passa in rassegna il gruppo e riprende la guardia del corpo.",
+			FALSE, demon, nullptr, master, TO_ROOM);
+		act("$N ti fa da guardia del corpo di nuovo.",
+			FALSE, demon, nullptr, master, TO_CHAR);
+		if(GetMaxLevel(demon) <= 49) {
+			send_to_char("Il cacaodemon estende la protezione a tutto il gruppo.\n\r",
+				master);
+		}
+	} else {
+		act("$n annuisce: la guardia del corpo e' gia' al suo posto.",
+			FALSE, demon, nullptr, master, TO_ROOM);
+		if(GetMaxLevel(demon) <= 49) {
+			send_to_char(
+				"Il cacaodemon e' gia' in guardia su di te e su tutto il gruppo.\n\r",
+				master);
+		} else {
+			send_to_char("Il cacaodemon e' gia' in guardia su di te.\n\r", master);
+		}
+	}
+	return true;
 }
 
 } // namespace Alarmud

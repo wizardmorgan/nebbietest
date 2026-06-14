@@ -2593,6 +2593,15 @@ void spell_cacaodemon(byte level, struct char_data* ch,
 	if(!IS_SET(victim->specials.act, ACT_SENTINEL)) {
 		SET_BIT(victim->specials.act, ACT_SENTINEL);
 	}
+
+	cacaodemon_assign_bodyguard(victim, ch);
+	act("$n giura di proteggerti a rischio della sua vita.",
+		FALSE, victim, nullptr, ch, TO_CHAR);
+	if(GetMaxLevel(victim) <= 49) {
+		send_to_char("Estendera' la guardia del corpo a tutto il gruppo.\n\r", ch);
+	}
+	act("$n si impegna a proteggere $N a rischio della sua vita!",
+		FALSE, victim, nullptr, ch, TO_NOTVICT);
 }
 
 /*
