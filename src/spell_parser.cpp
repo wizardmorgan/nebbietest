@@ -36,6 +36,8 @@
 #include "interpreter.hpp"
 #include "opinion.hpp"
 #include "regen.hpp"
+#include "spells.hpp"
+#include "proc_cacaodemon.hpp"
 
 namespace Alarmud {
 
@@ -52,6 +54,14 @@ struct spell_info_type spell_info[MAX_SPL_LIST];
 #define USE_MANA( ch, sn ) MAX( (int)spell_info[ sn ].min_usesmana, 100 /     MAX( 2,( (GetAverageLevel(ch)==51?4:2) + GET_LEVEL( ch, BestMagicClass( ch ) ) - SPELL_LEVEL( ch, sn ))))
 #define SPELLFAIL_MOD( cn, sn ) (int)((cn - sn) / 3 * 2)
 #define ABSNEUTRAL 350
+
+static int spell_cast_mana_cost(struct char_data* ch, int spl, const char* argument) {
+	if(spl == SPELL_CACAODEMON) {
+		const int magnitude = cacaodemon_magnitude_from_cast_arg(argument);
+		return cacaodemon_mana_cost(ch, magnitude > 0 ? magnitude : 1);
+	}
+	return static_cast<int>(USE_MANA(ch, spl));
+}
 
 const char* spells[]= {
 	"armor",               /* 1 */
@@ -2027,7 +2037,8 @@ ACTION_FUNC(do_cast) {
 			}
 			else {
 				if(GetMaxLevel(ch) < IMMORTALE) {
-					if(GET_MANA(ch) < (int)USE_MANA(ch, (int)spl) ||
+					const int mana_needed = spell_cast_mana_cost(ch, spl, argument);
+					if(GET_MANA(ch) < mana_needed ||
 							GET_MANA(ch) <=0)
                     {
                         if(cmd != CMD_MIND)
@@ -2136,7 +2147,7 @@ ACTION_FUNC(do_cast) {
 						act("Certo.. con tutta quella robaccia addosso...",
 							FALSE, ch, NULL, NULL, TO_CHAR);
 					}
-					cost = (int)USE_MANA(ch, (int)spl);
+					cost = spell_cast_mana_cost(ch, spl, argument);
 					if(cmd == CMD_RECALL) {
 						/* give chance to forget */
 						if(number(1,130) > ch->skills[spl].learned) {
@@ -2204,7 +2215,7 @@ ACTION_FUNC(do_cast) {
 				 * cast sia il motivo per cui il recall 'poly' non
 				 * dimenticava
 				 * */
-				cost = (int)USE_MANA(ch, (int)spl);
+				cost = spell_cast_mana_cost(ch, spl, argument);
 				if(cmd == CMD_RECALL) {  /* recall */
 					FORGET(ch, spl);
 				}

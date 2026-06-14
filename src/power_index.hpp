@@ -9,6 +9,10 @@
 
 namespace Alarmud {
 
+/** Tetto del moltiplicatore EQ nel power index (EQ_medio/100). */
+static constexpr float POWER_INDEX_EQ_FACTOR_CAP = 3.0f;
+static constexpr float POWER_INDEX_EQ_FACTOR_FLOOR = 1.0f;
+
 /** Snapshot dell'EQ medio online usato per il power index. */
 struct PowerIndexWorldEq {
 	float world_eq_avg = 1.0f;
@@ -16,7 +20,10 @@ struct PowerIndexWorldEq {
 	float eq_factor = 1.0f;
 };
 
-/** Media GetCharBonusIndex sui PG online con equipment index > 0. */
+/** max(1, EQ/100) limitato a POWER_INDEX_EQ_FACTOR_CAP. */
+float power_index_eq_factor_from_avg(float eq_avg);
+
+/** Media GetCharBonusIndex sui PG mortali online con equipment index > 0. */
 PowerIndexWorldEq power_index_world_snapshot();
 
 /**

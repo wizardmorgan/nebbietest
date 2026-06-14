@@ -32,6 +32,7 @@
 #include "magic3.hpp"
 #include "regen.hpp"
 #include "spell_parser.hpp"
+#include "proc_cacaodemon.hpp"
 
 namespace Alarmud {
 /*AlarMUD*/
@@ -2805,43 +2806,43 @@ void cast_conjure_elemental(byte level, struct char_data* ch, const char* arg, i
 
 void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	char buffer[40];
-	int mob, obj;
+	int mob = 0;
+	int obj = 0;
 	struct obj_data* sac;
 	struct char_data* el;
 	int held = FALSE, wielded = FALSE;
-
-	one_argument(arg,buffer);
 
 	if(NoSummon(ch)) {
 		return;
 	}
 
-	if(!str_cmp(buffer, "one") || !str_cmp(buffer, "uno") || !str_cmp(buffer, "1")) {
+	const int magnitude = cacaodemon_magnitude_from_cast_arg(arg);
+	switch(magnitude) {
+	case 1:
 		mob = DEMON_TYPE_I;
 		obj = TYPE_I_ITEM;
-	}
-	else if(!str_cmp(buffer, "two") || !str_cmp(buffer, "due") || !str_cmp(buffer, "2")) {
+		break;
+	case 2:
 		mob = DEMON_TYPE_II;
 		obj = TYPE_II_ITEM;
-	}
-	else if(!str_cmp(buffer, "three") || !str_cmp(buffer, "tre") || !str_cmp(buffer, "3")) {
+		break;
+	case 3:
 		mob = DEMON_TYPE_III;
 		obj = TYPE_III_ITEM;
-	}
-	else if(!str_cmp(buffer, "four") || !str_cmp(buffer, "quattro") || !str_cmp(buffer, "4")) {
+		break;
+	case 4:
 		mob = DEMON_TYPE_IV;
 		obj = TYPE_IV_ITEM;
-	}
-	else if(!str_cmp(buffer, "five") || !str_cmp(buffer, "cinque") || !str_cmp(buffer, "5")) {
+		break;
+	case 5:
 		mob = DEMON_TYPE_V;
 		obj = TYPE_V_ITEM;
-	}
-	else if(!str_cmp(buffer, "six") || !str_cmp(buffer, "sei") || !str_cmp(buffer, "6")) {
+		break;
+	case 6:
 		mob = DEMON_TYPE_VI;
 		obj = TYPE_VI_ITEM;
-	}
-	else {
+		break;
+	default:
 		send_to_char("You must choose a demon type from one to six.\n\r", ch);
 		return;
 	}
@@ -2873,7 +2874,7 @@ void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type
 
 	sac = unequip_char(ch,(held ? HOLD : WIELD));
 	if((sac) && (GET_LEVEL(ch,CLERIC_LEVEL_IND) > 40) && IS_EVIL(ch)) {
-		if(sac->obj_flags.cost >= 200) {
+		if(sac->obj_flags.cost >= cacaodemon_min_offering_cost(ch)) {
 			equip_char(ch,sac,(held ? HOLD : WIELD));
 		}
 		else {

@@ -5266,7 +5266,7 @@ ACTION_FUNC(do_world) {
 		{
 			std::ostringstream o;
 			o << std::fixed << std::setprecision(2);
-			o << "$c0005EQ medio online (PG connessi)       : $c0015"
+			o << "$c0005EQ medio online (PG mortali)       : $c0015"
 			  << world_eq.world_eq_avg << "$c0005  ($c0015" << world_eq.online_pc_count
 			  << "$c0005 PG con equip index > 0)";
 			worldCharLine(o.str());
@@ -5274,7 +5274,8 @@ ACTION_FUNC(do_world) {
 		{
 			std::ostringstream o;
 			o << std::fixed << std::setprecision(2);
-			o << "$c0005Fattore EQ (power index)           : $c0015" << world_eq.eq_factor;
+			o << "$c0005Fattore EQ mondo (cap " << POWER_INDEX_EQ_FACTOR_CAP
+			  << ")       : $c0015" << world_eq.eq_factor;
 			worldCharLine(o.str());
 		}
 		if(GetMaxLevel(ch) >= IMMORTALE) {
@@ -5341,20 +5342,27 @@ ACTION_FUNC(do_powerindex) {
 	std::ostringstream out;
 	out << std::fixed << std::setprecision(2);
 	out << "$c0005Power index$c0007\n\r";
-	out << "$c0005EQ medio online$c0007 (PG con equip index > 0): $c0015"
+	out << "$c0005EQ medio online$c0007 (PG mortali, equip index > 0): $c0015"
 		<< world_eq.world_eq_avg << "$c0007";
 	out << "  ($c0015" << world_eq.online_pc_count << "$c0007 PG)\n\r";
-	out << "$c0005Fattore EQ$c0007 (max(1, medio/100)): $c0015"
-		<< world_eq.eq_factor << "$c0007\n\r";
+	out << "$c0005Fattore EQ mondo$c0007 (cap " << POWER_INDEX_EQ_FACTOR_CAP
+		<< "): $c0015" << world_eq.eq_factor << "$c0007\n\r";
+	const float caster_factor = self_eq > 0.0f
+		? power_index_eq_factor_from_avg(self_eq)
+		: POWER_INDEX_EQ_FACTOR_FLOOR;
+	out << "$c0005Fattore EQ caster$c0007 (cap " << POWER_INDEX_EQ_FACTOR_CAP
+		<< "): $c0015" << caster_factor << "$c0007\n\r";
+	out << "$c0005Fattore EQ cacaodemon$c0007 (70% mondo + 30% caster): $c0015"
+		<< cacaodemon_eq_factor(ch) << "$c0007\n\r";
 	out << "$c0005Il tuo equipment index$c0007: $c0015" << self_eq << "$c0007\n\r";
 	out << "$c0005Valore medio storico (rent)$c0007: $c0015"
 		<< AverageEqIndex(-1) << "$c0007"
 		<< "  $c0007(medio XP/rent; non entra nel PI)\n\r";
 
 	if(world_eq.online_pc_count > 0) {
-		out << "$c0005PG nel calcolo$c0007:\n\r";
+		out << "$c0005PG mortali nel calcolo$c0007:\n\r";
 		for(struct char_data* i = character_list; i != nullptr; i = i->next) {
-			if(IS_NPC(i)) {
+			if(IS_NPC(i) || IS_IMMORTAL(i)) {
 				continue;
 			}
 			const float eq = GetCharBonusIndex(i);
@@ -5366,16 +5374,22 @@ ACTION_FUNC(do_powerindex) {
 	}
 
 	if(magnitude != 0) {
-		const float pi = compute_power_index(spell_level, magnitude, &world_eq);
-		out << "\n\r$c0005Power index$c0007 (livello " << spell_level
-			<< ", scala " << magnitude << "): $c0015" << pi << "$c0007\n\r";
+		out << "\n\r$c0005Power index generico$c0007 (livello " << spell_level
+			<< ", scala " << magnitude << "): $c0015"
+			<< compute_power_index(spell_level, magnitude, &world_eq) << "$c0007\n\r";
+		out << "$c0005Power index cacaodemon$c0007 (blend caster): $c0015"
+			<< cacaodemon_power_index(ch, spell_level, magnitude) << "$c0007\n\r";
 	} else {
-		out << "\n\r$c0005Power index per livello incantesimo $c0015" << spell_level
+		out << "\n\r$c0005Power index generico per livello incantesimo $c0015" << spell_level
 			<< "$c0007 (scale 1-6, es. tier cacaodemon):\n\r";
 		for(int scale = 1; scale <= 6; ++scale) {
 			const float pi = compute_power_index(spell_level, scale, &world_eq);
-			out << "  Scala " << scale << ": $c0015" << pi << "$c0007\n\r";
+			const float pi_caca = cacaodemon_power_index(ch, spell_level, scale);
+			out << "  Scala " << scale << ": generico $c0015" << pi
+				<< "$c0007, cacaodemon $c0015" << pi_caca << "$c0007\n\r";
 		}
+		out << "$c0005Mana cacaodemon (grado 6)$c0007: $c0015"
+			<< cacaodemon_mana_cost(ch, 6) << "$c0007\n\r";
 	}
 
 	send_to_char(out.str().c_str(), ch);

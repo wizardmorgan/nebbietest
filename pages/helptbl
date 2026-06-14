@@ -2230,7 +2230,7 @@ Accumulazione: -
 Durata      : Varia, dipende dal carisma del caster
 Livello     : Level 30 mage, level 29 cleric, level 30 sorcerer.
 Save        : Nessuno
-Costo di lancio: 50 mana
+Costo di lancio: base 50 mana, variabile (vedi sotto)
 
 Cacaodemon e' un rituale di evocazione: vincola per breve tempo un servitore
 che prende forma al momento del rito. La potenza del patto va indicata da
@@ -2247,20 +2247,44 @@ Le offerte sono reliquie legate al rito: piume impregnate di pece, lingue
 essiccate di rospo, chele d'ossidiana, maschere bestiali d'avorio,
 monili serpentini, frammenti di frusta infuocata e simili.
 
-Quando il rito riesce, l'offerta viene di norma consumata. Un chierico
-malvagio molto esperto puo' invece logorarla gradualmente e riutilizzarla
-finche' conserva sufficiente valore rituale. Chi non e' gia' al di fuori
-delle regole comuni rischia di macchiare ulteriormente il proprio
-allineamento.
+Costo del rituale
+-----------------
+Il mana non e' fisso: parte da 50 e cresce con il grado del patto e con
+l'energia del mondo in quel momento.
+
+  mana = 50 * fattore_EQ * (1 + 0.15 * (grado - 1))
+
+Il fattore_EQ del cacaodemon combina:
+  - 70% la qualita' media dell'equip indossato dai PG mortali online;
+  - 30% il tuo equipment index personale.
+
+Gli immortali non entrano nel calcolo del mondo. Il moltiplicatore EQ e'
+limitato (cap 3.0): anche con equip eccezionale online, il rituale non
+scala all'infinito.
+
+Esempi indicativi (fattore 1.0): grado 1 = 50 mana, grado 6 = 87 mana.
+Con fattore al cap (3.0): grado 1 = 150 mana, grado 6 = 262 mana.
+
+L'offerta rituale
+-----------------
+Quando il rito riesce, l'offerta viene di norma consumata del tutto. Un
+chierico malvagio molto esperto puo' invece logorarla gradualmente e
+riutilizzarla finche' conserva sufficiente valore rituale; quel valore
+minimo cresce con lo stesso fattore_EQ (base 200 al minimo). Anche il
+logoramento per cast e' piu' rapido quando il mondo e' "carico" di
+equipaggiamento pregiato.
+
+Chi non e' gia' al di fuori delle regole comuni rischia di macchiare
+ulteriormente il proprio allineamento.
 
 La creatura evocata
 -------------------
 Non e' un semplice clone del modello di zona: al momento dell'apparizione
 viene trasfigurata in base al patto scelto, al livello effettivo del
-lancio e alla qualita' media dell'equipaggiamento indossato dai
-personaggi attualmente in gioco nel mondo. Un mondo in cui molti giocatori
-indossano equipaggiamento pregiato tende a produrre servitori piu' resistenti
-e pericolosi; un mondo "povero" di equip produce evocazioni piu' modeste.
+lancio e al fattore_EQ descritto sopra (mondo + caster). Un mondo in cui
+molti giocatori mortali indossano equip pregiato tende a produrre
+servitori piu' resistenti e pericolosi, ma il cap sul moltiplicatore
+evita picchi estremi causati da pochi outlier.
 
 Il grado del patto (da uno a sei) incide sulla potenza complessiva e sulla
 forma assunta. Descrizioni, aspetto e nome cambiano a ogni evocazione

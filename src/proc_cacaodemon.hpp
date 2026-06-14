@@ -10,8 +10,31 @@
 
 namespace Alarmud {
 
+static constexpr float CACAODEMON_WORLD_EQ_WEIGHT = 0.7f;
+static constexpr float CACAODEMON_CASTER_EQ_WEIGHT = 0.3f;
+static constexpr int CACAODEMON_BASE_MANA_COST = 50;
+
 /* Magnitudine 1-6 da vnum mob 20-25 (default 1). */
 int cacaodemon_magnitude_from_vnum(int vnum);
+
+/* Magnitudine 1-6 dall'argomento cast (one..six / 1..6); 0 se non valido. */
+int cacaodemon_magnitude_from_cast_arg(const char* arg);
+
+/**
+ * Fattore EQ per cacaodemon: 70% mondo online + 30% equipment index del caster,
+ * ciascuno gia' limitato al cap PI, poi blend limitato al cap.
+ */
+float cacaodemon_eq_factor(struct char_data* caster);
+
+float cacaodemon_power_index(struct char_data* caster, int spell_level, int magnitude);
+
+int cacaodemon_mana_cost(struct char_data* caster, int magnitude);
+
+/** Valore minimo offerta per riutilizzo chierico malvagio (base 200 * fattore EQ). */
+int cacaodemon_min_offering_cost(struct char_data* caster);
+
+/** Divisore logoramento offerta chierico malvagio (cresce col fattore EQ). */
+int cacaodemon_offering_wear_divisor(struct char_data* caster);
 
 bool is_cacaodemon(const struct char_data* mob);
 

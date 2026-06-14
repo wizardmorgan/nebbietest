@@ -2539,8 +2539,8 @@ void spell_cacaodemon(byte level, struct char_data* ch,
 	if(GET_LEVEL(ch, CLERIC_LEVEL_IND) > 40 && IS_EVIL(ch)) {
 		act("$p emette un po' di $c0008fumo$c0007...", TRUE, ch, obj, 0, TO_ROOM);
 		act("$p emette un po' di $c0008fumo$c0007...", TRUE, ch, obj, 0, TO_CHAR);
-		obj->obj_flags.cost /= 2;
-		if(obj->obj_flags.cost < 100) {
+		obj->obj_flags.cost /= cacaodemon_offering_wear_divisor(ch);
+		if(obj->obj_flags.cost < cacaodemon_min_offering_cost(ch)) {
 			act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!",
 				TRUE, ch, obj, 0, TO_ROOM);
 			act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!",

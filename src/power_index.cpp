@@ -15,6 +15,11 @@ namespace Alarmud {
 
 extern struct char_data* character_list;
 
+float power_index_eq_factor_from_avg(float eq_avg) {
+	const float raw = eq_avg / 100.0f;
+	return std::clamp(raw, POWER_INDEX_EQ_FACTOR_FLOOR, POWER_INDEX_EQ_FACTOR_CAP);
+}
+
 namespace {
 
 PowerIndexWorldEq snapshot_online_eq() {
@@ -22,10 +27,15 @@ PowerIndexWorldEq snapshot_online_eq() {
 	float total_eq = 0.0f;
 
 	for(struct char_data* i = character_list; i != nullptr; i = i->next) {
-		if(!IS_NPC(i) && GetCharBonusIndex(i) > 0.0f) {
-			total_eq += GetCharBonusIndex(i);
-			out.online_pc_count++;
+		if(IS_NPC(i) || IS_IMMORTAL(i)) {
+			continue;
 		}
+		const float eq = GetCharBonusIndex(i);
+		if(eq <= 0.0f) {
+			continue;
+		}
+		total_eq += eq;
+		out.online_pc_count++;
 	}
 
 	if(out.online_pc_count == 0) {
@@ -33,7 +43,7 @@ PowerIndexWorldEq snapshot_online_eq() {
 	} else {
 		out.world_eq_avg = total_eq / static_cast<float>(out.online_pc_count);
 	}
-	out.eq_factor = std::max(1.0f, out.world_eq_avg / 100.0f);
+	out.eq_factor = power_index_eq_factor_from_avg(out.world_eq_avg);
 	return out;
 }
 

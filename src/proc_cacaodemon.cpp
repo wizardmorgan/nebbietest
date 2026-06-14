@@ -307,6 +307,70 @@ int cacaodemon_magnitude_from_vnum(int vnum) {
 	return 1;
 }
 
+int cacaodemon_magnitude_from_cast_arg(const char* arg) {
+	if(arg == nullptr) {
+		return 0;
+	}
+	char buffer[MAX_INPUT_LENGTH];
+	one_argument(arg, buffer);
+	if(!*buffer) {
+		return 0;
+	}
+	if(!str_cmp(buffer, "one") || !str_cmp(buffer, "uno") || !str_cmp(buffer, "1")) {
+		return 1;
+	}
+	if(!str_cmp(buffer, "two") || !str_cmp(buffer, "due") || !str_cmp(buffer, "2")) {
+		return 2;
+	}
+	if(!str_cmp(buffer, "three") || !str_cmp(buffer, "tre") || !str_cmp(buffer, "3")) {
+		return 3;
+	}
+	if(!str_cmp(buffer, "four") || !str_cmp(buffer, "quattro") || !str_cmp(buffer, "4")) {
+		return 4;
+	}
+	if(!str_cmp(buffer, "five") || !str_cmp(buffer, "cinque") || !str_cmp(buffer, "5")) {
+		return 5;
+	}
+	if(!str_cmp(buffer, "six") || !str_cmp(buffer, "sei") || !str_cmp(buffer, "6")) {
+		return 6;
+	}
+	return 0;
+}
+
+float cacaodemon_eq_factor(struct char_data* caster) {
+	const PowerIndexWorldEq world = power_index_world_snapshot();
+	const float caster_eq = caster ? GetCharBonusIndex(caster) : 0.0f;
+	const float caster_factor = caster_eq > 0.0f
+		? power_index_eq_factor_from_avg(caster_eq)
+		: POWER_INDEX_EQ_FACTOR_FLOOR;
+	const float blended = (CACAODEMON_WORLD_EQ_WEIGHT * world.eq_factor) +
+		(CACAODEMON_CASTER_EQ_WEIGHT * caster_factor);
+	return std::clamp(blended, POWER_INDEX_EQ_FACTOR_FLOOR, POWER_INDEX_EQ_FACTOR_CAP);
+}
+
+float cacaodemon_power_index(struct char_data* caster, int spell_level, int magnitude) {
+	const int lvl = std::max(1, spell_level);
+	const int mag = std::clamp(magnitude, 1, 6);
+	return static_cast<float>(lvl * mag) * cacaodemon_eq_factor(caster);
+}
+
+int cacaodemon_mana_cost(struct char_data* caster, int magnitude) {
+	const int mag = std::clamp(magnitude, 1, 6);
+	const float factor = cacaodemon_eq_factor(caster);
+	const float mag_mul = 1.0f + (0.15f * static_cast<float>(mag - 1));
+	return static_cast<int>(
+		static_cast<float>(CACAODEMON_BASE_MANA_COST) * factor * mag_mul + 0.5f);
+}
+
+int cacaodemon_min_offering_cost(struct char_data* caster) {
+	return static_cast<int>(200.0f * cacaodemon_eq_factor(caster) + 0.5f);
+}
+
+int cacaodemon_offering_wear_divisor(struct char_data* caster) {
+	const int wear = static_cast<int>(1.0f + cacaodemon_eq_factor(caster) + 0.5f);
+	return std::max(2, wear);
+}
+
 MOBSPECIAL_FUNC(spec_cacaodemon) {
     if (cmd) {
         return FALSE;
@@ -335,9 +399,8 @@ void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, i
     int magnitude = cacaodemon_magnitude_from_vnum(GET_MOB_VNUM(demon));
     magnitude = std::clamp(magnitude, 1, 6);
 
-    const PowerIndexWorldEq world_eq = power_index_world_snapshot();
     const float power_index =
-        compute_power_index(spell_level, magnitude, &world_eq);
+        cacaodemon_power_index(caster, spell_level, magnitude);
 
     int align = GET_ALIGNMENT(caster);
     DemonStrings strings;
