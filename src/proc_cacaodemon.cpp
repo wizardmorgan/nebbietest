@@ -126,7 +126,7 @@ bool cacaodemon_neutral_tick(struct char_data* demon) {
             next_vict = vict->next_in_room;
             if (vict != demon && vict != demon->master && !is_same_group(vict, demon)) {
                 int damage_amount = dice(GetMaxLevel(demon) / 2, 8);
-                damage(demon, vict, damage_amount, TYPE_BLAST);
+                damage(demon, vict, damage_amount, TYPE_BLAST, 5);
             }
         }
         return true;
@@ -146,7 +146,7 @@ bool cacaodemon_evil_tick(struct char_data* demon) {
         act("$n ti strappa l'energia vitale!", FALSE, demon, nullptr, victim, TO_VICT);
 
         int drain = dice(4, 12) + (GetMaxLevel(demon) / 2);
-        damage(demon, victim, drain, TYPE_UNDEFINED);
+        damage(demon, victim, drain, TYPE_UNDEFINED, 5);
         GET_HIT(demon) = std::min(GET_MAX_HIT(demon), GET_HIT(demon) + drain);
         return true;
     } else if (chance > 75 && !IS_AFFECTED(victim, AFF_POISON)) {
