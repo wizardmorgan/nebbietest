@@ -214,8 +214,8 @@ echo "==> MySQL + database nebbie"
 start_mysql
 
 if [ -x "${WORKSPACE}/scripts/link-dev-toons-to-account.sh" ]; then
-	echo "==> Associazione PG dev -> wizmorgan@gmail.com (se presenti)"
-	bash "${WORKSPACE}/scripts/link-dev-toons-to-account.sh" || true
+	echo "==> Setup PG dev Sirio -> wizmorgan@gmail.com (se presente)"
+	bash "${WORKSPACE}/scripts/link-dev-toons-to-account.sh" --boost || true
 fi
 
 echo "==> World data"
