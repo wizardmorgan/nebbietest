@@ -514,15 +514,20 @@ fewer of the log messages until they are filtered out completely.
 #
 "POWERINDEX"
 
-Comando staff (livello immortale 52+): powerindex [<livello_incantesimo> [<magnitudine>]]
+Comando staff (livello immortale 52+):
+  powerindex [<livello_incantesimo> [<scala>]]
 
-Mostra i parametri usati da proc_modify_cacaodemon al momento dell'evocazione.
-NON e' il valore medio EQ storico mostrato da 'world' o aggiornato al rent
-(AverageEqIndex): il cacaodemon usa solo l'EQ medio dei PG attualmente
-online con equipment index > 0.
+Il power index (PI) e' un indicatore generico di potenza degli incantesimi
+che tengono conto del livello effettivo del cast e della qualita' media
+dell'equipaggiamento indossato dai personaggi attualmente online nel mondo.
+Ogni spell decide come interpretare il PI (stat, durata, numero bersagli, ecc.).
 
-Calcolo EQ online
------------------
+NON confondere con il "valore medio EQ" mostrato da 'world' o aggiornato al
+rent (AverageEqIndex): il PI usa solo l'equipment index dei PG connessi in
+questo momento.
+
+Calcolo EQ online (condiviso da tutti gli spell che usano PI)
+------------------------------------------------------------
 Per ogni PG connesso con GetCharBonusIndex > 0:
   total_eq += equipment index del PG
   pc_count++
@@ -535,54 +540,48 @@ Altrimenti:
 Fattore EQ:
   eq_factor = max(1.0, EQ_medio / 100.0)
 
-Power index (PI):
-  PI = livello_incantesimo * magnitudine * eq_factor
+Power index:
+  PI = livello_incantesimo * scala * eq_factor
 
-  dove magnitudine = 1..6 dal vnum del template evocato (vnum 20 -> 1,
-  vnum 21 -> 2, ... vnum 25 -> 6).
+  livello_incantesimo = livello effettivo del cast.
+  scala = moltiplicatore intero >= 1, scelto dallo spell (tier, categoria,
+          numero bersagli, ecc.). Il comando powerindex accetta scale 1-99;
+          senza argomenti mostra una tabella 1-6 come esempio tipico.
 
-Uso del PI in proc_modify_cacaodemon
-------------------------------------
-Dati spell_level (livello effettivo del cast) e magnitude:
+API codice (src/power_index.hpp)
+--------------------------------
+  PowerIndexWorldEq power_index_world_snapshot();
+  float compute_power_index(int spell_level, int scale,
+                            const PowerIndexWorldEq* world = nullptr);
 
-  livello_finale = clamp(spell_level + magnitude*2, 1, 60)
+Passare `world` evita un secondo scan della character_list se si calcola
+piu' PI nello stesso tick.
 
-  HP_base = livello_finale*15 + magnitude*50
-  HP_bonus = HP_base * (PI / 500)
-  HP = HP_base + HP_bonus
-
-  AC = 10 - livello_finale/2 - magnitude*3
-
-  damnodice = max(2, livello_finale/10)
-  damsizedice = 6 + magnitude/2   (divisione intera)
-
-  hitroll = damroll = magnitude*2 + (PI / 50)   [sbyte]
-
-  magnitude >= 4 -> AFF_SANCTUARY
-  magnitude == 6 -> AFF_FIRESHIELD
-
-Allineamento caster (>=350 buono, <=-350 malvagio, altrimenti neutro)
-sceglie il pool di descrizioni e imposta l'allineamento del mob; viene
-applicata spec_cacaodemon.
+Esempio consumatore: cacaodemon (proc_cacaodemon.cpp)
+-----------------------------------------------------
+  scala = magnitudine 1-6 dal vnum template (20 -> 1, ... 25 -> 6).
+  PI alimenta HP bonus, hitroll e damroll; magnitudine e livello incidono
+  anche su livello finale, AC, dadi, flag (sanctuary, fireshield) e testi.
+  Altri spell futuri possono chiamare compute_power_index() con scala=1 o
+  con regole proprie, senza dipendere da proc_cacaodemon.
 
 Sintassi powerindex
 -------------------
   powerindex
-      EQ online, fattore, proprio equipment index, valore storico rent
-      (solo confronto), elenco PG nel calcolo, tabella PI per magnitudini
-      1-6 con livello incantesimo di default 40.
+      snapshot EQ online, fattore, proprio equipment index, medio rent
+      (solo confronto), elenco PG nel calcolo, tabella PI scale 1-6
+      con livello incantesimo di default 40.
 
   powerindex <livello>
-      stessa tabella PI per il livello indicato.
+      tabella PI per scale 1-6 al livello indicato.
 
-  powerindex <livello> <magnitudine>
+  powerindex <livello> <scala>
       PI singolo per quella coppia.
 
-Log evocazione (LOG_CHECK):
-  proc_cacaodemon: Modificata creatura liv X, Mag Y, HP Z, forma '...'
-  per <caster> (PI ...)
+Log cacaodemon (LOG_CHECK, solo esempio d'uso):
+  proc_cacaodemon: Modificata creatura liv X, Mag Y, HP Z, ... (PI ...)
 
-Vedi anche: help cacaodemon, ckeq, world
+Vedi anche: help cacaodemon, ckeq, world, power_index.hpp
 
 #~
 

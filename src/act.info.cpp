@@ -50,6 +50,7 @@
 #include "multiclass.hpp"
 #include "parser.hpp"
 #include "proc_cacaodemon.hpp"
+#include "power_index.hpp"
 #include "signals.hpp"
 #include "skills.hpp"
 #include "snew.hpp"
@@ -5286,8 +5287,9 @@ ACTION_FUNC(do_powerindex) {
 	if(*spell_buf) {
 		if(!isdigit(*spell_buf)) {
 			send_to_char(
-				"Sintassi: powerindex [<livello_incantesimo> [<magnitudine 1-6>]]\n\r"
-				"Senza argomenti usa livello incantesimo 40 e mostra tutte le magnitudini.\n\r",
+				"Sintassi: powerindex [<livello_incantesimo> [<scala>]]\n\r"
+				"Senza argomenti usa livello 40 e mostra PI per scale 1-6.\n\r"
+				"La scala e' un moltiplicatore libero (es. grado cacaodemon).\n\r",
 				ch);
 			return;
 		}
@@ -5296,7 +5298,7 @@ ACTION_FUNC(do_powerindex) {
 	if(*mag_buf) {
 		if(!isdigit(*mag_buf)) {
 			send_to_char(
-				"Sintassi: powerindex [<livello_incantesimo> [<magnitudine 1-6>]]\n\r",
+				"Sintassi: powerindex [<livello_incantesimo> [<scala>]]\n\r",
 				ch);
 			return;
 		}
@@ -5305,15 +5307,15 @@ ACTION_FUNC(do_powerindex) {
 
 	spell_level = std::clamp(spell_level, 1, 60);
 	if(magnitude != 0) {
-		magnitude = std::clamp(magnitude, 1, 6);
+		magnitude = std::clamp(magnitude, 1, 99);
 	}
 
-	const CacaodemonWorldEq world_eq = cacaodemon_world_eq_snapshot();
+	const PowerIndexWorldEq world_eq = power_index_world_snapshot();
 	const float self_eq = GetCharBonusIndex(ch);
 
 	std::ostringstream out;
 	out << std::fixed << std::setprecision(2);
-	out << "$c0005Power index (cacaodemon)$c0007\n\r";
+	out << "$c0005Power index$c0007\n\r";
 	out << "$c0005EQ medio online$c0007 (PG con equip index > 0): $c0015"
 		<< world_eq.world_eq_avg << "$c0007";
 	out << "  ($c0015" << world_eq.online_pc_count << "$c0007 PG)\n\r";
@@ -5322,7 +5324,7 @@ ACTION_FUNC(do_powerindex) {
 	out << "$c0005Il tuo equipment index$c0007: $c0015" << self_eq << "$c0007\n\r";
 	out << "$c0005Valore medio storico (rent)$c0007: $c0015"
 		<< AverageEqIndex(-1) << "$c0007"
-		<< "  $c0007(non usato dal cacaodemon)\n\r";
+		<< "  $c0007(medio XP/rent; non entra nel PI)\n\r";
 
 	if(world_eq.online_pc_count > 0) {
 		out << "$c0005PG nel calcolo$c0007:\n\r";
@@ -5339,16 +5341,15 @@ ACTION_FUNC(do_powerindex) {
 	}
 
 	if(magnitude != 0) {
-		const float pi =
-			cacaodemon_power_index(spell_level, magnitude, &world_eq);
+		const float pi = compute_power_index(spell_level, magnitude, &world_eq);
 		out << "\n\r$c0005Power index$c0007 (livello " << spell_level
-			<< ", magnitudine " << magnitude << "): $c0015" << pi << "$c0007\n\r";
+			<< ", scala " << magnitude << "): $c0015" << pi << "$c0007\n\r";
 	} else {
 		out << "\n\r$c0005Power index per livello incantesimo $c0015" << spell_level
-			<< "$c0007:\n\r";
-		for(int mag = 1; mag <= 6; ++mag) {
-			const float pi = cacaodemon_power_index(spell_level, mag, &world_eq);
-			out << "  Magnitudine " << mag << ": $c0015" << pi << "$c0007\n\r";
+			<< "$c0007 (scale 1-6, es. tier cacaodemon):\n\r";
+		for(int scale = 1; scale <= 6; ++scale) {
+			const float pi = compute_power_index(spell_level, scale, &world_eq);
+			out << "  Scala " << scale << ": $c0015" << pi << "$c0007\n\r";
 		}
 	}
 

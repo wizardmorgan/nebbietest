@@ -19,6 +19,7 @@
 #include "handler.hpp"
 #include "interpreter.hpp"
 #include "multiclass.hpp"
+#include "power_index.hpp"
 #include "snew.hpp"
 #include "act.comm.hpp"
 #include "proc_cacaodemon.hpp"
@@ -33,26 +34,6 @@ extern struct char_data *character_list;
 extern struct index_data *mob_index;
 
 namespace {
-
-CacaodemonWorldEq calc_world_eq_snapshot() {
-	CacaodemonWorldEq out {};
-	float total_eq = 0.0f;
-
-	for(struct char_data* i = character_list; i != nullptr; i = i->next) {
-		if(!IS_NPC(i) && GetCharBonusIndex(i) > 0) {
-			total_eq += GetCharBonusIndex(i);
-			out.online_pc_count++;
-		}
-	}
-
-	if(out.online_pc_count == 0) {
-		out.world_eq_avg = 1.0f;
-	} else {
-		out.world_eq_avg = total_eq / static_cast<float>(out.online_pc_count);
-	}
-	out.eq_factor = std::max(1.0f, out.world_eq_avg / 100.0f);
-	return out;
-}
 
 struct DemonStrings {
     const char* keywords;
@@ -319,19 +300,6 @@ bool cacaodemon_evil_tick(struct char_data* demon) {
 
 } // namespace anonimo
 
-CacaodemonWorldEq cacaodemon_world_eq_snapshot() {
-	return calc_world_eq_snapshot();
-}
-
-float cacaodemon_power_index(int spell_level, int magnitude,
-		const CacaodemonWorldEq* metrics) {
-	const CacaodemonWorldEq local =
-		metrics ? *metrics : calc_world_eq_snapshot();
-	const int mag = std::clamp(magnitude, 1, 6);
-	const int lvl = std::max(1, spell_level);
-	return static_cast<float>(lvl * mag) * local.eq_factor;
-}
-
 int cacaodemon_magnitude_from_vnum(int vnum) {
 	if(vnum >= 20 && vnum <= 25) {
 		return vnum - 19;
@@ -367,9 +335,9 @@ void proc_modify_cacaodemon(struct char_data* caster, struct char_data* demon, i
     int magnitude = cacaodemon_magnitude_from_vnum(GET_MOB_VNUM(demon));
     magnitude = std::clamp(magnitude, 1, 6);
 
-    const CacaodemonWorldEq world_eq = calc_world_eq_snapshot();
+    const PowerIndexWorldEq world_eq = power_index_world_snapshot();
     const float power_index =
-        cacaodemon_power_index(spell_level, magnitude, &world_eq);
+        compute_power_index(spell_level, magnitude, &world_eq);
 
     int align = GET_ALIGNMENT(caster);
     DemonStrings strings;

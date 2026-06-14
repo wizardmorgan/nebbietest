@@ -10,19 +10,6 @@
 
 namespace Alarmud {
 
-struct CacaodemonWorldEq {
-	float world_eq_avg = 1.0f;
-	int online_pc_count = 0;
-	float eq_factor = 1.0f;
-};
-
-/* Snapshot EQ medio dei PG attualmente online (GetCharBonusIndex > 0). */
-CacaodemonWorldEq cacaodemon_world_eq_snapshot();
-
-/* PI = (spell_level * magnitude) * eq_factor; metrics opzionale per evitare doppio scan. */
-float cacaodemon_power_index(int spell_level, int magnitude,
-		const CacaodemonWorldEq* metrics = nullptr);
-
 /* Magnitudine 1-6 da vnum mob 20-25 (default 1). */
 int cacaodemon_magnitude_from_vnum(int vnum);
 
