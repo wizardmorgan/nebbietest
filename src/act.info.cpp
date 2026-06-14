@@ -5257,9 +5257,34 @@ ACTION_FUNC(do_world) {
 	/****/
 	{
 		std::ostringstream o;
-		o << std::fixed << std::setprecision(6);
-		o << "$c0005Valore medio dell'eq in gioco        : $c0015" << AverageEqIndex(-1);
+		o << std::fixed << std::setprecision(2);
+		o << "$c0005Valore medio EQ storico (rent)     : $c0015" << AverageEqIndex(-1);
 		worldCharLine(o.str());
+	}
+	{
+		const PowerIndexWorldEq world_eq = power_index_world_snapshot();
+		{
+			std::ostringstream o;
+			o << std::fixed << std::setprecision(2);
+			o << "$c0005EQ medio online (PG connessi)       : $c0015"
+			  << world_eq.world_eq_avg << "$c0005  ($c0015" << world_eq.online_pc_count
+			  << "$c0005 PG con equip index > 0)";
+			worldCharLine(o.str());
+		}
+		{
+			std::ostringstream o;
+			o << std::fixed << std::setprecision(2);
+			o << "$c0005Fattore EQ (power index)           : $c0015" << world_eq.eq_factor;
+			worldCharLine(o.str());
+		}
+		if(GetMaxLevel(ch) >= IMMORTALE) {
+			const float pi_ref = compute_power_index(40, 1, &world_eq);
+			std::ostringstream o;
+			o << std::fixed << std::setprecision(2);
+			o << "$c0005PI di riferimento (liv.40, scala 1): $c0015" << pi_ref
+			  << "$c0005  ($c0007wizhelp powerindex$c0005)";
+			worldCharLine(o.str());
+		}
 	}
 
 }
