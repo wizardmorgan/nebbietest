@@ -511,6 +511,79 @@ SETSEV
 This command will set a god's severity levels.  Basically, at 0 you get
 all wiz messages.  As you increase your severity level, you get fewer and
 fewer of the log messages until they are filtered out completely.
+#
+"POWERINDEX"
+
+Comando staff (livello immortale 52+): powerindex [<livello_incantesimo> [<magnitudine>]]
+
+Mostra i parametri usati da proc_modify_cacaodemon al momento dell'evocazione.
+NON e' il valore medio EQ storico mostrato da 'world' o aggiornato al rent
+(AverageEqIndex): il cacaodemon usa solo l'EQ medio dei PG attualmente
+online con equipment index > 0.
+
+Calcolo EQ online
+-----------------
+Per ogni PG connesso con GetCharBonusIndex > 0:
+  total_eq += equipment index del PG
+  pc_count++
+
+Se pc_count == 0:
+  EQ_medio = 1
+Altrimenti:
+  EQ_medio = total_eq / pc_count
+
+Fattore EQ:
+  eq_factor = max(1.0, EQ_medio / 100.0)
+
+Power index (PI):
+  PI = livello_incantesimo * magnitudine * eq_factor
+
+  dove magnitudine = 1..6 dal vnum del template evocato (vnum 20 -> 1,
+  vnum 21 -> 2, ... vnum 25 -> 6).
+
+Uso del PI in proc_modify_cacaodemon
+------------------------------------
+Dati spell_level (livello effettivo del cast) e magnitude:
+
+  livello_finale = clamp(spell_level + magnitude*2, 1, 60)
+
+  HP_base = livello_finale*15 + magnitude*50
+  HP_bonus = HP_base * (PI / 500)
+  HP = HP_base + HP_bonus
+
+  AC = 10 - livello_finale/2 - magnitude*3
+
+  damnodice = max(2, livello_finale/10)
+  damsizedice = 6 + magnitude/2   (divisione intera)
+
+  hitroll = damroll = magnitude*2 + (PI / 50)   [sbyte]
+
+  magnitude >= 4 -> AFF_SANCTUARY
+  magnitude == 6 -> AFF_FIRESHIELD
+
+Allineamento caster (>=350 buono, <=-350 malvagio, altrimenti neutro)
+sceglie il pool di descrizioni e imposta l'allineamento del mob; viene
+applicata spec_cacaodemon.
+
+Sintassi powerindex
+-------------------
+  powerindex
+      EQ online, fattore, proprio equipment index, valore storico rent
+      (solo confronto), elenco PG nel calcolo, tabella PI per magnitudini
+      1-6 con livello incantesimo di default 40.
+
+  powerindex <livello>
+      stessa tabella PI per il livello indicato.
+
+  powerindex <livello> <magnitudine>
+      PI singolo per quella coppia.
+
+Log evocazione (LOG_CHECK):
+  proc_cacaodemon: Modificata creatura liv X, Mag Y, HP Z, forma '...'
+  per <caster> (PI ...)
+
+Vedi anche: help cacaodemon, ckeq, world
+
 #~
 
 
