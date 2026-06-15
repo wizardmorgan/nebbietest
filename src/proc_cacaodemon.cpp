@@ -341,11 +341,12 @@ float cacaodemon_eq_factor(struct char_data* caster) {
 	const PowerIndexWorldEq world = power_index_world_snapshot();
 	const float caster_eq = caster ? GetCharBonusIndex(caster) : 0.0f;
 	const float caster_factor = caster_eq > 0.0f
-		? power_index_eq_factor_from_avg(caster_eq)
+		? power_index_caster_eq_factor(caster_eq, world.world_eq_reference)
 		: POWER_INDEX_EQ_FACTOR_FLOOR;
 	const float blended = (CACAODEMON_WORLD_EQ_WEIGHT * world.eq_factor) +
 		(CACAODEMON_CASTER_EQ_WEIGHT * caster_factor);
-	return std::clamp(blended, POWER_INDEX_EQ_FACTOR_FLOOR, POWER_INDEX_EQ_FACTOR_CAP);
+	return std::clamp(blended, POWER_INDEX_EQ_FACTOR_FLOOR,
+		POWER_INDEX_EQ_FACTOR_MAX);
 }
 
 float cacaodemon_power_index(struct char_data* caster, int spell_level, int magnitude) {

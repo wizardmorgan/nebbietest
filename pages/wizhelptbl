@@ -518,79 +518,58 @@ fewer of the log messages until they are filtered out completely.
 Comando staff (livello immortale 52+):
   powerindex [<livello_incantesimo> [<scala>]]
 
-Il power index (PI) e' un indicatore generico di potenza degli incantesimi
-che tengono conto del livello effettivo del cast e della qualita' media
-dell'equipaggiamento indossato dai personaggi attualmente online nel mondo.
-Ogni spell decide come interpretare il PI (stat, durata, numero bersagli, ecc.).
+Il power index (PI) e' un indicatore **neutro** riusabile per calibrare dinamicamente
+spell, skill, mob procedurali e altre meccaniche: non e' necessariamente un malus.
+Il cacaodemon evoca servitori piu' utili con PI alto (endgame) e resta accessibile
+con alleati modesti a livelli bassi; il mana leggermente superiore compensa in parte.
 
-NON confondere con il "valore medio EQ" mostrato da 'world' o aggiornato al
-rent (AverageEqIndex): il PI usa solo l'equipment index dei PG connessi in
-questo momento.
+NON confondere con il valore medio EQ storico (rent) mostrato da 'world'.
 
 Calcolo EQ online (condiviso da tutti gli spell che usano PI)
 ------------------------------------------------------------
 Per ogni PG mortale connesso con GetCharBonusIndex > 0:
-  total_eq += equipment index del PG
-  pc_count++
+  peso = clamp(sqrt(livello_max/40), 0.25, 1.0)
+  si accumulano EQ pesati per mediana, armonica e media aritmetica
 
 Gli immortali sono esclusi dal campione.
 
-Se pc_count == 0:
-  EQ_medio = 1
-Altrimenti:
-  EQ_medio = total_eq / pc_count
+EQ riferimento PI = 60% mediana pesata + 40% armonica pesata.
+Con <= 2 PG online il riferimento e' stabilizzato verso AverageEqIndex (rent).
 
-Fattore EQ:
-  eq_factor = clamp(EQ_medio / 100.0, 1.0, 3.0)
+Fattore EQ mondo (soft cap, asintoto 4.0, anchor 3000):
+  raw = EQ_riferimento / 3000
+  factor = 1 + 3 * raw / (1 + raw)
+
+Fattore EQ caster (relativo al riferimento mondo):
+  ratio = tuo_EQ / EQ_riferimento
+  factor = 1 + 3 * ratio / (1 + ratio)
 
 Power index generico:
-  PI = livello_incantesimo * scala * eq_factor
+  PI = livello_incantesimo * scala * fattore_EQ_mondo
 
-  livello_incantesimo = livello effettivo del cast.
-  scala = moltiplicatore intero >= 1, scelto dallo spell (tier, categoria,
-          numero bersagli, ecc.). Il comando powerindex accetta scale 1-99;
-          senza argomenti mostra una tabella 1-6 come esempio tipico.
+Cacaodemon (esempio consumatore):
+  fattore = 70% mondo + 30% caster (clamp 1..4)
+  PI = livello * magnitudine * fattore
+  Mana: 50 * fattore * (1 + 0.15 * (grado - 1))
 
 API codice (src/power_index.hpp)
 --------------------------------
   PowerIndexWorldEq power_index_world_snapshot();
-  float power_index_eq_factor_from_avg(float eq_avg);
+  float power_index_eq_factor_from_reference(float eq_reference);
+  float power_index_caster_eq_factor(float caster_eq, float world_eq_reference);
   float compute_power_index(int spell_level, int scale,
                             const PowerIndexWorldEq* world = nullptr);
-
-Passare `world` evita un secondo scan della character_list se si calcola
-piu' PI nello stesso tick.
-
-Esempio consumatore: cacaodemon (proc_cacaodemon.cpp)
------------------------------------------------------
-  scala = magnitudine 1-6 dal vnum template (20 -> 1, ... 25 -> 6).
-  fattore_EQ = 70% eq_factor mondo + 30% eq_factor caster (entrambi cap 3.0).
-  PI cacaodemon = livello * magnitudine * fattore_EQ.
-  PI alimenta HP bonus, hitroll e damroll; magnitudine e livello incidono
-  anche su livello finale, AC, dadi, flag (sanctuary, fireshield) e testi.
-  Mana: 50 * fattore_EQ * (1 + 0.15 * (grado - 1)).
-  Offerta chierico malvagio: valore minimo 200 * fattore_EQ; logoramento
-  piu' rapido con fattore alto.
-  Altri spell futuri possono chiamare compute_power_index() con scala=1 o
-  con regole proprie, senza dipendere da proc_cacaodemon.
 
 Sintassi powerindex
 -------------------
   powerindex
-      snapshot EQ online, fattore, proprio equipment index, medio rent
-      (solo confronto), elenco PG nel calcolo, tabella PI scale 1-6
-      con livello incantesimo di default 40.
+      snapshot EQ (aritmetico, riferimento, mediana, armonica), fattori,
+      tabella PI scale 1-6 a livello 40, mana cacaodemon grado 6.
 
-  powerindex <livello>
-      tabella PI per scale 1-6 al livello indicato.
+  powerindex <livello> [<scala>]
+      tabella o PI singolo.
 
-  powerindex <livello> <scala>
-      PI singolo per quella coppia.
-
-Log cacaodemon (LOG_CHECK, solo esempio d'uso):
-  proc_cacaodemon: Modificata creatura liv X, Mag Y, HP Z, ... (PI ...)
-
-Vedi anche: help cacaodemon, ckeq, world, power_index.hpp
+Vedi anche: help cacaodemon, ckeq, world, docs/cacaodemon-powerindex-world.md
 
 #~
 

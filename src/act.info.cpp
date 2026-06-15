@@ -5267,16 +5267,25 @@ ACTION_FUNC(do_world) {
 		{
 			std::ostringstream o;
 			o << std::fixed << std::setprecision(2);
-			o << "$c0005EQ medio online (PG mortali)       : $c0015"
-			  << world_eq.world_eq_avg << "$c0005  ($c0015" << world_eq.online_pc_count
+			o << "$c0005EQ medio aritmetico (PG mortali)  : $c0015"
+			  << world_eq.world_eq_arithmetic << "$c0005  ($c0015"
+			  << world_eq.online_pc_count
 			  << "$c0005 PG con equip index > 0)";
 			worldCharLine(o.str());
 		}
 		{
 			std::ostringstream o;
 			o << std::fixed << std::setprecision(2);
-			o << "$c0005Fattore EQ mondo (cap " << POWER_INDEX_EQ_FACTOR_CAP
-			  << ")       : $c0015" << world_eq.eq_factor;
+			o << "$c0005EQ riferimento PI (med+arm)       : $c0015"
+			  << world_eq.world_eq_reference;
+			worldCharLine(o.str());
+		}
+		{
+			std::ostringstream o;
+			o << std::fixed << std::setprecision(2);
+			o << "$c0005Fattore EQ mondo (soft cap "
+			  << POWER_INDEX_EQ_FACTOR_MAX << ")     : $c0015"
+			  << world_eq.eq_factor;
 			worldCharLine(o.str());
 		}
 		if(GetMaxLevel(ch) >= IMMORTALE) {
@@ -5343,16 +5352,33 @@ ACTION_FUNC(do_powerindex) {
 	std::ostringstream out;
 	out << std::fixed << std::setprecision(2);
 	out << "$c0005Power index$c0007\n\r";
-	out << "$c0005EQ medio online$c0007 (PG mortali, equip index > 0): $c0015"
-		<< world_eq.world_eq_avg << "$c0007";
+	out << "$c0005EQ medio aritmetico$c0007 (PG mortali, pesato per livello): $c0015"
+		<< world_eq.world_eq_arithmetic << "$c0007";
 	out << "  ($c0015" << world_eq.online_pc_count << "$c0007 PG)\n\r";
-	out << "$c0005Fattore EQ mondo$c0007 (cap " << POWER_INDEX_EQ_FACTOR_CAP
+	out << "$c0005EQ riferimento PI$c0007 (60% mediana + 40% armonica";
+	if(world_eq.online_pc_count > 0 &&
+			world_eq.online_pc_count <= POWER_INDEX_THIN_SAMPLE_MAX) {
+		out << ", stabilizzato con media rent";
+	}
+	out << "): $c0015" << world_eq.world_eq_reference << "$c0007\n\r";
+	out << "$c0005Mediana / armonica pesate$c0007: $c0015"
+		<< world_eq.world_eq_median << "$c0007 / $c0015"
+		<< world_eq.world_eq_harmonic << "$c0007\n\r";
+	out << "$c0005Fattore EQ mondo$c0007 (soft cap " << POWER_INDEX_EQ_FACTOR_MAX
+		<< ", anchor " << static_cast<int>(POWER_INDEX_EQ_ANCHOR)
 		<< "): $c0015" << world_eq.eq_factor << "$c0007\n\r";
 	const float caster_factor = self_eq > 0.0f
-		? power_index_eq_factor_from_avg(self_eq)
+		? power_index_caster_eq_factor(self_eq, world_eq.world_eq_reference)
 		: POWER_INDEX_EQ_FACTOR_FLOOR;
-	out << "$c0005Fattore EQ caster$c0007 (cap " << POWER_INDEX_EQ_FACTOR_CAP
-		<< "): $c0015" << caster_factor << "$c0007\n\r";
+	const float caster_ratio = (self_eq > 0.0f && world_eq.world_eq_reference > 0.0f)
+		? (self_eq / world_eq.world_eq_reference)
+		: 0.0f;
+	out << "$c0005Fattore EQ caster$c0007 (relativo al riferimento mondo): $c0015"
+		<< caster_factor << "$c0007";
+	if(self_eq > 0.0f) {
+		out << "  $c0007(ratio $c0015" << caster_ratio << "$c0007)";
+	}
+	out << "\n\r";
 	out << "$c0005Fattore EQ cacaodemon$c0007 (70% mondo + 30% caster): $c0015"
 		<< cacaodemon_eq_factor(ch) << "$c0007\n\r";
 	out << "$c0005Il tuo equipment index$c0007: $c0015" << self_eq << "$c0007\n\r";

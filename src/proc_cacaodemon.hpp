@@ -21,8 +21,8 @@ int cacaodemon_magnitude_from_vnum(int vnum);
 int cacaodemon_magnitude_from_cast_arg(const char* arg);
 
 /**
- * Fattore EQ per cacaodemon: 70% mondo online + 30% equipment index del caster,
- * ciascuno gia' limitato al cap PI, poi blend limitato al cap.
+ * Fattore EQ per cacaodemon: 70% pressione mondo (EQ riferimento online) +
+ * 30% potenza personale relativa al mondo; entrambi su curva soft-cap.
  */
 float cacaodemon_eq_factor(struct char_data* caster);
 

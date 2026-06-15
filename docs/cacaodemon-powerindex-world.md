@@ -12,9 +12,9 @@ del cacaodemon e l’aggiornamento degli help).
 |----------|--------------|-------------|
 | **Equipment index** (`GetCharBonusIndex`) | Punteggio numerico della qualità dell’equip indossato da un PG | Motore di gioco (calcoli interni) |
 | **EQ medio storico (rent)** (`AverageEqIndex`) | Media cumulativa campionata al login/rent, in memoria dal boot | Comando `world` |
-| **EQ medio online** | Media dell’equipment index dei PG mortali connessi con EQ > 0 | Comando `world`, staff `powerindex` |
-| **Fattore EQ** | Moltiplicatore derivato dall’EQ medio (min 1.0, max 3.0) | Comando `world`, staff `powerindex` |
-| **Power Index (PI)** | Indicatore generico di “potenza” di uno spell | Staff `powerindex`; usato dal cacaodemon |
+| **EQ riferimento PI** | Blend mediana/armonica pesato per livello dei mortali online | Comando `world`, staff `powerindex` |
+| **Fattore EQ** | Moltiplicatore soft-cap dal riferimento mondo (asintoto 4.0) | Comando `world`, staff `powerindex` |
+| **Power Index (PI)** | Indicatore **neutro** riusabile per spell, skill, mob procedurali, ecc. | Staff `powerindex`; consumatori (es. cacaodemon) |
 | **PI cacaodemon** | Variante del PI con blend mondo + caster | Calcolo interno al rituale; staff `powerindex` |
 
 **Importante:** le tre metriche EQ (storico rent, online, personale) **non sono la stessa cosa** e possono divergere molto — soprattutto dopo un riavvio del server o con pochi PG connessi.
@@ -27,47 +27,72 @@ File: `src/power_index.hpp`, `src/power_index.cpp`
 
 ### Scopo
 
-Fornire un indicatore riutilizzabile per incantesimi che devono scalare con il “livello di equip” del mondo online, senza legarsi al solo cacaodemon. Oggi il **primo consumatore** è il cacaodemon; altri spell futuri possono chiamare le stesse API.
+Fornire un indicatore **neutro e riusabile** per calibrare dinamicamente spell, skill, mob
+generati proceduralmente o qualsiasi meccanica che benefici di variabilità legata al contesto
+di gioco. Non è necessariamente un malus: il cacaodemon, ad esempio, evoca servitori **più utili**
+quando il PI è alto (endgame impegnativo) e resta accessibile a livelli più bassi con mob
+modesti; il costo mana leggermente superiore compensa in parte il vantaggio.
+
+Oggi il **primo consumatore** è il cacaodemon; altri sistemi possono chiamare le stesse API.
 
 ### Campione EQ online
 
 Ad ogni richiesta (nessun timer in background):
 
-1. Si scorre la lista dei personaggi connessi (`character_list`).
-2. Si includono solo i **PG mortali** (`!IS_NPC`, `!IS_IMMORTAL`) con `GetCharBonusIndex > 0`.
-3. Si calcola la media aritmetica del loro equipment index.
-4. Se nessuno rientra nel campione: `EQ_medio = 1` (valore di fallback).
+1. Si scorre `character_list`.
+2. Si includono solo **PG mortali** (`!IS_NPC`, `!IS_IMMORTAL`) con `GetCharBonusIndex > 0`.
+3. Per ogni PG si calcola un **peso** `clamp(sqrt(livello_max/40), 0.25, 1.0)`.
+4. Si derivano:
+   - **EQ aritmetico pesato** (display informativo)
+   - **Mediana pesata** dell'equipment index
+   - **Media armonica pesata** (dà più voce ai PG con EQ basso nel campione)
+5. **EQ riferimento** = `0.6 × mediana + 0.4 × armonica`.
+6. Con **≤ 2 PG** online, il riferimento viene stabilizzato verso `AverageEqIndex(-1)` (media rent dal boot), senza escludere i connessi dal campione.
+7. Se nessuno rientra: fallback `EQ_riferimento = 1`.
 
-Gli **immortali/staff non entrano** nel campione, per evitare che toon di test gonfino il mondo.
+Gli **immortali** non entrano nel campione.
 
-### Fattore EQ (generico)
+### Fattore EQ mondo (soft cap)
 
 ```
-eq_factor = clamp(EQ_medio / 100, 1.0, 3.0)
+raw     = EQ_riferimento / ANCHOR        (ANCHOR = 3000)
+eq_factor = 1 + (MAX - 1) × raw / (1 + raw)     (MAX = 4.0, floor 1.0)
 ```
 
-- **Pavimento 1.0:** con EQ medio ≤ 100 (o mondo vuoto) il moltiplicatore resta 1.
-- **Tetto 3.0:** anche con EQ medio molto alto (es. 1900+) il fattore non supera 3.
+- Crescita **continua** oltre l'endgame attuale: non satura tutti al mismo valore come il vecchio `clamp(EQ/100, 1, 3)`.
+- Con EQ riferimento ≈ 6000 il fattore è ~3.0, non 4.0; resta margine se l'economia cresce ancora.
+
+### Fattore EQ caster (relativo al mondo)
+
+```
+ratio = tuo_EQ / EQ_riferimento
+caster_factor = 1 + (MAX - 1) × ratio / (1 + ratio)
+```
+
+Misura quanto il **tuo** equip è sopra/sotto il contesto online, non un valore assoluto `/100`.
 
 ### Formula PI generica
 
 ```
-PI = livello_incantesimo × scala × eq_factor
+PI = livello_incantesimo × scala × eq_factor_mondo
 ```
 
 | Parametro | Significato |
 |-----------|-------------|
-| `livello_incantesimo` | Livello effettivo del cast (classe magica usata) |
-| `scala` | Moltiplicatore scelto dallo spell (per cacaodemon = magnitudine 1–6) |
-| `eq_factor` | Solo dal mondo online (senza blend col caster) |
+| `livello_incantesimo` | Livello effettivo del cast |
+| `scala` | Moltiplicatore libero (tier cacaodemon 1–6, numero bersagli, ecc.) |
+| `eq_factor_mondo` | Solo pressione mondo (EQ riferimento) |
 
 ### API codice
 
 ```cpp
 PowerIndexWorldEq power_index_world_snapshot();
-float power_index_eq_factor_from_avg(float eq_avg);
+float power_index_eq_factor_from_reference(float eq_reference);
+float power_index_caster_eq_factor(float caster_eq, float world_eq_reference);
 float compute_power_index(int spell_level, int scale, const PowerIndexWorldEq* world = nullptr);
 ```
+
+`power_index_eq_factor_from_avg()` resta come alias di compatibilità.
 
 Passare `world` evita un secondo scan della `character_list` se si calcolano più PI nello stesso tick.
 
@@ -82,11 +107,12 @@ Passare `world` evita un secondo scan della `character_list` se si calcolano pi�
 
 | Voce | Cosa significa |
 |------|----------------|
-| **EQ medio online (PG mortali…)** | Media equipment index dei mortali connessi con EQ > 0 |
-| **(N PG)** | Quanti PG entrano nel campione |
-| **Fattore EQ mondo (cap 3.0)** | `clamp(EQ_medio/100, 1, 3)` — usato dal PI generico |
-| **Fattore EQ caster (cap 3.0)** | `clamp(tuo_EQ/100, 1, 3)` — solo il tuo equip |
-| **Fattore EQ cacaodemon (70% mondo + 30% caster)** | Blend usato dal rituale cacaodemon |
+| **EQ medio aritmetico** | Media pesata per livello (informativa) |
+| **EQ riferimento PI** | 60% mediana + 40% armonica (pesate); stabilizzata con rent se ≤2 PG |
+| **Mediana / armonica** | Componenti del riferimento |
+| **Fattore EQ mondo** | Soft cap su EQ riferimento (anchor 3000, max 4.0) |
+| **Fattore EQ caster** | Rapporto tuo_EQ / EQ_riferimento, stessa curva |
+| **Fattore EQ cacaodemon** | 70% mondo + 30% caster |
 | **Il tuo equipment index** | `GetCharBonusIndex` del PG che lancia il comando |
 | **Valore medio storico (rent)** | `AverageEqIndex(-1)` — **non** entra nel PI |
 | **PG mortali nel calcolo** | Elenco nome + equipment index di chi pesa sulla media online |
@@ -125,16 +151,17 @@ Help giocatore: `help cacaodemon` (`pages/helptbl`).
 ### Costo mana dinamico
 
 ```
-fattore_cacaodemon = clamp(0.7 × fattore_mondo + 0.3 × fattore_caster, 1.0, 3.0)
+fattore_cacaodemon = clamp(0.7 × fattore_mondo + 0.3 × fattore_caster_relativo, 1.0, 4.0)
+PI_cacaodemon = livello_cast × magnitudine × fattore_cacaodemon
+```
+
+Il PI alimenta statistiche del servitore (HP bonus, hitroll, damroll): più alto il contesto,
+più utile il mob in endgame; con fattore basso resta un alleato modesto per i non-endgame.
+```
 mana = round(50 × fattore_cacaodemon × (1 + 0.15 × (grado − 1)))
 ```
 
-| Grado | fattore 1.0 | fattore 3.0 (cap) |
-|-------|-------------|-----------------|
-| 1 | 50 | 150 |
-| 6 | 87 | 262 |
-
-Il fattore dipende dall’equip **medio dei mortali online** (70%) e dal **tuo** equip (30%). Gli immortali non pesano sul 70% “mondo”.
+Il fattore dipende dalla **pressione mondo** (70%) e dalla **potenza personale relativa** (30%).
 
 ### Offerta rituale
 
@@ -273,11 +300,14 @@ Il salto da 145 a 1902 osservato in test non era un cambio di formula sulla riga
 
 ---
 
-## Riepilogo bilanciamento (introdotto per evitare outlier)
+## Riepilogo bilanciamento
 
-1. **Cap fattore EQ a 3.0** — nessun moltiplicatore illimitato da twink online.
-2. **Esclusione immortali** dal campione mondo.
-3. **Blend 70/30 mondo/caster** — il PI del cacaodemon dipende anche da chi lancia, non solo dagli altri online.
-4. **Mana e offerta dinamici** — costo cresce con il fattore EQ; offerta chierico malvagio si logora più in fretta e richiede valore minimo più alto.
+1. **Soft cap a 4.0** con anchor 3000 — il fattore continua a crescere oltre l'endgame attuale senza saturare tutti allo stesso valore.
+2. **EQ riferimento robusto** — mediana + armonica pesate per livello; i PG con EQ basso pesano di più che con la sola media aritmetica.
+3. **Stabilizzazione campione sottile** — con ≤2 PG online si miscela la media rent storica, senza escludere i connessi.
+4. **Fattore caster relativo** — il blend cacaodemon distingue chi è sopra/sotto il contesto, non solo il mondo globale.
+5. **Esclusione immortali** dal campione mondo.
+6. **PI neutro riusabile** — stesse API per spell, mob procedurali, skill future; il cacaodemon è un consumatore che **potenzia** il servitore, non un malus generalizzato.
+7. **Mana e offerta dinamici** — costo leggermente superiore al normale come compensazione parziale.
 
 Queste regole sono implementate nel codice; l’help giocatore (`help cacaodemon`) le descrive in linguaggio narrativo **senza formule**, mentre questo documento le espone in forma tecnica per staff e sviluppo.
