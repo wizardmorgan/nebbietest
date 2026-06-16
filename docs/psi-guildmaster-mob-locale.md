@@ -36,17 +36,6 @@ patch -p0 < "PERCORSO_REPO\docs\patches\myst.mob-psi-guildmasters.patch"
 Se `patch` non è disponibile, applica a mano le tre sezioni del file
 `docs/patches/myst.mob-psi-guildmasters.patch` (Silverleaf, #21366, nuovo blocco #21368).
 
-## Verifica proc su Kaelith
-
-Dopo `./getworldlocal`, in `mudroot/lib/myst.spe` devono esserci:
-
-```
-M 21366 PsiGuildmaster
-M 21368 MetapsionicGuildmaster
-```
-
-Senza `M 21368 MetapsionicGuildmaster`, Kaelith non ha special proc e `practice` non funziona.
-
 ## Deploy locale MUD
 
 ```bash
