@@ -1051,7 +1051,7 @@ void mind_mass_confusion(byte level, struct char_data* ch,
 	act("$n scatena un turbine di impulsi psichici confusi!", FALSE, ch, 0, 0,
 		TO_ROOM);
 
-	for(tmp = world[ch->in_room].people; tmp; tmp = tmp->next_in_room) {
+	for(tmp = real_roomp(ch->in_room)->people; tmp; tmp = tmp->next_in_room) {
 		if(tmp == ch || IS_IMMORTAL(tmp) || in_group(ch, tmp)) {
 			continue;
 		}
