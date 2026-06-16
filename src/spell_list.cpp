@@ -3563,7 +3563,7 @@ void boot_spells() {
 
 	/* 0 */
 	spello(SKILL_HYPNOSIS,
-		   /*beats       */ 0,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_STANDING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3572,7 +3572,7 @@ void boot_spells() {
 		   /*Paladin     */ IMMORTALE,
 		   /*Ranger      */ IMMORTALE,
 		   /*psIonic     */ 2,
-		   /*mana        */ 20,
+		   /*mana        */ 15,
 		   /*target      */ 0,
 		   /*funzione    */ 0,
 		   /*spell fail  */ 0,
@@ -3671,7 +3671,7 @@ void boot_spells() {
 
 	/* mind_use_burn */
 	spello(268,
-		   /*beats       */ 24,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3689,7 +3689,7 @@ void boot_spells() {
 
 	/* mind_use_clairvoyance */
 	spello(269,
-		   /*beats       */ 24,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3707,7 +3707,7 @@ void boot_spells() {
 
 	/* mind_use_danger_sense */
 	spello(270,
-		   /*beats       */ 24,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3725,7 +3725,7 @@ void boot_spells() {
 
 	/* mind_use_disintegrate */
 	spello(271,
-		   /*beats       */ 24,
+		   /*beats       */ 30,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3743,7 +3743,7 @@ void boot_spells() {
 
 	/* mind_use_telekinesis */
 	spello(272,
-		   /*beats       */ 24,
+		   /*beats       */ 18,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3752,7 +3752,7 @@ void boot_spells() {
 		   /*Paladin     */ IMMORTALE,
 		   /*Ranger      */ IMMORTALE,
 		   /*psIonic     */ 35,
-		   /*mana        */ 35,
+		   /*mana        */ 30,
 		   /*target      */ TAR_CHAR_ROOM|TAR_VIOLENT|TAR_FIGHT_VICT,
 		   /*funzione    */ mind_use_telekinesis,
 		   /*spell fail  */ 20,
@@ -3761,7 +3761,7 @@ void boot_spells() {
 
 	/* mind_use_levitation */
 	spello(273,
-		   /*beats       */ 24,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3779,7 +3779,7 @@ void boot_spells() {
 
 	/* mind_use_cell_adjustment */
 	spello(274,
-		   /*beats       */ 24,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3797,7 +3797,7 @@ void boot_spells() {
 
 	/* mind_use_chameleon */
 	spello(275,
-		   /*beats       */ 24,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3815,7 +3815,7 @@ void boot_spells() {
 
 	/* mind_use_psi_strength */
 	spello(276,
-		   /*beats       */ 24,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3869,7 +3869,7 @@ void boot_spells() {
 
 	/* mind_use_teleport */
 	spello(279,
-		   /*beats       */ 24,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3914,7 +3914,7 @@ void boot_spells() {
 		   /*Paladin     */ IMMORTALE,
 		   /*Ranger      */ IMMORTALE,
 		   /*psIonic     */ 31,
-		   /*mana        */ 100,
+		   /*mana        */ 60,
 		   /*target      */ TAR_CHAR_ROOM|TAR_VIOLENT|TAR_FIGHT_VICT,
 		   /*funzione    */ mind_use_mind_wipe,
 		   /*spell fail  */ 0,
@@ -3923,7 +3923,7 @@ void boot_spells() {
 
 	/* mind_use_psychic_crush */
 	spello(282,
-		   /*beats       */ 34,
+		   /*beats       */ 24,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3941,7 +3941,7 @@ void boot_spells() {
 
 	/* mind_use_tower_iron_will */
 	spello(283,
-		   /*beats       */ 24,
+		   /*beats       */ 12,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -3995,7 +3995,7 @@ void boot_spells() {
 
 	/* mind_use_ultra_blast */
 	spello(286,
-		   /*beats       */ 35,
+		   /*beats       */ 24,
 		   /*min position*/ POSITION_FIGHTING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
@@ -4004,7 +4004,7 @@ void boot_spells() {
 		   /*Paladin     */ IMMORTALE,
 		   /*Ranger      */ IMMORTALE,
 		   /*psIonic     */ 20,
-		   /*mana        */ 60,
+		   /*mana        */ 45,
 		   /*target      */ TAR_CHAR_ROOM|TAR_VIOLENT|TAR_FIGHT_VICT|TAR_IGNORE,
 		   /*funzione    */ mind_use_ultra_blast,
 		   /*spell fail  */ 0,

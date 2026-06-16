@@ -420,6 +420,11 @@ int check_peaceful(struct char_data* ch, const char* msg) {
 
 void set_fighting(struct char_data* ch, struct char_data* vict) {
 
+	if(IS_NPC(ch) && affected_by_spell(ch, SKILL_HYPNOSIS) &&
+			!IS_AFFECTED(ch, AFF_CHARM)) {
+		return;
+	}
+
 	if(ch->specials.fighting) {
 		mudlog(LOG_SYSERR, "Fighting character set to fighting another.");
 		return;
