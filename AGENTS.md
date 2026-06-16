@@ -95,3 +95,4 @@ Runs `./getworldlocal` only. System packages and ODB are installed once via `scr
 - **`cc`/`c++` → Clang**: Cloud images may default to LLVM. Provision script forces `gcc-12`/`g++-12` for all four commands; CMake fails with `cannot find -lstdc++` if `c++` is still Clang.
 - **Port 4000 conflict**: Stop Docker `nebbieserver` before running native `./myst`.
 - **S1 DDL**: `./scripts/apply-schema-s1.sh` after ODB creates `toon`; entrypoint skips migration when `toon` is absent (native provision matches Vagrant).
+- **`myst.mob` personale (fuori git)**: alcune installazioni usano una copia locale del world mob (es. OneDrive) non committata. Per le integrazioni guildmaster PSI applicare `docs/patches/myst.mob-psi-guildmasters.patch` su quella copia; vedi `docs/psi-guildmaster-mob-locale.md`. `getworldlocal` sovrascrive `mudroot/lib/myst.mob` dal repo: dopo copiare il file personale se serve.
