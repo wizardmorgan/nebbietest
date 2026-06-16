@@ -41,6 +41,7 @@
 #include "regen.hpp"
 #include "procarea.hpp"
 #include "spell_parser.hpp"
+#include "spells.hpp"
 #include "toon_migration.hpp"
 
 namespace Alarmud {
@@ -1993,12 +1994,37 @@ int SetVictFighting(struct char_data* ch, struct char_data* v) {
 	return(FALSE);
 }
 
+int MonkInFightingForm(struct char_data* ch) {
+	int dummy = 0;
+	int worn = 0;
+
+	if(!HasClass(ch, CLASS_MONK)) {
+		return FALSE;
+	}
+
+	WEARING_N(ch, dummy, worn);
+	const unsigned carried =
+		static_cast<unsigned>(IS_CARRYING_N(ch)) + static_cast<unsigned>(worn);
+
+	if((ch->equipment[WIELD] &&
+		ch->equipment[WIELD]->obj_flags.type_flag == ITEM_WEAPON) ||
+	   (ch->equipment[HOLD] &&
+		ch->equipment[HOLD]->obj_flags.type_flag == ITEM_WEAPON)) {
+		return FALSE;
+	}
+
+	if(carried >= static_cast<unsigned>(MONK_MAX_RENT) + 5u) {
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 int DamageTrivia(struct char_data* ch, struct char_data* v,
 				 int dam, int type, int location) {
 
 	char buf[255];
 	int classe=-1;
-	int dummy,result;
 	if((type == TYPE_SUFFERING) || (type == SPELL_CHANGE_FORM)) { /*ACIDUS shock change_form */
 		return(dam);
 	}
@@ -2028,22 +2054,8 @@ int DamageTrivia(struct char_data* ch, struct char_data* v,
 			&& type >= TYPE_HIT) { /*chec to see if berserked and using a weapon */
 		dam = berserkdambonus(ch, dam);       /* More damage if berserked */
 	}
-	/* Qui testa le immunita'... se ha classe Monk NON la chiamo.
-	 * Un monaco a mani nude secondo me deve colpire chiunque.
-	 * Testo anche hold e totale oggetti portati
-	 */
-	WEARING_N(ch,dummy,result);
-	const unsigned carried =
-		static_cast<unsigned>(IS_CARRYING_N(ch)) + static_cast<unsigned>(result);
-	if(HasClass(ch,CLASS_MONK) &&
-			!((ch->equipment[WIELD]) &&
-			  (ch->equipment[WIELD]->obj_flags.type_flag == ITEM_WEAPON)
-			 ) &&
-			!((ch->equipment[HOLD]) &&
-			  (ch->equipment[HOLD]->obj_flags.type_flag == ITEM_WEAPON)
-			 ) &&
-			(carried < static_cast<unsigned>(MONK_MAX_RENT) + 5u)
-	  ) {
+	/* Monaco in forma: danno sacro (IMM_HOLY), non piu' bypass resistenze. */
+	if(MonkInFightingForm(ch)) {
 		classe=CLASS_MONK;
 	}
 	if(HasClass(ch,CLASS_BARBARIAN)) {
@@ -2299,8 +2311,11 @@ void DamageMessages(struct char_data* ch, struct char_data* v, int dam,
 	if(attacktype == SKILL_KICK) {
 		return;
 	}
-	else if(attacktype >= TYPE_HIT && attacktype <= TYPE_RANGE_WEAPON) {
-		dam_message(dam, ch, v, attacktype, location);
+	else if(attacktype >= TYPE_HIT &&
+			(attacktype <= TYPE_RANGE_WEAPON || attacktype == TYPE_GENERIC_HOLY)) {
+		dam_message(dam, ch, v,
+					attacktype == TYPE_GENERIC_HOLY ? TYPE_HIT : attacktype,
+					location);
 		/* do not wanna frag the bow, frag the arrow instead! */
 		if(ch->equipment[ WIELD ] && attacktype != TYPE_RANGE_WEAPON) {
 			BrittleCheck(ch,v, dam);
@@ -3784,7 +3799,10 @@ DamageResult root_hit(struct char_data* ch, struct char_data* orig_victim,
 	}
 
 	int w_type = GetWeaponType(ch, &wielded);
-	if(w_type == TYPE_HIT) {
+	if(MonkInFightingForm(ch) && !wielded) {
+		w_type = TYPE_GENERIC_HOLY;
+	}
+	else if(w_type == TYPE_HIT) {
 		w_type = GetFormType(ch);    /* races have different types of attack */
 	}
 
@@ -4630,6 +4648,17 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 		Our_Bit = IMM_ACID;
 		break;
 
+	case SPELL_HARM:
+	case SPELL_CAUSE_LIGHT:
+	case SPELL_CAUSE_SERIOUS:
+	case SPELL_CAUSE_CRITICAL:
+	case SPELL_HOLY_WORD:
+	case SKILL_HOLY_WARCRY:
+	case SKILL_QUIV_PALM:
+	case TYPE_GENERIC_HOLY:
+		Our_Bit = IMM_HOLY;
+		break;
+
 	case SKILL_BACKSTAB:
 	case TYPE_PIERCE:
 	case TYPE_STING:
@@ -4647,13 +4676,16 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 
 	case TYPE_BLUDGEON:
 	case TYPE_HIT:
-	case SKILL_KICK:
 	case TYPE_CRUSH:
 	case TYPE_BITE:
 	case TYPE_SMASH:
 	case TYPE_SMITE:
 	case TYPE_BLAST:
 		Our_Bit = IMM_BLUNT;
+		break;
+
+	case SKILL_KICK:
+		Our_Bit = (classe == CLASS_MONK) ? IMM_HOLY : IMM_BLUNT;
 		break;
 
 	case SPELL_POISON:
@@ -4664,26 +4696,23 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 		return(dam);
 		break;
 	}
-	if(classe !=CLASS_MONK) {
-		if(IS_SET(ch->susc, Our_Bit)) {
-			dam <<= 1;
-		}
+	if(IS_SET(ch->susc, Our_Bit)) {
+		dam <<= 1;
+	}
 
-		if(IS_SET(ch->immune, Our_Bit)) {
-			dam >>= 1;
-		}
+	if(IS_SET(ch->immune, Our_Bit)) {
+		dam >>= 1;
+	}
 
-		if(classe !=CLASS_BARBARIAN) {
-			if(IS_SET(ch->M_immune, Our_Bit)) {
-				dam = -1;
-			}
+	if(classe !=CLASS_BARBARIAN) {
+		if(IS_SET(ch->M_immune, Our_Bit)) {
+			dam = -1;
 		}
-		else {
-			if(IS_SET(ch->M_immune, Our_Bit)) {
-				dam >>=1;
-			}
+	}
+	else {
+		if(IS_SET(ch->M_immune, Our_Bit)) {
+			dam >>=1;
 		}
-
 	}
 
 	return(dam);
@@ -5091,6 +5120,12 @@ int GetItemDamageType(int type) {
 	case SPELL_ACID_BLAST:
 	case TYPE_GENERIC_ACID:
 		return(ACID_DAMAGE);
+		break;
+
+	case TYPE_GENERIC_HOLY:
+		return(HOLY_DAMAGE);
+		break;
+
 	default:
 		return(0);
 		break;

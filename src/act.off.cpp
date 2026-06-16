@@ -904,17 +904,7 @@ int off_kick_race_message_index(struct char_data* victim) {
 }
 
 int off_kick_fighter_class(struct char_data* ch) {
-	int dummy = 0;
-	int carry = 0;
-	WEARING_N(ch, dummy, carry);
-	const unsigned carried =
-		static_cast<unsigned>(IS_CARRYING_N(ch)) + static_cast<unsigned>(carry);
-	if(HasClass(ch, CLASS_MONK) &&
-	   !((ch->equipment[WIELD]) &&
-	     (ch->equipment[WIELD]->obj_flags.type_flag == ITEM_WEAPON)) &&
-	   !((ch->equipment[HOLD]) &&
-	     (ch->equipment[HOLD]->obj_flags.type_flag == ITEM_WEAPON)) &&
-	   (carried < static_cast<unsigned>(MONK_MAX_RENT) + 5u)) {
+	if(MonkInFightingForm(ch)) {
 		return CLASS_MONK;
 	}
 	if(HasClass(ch, CLASS_BARBARIAN)) {
@@ -924,21 +914,21 @@ int off_kick_fighter_class(struct char_data* ch) {
 }
 
 void off_kick_adjust_damage(struct char_data* victim, int fighterClass, int& damage) {
-	if(fighterClass == CLASS_MONK) {
-		return;
-	}
-	if(IS_SET(victim->susc, IMM_BLUNT)) {
+	const unsigned long our_bit =
+		(fighterClass == CLASS_MONK) ? IMM_HOLY : IMM_BLUNT;
+
+	if(IS_SET(victim->susc, our_bit)) {
 		damage <<= 1;
 	}
-	if(IS_SET(victim->immune, IMM_BLUNT)) {
+	if(IS_SET(victim->immune, our_bit)) {
 		damage >>= 1;
 	}
 	if(fighterClass != CLASS_BARBARIAN) {
-		if(IS_SET(victim->M_immune, IMM_BLUNT)) {
+		if(IS_SET(victim->M_immune, our_bit)) {
 			damage = 0;
 		}
 	}
-	else if(IS_SET(victim->M_immune, IMM_BLUNT)) {
+	else if(IS_SET(victim->M_immune, our_bit)) {
 		damage >>= 1;
 	}
 }

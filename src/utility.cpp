@@ -9464,6 +9464,7 @@ int IsMagicSpell(int spell_num) {
 	case TYPE_SMASH:
 	case TYPE_SMITE:
 	case TYPE_BLAST:
+	case TYPE_GENERIC_HOLY:
 	case TYPE_SUFFERING:
 	case TYPE_RANGE_WEAPON:
 		tmp = FALSE;        /* these are NOT magical! */

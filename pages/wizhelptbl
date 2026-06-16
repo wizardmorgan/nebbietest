@@ -313,6 +313,7 @@ IMM_PLUS1    16384   armi con meno di tohit +1
 IMM_PLUS2    32768   armi con meno di tohit +2
 IMM_PLUS3    65536   armi con meno di tohit +3
 IMM_PLUS4   131072   armi con meno di tohit +4
+IMM_HOLY    262144   danno sacro (monaci in forma, harm, cause wounds, holy word)
 
 Vedi anche: DANNI
 #

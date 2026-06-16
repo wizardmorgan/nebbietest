@@ -59,6 +59,7 @@ DamageResult MissVictim(struct char_data* ch, struct char_data* v, int type,int 
 DamageResult MissileDamage(struct char_data* ch, struct char_data* victim,int dam, int attacktype, int location);
 DamageResult MissileHit(struct char_data* ch, struct char_data* victim,int type);
 int MonkDodge(struct char_data* ch, struct char_data* v, int* dam) ;
+int MonkInFightingForm(struct char_data* ch) ;
 void NPCAttacks(char_data* pChar) ;
 void NailThisSucker(struct char_data* ch) ;
 void PCAttacks(char_data* pChar) ;
