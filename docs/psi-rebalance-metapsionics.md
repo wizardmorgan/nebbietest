@@ -2,7 +2,7 @@
 
 Documentazione delle novità introdotte dal rebalance psionico per mortali **L1–50**:
 modifiche alle abilità esistenti (Fase A), sette nuove discipline metapsioniche (Fase B),
-suddivisione dei maestri, migrazione al login e aggiornamenti correlati.
+suddivisione dei maestri e aggiornamenti correlati.
 
 > **Branch di riferimento:** `feature/psi-phase-a-rebalance`  
 > **Help in gioco:** voci aggiornate in `pages/helptbl` e `mudroot/lib/helptbl`  
@@ -16,9 +16,8 @@ suddivisione dei maestri, migrazione al login e aggiornamenti correlati.
 2. [Fase A — abilità esistenti ribilanciate](#fase-a--abilità-esistenti-ribilanciate)
 3. [Fase B — nuove discipline metapsioniche (L39–50)](#fase-b--nuove-discipline-metapsioniche-l3950)
 4. [Maestri psionici e progressione](#maestri-psionici-e-progressione)
-5. [Migrazione personaggi esistenti](#migrazione-personaggi-esistenti)
-6. [Silverleaf e immortali](#silverleaf-e-immortali)
-7. [Note per builder e deploy](#note-per-builder-e-deploy)
+5. [Silverleaf e immortali](#silverleaf-e-immortali)
+6. [Note per builder e deploy](#note-per-builder-e-deploy)
 
 ---
 
@@ -29,7 +28,6 @@ suddivisione dei maestri, migrazione al login e aggiornamenti correlati.
 | **Fase A** | Mind Wipe, Ultra Blast, Telekinesis, ESP, Hypnosis, Psionic Blast, NPC ipnotizzati |
 | **Fase B** | 7 skill metapsioniche (ID 295–301), livelli PSI 39–50 |
 | **Guildmaster** | Due ruoli distinti: base L1–39 e metapsionico L40–50 |
-| **Login** | `migrate_psi_skills()` marca le skill PSI già apprese |
 | **Help** | Nuove voci `METAPSIONIC`, skill singole, aggiornamento `PSIONIST` |
 
 **Costanti in codice** (`src/spells.hpp`):
@@ -286,19 +284,6 @@ Per il contenuto dei mob (descrizioni, stanza, eq) vedi anche `docs/psi-guildmas
 
 ---
 
-## Migrazione personaggi esistenti
-
-All’**login**, `migrate_psi_skills()` (`src/psi_skill_migration.cpp`, chiamata da `store_to_char()` in `db.cpp`) per ogni personaggio con classe PSI:
-
-- Scorre tutte le skill con `min_level_psi` valido (1–49)
-- Se la skill ha `learned > 0` ma mancano i flag:
-  - imposta **`SKILL_KNOWN`**
-  - imposta **`SKILL_KNOWN_PSI`**
-
-Così `show skill I` e `practice I` mostrano correttamente le discipline già apprese prima dell’aggiornamento, incluse le metapsioniche per chi era già oltre il 39.
-
----
-
 ## Silverleaf e immortali
 
 **Silverleaf** (vnum **#641**, `DruidGuildMaster` nell’area druidica) resta riservata ai **mortali** per le skill druidiche.
@@ -316,7 +301,6 @@ Così `show skill I` e `practice I` mostrano correttamente le discipline già ap
 | Implementazione skill | `src/mindskills1.cpp`, `src/mind_use1.cpp` |
 | Registro skill | `src/spell_list.cpp`, `src/spell_parser.cpp`, `src/constants.cpp` |
 | Guildmaster | `src/spec_procs2.cpp`, `myst.spe`, `myst.mob`, `myst.zon` |
-| Migrazione | `src/psi_skill_migration.cpp`, `src/db.cpp` |
 | Help | `pages/helptbl`, `mudroot/lib/helptbl` |
 | Combattimento | `src/fight.cpp` (NPC ipnotizzati pacificati) |
 
@@ -334,7 +318,7 @@ Così `show skill I` e `practice I` mostrano correttamente le discipline già ap
 1. Stanza **3090**: presenti #21366 e #21368
 2. `practice` su #21366: lista fino a [39]
 3. `practice` su Kaelith: lista da [39] Ego Whip / [40]+ metapsioniche
-4. `show skill I` su un psi esistente: skill conosciute con flag corretti
+4. `practice I` su un psi esistente: elenco skill con `SKILL_KNOWN` (impostato dal GM al `practice`)
 5. Help: `help metapsionic`, `help ego whip`, ecc.
 
 ### Help in gioco (riferimento rapido)
