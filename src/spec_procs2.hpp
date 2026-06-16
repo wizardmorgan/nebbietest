@@ -27,6 +27,7 @@ MOBSPECIAL_FUNC(PaladinGuildmaster) ;
 MOBSPECIAL_FUNC(PrisonGuard) ;
 MOBSPECIAL_FUNC(PrydainGuard) ;
 MOBSPECIAL_FUNC(PsiGuildmaster) ;
+MOBSPECIAL_FUNC(MetapsionicGuildmaster) ;
 MOBSPECIAL_FUNC(RangerGuildmaster) ;
 MOBSPECIAL_FUNC(RepairGuy) ;
 MOBSPECIAL_FUNC(Samah) ;

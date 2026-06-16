@@ -1101,10 +1101,10 @@ silverleaf guildmaster master~
 the Druid Guildmaster~
 Silverleaf the druid guildmaster is standing here.
 ~
-She is young and vibrant, and, it is rumored, quite an exceptional lover.
-She emanates an aura of raw natural power quite unlike anything you have
-ever seen before.  Her eyes glitter as she appraises you, and your
-worth to the druidical cause
+She is young and vibrant, and emanates an aura of raw natural power.
+For mortal druids she teaches the druidic way; immortals who find her
+may study every psionic discipline here, including metapsionic arts.
+Her eyes glitter as she appraises you and your worth.
 ~
 1|2 0 0 A 1
 61 -10 -10 96 5d5+3
@@ -3475,17 +3475,32 @@ the paladin guildmaster is standing here
 -1 8000 6 1
 8 8 4 1|2|4|8 16|32|64|2048 0
 #21366
-psionist gm guildmaster~
-the psionist guildmaster~
-the psionist guildmaster is standing here.
+psionist metapsionic gm guildmaster~
+the metapsionic guildmaster~
+the metapsionic guildmaster is standing here.
 ~
-Bald and beautiful! You sense a powerful mind behind those dark blue
-eyes of his.
+His gaze is distant, as if listening to thoughts from another plane.
+The air around him crackles with barely contained psychic force.
 ~
 2 0 1000 A 5
 60 -15 -10 96 1d3+40
 -1 8000 1 1
 8 8 5 1|2|4|8 16|32|64|2048 0
+#21368
+psionist metapsionic gm guildmaster~
+Kaelith, maestro metapsionico~
+Kaelith, maestro delle discipline metapsioniche, fluttua a pochi centimetri da terra.
+~
+I suoi occhi sono completamente bianchi e la sua mente sembra estendersi ben oltre
+i confini della stanza. Parla a voce bassa, ma ogni parola risuona direttamente
+nella tua testa.
+~
+2|16 2048|32768 0 L 2
+16 10 2 32 2d3+5
+-1 0 47 77
+5 5 1
+~
+~
 #21367
 ranger gm guildmaster~
 the ranger guildmaster~
@@ -4586,7 +4601,8 @@ Alrani, maestro degli Psionici, e' seduto qui, assorto in meditazione... a mezz'
 E' talmente grande e grosso da  sembrare quasi un gigante  e
 potrebbe  anche essere un  ottimo lottatore, ma la  perfetta
 posizione yoga in cui resta immobile ti suggerisce che forse
-non sono i muscoli la sua vera forza.
+non sono i muscoli la sua vera forza. Insegna le discipline
+fondamentali fino al livello 38; oltre, cerca un maestro metapsionico.
 ~
 2|16 2048|32768 0 L 2
 16 10 2 32 2d3+5

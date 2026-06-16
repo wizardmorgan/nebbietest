@@ -46,6 +46,7 @@
 #include "odb/account-odb.hxx" //Sirio per gestione registrazione pg su db
 #include "multiclass.hpp" //Sirio per gestione registrazione pg su db
 #include "toon_migration.hpp"
+#include "psi_skill_migration.hpp"
 #include "procarea.hpp"
 #include <fstream>
 #include <sstream>
@@ -3912,6 +3913,8 @@ void store_to_char(struct char_file_u* st, struct char_data* ch) {
 		REMOVE_BIT(ch->specials.act, PLR_FREEZE);
 		mudlog(LOG_PLAYERS, "FREEZE removed from %s", GET_NAME(ch));
 	}
+
+	migrate_psi_skills(ch);
 
 } /* store_to_char */
 

@@ -4628,43 +4628,55 @@ su di una persona. Attenzione tale spell funzionera' esclusivamente su personagg
 PSIONIST PSIONISTI PSYONIST
 
 Gli psionisti sono personaggi che usano il potere della mente.
-Possono evocare persone da grandi distanze e sanno anche trasformare in
-gelatina la mente di potenti mostri.
+Possono evocare persone da grandi distanze e sanno anche assalire
+la mente dei nemici con discipline sempre piu' potenti.
 
-Le abilita' segli psionisti vengono dalla forza della mente, e non sono
+Le abilita' degli psionisti vengono dalla forza della mente, e non sono
 magie. Quindi possono essere usate anche dove gli incantesimi dei maghi o dei
 chierici spesso non funzionano.
-Per vedere gli skill dei psionisti usa 'pratice I'
+
+Per vedere le abilita' che PUOI imparare (tabella di progressione) usa:
+  show skill I
+
+Per vedere le abilita' che CONOSCI gia' usa:
+  practice I
+
+I maestri psionici fondamentali (es. Alrani) insegnano fino al livello 38.
+Le discipline metapsioniche (dal 39 al 50) si apprendono da un maestro
+metapsionico dedicato (es. nella Stanza degli Psionici o presso il
+Signore del Pensiero).
 
 Vedi anche : MINDSUMMON, DOORWAY, PORTAL, AURA SIGHT, GREAT SIGHT, MEDITATE
-Vedi anche : PSIONIC INVISIBILITY, ADRENALIZE, FLAME SHROUD,PSIONIC BLAST
-Vedi anche : CANIBALIZE, PSI SHIELD, ESP, HYPNOSIS
+Vedi anche : PSIONIC INVISIBILITY, ADRENALIZE, FLAME SHROUD, PSIONIC BLAST
+Vedi anche : CANIBALIZE, PSI SHIELD, ESP, HYPNOSIS, METAPSIONIC
 
 #
 HYPNOSIS
 
 Sintassi: hypnosis <nome>
 spell: level 2 psi
-Costo di lancio: 20 mana
+Costo di lancio: 15 mana
+Lag: 12 beat
 
-Questo skill consente ad uno psionista di ipnotizzare una vittima
-trasformandola in un seguace. E' simile allo spell 'charm monster'
-e ne rispetta le regole. Ricorda che e' considerata aggressiva,
-per cui alcuni mostri potrebbero attaccarti se lo skill non ha
-successo.
-La riuscita dipende da molti fattori, come la tua Intelligenza,
-quella del mob, il Carisma tuo e del mob.
+Questo skill consente ad uno psionista di assalire la mente di una vittima.
+Su creature con intelligenza bassa puo' pacificarle temporaneamente; su
+creature piu' intelligenti (INT 10+) puo' agire come un charm, salvo
+che non funziona su sentinelle (ACT_SENTINEL).
+E' considerata aggressiva: un fallimento puo' far scattare il combattimento.
+La riuscita dipende da intelligenza e carisma di entrambi.
 
 #
 ESP
 
 Sintassi: esp
+         esp stop
 spell: lev 1 psi
 Costo di lancio: 10 mana
+Durata: circa livello psionico x 2 (round)
 
-Questo skill consente ad uno psionista di leggere il pensiero delle
-persone che parlano. In pratica riuscira' a comprendere tutti i
-linguaggi di quelli vicino  a lui.
+Questo skill consente ad uno psionista di leggere i pensieri delle
+persone che parlano e di percepire presenze nascoste nella stanza.
+Usa 'esp stop' per interrompere l'effetto prima che scada.
 
 #
 "PSI SHIELD"
@@ -4734,10 +4746,14 @@ TELEKINESIS
 
 Sintassi:  telekinesis <nome> <direzione>
 spell: lev 35 psi
-Costo di lancio: 35 mana
+Costo di lancio: 30 mana
+Lag: 18 beat
 
 Lo psionista ricorre ai suoi poteri mentali per spostare un
 personaggio da una stanza all'altra (va indicata la direzione).
+In combattimento infligge anche danno psichico e puo' far
+cadere a sedere la vittima (probabilita' ridotta su creature
+enormi, ACT_HUGE).
 Se il mob non si sposta e' probabile che si arrabbi.
 
 #
@@ -4765,10 +4781,13 @@ gli effetti della fame e della sete.
 
 Sintassi: mind 'ultra blast'
 spell: lev 20 psi
-Costo di lancio: 60 mana
+Costo di lancio: 45 mana
+Lag: 24 beat
 
-Simile a "psionic blast", ma colpisce tutti i personaggi presenti
-nella stanza. Non ha effetto sui componenti del gruppo del caster.
+Simile a "psionic blast", ma colpisce in area solo bersagli ostili
+(nemici in combattimento, aggressive, o che vi odiano). Non ha effetto
+sui componenti del gruppo del caster. Il danno e' piu' elevato rispetto
+alla versione base.
 
 #
 "PSI SUMMON"
@@ -4883,6 +4902,7 @@ Ha il potere di far abbassare pero' alcuni bonus.
 Sintassi    : blast <nome>
 Spell: lev 1 psi
 Costo di lancio: 20 mana
+Lag: 12 beat
 
 Con questo skill lo psionista focalizza i suoi poteri mentali su un
 mostro e colpisce la sua mente. Piu' potente e' lo psionista piu'
@@ -4979,14 +4999,15 @@ E' in grado di vedere anche la presenza di DT.
 "MIND WIPE"
 
 Sintassi: mind 'mind wipe' <nome>
-Spell: lev 21 psi
-Costo di lancio: 100 mana
+Spell: lev 31 psi
+Costo di lancio: 60 mana
+Lag: 24 beat
 
-Spell con cui lo psionista abbassa la intelligenza dei mob.
-Non e' una spell aggressiva, ma gli altri giocatori noteranno
-i vostri tentativi.
-Attenzione: se lo usate su altri players, questi ne avranno un danno
-permanente, perdendo 1 sessione di pratica in maniera definitiva.
+Assalto psichico che confonde la mente del bersaglio.
+Su altri giocatori provoca subbuglio mentale (INT ridotta,
+maggiore spellfail, possibile degradazione skill temporanea).
+Su mostri applica penalita' di combattimento (hitroll, damroll, AC).
+Non e' una spell aggressiva di per se', ma i tentativi possono essere notati.
 Vedi anche: FEEBLEMIND
 
 #
@@ -5009,6 +5030,94 @@ Costo di lancio: 50 mana
 Con questo spell lo psionista vuota la sua mente, rendendo difficile
 l'attacco di un BLAST di un altro mob PSI.
 
+
+#
+METAPSIONIC METAPSIONICO METAPSIONICS
+
+Le discipline metapsioniche sono abilita' psioniche avanzate (livelli 39-50).
+Si apprendono esclusivamente presso un maestro metapsionico, non dai maestri
+che insegnano le discipline fondamentali (fino al livello 38).
+
+Vedi anche: EGO WHIP, PSYCHIC VAMPIRISM, METAPSIONIC SURGE, THOUGHT BARRIER
+Vedi anche: NEURAL SPIKE, MASS CONFUSION, CATACLYSM MIND
+
+#
+"EGO WHIP"
+
+Sintassi: mind 'ego whip' <nome>
+Spell: lev 39 psi
+Costo: 35 mana | Lag: 18 beat
+
+Frustata psichica che infligge danno mentale e puo' ridurre temporaneamente
+l'intelligenza del bersaglio.
+
+#
+"PSYCHIC VAMPIRISM"
+
+Sintassi: mind 'psychic vampirism' <nome>
+Spell: lev 40 psi
+Costo: 40 mana | Lag: 24 beat
+
+Prosciuga energia mentale da un bersaglio (non giocatori), recuperando
+parte del mana sottratto.
+
+#
+"METAPSIONIC SURGE"
+
+Sintassi: mind 'metapsionic surge'
+Spell: lev 42 psi
+Costo: 45 mana | Lag: 24 beat
+
+Canalizza un'ondata di potere metapsionico che aumenta temporaneamente
+hitroll e damroll.
+
+#
+"THOUGHT BARRIER"
+
+Sintassi: mind 'thought barrier'
+Spell: lev 44 psi
+Costo: 50 mana | Lag: 24 beat
+
+Crea una barriera mentale difensiva che migliora temporaneamente la classe
+armatura.
+
+#
+"NEURAL SPIKE"
+
+Sintassi: mind 'neural spike' <nome>
+Spell: lev 46 psi
+Costo: 55 mana | Lag: 24 beat
+
+Potente colpo psichico singolo, efficace contro bersagli gia' indeboliti
+dalla torre di ferro.
+
+#
+"MASS CONFUSION"
+
+Sintassi: mind 'mass confusion'
+Spell: lev 48 psi
+Costo: 60 mana | Lag: 30 beat
+
+Scatena impulsi confusi nella stanza, penalizzando i riflessi dei mostri
+nemici (non i giocatori).
+
+#
+"CATACLYSM MIND"
+
+Sintassi: mind 'cataclysm mind'
+Spell: lev 50 psi
+Costo: 80 mana | Lag: 36 beat
+
+Capstone metapsionico: devastante ondata psichica su tutti i bersagli
+ostili nella stanza. Il massimo della disciplina psionica mortale.
+
+#
+SILVERLEAF
+
+Silverleaf e' la maestra druidica riservata agli immortali in addestramento.
+I mortali non possono accedere ai suoi insegnamenti.
+Gli immortali che la raggiungono possono praticare ogni disciplina psionica,
+incluse quelle metapsioniche, oltre agli incantesimi druidici.
 
 #
 SPECIALIZZAZIONE

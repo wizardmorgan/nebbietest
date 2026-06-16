@@ -363,6 +363,16 @@ namespace Alarmud {
 #define SKILL_FORGE      292   /* ACIDUS 2003 skill forge per creazione oggetti */
 #define SKILL_DETERMINE      293   /* ACIDUS 2003 skill determine established per determinazione teleport */
 #define SKILL_EQUILIBRIUM      294   /* ACIDUS 2003 skill better equilibrium per equilibrio nanesco */
+#define SKILL_EGO_WHIP         295   /* metapsionic L39: mental lash */
+#define SKILL_PSYCHIC_VAMPIRISM 296  /* metapsionic L40: mana drain */
+#define SKILL_METAPSIONIC_SURGE 297  /* metapsionic L42: combat surge */
+#define SKILL_THOUGHT_BARRIER  298   /* metapsionic L44: mental ward */
+#define SKILL_NEURAL_SPIKE     299   /* metapsionic L46: single target burst */
+#define SKILL_MASS_CONFUSION   300   /* metapsionic L48: room debuff */
+#define SKILL_CATACLYSM_MIND   301   /* metapsionic L50: capstone area blast */
+
+constexpr int PSI_GUILD_BASIC_MAX_LEVEL = 38;
+constexpr int PSI_METAPSIONIC_MIN_LEVEL = 39;
 
 #define MAX_EXIST_SPELL         294   /* max number of skills/spells/status */
 

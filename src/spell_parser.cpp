@@ -362,6 +362,13 @@ const char* spells[]= {
     "forge",
     "determine",
     "equilibrium",
+	"ego whip",
+	"psychic vampirism",
+	"metapsionic surge",
+	"thought barrier",
+	"neural spike",
+	"mass confusion",
+	"cataclysm mind",
 	"\n"
 };
 

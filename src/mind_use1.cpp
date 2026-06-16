@@ -362,5 +362,29 @@ void mind_use_intensify(byte level, struct char_data* ch, const char* arg, int t
 	}
 }
 
+#define MIND_USE_STUB(name, func) \
+void mind_use_##name(byte level, struct char_data* ch, const char* arg, int type, \
+					 struct char_data* victim, struct obj_data* tar_obj) { \
+	switch(type) { \
+	case SPELL_TYPE_WAND: \
+	case SPELL_TYPE_SPELL: \
+	case SPELL_TYPE_STAFF: \
+	case SPELL_TYPE_SCROLL: \
+		func(level, ch, victim, 0); \
+		break; \
+	default: \
+		mudlog(LOG_SYSERR, "Serious screw-up in mind_" #name); \
+		break; \
+	} \
+}
+
+MIND_USE_STUB(ego_whip, mind_ego_whip)
+MIND_USE_STUB(psychic_vampirism, mind_psychic_vampirism)
+MIND_USE_STUB(metapsionic_surge, mind_metapsionic_surge)
+MIND_USE_STUB(thought_barrier, mind_thought_barrier)
+MIND_USE_STUB(neural_spike, mind_neural_spike)
+MIND_USE_STUB(mass_confusion, mind_mass_confusion)
+MIND_USE_STUB(cataclysm_mind, mind_cataclysm_mind)
+
 } // namespace Alarmud
 

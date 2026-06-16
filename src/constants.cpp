@@ -377,6 +377,13 @@ const char* spell_wear_off_msg[] = {
 	/*	292 SKILL_FORGE					*/	"!forge!",
 	/*	293 SKILL_DETERMINE				*/	"!determine!",
 	/*	294 SKILL_EQUILIBRIUM			*/	"!equilibrium!",
+	/*	295 SKILL_EGO_WHIP				*/	"!ego whip!",
+	/*	296 SKILL_PSYCHIC_VAMPIRISM		*/	"!psychic vampirism!",
+	/*	297 SKILL_METAPSIONIC_SURGE		*/	"!metapsionic surge!",
+	/*	298 SKILL_THOUGHT_BARRIER		*/	"!thought barrier!",
+	/*	299 SKILL_NEURAL_SPIKE			*/	"!neural spike!",
+	/*	300 SKILL_MASS_CONFUSION		*/	"!mass confusion!",
+	/*	301 SKILL_CATACLYSM_MIND			*/	"!cataclysm mind!",
 											"\n"
 };
 /*Messaggio per la stanza quando una spell/skill scade*/
@@ -676,6 +683,13 @@ const char* spell_wear_off_room_msg[] = {
 	/*	292 SKILL_FORGE					*/	"!forge!",
 	/*	293 SKILL_DETERMINE				*/	"!determine!",
 	/*	294 SKILL_EQUILIBRIUM			*/	"!equilibrium!",
+	/*	295 SKILL_EGO_WHIP				*/	"!ego whip!",
+	/*	296 SKILL_PSYCHIC_VAMPIRISM		*/	"!psychic vampirism!",
+	/*	297 SKILL_METAPSIONIC_SURGE		*/	"!metapsionic surge!",
+	/*	298 SKILL_THOUGHT_BARRIER		*/	"!thought barrier!",
+	/*	299 SKILL_NEURAL_SPIKE			*/	"!neural spike!",
+	/*	300 SKILL_MASS_CONFUSION		*/	"!mass confusion!",
+	/*	301 SKILL_CATACLYSM_MIND			*/	"!cataclysm mind!",
 											"\n"
 };
 /* Messaggio di preavviso di fine spell*/
@@ -975,6 +989,13 @@ const char* spell_wear_off_soon_msg[] = {
 	/*	292 SKILL_FORGE                 */	"!forge!",
 	/*	293 SKILL_DETERMINE             */	"!determine!",
 	/*	294 SKILL_EQUILIBRIUM           */	"!equilibrium!",
+	/*	295 SKILL_EGO_WHIP              */	"!ego whip!",
+	/*	296 SKILL_PSYCHIC_VAMPIRISM     */	"!psychic vampirism!",
+	/*	297 SKILL_METAPSIONIC_SURGE     */	"!metapsionic surge!",
+	/*	298 SKILL_THOUGHT_BARRIER       */	"!thought barrier!",
+	/*	299 SKILL_NEURAL_SPIKE          */	"!neural spike!",
+	/*	300 SKILL_MASS_CONFUSION       */	"!mass confusion!",
+	/*	301 SKILL_CATACLYSM_MIND        */	"!cataclysm mind!",
 											"\n"
 };
 
@@ -1274,6 +1295,13 @@ const char* spell_wear_off_soon_room_msg[] = {
 	/*	292 SKILL_FORGE                 */	"!forge!",
 	/*	293 SKILL_DETERMINE             */	"!determine!",
 	/*	294 SKILL_EQUILIBRIUM           */	"!equilibrium!",
+	/*	295 SKILL_EGO_WHIP              */	"!ego whip!",
+	/*	296 SKILL_PSYCHIC_VAMPIRISM     */	"!psychic vampirism!",
+	/*	297 SKILL_METAPSIONIC_SURGE     */	"!metapsionic surge!",
+	/*	298 SKILL_THOUGHT_BARRIER       */	"!thought barrier!",
+	/*	299 SKILL_NEURAL_SPIKE          */	"!neural spike!",
+	/*	300 SKILL_MASS_CONFUSION       */	"!mass confusion!",
+	/*	301 SKILL_CATACLYSM_MIND        */	"!cataclysm mind!",
 											"\n"
 
 };
@@ -3859,6 +3887,13 @@ const char* spell_desc[] = {
 	/*  292 SKILL_FORGE                 */	"!forge!",
 	/*  293 SKILL_DETERMINE             */	"!determine!",
 	/*  294 SKILL_EQUILIBRIUM           */	"!equilibrium!",
+	/*  295 SKILL_EGO_WHIP              */	"!ego whip!",
+	/*  296 SKILL_PSYCHIC_VAMPIRISM     */	"!psychic vampirism!",
+	/*  297 SKILL_METAPSIONIC_SURGE     */	"!metapsionic surge!",
+	/*  298 SKILL_THOUGHT_BARRIER       */	"!thought barrier!",
+	/*  299 SKILL_NEURAL_SPIKE          */	"!neural spike!",
+	/*  300 SKILL_MASS_CONFUSION       */	"!mass confusion!",
+	/*  301 SKILL_CATACLYSM_MIND        */	"!cataclysm mind!",
 											"\n"
 };
 

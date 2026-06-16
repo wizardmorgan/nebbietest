@@ -890,5 +890,250 @@ void mind_domination(byte level, struct char_data* ch,
     return;
 }
 
+void mind_ego_whip(byte level, struct char_data* ch,
+				   struct char_data* victim, struct obj_data* obj) {
+	struct affected_type af;
+	int dam;
+
+	(void)obj;
+	if(!ch || !victim) {
+		return;
+	}
+
+	dam = dice(level, 5);
+	if(saves_spell(victim, SAVING_SPELL)) {
+		dam >>= 1;
+	}
+	MissileDamage(ch, victim, dam, SKILL_EGO_WHIP, 5);
+
+	if(!saves_spell(victim, SAVING_SPELL)) {
+		af.type      = SKILL_EGO_WHIP;
+		af.duration  = MAX(3, (int)level / 8);
+		af.modifier  = -2;
+		af.location  = APPLY_INT;
+		af.bitvector = 0;
+		affect_join(victim, &af, FALSE, FALSE);
+		act("$N barcolla sotto il colpo del tuo frustino psichico!", FALSE, ch, 0,
+			victim, TO_CHAR);
+	}
+}
+
+void mind_psychic_vampirism(byte level, struct char_data* ch,
+							struct char_data* victim, struct obj_data* obj) {
+	int drain;
+
+	(void)obj;
+	if(!ch || !victim) {
+		return;
+	}
+
+	if(IS_PC(victim) && !IS_NPC(victim)) {
+		send_to_char("Non puoi prosciugare cosi' un altro giocatore.\n\r", ch);
+		return;
+	}
+
+	drain = MIN(GET_MANA(victim), MAX(10, (int)level * 3));
+	if(saves_spell(victim, SAVING_SPELL)) {
+		drain >>= 1;
+	}
+	if(drain <= 0) {
+		act("$N resiste al tuo assalto vampirico.", FALSE, ch, 0, victim, TO_CHAR);
+		return;
+	}
+
+	GET_MANA(victim) = MAX(0, GET_MANA(victim) - drain);
+	GET_MANA(ch) = MIN(GET_MAX_MANA(ch), GET_MANA(ch) + drain / 2);
+	act("Prosciugbi l'energia mentale di $N!", FALSE, ch, 0, victim, TO_CHAR);
+	act("$n prosciuga la tua energia mentale!", FALSE, ch, 0, victim, TO_VICT);
+	MissileDamage(ch, victim, MAX(1, drain / 4), SKILL_PSYCHIC_VAMPIRISM, 5);
+}
+
+void mind_metapsionic_surge(byte level, struct char_data* ch,
+							struct char_data* victim, struct obj_data* obj) {
+	struct affected_type af;
+
+	(void)obj;
+	if(!ch) {
+		return;
+	}
+	if(!victim) {
+		victim = ch;
+	}
+
+	if(affected_by_spell(victim, SKILL_METAPSIONIC_SURGE)) {
+		send_to_char("Sei gia' in stato di surge metapsionico.\n\r", ch);
+		return;
+	}
+
+	af.type      = SKILL_METAPSIONIC_SURGE;
+	af.duration  = MAX(4, (int)level / 4);
+	af.modifier  = MAX(2, (int)level / 10);
+	af.location  = APPLY_HITROLL;
+	af.bitvector = 0;
+	affect_to_char(victim, &af);
+
+	af.location  = APPLY_DAMROLL;
+	affect_to_char(victim, &af);
+
+	act("Un'ondata di potere metapsionico ti pervade!", FALSE, ch, 0, victim,
+		TO_VICT);
+	act("$n e' avvolt$B da un'ondata di potere metapsionico!", FALSE, ch, 0,
+		victim, TO_NOTVICT);
+}
+
+void mind_thought_barrier(byte level, struct char_data* ch,
+						  struct char_data* victim, struct obj_data* obj) {
+	struct affected_type af;
+
+	(void)obj;
+	if(!ch) {
+		return;
+	}
+	if(!victim) {
+		victim = ch;
+	}
+
+	if(affected_by_spell(victim, SKILL_THOUGHT_BARRIER)) {
+		send_to_char("La tua barriera mentale e' gia' attiva.\n\r", ch);
+		return;
+	}
+
+	af.type      = SKILL_THOUGHT_BARRIER;
+	af.duration  = MAX(5, (int)level / 3);
+	af.modifier  = -MAX(10, (int)level / 2);
+	af.location  = APPLY_AC;
+	af.bitvector = 0;
+	affect_to_char(victim, &af);
+
+	act("Intrecci una barriera di pensieri intorno a te.", FALSE, ch, 0, victim,
+		TO_VICT);
+	act("$n e' circondat$B da una barriera di pensieri.", FALSE, ch, 0, victim,
+		TO_NOTVICT);
+}
+
+void mind_neural_spike(byte level, struct char_data* ch,
+					   struct char_data* victim, struct obj_data* obj) {
+	int dam;
+
+	(void)obj;
+	if(!ch || !victim) {
+		return;
+	}
+
+	dam = dice(level, 8) + level;
+	if(saves_spell(victim, SAVING_SPELL)) {
+		dam >>= 1;
+		if(affected_by_spell(victim, SKILL_TOWER_IRON_WILL)) {
+			dam = 0;
+		}
+	}
+	if(affected_by_spell(victim, SKILL_TOWER_IRON_WILL)) {
+		dam >>= 1;
+	}
+	MissileDamage(ch, victim, dam, SKILL_NEURAL_SPIKE, 5);
+}
+
+void mind_mass_confusion(byte level, struct char_data* ch,
+						 struct char_data* victim, struct obj_data* obj) {
+	struct char_data* tmp;
+	struct affected_type af;
+	int dur;
+
+	(void)victim;
+	(void)obj;
+	if(!ch) {
+		return;
+	}
+
+	dur = MAX(3, (int)level / 6);
+	act("Scateni un turbine di impulsi confusi nella stanza!", FALSE, ch, 0, 0,
+		TO_CHAR);
+	act("$n scatena un turbine di impulsi psichici confusi!", FALSE, ch, 0, 0,
+		TO_ROOM);
+
+	for(tmp = world[ch->in_room].people; tmp; tmp = tmp->next_in_room) {
+		if(tmp == ch || IS_IMMORTAL(tmp) || in_group(ch, tmp)) {
+			continue;
+		}
+		if(IS_PC(tmp)) {
+			continue;
+		}
+		if(saves_spell(tmp, SAVING_SPELL)) {
+			continue;
+		}
+
+		af.type      = SKILL_MASS_CONFUSION;
+		af.duration  = dur;
+		af.bitvector = 0;
+
+		af.location  = APPLY_HITROLL;
+		af.modifier  = -MAX(2, (int)level / 6);
+		affect_join(tmp, &af, FALSE, FALSE);
+
+		af.location  = APPLY_DAMROLL;
+		af.modifier  = -MAX(2, (int)level / 8);
+		affect_join(tmp, &af, FALSE, FALSE);
+
+		af.location  = APPLY_AC;
+		af.modifier  = MAX(2, (int)level / 4);
+		affect_join(tmp, &af, FALSE, FALSE);
+	}
+}
+
+void mind_cataclysm_mind(byte level, struct char_data* ch,
+						 struct char_data* victim, struct obj_data* obj) {
+	int dam;
+	int tdam;
+	struct char_data* tmp_victim;
+	struct char_data* temp;
+	struct affected_type af;
+
+	(void)victim;
+	(void)obj;
+	if(!ch) {
+		return;
+	}
+
+	dam = dice(level, 8) + level * 3;
+
+	act("Concentri ogni fibra della mente in un cataclisma psionico!", FALSE, ch,
+		0, 0, TO_CHAR);
+	act("$n scatena un cataclisma di pura energia mentale!", FALSE, ch, 0, 0,
+		TO_ROOM);
+
+	for(tmp_victim = character_list; tmp_victim; tmp_victim = temp) {
+		bool saved;
+
+		temp = tmp_victim->next;
+		if(ch->in_room != tmp_victim->in_room ||
+				!psi_ultra_blast_target(ch, tmp_victim)) {
+			continue;
+		}
+
+		saved = saves_spell(tmp_victim, SAVING_SPELL) != 0;
+		tdam = dam;
+		if(saved) {
+			tdam >>= 1;
+		}
+		if(affected_by_spell(tmp_victim, SKILL_TOWER_IRON_WILL)) {
+			tdam >>= 1;
+		}
+		if(tdam <= 0) {
+			continue;
+		}
+
+		MissileDamage(ch, tmp_victim, tdam, SKILL_CATACLYSM_MIND, 5);
+
+		if(!saved && IS_NPC(tmp_victim)) {
+			af.type      = SKILL_CATACLYSM_MIND;
+			af.duration  = 2;
+			af.modifier  = -3;
+			af.location  = APPLY_HITROLL;
+			af.bitvector = 0;
+			affect_join(tmp_victim, &af, FALSE, FALSE);
+		}
+	}
+}
+
 } // namespace Alarmud
 
