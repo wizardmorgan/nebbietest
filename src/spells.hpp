@@ -371,8 +371,8 @@ namespace Alarmud {
 #define SKILL_MASS_CONFUSION   300   /* metapsionic L48: room debuff */
 #define SKILL_CATACLYSM_MIND   301   /* metapsionic L50: capstone area blast */
 
-constexpr int PSI_GUILD_BASIC_MAX_LEVEL = 38;
-constexpr int PSI_METAPSIONIC_MIN_LEVEL = 39;
+constexpr int PSI_GUILD_BASIC_MAX_LEVEL = 39;
+constexpr int PSI_METAPSIONIC_MIN_LEVEL = 40;
 
 #define MAX_EXIST_SPELL         294   /* max number of skills/spells/status */
 

@@ -986,7 +986,8 @@ M 0 3074 1 3064 *!003074 [Il cacciatore] caricato nella stanza 003064 [Crocicchi
 M 0 3077 1 3070 *!003077 [il Maestro Barbaro] caricato nella stanza 003070 [La tenda del signore dei Barbari]
 M 0 3144 1 3004 *!003144 [La Ronda] caricato nella stanza 003004 [La zona occidentale della Piazza delle Nebbie]
 M 0 21363 1 3089 *!021363 [the paladin guildmaster] caricato nella stanza 003089 [La stanza del maestro dell'ordine dei Paladini]
-M 0 21366 1 3090 *!021366 [the metapsionic guildmaster] caricato nella stanza 003090 [Il signore del pensiero]
+M 0 21366 1 3090 *!021366 [the psionist guildmaster] caricato nella stanza 003090 [Il signore del pensiero]
+M 0 21368 1 3090 *!021368 [Kaelith, maestro metapsionico] caricato nella stanza 003090 [Il signore del pensiero]
 M 0 21367 1 3088 *!021367 [the ranger guildmaster] caricato nella stanza 003088 [Il campo dei Ranger]
 *! Exits initializations
 D 0 3001 0 1 *! Uscita North della stanza 003001 [La piazza delle Nebbie]: Chiusa
@@ -1912,7 +1913,6 @@ M 0 7803 1 7812 *!007803 [Silraen, la maestra dei ranger] caricato nella stanza 
 M 0 7805 1 7821 *!007805 [Garwin, il maestro dei guerrieri] caricato nella stanza 007821 [Stanza dei Guerrieri]
 M 0 7802 1 7811 *!007802 [Tairin, la maestra dei druidi] caricato nella stanza 007811 [Radura dei Druidi]
 M 0 7808 1 7825 *!007808 [Alrani, il maestro degli psionici] caricato nella stanza 007825 [Stanza degli Psionici]
-M 0 21368 1 7825 *!021368 [Kaelith, maestro metapsionico] caricato nella stanza 007825 [Stanza degli Psionici]
 M 0 7806 1 7824 *!007806 [Mei-Chan, il maestro dei monaci] caricato nella stanza 007824 [Stanza dei Monaci]
 M 0 7810 1 7820 *!007810 [Ayle, il maestro dei barbari] caricato nella stanza 007820 [Stanza dei Barbari]
 M 0 7811 1 7828 *!007811 [Flasite, il maestro dei ladri] caricato nella stanza 007828 [La vera stanza del maestro]
