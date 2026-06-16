@@ -7525,29 +7525,12 @@ bool psi_gm_teaches_level(ubyte skill_level, bool metapsionic_gm) {
 	return skill_level <= PSI_GUILD_BASIC_MAX_LEVEL;
 }
 
-bool room_has_other_psi_gm(int room, bool metapsionic_gm) {
-	genericspecial_func fn = metapsionic_gm
-		? reinterpret_cast<genericspecial_func>(MetapsionicGuildmaster)
-		: reinterpret_cast<genericspecial_func>(PsiGuildmaster);
-
-	if(room <= NOWHERE || !real_roomp(room)) {
-		return false;
-	}
-	for(struct char_data* k = real_roomp(room)->people; k; k = k->next_in_room) {
-		if(IS_MOB(k) && mob_index[k->nr].func == fn) {
-			return true;
-		}
-	}
-	return false;
-}
-
 int psi_guildmaster_proc(struct char_data* ch, int cmd, char* arg,
 						 struct char_data* guildmaster, bool metapsionic_gm) {
 	int number, i, max;
 	char buf[MAX_INPUT_LENGTH];
 	const int gm_teach_max =
 		(GetMaxLevel(guildmaster) < 10 ? 0 : GetMaxLevel(guildmaster) - 10);
-	const int basic_gain_cap = MIN(gm_teach_max, PSI_GUILD_BASIC_MAX_LEVEL);
 
 	if(!ch->skills) {
 		return FALSE;
@@ -7574,42 +7557,22 @@ int psi_guildmaster_proc(struct char_data* ch, int cmd, char* arg,
 
 	if(HasClass(ch, CLASS_PSI)) {
 		if(cmd == CMD_GAIN) {
-			const int psi_level = GET_LEVEL(ch, PSI_LEVEL_IND);
-
-			if(metapsionic_gm) {
-				if(psi_level < PSI_METAPSIONIC_MIN_LEVEL) {
-					return FALSE;
-				}
-				if(psi_level < gm_teach_max) {
-					if(GET_EXP(ch) <
-							titles[PSI_LEVEL_IND][psi_level + 1].exp) {
-						send_to_char("You are not yet ready to gain.\n\r", ch);
-						return FALSE;
-					}
-					GainLevel(ch, PSI_LEVEL_IND);
-					return TRUE;
-				}
-				send_to_char(
-					"Non posso addestrarti oltre... devi trovare un altro maestro.\n\r",
-					ch);
-				return TRUE;
-			}
-
-			if(psi_level < basic_gain_cap) {
-				if(GET_EXP(ch) <
-						titles[PSI_LEVEL_IND][psi_level + 1].exp) {
+			if(GET_LEVEL(ch, PSI_LEVEL_IND) < gm_teach_max) {
+				if(GET_EXP(ch) < titles[PSI_LEVEL_IND][GET_LEVEL(ch, PSI_LEVEL_IND) + 1].exp) {
 					send_to_char("You are not yet ready to gain.\n\r", ch);
 					return FALSE;
 				}
 				GainLevel(ch, PSI_LEVEL_IND);
 				return TRUE;
 			}
-			if(room_has_other_psi_gm(ch->in_room, true)) {
-				return FALSE;
+			if(metapsionic_gm) {
+				send_to_char("Non posso addestrarti oltre... devi trovare un altro maestro.\n\r",
+							 ch);
 			}
-			send_to_char(
-				"Hai raggiunto il limite di questa scuola. Cerca un maestro metapsionico.\n\r",
-				ch);
+			else {
+				send_to_char("Hai raggiunto il limite di questa scuola. Cerca un maestro metapsionico.\n\r",
+							 ch);
+			}
 			return TRUE;
 		}
 
@@ -7637,13 +7600,8 @@ int psi_guildmaster_proc(struct char_data* ch, int cmd, char* arg,
 						sprintf(buf, "[%d] %s %s \n\r", skill_level, spells[i],
 								how_good(ch->skills[i + 1].learned));
 						send_to_char(buf, ch);
-						listed_practice = true;
 					}
 				}
-			}
-			if(listed_practice &&
-					room_has_other_psi_gm(ch->in_room, !metapsionic_gm)) {
-				return FALSE;
 			}
 			return TRUE;
 		}
@@ -7651,10 +7609,19 @@ int psi_guildmaster_proc(struct char_data* ch, int cmd, char* arg,
 		for(; isspace(*arg); arg++);
 		number = old_search_block(arg, 0, strlen(arg), spells, FALSE);
 		if(number == -1 || spell_info[number].min_level_psi < 1) {
-			return FALSE;
+			send_to_char("You do not know of that skill...\n\r", ch);
+			return TRUE;
 		}
 		if(!psi_gm_teaches_level(spell_info[number].min_level_psi, metapsionic_gm)) {
-			return FALSE;
+			if(metapsionic_gm) {
+				do_say(guildmaster,
+					   "Insegno solo le discipline metapsioniche avanzate.", 0);
+			}
+			else {
+				do_say(guildmaster,
+					   "Per quella disciplina devi cercare un maestro metapsionico.", 0);
+			}
+			return TRUE;
 		}
 		if(GET_LEVEL_CASTER(ch, PSI_LEVEL_IND) < spell_info[number].min_level_psi) {
 			send_to_char("You do not know of this skill...\n\r", ch);
@@ -7690,8 +7657,7 @@ int psi_guildmaster_proc(struct char_data* ch, int cmd, char* arg,
 		}
 		return TRUE;
 	}
-	else if(!metapsionic_gm && IS_PRINCE(ch) && !HasClass(ch, CLASS_PSI) &&
-			cmd != CMD_GAIN) {
+	else if(IS_PRINCE(ch) && !HasClass(ch, CLASS_PSI) && cmd != CMD_GAIN) {
 		if(!*arg) {
 			sprintf(buf, "Hai ancora %d sessioni di pratica.\n\r",
 					ch->specials.spells_to_learn);
@@ -7743,17 +7709,17 @@ int psi_guildmaster_proc(struct char_data* ch, int cmd, char* arg,
 } // namespace
 
 MOBSPECIAL_FUNC(PsiGuildmaster) {
-	if(type != EVENT_COMMAND || !mob) {
-		return FALSE;
-	}
-	return psi_guildmaster_proc(ch, cmd, const_cast<char*>(arg), mob, false);
+	struct char_data* guildmaster =
+		FindMobInRoomWithFunction(ch->in_room,
+								  reinterpret_cast<genericspecial_func>(PsiGuildmaster));
+	return psi_guildmaster_proc(ch, cmd, const_cast<char*>(arg), guildmaster, false);
 }
 
 MOBSPECIAL_FUNC(MetapsionicGuildmaster) {
-	if(type != EVENT_COMMAND || !mob) {
-		return FALSE;
-	}
-	return psi_guildmaster_proc(ch, cmd, const_cast<char*>(arg), mob, true);
+	struct char_data* guildmaster =
+		FindMobInRoomWithFunction(ch->in_room,
+								  reinterpret_cast<genericspecial_func>(MetapsionicGuildmaster));
+	return psi_guildmaster_proc(ch, cmd, const_cast<char*>(arg), guildmaster, true);
 }
 
 MOBSPECIAL_FUNC(PaladinGuildmaster) {
