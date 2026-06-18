@@ -469,7 +469,7 @@ def build_install_lua(spells):
 
 
 INSTALLER_LUA = r'''
-Nebbie.version = "1.0.4"
+Nebbie.version = "1.0.5"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
@@ -477,6 +477,16 @@ Nebbie.playerClass = Nebbie.playerClass or nil
 
 local PKG = Nebbie.package
 local CLASS_VAR = "nebbie_class"
+
+function Nebbie.now()
+  if type(getEpoch) == "function" then
+    return getEpoch()
+  end
+  if type(getEpochTime) == "function" then
+    return getEpochTime()
+  end
+  return os.time()
+end
 
 function Nebbie.stripColors(line)
   return line:gsub("%$c%d%d%d%d", "")
@@ -550,7 +560,7 @@ end
 function Nebbie.onBuffApplied(spell)
   local dur = Nebbie.buffDurations[spell] or 0
   Nebbie.buffs[spell] = {
-    since = getEpochTime(),
+    since = Nebbie.now(),
     duration = dur,
     soon = false,
     active = true,
@@ -568,7 +578,7 @@ function Nebbie.onBuffSoon(spell)
   if Nebbie.buffs[spell] then
     Nebbie.buffs[spell].soon = true
   else
-    Nebbie.buffs[spell] = { since = getEpochTime(), duration = 0, soon = true, active = true }
+    Nebbie.buffs[spell] = { since = Nebbie.now(), duration = 0, soon = true, active = true }
   end
   Nebbie.refreshGUI()
 end
@@ -636,7 +646,7 @@ function Nebbie.refreshGUI()
 
     cecho("NebbieBuffs", "<cyan><b>=== Nebbie Buffs v" .. Nebbie.version .. " ===</b>\n")
     cecho("NebbieBuffs", "<grey>Classe: <yellow>" .. classLine .. " <grey>| mode: <yellow>" .. modeLine .. "\n")
-    local now = getEpochTime()
+    local now = Nebbie.now()
     local count = 0
     for spell, data in pairs(Nebbie.buffs) do
       if type(spell) == "string" and spell:sub(1, 1) ~= "_" and type(data) == "table" then
