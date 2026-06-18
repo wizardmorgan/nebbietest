@@ -66,7 +66,7 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-mudlet-s
 3. Seleziona `nebbie-spells-skills.mpackage`.
 4. In console dovresti vedere un messaggio simile a:
    ```
-   Nebbie v1.0.9: 177 alias, 116 trigger.
+   Nebbie v1.0.10: 179 alias, 116 trigger.
    Pronto: nclass m, q1, fb, ngui
    ```
 5. Imposta la classe **una volta** per profilo:
@@ -91,7 +91,7 @@ Nella riga di comando Mudlet:
 lua cecho("<yellow>"..Nebbie.version)
 ```
 
-Deve mostrare la versione corrente (es. `1.0.9`). Nel pannello buff compare anche `=== Nebbie Buffs v1.0.9 ===`.
+Deve mostrare la versione corrente (es. `1.0.10`). Nel pannello buff compare anche `=== Nebbie Buffs v1.0.10 ===`.
 
 ---
 
