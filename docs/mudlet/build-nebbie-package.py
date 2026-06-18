@@ -469,6 +469,7 @@ def build_install_lua(spells):
 
 
 INSTALLER_LUA = r'''
+Nebbie.version = "1.0.4"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
@@ -590,7 +591,15 @@ function Nebbie.execQuick(entry, target)
   end
 end
 
+function Nebbie.stopGUI()
+  if Nebbie.guiTimer then
+    killTimer(Nebbie.guiTimer)
+    Nebbie.guiTimer = nil
+  end
+end
+
 function Nebbie.initGUI()
+  Nebbie.stopGUI()
   if not Nebbie.buffConsole then
     local _, sh = getMainWindowSize()
     local h, w = 200, 250
@@ -601,7 +610,6 @@ function Nebbie.initGUI()
     showWindow("NebbieBuffs")
     Nebbie.buffConsole = true
   end
-  if Nebbie.guiTimer then killTimer(Nebbie.guiTimer) end
   Nebbie.guiTimer = tempTimer(1, function() Nebbie.refreshGUI() end, true)
 end
 
@@ -611,51 +619,54 @@ end
 
 function Nebbie.refreshGUI()
   if not Nebbie.buffConsole then return end
-  clearUserWindow("NebbieBuffs")
+  local ok, err = pcall(function()
+    clearUserWindow("NebbieBuffs")
 
-  local classLine = "(nclass non impostata)"
-  local modeLine = Nebbie.castMode or "cast"
-  local preset = nil
-  if Nebbie.playerClass and Nebbie.playerClass ~= "" then
-    preset = Nebbie.classes[Nebbie.playerClass]
-    if preset then
-      classLine = preset.name .. " (" .. Nebbie.playerClass .. ")"
-      modeLine = preset.mode or modeLine
-    else
-      classLine = "classe sconosciuta (" .. tostring(Nebbie.playerClass) .. ")"
+    local classLine = "(nclass non impostata)"
+    local modeLine = tostring(Nebbie.castMode or "cast")
+    if Nebbie.playerClass and Nebbie.playerClass ~= "" then
+      local preset = Nebbie.classes[Nebbie.playerClass]
+      if preset then
+        classLine = tostring(preset.name or "?") .. " (" .. tostring(Nebbie.playerClass) .. ")"
+        modeLine = tostring(preset.mode or modeLine)
+      else
+        classLine = "classe sconosciuta (" .. tostring(Nebbie.playerClass) .. ")"
+      end
     end
-  end
 
-  cecho("NebbieBuffs", "<cyan><b>=== Nebbie Buffs ===</b>\n")
-  cecho("NebbieBuffs", "<grey>Classe: <yellow>" .. classLine .. " <grey>| mode: <yellow>" .. modeLine .. "\n")
-  local now = getEpochTime()
-  local count = 0
-  for spell, data in pairs(Nebbie.buffs) do
-    if spell:sub(1, 1) ~= "_" and type(data) == "table" then
-      count = count + 1
-      local elapsed = now - (data.since or now)
-      local status = "<green>OK"
-      local timeTxt = Nebbie.formatTime(elapsed)
-      if data.soon then
-        status = "<orange>!"
+    cecho("NebbieBuffs", "<cyan><b>=== Nebbie Buffs v" .. Nebbie.version .. " ===</b>\n")
+    cecho("NebbieBuffs", "<grey>Classe: <yellow>" .. classLine .. " <grey>| mode: <yellow>" .. modeLine .. "\n")
+    local now = getEpochTime()
+    local count = 0
+    for spell, data in pairs(Nebbie.buffs) do
+      if type(spell) == "string" and spell:sub(1, 1) ~= "_" and type(data) == "table" then
+        count = count + 1
+        local elapsed = now - (data.since or now)
+        local status = "<green>OK"
+        local timeTxt = Nebbie.formatTime(elapsed)
+        if data.soon then status = "<orange>!" end
+        if data.duration and data.duration > 0 then
+          local left = data.duration - elapsed
+          timeTxt = Nebbie.formatTime(left) .. " <grey>(" .. Nebbie.formatTime(elapsed) .. ")"
+          if left <= 0 then status = "<red>SCAD" end
+        end
+        cecho("NebbieBuffs", status .. " <reset><white>" .. tostring(spell) .. "  <grey>" .. timeTxt .. "\n")
       end
-      if data.duration and data.duration > 0 then
-        local left = data.duration - elapsed
-        timeTxt = Nebbie.formatTime(left) .. " <grey>(" .. Nebbie.formatTime(elapsed) .. ")"
-        if left <= 0 then status = "<red>SCAD" end
+    end
+    if count == 0 then
+      cecho("NebbieBuffs", "<grey>(nessun buff tracciato)\n")
+    end
+    local preset = Nebbie.playerClass and Nebbie.classes[Nebbie.playerClass]
+    if preset and preset.quick then
+      cecho("NebbieBuffs", "<grey>Quick: ")
+      for i, q in ipairs(preset.quick) do
+        cecho("NebbieBuffs", "<dark_green>q" .. i .. "<grey>=" .. tostring(q.abbr) .. " ")
       end
-      cecho("NebbieBuffs", status .. " <reset><white>" .. spell .. "  <grey>" .. timeTxt .. "\n")
+      cecho("NebbieBuffs", "\n")
     end
-  end
-  if count == 0 then
-    cecho("NebbieBuffs", "<grey>(nessun buff tracciato)\n")
-  end
-  if preset and preset.quick then
-    cecho("NebbieBuffs", "<grey>Quick: ")
-    for i, q in ipairs(preset.quick) do
-      cecho("NebbieBuffs", "<dark_green>q" .. i .. "<grey>=" .. q.abbr .. " ")
-    end
-    cecho("NebbieBuffs", "\n")
+  end)
+  if not ok then
+    cecho("<red>[Nebbie GUI] " .. tostring(err) .. "\n")
   end
 end
 
@@ -701,12 +712,14 @@ function Nebbie.uninstall()
     if exists(name, "trigger") ~= 0 then disableTrigger(name) end
   end
   if Nebbie.guiTimer then killTimer(Nebbie.guiTimer) end
+  Nebbie.stopGUI()
   Nebbie._aliasNames = {}
   Nebbie._triggerNames = {}
   cecho("<orange>Nebbie spells/skills: alias disattivati.\n")
 end
 
 function Nebbie.install()
+  Nebbie.stopGUI()
   for _, name in ipairs(Nebbie._aliasNames) do
     if exists(name, "alias") ~= 0 then killAlias(name) end
   end
@@ -736,6 +749,12 @@ function Nebbie.install()
   perm("mode recall", [[^nrecall$]], [[Nebbie.setCastMode("recall")]])
   perm("mode mind", [[^nmind$]], [[Nebbie.setCastMode("mind")]])
   perm("toggle gui", [[^ngui$]], [[Nebbie.toggleGUI()]])
+  perm("reinstall fix", [[^nfix$]], [[
+    Nebbie.stopGUI()
+    Nebbie.install()
+    Nebbie.loadClass()
+    cecho("<green>Nebbie v" .. Nebbie.version .. " reinstallato. Se vedi ancora errori, disinstalla il package da Alt+O e reinstalla.\n")
+  ]])
 
   -- Generic cast: c <spell> [target]  |  cast <spell> [target]
   perm("generic cast c", [[^c (.+)$]], [[
@@ -854,7 +873,7 @@ function Nebbie.install()
     ]], entry.name))
   end
 
-  cecho("<green>Nebbie spells/skills: " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
+  cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
   cecho("<grey>Alias: <yellow>c/r/m <spell><grey>, <yellow>q1-q9 [tgt]<grey>, <yellow>nclass<grey>, <yellow>ngui<grey>.\n")
   Nebbie.initGUI()
 end
