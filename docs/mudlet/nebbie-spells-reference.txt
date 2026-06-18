@@ -1,0 +1,303 @@
+Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
+
+=== INCANTESIMI (cast 'nome' [bersaglio]) ===
+  armor  [arm]
+  teleport  [tel]
+  bless  [ble]
+  blindness  [blind]
+  burning hands  [bh]
+  call lightning  [cl]
+  charm person  [charm]
+  chill touch  [ct]
+  clone
+  colour spray  [cs]
+  control weather
+  create food  [cfood]
+  create water  [cwater]
+  cure blind  [cblind]
+  cure critic  [cc]
+  cure light  [clight]
+  curse  [curse]
+  detect evil  [dev]
+  detect invisibility  [dinv]
+  detect magic  [dmag]
+  detect poison  [dpois]
+  dispel evil  [de]
+  earthquake  [eq]
+  enchant weapon  [ewep]
+  energy drain  [edrain]
+  fireball  [fb]
+  harm  [harm]
+  heal  [heal]
+  invisibility  [inv]
+  lightning bolt  [lb]
+  locate object  [loc]
+  magic missile  [mm]
+  poison  [pois]
+  protection from evil  [pevil]
+  remove curse  [rcurse]
+  sanctuary  [san]
+  shocking grasp  [sg]
+  sleep  [sleep]
+  strength  [str]
+  summon  [sum]
+  ventriloquate
+  word of recall  [rec]
+  remove poison  [rpois]
+  sense life  [slife]
+  identify  [id]
+  infravision  [infra]
+  cause light  [cal]
+  cause critical  [cac]
+  flamestrike  [fs]
+  dispel good  [dg]
+  weakness  [weak]
+  dispel magic  [dm]
+  knock  [knock]
+  know alignment  [kalign]
+  animate dead  [ad]
+  paralyze  [para]
+  remove paralysis  [rpara]
+  fear  [fear]
+  acid blast  [ab]
+  water breath  [wb]
+  fly  [fly]
+  cone of cold  [coc]
+  meteor swarm  [ms]
+  ice storm  [is]
+  shield  [shld]
+  monsum one
+  monsum two
+  monsum three
+  monsum four
+  monsum five
+  monsum six
+  monsum seven
+  fireshield  [fshld]
+  charm monster  [cmon]
+  cure serious  [cser]
+  cause serious  [cas]
+  refresh  [ref]
+  second wind  [sw]
+  turn
+  succor
+  create light
+  continual light
+  calm
+  stone skin  [sskin]
+  conjure elemental
+  true sight  [tsight]
+  minor creation
+  faerie fire  [ffire]
+  faerie fog
+  cacaodemon
+  polymorph self  [poly]
+  mana  [mana]
+  astral walk
+  resurrection  [resu]
+  heroes feast
+  group fly
+  breath
+  web
+  minor track
+  major track
+  golem
+  find familiar
+  changestaff
+  holy word
+  unholy word
+  power word kill
+  power word blind
+  chain lightning  [chain]
+  scare
+  aid  [aid]
+  command  [cmd]
+  change form
+  feeblemind  [feeble]
+  shillelagh
+  goodberry
+  elemental blade
+  animal growth
+  insect growth
+  creeping death
+  commune
+  animal summon one
+  animal summon two
+  animal summon three
+  fire servant
+  earth servant
+  water servant
+  wind servant
+  reincarnate  [reinc]
+  charm vegetable
+  vegetable growth
+  tree
+  animate rock
+  tree travel
+  travelling
+  animal friendship
+  invis to animals
+  slow poison
+  entangle  [ent]
+  snare  [snare]
+  gust of wind
+  barkskin  [bark]
+  sunray
+  warp weapon
+  heat stuff
+  firestorm
+  haste  [haste]
+  slowness  [slow]
+  dust devil
+  know monster
+  transport via plant
+  speak with plants
+  silence  [sil]
+  sending
+  teleport without error
+  portal  [port]
+  dragon ride
+  mount
+  spring leap
+  geyser
+  mirror images
+  green slime
+  darkness
+  minor invulnerability
+  major invulnerability
+  protection from drain
+  protection from breath
+  anti magic shell
+  psi invisibility
+  protection from evil group
+  prismatic spray  [prism]
+  incendiary cloud
+  disintegrate  [disint]
+  comprehend languages
+  protection from fire
+  protection from cold
+  protection from energy
+  protection from electricity
+  enchant armor  [earmor]
+  messenger
+  protection fire breath
+  protection frost breath
+  protection electric breath
+  protection acid breath
+  protection gas breath
+  wizardeye
+  mind burn  [mburn]
+  clairvoyance
+  psionic danger sense
+  psionic disintegrate
+  telekinesis  [telek]
+  levitation  [lev]
+  cell adjustment
+  chameleon
+  psionic strength
+  mind over body
+  probability travel
+  psionic teleport  [ptel]
+  domination  [dom]
+  mind wipe  [mwipe]
+  psychic crush  [pcrush]
+  tower of iron will
+  mindblank
+  psychic impersonation
+  ultra blast
+  intensify
+  \n
+
+=== PSI via mind 'nome' ===
+  cell adjustment
+  chameleon
+  clairvoyance
+  domination  [dom]
+  hypnosis
+  intensify
+  levitation  [lev]
+  mind burn  [mburn]
+  mind over body
+  mind wipe  [mwipe]
+  mindblank
+  probability travel
+  psi invisibility
+  psionic danger sense
+  psionic disintegrate
+  psionic strength
+  psionic teleport  [ptel]
+  psychic crush  [pcrush]
+  psychic impersonation
+  telekinesis  [telek]
+  tower of iron will
+  ultra blast
+
+=== SKILL (comando diretto) ===
+  adrenalize: adrenalize <bersaglio>  [adr]
+  aura sight: aura   [aura]
+  backstab: backstab <vittima>  [bs]
+  bash: bash <vittima>  [b]
+  bellow: bellow   [bel]
+  berserk: berserk   [berz]
+  blessing: blessing <bersaglio>  [bld]
+  bodyguard: bodyguard <bersaglio>  [bg]
+  brew: brew   [brew]
+  camouflage: camouflage   [camo]
+  canibalize: canibalize [numero]  [cani]
+  carve: carve <cadavere>  [carve]
+  climb: climb <direzione>  [climb]
+  daimoku: daimoku   [dai]
+  disarm: disarm <vittima>  [disarm]
+  disguise: disguise   [dis]
+  doorbash: doorbash <porta>  [dbash]
+  doorway: doorway <nome>  [dw]
+  eavesdrop: eavesdrop   [ed]
+  esp: esp   [esp]
+  feign death: feign death   [fd]
+  find food: find food   [ffood]
+  find traps: find traps   [ftrap]
+  find water: find water   [fwater]
+  finger: finger   [fin]
+  first aid: first aid   [fa]
+  flame shroud: flame   [flm]
+  forge: forge <arma> <materiale>  [forge]
+  great sight: great   [great]
+  heroic rescue: heroic   [hero]
+  hide: hide   [hi]
+  hypnosis: hypnotize <bersaglio>  [hyp]
+  immolation: immolate   [imm]
+  kick: kick <vittima>  [k]
+  lay on hands: lay on hands [bersaglio]  [loh]
+  mantra: mantra   [man]
+  meditate: meditate   [med]
+  memorizing: memorize '<incantesimo>'  [mem]
+  parry: parry   [parry]
+  pick: pick <porta/cassa>  [pick]
+  pray: pray   [pray]
+  psi portal: portal <nome>  [port]
+  psi shield: shield   [pshld]
+  psi summon: summon <nome>  [sum]
+  psionic blast: blast <bersaglio>  [blast]
+  quivering palm: quivering palm <vittima>  [qp]
+  ration: carve <cadavere>  [carve]
+  rescue: rescue <persona>  [res]
+  scry: scry <nome>  [scry]
+  sign language: sign 
+  sneak: sneak   [sn]
+  spot: spot   [spot]
+  springleap: springleap   [sl]
+  spy: spy   [spy]
+  steal: steal <oggetto> <vittima>  [stl]
+  swim: swim   [swim]
+  tan: tan <cadavere> <tipo>  [tan]
+  track: track <nome>  [tr]
+  tspy: tspy   [tspy]
+  warcry: warcry   [wc]
+
+=== ALIAS MUDLET ===
+  c <spell> [tgt]     → cast (modalita' corrente)
+  r <spell> [tgt]     → recall (stregone)
+  m <spell> [tgt]     → mind (psi)
+  mem <spell>         → memorize
+  ncast/nrecall/nmind → cambia modalita' predefinita
+  fb mm heal arm ...  → abbreviazioni rapide
