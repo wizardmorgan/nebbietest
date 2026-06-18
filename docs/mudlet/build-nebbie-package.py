@@ -469,14 +469,16 @@ def build_install_lua(spells):
 
 
 INSTALLER_LUA = r'''
-Nebbie.version = "1.0.5"
+Nebbie.version = "1.0.7"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
+Nebbie._settings = Nebbie._settings or {}
 Nebbie.playerClass = Nebbie.playerClass or nil
 
 local PKG = Nebbie.package
 local CLASS_VAR = "nebbie_class"
+Nebbie._settingsFile = getMudletHomeDir() .. "/nebbie-spells-skills-settings.lua"
 
 function Nebbie.now()
   if type(getEpoch) == "function" then
@@ -502,6 +504,33 @@ function Nebbie.setCastMode(mode)
   Nebbie.refreshGUI()
 end
 
+function Nebbie.loadSettings()
+  Nebbie._settings = Nebbie._settings or {}
+  if type(table.load) == "function" then
+    pcall(function() table.load(Nebbie._settingsFile, Nebbie._settings) end)
+  end
+end
+
+function Nebbie.saveSettings()
+  if type(table.save) == "function" then
+    pcall(function() table.save(Nebbie._settingsFile, Nebbie._settings) end)
+  end
+end
+
+function Nebbie.purgePackageAliases()
+  if type(getAliasList) ~= "function" then return end
+  for _, entry in ipairs(getAliasList()) do
+    local name = entry
+    if type(getAliasName) == "function" then
+      local ok, n = pcall(function() return getAliasName(entry) end)
+      if ok and n and n ~= "" then name = n end
+    end
+    if type(name) == "string" and name:find(PKG .. "::", 1, true) then
+      killAlias(name)
+    end
+  end
+end
+
 function Nebbie.listClasses()
   cecho("<cyan><b>Classi Nebbie</b> <grey>(una per profilo Mudlet, salvata con nclass):\n")
   local order = {"m", "s", "c", "d", "p", "r", "I", "t", "w", "k", "b"}
@@ -518,11 +547,21 @@ function Nebbie.listClasses()
 end
 
 function Nebbie.saveClass(cls)
-  setVariable(CLASS_VAR, cls)
+  Nebbie._settings = Nebbie._settings or {}
+  Nebbie._settings.class = cls
+  if type(setVariable) == "function" then
+    pcall(function() setVariable(CLASS_VAR, cls) end)
+  end
+  Nebbie.saveSettings()
 end
 
 function Nebbie.loadClass()
-  local saved = getVariable(CLASS_VAR)
+  Nebbie.loadSettings()
+  local saved = Nebbie._settings.class
+  if type(getVariable) == "function" then
+    local ok, v = pcall(function() return getVariable(CLASS_VAR) end)
+    if ok and v and v ~= "" then saved = v end
+  end
   if saved and saved ~= "" and Nebbie.classes[saved] then
     Nebbie.setClass(saved, true)
     return true
@@ -730,6 +769,7 @@ end
 
 function Nebbie.install()
   Nebbie.stopGUI()
+  Nebbie.purgePackageAliases()
   for _, name in ipairs(Nebbie._aliasNames) do
     if exists(name, "alias") ~= 0 then killAlias(name) end
   end
@@ -765,10 +805,11 @@ function Nebbie.install()
   perm("mode mind", [[^nmind$]], [[Nebbie.setCastMode("mind")]])
   perm("toggle gui", [[^ngui$]], [[Nebbie.toggleGUI()]])
   perm("reinstall fix", [[^nfix$]], [[
+    Nebbie.purgePackageAliases()
     Nebbie.stopGUI()
     Nebbie.install()
     Nebbie.loadClass()
-    cecho("<green>Nebbie v" .. Nebbie.version .. " reinstallato. Se vedi ancora errori, disinstalla il package da Alt+O e reinstalla.\n")
+    cecho("<green>Nebbie v" .. Nebbie.version .. " reinstallato.\n")
   ]])
 
   -- Generic cast: c <spell> [target]  |  cast <spell> [target]
@@ -836,14 +877,9 @@ function Nebbie.install()
     ]], cmd, cmd))
   end
 
-  -- Class selection: nclass | nclass m | nclass I | ...
-  perm("set class", [[^nclass(?: ([A-Za-z]))?$]], [[
-    if not matches[2] or matches[2] == "" then
-      Nebbie.listClasses()
-      return
-    end
-    Nebbie.setClass(matches[2])
-  ]])
+  -- Class selection: nclass | nclass m
+  perm("list classes", [[^nclass$]], [[Nebbie.listClasses()]])
+  perm("set class", [[^nclass ([A-Za-z])$]], [[Nebbie.setClass(matches[2])]])
 
   -- Quick slots q1-q9 [target] for current class preset
   for slot = 1, 9 do
@@ -889,14 +925,20 @@ function Nebbie.install()
   end
 
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
+  if exists(PKG .. "::set class", "alias") == 0 then
+    cecho("<red>[Nebbie] alias nclass mancante — riprova <yellow>nfix<grey> o reinstalla il package.\n")
+  else
+    cecho("<grey>Pronto: <yellow>nclass m<grey>, <yellow>q1<grey>, <yellow>fb<grey>, <yellow>ngui<grey>\n")
+  end
   cecho("<grey>Alias: <yellow>c/r/m <spell><grey>, <yellow>q1-q9 [tgt]<grey>, <yellow>nclass<grey>, <yellow>ngui<grey>.\n")
   Nebbie.initGUI()
 end
 
+Nebbie.loadSettings()
 Nebbie.install()
 if not Nebbie.loadClass() then
   Nebbie.castMode = Nebbie.castMode or "cast"
-  cecho("<grey>Nebbie: imposta la classe con <yellow>nclass m<grey> (m s c d p r I t w k b). Salvata per profilo.\n")
+  cecho("<grey>Nebbie: imposta la classe con <yellow>nclass m<grey> (m s c d p r I t w k b).\n")
 end
 '''
 
