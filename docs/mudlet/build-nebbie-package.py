@@ -469,7 +469,7 @@ def build_install_lua(spells):
 
 
 INSTALLER_LUA = r'''
-Nebbie.version = "1.0.8"
+Nebbie.version = "1.0.9"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
@@ -640,6 +640,153 @@ function Nebbie.execQuick(entry, target)
   end
 end
 
+Nebbie.guiW = 230
+Nebbie.guiH = 170
+Nebbie.guiHeaderH = 18
+Nebbie.guiMargin = 8
+Nebbie.guiLayoutVer = 2
+Nebbie.guiBar = "NebbieBuffsBar"
+Nebbie.guiConsole = "NebbieBuffs"
+
+function Nebbie.guiExists()
+  local ok = pcall(function() return isHidden(Nebbie.guiConsole) end)
+  return ok
+end
+
+function Nebbie.calcGUIPos()
+  local mw, mh = getMainWindowSize()
+  local w, h, m = Nebbie.guiW, Nebbie.guiH, Nebbie.guiMargin
+  local x = math.max(m, mw - w - m)
+  local y = m
+  return x, y, w, h
+end
+
+function Nebbie.applyGUIPosition(x, y, w, h)
+  local bar, con = Nebbie.guiBar, Nebbie.guiConsole
+  local hh = Nebbie.guiHeaderH
+  if type(moveWindow) == "function" and type(resizeWindow) == "function" then
+    moveWindow(bar, x, y)
+    resizeWindow(bar, w, hh)
+    moveWindow(con, x, y + hh)
+    resizeWindow(con, w, h - hh)
+    if type(raiseWindow) == "function" then raiseWindow(bar) end
+  end
+  Nebbie._guiX, Nebbie._guiY = x, y
+end
+
+function Nebbie.moveGUITo(x, y, persist)
+  local mw, mh = getMainWindowSize()
+  local w, h, m = Nebbie.guiW, Nebbie.guiH, Nebbie.guiMargin
+  x = math.max(m, math.min(x, mw - w - m))
+  y = math.max(m, math.min(y, mh - h - m))
+  Nebbie.applyGUIPosition(x, y, w, h)
+  if persist then
+    Nebbie._settings.guiCustom = true
+    Nebbie._settings.guiX = x
+    Nebbie._settings.guiY = y
+    Nebbie.saveSettings()
+  end
+end
+
+function Nebbie.positionGUI(verbose)
+  if not Nebbie.guiExists() then
+    if verbose then
+      cecho("<orange>Nebbie: pannello assente — prova <yellow>nfix<orange>.\n")
+    end
+    return false
+  end
+  Nebbie.buffConsole = true
+  local x, y, w, h
+  if Nebbie._settings.guiCustom and Nebbie._settings.guiX and Nebbie._settings.guiY then
+    x, y = Nebbie._settings.guiX, Nebbie._settings.guiY
+    w, h = Nebbie.guiW, Nebbie.guiH
+  else
+    x, y, w, h = Nebbie.calcGUIPos()
+  end
+  Nebbie.applyGUIPosition(x, y, w, h)
+  if verbose then
+    cecho("<green>Nebbie: pannello in alto a destra (" .. x .. ", " .. y .. ").\n")
+  end
+  return true
+end
+
+function Nebbie.resetGUIPosition()
+  Nebbie._settings.guiCustom = false
+  Nebbie._settings.guiX = nil
+  Nebbie._settings.guiY = nil
+  Nebbie.saveSettings()
+  return Nebbie.positionGUI(true)
+end
+
+function Nebbie.barClick(event)
+  Nebbie._drag = Nebbie._drag or {}
+  Nebbie._drag.active = true
+  Nebbie._drag.gx0 = event.globalX or event.x or 0
+  Nebbie._drag.gy0 = event.globalY or event.y or 0
+  Nebbie._drag.x0 = Nebbie._guiX or 0
+  Nebbie._drag.y0 = Nebbie._guiY or 0
+end
+
+function Nebbie.barMove(event)
+  if not Nebbie._drag or not Nebbie._drag.active then return end
+  local gx = event.globalX or event.x or 0
+  local gy = event.globalY or event.y or 0
+  local x = Nebbie._drag.x0 + (gx - Nebbie._drag.gx0)
+  local y = Nebbie._drag.y0 + (gy - Nebbie._drag.gy0)
+  Nebbie.moveGUITo(x, y, false)
+end
+
+function Nebbie.barRelease()
+  if Nebbie._drag then Nebbie._drag.active = false end
+  Nebbie._settings.guiCustom = true
+  Nebbie._settings.guiX = Nebbie._guiX
+  Nebbie._settings.guiY = Nebbie._guiY
+  Nebbie.saveSettings()
+end
+
+function Nebbie.setupDragBar()
+  if Nebbie._dragReady then return end
+  if type(setLabelClickCallback) == "function" then
+    setLabelClickCallback(Nebbie.guiBar, "Nebbie.barClick")
+  end
+  if type(setLabelMoveCallback) == "function" then
+    setLabelMoveCallback(Nebbie.guiBar, "Nebbie.barMove")
+  end
+  if type(setLabelReleaseCallback) == "function" then
+    setLabelReleaseCallback(Nebbie.guiBar, "Nebbie.barRelease")
+  end
+  Nebbie._dragReady = true
+end
+
+function Nebbie.buildGUI()
+  local x, y, w, h = Nebbie.calcGUIPos()
+  local hh = Nebbie.guiHeaderH
+  createLabel(Nebbie.guiBar, x, y, w, hh, 1)
+  setBackgroundColor(Nebbie.guiBar, 45, 45, 60, 255)
+  setFgColor(Nebbie.guiBar, 200, 200, 220)
+  echo(Nebbie.guiBar, " Nebbie Buffs — trascina qui")
+  createMiniConsole(Nebbie.guiConsole, x, y + hh, w, h - hh, true)
+  setMiniConsoleFontSize(Nebbie.guiConsole, 9)
+  setBackgroundColor(Nebbie.guiConsole, 20, 20, 30, 200)
+  setFgColor(Nebbie.guiConsole, 200, 200, 200)
+  showWindow(Nebbie.guiBar)
+  showWindow(Nebbie.guiConsole)
+  Nebbie.buffConsole = true
+  Nebbie.setupDragBar()
+  Nebbie.applyGUIPosition(x, y, w, h)
+end
+
+function Nebbie.destroyGUI()
+  if type(deleteMiniConsole) == "function" then
+    pcall(function() deleteMiniConsole(Nebbie.guiConsole) end)
+  end
+  if type(deleteLabel) == "function" then
+    pcall(function() deleteLabel(Nebbie.guiBar) end)
+  end
+  Nebbie.buffConsole = false
+  Nebbie._dragReady = false
+end
+
 function Nebbie.stopGUI()
   if Nebbie.guiTimer then
     killTimer(Nebbie.guiTimer)
@@ -649,27 +796,52 @@ end
 
 function Nebbie.initGUI()
   Nebbie.stopGUI()
-  if not Nebbie.buffConsole then
-    local _, sh = getMainWindowSize()
-    local h, w = 200, 250
-    createMiniConsole("NebbieBuffs", 10, math.max(10, sh - h - 10), w, h, true)
-    setMiniConsoleFontSize("NebbieBuffs", 9)
-    setBackgroundColor("NebbieBuffs", 20, 20, 30, 220)
-    setFgColor("NebbieBuffs", 200, 200, 200)
-    showWindow("NebbieBuffs")
-    Nebbie.buffConsole = true
+  Nebbie.loadSettings()
+  local layout = Nebbie._settings.guiLayout or 0
+  if layout < Nebbie.guiLayoutVer then
+    Nebbie.destroyGUI()
+    Nebbie._settings.guiLayout = Nebbie.guiLayoutVer
+    Nebbie._settings.guiCustom = false
+    Nebbie._settings.guiX = nil
+    Nebbie._settings.guiY = nil
+    Nebbie.saveSettings()
+  elseif Nebbie.guiExists() and not Nebbie.buffConsole then
+    Nebbie.destroyGUI()
   end
+  if not Nebbie.guiExists() then
+    Nebbie.buildGUI()
+  else
+    Nebbie.buffConsole = true
+    Nebbie.setupDragBar()
+    Nebbie.positionGUI(false)
+  end
+  if not Nebbie.resizeHandler and type(registerAnonymousEventHandler) == "function" then
+    Nebbie.resizeHandler = registerAnonymousEventHandler("sysWindowResizeEvent", function()
+      if Nebbie._settings.guiCustom then
+        Nebbie.moveGUITo(Nebbie._settings.guiX or Nebbie._guiX, Nebbie._settings.guiY or Nebbie._guiY, false)
+      else
+        Nebbie.positionGUI(false)
+      end
+    end)
+  end
+  tempTimer(0.05, function() Nebbie.positionGUI(false) end)
   Nebbie.guiTimer = tempTimer(1, function() Nebbie.refreshGUI() end, true)
 end
 
 function Nebbie.toggleGUI()
-  if isHidden("NebbieBuffs") then showWindow("NebbieBuffs") else hideWindow("NebbieBuffs") end
+  if isHidden(Nebbie.guiConsole) then
+    showWindow(Nebbie.guiConsole)
+    showWindow(Nebbie.guiBar)
+  else
+    hideWindow(Nebbie.guiConsole)
+    hideWindow(Nebbie.guiBar)
+  end
 end
 
 function Nebbie.refreshGUI()
-  if not Nebbie.buffConsole then return end
+  if not Nebbie.guiExists() then return end
   local ok, err = pcall(function()
-    clearUserWindow("NebbieBuffs")
+    clearWindow(Nebbie.guiConsole)
 
     local classLine = "(nclass non impostata)"
     local modeLine = tostring(Nebbie.castMode or "cast")
@@ -762,6 +934,7 @@ function Nebbie.uninstall()
   end
   if Nebbie.guiTimer then killTimer(Nebbie.guiTimer) end
   Nebbie.stopGUI()
+  Nebbie.destroyGUI()
   Nebbie._aliasNames = {}
   Nebbie._triggerNames = {}
   cecho("<orange>Nebbie spells/skills: alias disattivati.\n")
@@ -804,9 +977,11 @@ function Nebbie.install()
   perm("mode recall", [[^nrecall$]], [[Nebbie.setCastMode("recall")]])
   perm("mode mind", [[^nmind$]], [[Nebbie.setCastMode("mind")]])
   perm("toggle gui", [[^ngui$]], [[Nebbie.toggleGUI()]])
+  perm("reposition gui", [[^npos$]], [[Nebbie.resetGUIPosition()]])
   perm("reinstall fix", [[^nfix$]], [[
     Nebbie.purgePackageAliases()
     Nebbie.stopGUI()
+    Nebbie.destroyGUI()
     Nebbie.install()
     Nebbie.loadClass()
     cecho("<green>Nebbie v" .. Nebbie.version .. " reinstallato.\n")
@@ -1004,7 +1179,7 @@ def main():
         f.write("  q1-q9 [tgt]         → slot rapidi della classe corrente\n")
         f.write("  fb mm heal arm ...  → abbreviazioni rapide\n")
         f.write("\n=== PANNELLO GUI ===\n")
-        f.write("  MiniConsole 'NebbieBuffs' in basso a sinistra\n")
+        f.write("  MiniConsole 'NebbieBuffs' in alto a destra (npos per riposizionare, ngui per nascondere)\n")
         f.write("  Timer buff, stato OK/!/SCAD, countdown stimato\n")
         for cls, data in sorted(CLASS_PRESETS.items()):
             slots = ", ".join(f"q{i+1}={q[0]}" for i, q in enumerate(data["quick"]))

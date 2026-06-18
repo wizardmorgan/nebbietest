@@ -306,7 +306,7 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   fb mm heal arm ...  → abbreviazioni rapide
 
 === PANNELLO GUI ===
-  MiniConsole 'NebbieBuffs' in basso a sinistra
+  MiniConsole 'NebbieBuffs' in alto a destra (npos per riposizionare, ngui per nascondere)
   Timer buff, stato OK/!/SCAD, countdown stimato
   I (Psionista): q1=pshld, q2=mb, q3=pcrush, q4=lev, q5=ptel, q6=med, q7=blast, q8=dw, q9=port
   b (Barbaro): q1=berz, q2=bel, q3=k, q4=b, q5=camo, q6=ffood, q7=fwater, q8=tan, q9=fa

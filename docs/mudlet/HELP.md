@@ -66,7 +66,7 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-mudlet-s
 3. Seleziona `nebbie-spells-skills.mpackage`.
 4. In console dovresti vedere un messaggio simile a:
    ```
-   Nebbie v1.0.8: 177 alias, 116 trigger.
+   Nebbie v1.0.9: 177 alias, 116 trigger.
    Pronto: nclass m, q1, fb, ngui
    ```
 5. Imposta la classe **una volta** per profilo:
@@ -254,7 +254,7 @@ Ogni slot esegue l’abbreviazione indicata (cast, recall, mind o skill).
 
 Il pannello mostra anche la classe, la modalità cast e l’elenco `q1=… q2=…`.
 
-Puoi spostarlo manualmente trascinando la finestra; `npos` lo riporta in alto a destra.
+Puoi spostarlo trascinando la **barra grigia** in alto (`Nebbie Buffs — trascina qui`); `npos` lo riporta in alto a destra.
 
 ---
 
@@ -312,7 +312,7 @@ In console Mudlet compaiono righe `[buff]` o `[cast]` colorate.
 | `lua Nebbie.buffs` | Tabella buff (in Lua) |
 | `lua Nebbie.setClass("t")` | Imposta ladro da Lua |
 | `lua Nebbie.toggleGUI()` | Mostra/nasconde pannello |
-| `lua Nebbie.positionGUI()` | Riposiziona pannello |
+| `lua Nebbie.resetGUIPosition()` | Riposiziona pannello in alto a destra |
 
 ---
 
@@ -326,7 +326,8 @@ In console Mudlet compaiono righe `[buff]` o `[cast]` colorate.
 | Errore `classLine` nil | Package vecchio | Reinstall v1.0.4+ |
 | Alias eseguito due volte | Duplicati da reinstall | `nfix` o reinstall pulita |
 | Versione sbagliata dopo download | File dalla branch errata | Usa il link `cursor/nebbie-mudlet-spells-skills-55b4` |
-| Pannello copre il prompt | Posizione vecchia | `npos` o reinstall v1.0.8+ |
+| Pannello copre il prompt | Posizione salvata nel profilo | `npos` o `nfix` (v1.0.9+ ricrea il pannello) |
+| `npos` non fa nulla | Pannello vecchio / flag perso | `nfix` poi `npos` |
 | `nclass` non salva | `table.save` non disponibile | Aggiorna Mudlet; la v1.0.7+ usa file nel profilo |
 
 ### Reinstall rapida
