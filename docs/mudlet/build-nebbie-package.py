@@ -231,6 +231,118 @@ SOON_TRIGGERS = [
     ("fly", "stai perdendo la capacita' di volare"),
 ]
 
+# Stima durata buff in secondi (tick MUD ~4s; molti affect = 24 tick)
+BUFF_DURATIONS = {
+    "armor": 96, "bless": 96, "invisibility": 96, "sanctuary": 96, "fly": 96,
+    "haste": 96, "fireshield": 96, "stone skin": 96, "shield": 96, "strength": 96,
+    "barkskin": 96, "detect magic": 96, "detect invisibility": 96,
+    "protection from evil": 96, "anti magic shell": 96, "minor invulnerability": 96,
+    "mana": 96, "aid": 96, "faerie fire": 48, "mirror images": 48,
+    "psi shield": 96, "tower of iron will": 96, "mindblank": 96,
+    "chameleon": 96, "levitation": 96, "psionic strength": 96,
+}
+
+# Scorciatoie rapide per classe (lettera practice in-game)
+CLASS_PRESETS = {
+    "m": {
+        "name": "Mago", "mode": "cast",
+        "quick": [
+            ("arm", "cast", "armor"), ("shld", "cast", "shield"), ("fly", "cast", "fly"),
+            ("mm", "cast", "magic missile"), ("fb", "cast", "fireball"),
+            ("inv", "cast", "invisibility"), ("str", "cast", "strength"),
+            ("tel", "cast", "teleport"),
+        ],
+    },
+    "s": {
+        "name": "Stregone", "mode": "recall",
+        "quick": [
+            ("arm", "recall", "armor"), ("shld", "recall", "shield"), ("mm", "recall", "magic missile"),
+            ("fb", "recall", "fireball"), ("inv", "recall", "invisibility"),
+            ("fly", "recall", "fly"), ("tel", "recall", "teleport"),
+        ],
+    },
+    "c": {
+        "name": "Chierico", "mode": "cast",
+        "quick": [
+            ("heal", "cast", "heal"), ("cser", "cast", "cure serious"),
+            ("cc", "cast", "cure critic"), ("ble", "cast", "bless"),
+            ("san", "cast", "sanctuary"), ("pevil", "cast", "protection from evil"),
+            ("de", "cast", "dispel evil"), ("aid", "cast", "aid"),
+        ],
+    },
+    "d": {
+        "name": "Druido", "mode": "cast",
+        "quick": [
+            ("bark", "cast", "barkskin"), ("cl", "cast", "call lightning"),
+            ("ent", "cast", "entangle"), ("clight", "cast", "cure light"),
+            ("fly", "cast", "fly"), ("sskin", "cast", "stone skin"),
+            ("ffood", "skill", "find food"), ("brew", "skill", "brew"),
+        ],
+    },
+    "p": {
+        "name": "Paladino", "mode": "cast",
+        "quick": [
+            ("heal", "cast", "heal"), ("loh", "skill", "lay on hands"),
+            ("wc", "skill", "warcry"), ("ble", "cast", "bless"),
+            ("san", "cast", "sanctuary"), ("hero", "skill", "heroic rescue"),
+            ("bld", "skill", "blessing"), ("pray", "skill", "pray"),
+        ],
+    },
+    "r": {
+        "name": "Ranger", "mode": "cast",
+        "quick": [
+            ("tr", "skill", "track"), ("clight", "cast", "cure light"),
+            ("bark", "cast", "barkskin"), ("camo", "skill", "camouflage"),
+            ("sn", "skill", "sneak"), ("carve", "skill", "carve"),
+            ("ffood", "skill", "find food"), ("ent", "cast", "entangle"),
+        ],
+    },
+    "I": {
+        "name": "Psionista", "mode": "mind",
+        "quick": [
+            ("pshld", "skill", "psi shield"), ("mb", "mind", "mindblank"),
+            ("pcrush", "mind", "psychic crush"), ("lev", "mind", "levitation"),
+            ("ptel", "mind", "psionic teleport"), ("med", "skill", "meditate"),
+            ("blast", "skill", "psionic blast"), ("dw", "skill", "doorway"),
+        ],
+    },
+    "t": {
+        "name": "Ladro", "mode": "cast",
+        "quick": [
+            ("bs", "skill", "backstab"), ("sn", "skill", "sneak"),
+            ("hi", "skill", "hide"), ("stl", "skill", "steal"),
+            ("pick", "skill", "pick"), ("spy", "skill", "spy"),
+            ("dis", "skill", "disguise"), ("ed", "skill", "eavesdrop"),
+        ],
+    },
+    "w": {
+        "name": "Guerriero", "mode": "cast",
+        "quick": [
+            ("k", "skill", "kick"), ("b", "skill", "bash"),
+            ("res", "skill", "rescue"), ("disarm", "skill", "disarm"),
+            ("bel", "skill", "bellow"), ("parry", "skill", "parry"),
+        ],
+    },
+    "k": {
+        "name": "Monaco", "mode": "cast",
+        "quick": [
+            ("man", "skill", "mantra"), ("fin", "skill", "finger"),
+            ("qp", "skill", "quivering palm"), ("sl", "skill", "springleap"),
+            ("fd", "skill", "feign death"), ("k", "skill", "kick"),
+            ("dai", "skill", "daimoku"), ("fa", "skill", "first aid"),
+        ],
+    },
+    "b": {
+        "name": "Barbaro", "mode": "cast",
+        "quick": [
+            ("berz", "skill", "berserk"), ("bel", "skill", "bellow"),
+            ("k", "skill", "kick"), ("b", "skill", "bash"),
+            ("camo", "skill", "camouflage"), ("ffood", "skill", "find food"),
+            ("fwater", "skill", "find water"), ("tan", "skill", "tan"),
+        ],
+    },
+}
+
 
 def parse_spells():
     text = SPELL_PARSER.read_text(encoding="utf-8", errors="replace")
@@ -319,6 +431,25 @@ def build_install_lua(spells):
         lines.append(f"  {{ name = '{lua_escape(label)}', pattern = '{lua_escape(pat)}' }},")
     lines.append("}")
     lines.append("")
+    lines.append("Nebbie.buffDurations = {")
+    for k, v in sorted(BUFF_DURATIONS.items()):
+        lines.append(f"  ['{lua_escape(k)}'] = {v},")
+    lines.append("}")
+    lines.append("")
+    lines.append("Nebbie.classes = {")
+    for cls, data in sorted(CLASS_PRESETS.items()):
+        lines.append(f"  ['{lua_escape(cls)}'] = {{")
+        lines.append(f"    name = '{lua_escape(data['name'])}',")
+        lines.append(f"    mode = '{lua_escape(data['mode'])}',")
+        lines.append("    quick = {")
+        for abbr, kind, target in data["quick"]:
+            lines.append(
+                f"      {{ abbr = '{lua_escape(abbr)}', kind = '{lua_escape(kind)}', target = '{lua_escape(target)}' }},"
+            )
+        lines.append("    },")
+        lines.append("  },")
+    lines.append("}")
+    lines.append("")
     lines.append(INSTALLER_LUA)
     return "\n".join(lines)
 
@@ -327,6 +458,7 @@ INSTALLER_LUA = r'''
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
+Nebbie.playerClass = Nebbie.playerClass or "m"
 
 local PKG = Nebbie.package
 
@@ -341,6 +473,127 @@ function Nebbie.setCastMode(mode)
   end
   Nebbie.castMode = mode
   cecho("<green>Nebbie cast mode: <yellow>" .. mode .. "\n")
+  Nebbie.refreshGUI()
+end
+
+function Nebbie.setClass(cls)
+  local preset = Nebbie.classes[cls]
+  if not preset then
+    cecho("<orange>Classi: m s c d p r I t w k b — es. <yellow>nclass m\n")
+    return
+  end
+  Nebbie.playerClass = cls
+  Nebbie.setCastMode(preset.mode)
+  cecho("<green>Classe Nebbie: <yellow>" .. preset.name .. " <grey>(" .. cls .. ")\n")
+  Nebbie.refreshGUI()
+end
+
+function Nebbie.formatTime(secs)
+  secs = math.max(0, math.floor(secs))
+  local m = math.floor(secs / 60)
+  local s = secs % 60
+  return string.format("%02d:%02d", m, s)
+end
+
+function Nebbie.onBuffApplied(spell)
+  local dur = Nebbie.buffDurations[spell] or 0
+  Nebbie.buffs[spell] = {
+    since = getEpochTime(),
+    duration = dur,
+    soon = false,
+    active = true,
+  }
+  Nebbie.buffs._lastCast = spell
+  Nebbie.refreshGUI()
+end
+
+function Nebbie.onBuffWearOff(spell)
+  Nebbie.buffs[spell] = nil
+  Nebbie.refreshGUI()
+end
+
+function Nebbie.onBuffSoon(spell)
+  if Nebbie.buffs[spell] then
+    Nebbie.buffs[spell].soon = true
+  else
+    Nebbie.buffs[spell] = { since = getEpochTime(), duration = 0, soon = true, active = true }
+  end
+  Nebbie.refreshGUI()
+end
+
+function Nebbie.execQuick(entry, target)
+  if entry.kind == "cast" then
+    Nebbie.sendCast(entry.target, target)
+  elseif entry.kind == "recall" then
+    local cmd = "recall '" .. entry.target .. "'"
+    if target and target ~= "" then cmd = cmd .. " " .. target end
+    send(cmd)
+  elseif entry.kind == "mind" then
+    local cmd = "mind '" .. entry.target .. "'"
+    if target and target ~= "" then cmd = cmd .. " " .. target end
+    send(cmd)
+  elseif entry.kind == "skill" then
+    local info = Nebbie.dedicatedSkills[entry.target]
+    local cmd = info and info.cmd or entry.target
+    if target and target ~= "" then send(cmd .. " " .. target) else send(cmd) end
+  end
+end
+
+function Nebbie.initGUI()
+  if not Nebbie.buffConsole then
+    local _, sh = getMainWindowSize()
+    local h, w = 200, 250
+    createMiniConsole("NebbieBuffs", 10, math.max(10, sh - h - 10), w, h, true)
+    setMiniConsoleFontSize("NebbieBuffs", 9)
+    setBackgroundColor("NebbieBuffs", 20, 20, 30, 220)
+    setFgColor("NebbieBuffs", 200, 200, 200)
+    showWindow("NebbieBuffs")
+    Nebbie.buffConsole = true
+  end
+  if Nebbie.guiTimer then killTimer(Nebbie.guiTimer) end
+  Nebbie.guiTimer = tempTimer(1, function() Nebbie.refreshGUI() end, true)
+end
+
+function Nebbie.toggleGUI()
+  if isHidden("NebbieBuffs") then showWindow("NebbieBuffs") else hideWindow("NebbieBuffs") end
+end
+
+function Nebbie.refreshGUI()
+  if not Nebbie.buffConsole then return end
+  clearUserWindow("NebbieBuffs")
+  local preset = Nebbie.classes[Nebbie.playerClass]
+  local classLine = preset and (preset.name .. " (" .. Nebbie.playerClass .. ")") or Nebbie.playerClass
+  cecho("NebbieBuffs", "<cyan><b>=== Nebbie Buffs ===</b>\n")
+  cecho("NebbieBuffs", "<grey>Classe: <yellow>" .. classLine .. " <grey>| mode: <yellow>" .. Nebbie.castMode .. "\n")
+  local now = getEpochTime()
+  local count = 0
+  for spell, data in pairs(Nebbie.buffs) do
+    if spell:sub(1, 1) ~= "_" and type(data) == "table" then
+      count = count + 1
+      local elapsed = now - (data.since or now)
+      local status = "<green>OK"
+      local timeTxt = Nebbie.formatTime(elapsed)
+      if data.soon then
+        status = "<orange>!"
+      end
+      if data.duration and data.duration > 0 then
+        local left = data.duration - elapsed
+        timeTxt = Nebbie.formatTime(left) .. " <grey>(" .. Nebbie.formatTime(elapsed) .. ")"
+        if left <= 0 then status = "<red>SCAD" end
+      end
+      cecho("NebbieBuffs", status .. " <reset><white>" .. spell .. "  <grey>" .. timeTxt .. "\n")
+    end
+  end
+  if count == 0 then
+    cecho("NebbieBuffs", "<grey>(nessun buff tracciato)\n")
+  end
+  if preset and preset.quick then
+    cecho("NebbieBuffs", "<grey>Quick: ")
+    for i, q in ipairs(preset.quick) do
+      cecho("NebbieBuffs", "<dark_green>q" .. i .. "<grey>=" .. q.abbr .. " ")
+    end
+    cecho("NebbieBuffs", "\n")
+  end
 end
 
 function Nebbie.resolveSpell(token)
@@ -384,9 +637,10 @@ function Nebbie.uninstall()
   for _, name in ipairs(Nebbie._triggerNames) do
     if exists(name, "trigger") ~= 0 then disableTrigger(name) end
   end
+  if Nebbie.guiTimer then killTimer(Nebbie.guiTimer) end
   Nebbie._aliasNames = {}
   Nebbie._triggerNames = {}
-  cecho("<orange>Nebbie spells/skills: alias disattivati (reinstalla il package per rimuovere i trigger permanenti).\n")
+  cecho("<orange>Nebbie spells/skills: alias disattivati.\n")
 end
 
 function Nebbie.install()
@@ -418,6 +672,7 @@ function Nebbie.install()
   perm("mode cast", [[^ncast$]], [[Nebbie.setCastMode("cast")]])
   perm("mode recall", [[^nrecall$]], [[Nebbie.setCastMode("recall")]])
   perm("mode mind", [[^nmind$]], [[Nebbie.setCastMode("mind")]])
+  perm("toggle gui", [[^ngui$]], [[Nebbie.toggleGUI()]])
 
   -- Generic cast: c <spell> [target]  |  cast <spell> [target]
   perm("generic cast c", [[^c (.+)$]], [[
@@ -484,6 +739,21 @@ function Nebbie.install()
     ]], cmd, cmd))
   end
 
+  -- Class selection: nclass m | nclass I | ...
+  perm("set class", [[^nclass ([A-Za-z])$]], [[Nebbie.setClass(matches[2])]])
+
+  -- Quick slots q1-q9 [target] for current class preset
+  for slot = 1, 9 do
+    perm("quick slot " .. slot, "^q" .. slot .. "(?: (.+))?$", string.format([[
+      local preset = Nebbie.classes[Nebbie.playerClass]
+      if not preset or not preset.quick[%d] then
+        cecho("<red>Slot q%d non configurato per questa classe.\n")
+        return
+      end
+      Nebbie.execQuick(preset.quick[%d], matches[2])
+    ]], slot, slot, slot))
+  end
+
   -- Return from polymorph
   perm("return form", [[^return$]], [[send("return")]])
 
@@ -491,24 +761,22 @@ function Nebbie.install()
   trig("cast started", {"Pronunci le parole"}, [[
     local plain = Nebbie.stripColors(line)
     local spell = plain:match("Pronunci le parole, '(.+)'")
-    if spell then
-      Nebbie.buffs[spell] = { active = true, since = getEpochTime() }
-      Nebbie.buffs._lastCast = spell
-    end
+    if spell then Nebbie.onBuffApplied(spell) end
   ]])
 
   for _, entry in ipairs(Nebbie.wearOff) do
     local label = entry.name:gsub("'", "\\'")
     trig("wearoff " .. entry.name, {entry.pattern}, string.format([[
-      Nebbie.buffs['%s'] = nil
+      Nebbie.onBuffWearOff('%s')
       cecho("<grey>[buff] <yellow>%s <grey>scaduto\n")
     ]], label, entry.name))
   end
 
   for _, entry in ipairs(Nebbie.wearOffSoon) do
     trig("soon " .. entry.name, {entry.pattern}, string.format([[
+      Nebbie.onBuffSoon('%s')
       cecho("<grey>[buff] <orange>%s <grey>in scadenza\n")
-    ]], entry.name))
+    ]], entry.name:gsub("'", "\\'"), entry.name))
   end
 
   for _, entry in ipairs(Nebbie.failures) do
@@ -518,8 +786,9 @@ function Nebbie.install()
   end
 
   cecho("<green>Nebbie spells/skills: " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
-  cecho("<grey>Alias: <yellow>c <spell> [tgt]<grey>, <yellow>r/m <spell><grey>, abbreviazioni (<yellow>fb mm heal<grey>), <yellow>ncast/nrecall/nmind<grey>.\n")
-  cecho("<grey>Console Lua: <yellow>Nebbie.buffs<grey>, <yellow>Nebbie.setCastMode('recall')<grey>, <yellow>Nebbie.uninstall()<grey>.\n")
+  cecho("<grey>Alias: <yellow>c/r/m <spell><grey>, <yellow>q1-q9 [tgt]<grey>, <yellow>nclass m<grey>, <yellow>ncast/nrecall/nmind<grey>.\n")
+  cecho("<grey>GUI: pannello <yellow>NebbieBuffs<grey> (angolo in basso a sinistra).\n")
+  Nebbie.initGUI()
 end
 
 -- Auto-install on package load
@@ -579,7 +848,15 @@ def main():
         f.write("  m <spell> [tgt]     → mind (psi)\n")
         f.write("  mem <spell>         → memorize\n")
         f.write("  ncast/nrecall/nmind → cambia modalita' predefinita\n")
+        f.write("  nclass m            → imposta classe (m s c d p r I t w k b)\n")
+        f.write("  q1-q9 [tgt]         → slot rapidi della classe corrente\n")
         f.write("  fb mm heal arm ...  → abbreviazioni rapide\n")
+        f.write("\n=== PANNELLO GUI ===\n")
+        f.write("  MiniConsole 'NebbieBuffs' in basso a sinistra\n")
+        f.write("  Timer buff, stato OK/!/SCAD, countdown stimato\n")
+        for cls, data in sorted(CLASS_PRESETS.items()):
+            slots = ", ".join(f"q{i+1}={q[0]}" for i, q in enumerate(data["quick"]))
+            f.write(f"  {cls} ({data['name']}): {slots}\n")
 
     print(f"Wrote {mpackage} ({mpackage.stat().st_size} bytes)")
     print(f"Wrote {ref}")
