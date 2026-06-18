@@ -242,41 +242,45 @@ BUFF_DURATIONS = {
     "chameleon": 96, "levitation": 96, "psionic strength": 96,
 }
 
-# Scorciatoie rapide per classe (lettera practice in-game)
+# Scorciatoie rapide per classe (lettera practice in-game) — 9 slot ciascuna (q1-q9)
 CLASS_PRESETS = {
     "m": {
         "name": "Mago", "mode": "cast",
         "quick": [
             ("arm", "cast", "armor"), ("shld", "cast", "shield"), ("fly", "cast", "fly"),
             ("mm", "cast", "magic missile"), ("fb", "cast", "fireball"),
-            ("inv", "cast", "invisibility"), ("str", "cast", "strength"),
-            ("tel", "cast", "teleport"),
+            ("lb", "cast", "lightning bolt"), ("inv", "cast", "invisibility"),
+            ("str", "cast", "strength"), ("tel", "cast", "teleport"),
         ],
     },
     "s": {
         "name": "Stregone", "mode": "recall",
         "quick": [
-            ("arm", "recall", "armor"), ("shld", "recall", "shield"), ("mm", "recall", "magic missile"),
-            ("fb", "recall", "fireball"), ("inv", "recall", "invisibility"),
-            ("fly", "recall", "fly"), ("tel", "recall", "teleport"),
+            ("arm", "recall", "armor"), ("shld", "recall", "shield"),
+            ("mm", "recall", "magic missile"), ("fb", "recall", "fireball"),
+            ("lb", "recall", "lightning bolt"), ("inv", "recall", "invisibility"),
+            ("str", "recall", "strength"), ("fly", "recall", "fly"),
+            ("tel", "recall", "teleport"),
         ],
     },
     "c": {
         "name": "Chierico", "mode": "cast",
         "quick": [
             ("heal", "cast", "heal"), ("cser", "cast", "cure serious"),
-            ("cc", "cast", "cure critic"), ("ble", "cast", "bless"),
-            ("san", "cast", "sanctuary"), ("pevil", "cast", "protection from evil"),
-            ("de", "cast", "dispel evil"), ("aid", "cast", "aid"),
+            ("cc", "cast", "cure critic"), ("clight", "cast", "cure light"),
+            ("ble", "cast", "bless"), ("san", "cast", "sanctuary"),
+            ("pevil", "cast", "protection from evil"), ("de", "cast", "dispel evil"),
+            ("aid", "cast", "aid"),
         ],
     },
     "d": {
         "name": "Druido", "mode": "cast",
         "quick": [
             ("bark", "cast", "barkskin"), ("cl", "cast", "call lightning"),
-            ("ent", "cast", "entangle"), ("clight", "cast", "cure light"),
-            ("fly", "cast", "fly"), ("sskin", "cast", "stone skin"),
-            ("ffood", "skill", "find food"), ("brew", "skill", "brew"),
+            ("ent", "cast", "entangle"), ("snare", "cast", "snare"),
+            ("clight", "cast", "cure light"), ("fly", "cast", "fly"),
+            ("sskin", "cast", "stone skin"), ("ffood", "skill", "find food"),
+            ("brew", "skill", "brew"),
         ],
     },
     "p": {
@@ -284,8 +288,9 @@ CLASS_PRESETS = {
         "quick": [
             ("heal", "cast", "heal"), ("loh", "skill", "lay on hands"),
             ("wc", "skill", "warcry"), ("ble", "cast", "bless"),
-            ("san", "cast", "sanctuary"), ("hero", "skill", "heroic rescue"),
-            ("bld", "skill", "blessing"), ("pray", "skill", "pray"),
+            ("san", "cast", "sanctuary"), ("fs", "cast", "flamestrike"),
+            ("hero", "skill", "heroic rescue"), ("bld", "skill", "blessing"),
+            ("pray", "skill", "pray"),
         ],
     },
     "r": {
@@ -294,7 +299,8 @@ CLASS_PRESETS = {
             ("tr", "skill", "track"), ("clight", "cast", "cure light"),
             ("bark", "cast", "barkskin"), ("camo", "skill", "camouflage"),
             ("sn", "skill", "sneak"), ("carve", "skill", "carve"),
-            ("ffood", "skill", "find food"), ("ent", "cast", "entangle"),
+            ("ffood", "skill", "find food"), ("fwater", "skill", "find water"),
+            ("ent", "cast", "entangle"),
         ],
     },
     "I": {
@@ -304,6 +310,7 @@ CLASS_PRESETS = {
             ("pcrush", "mind", "psychic crush"), ("lev", "mind", "levitation"),
             ("ptel", "mind", "psionic teleport"), ("med", "skill", "meditate"),
             ("blast", "skill", "psionic blast"), ("dw", "skill", "doorway"),
+            ("port", "skill", "psi portal"),
         ],
     },
     "t": {
@@ -312,7 +319,8 @@ CLASS_PRESETS = {
             ("bs", "skill", "backstab"), ("sn", "skill", "sneak"),
             ("hi", "skill", "hide"), ("stl", "skill", "steal"),
             ("pick", "skill", "pick"), ("spy", "skill", "spy"),
-            ("dis", "skill", "disguise"), ("ed", "skill", "eavesdrop"),
+            ("tspy", "skill", "tspy"), ("dis", "skill", "disguise"),
+            ("ed", "skill", "eavesdrop"),
         ],
     },
     "w": {
@@ -321,6 +329,8 @@ CLASS_PRESETS = {
             ("k", "skill", "kick"), ("b", "skill", "bash"),
             ("res", "skill", "rescue"), ("disarm", "skill", "disarm"),
             ("bel", "skill", "bellow"), ("parry", "skill", "parry"),
+            ("fa", "skill", "first aid"), ("dbash", "skill", "doorbash"),
+            ("climb", "skill", "climb"),
         ],
     },
     "k": {
@@ -329,7 +339,8 @@ CLASS_PRESETS = {
             ("man", "skill", "mantra"), ("fin", "skill", "finger"),
             ("qp", "skill", "quivering palm"), ("sl", "skill", "springleap"),
             ("fd", "skill", "feign death"), ("k", "skill", "kick"),
-            ("dai", "skill", "daimoku"), ("fa", "skill", "first aid"),
+            ("b", "skill", "bash"), ("dai", "skill", "daimoku"),
+            ("fa", "skill", "first aid"),
         ],
     },
     "b": {
@@ -339,9 +350,12 @@ CLASS_PRESETS = {
             ("k", "skill", "kick"), ("b", "skill", "bash"),
             ("camo", "skill", "camouflage"), ("ffood", "skill", "find food"),
             ("fwater", "skill", "find water"), ("tan", "skill", "tan"),
+            ("fa", "skill", "first aid"),
         ],
     },
 }
+
+CLASS_VAR = "nebbie_class"
 
 
 def parse_spells():
@@ -458,9 +472,10 @@ INSTALLER_LUA = r'''
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
-Nebbie.playerClass = Nebbie.playerClass or "m"
+Nebbie.playerClass = Nebbie.playerClass or nil
 
 local PKG = Nebbie.package
+local CLASS_VAR = "nebbie_class"
 
 function Nebbie.stripColors(line)
   return line:gsub("%$c%d%d%d%d", "")
@@ -476,16 +491,52 @@ function Nebbie.setCastMode(mode)
   Nebbie.refreshGUI()
 end
 
-function Nebbie.setClass(cls)
+function Nebbie.listClasses()
+  cecho("<cyan><b>Classi Nebbie</b> <grey>(una per profilo Mudlet, salvata con nclass):\n")
+  local order = {"m", "s", "c", "d", "p", "r", "I", "t", "w", "k", "b"}
+  for _, cls in ipairs(order) do
+    local preset = Nebbie.classes[cls]
+    if preset then
+      local mark = (cls == Nebbie.playerClass) and "<green>* " or "  "
+      local slots = {}
+      for i, q in ipairs(preset.quick) do slots[i] = "q" .. i .. "=" .. q.abbr end
+      cecho(mark .. "<yellow>" .. cls .. " <white>" .. preset.name
+        .. " <grey>[" .. table.concat(slots, " ") .. "]\n")
+    end
+  end
+end
+
+function Nebbie.saveClass(cls)
+  setVariable(CLASS_VAR, cls)
+end
+
+function Nebbie.loadClass()
+  local saved = getVariable(CLASS_VAR)
+  if saved and saved ~= "" and Nebbie.classes[saved] then
+    Nebbie.setClass(saved, true)
+    return true
+  end
+  return false
+end
+
+function Nebbie.setClass(cls, silent)
   local preset = Nebbie.classes[cls]
   if not preset then
-    cecho("<orange>Classi: m s c d p r I t w k b — es. <yellow>nclass m\n")
-    return
+    if not silent then
+      cecho("<orange>Classi: m s c d p r I t w k b — es. <yellow>nclass m<grey> | <yellow>nclass<grey> elenca tutte\n")
+    end
+    return false
   end
   Nebbie.playerClass = cls
-  Nebbie.setCastMode(preset.mode)
-  cecho("<green>Classe Nebbie: <yellow>" .. preset.name .. " <grey>(" .. cls .. ")\n")
+  Nebbie.saveClass(cls)
+  Nebbie.castMode = preset.mode
+  if not silent then
+    cecho("<green>Classe Nebbie: <yellow>" .. preset.name .. " <grey>(" .. cls .. ") <grey>salvata per questo profilo.\n")
+  else
+    cecho("<green>Nebbie: profilo <yellow>" .. preset.name .. " <grey>(" .. cls .. ", " .. preset.mode .. ")\n")
+  end
   Nebbie.refreshGUI()
+  return true
 end
 
 function Nebbie.formatTime(secs)
@@ -561,8 +612,8 @@ end
 function Nebbie.refreshGUI()
   if not Nebbie.buffConsole then return end
   clearUserWindow("NebbieBuffs")
-  local preset = Nebbie.classes[Nebbie.playerClass]
-  local classLine = preset and (preset.name .. " (" .. Nebbie.playerClass .. ")") or Nebbie.playerClass
+  local preset = Nebbie.playerClass and Nebbie.classes[Nebbie.playerClass]
+  local classLine = preset and (preset.name .. " (" .. Nebbie.playerClass .. ")") or "<orange>(nclass non impostata)"
   cecho("NebbieBuffs", "<cyan><b>=== Nebbie Buffs ===</b>\n")
   cecho("NebbieBuffs", "<grey>Classe: <yellow>" .. classLine .. " <grey>| mode: <yellow>" .. Nebbie.castMode .. "\n")
   local now = getEpochTime()
@@ -739,8 +790,14 @@ function Nebbie.install()
     ]], cmd, cmd))
   end
 
-  -- Class selection: nclass m | nclass I | ...
-  perm("set class", [[^nclass ([A-Za-z])$]], [[Nebbie.setClass(matches[2])]])
+  -- Class selection: nclass | nclass m | nclass I | ...
+  perm("set class", [[^nclass(?: ([A-Za-z]))?$]], [[
+    if not matches[2] or matches[2] == "" then
+      Nebbie.listClasses()
+      return
+    end
+    Nebbie.setClass(matches[2])
+  ]])
 
   -- Quick slots q1-q9 [target] for current class preset
   for slot = 1, 9 do
@@ -786,13 +843,14 @@ function Nebbie.install()
   end
 
   cecho("<green>Nebbie spells/skills: " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
-  cecho("<grey>Alias: <yellow>c/r/m <spell><grey>, <yellow>q1-q9 [tgt]<grey>, <yellow>nclass m<grey>, <yellow>ncast/nrecall/nmind<grey>.\n")
-  cecho("<grey>GUI: pannello <yellow>NebbieBuffs<grey> (angolo in basso a sinistra).\n")
+  cecho("<grey>Alias: <yellow>c/r/m <spell><grey>, <yellow>q1-q9 [tgt]<grey>, <yellow>nclass<grey>, <yellow>ngui<grey>.\n")
   Nebbie.initGUI()
 end
 
--- Auto-install on package load
 Nebbie.install()
+if not Nebbie.loadClass() then
+  cecho("<grey>Nebbie: primo avvio — imposta la classe con <yellow>nclass m<grey> (m s c d p r I t w k b). Salvata per profilo.\n")
+end
 '''
 
 
@@ -816,6 +874,10 @@ def build_xml(lua_body):
 def main():
     spells = parse_spells()
     cast_spells = build_cast_spell_list(spells)
+    for cls, data in CLASS_PRESETS.items():
+        n = len(data["quick"])
+        if n != 9:
+            raise SystemExit(f"Class {cls} has {n} quick slots, expected 9")
     lua = build_install_lua(spells)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / "config.lua").write_text(f'return "{PACKAGE_NAME}"\n', encoding="utf-8")
@@ -848,7 +910,8 @@ def main():
         f.write("  m <spell> [tgt]     → mind (psi)\n")
         f.write("  mem <spell>         → memorize\n")
         f.write("  ncast/nrecall/nmind → cambia modalita' predefinita\n")
-        f.write("  nclass m            → imposta classe (m s c d p r I t w k b)\n")
+        f.write("  nclass m            → imposta classe (salvata per profilo Mudlet)\n")
+        f.write("  nclass              → elenca tutte le classi e slot q1-q9\n")
         f.write("  q1-q9 [tgt]         → slot rapidi della classe corrente\n")
         f.write("  fb mm heal arm ...  → abbreviazioni rapide\n")
         f.write("\n=== PANNELLO GUI ===\n")

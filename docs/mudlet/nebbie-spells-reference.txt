@@ -300,21 +300,22 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   m <spell> [tgt]     → mind (psi)
   mem <spell>         → memorize
   ncast/nrecall/nmind → cambia modalita' predefinita
-  nclass m            → imposta classe (m s c d p r I t w k b)
+  nclass m            → imposta classe (salvata per profilo Mudlet)
+  nclass              → elenca tutte le classi e slot q1-q9
   q1-q9 [tgt]         → slot rapidi della classe corrente
   fb mm heal arm ...  → abbreviazioni rapide
 
 === PANNELLO GUI ===
   MiniConsole 'NebbieBuffs' in basso a sinistra
   Timer buff, stato OK/!/SCAD, countdown stimato
-  I (Psionista): q1=pshld, q2=mb, q3=pcrush, q4=lev, q5=ptel, q6=med, q7=blast, q8=dw
-  b (Barbaro): q1=berz, q2=bel, q3=k, q4=b, q5=camo, q6=ffood, q7=fwater, q8=tan
-  c (Chierico): q1=heal, q2=cser, q3=cc, q4=ble, q5=san, q6=pevil, q7=de, q8=aid
-  d (Druido): q1=bark, q2=cl, q3=ent, q4=clight, q5=fly, q6=sskin, q7=ffood, q8=brew
-  k (Monaco): q1=man, q2=fin, q3=qp, q4=sl, q5=fd, q6=k, q7=dai, q8=fa
-  m (Mago): q1=arm, q2=shld, q3=fly, q4=mm, q5=fb, q6=inv, q7=str, q8=tel
-  p (Paladino): q1=heal, q2=loh, q3=wc, q4=ble, q5=san, q6=hero, q7=bld, q8=pray
-  r (Ranger): q1=tr, q2=clight, q3=bark, q4=camo, q5=sn, q6=carve, q7=ffood, q8=ent
-  s (Stregone): q1=arm, q2=shld, q3=mm, q4=fb, q5=inv, q6=fly, q7=tel
-  t (Ladro): q1=bs, q2=sn, q3=hi, q4=stl, q5=pick, q6=spy, q7=dis, q8=ed
-  w (Guerriero): q1=k, q2=b, q3=res, q4=disarm, q5=bel, q6=parry
+  I (Psionista): q1=pshld, q2=mb, q3=pcrush, q4=lev, q5=ptel, q6=med, q7=blast, q8=dw, q9=port
+  b (Barbaro): q1=berz, q2=bel, q3=k, q4=b, q5=camo, q6=ffood, q7=fwater, q8=tan, q9=fa
+  c (Chierico): q1=heal, q2=cser, q3=cc, q4=clight, q5=ble, q6=san, q7=pevil, q8=de, q9=aid
+  d (Druido): q1=bark, q2=cl, q3=ent, q4=snare, q5=clight, q6=fly, q7=sskin, q8=ffood, q9=brew
+  k (Monaco): q1=man, q2=fin, q3=qp, q4=sl, q5=fd, q6=k, q7=b, q8=dai, q9=fa
+  m (Mago): q1=arm, q2=shld, q3=fly, q4=mm, q5=fb, q6=lb, q7=inv, q8=str, q9=tel
+  p (Paladino): q1=heal, q2=loh, q3=wc, q4=ble, q5=san, q6=fs, q7=hero, q8=bld, q9=pray
+  r (Ranger): q1=tr, q2=clight, q3=bark, q4=camo, q5=sn, q6=carve, q7=ffood, q8=fwater, q9=ent
+  s (Stregone): q1=arm, q2=shld, q3=mm, q4=fb, q5=lb, q6=inv, q7=str, q8=fly, q9=tel
+  t (Ladro): q1=bs, q2=sn, q3=hi, q4=stl, q5=pick, q6=spy, q7=tspy, q8=dis, q9=ed
+  w (Guerriero): q1=k, q2=b, q3=res, q4=disarm, q5=bel, q6=parry, q7=fa, q8=dbash, q9=climb
