@@ -131,6 +131,7 @@ Stesse lettere del comando `practice` / `pratice` in gioco:
 
 | Lettera | Classe | Modalità cast automatica |
 |---------|--------|--------------------------|
+| `+` / `u` | Cast universale (multiclasse cast) | `cast` |
 | `m` | Mago | `cast` |
 | `s` | Stregone | `recall` |
 | `c` | Chierico | `cast` |
@@ -144,35 +145,49 @@ Stesse lettere del comando `practice` / `pratice` in gioco:
 | `b` | Barbaro | `cast` |
 
 ```
+nclass +      → preset cast universale (consigliato per multiclasse cast)
+nclass m c    → unisce slot Mago + Chierico
 nclass m      → imposta Mago e salva
 nclass        → elenca tutte le classi e gli slot q1–q9
 ```
 
 ### Personaggi multiclasse (es. Mago + Chierico)
 
-Il package **non** ha preset combinati (`mc`, `m/c`, ecc.): scegli **una classe attiva** alla volta con `nclass`.
+Due modi supportati in v1.0.11+:
+
+#### 1. Preset cast universale (`+`)
+
+Per un **unico profilo** con tutte le classi che usano `cast` (mago, chierico, druido, paladino, ranger, ladro, guerriero, monaco, barbaro):
+
+```
+nclass +
+```
+
+Slot rapidi misti: heal, arm, san, fb, mm, lb, fly, ble, inv. La modalità resta `cast`; abbreviazioni (`fb`, `heal`, `bs`…) funzionano sempre. Stregone (`s`) e psi (`I`) restano preset separati perché usano `recall` e `mind`.
+
+Alias: `nclass u` equivale a `nclass +`.
+
+#### 2. Multiclasse esplicito (`nclass m c`)
+
+Unisce gli slot `q1`–`q9` delle classi indicate (senza duplicati, nell’ordine digitato):
+
+```
+nclass m c     → Mago + Chierico (arm, shld, fly, mm, fb, heal, cser, cc, clight…)
+nclass w t     → Guerriero + Ladro
+```
+
+Modalità default: `cast`. Per incantesimi da stregone usa `r` o `nrecall`; per psi usa `m` o `nmind`.
+
+#### Alternativa: una classe alla volta
+
+Puoi ancora alternare `nclass m` e `nclass c` se preferisci barre separate.
 
 | Cosa cambia | `nclass m` | `nclass c` |
 |-------------|------------|------------|
 | Slot rapidi `q1`–`q9` | arm, fb, mm… | heal, san, ble… |
 | Comando `c` | `cast '…'` | `cast '…'` |
-| Comando `r` | `recall '…'` (stregone) | `recall '…'` |
-| Comando `m` | `mind '…'` (psi) | `mind '…'` |
 
-**In pratica:** se giochi un mago/chierico, passa da `nclass m` quando lanci danno o utilità da mago, e `nclass c` quando curi o benedici. Il MUD controlla comunque quali incantesimi puoi usare in base alle tue classi reali; il package configura solo scorciatoie e modalità.
-
-Combinazioni comuni nel MUD (umani e altre razze hanno limiti diversi):
-
-| Se giochi… | Lettere utili |
-|------------|----------------|
-| Mago + Chierico | `m` / `c` |
-| Mago + Stregone | `m` (`cast`) / `s` (`recall`) |
-| Guerriero + Ladro | `w` / `t` |
-| Ranger + Druido | `r` / `d` |
-| Paladino + Chierico | `p` (skill + cure) / `c` (solo magia) |
-| Psionista + altro | `I` per `mind` e slot psi |
-
-Non esiste validazione automatica: se imposti `nclass c` su un personaggio senza chierico, le scorciatoie funzionano ma il MUD può rifiutare il cast.
+Il MUD controlla quali incantesimi puoi usare; il package configura solo scorciatoie.
 
 ---
 

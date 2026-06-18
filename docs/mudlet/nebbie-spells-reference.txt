@@ -300,6 +300,8 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   m <spell> [tgt]     → mind (psi)
   mem <spell>         → memorize
   ncast/nrecall/nmind → cambia modalita' predefinita
+  nclass +            → preset cast universale (multiclasse cast)
+  nclass m c          → unisce slot di piu' classi
   nclass m            → imposta classe (salvata per profilo Mudlet)
   nclass              → elenca tutte le classi e slot q1-q9
   q1-q9 [tgt]         → slot rapidi della classe corrente
@@ -308,6 +310,7 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
 === PANNELLO GUI ===
   MiniConsole 'NebbieBuffs' in alto a destra (npos per riposizionare, ngui per nascondere)
   Timer buff, stato OK/!/SCAD, countdown stimato
+  + (Cast universale): q1=heal, q2=arm, q3=san, q4=fb, q5=mm, q6=lb, q7=fly, q8=ble, q9=inv
   I (Psionista): q1=pshld, q2=mb, q3=pcrush, q4=lev, q5=ptel, q6=med, q7=blast, q8=dw, q9=port
   b (Barbaro): q1=berz, q2=bel, q3=k, q4=b, q5=camo, q6=ffood, q7=fwater, q8=tan, q9=fa
   c (Chierico): q1=heal, q2=cser, q3=cc, q4=clight, q5=ble, q6=san, q7=pevil, q8=de, q9=aid

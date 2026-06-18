@@ -244,6 +244,14 @@ BUFF_DURATIONS = {
 
 # Scorciatoie rapide per classe (lettera practice in-game) — 9 slot ciascuna (q1-q9)
 CLASS_PRESETS = {
+    "+": {
+        "name": "Cast universale", "mode": "cast",
+        "quick": [
+            ("heal", "cast", "heal"), ("arm", "cast", "armor"), ("san", "cast", "sanctuary"),
+            ("fb", "cast", "fireball"), ("mm", "cast", "magic missile"), ("lb", "cast", "lightning bolt"),
+            ("fly", "cast", "fly"), ("ble", "cast", "bless"), ("inv", "cast", "invisibility"),
+        ],
+    },
     "m": {
         "name": "Mago", "mode": "cast",
         "quick": [
@@ -469,7 +477,7 @@ def build_install_lua(spells):
 
 
 INSTALLER_LUA = r'''
-Nebbie.version = "1.0.10"
+Nebbie.version = "1.0.11"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
@@ -551,9 +559,56 @@ function Nebbie.purgeOrphanNebbieAliases()
   end
 end
 
+function Nebbie.parseClassArg(arg)
+  if not arg or arg == "" then return {} end
+  if arg == "u" then return {"+"} end
+  local parts = {}
+  for letter in arg:gmatch("%S+") do
+    table.insert(parts, letter)
+  end
+  return parts
+end
+
+function Nebbie.buildMergedPreset(parts)
+  local key = table.concat(parts, " ")
+  Nebbie._mergedCache = Nebbie._mergedCache or {}
+  if Nebbie._mergedCache[key] then return Nebbie._mergedCache[key] end
+  local quick, seen, names = {}, {}, {}
+  for _, cls in ipairs(parts) do
+    local p = Nebbie.classes[cls]
+    if p then
+      table.insert(names, p.name)
+      for _, entry in ipairs(p.quick) do
+        local sk = entry.abbr .. "\0" .. entry.kind .. "\0" .. entry.target
+        if not seen[sk] and #quick < 9 then
+          seen[sk] = true
+          table.insert(quick, entry)
+        end
+      end
+    end
+  end
+  local preset = {
+    name = table.concat(names, " + "),
+    mode = "cast",
+    quick = quick,
+  }
+  Nebbie._mergedCache[key] = preset
+  return preset
+end
+
+function Nebbie.getActivePreset()
+  if not Nebbie.playerClass or Nebbie.playerClass == "" then return nil end
+  if Nebbie.classes[Nebbie.playerClass] then
+    return Nebbie.classes[Nebbie.playerClass]
+  end
+  local parts = Nebbie.parseClassArg(Nebbie.playerClass)
+  if #parts > 1 then return Nebbie.buildMergedPreset(parts) end
+  return nil
+end
+
 function Nebbie.listClasses()
-  cecho("<cyan><b>Classi Nebbie</b> <grey>(una per profilo Mudlet, salvata con nclass):\n")
-  local order = {"m", "s", "c", "d", "p", "r", "I", "t", "w", "k", "b"}
+  cecho("<cyan><b>Classi Nebbie</b> <grey>(salvata con nclass, un profilo Mudlet per personaggio):\n")
+  local order = {"+", "m", "s", "c", "d", "p", "r", "I", "t", "w", "k", "b"}
   for _, cls in ipairs(order) do
     local preset = Nebbie.classes[cls]
     if preset then
@@ -564,6 +619,11 @@ function Nebbie.listClasses()
         .. " <grey>[" .. table.concat(slots, " ") .. "]\n")
     end
   end
+  local active = Nebbie.getActivePreset()
+  if Nebbie.playerClass and not Nebbie.classes[Nebbie.playerClass] and active then
+    cecho("<green>* <yellow>" .. Nebbie.playerClass .. " <white>" .. active.name .. " <grey>(multiclasse)\n")
+  end
+  cecho("<grey>Multiclasse: <yellow>nclass m c<grey> unisce gli slot | <yellow>nclass +<grey> preset cast universale\n")
 end
 
 function Nebbie.saveClass(cls)
@@ -582,19 +642,56 @@ function Nebbie.loadClass()
     local ok, v = pcall(function() return getVariable(CLASS_VAR) end)
     if ok and v and v ~= "" then saved = v end
   end
-  if saved and saved ~= "" and Nebbie.classes[saved] then
-    Nebbie.setClass(saved, true)
-    return true
+  if saved and saved ~= "" then
+    if Nebbie.classes[saved] or #Nebbie.parseClassArg(saved) > 1 then
+      Nebbie.setClass(saved, true)
+      return true
+    end
   end
   return false
 end
 
+function Nebbie.setMulticlass(parts, silent)
+  local names, missing = {}, {}
+  for _, cls in ipairs(parts) do
+    if Nebbie.classes[cls] then
+      table.insert(names, Nebbie.classes[cls].name)
+    else
+      table.insert(missing, cls)
+    end
+  end
+  if #missing > 0 then
+    if not silent then
+      cecho("<orange>Classe sconosciuta: <yellow>" .. table.concat(missing, ", ") .. "\n")
+    end
+    return false
+  end
+  local key = table.concat(parts, " ")
+  local preset = Nebbie.buildMergedPreset(parts)
+  Nebbie.playerClass = key
+  Nebbie.saveClass(key)
+  Nebbie.castMode = preset.mode
+  if not silent then
+    Nebbie._lastClassMsgAt = Nebbie.now()
+    local slots = {}
+    for i, q in ipairs(preset.quick) do slots[i] = "q" .. i .. "=" .. q.abbr end
+    cecho("<green>Nebbie multiclasse: <yellow>" .. preset.name .. " <grey>[" .. table.concat(slots, " ") .. "]\n")
+    cecho("<grey>Modalita' <yellow>" .. preset.mode .. "<grey> — usa <yellow>r<grey>/<yellow>nrecall<grey> per stregone, <yellow>m<grey>/<yellow>nmind<grey> per psi.\n")
+  else
+    cecho("<green>Nebbie: profilo <yellow>" .. preset.name .. " <grey>(" .. key .. ", " .. preset.mode .. ")\n")
+  end
+  Nebbie.refreshGUI()
+  return true
+end
+
 function Nebbie.setClass(cls, silent)
+  local parts = Nebbie.parseClassArg(cls)
+  if #parts > 1 then return Nebbie.setMulticlass(parts, silent) end
+  if #parts == 1 then cls = parts[1] end
   local preset = Nebbie.classes[cls]
   if not preset then
     if not silent then
-      cecho("<orange>Classi: m s c d p r I t w k b — es. <yellow>nclass m<grey> | <yellow>nclass<grey> elenca tutte\n")
-      cecho("<grey>Multiclasse: scegli la classe <yellow>attiva<grey> (es. m per magia, c per cure).\n")
+      cecho("<orange>Classi: + u m s c d p r I t w k b — es. <yellow>nclass +<grey> | <yellow>nclass m c<grey> | <yellow>nclass<grey> elenca\n")
     end
     return false
   end
@@ -874,7 +971,7 @@ function Nebbie.refreshGUI()
     local classLine = "(nclass non impostata)"
     local modeLine = tostring(Nebbie.castMode or "cast")
     if Nebbie.playerClass and Nebbie.playerClass ~= "" then
-      local preset = Nebbie.classes[Nebbie.playerClass]
+      local preset = Nebbie.getActivePreset()
       if preset then
         classLine = tostring(preset.name or "?") .. " (" .. tostring(Nebbie.playerClass) .. ")"
         modeLine = tostring(preset.mode or modeLine)
@@ -905,7 +1002,7 @@ function Nebbie.refreshGUI()
     if count == 0 then
       cecho("NebbieBuffs", "<grey>(nessun buff tracciato)\n")
     end
-    local preset = Nebbie.playerClass and Nebbie.classes[Nebbie.playerClass]
+    local preset = Nebbie.getActivePreset()
     if preset and preset.quick then
       cecho("NebbieBuffs", "<grey>Quick: ")
       for i, q in ipairs(preset.quick) do
@@ -1085,14 +1182,14 @@ function Nebbie.install()
     ]], cmd, cmd))
   end
 
-  -- Class selection: nclass | nclass m
+  -- Class selection: nclass | nclass m | nclass m c | nclass +
   perm("list classes", [[^nclass$]], [[Nebbie.listClasses()]])
-  perm("set class", [[^nclass ([A-Za-z])$]], [[Nebbie.setClass(matches[2])]])
+  perm("set class", [[^nclass (.+)$]], [[Nebbie.setClass(matches[2])]])
 
   -- Quick slots q1-q9 [target] for current class preset
   for slot = 1, 9 do
     perm("quick slot " .. slot, "^q" .. slot .. "(?: (.+))?$", string.format([[
-      local preset = Nebbie.classes[Nebbie.playerClass]
+      local preset = Nebbie.getActivePreset()
       if not preset or not preset.quick[%d] then
         cecho("<red>Slot q%d non configurato per questa classe.\n")
         return
@@ -1155,7 +1252,7 @@ function Nebbie.boot()
   Nebbie.install()
   if not Nebbie.loadClass() then
     Nebbie.castMode = Nebbie.castMode or "cast"
-    cecho("<grey>Nebbie: imposta la classe con <yellow>nclass m<grey> (m s c d p r I t w k b).\n")
+    cecho("<grey>Nebbie: <yellow>nclass +<grey> (cast universale), <yellow>nclass m c<grey> (multiclasse), o <yellow>nclass m<grey>.\n")
   end
 end
 
@@ -1219,6 +1316,8 @@ def main():
         f.write("  m <spell> [tgt]     → mind (psi)\n")
         f.write("  mem <spell>         → memorize\n")
         f.write("  ncast/nrecall/nmind → cambia modalita' predefinita\n")
+        f.write("  nclass +            → preset cast universale (multiclasse cast)\n")
+        f.write("  nclass m c          → unisce slot di piu' classi\n")
         f.write("  nclass m            → imposta classe (salvata per profilo Mudlet)\n")
         f.write("  nclass              → elenca tutte le classi e slot q1-q9\n")
         f.write("  q1-q9 [tgt]         → slot rapidi della classe corrente\n")
