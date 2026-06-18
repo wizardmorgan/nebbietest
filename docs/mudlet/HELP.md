@@ -91,7 +91,7 @@ Nella riga di comando Mudlet:
 lua cecho("<yellow>"..Nebbie.version)
 ```
 
-Deve mostrare la versione corrente (es. `1.0.8`). Nel pannello buff compare anche `=== Nebbie Buffs v1.0.8 ===`.
+Deve mostrare la versione corrente (es. `1.0.9`). Nel pannello buff compare anche `=== Nebbie Buffs v1.0.9 ===`.
 
 ---
 
