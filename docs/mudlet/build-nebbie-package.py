@@ -738,18 +738,23 @@ function Nebbie.install()
   local function perm(short, pattern, script)
     local full = PKG .. "::" .. short
     if exists(full, "alias") ~= 0 then killAlias(full) end
-    permAlias(full, PKG, pattern, script)
-    table.insert(Nebbie._aliasNames, full)
+    permAlias(full, "", pattern, script)
+    if exists(full, "alias") == 0 then
+      cecho("<red>[Nebbie] alias non creato: " .. full .. "\n")
+    else
+      table.insert(Nebbie._aliasNames, full)
+    end
   end
 
   local function trig(short, patterns, script)
     local full = PKG .. "::" .. short
-    if exists(full, "trigger") == 0 then
-      if type(patterns) == "string" then
-        permRegexTrigger(full, PKG, {patterns}, script)
-      else
-        permSubstringTrigger(full, PKG, patterns, script)
-      end
+    if exists(full, "trigger") ~= 0 then disableTrigger(full) end
+    if type(patterns) == "string" then
+      permRegexTrigger(full, "", {patterns}, script)
+    else
+      permSubstringTrigger(full, "", patterns, script)
+    end
+    if exists(full, "trigger") ~= 0 then
       table.insert(Nebbie._triggerNames, full)
     end
   end
