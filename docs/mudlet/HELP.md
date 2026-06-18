@@ -64,9 +64,9 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-mudlet-s
 1. Apri Mudlet e il **profilo** del personaggio (consigliato: un profilo per PG).
 2. **Alt+O** → *Install New Package*.
 3. Seleziona `nebbie-spells-skills.mpackage`.
-4. In console dovresti vedere un messaggio simile a:
+4. In console dovresti vedere (dopo 1–3 secondi) un messaggio simile a:
    ```
-   Nebbie v1.0.10: 179 alias, 116 trigger.
+   Nebbie v1.0.12: 179 alias, 116 trigger.
    Pronto: nclass m, q1, fb, ngui
    ```
 5. Imposta la classe **una volta** per profilo:
@@ -91,7 +91,7 @@ Nella riga di comando Mudlet:
 lua cecho("<yellow>"..Nebbie.version)
 ```
 
-Deve mostrare la versione corrente (es. `1.0.10`). Nel pannello buff compare anche `=== Nebbie Buffs v1.0.10 ===`.
+Deve mostrare la versione corrente (es. `1.0.12`). Nel pannello buff compare anche `=== Nebbie Buffs v1.0.12 ===`.
 
 ---
 
@@ -369,6 +369,7 @@ In console Mudlet compaiono righe `[buff]` o `[cast]` colorate.
 | Versione sbagliata dopo download | File dalla branch errata | Usa il link `cursor/nebbie-mudlet-spells-skills-55b4` |
 | Pannello copre il prompt | Posizione salvata nel profilo | `npos` o `nfix` (v1.0.9+ ricrea il pannello) |
 | `nclass` ripetuto 3 volte | Alias duplicati da reinstall | `nfix` (v1.0.10+); in **Scripts** elimina eventuali copie extra di «Nebbie Spells and Skills» |
+| Installazione bloccata su «unpacking» | Download corrotto o import bloccato | Riscarica il file (deve essere ~50 KB zip valido); evita Safari; usa v1.0.12+; riavvia Mudlet |
 | `nclass` non salva | `table.save` non disponibile | Aggiorna Mudlet; la v1.0.7+ usa file nel profilo |
 
 ### Reinstall rapida

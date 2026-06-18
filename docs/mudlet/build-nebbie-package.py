@@ -477,7 +477,7 @@ def build_install_lua(spells):
 
 
 INSTALLER_LUA = r'''
-Nebbie.version = "1.0.11"
+Nebbie.version = "1.0.12"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
@@ -1076,9 +1076,7 @@ function Nebbie.install()
 
   local function perm(short, pattern, script)
     local full = PKG .. "::" .. short
-    while exists(full, "alias") ~= 0 do
-      killAlias(full)
-    end
+    if exists(full, "alias") ~= 0 then killAlias(full) end
     permAlias(full, "", pattern, script)
     if exists(full, "alias") == 0 then
       cecho("<red>[Nebbie] alias non creato: " .. full .. "\n")
@@ -1260,8 +1258,24 @@ Nebbie.boot()
 '''
 
 
-def build_xml(lua_body):
-    escaped = lua_body.replace("]]>", "]]..']]'..[[")
+def build_xml():
+    bootstrap = r'''-- Nebbie Arcane package bootstrap
+Nebbie = Nebbie or {}
+Nebbie.package = "nebbie-spells-skills"
+local function Nebbie_loadMain()
+  local path = getMudletHomeDir() .. "/nebbie-spells-skills/nebbie-install.lua"
+  local ok, err = pcall(dofile, path)
+  if not ok then
+    cecho("<red>[Nebbie] errore caricamento: " .. tostring(err) .. "\n")
+    cecho("<grey>File atteso: <yellow>" .. path .. "\n")
+  end
+end
+if type(tempTimer) == "function" then
+  tempTimer(0, Nebbie_loadMain)
+else
+  Nebbie_loadMain()
+end'''
+    escaped = bootstrap.replace("]]>", "]]..']]'..[[")
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE MudletPackage>
 <MudletPackage version="1.001">
@@ -1286,13 +1300,16 @@ def main():
             raise SystemExit(f"Class {cls} has {n} quick slots, expected 9")
     lua = build_install_lua(spells)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    (OUT_DIR / "config.lua").write_text(f'return "{PACKAGE_NAME}"\n', encoding="utf-8")
+    install_lua = OUT_DIR / "nebbie-install.lua"
+    install_lua.write_text(lua, encoding="utf-8")
+    (OUT_DIR / "config.lua").write_text(f'mpackage = "{PACKAGE_NAME}"\n', encoding="utf-8")
     xml_name = f"{PACKAGE_NAME}.xml"
-    (OUT_DIR / xml_name).write_text(build_xml(lua), encoding="utf-8")
+    (OUT_DIR / xml_name).write_text(build_xml(), encoding="utf-8")
     mpackage = ROOT / f"{PACKAGE_NAME}.mpackage"
-    with zipfile.ZipFile(mpackage, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(mpackage, "w", zipfile.ZIP_STORED) as zf:
         zf.write(OUT_DIR / "config.lua", "config.lua")
         zf.write(OUT_DIR / xml_name, xml_name)
+        zf.write(install_lua, "nebbie-install.lua")
 
     # Reference list for players (not imported by Mudlet)
     ref = ROOT / "nebbie-spells-reference.txt"
