@@ -469,7 +469,7 @@ def build_install_lua(spells):
 
 
 INSTALLER_LUA = r'''
-Nebbie.version = "1.0.9"
+Nebbie.version = "1.0.10"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
@@ -525,8 +525,28 @@ function Nebbie.purgePackageAliases()
       local ok, n = pcall(function() return getAliasName(entry) end)
       if ok and n and n ~= "" then name = n end
     end
-    if type(name) == "string" and name:find(PKG .. "::", 1, true) then
+    if type(name) == "string" and name:find(PKG, 1, true) then
       killAlias(name)
+    end
+  end
+end
+
+function Nebbie.purgeOrphanNebbieAliases()
+  if type(getAliasList) ~= "function" then return end
+  local patterns = {"set class", "list classes", "reinstall fix", "reposition gui"}
+  for _, entry in ipairs(getAliasList()) do
+    local name = entry
+    if type(getAliasName) == "function" then
+      local ok, n = pcall(function() return getAliasName(entry) end)
+      if ok and n and n ~= "" then name = n end
+    end
+    if type(name) == "string" then
+      for _, frag in ipairs(patterns) do
+        if name:find(frag, 1, true) then
+          killAlias(name)
+          break
+        end
+      end
     end
   end
 end
@@ -574,13 +594,21 @@ function Nebbie.setClass(cls, silent)
   if not preset then
     if not silent then
       cecho("<orange>Classi: m s c d p r I t w k b — es. <yellow>nclass m<grey> | <yellow>nclass<grey> elenca tutte\n")
+      cecho("<grey>Multiclasse: scegli la classe <yellow>attiva<grey> (es. m per magia, c per cure).\n")
     end
     return false
+  end
+  if Nebbie.playerClass == cls and not silent then
+    local now = Nebbie.now()
+    if Nebbie._lastClassMsgAt and (now - Nebbie._lastClassMsgAt) < 1 then
+      return true
+    end
   end
   Nebbie.playerClass = cls
   Nebbie.saveClass(cls)
   Nebbie.castMode = preset.mode
   if not silent then
+    Nebbie._lastClassMsgAt = Nebbie.now()
     cecho("<green>Classe Nebbie: <yellow>" .. preset.name .. " <grey>(" .. cls .. ") <grey>salvata per questo profilo.\n")
   else
     cecho("<green>Nebbie: profilo <yellow>" .. preset.name .. " <grey>(" .. cls .. ", " .. preset.mode .. ")\n")
@@ -943,6 +971,7 @@ end
 function Nebbie.install()
   Nebbie.stopGUI()
   Nebbie.purgePackageAliases()
+  Nebbie.purgeOrphanNebbieAliases()
   for _, name in ipairs(Nebbie._aliasNames) do
     if exists(name, "alias") ~= 0 then killAlias(name) end
   end
@@ -950,7 +979,9 @@ function Nebbie.install()
 
   local function perm(short, pattern, script)
     local full = PKG .. "::" .. short
-    if exists(full, "alias") ~= 0 then killAlias(full) end
+    while exists(full, "alias") ~= 0 do
+      killAlias(full)
+    end
     permAlias(full, "", pattern, script)
     if exists(full, "alias") == 0 then
       cecho("<red>[Nebbie] alias non creato: " .. full .. "\n")
@@ -980,8 +1011,10 @@ function Nebbie.install()
   perm("reposition gui", [[^npos$]], [[Nebbie.resetGUIPosition()]])
   perm("reinstall fix", [[^nfix$]], [[
     Nebbie.purgePackageAliases()
+    Nebbie.purgeOrphanNebbieAliases()
     Nebbie.stopGUI()
     Nebbie.destroyGUI()
+    Nebbie._installedVer = nil
     Nebbie.install()
     Nebbie.loadClass()
     cecho("<green>Nebbie v" .. Nebbie.version .. " reinstallato.\n")
@@ -1109,12 +1142,24 @@ function Nebbie.install()
   Nebbie.initGUI()
 end
 
-Nebbie.loadSettings()
-Nebbie.install()
-if not Nebbie.loadClass() then
-  Nebbie.castMode = Nebbie.castMode or "cast"
-  cecho("<grey>Nebbie: imposta la classe con <yellow>nclass m<grey> (m s c d p r I t w k b).\n")
+function Nebbie.boot()
+  Nebbie.loadSettings()
+  if Nebbie._installedVer == Nebbie.version and Nebbie._aliasNames and #Nebbie._aliasNames > 0 then
+    if not Nebbie.guiExists() then Nebbie.initGUI() end
+    if not Nebbie.loadClass() then
+      Nebbie.castMode = Nebbie.castMode or "cast"
+    end
+    return
+  end
+  Nebbie._installedVer = Nebbie.version
+  Nebbie.install()
+  if not Nebbie.loadClass() then
+    Nebbie.castMode = Nebbie.castMode or "cast"
+    cecho("<grey>Nebbie: imposta la classe con <yellow>nclass m<grey> (m s c d p r I t w k b).\n")
+  end
 end
+
+Nebbie.boot()
 '''
 
 

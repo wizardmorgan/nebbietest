@@ -148,6 +148,32 @@ nclass m      → imposta Mago e salva
 nclass        → elenca tutte le classi e gli slot q1–q9
 ```
 
+### Personaggi multiclasse (es. Mago + Chierico)
+
+Il package **non** ha preset combinati (`mc`, `m/c`, ecc.): scegli **una classe attiva** alla volta con `nclass`.
+
+| Cosa cambia | `nclass m` | `nclass c` |
+|-------------|------------|------------|
+| Slot rapidi `q1`–`q9` | arm, fb, mm… | heal, san, ble… |
+| Comando `c` | `cast '…'` | `cast '…'` |
+| Comando `r` | `recall '…'` (stregone) | `recall '…'` |
+| Comando `m` | `mind '…'` (psi) | `mind '…'` |
+
+**In pratica:** se giochi un mago/chierico, passa da `nclass m` quando lanci danno o utilità da mago, e `nclass c` quando curi o benedici. Il MUD controlla comunque quali incantesimi puoi usare in base alle tue classi reali; il package configura solo scorciatoie e modalità.
+
+Combinazioni comuni nel MUD (umani e altre razze hanno limiti diversi):
+
+| Se giochi… | Lettere utili |
+|------------|----------------|
+| Mago + Chierico | `m` / `c` |
+| Mago + Stregone | `m` (`cast`) / `s` (`recall`) |
+| Guerriero + Ladro | `w` / `t` |
+| Ranger + Druido | `r` / `d` |
+| Paladino + Chierico | `p` (skill + cure) / `c` (solo magia) |
+| Psionista + altro | `I` per `mind` e slot psi |
+
+Non esiste validazione automatica: se imposti `nclass c` su un personaggio senza chierico, le scorciatoie funzionano ma il MUD può rifiutare il cast.
+
 ---
 
 ## Comandi principali
@@ -327,7 +353,7 @@ In console Mudlet compaiono righe `[buff]` o `[cast]` colorate.
 | Alias eseguito due volte | Duplicati da reinstall | `nfix` o reinstall pulita |
 | Versione sbagliata dopo download | File dalla branch errata | Usa il link `cursor/nebbie-mudlet-spells-skills-55b4` |
 | Pannello copre il prompt | Posizione salvata nel profilo | `npos` o `nfix` (v1.0.9+ ricrea il pannello) |
-| `npos` non fa nulla | Pannello vecchio / flag perso | `nfix` poi `npos` |
+| `nclass` ripetuto 3 volte | Alias duplicati da reinstall | `nfix` (v1.0.10+); in **Scripts** elimina eventuali copie extra di «Nebbie Spells and Skills» |
 | `nclass` non salva | `table.save` non disponibile | Aggiorna Mudlet; la v1.0.7+ usa file nel profilo |
 
 ### Reinstall rapida
