@@ -612,10 +612,22 @@ end
 function Nebbie.refreshGUI()
   if not Nebbie.buffConsole then return end
   clearUserWindow("NebbieBuffs")
-  local preset = Nebbie.playerClass and Nebbie.classes[Nebbie.playerClass]
-  local classLine = preset and (preset.name .. " (" .. Nebbie.playerClass .. ")") or "<orange>(nclass non impostata)"
+
+  local classLine = "(nclass non impostata)"
+  local modeLine = Nebbie.castMode or "cast"
+  local preset = nil
+  if Nebbie.playerClass and Nebbie.playerClass ~= "" then
+    preset = Nebbie.classes[Nebbie.playerClass]
+    if preset then
+      classLine = preset.name .. " (" .. Nebbie.playerClass .. ")"
+      modeLine = preset.mode or modeLine
+    else
+      classLine = "classe sconosciuta (" .. tostring(Nebbie.playerClass) .. ")"
+    end
+  end
+
   cecho("NebbieBuffs", "<cyan><b>=== Nebbie Buffs ===</b>\n")
-  cecho("NebbieBuffs", "<grey>Classe: <yellow>" .. classLine .. " <grey>| mode: <yellow>" .. Nebbie.castMode .. "\n")
+  cecho("NebbieBuffs", "<grey>Classe: <yellow>" .. classLine .. " <grey>| mode: <yellow>" .. modeLine .. "\n")
   local now = getEpochTime()
   local count = 0
   for spell, data in pairs(Nebbie.buffs) do
@@ -849,7 +861,8 @@ end
 
 Nebbie.install()
 if not Nebbie.loadClass() then
-  cecho("<grey>Nebbie: primo avvio — imposta la classe con <yellow>nclass m<grey> (m s c d p r I t w k b). Salvata per profilo.\n")
+  Nebbie.castMode = Nebbie.castMode or "cast"
+  cecho("<grey>Nebbie: imposta la classe con <yellow>nclass m<grey> (m s c d p r I t w k b). Salvata per profilo.\n")
 end
 '''
 
