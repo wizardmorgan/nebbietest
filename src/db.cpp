@@ -102,6 +102,87 @@ std::string db_sql_literal(const char* s, bool allow_null = false) {
 	return "'" + db_sql_escape(s) + "'";
 }
 
+void replace_player_title(struct char_data* ch, const char* title) {
+	if(!ch) {
+		return;
+	}
+	if(ch->player.title) {
+		free(ch->player.title);
+		ch->player.title = NULL;
+	}
+	if(title && *title) {
+		CREATE(ch->player.title, char, std::strlen(title) + 1);
+		std::strcpy(ch->player.title, title);
+	}
+}
+
+bool title_looks_custom(const char* title) {
+	if(!title || !*title) {
+		return false;
+	}
+	if(std::strstr(title, "$c") || std::strstr(title, "$$")) {
+		return true;
+	}
+	if(std::strncmp(title, "the ", 4) != 0) {
+		return true;
+	}
+	return false;
+}
+
+#if USE_MYSQL
+bool load_toon_title_mysql(unsigned long long toon_id, char* buf, size_t buflen) {
+	if(!buf || buflen == 0 || !toon_id) {
+		return false;
+	}
+	buf[0] = '\0';
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return false;
+	}
+	MYSQL_RES* res = nullptr;
+	const std::string sql =
+		"SELECT title FROM toon WHERE id = " + std::to_string(toon_id) + " LIMIT 1";
+	if(!mysql_query_select(db, sql, res) || !res) {
+		return false;
+	}
+	bool ok = false;
+	if(MYSQL_ROW row = mysql_fetch_row(res)) {
+		if(row[0]) {
+			std::snprintf(buf, buflen, "%s", row[0]);
+			ok = true;
+		}
+	}
+	mysql_free_result(res);
+	return ok;
+}
+
+bool load_toon_title_mysql(const char* name, char* buf, size_t buflen) {
+	if(!name || !*name || !buf || buflen == 0) {
+		return false;
+	}
+	buf[0] = '\0';
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return false;
+	}
+	MYSQL_RES* res = nullptr;
+	const std::string sql = "SELECT title FROM toon WHERE name = " +
+							db_sql_literal(name, false) + " LIMIT 1";
+	if(!mysql_query_select(db, sql, res) || !res) {
+		return false;
+	}
+	bool ok = false;
+	if(MYSQL_ROW row = mysql_fetch_row(res)) {
+		if(row[0]) {
+			std::snprintf(buf, buflen, "%s", row[0]);
+			ok = true;
+		}
+	}
+	mysql_free_result(res);
+	return ok;
+}
+#endif
+
 struct char_data* save_char_resolve_pc(struct char_data* ch) {
 	if(!ch || !IS_PC(ch)) {
 		return nullptr;
@@ -226,6 +307,22 @@ void db_update_toon_registry_tx(DB* db, const std::string& toon_id, struct char_
 								const struct char_file_u& st) {
 	const int level = static_cast<int>(st.level[BestClassIND(ch)]);
 	const char* title = st.title[0] ? st.title : "";
+	/* RAM puo' avere titolo di razza stantio ("the Human"); non sovrascrivere un custom in DB. */
+	if(title[0] && !title_looks_custom(title)) {
+		MYSQL_RES* res = nullptr;
+		const std::string title_sql = "SELECT title FROM toon WHERE id = " + toon_id + " LIMIT 1";
+		if(mysql_query_select(db, title_sql, res) && res) {
+			if(MYSQL_ROW row = mysql_fetch_row(res)) {
+				if(row[0] && title_looks_custom(row[0])) {
+					title = row[0];
+					mudlog(LOG_SAVE,
+						   "db_update_toon_registry_tx: preserve custom title for toon id %s",
+						   toon_id.c_str());
+				}
+			}
+			mysql_free_result(res);
+		}
+	}
 	const char* host = (ch->desc && ch->desc->host[0]) ? ch->desc->host : "";
 	std::ostringstream sql;
 	sql << "UPDATE toon SET password=" << db_sql_literal(st.pwd, false) << ",title="
@@ -3329,7 +3426,15 @@ int load_char_mysql(const char* name, struct char_file_u* char_element) {
 	res = nullptr;
 
 	std::snprintf(st.name, sizeof(st.name), "%s", pg->name.c_str());
-	std::snprintf(st.title, sizeof(st.title), "%s", pg->title.c_str());
+	{
+		char title_buf[sizeof(st.title)] = {};
+		if(load_toon_title_mysql(pg->id, title_buf, sizeof(title_buf))) {
+			std::snprintf(st.title, sizeof(st.title), "%s", title_buf);
+		}
+		else {
+			std::snprintf(st.title, sizeof(st.title), "%s", pg->title.c_str());
+		}
+	}
 	std::snprintf(st.pwd, sizeof(st.pwd), "%s", pg->password.c_str());
 
 	const std::string classes_sql =
@@ -3720,13 +3825,7 @@ void store_to_char(struct char_file_u* st, struct char_data* ch) {
 	ch->player.short_descr = 0;
 	ch->player.long_descr = 0;
 
-	if(*st->title) {
-		CREATE(ch->player.title, char, strlen(st->title) + 1);
-		strcpy(ch->player.title, st->title);
-	}
-	else {
-		GET_TITLE(ch) = 0;
-	}
+	replace_player_title(ch, (*st->title) ? st->title : nullptr);
 
 	if(*st->description) {
 		CREATE(ch->player.description, char, strlen(st->description) + 1);
@@ -4130,29 +4229,35 @@ void save_char(struct char_data* ch, sh_int load_room, int bonus) {
 		return;
 	}
 
+	struct char_data* pc = save_char_resolve_pc(ch);
+	if(!pc) {
+		return;
+	}
+
+	tmp = pc;
 	if(IS_POLY(ch)) {
-		if(!ch->desc) {
+		if(!ch->desc || !ch->desc->original) {
 			return;
 		}
 		tmp = ch->desc->original;
-		if(!tmp) {
-			return;
-		}
-	}
-	else {
-		if(!ch->desc) {
-			return;
-		}
-	}
-	if(!tmp) {
-		tmp = ch;
 	}
 
 	char_to_store(tmp, &st);
 
 	st.load_room = load_room;
 	st.last_logon += bonus * 60 * 60 * 24;
-	strcpy(st.pwd, ch->desc->pwd);
+	if(ch->desc && ch->desc->pwd[0]) {
+		std::strcpy(st.pwd, ch->desc->pwd);
+	}
+	else {
+		const toonPtr pg = Sql::getOne<toon>(toonQuery::name == std::string(GET_NAME(tmp)));
+		if(pg && pg->id && !pg->password.empty()) {
+			std::snprintf(st.pwd, sizeof(st.pwd), "%s", pg->password.c_str());
+		}
+		else {
+			st.pwd[0] = '\0';
+		}
+	}
 
 	bool skip_dat_file = false;
 #if USE_MYSQL
@@ -5328,8 +5433,16 @@ void init_char(struct char_data* ch) {
 		ch->specials.apply_saving_throw[i] = 0;
 	}
 
-	for(i = 0; i < 3; i++) {
-		GET_COND(ch, i) = (GetMaxLevel(ch) > CREATORE ? -1 : 24);
+	/* FULL/THIRST: 24 = sazio; DRUNK: 0 = sobrio (valori alti = più sbronzo). */
+	if(GetMaxLevel(ch) > CREATORE) {
+		GET_COND(ch, FULL) = -1;
+		GET_COND(ch, THIRST) = -1;
+		GET_COND(ch, DRUNK) = -1;
+	}
+	else {
+		GET_COND(ch, FULL) = 24;
+		GET_COND(ch, THIRST) = 24;
+		GET_COND(ch, DRUNK) = 0;
 	}
 }
 

@@ -1911,7 +1911,20 @@ void toonList(struct descriptor_data* d,const string &optional_message="") {
 #endif
 			++n;
 			message.append(std::to_string(n)).append(". ").append(pg->name).append(" ");
+#if USE_MYSQL
+			{
+				char title_buf[80] = {};
+				if(pg->id && load_toon_title_mysql(pg->id, title_buf, sizeof(title_buf)) &&
+				   title_buf[0]) {
+					message.append(ParseAnsiColors(true, title_buf)).append("\r\n");
+				}
+				else {
+					message.append(ParseAnsiColors(true, pg->title.c_str())).append("\r\n");
+				}
+			}
+#else
 			message.append(ParseAnsiColors(true,pg->title.c_str())).append("\r\n");
+#endif
 			d->toons.emplace_back(pg->name);
 		}
 	}
@@ -2525,18 +2538,32 @@ NANNY_FUNC(con_slct) {
 			}
 			break;
 		}
+		char saved_title[80] = {};
+		bool have_saved_title = false;
 #if USE_MYSQL
-		/* Dopo morte/resurrect al menu: RAM puo' avere exp post-morte; ricarica da DB. */
+		/* Dopo morte/resurrect/rent al menu: RAM puo' essere stantia; ricarica da DB. */
 		if(IS_PC(d->character) && toon_is_migrated_by_name(GET_NAME(d->character))) {
 			char_file_u menu_reload {};
 			if(load_char_mysql(GET_NAME(d->character), &menu_reload)) {
 				store_to_char(&menu_reload, d->character);
-				mudlog(LOG_CONNECT, "con_slct: reloaded %s from MySQL before enter",
-					   GET_NAME(d->character));
+				if(*menu_reload.title) {
+					std::strncpy(saved_title, menu_reload.title, sizeof(saved_title) - 1);
+					saved_title[sizeof(saved_title) - 1] = '\0';
+					have_saved_title = true;
+				}
+				mudlog(LOG_CONNECT,
+					   "con_slct: reloaded %s from MySQL before enter (title=%s)",
+					   GET_NAME(d->character),
+					   have_saved_title ? saved_title : "(empty)");
 			}
 		}
 #endif
 		reset_char(d->character);
+#if USE_MYSQL
+		if(have_saved_title) {
+			replace_player_title(d->character, saved_title);
+		}
+#endif
 		int Level=GetMaxLevel(d->character);
 		if (PORT==RELEASE_PORT) {
 			if (Level > PRINCIPE and Level < MAESTRO_DEL_CREATO) {
@@ -3031,6 +3058,16 @@ NANNY_FUNC(con_pwdok) {
 			store_to_char(&tmp_store, d->character);
 			loaded = true;
 			mudlog(LOG_CONNECT, "con_pwdok: loaded %s from file fallback", toon_name.c_str());
+		}
+		if(loaded) {
+#if USE_MYSQL
+			char title_buf[sizeof(tmp_store.title)] = {};
+			if(load_toon_title_mysql(toon_name.c_str(), title_buf, sizeof(title_buf)) &&
+			   title_buf[0]) {
+				std::snprintf(tmp_store.title, sizeof(tmp_store.title), "%s", title_buf);
+				replace_player_title(d->character, title_buf);
+			}
+#endif
 		}
 		if(!loaded) {
 			//Something went terribly wrong
