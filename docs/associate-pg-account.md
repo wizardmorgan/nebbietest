@@ -15,12 +15,14 @@ Percorso: `scripts/associate-pg-account.sh`
 | **Report** | Mostra se il PG esiste in `toon`, chi è l’owner, livello, migrazione, file su disco |
 | **Collegamento** | `UPDATE toon SET owner_id = <user.id>` |
 | **Boost livello** | `UPDATE toon.level` +, se migrate, `character_classes` e `character_stats` |
+| **Grant skill/spell** | `INSERT`/`UPDATE` su `character_skills` a livello "buono" per una o più classi |
 
 Casi d’uso tipici in dev/test:
 
 - Associare un PG importato (es. Sirio) all’account `wizmorgan@gmail.com`
 - Verificare che esistano sia la riga `toon` sia i file sotto `mudroot/lib`
 - Portare un PG a livello 60 senza editare a mano le tabelle
+- Impostare spell e skill fisiche a **buona** proficienza in base al livello di classe nel DB
 
 Script correlato, più limitato: `scripts/link-dev-toons-to-account.sh` (solo Sirio + account dev predefinito).
 
@@ -33,6 +35,7 @@ Script correlato, più limitato: `scripts/link-dev-toons-to-account.sh` (solo Si
 - Opzionale: `python3` (per leggere il nome interno dal file `.dat`)
 - Per il **collegamento**: riga in tabella `toon` per il PG (creata al primo login con quel nome, se assente)
 - Per il **boost completo**: PG già migrato su schema `character_*` (almeno una riga in `character_core` — di solito dopo un login post-migrazione)
+- Per **grant skill/spell**: tabella `character_skills` presente e livelli in `character_classes` (usa `--boost` prima se le classi sono ancora a 1)
 
 ### Variabili d’ambiente
 
@@ -45,6 +48,7 @@ Script correlato, più limitato: `scripts/link-dev-toons-to-account.sh` (solo Si
 | `MYSQL_DB` | `nebbie` | Database |
 | `MUD_LIB` | auto | Directory `lib` del mud (cerca `players/` in percorsi noti) |
 | `DEV_TOON_LEVEL` | `60` | Livello predefinito per `--boost` |
+| `DEV_GOOD_SKILL_LEVEL` | `75` | Livello `learned` predefinito per `--grant-skills` (71–80 = buono in gioco) |
 
 Esempio:
 
@@ -70,6 +74,8 @@ export MUD_LIB=/home/nebbie/Server/mudroot/lib
 | `-f`, `--force` | Riassegna anche se `toon.owner_id` punta già a un altro account |
 | `-b`, `--boost` | Forza il livello del PG su MySQL (default: 60) |
 | `--level <n>` | Livello da impostare con il boost (1–60); implica `--boost` |
+| `--grant-skills <spec>` | Imposta skill/spell a livello "buono" per le classi indicate (`mage,cleric` o `all`) |
+| `--good-level <n>` | Valore `learned` in `character_skills` (default 75; 71–80 = buona proficienza) |
 | `-y`, `--yes` | Salta le conferme interattive |
 | `-n`, `--dry-run` | Solo controlli e messaggi `[dry-run]`, nessun `UPDATE` |
 | `-h`, `--help` | Help a riga di comando |
@@ -104,13 +110,32 @@ Stampa il report e chiede se vuoi collegare l’account (risposta `N` = nessuna 
 
 Con `--boost` e **senza** `--account`, lo script **non** chiede il collegamento: esegue solo il boost e termina.
 
+### Solo grant skill/spell
+
+```bash
+./scripts/associate-pg-account.sh Sirio --grant-skills all -y
+./scripts/associate-pg-account.sh Sirio --grant-skills mage,cleric -y
+./scripts/associate-pg-account.sh Sirio --grant-skills warrior --good-level 78 -y
+```
+
+Con `--grant-skills all` usa tutte le classi con `level > 0` in `character_classes`. Con classi esplicite, il livello viene letto da `character_classes` (o da `toon.level` se la classe non ha riga).
+
 ### Collegamento + boost
 
 ```bash
 ./scripts/associate-pg-account.sh Sirio -a wizmorgan@gmail.com --boost -y
 ```
 
-Ordine: prima collegamento (`owner_id`), poi boost livello.
+Ordine: prima collegamento (`owner_id`), poi boost livello, poi grant skill (se richiesti).
+
+### Boost + grant skill
+
+```bash
+./scripts/associate-pg-account.sh Sirio --boost --grant-skills all -y
+./scripts/associate-pg-account.sh Sirio -a wizmorgan@gmail.com --boost --grant-skills mage,cleric -y
+```
+
+Consigliato: eseguire `--boost` prima di `--grant-skills` così i livelli di classe sono allineati.
 
 ### Anteprima senza scrivere
 
@@ -128,23 +153,26 @@ flowchart TD
   B --> C[check_mysql]
   C --> D[check_files + check_db]
   D --> E[print_report]
-  E --> F{--boost senza --account?}
-  F -->|sì| G[do_boost]
-  G --> H[print_verification]
-  F -->|no| I{Account specificato?}
-  I -->|no| J{Vuoi collegare?}
-  J -->|no| K{--boost?}
-  K -->|sì| G
-  K -->|no| L[Esci senza modifiche]
-  J -->|sì| M[prompt_account]
-  I -->|sì| N[resolve_account]
-  M --> O{toon esiste?}
-  N --> O
-  O -->|no| P[Esci codice 2]
-  O -->|sì| Q[confirm_link → do_link]
-  Q --> R{--boost?}
-  R -->|sì| G
-  R -->|no| S[print_verification se link ok]
+  E --> F{--boost o --grant-skills senza --account?}
+  F -->|sì| G{--boost?}
+  G -->|sì| H[do_boost]
+  G -->|no| I{--grant-skills?}
+  H --> I
+  I -->|sì| J[do_grant_skills]
+  I -->|no| K[print_verification]
+  J --> K
+  F -->|no| L{Account specificato?}
+  L -->|no| M{Vuoi collegare?}
+  M -->|no| N{--boost o --grant-skills?}
+  N -->|sì| G
+  N -->|no| O[Esci senza modifiche]
+  M -->|sì| P[prompt_account]
+  L -->|sì| Q[resolve_account]
+  P --> R{toon esiste?}
+  Q --> R
+  R -->|no| S[Esci codice 2]
+  R -->|sì| T[confirm_link → do_link]
+  T --> G
 ```
 
 ---
@@ -231,6 +259,40 @@ DEV_TOON_LEVEL=55 ./scripts/associate-pg-account.sh Alar --boost -y
 
 ---
 
+## Grant skill/spell (dettaglio)
+
+Helper: `scripts/associate-pg-grant-skills.py` (invocato da `--grant-skills`).
+
+### Cosa aggiorna
+
+Per ogni classe richiesta, in base al **livello di quella classe** in `character_classes`:
+
+1. **Classi magiche** (mage, cleric, druid, sorcerer, paladin, ranger, psi): tutte le spell da `src/spell_list.cpp` con requisito di livello `≤` livello classe
+2. **Classi fisiche** (warrior, thief, monk, barbarian): skill da `CheckPrac` in `utility.cpp`
+
+Ogni skill viene scritta in `character_skills` con:
+
+- `learned = <good-level>` (default **75** → in gioco `how_good()` restituisce **buona**, range 71–80)
+- `flags` = `SKILL_KNOWN` (+ flag classe; per warrior `SKILL_KNOWN` solo perché il flag supera 127)
+
+### Alias classi accettati
+
+`mage`/`magic`/`mu`, `cleric`/`cl`, `warrior`/`wa`, `thief`/`th`, `druid`/`dr`, `monk`/`mo`, `barbarian`/`ba`, `sorcerer`/`so`, `paladin`/`pa`, `ranger`/`ra`, `psi`/`psionic`, oppure `all`.
+
+### Cosa **non** aggiorna
+
+- File `players/*.dat` o `rent/*`
+- PG già **connesso in gioco**: serve **rilogga** per ricaricare le skill dal DB
+
+### Esempio manuale (solo helper Python)
+
+```bash
+python3 scripts/associate-pg-grant-skills.py \
+  --toon-id 42 --classes mage,cleric --good-level 75 --dry-run
+```
+
+---
+
 ## Verifica finale
 
 Dopo collegamento o boost, lo script stampa:
@@ -267,6 +329,7 @@ mysql -h 127.0.0.1 -uroot -psecret nebbie -e \
 | Account | Email/id scelto | Fisso `wizmorgan@gmail.com` |
 | Report file/DB | Sì, esteso | No |
 | Boost | `--boost` / `--level` | `--boost` |
+| Grant skill | `--grant-skills` / `--good-level` | No |
 | Interattivo | Sì | No |
 
 Per setup Vagrant automatico si usa ancora `link-dev-toons-to-account.sh` nel provision script; per operazioni manuali su un PG qualsiasi usa `associate-pg-account.sh`.
@@ -281,7 +344,9 @@ Per setup Vagrant automatico si usa ancora `link-dev-toons-to-account.sh` nel pr
 | `Account non trovato` | Registra l’account via login web/telnet o inseriscilo in `user` |
 | `Impossibile collegare: toon assente` | Login in gioco con quel nome PG, poi rilancia |
 | Boost solo su `toon.level` | Fai un login (crea `character_core`), poi `--boost` di nuovo |
+| Grant skill fallisce (tabella assente) | PG non migrato: login post-migrazione, poi `--grant-skills` |
 | In gioco livello ancora 58 | Rilogga il PG dopo il boost |
+| In gioco skill non aggiornate | Rilogga il PG dopo `--grant-skills` |
 | PG già assegnato ad altro | Usa `--force` se la riassegnazione è intenzionale |
 
 ---
@@ -289,6 +354,7 @@ Per setup Vagrant automatico si usa ancora `link-dev-toons-to-account.sh` nel pr
 ## Riferimenti
 
 - Script: `scripts/associate-pg-account.sh`
+- Helper grant skill: `scripts/associate-pg-grant-skills.py`
 - Script dev rapido: `scripts/link-dev-toons-to-account.sh`
 - Schema PG migrato: `docs/schema-s1-ddl-draft.sql`
 - Dedupe utenti duplicati (login): `docs/dedupe-user-by-email.sql`

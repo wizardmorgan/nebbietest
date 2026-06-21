@@ -14,11 +14,14 @@
 #   ./scripts/associate-pg-account.sh Sirio -a wizmorgan@gmail.com --force --yes
 #   ./scripts/associate-pg-account.sh Sirio --boost --yes
 #   ./scripts/associate-pg-account.sh Sirio --boost --level 60 --yes
+#   ./scripts/associate-pg-account.sh Sirio --grant-skills all --yes
+#   ./scripts/associate-pg-account.sh Sirio --boost --grant-skills mage,cleric -y
 #
 # Variabili d'ambiente (come gli altri script):
 #   MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB
 #   MUD_LIB  — directory lib del mud (default: auto)
 #   DEV_TOON_LEVEL — livello usato da --boost (default: 60)
+#   DEV_GOOD_SKILL_LEVEL — learned per --grant-skills (default: 75, range 71-80 = buono)
 
 set -euo pipefail
 
@@ -34,6 +37,8 @@ FORCE_LINK=0
 ASSUME_YES=0
 DRY_RUN=0
 BOOST_PG=0
+GRANT_SKILLS_SPEC=""
+GOOD_SKILL_LEVEL="${DEV_GOOD_SKILL_LEVEL:-75}"
 TARGET_LEVEL="${DEV_TOON_LEVEL:-60}"
 
 log() { printf '==> %s\n' "$*"; }
@@ -49,6 +54,9 @@ Opzioni:
   -f, --force                Riassegna anche se owner_id punta ad altro account
   -b, --boost                Forza il livello del PG su MySQL (default: 60)
   --level <n>                Livello da impostare con --boost (default: 60)
+  --grant-skills <spec>      Imposta skill/spell a livello "buono" per le classi
+                             (spec: virgola es. mage,cleric oppure all)
+  --good-level <n>           Livello learned per --grant-skills (default: 75)
   -y, --yes                  Salta la conferma finale
   -n, --dry-run              Mostra solo controlli, nessun UPDATE
   -h, --help                 Questo messaggio
@@ -59,10 +67,14 @@ Esempi:
   ./scripts/associate-pg-account.sh Sirio -a 42 --force -y
   ./scripts/associate-pg-account.sh Sirio --boost -y
   ./scripts/associate-pg-account.sh Sirio --boost --level 60 -y
+  ./scripts/associate-pg-account.sh Sirio --grant-skills all -y
+  ./scripts/associate-pg-account.sh Sirio --boost --grant-skills mage,cleric -y
 
 Con --boost aggiorna toon.level e, se presenti, character_classes e character_stats.
-Non modifica user.level dell'account. Dopo il boost, un PG già in gioco può
-mostrare il livello vecchio finché non si rilogga (il MUD ricarica da MySQL).
+Con --grant-skills aggiorna character_skills (spell da spell_list.cpp, skill fisiche
+da CheckPrac) in base al livello di ogni classe in character_classes.
+Non modifica user.level dell'account. Dopo boost o grant, un PG già in gioco può
+mostrare dati vecchi finché non si rilogga (il MUD ricarica da MySQL).
 
 File controllati (sotto MUD_LIB, nome in minuscolo):
   players/<nome>.dat
@@ -327,6 +339,21 @@ confirm_boost() {
 	[[ "${ans:-}" =~ ^[yY]$ ]]
 }
 
+confirm_grant_skills() {
+	local name="$1"
+	echo ""
+	echo "Grant skill/spell proposto:"
+	echo "  PG '${name}' (toon.id=${DB_TOON_ID})"
+	echo "    classi ........... ${GRANT_SKILLS_SPEC}"
+	echo "    learned (buono) .. ${GOOD_SKILL_LEVEL}"
+	if [[ "$ASSUME_YES" == "1" ]]; then
+		return 0
+	fi
+	local ans
+	read -r -p "Confermi? [y/N] " ans
+	[[ "${ans:-}" =~ ^[yY]$ ]]
+}
+
 do_link() {
 	local name="$1"
 	local sql
@@ -422,6 +449,55 @@ do_boost() {
 	fi
 }
 
+grant_class_skills() {
+	local toon_id="$1"
+	local script_dir py
+
+	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	py="${script_dir}/associate-pg-grant-skills.py"
+
+	if [[ ! -f "$py" ]]; then
+		die "Script helper non trovato: $py"
+	fi
+	if ! command -v python3 >/dev/null 2>&1; then
+		die "python3 richiesto per --grant-skills"
+	fi
+	if ! mysql_q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${MYSQL_DB}' AND table_name='character_skills';" | grep -q '^1$'; then
+		die "Tabella character_skills assente: il PG deve essere migrato (login post-migrazione)."
+	fi
+
+	local -a py_args=(
+		--toon-id "$toon_id"
+		--classes "$GRANT_SKILLS_SPEC"
+		--good-level "$GOOD_SKILL_LEVEL"
+		--mysql-host "$MYSQL_HOST"
+		--mysql-port "$MYSQL_PORT"
+		--mysql-user "$MYSQL_USER"
+		--mysql-password "$MYSQL_PASSWORD"
+		--mysql-db "$MYSQL_DB"
+	)
+	if [[ "$DRY_RUN" == "1" ]]; then
+		py_args+=(--dry-run)
+	fi
+
+	python3 "$py" "${py_args[@]}"
+}
+
+do_grant_skills() {
+	local name="$1"
+
+	if [[ -z "$DB_TOON_ID" ]]; then
+		die "Impossibile grant skills: il PG non esiste in tabella toon. Fai un login col nome del personaggio e rilancia."
+	fi
+
+	if confirm_grant_skills "$name"; then
+		grant_class_skills "$DB_TOON_ID"
+	else
+		log "Grant skill annullato."
+		return 1
+	fi
+}
+
 print_verification() {
 	local name="$1"
 	echo ""
@@ -459,6 +535,16 @@ parse_args() {
 				TARGET_LEVEL="${1:-}"
 				[[ -n "$TARGET_LEVEL" ]] || die "Manca valore per --level"
 				BOOST_PG=1
+				;;
+			--grant-skills)
+				shift
+				GRANT_SKILLS_SPEC="${1:-}"
+				[[ -n "$GRANT_SKILLS_SPEC" ]] || die "Manca valore per --grant-skills (es. mage,cleric oppure all)"
+				;;
+			--good-level)
+				shift
+				GOOD_SKILL_LEVEL="${1:-}"
+				[[ -n "$GOOD_SKILL_LEVEL" ]] || die "Manca valore per --good-level"
 				;;
 			-y|--yes)
 				ASSUME_YES=1
@@ -499,13 +585,21 @@ main() {
 	check_db "$PG_NAME"
 	print_report "$PG_NAME" "$MUD_LIB"
 
-	# Solo boost, senza collegamento account
-	if [[ "$BOOST_PG" == "1" && -z "$ACCOUNT_SPEC" ]]; then
+	# Solo boost e/o grant, senza collegamento account
+	if [[ -z "$ACCOUNT_SPEC" && ( "$BOOST_PG" == "1" || -n "$GRANT_SKILLS_SPEC" ) ]]; then
 		if [[ -z "$DB_TOON_ID" ]]; then
-			die "Impossibile boost: riga toon assente per '${PG_NAME}'"
+			die "Impossibile modificare il PG: riga toon assente per '${PG_NAME}'"
 		fi
-		do_boost "$PG_NAME"
-		print_verification "$PG_NAME"
+		local did_action=0
+		if [[ "$BOOST_PG" == "1" ]]; then
+			do_boost "$PG_NAME" && did_action=1 || true
+		fi
+		if [[ -n "$GRANT_SKILLS_SPEC" ]]; then
+			do_grant_skills "$PG_NAME" && did_action=1 || true
+		fi
+		if [[ "$did_action" == "1" ]]; then
+			print_verification "$PG_NAME"
+		fi
 		exit 0
 	fi
 
@@ -513,8 +607,14 @@ main() {
 		echo ""
 		read -r -p "Vuoi collegare questo PG a un account? [y/N] " link_ans
 		if [[ ! "${link_ans:-}" =~ ^[yY]$ ]]; then
+			local did_action=0
 			if [[ "$BOOST_PG" == "1" ]]; then
-				do_boost "$PG_NAME"
+				do_boost "$PG_NAME" && did_action=1 || true
+			fi
+			if [[ -n "$GRANT_SKILLS_SPEC" ]]; then
+				do_grant_skills "$PG_NAME" && did_action=1 || true
+			fi
+			if [[ "$did_action" == "1" ]]; then
 				print_verification "$PG_NAME"
 			else
 				log "Nessuna modifica."
@@ -545,7 +645,11 @@ main() {
 		do_boost "$PG_NAME" || true
 	fi
 
-	if [[ "$linked" == "1" || "$BOOST_PG" == "1" ]]; then
+	if [[ -n "$GRANT_SKILLS_SPEC" ]]; then
+		do_grant_skills "$PG_NAME" || true
+	fi
+
+	if [[ "$linked" == "1" || "$BOOST_PG" == "1" || -n "$GRANT_SKILLS_SPEC" ]]; then
 		print_verification "$PG_NAME"
 	fi
 }
