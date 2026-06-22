@@ -3094,7 +3094,11 @@ NANNY_FUNC(con_pwdok) {
 	if(d->AccountData.authorized and !d->impersonating and d->AccountData.level < GetMaxLevel(d->character)) {
 		d->AccountData.level = GetMaxLevel(d->character);
 		d->AccountData.nickname.assign(GET_NAME(d->character));
-		Sql::update(d->AccountData,true);
+		if(!Sql::update(d->AccountData)) {
+			mudlog(LOG_SYSERR, "con_pwdok: failed to sync account level for %s (id=%llu)",
+				   d->AccountData.email.c_str(),
+				   static_cast<unsigned long long>(d->AccountData.id));
+		}
 	}
 #if IMPL_SECURITY
 	if(not check_impl_security(d)) {
