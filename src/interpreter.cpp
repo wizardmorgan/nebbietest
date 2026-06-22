@@ -2035,13 +2035,13 @@ NANNY_FUNC(con_account_pwd) {
 	d->AccountData.authorized=false;
 	userQuery query=d->AccountData.id>0?(userQuery::id == d->AccountData.id):(userQuery::email==d->AccountData.email);
 	userPtr u=Sql::getOne<user>(query);
-	if (u) {
+	if(u && u->id) {
 		d->AccountData.id=u->id;
 		if (u->nickname.empty()) {
 			d->AccountData.nickname=u->email;
 		}
 		else {
-			d->AccountData.nickname=u->email;
+			d->AccountData.nickname=u->nickname;
 		}
 		d->AccountData.registered=u->registered;
 		d->AccountData.password.assign(u->password);
@@ -2052,7 +2052,7 @@ NANNY_FUNC(con_account_pwd) {
 		mudlog(LOG_CONNECT,"Id: %d ,email: %s toon: %s",d->AccountData.id,d->AccountData.email.c_str(),d->AccountData.choosen.c_str());
 	}
 	const char* check=d->AccountData.password.c_str();
-	if(u and !strcmp(crypt(arg,check),check)) {
+	if(u && u->id && !strcmp(crypt(arg,check),check)) {
 
 		if (PORT==DEVEL_PORT and d->AccountData.level<52) {
 			mudlog(LOG_CONNECT,"%s level %d attempted to access devel",d->AccountData.email,d->AccountData.level);
@@ -2076,6 +2076,11 @@ NANNY_FUNC(con_account_pwd) {
 		toonList(d,message);
 	}
 	else {
+		if(!u || !u->id) {
+			mudlog(LOG_CONNECT, "Account login failed: no user row for email %s",
+				   d->AccountData.email.c_str());
+			SEND_TO_Q("Account non trovato. Registrati su http://www.nebbiearcane.it oppure verifica l'email.\r\n", d);
+		}
 		SEND_TO_Q("Riprova (digita <b> per rinunciare).",d);
 		echoOff(d);
 	}
