@@ -584,7 +584,7 @@ function Nebbie_purgeLegacyPerm()
   local aliases = {lua_string_list(legacy_aliases)}
   for _, name in ipairs(triggers) do Nebbie_killNamed(name, "trigger") end
   for _, name in ipairs(aliases) do
-    if name ~= "nebbie-fix" and not name:find("nebbie%-fix", 1, true) then
+    if name ~= "nebbie-fix" and not name:find("nebbie%-fix", 1, true) and name ~= "nebbie-nprompt" then
       Nebbie_killNamed(name, "alias")
     end
   end
@@ -701,15 +701,23 @@ def build_install_lua(spells):
 
 def build_xml(legacy_aliases, legacy_triggers):
     purge_lua = build_bootstrap_purge_lua(legacy_aliases, legacy_triggers)
-    bootstrap = r'''-- Nebbie Arcane play-all bootstrap
+    pkg_ver = "2.1.7"
+    bootstrap = (
+        r'''-- Nebbie Arcane play-all bootstrap
 Nebbie = Nebbie or {}
 Nebbie.package = "nebbie-play-all"
-if Nebbie._bootScheduled then return end
-Nebbie._bootScheduled = true
-''' + purge_lua + r'''
+local NEBBIE_PKG_VER = "'''
+        + pkg_ver
+        + r'''"
+if Nebbie._loadedPkgVer == NEBBIE_PKG_VER and Nebbie._mainLoaded then return end
+Nebbie._loadedPkgVer = NEBBIE_PKG_VER
+Nebbie._mainLoaded = false
+'''
+        + purge_lua
+        + r'''
 local function Nebbie_loadMain()
-  if Nebbie._mainLoaded then return end
-  Nebbie._mainLoaded = true
+  if Nebbie._mainLoaded and Nebbie._loadedPkgVer == NEBBIE_PKG_VER then return end
+  Nebbie._mainLoaded = false
   Nebbie_purgeLegacyPerm()
   local path = getMudletHomeDir() .. "/nebbie-play-all/nebbie-install.lua"
   local ok, err = pcall(dofile, path)
@@ -717,6 +725,9 @@ local function Nebbie_loadMain()
     cecho("<red>[Nebbie] errore caricamento: " .. tostring(err) .. "\n")
     cecho("<grey>File atteso: <yellow>" .. path .. "\n")
     Nebbie._mainLoaded = false
+  else
+    Nebbie._mainLoaded = true
+    if Nebbie.testPromptParse then Nebbie.testPromptParse(true) end
   end
 end
 if type(tempTimer) == "function" then
@@ -724,15 +735,30 @@ if type(tempTimer) == "function" then
 else
   Nebbie_loadMain()
 end'''
+    )
     escaped = bootstrap.replace("]]>", "]]..']]'..[[")
+    reload_lua = (
+        'local _p=getMudletHomeDir().."/nebbie-play-all/nebbie-install.lua" '
+        'pcall(dofile,_p) '
+    )
     nfix_script = (
-        'if Nebbie and Nebbie.runFix then Nebbie.runFix() else '
-        'cecho("<orange>Nebbie: caricamento in corso, riprova tra 2s.\\n") end'
+        reload_lua
+        + 'if Nebbie and Nebbie.runFix then Nebbie.runFix() else '
+        + 'cecho("<orange>Nebbie: caricamento in corso, riprova tra 2s.\\n") end'
     )
     npurge_script = (
         'if Nebbie_purgeLegacyPerm then Nebbie_purgeLegacyPerm() end '
         'if Nebbie and Nebbie.purgeLegacyPermItems then Nebbie.purgeLegacyPermItems(false) end '
-        'cecho("<green>Nebbie: perm vecchi disattivati. Riavvia Mudlet, reinstalla v2.1.6, poi nfix.\\n")'
+        'cecho("<green>Nebbie: perm vecchi disattivati. Riavvia Mudlet, reinstalla v'
+        + pkg_ver
+        + ', poi nfix.\\n")'
+    )
+    nprompt_script = (
+        reload_lua
+        + 'if Nebbie and Nebbie.debugPrompt then Nebbie.debugPrompt() else '
+        'cecho("<orange>Nebbie: reinstalla package v'
+        + pkg_ver
+        + ' da GitHub, poi nfix.\\n") end'
     )
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE MudletPackage>
@@ -759,6 +785,13 @@ end'''
    <command></command>
    <packageName>{PACKAGE_NAME}</packageName>
    <regex>^npurge$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-nprompt</name>
+   <script><![CDATA[{nprompt_script}]]></script>
+   <command></command>
+   <packageName>{PACKAGE_NAME}</packageName>
+   <regex>^nprompt$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>

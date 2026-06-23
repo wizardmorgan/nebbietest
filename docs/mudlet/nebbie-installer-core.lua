@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.6"
+Nebbie.version = "2.1.7"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -50,8 +50,24 @@ end
 
 function Nebbie.normalizePromptLine(line)
   local plain = Nebbie.stripColors(line)
+  plain = plain:gsub(">>%s*$", "")
   plain = plain:gsub("^%s+", ""):gsub("%s+$", "")
   return plain
+end
+
+function Nebbie.extractPromptChunk(plain)
+  if not plain or plain == "" then return plain end
+  local pos = plain:find("H:%d+/%d+")
+  if not pos then pos = plain:find("H%d+/%d+") end
+  if not pos then return plain end
+  if pos > 1 then
+    local prefix = plain:sub(1, pos - 1)
+    local name = prefix:match("(%S+)%s*$")
+    if name and #name >= 2 and name:match("^[%a]") then
+      return name .. " " .. plain:sub(pos)
+    end
+  end
+  return plain:sub(pos)
 end
 
 function Nebbie.parsePromptPair(plain, letter)
@@ -67,14 +83,21 @@ function Nebbie.parsePromptPair(plain, letter)
 end
 
 function Nebbie.parsePromptStats(line)
-  local plain = Nebbie.normalizePromptLine(line)
-  if plain == "" then return nil end
+  local plain = Nebbie.extractPromptChunk(Nebbie.normalizePromptLine(line))
+  if plain == "" then
+    Nebbie._lastParseError = "riga vuota"
+    return nil
+  end
 
   local hp, hpmax = Nebbie.parsePromptPair(plain, "H")
   local mana, manamax = Nebbie.parsePromptPair(plain, "M")
   local move, movemax = Nebbie.parsePromptPair(plain, "V")
   local xp = tonumber(plain:match("X:(%d+)") or plain:match("X(%d+)"))
-  if not hp or not mana or not move or not xp then return nil end
+  if not hp or not mana or not move or not xp then
+    Nebbie._lastParseError = "mancano H/M/V/X in: " .. plain:sub(1, 80)
+    return nil
+  end
+  Nebbie._lastParseError = nil
 
   local name = plain:match("^(%S+)%s+H") or plain:match("^(%S+)")
   local gold = tonumber(plain:match("G:(%d+)") or plain:match("g:(%d+)"))
@@ -150,10 +173,12 @@ end
 function Nebbie.debugPrompt()
   local polled = false
   if not Nebbie.stats then polled = Nebbie.pollPromptFromBuffer() end
-  cecho("<cyan>Nebbie v" .. Nebbie.version .. " — debug prompt\n")
-  cecho("<grey>versione package: <yellow>" .. tostring(Nebbie.version) .. "\n")
+  cecho("<cyan>Nebbie v" .. tostring(Nebbie.version) .. " — debug prompt\n")
   cecho("<grey>ultima riga vista: <white>" .. tostring(Nebbie._lastPromptRaw or "(nessuna)") .. "\n")
   cecho("<grey>poll buffer: <yellow>" .. tostring(polled) .. "\n")
+  if Nebbie._lastParseError then
+    cecho("<orange>parse error: <white>" .. Nebbie._lastParseError .. "\n")
+  end
   if Nebbie.stats then
     local s = Nebbie.stats
     cecho(string.format("<green>stats ok: HP %s/%s MN %s/%s MV %s/%s\n",
@@ -161,9 +186,31 @@ function Nebbie.debugPrompt()
       tostring(s.move), tostring(s.movemax)))
     Nebbie.updateGauges()
   else
-    cecho("<orange>stats=nil — il trigger prompt non ha ancora letto nulla.\n")
-    cecho("<grey>Prova: <yellow>nprompt<grey> subito dopo che vedi il prompt in gioco.\n")
+    cecho("<orange>stats=nil — digita un comando qualsiasi, poi ripeti nprompt.\n")
   end
+end
+
+function Nebbie.testPromptParse(silent)
+  local sample = "Mirari H:652/652 M:532/532 V:265/265 X:280457721 - */* - *-* - [[------Tm---]] - G:49287175 >>"
+  local parsed = Nebbie.parsePromptStats(sample)
+  if parsed and parsed.hp == 652 and parsed.mana == 532 then
+    if not silent then cecho("<green>Nebbie: parser prompt OK (v" .. Nebbie.version .. ").\n") end
+    return true
+  end
+  if not silent then
+    cecho("<red>Nebbie: parser prompt FALLITO — " .. tostring(Nebbie._lastParseError or "sconosciuto") .. "\n")
+  end
+  return false
+end
+
+function Nebbie.reloadMainScript()
+  local path = getMudletHomeDir() .. "/nebbie-play-all/nebbie-install.lua"
+  local ok, err = pcall(dofile, path)
+  if not ok then
+    cecho("<red>[Nebbie] reload fallito: " .. tostring(err) .. "\n")
+    return false
+  end
+  return true
 end
 
 function Nebbie.installPromptHooks()
@@ -306,7 +353,7 @@ function Nebbie.killTempTriggers(full)
 end
 
 function Nebbie.isKeepPackageAlias(name)
-  return name == "nebbie-fix" or name == "nebbie-purge"
+  return name == "nebbie-fix" or name == "nebbie-purge" or name == "nebbie-nprompt"
 end
 
 function Nebbie.purgeLegacyPermItems(silent)
@@ -1598,6 +1645,7 @@ function Nebbie.install()
   end
 
   Nebbie.installPromptHooks()
+  Nebbie.testPromptParse(true)
 
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
   cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey>\n")
@@ -1624,6 +1672,7 @@ function Nebbie.boot()
   end
   Nebbie._installedVer = Nebbie.version
   Nebbie.install()
+  Nebbie.testPromptParse(false)
   if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
   Nebbie.syncAttribTimer()
   Nebbie._bootInProgress = false
