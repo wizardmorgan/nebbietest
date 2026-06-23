@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.0.9"
+Nebbie.version = "2.1.0"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -115,6 +115,34 @@ function Nebbie.killTempTriggers(full)
   Nebbie._triggerIds[full] = nil
 end
 
+function Nebbie.isKeepPackageAlias(name)
+  return name == "nebbie-fix"
+end
+
+function Nebbie.disableAllLegacyNfixAliases(silent)
+  if type(getAliasList) ~= "function" then return 0 end
+  local n = 0
+  for _, entry in ipairs(getAliasList()) do
+    local name = entry
+    if type(getAliasName) == "function" then
+      local ok, nm = pcall(function() return getAliasName(entry) end)
+      if ok and nm and nm ~= "" then name = nm end
+    end
+    if type(name) == "string" and not Nebbie.isKeepPackageAlias(name) then
+      local kill = name:find("reinstall fix", 1, true) ~= nil
+      if kill then
+        if type(disableAlias) == "function" then disableAlias(name) end
+        if type(killAlias) == "function" then killAlias(name) end
+        n = n + 1
+      end
+    end
+  end
+  if n > 0 and not silent then
+    cecho("<orange>Nebbie: disattivati " .. n .. " alias <yellow>nfix<orange> duplicati (perm vecchi).\n")
+  end
+  return n
+end
+
 function Nebbie.disablePackagePermItems()
   if type(getAliasList) == "function" then
     for _, entry in ipairs(getAliasList()) do
@@ -123,7 +151,7 @@ function Nebbie.disablePackagePermItems()
         local ok, n = pcall(function() return getAliasName(entry) end)
         if ok and n and n ~= "" then name = n end
       end
-      if type(name) == "string" then
+      if type(name) == "string" and not Nebbie.isKeepPackageAlias(name) then
         for _, pkg in ipairs(LEGACY_PKGS) do
           if name:find(pkg, 1, true) and type(disableAlias) == "function" then
             disableAlias(name)
@@ -1063,6 +1091,7 @@ end
 function Nebbie.runFix()
   if Nebbie._fixRunning then return end
   Nebbie._fixRunning = true
+  Nebbie.disableAllLegacyNfixAliases(true)
   Nebbie.disablePackagePermItems()
   Nebbie.killAllByName(PKG .. "::reinstall fix", "alias")
   Nebbie.stopGUI()
@@ -1158,7 +1187,7 @@ function Nebbie.install()
   perm("loot manual", [[^nloot$]], [[Nebbie.lootMobRemains(true)]])
   perm("loot on", [[^nloot on$]], [[Nebbie.setLootAuto(true)]])
   perm("loot off", [[^nloot off$]], [[Nebbie.setLootAuto(false)]])
-  perm("reinstall fix", [[^nfix$]], [[Nebbie.runFix()]])
+  -- nfix: unico alias XML nel package (nebbie-fix), non crearlo qui
 
   perm("generic cast c", [[^c (.+)$]], [[
     local rest = matches[2]
@@ -1304,7 +1333,7 @@ function Nebbie.install()
   end
 
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
-  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>fb<grey>, <yellow>ngui<grey>, <yellow>nattrib<grey>, <yellow>nloot<grey>\n")
+  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>fb<grey>, <yellow>ngui<grey>, <yellow>nattrib<grey>, <yellow>nloot<grey> | <yellow>nfix<grey> (1 solo alias XML)\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
   Nebbie._installing = false
   Nebbie.initGUI()
@@ -1317,6 +1346,8 @@ function Nebbie.boot()
   if Nebbie._settings.attribAuto then Nebbie.attribAuto = true end
   if Nebbie._settings.lootAuto == false then Nebbie.lootAuto = false end
   Nebbie.warnLegacyPackages()
+  Nebbie.disableAllLegacyNfixAliases(true)
+  Nebbie.disablePackagePermItems()
   if Nebbie._installedVer == Nebbie.version and Nebbie._aliasIds and next(Nebbie._aliasIds) ~= nil then
     if not Nebbie.guiExists() then Nebbie.initGUI() end
     if not Nebbie.loadClass() then Nebbie.setClass("+", true) end

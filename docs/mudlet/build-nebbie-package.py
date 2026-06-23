@@ -591,9 +591,25 @@ Nebbie = Nebbie or {}
 Nebbie.package = "nebbie-play-all"
 if Nebbie._bootScheduled then return end
 Nebbie._bootScheduled = true
+local function Nebbie_disableLegacyNfix()
+  if type(getAliasList) ~= "function" then return end
+  for _, entry in ipairs(getAliasList()) do
+    local name = entry
+    if type(getAliasName) == "function" then
+      local ok, nm = pcall(function() return getAliasName(entry) end)
+      if ok and nm and nm ~= "" then name = nm end
+    end
+    if type(name) == "string" and name ~= "nebbie-fix" and name:find("reinstall fix", 1, true) then
+      if type(disableAlias) == "function" then disableAlias(name) end
+      if type(killAlias) == "function" then killAlias(name) end
+    end
+  end
+end
+Nebbie_disableLegacyNfix()
 local function Nebbie_loadMain()
   if Nebbie._mainLoaded then return end
   Nebbie._mainLoaded = true
+  Nebbie_disableLegacyNfix()
   local path = getMudletHomeDir() .. "/nebbie-play-all/nebbie-install.lua"
   local ok, err = pcall(dofile, path)
   if not ok then
@@ -608,6 +624,10 @@ else
   Nebbie_loadMain()
 end'''
     escaped = bootstrap.replace("]]>", "]]..']]'..[[")
+    nfix_script = (
+        'if Nebbie and Nebbie.runFix then Nebbie.runFix() else '
+        'cecho("<orange>Nebbie: caricamento in corso, riprova tra 2s.\\n") end'
+    )
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE MudletPackage>
 <MudletPackage version="1.001">
@@ -619,6 +639,15 @@ end'''
    <packageName>{PACKAGE_NAME}</packageName>
   </Script>
  </ScriptPackage>
+ <AliasPackage>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-fix</name>
+   <script><![CDATA[{nfix_script}]]></script>
+   <command></command>
+   <packageName>{PACKAGE_NAME}</packageName>
+   <regex>^nfix$</regex>
+  </Alias>
+ </AliasPackage>
 </MudletPackage>
 '''
 
