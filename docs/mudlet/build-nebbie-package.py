@@ -488,6 +488,93 @@ def build_cast_spell_list(spells):
     return cast_spells
 
 
+def build_legacy_perm_names(spells):
+    """Full names of old permAlias/permTrigger items (for exists()-based purge)."""
+    cast_spells = build_cast_spell_list(spells)
+    mud_cmds = parse_mud_commands()
+    pkgs = [PACKAGE_NAME, "nebbie-spells-skills"]
+    aliases, triggers = [], []
+
+    static_alias = [
+        "mode cast", "mode recall", "mode mind", "toggle gui", "toggle hud",
+        "reposition gui", "setup hud", "attrib sync", "attrib on", "attrib off",
+        "loot manual", "loot on", "loot off", "generic cast c", "generic cast word",
+        "memorize", "recall shortcut", "mind shortcut", "list classes", "set class",
+        "return form", "reinstall fix",
+    ]
+    static_triggers = [
+        "prompt parse", "attrib gag", "look loot parse", "mob kill exp loot", "cast started",
+    ]
+
+    for pkg in pkgs:
+        prefix = f"{pkg}::"
+        aliases.extend(prefix + s for s in static_alias)
+        triggers.extend(prefix + s for s in static_triggers)
+        for slot in range(1, 10):
+            aliases.append(f"{prefix}quick slot {slot}")
+        seen_abbr = set()
+        for spell, abbr in sorted(ABBREVS.items()):
+            if spell in cast_spells or spell in MIND_SPELLS:
+                if is_safe_standalone_abbr(abbr, mud_cmds) and abbr not in seen_abbr:
+                    seen_abbr.add(abbr)
+                    aliases.append(f"{prefix}abbr cast {abbr}")
+        for spell in FAVORITE_SPELL_ALIASES:
+            if spell in cast_spells:
+                aliases.append(f"{prefix}fav cast {spell}")
+        seen_skill = set()
+        for skill_name, (cmd, _hint) in DEDICATED_SKILLS.items():
+            abbr = ABBREVS.get(skill_name, ABBREVS.get(cmd, cmd.replace(" ", "")))
+            if is_safe_standalone_abbr(abbr, mud_cmds, skill_cmd=cmd) and abbr not in seen_skill:
+                seen_skill.add(abbr)
+                aliases.append(f"{prefix}skill {cmd}")
+        for name, _pat in WEAR_OFF_TRIGGERS:
+            triggers.append(f"{prefix}wearoff {name}")
+        for name, _pat in SOON_TRIGGERS:
+            triggers.append(f"{prefix}soon {name}")
+        for name, pat in DEBUFF_APPLY_TRIGGERS:
+            triggers.append(f"{prefix}debuff on {name} {pat}")
+        for name, pat in DEBUFF_WEAR_OFF_TRIGGERS:
+            triggers.append(f"{prefix}debuff off {name} {pat}")
+        for name, _pat in FAIL_TRIGGERS:
+            triggers.append(f"{prefix}fail {name}")
+
+    return sorted(set(aliases)), sorted(set(triggers))
+
+
+def lua_string_list(items):
+    return "{" + ", ".join(f'"{lua_escape(x)}"' for x in items) + "}"
+
+
+def build_bootstrap_purge_lua(legacy_aliases, legacy_triggers):
+    return f"""
+local function Nebbie_killNamed(name, typ)
+  if type(exists) ~= "function" then return end
+  local n = 0
+  while exists(name, typ) > 0 and n < 64 do
+    if typ == "trigger" then
+      if type(disableTrigger) == "function" then disableTrigger(name) end
+      if type(killTrigger) == "function" then killTrigger(name) end
+    else
+      if type(disableAlias) == "function" then disableAlias(name) end
+      if type(killAlias) == "function" then killAlias(name) end
+    end
+    n = n + 1
+  end
+end
+function Nebbie_purgeLegacyPerm()
+  local triggers = {lua_string_list(legacy_triggers)}
+  local aliases = {lua_string_list(legacy_aliases)}
+  for _, name in ipairs(triggers) do Nebbie_killNamed(name, "trigger") end
+  for _, name in ipairs(aliases) do
+    if name ~= "nebbie-fix" and not name:find("nebbie%-fix", 1, true) then
+      Nebbie_killNamed(name, "alias")
+    end
+  end
+end
+Nebbie_purgeLegacyPerm()
+"""
+
+
 def build_install_lua(spells):
     cast_spells = build_cast_spell_list(spells)
     lines = []
@@ -580,36 +667,27 @@ def build_install_lua(spells):
         lines.append(f"  '{lua_escape(n)}',")
     lines.append("}")
     lines.append("")
+    legacy_aliases, legacy_triggers = build_legacy_perm_names(spells)
+    lines.append("Nebbie.legacyPermAliases = " + lua_string_list(legacy_aliases))
+    lines.append("Nebbie.legacyPermTriggers = " + lua_string_list(legacy_triggers))
+    lines.append("")
     core = INSTALLER_CORE.read_text(encoding="utf-8")
     lines.append(core)
     return "\n".join(lines)
 
 
-def build_xml():
+def build_xml(legacy_aliases, legacy_triggers):
+    purge_lua = build_bootstrap_purge_lua(legacy_aliases, legacy_triggers)
     bootstrap = r'''-- Nebbie Arcane play-all bootstrap
 Nebbie = Nebbie or {}
 Nebbie.package = "nebbie-play-all"
 if Nebbie._bootScheduled then return end
 Nebbie._bootScheduled = true
-local function Nebbie_disableLegacyNfix()
-  if type(getAliasList) ~= "function" then return end
-  for _, entry in ipairs(getAliasList()) do
-    local name = entry
-    if type(getAliasName) == "function" then
-      local ok, nm = pcall(function() return getAliasName(entry) end)
-      if ok and nm and nm ~= "" then name = nm end
-    end
-    if type(name) == "string" and name ~= "nebbie-fix" and name:find("reinstall fix", 1, true) then
-      if type(disableAlias) == "function" then disableAlias(name) end
-      if type(killAlias) == "function" then killAlias(name) end
-    end
-  end
-end
-Nebbie_disableLegacyNfix()
+''' + purge_lua + r'''
 local function Nebbie_loadMain()
   if Nebbie._mainLoaded then return end
   Nebbie._mainLoaded = true
-  Nebbie_disableLegacyNfix()
+  Nebbie_purgeLegacyPerm()
   local path = getMudletHomeDir() .. "/nebbie-play-all/nebbie-install.lua"
   local ok, err = pcall(dofile, path)
   if not ok then
@@ -627,6 +705,11 @@ end'''
     nfix_script = (
         'if Nebbie and Nebbie.runFix then Nebbie.runFix() else '
         'cecho("<orange>Nebbie: caricamento in corso, riprova tra 2s.\\n") end'
+    )
+    npurge_script = (
+        'if Nebbie_purgeLegacyPerm then Nebbie_purgeLegacyPerm() end '
+        'if Nebbie and Nebbie.purgeLegacyPermItems then Nebbie.purgeLegacyPermItems(false) end '
+        'cecho("<green>Nebbie: perm vecchi disattivati. Riavvia Mudlet, reinstalla v2.1.1, poi nfix.\\n")'
     )
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE MudletPackage>
@@ -647,6 +730,13 @@ end'''
    <packageName>{PACKAGE_NAME}</packageName>
    <regex>^nfix$</regex>
   </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-purge</name>
+   <script><![CDATA[{npurge_script}]]></script>
+   <command></command>
+   <packageName>{PACKAGE_NAME}</packageName>
+   <regex>^npurge$</regex>
+  </Alias>
  </AliasPackage>
 </MudletPackage>
 '''
@@ -659,13 +749,14 @@ def main():
         n = len(data["quick"])
         if n != 9:
             raise SystemExit(f"Class {cls} has {n} quick slots, expected 9")
+    legacy_aliases, legacy_triggers = build_legacy_perm_names(spells)
     lua = build_install_lua(spells)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     install_lua = OUT_DIR / "nebbie-install.lua"
     install_lua.write_text(lua, encoding="utf-8")
     (OUT_DIR / "config.lua").write_text(f'mpackage = "{PACKAGE_NAME}"\n', encoding="utf-8")
     xml_name = f"{PACKAGE_NAME}.xml"
-    (OUT_DIR / xml_name).write_text(build_xml(), encoding="utf-8")
+    (OUT_DIR / xml_name).write_text(build_xml(legacy_aliases, legacy_triggers), encoding="utf-8")
     mpackage = ROOT / f"{PACKAGE_NAME}.mpackage"
     with zipfile.ZipFile(mpackage, "w", zipfile.ZIP_STORED) as zf:
         zf.write(OUT_DIR / "config.lua", "config.lua")

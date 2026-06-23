@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.0"
+Nebbie.version = "2.1.1"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -116,34 +116,40 @@ function Nebbie.killTempTriggers(full)
 end
 
 function Nebbie.isKeepPackageAlias(name)
-  return name == "nebbie-fix"
+  return name == "nebbie-fix" or name == "nebbie-purge"
 end
 
-function Nebbie.disableAllLegacyNfixAliases(silent)
-  if type(getAliasList) ~= "function" then return 0 end
-  local n = 0
-  for _, entry in ipairs(getAliasList()) do
-    local name = entry
-    if type(getAliasName) == "function" then
-      local ok, nm = pcall(function() return getAliasName(entry) end)
-      if ok and nm and nm ~= "" then name = nm end
+function Nebbie.purgeLegacyPermItems(silent)
+  if type(exists) ~= "function" then return end
+  local ta, tt = 0, 0
+  for _, name in ipairs(Nebbie.legacyPermTriggers or {}) do
+    local before = exists(name, "trigger")
+    if before > 0 then
+      Nebbie.killAllByName(name, "trigger")
+      ta = ta + before
     end
-    if type(name) == "string" and not Nebbie.isKeepPackageAlias(name) then
-      local kill = name:find("reinstall fix", 1, true) ~= nil
-      if kill then
-        if type(disableAlias) == "function" then disableAlias(name) end
-        if type(killAlias) == "function" then killAlias(name) end
-        n = n + 1
+  end
+  for _, name in ipairs(Nebbie.legacyPermAliases or {}) do
+    if not Nebbie.isKeepPackageAlias(name) then
+      local before = exists(name, "alias")
+      if before > 0 then
+        Nebbie.killAllByName(name, "alias")
+        ta = ta + before
       end
     end
   end
-  if n > 0 and not silent then
-    cecho("<orange>Nebbie: disattivati " .. n .. " alias <yellow>nfix<orange> duplicati (perm vecchi).\n")
+  if not silent and ta > 0 then
+    cecho("<orange>Nebbie: disattivati perm vecchi (~" .. ta .. " item).\n")
   end
-  return n
+  return ta
+end
+
+function Nebbie.disableAllLegacyNfixAliases(silent)
+  return Nebbie.purgeLegacyPermItems(silent)
 end
 
 function Nebbie.disablePackagePermItems()
+  Nebbie.purgeLegacyPermItems(true)
   if type(getAliasList) == "function" then
     for _, entry in ipairs(getAliasList()) do
       local name = entry
@@ -1091,7 +1097,7 @@ end
 function Nebbie.runFix()
   if Nebbie._fixRunning then return end
   Nebbie._fixRunning = true
-  Nebbie.disableAllLegacyNfixAliases(true)
+  Nebbie.purgeLegacyPermItems(true)
   Nebbie.disablePackagePermItems()
   Nebbie.killAllByName(PKG .. "::reinstall fix", "alias")
   Nebbie.stopGUI()
@@ -1282,49 +1288,55 @@ function Nebbie.install()
 
   perm("return form", [[^return$]], [[send("return")]])
 
-  trig("prompt parse", {[[\S+\s+H:\d+/\d+\s+M:\d+/\d+\s+V:\d+/\d+\s+X:\d+]]}, [[Nebbie.onPrompt(line)]], true)
-  trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[Nebbie.onAttribLine(line)]])
+  trig("prompt parse", {[[\S+\s+H:\d+/\d+\s+M:\d+/\d+\s+V:\d+/\d+\s+X:\d+]]}, [[if Nebbie and Nebbie.onPrompt then Nebbie.onPrompt(line) end]], true)
+  trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
 
   trig("look loot parse", {"il corpo di", "corpo sfigurato", "pile of dust", "Pile of dust"}, [[
-    if Nebbie._lookLootActive then Nebbie.onLookLootLine(line) end
+    if Nebbie and Nebbie._lookLootActive and Nebbie.onLookLootLine then Nebbie.onLookLootLine(line) end
   ]])
 
   trig("mob kill exp loot", {[[^La tua esperienza e' aumentata di \d+ punti\.?$]]}, [[
-    Nebbie.onMobKillExp(line)
+    if Nebbie and Nebbie.onMobKillExp then Nebbie.onMobKillExp(line) end
   ]], true)
 
   trig("cast started", {"Pronunci le parole"}, [[
-    local plain = Nebbie.stripColors(line)
-    local spell = plain:match("Pronunci le parole, '(.+)'")
-    if spell then Nebbie.onBuffApplied(spell) end
+    if Nebbie and Nebbie.stripColors and Nebbie.onBuffApplied then
+      local plain = Nebbie.stripColors(line)
+      local spell = plain:match("Pronunci le parole, '(.+)'")
+      if spell then Nebbie.onBuffApplied(spell) end
+    end
   ]])
 
   for _, entry in ipairs(Nebbie.wearOff) do
     local label = entry.name:gsub("'", "\\'")
     trig("wearoff " .. entry.name, {entry.pattern}, string.format([[
-      Nebbie.onBuffWearOff('%s')
+      if Nebbie and Nebbie.onBuffWearOff then Nebbie.onBuffWearOff('%s') end
     ]], label))
   end
 
   for _, entry in ipairs(Nebbie.wearOffSoon) do
     trig("soon " .. entry.name, {entry.pattern}, string.format([[
-      Nebbie.onBuffSoon('%s')
+      if Nebbie and Nebbie.onBuffSoon then Nebbie.onBuffSoon('%s') end
     ]], entry.name:gsub("'", "\\'")))
   end
 
   for _, entry in ipairs(Nebbie.debuffApply or {}) do
     local label = entry.name:gsub("'", "\\'")
     trig("debuff on " .. entry.name .. " " .. entry.pattern, {entry.pattern}, string.format([[
-      local plain = Nebbie.stripColors(line)
-      if plain:find("%s", 1, true) then Nebbie.onDebuffApplied('%s') end
+      if Nebbie and Nebbie.stripColors and Nebbie.onDebuffApplied then
+        local plain = Nebbie.stripColors(line)
+        if plain:find("%s", 1, true) then Nebbie.onDebuffApplied('%s') end
+      end
     ]], entry.pattern:gsub("([%(%)%.%+%-%*%?%[%]%^%$%%])", "%%%1"), label))
   end
 
   for _, entry in ipairs(Nebbie.debuffWearOff or {}) do
     local label = entry.name:gsub("'", "\\'")
     trig("debuff off " .. entry.name .. " " .. entry.pattern, {entry.pattern}, string.format([[
-      local plain = Nebbie.stripColors(line)
-      if plain:find("%s", 1, true) then Nebbie.onDebuffWearOff('%s') end
+      if Nebbie and Nebbie.stripColors and Nebbie.onDebuffWearOff then
+        local plain = Nebbie.stripColors(line)
+        if plain:find("%s", 1, true) then Nebbie.onDebuffWearOff('%s') end
+      end
     ]], entry.pattern:gsub("([%(%)%.%+%-%*%?%[%]%^%$%%])", "%%%1"), label))
   end
 
@@ -1333,7 +1345,7 @@ function Nebbie.install()
   end
 
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
-  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>fb<grey>, <yellow>ngui<grey>, <yellow>nattrib<grey>, <yellow>nloot<grey> | <yellow>nfix<grey> (1 solo alias XML)\n")
+  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>fb<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>npurge<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
   Nebbie._installing = false
   Nebbie.initGUI()
@@ -1346,8 +1358,7 @@ function Nebbie.boot()
   if Nebbie._settings.attribAuto then Nebbie.attribAuto = true end
   if Nebbie._settings.lootAuto == false then Nebbie.lootAuto = false end
   Nebbie.warnLegacyPackages()
-  Nebbie.disableAllLegacyNfixAliases(true)
-  Nebbie.disablePackagePermItems()
+  Nebbie.purgeLegacyPermItems(true)
   if Nebbie._installedVer == Nebbie.version and Nebbie._aliasIds and next(Nebbie._aliasIds) ~= nil then
     if not Nebbie.guiExists() then Nebbie.initGUI() end
     if not Nebbie.loadClass() then Nebbie.setClass("+", true) end

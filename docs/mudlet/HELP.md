@@ -86,10 +86,31 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/neb
 ### Reinstallazione pulita (se qualcosa non funziona)
 
 1. **Alt+O** → disinstalla `nebbie-play-all` (e `nebbie-spells-skills` se presente).
-2. **Scripts** → elimina manualmente script Nebbie residui se presenti.
-3. Riavvia Mudlet.
-4. Reinstalla il `.mpackage` dal link sopra.
-5. Digita `nfix` oppure `nclass m`.
+2. **Scripts → Triggers** → cerca `nebbie-play-all` → elimina tutto il gruppo (trigger `perm` orfani).
+3. **Scripts → Aliases** → elimina `reinstall fix` e altri duplicati `nebbie-play-all`.
+4. Riavvia Mudlet.
+5. Reinstalla il `.mpackage` dal link sopra (v2.1.1+).
+6. Digita **una volta** `nfix`, poi `nsetup` e `nclass +`.
+
+Se dopo il riavvio compaiono errori `onPrompt` (nil) **prima** di reinstallare, i trigger `perm` vecchi sono ancora nel profilo: ripeti i passi 2–4 oppure usa la pulizia d’emergenza sotto.
+
+### Pulizia d’emergenza (senza `getAliasList`)
+
+Su alcune versioni Mudlet `getAliasList()` **non esiste**. Usa `exists()` per nome:
+
+```
+lua local function k(n,t) local i=0 while exists(n,t)>0 and i<64 do if t=="trigger" then if disableTrigger then disableTrigger(n) end if killTrigger then killTrigger(n) end else if disableAlias then disableAlias(n) end if killAlias then killAlias(n) end end i=i+1 end end k("nebbie-play-all::prompt parse","trigger") k("reinstall fix","alias") k("nebbie-play-all::reinstall fix","alias") cecho("<green>Pulizia emergenza ok. Riavvia Mudlet.\n")
+```
+
+Poi riavvia Mudlet e reinstalla il package.
+
+Con il package installato puoi anche usare:
+
+```
+npurge
+```
+
+(disattiva i `perm` vecchi noti, poi riavvia e `nfix`).
 
 ### Verifica versione
 
@@ -99,7 +120,7 @@ Nella riga di comando Mudlet:
 lua cecho("<yellow>"..Nebbie.version)
 ```
 
-Deve mostrare la versione corrente (es. `2.0.4`).
+Deve mostrare la versione corrente (es. `2.1.1`).
 
 ---
 
@@ -248,6 +269,7 @@ Il MUD controlla quali incantesimi puoi usare; il package configura solo scorcia
 | `ngui`   | Mostra o nasconde il pannello buff                    |
 | `npos`   | Riposiziona il pannello in alto a destra              |
 | `nfix`   | Reinstalla alias/trigger e ricarica la classe salvata |
+| `npurge` | Disattiva alias/trigger `perm` vecchi (poi riavvia e `nfix`) |
 | `return` | Torna dalla forma `polymorph self`                    |
 
 
@@ -406,6 +428,9 @@ In console Mudlet compaiono righe `[buff]` o `[cast]` colorate.
 | `nclass` ripetuto 3 volte             | Alias duplicati da reinstall        | `nfix` (v1.0.10+); in **Scripts** elimina eventuali copie extra di «Nebbie Spells and Skills» |
 | Installazione bloccata su «unpacking» | Download corrotto o import bloccato | Riscarica il file (deve essere ~50 KB zip valido); evita Safari; usa v1.0.12+; riavvia Mudlet |
 | `nclass` non salva                    | `table.save` non disponibile        | Aggiorna Mudlet; la v1.0.7+ usa file nel profilo                                              |
+| `getAliasList` (a nil value)          | API assente su alcune versioni Mudlet | Usa `npurge` o pulizia d’emergenza con `exists()` (vedi sopra)                              |
+| `onPrompt` (a nil value) × molti trigger | Trigger `perm` orfani nel profilo | Elimina trigger `nebbie-play-all` in Scripts, oppure pulizia d’emergenza, poi reinstall v2.1.1+ |
+| `nfix` eseguito molte volte           | Alias `reinstall fix` duplicati     | `npurge`, riavvio Mudlet, reinstall; v2.1.1+ ha un solo `nfix` nel package                    |
 
 
 ### Reinstall rapida
