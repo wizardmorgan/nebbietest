@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.8"
+Nebbie.version = "2.1.9"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -737,6 +737,15 @@ function Nebbie.onBuffSoon(spell)
   Nebbie.refreshGUI()
 end
 
+function Nebbie.matchDebuffApply(name, plain)
+  if not plain or plain == "" then return false end
+  local low = plain:lower()
+  if name == "web" then
+    return low:find("ragnatela", 1, true) ~= nil or low:find("ragnatele", 1, true) ~= nil
+  end
+  return true
+end
+
 function Nebbie.onDebuffApplied(name)
   Nebbie.debuffs[name] = { since = Nebbie.now(), active = true }
   Nebbie.refreshGUI()
@@ -907,14 +916,14 @@ Nebbie.guiW = 600
 Nebbie.guiH = 680
 Nebbie.guiHeaderH = 28
 Nebbie.guiMargin = 12
-Nebbie.guiLayoutVer = 7
+Nebbie.guiLayoutVer = 8
 Nebbie.guiGaugeH = 22
 Nebbie.guiGaugeGap = 6
 Nebbie.guiGaugeArea = 96
 Nebbie.guiFontSize = 11
 Nebbie.guiBar = "NebbieHUDBar"
 Nebbie.guiConsole = "NebbieHUD"
-Nebbie._gauges = Nebbie._gauges or {}
+Nebbie._bars = Nebbie._bars or {}
 
 function Nebbie.guiExists()
   return Nebbie._guiBuilt == true
@@ -928,8 +937,8 @@ function Nebbie.showGUI()
   if type(showWindow) ~= "function" then return end
   showWindow(Nebbie.guiConsole)
   showWindow(Nebbie.guiBar)
-  for key, _ in pairs(Nebbie._gauges) do
-    if type(showGauge) == "function" then showGauge(key) end
+  for key, _ in pairs(Nebbie._bars) do
+    Nebbie.showBar(key)
   end
   Nebbie._guiHidden = false
 end
@@ -938,8 +947,8 @@ function Nebbie.hideGUI()
   if type(hideWindow) ~= "function" then return end
   hideWindow(Nebbie.guiConsole)
   hideWindow(Nebbie.guiBar)
-  for key, _ in pairs(Nebbie._gauges) do
-    if type(hideGauge) == "function" then hideGauge(key) end
+  for key, _ in pairs(Nebbie._bars) do
+    Nebbie.hideBar(key)
   end
   Nebbie._guiHidden = true
 end
@@ -952,126 +961,177 @@ function Nebbie.calcGUIPos()
   return x, y, w, h
 end
 
-function Nebbie.moveGaugeSafe(name, x, y, w, h)
-  if type(moveGauge) ~= "function" then return false end
-  local ok = pcall(function() moveGauge(name, x, y) end)
-  if ok and type(resizeGauge) == "function" then
-    pcall(function() resizeGauge(name, w, h) end)
-  end
-  return ok
-end
-
-function Nebbie.raiseGaugeLayers(key)
+function Nebbie.raiseBarLayers(key)
   if type(raiseWindow) ~= "function" then return end
-  for _, suffix in ipairs({"_back", "_front", "_text"}) do
-    pcall(function() raiseWindow(key .. suffix) end)
+  local bar = Nebbie._bars[key]
+  if not bar then return end
+  pcall(function() raiseWindow(bar.back) end)
+  pcall(function() raiseWindow(bar.front) end)
+  pcall(function() raiseWindow(bar.text) end)
+end
+
+function Nebbie.showBar(key)
+  local bar = Nebbie._bars[key]
+  if not bar or type(showWindow) ~= "function" then return end
+  showWindow(bar.back)
+  showWindow(bar.front)
+  showWindow(bar.text)
+end
+
+function Nebbie.hideBar(key)
+  local bar = Nebbie._bars[key]
+  if not bar or type(hideWindow) ~= "function" then return end
+  hideWindow(bar.back)
+  hideWindow(bar.front)
+  hideWindow(bar.text)
+end
+
+function Nebbie.deleteBar(key)
+  local bar = Nebbie._bars[key]
+  if not bar then return end
+  if type(deleteLabel) == "function" then
+    pcall(function() deleteLabel(bar.back) end)
+    pcall(function() deleteLabel(bar.front) end)
+    pcall(function() deleteLabel(bar.text) end)
+  end
+  Nebbie._bars[key] = nil
+end
+
+function Nebbie.deleteLegacyGauges()
+  local keys = {"NebbieHP", "NebbieMN", "NebbieMV"}
+  if type(deleteGauge) ~= "function" then return end
+  for _, key in ipairs(keys) do
+    pcall(function() deleteGauge(key) end)
   end
 end
 
-function Nebbie.paintGauge(key, rgb, backRgb)
+function Nebbie.paintBar(key, rgb, backRgb)
   backRgb = backRgb or {42, 42, 56}
+  local bar = Nebbie._bars[key]
+  if not bar or type(setBackgroundColor) ~= "function" then return end
   local r, g, b = rgb[1], rgb[2], rgb[3]
-  if type(setGaugeStyleSheet) == "function" then
-    local cssFront = string.format(
-      "background-color:QLinearGradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgb(%d,%d,%d),stop:1 rgb(%d,%d,%d));border:1px solid #222;border-radius:4px;",
-      r, g, b, math.max(0, r - 25), math.max(0, g - 25), math.max(0, b - 25))
-    local cssBack = string.format(
-      "background-color:rgb(%d,%d,%d);border:1px solid #222;border-radius:4px;",
-      backRgb[1], backRgb[2], backRgb[3])
-    pcall(function() setGaugeStyleSheet(key, cssFront, cssBack, "") end)
-  end
-  if type(setBackgroundColor) == "function" then
-    pcall(function() setBackgroundColor(key .. "_front", r, g, b, 255) end)
-    pcall(function() setBackgroundColor(key .. "_back", backRgb[1], backRgb[2], backRgb[3], 255) end)
-  end
+  pcall(function() setBackgroundColor(bar.back, backRgb[1], backRgb[2], backRgb[3], 255) end)
+  pcall(function() setBackgroundColor(bar.front, r, g, b, 255) end)
+  pcall(function() setBackgroundColor(bar.text, 0, 0, 0, 0) end)
   if type(setFgColor) == "function" then
-    pcall(function() setFgColor(key .. "_text", 240, 240, 240) end)
+    pcall(function() setFgColor(bar.text, 240, 240, 240) end)
   end
-  Nebbie.raiseGaugeLayers(key)
+  Nebbie.raiseBarLayers(key)
 end
 
-function Nebbie.styleGauge(key, frontHex, backHex)
-  local function hex(n)
-    n = n:gsub("#", "")
-    return tonumber(n:sub(1, 2), 16) or 80, tonumber(n:sub(3, 4), 16) or 80, tonumber(n:sub(5, 6), 16) or 80
-  end
-  local fr, fg, fb = hex(frontHex or "#808080")
-  local br, bg, bb = hex(backHex or "#2a2a38")
-  Nebbie.paintGauge(key, {fr, fg, fb}, {br, bg, bb})
-end
+Nebbie.paintGauge = Nebbie.paintBar
 
-function Nebbie.createGaugeEntry(spec, gx, gy2, gw)
-  if type(createGauge) ~= "function" then return false end
+function Nebbie.createBar(spec, gx, gy2, gw)
+  if type(createLabel) ~= "function" then return false end
   local x, y = math.floor(gx), math.floor(gy2)
-  local r, g, b = spec.color[1], spec.color[2], spec.color[3]
+  local h = Nebbie.guiGaugeH
+  local backK = spec.key .. "_back"
+  local frontK = spec.key .. "_front"
+  local textK = spec.key .. "_text"
   local ok = pcall(function()
-    createGauge(spec.key, gw, Nebbie.guiGaugeH, x, y, "", r, g, b)
+    createLabel(backK, x, y, gw, h, 0)
+    createLabel(frontK, x, y, 1, h, 0)
+    createLabel(textK, x, y, gw, h, 0)
   end)
-  if not ok then
-    ok = pcall(function()
-      createGauge(spec.key, gw, Nebbie.guiGaugeH, x, y, "", spec.colorName)
-    end)
-  end
   if not ok then return false end
-  Nebbie.paintGauge(spec.key, spec.color, {42, 42, 56})
-  if type(showGauge) == "function" then pcall(function() showGauge(spec.key) end) end
-  Nebbie._gauges[spec.key] = true
+  Nebbie._bars[spec.key] = { x = x, y = y, w = gw, h = h, back = backK, front = frontK, text = textK }
+  Nebbie.paintBar(spec.key, spec.color, {42, 42, 56})
+  Nebbie.showBar(spec.key)
   return true
 end
 
-function Nebbie.ensureGauges(x, y, w)
+function Nebbie.moveBar(key, gx, gy2, gw)
+  local bar = Nebbie._bars[key]
+  if not bar or type(moveWindow) ~= "function" or type(resizeWindow) ~= "function" then
+    return false
+  end
+  local x, y = math.floor(gx), math.floor(gy2)
+  local h = Nebbie.guiGaugeH
+  bar.x, bar.y, bar.w, bar.h = x, y, gw, h
+  pcall(function() moveWindow(bar.back, x, y) end)
+  pcall(function() resizeWindow(bar.back, gw, h) end)
+  pcall(function() moveWindow(bar.text, x, y) end)
+  pcall(function() resizeWindow(bar.text, gw, h) end)
+  return true
+end
+
+function Nebbie.ensureBars(x, y, w)
   local gx, gy = x + 12, y + Nebbie.guiHeaderH + 6
   local gw = w - 24
-  Nebbie._gaugeSpecs = {
-    NebbieHP = { key = "NebbieHP", label = "HP", colorName = "green", front = "#2db44a", back = "#2a2a38", color = {45, 200, 70} },
-    NebbieMN = { key = "NebbieMN", label = "MN", colorName = "cyan", front = "#4f8cff", back = "#2a2a38", color = {70, 150, 255} },
-    NebbieMV = { key = "NebbieMV", label = "MV", colorName = "yellow", front = "#dcb428", back = "#2a2a38", color = {230, 190, 50} },
+  Nebbie._barSpecs = {
+    NebbieHP = { key = "NebbieHP", label = "HP", color = {45, 200, 70} },
+    NebbieMN = { key = "NebbieMN", label = "MN", color = {70, 150, 255} },
+    NebbieMV = { key = "NebbieMV", label = "MV", color = {230, 190, 50} },
   }
   local specs = {
-    Nebbie._gaugeSpecs.NebbieHP,
-    Nebbie._gaugeSpecs.NebbieMN,
-    Nebbie._gaugeSpecs.NebbieMV,
+    Nebbie._barSpecs.NebbieHP,
+    Nebbie._barSpecs.NebbieMN,
+    Nebbie._barSpecs.NebbieMV,
   }
   for i, spec in ipairs(specs) do
     local gy2 = gy + (i - 1) * (Nebbie.guiGaugeH + Nebbie.guiGaugeGap)
-    if Nebbie._gauges[spec.key] then
-      if not Nebbie.moveGaugeSafe(spec.key, gx, gy2, gw, Nebbie.guiGaugeH) then
-        Nebbie._gauges[spec.key] = nil
-        if type(deleteGauge) == "function" then pcall(function() deleteGauge(spec.key) end) end
+    if Nebbie._bars[spec.key] then
+      if not Nebbie.moveBar(spec.key, gx, gy2, gw) then
+        Nebbie.deleteBar(spec.key)
       end
     end
-    if not Nebbie._gauges[spec.key] then
-      Nebbie.createGaugeEntry(spec, gx, gy2, gw)
+    if not Nebbie._bars[spec.key] then
+      Nebbie.createBar(spec, gx, gy2, gw)
     else
-      Nebbie.paintGauge(spec.key, spec.color, {42, 42, 56})
+      Nebbie.paintBar(spec.key, spec.color, {42, 42, 56})
     end
   end
   Nebbie.updateGauges()
 end
 
-function Nebbie.applyGaugeValue(key, cur, max, label)
-  local setFn = (type(setGauge) == "function" and setGauge) or (type(setGaugeValue) == "function" and setGaugeValue)
-  if not setFn or not cur or not max or max <= 0 then return end
+function Nebbie.setBarText(key, text)
+  local bar = Nebbie._bars[key]
+  if not bar then return end
+  if type(clearWindow) == "function" then
+    pcall(function() clearWindow(bar.text) end)
+  end
+  if type(echo) == "function" then
+    pcall(function() echo(bar.text, " " .. text) end)
+  end
+end
+
+function Nebbie.applyBarValue(key, cur, max, label)
+  local bar = Nebbie._bars[key]
+  if not bar or not cur or not max or max <= 0 then return end
+  local pct = math.max(0, math.min(1, cur / max))
+  local fw = math.max(1, math.floor(bar.w * pct))
   local text = label .. " " .. cur .. "/" .. max
-  local ok = pcall(function() setFn(key, cur, max, text) end)
-  if not ok then pcall(function() setFn(key, cur, max) end) end
-  local spec = Nebbie._gaugeSpecs and Nebbie._gaugeSpecs[key]
-  if spec then Nebbie.paintGauge(key, spec.color, {42, 42, 56}) end
-  if type(showGauge) == "function" then pcall(function() showGauge(key) end) end
-  Nebbie.raiseGaugeLayers(key)
+  if type(moveWindow) == "function" and type(resizeWindow) == "function" then
+    pcall(function() moveWindow(bar.front, bar.x, bar.y) end)
+    pcall(function() resizeWindow(bar.front, fw, bar.h) end)
+  end
+  Nebbie.setBarText(key, text)
+  local spec = Nebbie._barSpecs and Nebbie._barSpecs[key]
+  if spec then Nebbie.paintBar(key, spec.color, {42, 42, 56}) end
+  Nebbie.showBar(key)
+  Nebbie.raiseBarLayers(key)
+end
+
+function Nebbie.setGauge(key, cur, max, text)
+  local label = key:gsub("^Nebbie", "")
+  if text and text ~= "" then
+    local fromText = text:match("^(%S+)")
+    if fromText then label = fromText end
+  end
+  Nebbie.applyBarValue(key, cur, max, label)
 end
 
 function Nebbie.updateGauges()
   local s = Nebbie.stats
   if s and s.hp and s.hpmax and s.hpmax > 0 then
-    Nebbie.applyGaugeValue("NebbieHP", s.hp, s.hpmax, "HP")
-    Nebbie.applyGaugeValue("NebbieMN", s.mana, s.manamax, "MN")
-    Nebbie.applyGaugeValue("NebbieMV", s.move, s.movemax, "MV")
+    Nebbie.applyBarValue("NebbieHP", s.hp, s.hpmax, "HP")
+    Nebbie.applyBarValue("NebbieMN", s.mana, s.manamax, "MN")
+    Nebbie.applyBarValue("NebbieMV", s.move, s.movemax, "MV")
     return
   end
-  Nebbie.applyGaugeValue("NebbieHP", 1, 1, "HP")
-  Nebbie.applyGaugeValue("NebbieMN", 1, 1, "MN")
-  Nebbie.applyGaugeValue("NebbieMV", 1, 1, "MV")
+  Nebbie.applyBarValue("NebbieHP", 0, 1, "HP")
+  Nebbie.applyBarValue("NebbieMN", 0, 1, "MN")
+  Nebbie.applyBarValue("NebbieMV", 0, 1, "MV")
 end
 
 function Nebbie.applyGUIPosition(x, y, w, h)
@@ -1085,8 +1145,8 @@ function Nebbie.applyGUIPosition(x, y, w, h)
     resizeWindow(con, w, h - hh - Nebbie.guiGaugeArea)
     if type(raiseWindow) == "function" then raiseWindow(bar) end
   end
-  Nebbie.ensureGauges(x, y, w)
-  for key, _ in pairs(Nebbie._gauges or {}) do Nebbie.raiseGaugeLayers(key) end
+  Nebbie.ensureBars(x, y, w)
+  for key, _ in pairs(Nebbie._bars or {}) do Nebbie.raiseBarLayers(key) end
   Nebbie._guiX, Nebbie._guiY = x, y
 end
 
@@ -1186,10 +1246,11 @@ function Nebbie.buildGUI()
 end
 
 function Nebbie.destroyGUI()
-  for key, _ in pairs(Nebbie._gauges) do
-    if type(deleteGauge) == "function" then pcall(function() deleteGauge(key) end) end
+  for key, _ in pairs(Nebbie._bars) do
+    Nebbie.deleteBar(key)
   end
-  Nebbie._gauges = {}
+  Nebbie._bars = {}
+  Nebbie.deleteLegacyGauges()
   if type(deleteMiniConsole) == "function" then pcall(function() deleteMiniConsole(Nebbie.guiConsole) end) end
   if type(deleteLabel) == "function" then pcall(function() deleteLabel(Nebbie.guiBar) end) end
   Nebbie._guiBuilt = false
@@ -1667,9 +1728,11 @@ function Nebbie.install()
     trig("debuff on " .. entry.name .. " " .. entry.pattern, {entry.pattern}, string.format([[
       if Nebbie and Nebbie.stripColors and Nebbie.onDebuffApplied then
         local plain = Nebbie.stripColors(line)
-        if plain:find("%s", 1, true) then Nebbie.onDebuffApplied('%s') end
+        if plain:find("%s", 1, true) and Nebbie.matchDebuffApply('%s', plain) then
+          Nebbie.onDebuffApplied('%s')
+        end
       end
-    ]], entry.pattern:gsub("([%(%)%.%+%-%*%?%[%]%^%$%%])", "%%%1"), label))
+    ]], entry.pattern:gsub("([%(%)%.%+%-%*%?%[%]%^%$%%])", "%%%1"), label, label))
   end
 
   for _, entry in ipairs(Nebbie.debuffWearOff or {}) do
