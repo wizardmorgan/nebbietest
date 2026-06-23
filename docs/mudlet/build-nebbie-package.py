@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.9"
+PKG_VER = "2.2.10"
 INSTALLER_CORE = ROOT / "nebbie-installer-core.lua"
 
 # Never shadow common MUD command prefixes (inventory, equipment, rest, …)
@@ -518,6 +518,7 @@ def build_legacy_perm_names(spells):
         "reposition gui", "setup hud", "attrib sync", "attrib on", "attrib off",
         "loot manual", "loot on", "loot off", "swap weapon",
         "eq key list", "eq key add", "eq key del",
+        "eq cache sync", "eq cache on", "eq cache off",
         "generic cast c", "generic cast word",
         "memorize", "recall shortcut", "mind shortcut", "list classes", "set class",
         "return form", "reinstall fix", "prompt debug",
@@ -833,6 +834,8 @@ def main():
         f.write("  usa <arma>          → cambio arma da borsa sulla schiena\n")
         f.write("  nkey                → elenco chiavi eq (nome → parola MUD)\n")
         f.write("  nkey add <k> <txt>  → aggiungi chiave custom\n")
+        f.write("  neq                 → mostra cache eq + sync ora\n")
+        f.write("  neq on/off          → sync eq automatico ogni 1h (gagged)\n")
         f.write("\n=== PANNELLO HUD ===\n")
         f.write("  Gauge HP/Mana/Move + buff/debuff + parser prompt [%s]\n")
         for cls, data in sorted(CLASS_PRESETS.items()):

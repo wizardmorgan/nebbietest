@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.9"
+Nebbie.version = "2.2.10"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -28,6 +28,10 @@ Nebbie.attribGag = false
 Nebbie._attribBusy = false
 Nebbie.lootAuto = true
 Nebbie._lootBusy = false
+Nebbie.eqAuto = true
+Nebbie._eqCacheBusy = false
+Nebbie._eqCacheGag = false
+Nebbie.eqCache = Nebbie.eqCache or { wield = nil, back = nil, wieldKey = nil, backKey = nil, updatedAt = 0 }
 
 local PKG = Nebbie.package
 local LEGACY_PKGS = {"nebbie-play-all", "nebbie-spells-skills"}
@@ -258,6 +262,20 @@ function Nebbie.loadSettings()
     pcall(function() table.load(Nebbie._settingsFile, Nebbie._settings) end)
   end
   Nebbie._settings.eqKeywords = Nebbie._settings.eqKeywords or {}
+  if type(Nebbie._settings.eqCache) == "table" then
+    Nebbie.eqCache = {
+      wield = Nebbie._settings.eqCache.wield,
+      back = Nebbie._settings.eqCache.back,
+      wieldKey = Nebbie._settings.eqCache.wieldKey,
+      backKey = Nebbie._settings.eqCache.backKey,
+      updatedAt = Nebbie._settings.eqCache.updatedAt or 0,
+    }
+  end
+  if Nebbie._settings.eqAuto == false then
+    Nebbie.eqAuto = false
+  else
+    Nebbie.eqAuto = true
+  end
 end
 
 function Nebbie.saveSettings()
@@ -546,7 +564,7 @@ function Nebbie.purgeOrphanNebbieAliases()
   local patterns = {
     "set class", "list classes", "reinstall fix", "reposition gui", "attrib sync",
     "setup hud", "toggle hud", "toggle gui", "loot manual", "loot on", "loot off",
-    "swap weapon", "eq key", "generic cast", "recall shortcut", "mind shortcut", "memorize", "mode cast",
+    "swap weapon", "eq key", "eq cache", "generic cast", "recall shortcut", "mind shortcut", "memorize", "mode cast",
     "mode recall", "mode mind", "abbr cast", "fav cast", "quick slot", "return form",
   }
   for _, entry in ipairs(getAliasList()) do
@@ -1091,20 +1109,174 @@ function Nebbie.parseEqSlotLine(line)
   return nil, nil
 end
 
+Nebbie.EQ_AUTO_INTERVAL = 3600
+Nebbie.EQ_CACHE_MAX_AGE = 3600
 Nebbie.EQ_SWAP_FIRST_WAIT = 4.0
 Nebbie.EQ_SWAP_AFTER_EQ = 2.0
 Nebbie.EQ_SWAP_RETRY_WAIT = 2.5
 Nebbie.EQ_SWAP_MAX_RETRIES = 2
 Nebbie.EQ_SWAP_POLL_LINES = 200
 
+function Nebbie.saveEqCache()
+  Nebbie._settings = Nebbie._settings or {}
+  Nebbie._settings.eqCache = Nebbie.eqCache
+  Nebbie.saveSettings()
+end
+
+function Nebbie.eqCacheAge()
+  local c = Nebbie.eqCache
+  if not c or not c.updatedAt or c.updatedAt <= 0 then return nil end
+  return Nebbie.now() - c.updatedAt
+end
+
+function Nebbie.eqCacheIsFresh()
+  local c = Nebbie.eqCache or {}
+  if not c.back or c.back == "" then return false end
+  local age = Nebbie.eqCacheAge()
+  return age ~= nil and age <= Nebbie.EQ_CACHE_MAX_AGE
+end
+
+function Nebbie.beginEqSnapshot()
+  Nebbie._eqSnapshot = { wield = nil, back = nil }
+end
+
+function Nebbie.applyEqSlot(slot, item)
+  if not slot then return end
+  Nebbie.eqCache = Nebbie.eqCache or {}
+  if slot == "wield" then
+    Nebbie.eqCache.wield = item
+    Nebbie.eqCache.wieldKey = (item and item ~= "") and Nebbie.eqItemKeyword(item) or nil
+  elseif slot == "back" then
+    Nebbie.eqCache.back = item
+    Nebbie.eqCache.backKey = (item and item ~= "") and Nebbie.eqItemKeyword(item) or nil
+  end
+  Nebbie.eqCache.updatedAt = Nebbie.now()
+  Nebbie.saveEqCache()
+  if Nebbie._eqSnapshot then Nebbie._eqSnapshot[slot] = item end
+end
+
+function Nebbie.onEqLine(line)
+  local plain = Nebbie.stripColors(line or "")
+  local isEqOutput = false
+
+  if plain:find("Stai usando", 1, true) then
+    isEqOutput = true
+    Nebbie.beginEqSnapshot()
+  elseif plain:match("^Nulla%.?") then
+    isEqOutput = true
+    Nebbie.eqCache = Nebbie.eqCache or {}
+    Nebbie.eqCache.wield = nil
+    Nebbie.eqCache.back = nil
+    Nebbie.eqCache.wieldKey = nil
+    Nebbie.eqCache.backKey = nil
+    Nebbie.eqCache.updatedAt = Nebbie.now()
+    Nebbie.saveEqCache()
+    Nebbie.beginEqSnapshot()
+  else
+    local slot, item = Nebbie.parseEqSlotLine(line)
+    if slot then
+      isEqOutput = true
+      Nebbie.applyEqSlot(slot, item)
+    end
+  end
+
+  if Nebbie._eqCacheGag and isEqOutput and type(deleteLine) == "function" then
+    deleteLine()
+  end
+  return isEqOutput
+end
+
+function Nebbie.showEqCache()
+  Nebbie.loadSettings()
+  local c = Nebbie.eqCache or {}
+  cecho("<cyan><b>Cache eq Nebbie</b> <grey>(impugnato + sulla schiena)\n")
+  cecho("<grey>  schiena: <white>" .. tostring(c.back or "(vuoto)"))
+  if c.backKey and c.backKey ~= "" then
+    cecho(" <dark_green>[" .. c.backKey .. "]")
+  end
+  cecho("\n")
+  cecho("<grey>  impugnato: <white>" .. tostring(c.wield or "(vuoto)"))
+  if c.wieldKey and c.wieldKey ~= "" then
+    cecho(" <dark_green>[" .. c.wieldKey .. "]")
+  end
+  cecho("\n")
+  local age = Nebbie.eqCacheAge()
+  if age and age > 0 then
+    if age >= 3600 then
+      cecho(string.format("<grey>  aggiornato: <yellow>%.1f h fa\n", age / 3600))
+    else
+      cecho("<grey>  aggiornato: <yellow>" .. math.floor(age) .. " s fa\n")
+    end
+  else
+    cecho("<grey>  aggiornato: <yellow>mai\n")
+  end
+  cecho("<grey>  sync auto 1h: <yellow>" .. (Nebbie.eqAuto and "on" or "off") .. "\n")
+end
+
+function Nebbie.requestEqCache(silent)
+  if Nebbie._eqCacheBusy then return false end
+  Nebbie._eqCacheBusy = true
+  Nebbie._eqCacheGag = silent == true
+  send("eq")
+  tempTimer(3, function()
+    Nebbie._eqCacheBusy = false
+    Nebbie._eqCacheGag = false
+  end)
+  return true
+end
+
+function Nebbie.setEqAuto(on)
+  Nebbie.eqAuto = on
+  Nebbie._settings.eqAuto = on
+  Nebbie.saveSettings()
+  Nebbie.syncEqCacheTimer()
+  if on then
+    cecho("<green>Nebbie: sync eq ogni 1h attivo (gagged).\n")
+    if not Nebbie.eqCacheIsFresh() then
+      tempTimer(1, function() Nebbie.requestEqCache(true) end)
+    end
+  else
+    cecho("<green>Nebbie: sync eq automatico disattivato.\n")
+  end
+end
+
+function Nebbie.syncEqCacheTimer()
+  if Nebbie.eqCacheTimer then killTimer(Nebbie.eqCacheTimer); Nebbie.eqCacheTimer = nil end
+  if Nebbie.eqAuto then
+    Nebbie.eqCacheTimer = tempTimer(Nebbie.EQ_AUTO_INTERVAL, function()
+      if Nebbie.eqAuto and not Nebbie._weaponSwapBusy then
+        Nebbie.requestEqCache(true)
+      end
+    end, true)
+  end
+end
+
+function Nebbie.maybeRefreshEqCacheOnBoot()
+  if not Nebbie.eqAuto then return end
+  tempTimer(8, function()
+    if Nebbie._weaponSwapBusy or Nebbie._eqCacheBusy then return end
+    local age = Nebbie.eqCacheAge()
+    if not age or age >= Nebbie.EQ_AUTO_INTERVAL then
+      Nebbie.requestEqCache(true)
+    end
+  end)
+end
+
 function Nebbie.onEqParseLine(line)
-  if not Nebbie._eqParseActive or not Nebbie._weaponSwap then return end
+  Nebbie.onEqLine(line)
+
+  if not Nebbie._weaponSwap then return end
   local plain = Nebbie.stripColors(line or "")
   if plain:find("Stai usando", 1, true) then
-    Nebbie._weaponSwap._eqSeen = true
-    Nebbie.scheduleWeaponSwapTimeout(Nebbie.EQ_SWAP_AFTER_EQ)
+    if Nebbie._eqParseActive then
+      Nebbie._weaponSwap._eqSeen = true
+      Nebbie._weaponSwap.wield = nil
+      Nebbie._weaponSwap.back = nil
+      Nebbie.scheduleWeaponSwapTimeout(Nebbie.EQ_SWAP_AFTER_EQ)
+    end
     return
   end
+  if not Nebbie._eqParseActive then return end
   local slot, item = Nebbie.parseEqSlotLine(line)
   if slot == "wield" then
     Nebbie._weaponSwap.wield = item
@@ -1177,15 +1349,7 @@ function Nebbie.buildWeaponSwapCommands(ws)
   return cmds
 end
 
-function Nebbie.finishWeaponSwap(verbose)
-  if Nebbie._weaponSwapTimer then
-    killTimer(Nebbie._weaponSwapTimer)
-    Nebbie._weaponSwapTimer = nil
-  end
-  local ws = Nebbie._weaponSwap
-  if ws then Nebbie.pollEqFromBuffer(Nebbie.EQ_SWAP_POLL_LINES) end
-  Nebbie._eqParseActive = false
-  Nebbie._weaponSwap = nil
+function Nebbie.finishWeaponSwapFromState(ws)
   if not ws then return end
   if not ws.back then
     cecho("<red>Nebbie: nessun oggetto nello slot <sulla schiena> — controlla con eq.\n")
@@ -1199,14 +1363,32 @@ function Nebbie.finishWeaponSwap(verbose)
     cecho("<red>Nebbie: impossibile costruire la sequenza cambio arma.\n")
     return
   end
-  if verbose then
+  if ws._verbose then
+    local src = ws._fromCache and "cache eq" or "eq live"
     cecho("<green>Nebbie: cambio arma → <yellow>" .. ws.weapon
-      .. "<green> (borsa: <yellow>" .. Nebbie.lookupEqKeyword(ws.back)
+      .. "<green> (" .. src .. ", borsa: <yellow>" .. Nebbie.lookupEqKeyword(ws.back)
       .. "<green>, impugnato: <yellow>" .. tostring(ws.wield and Nebbie.lookupEqKeyword(ws.wield) or "(vuoto)")
       .. "<green>).\n")
   end
   Nebbie._weaponSwapBusy = true
-  Nebbie.runCmdQueue(cmds, 1, function() Nebbie._weaponSwapBusy = false end)
+  Nebbie.runCmdQueue(cmds, 1, function()
+    Nebbie._weaponSwapBusy = false
+    tempTimer(1.5, function() Nebbie.requestEqCache(true) end)
+  end)
+end
+
+function Nebbie.finishWeaponSwap(verbose)
+  if Nebbie._weaponSwapTimer then
+    killTimer(Nebbie._weaponSwapTimer)
+    Nebbie._weaponSwapTimer = nil
+  end
+  local ws = Nebbie._weaponSwap
+  if ws then Nebbie.pollEqFromBuffer(Nebbie.EQ_SWAP_POLL_LINES) end
+  Nebbie._eqParseActive = false
+  Nebbie._weaponSwap = nil
+  if not ws then return end
+  ws._verbose = verbose
+  Nebbie.finishWeaponSwapFromState(ws)
 end
 
 function Nebbie.swapWeapon(weaponKw, verbose)
@@ -1217,6 +1399,18 @@ function Nebbie.swapWeapon(weaponKw, verbose)
   end
   if Nebbie._weaponSwapBusy then
     if verbose ~= false then cecho("<orange>Nebbie: cambio arma gia' in corso.\n") end
+    return
+  end
+  Nebbie.loadSettings()
+  if Nebbie.eqCacheIsFresh() then
+    local ws = {
+      weapon = weaponKw,
+      wield = Nebbie.eqCache.wield,
+      back = Nebbie.eqCache.back,
+      _verbose = verbose ~= false,
+      _fromCache = true,
+    }
+    Nebbie.finishWeaponSwapFromState(ws)
     return
   end
   Nebbie._weaponSwap = {
@@ -1614,6 +1808,7 @@ end
 function Nebbie.stopGUI()
   if Nebbie.guiTimer then killTimer(Nebbie.guiTimer); Nebbie.guiTimer = nil end
   if Nebbie.attribTimer then killTimer(Nebbie.attribTimer); Nebbie.attribTimer = nil end
+  if Nebbie.eqCacheTimer then killTimer(Nebbie.eqCacheTimer); Nebbie.eqCacheTimer = nil end
 end
 
 function Nebbie.initGUI()
@@ -1971,6 +2166,9 @@ function Nebbie.install()
   perm("eq key list", [[^nkey$]], [[Nebbie.listEqKeys()]])
   perm("eq key add", [[^nkey add (.+) (.+)$]], [[Nebbie.addEqKey(matches[2], matches[3])]])
   perm("eq key del", [[^nkey del (.+)$]], [[Nebbie.delEqKey(matches[2])]])
+  perm("eq cache sync", [[^neq$]], [[Nebbie.showEqCache(); Nebbie.requestEqCache(false)]])
+  perm("eq cache on", [[^neq on$]], [[Nebbie.setEqAuto(true)]])
+  perm("eq cache off", [[^neq off$]], [[Nebbie.setEqAuto(false)]])
   -- nfix: unico alias XML nel package (nebbie-fix), non crearlo qui
 
   perm("generic cast c", [[^c (.+)$]], [[
@@ -2144,6 +2342,7 @@ function Nebbie.boot()
   Nebbie.loadSettings()
   if Nebbie._settings.attribAuto then Nebbie.attribAuto = true end
   if Nebbie._settings.lootAuto == false then Nebbie.lootAuto = false end
+  if Nebbie._settings.eqAuto == false then Nebbie.eqAuto = false end
   Nebbie.warnLegacyPackages()
   Nebbie.pruneInvalidBuffs()
   Nebbie.pruneExpiredBuffs()
@@ -2152,6 +2351,8 @@ function Nebbie.boot()
     if not Nebbie.guiExists() then Nebbie.initGUI() end
     if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
     Nebbie.syncAttribTimer()
+    Nebbie.syncEqCacheTimer()
+    Nebbie.maybeRefreshEqCacheOnBoot()
     Nebbie._mainLoaded = true
     Nebbie._bootInProgress = false
     return
@@ -2161,6 +2362,8 @@ function Nebbie.boot()
   Nebbie.testPromptParse(false)
   if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
   Nebbie.syncAttribTimer()
+  Nebbie.syncEqCacheTimer()
+  Nebbie.maybeRefreshEqCacheOnBoot()
   Nebbie._mainLoaded = true
   Nebbie._bootInProgress = false
 end

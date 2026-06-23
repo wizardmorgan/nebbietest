@@ -313,6 +313,10 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   nloot               → look, poi corp/2.corp/… + pile/2.pile/…
   nloot on/off        → loot auto dopo kill mob (exp reale)
   usa <arma>          → cambio arma da borsa sulla schiena
+  nkey                → elenco chiavi eq (nome → parola MUD)
+  nkey add <k> <txt>  → aggiungi chiave custom
+  neq                 → mostra cache eq + sync ora
+  neq on/off          → sync eq automatico ogni 1h (gagged)
 
 === PANNELLO HUD ===
   Gauge HP/Mana/Move + buff/debuff + parser prompt [%s]
