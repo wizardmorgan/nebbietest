@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.4"
+Nebbie.version = "2.1.5"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -42,7 +42,55 @@ function Nebbie.now()
 end
 
 function Nebbie.stripColors(line)
-  return line:gsub("%$c%d%d%d%d", "")
+  if not line then return "" end
+  line = line:gsub("%$c%d%d%d%d", "")
+  line = line:gsub("\27%[[%d;]*m", "")
+  return line
+end
+
+function Nebbie.normalizePromptLine(line)
+  local plain = Nebbie.stripColors(line)
+  plain = plain:gsub("^%s+", ""):gsub("%s+$", "")
+  return plain
+end
+
+function Nebbie.parsePromptStats(line)
+  local plain = Nebbie.normalizePromptLine(line)
+  if plain == "" or not plain:find("H:%d+/%d+") then return nil end
+
+  local name, hp, hpmax, mana, manamax, move, movemax, xp = plain:match(
+    "^(%S+)%s+H:(%d+)/(%d+)%s+M:(%d+)/(%d+)%s+V:(%d+)/(%d+)%s+X:(%d+)"
+  )
+  if not name then
+    name, hp, hpmax, mana, manamax, move, movemax, xp = plain:match(
+      "(%S+)%s+H:(%d+)/(%d+)%s+M:(%d+)/(%d+)%s+V:(%d+)/(%d+)%s+X:(%d+)"
+    )
+  end
+  if not name then return nil end
+
+  local gold = tonumber(plain:match("G:(%d+)")) or tonumber(plain:match("g:(%d+)"))
+  local codes = plain:match("%[%[([^%]]*)%]%]") or plain:match("%[([^%]]*)%]")
+
+  local tankC, tankN, mobC, mobT = "*", "*", "*", "*"
+  local tail = plain:match("X:%d+%s*(.*)$") or ""
+  local fc, ft, mc, mt = tail:match("-%s+([^/]+)/(%S+)%s+%-%s+([^%-]+)%-(%S+)")
+  if fc then
+    tankC, tankN = Nebbie.stripColors(fc), ft
+    mobC, mobT = Nebbie.stripColors(mc), mt
+  end
+
+  return {
+    name = name,
+    hp = tonumber(hp), hpmax = tonumber(hpmax),
+    mana = tonumber(mana), manamax = tonumber(manamax),
+    move = tonumber(move), movemax = tonumber(movemax),
+    xp = tonumber(xp), gold = gold,
+    tankCond = Nebbie.stripColors(tankC or "*"),
+    tankName = (tankN ~= "*" and tankN) or nil,
+    mobCond = Nebbie.stripColors(mobC or "*"),
+    mobName = (mobT ~= "*" and mobT) or nil,
+    codes = codes or "",
+  }
 end
 
 function Nebbie.setCastMode(mode)
@@ -835,10 +883,15 @@ end
 
 function Nebbie.updateGauges()
   local s = Nebbie.stats
-  if not s then return end
-  Nebbie.applyGaugeValue("NebbieHP", s.hp, s.hpmax, "HP")
-  Nebbie.applyGaugeValue("NebbieMN", s.mana, s.manamax, "MN")
-  Nebbie.applyGaugeValue("NebbieMV", s.move, s.movemax, "MV")
+  if s and s.hp and s.hpmax and s.hpmax > 0 then
+    Nebbie.applyGaugeValue("NebbieHP", s.hp, s.hpmax, "HP")
+    Nebbie.applyGaugeValue("NebbieMN", s.mana, s.manamax, "MN")
+    Nebbie.applyGaugeValue("NebbieMV", s.move, s.movemax, "MV")
+    return
+  end
+  Nebbie.applyGaugeValue("NebbieHP", 1, 1, "HP")
+  Nebbie.applyGaugeValue("NebbieMN", 1, 1, "MN")
+  Nebbie.applyGaugeValue("NebbieMV", 1, 1, "MV")
 end
 
 function Nebbie.applyGUIPosition(x, y, w, h)
@@ -1026,22 +1079,10 @@ function Nebbie.parsePromptCodes(raw)
 end
 
 function Nebbie.onPrompt(line)
-  local plain = Nebbie.stripColors(line)
-  if not plain:find("H:%d+/%d+") then return end
-  local name, hp, hpmax, mana, manamax, move, movemax, xp, tankC, tankN, mobC, mobT, codes, gold =
-    plain:match("^(%S+)%s+H:(%d+)/(%d+)%s+M:(%d+)/(%d+)%s+V:(%d+)/(%d+)%s+X:(%d+)%s+%-%s+([^/]+)/(%S+)%s+%-%s+([^%-]+)%-(%S+)%s+%-%[([^%]]*)%]%s+%- G:(%d+)")
-  if not name then return end
-  Nebbie.stats = {
-    name = name, hp = tonumber(hp), hpmax = tonumber(hpmax),
-    mana = tonumber(mana), manamax = tonumber(manamax),
-    move = tonumber(move), movemax = tonumber(movemax),
-    xp = tonumber(xp), gold = tonumber(gold),
-    tankCond = Nebbie.stripColors(tankC or "*"),
-    tankName = (tankN ~= "*" and tankN) or nil,
-    mobCond = Nebbie.stripColors(mobC or "*"),
-    mobName = (mobT ~= "*" and mobT) or nil,
-  }
-  Nebbie.promptBuffs = Nebbie.parsePromptCodes(codes or "")
+  local parsed = Nebbie.parsePromptStats(line)
+  if not parsed then return end
+  Nebbie.stats = parsed
+  Nebbie.promptBuffs = Nebbie.parsePromptCodes(parsed.codes or "")
   Nebbie.updateGauges()
   Nebbie.refreshGUI()
 end
@@ -1414,7 +1455,7 @@ function Nebbie.install()
 
   perm("return form", [[^return$]], [[send("return")]])
 
-  trig("prompt parse", {[[\S+\s+H:\d+/\d+\s+M:\d+/\d+\s+V:\d+/\d+\s+X:\d+]]}, [[if Nebbie and Nebbie.onPrompt then Nebbie.onPrompt(line) end]], true)
+  trig("prompt parse", {[[H:\d+/\d+\s+M:\d+/\d+\s+V:\d+/\d+\s+X:\d+]]}, [[if Nebbie and Nebbie.onPrompt then Nebbie.onPrompt(line) end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
 
   trig("look loot parse", {"il corpo di", "corpo sfigurato", "pile of dust", "Pile of dust"}, [[

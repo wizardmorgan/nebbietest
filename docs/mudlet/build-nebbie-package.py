@@ -666,6 +666,11 @@ def build_install_lua(spells):
         lines.append(f"  ['{lua_escape(k)}'] = {v},")
     lines.append("}")
     lines.append("")
+    lines.append("Nebbie.noBuffSpells = {")
+    for n in sorted(set(NO_BUFF_SPELLS)):
+        lines.append(f"  ['{lua_escape(n)}'] = true,")
+    lines.append("}")
+    lines.append("")
     lines.append("Nebbie.classes = {")
     for cls, data in sorted(CLASS_PRESETS.items()):
         lines.append(f"  ['{lua_escape(cls)}'] = {{")
@@ -727,7 +732,7 @@ end'''
     npurge_script = (
         'if Nebbie_purgeLegacyPerm then Nebbie_purgeLegacyPerm() end '
         'if Nebbie and Nebbie.purgeLegacyPermItems then Nebbie.purgeLegacyPermItems(false) end '
-        'cecho("<green>Nebbie: perm vecchi disattivati. Riavvia Mudlet, reinstalla v2.1.3, poi nfix.\\n")'
+        'cecho("<green>Nebbie: perm vecchi disattivati. Riavvia Mudlet, reinstalla v2.1.5, poi nfix.\\n")'
     )
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE MudletPackage>
