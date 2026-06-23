@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.7"
+Nebbie.version = "2.2.8"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -217,12 +217,9 @@ function Nebbie.testPromptParse(silent)
 end
 
 function Nebbie.reloadMainScript()
-  local path = getMudletHomeDir() .. "/nebbie-play-all/nebbie-install.lua"
-  local ok, err = pcall(dofile, path)
-  if not ok then
-    cecho("<red>[Nebbie] reload fallito: " .. tostring(err) .. "\n")
-    return false
-  end
+  Nebbie._installedVer = nil
+  Nebbie._mainLoaded = false
+  Nebbie.boot()
   return true
 end
 
@@ -2108,6 +2105,7 @@ function Nebbie.boot()
     if not Nebbie.guiExists() then Nebbie.initGUI() end
     if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
     Nebbie.syncAttribTimer()
+    Nebbie._mainLoaded = true
     Nebbie._bootInProgress = false
     return
   end
@@ -2116,6 +2114,7 @@ function Nebbie.boot()
   Nebbie.testPromptParse(false)
   if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
   Nebbie.syncAttribTimer()
+  Nebbie._mainLoaded = true
   Nebbie._bootInProgress = false
 end
 
