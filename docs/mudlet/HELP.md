@@ -89,7 +89,7 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/neb
 2. **Scripts → Triggers** → cerca `nebbie-play-all` → elimina tutto il gruppo (trigger `perm` orfani).
 3. **Scripts → Aliases** → elimina `reinstall fix` e altri duplicati `nebbie-play-all`.
 4. Riavvia Mudlet.
-5. Reinstalla il `.mpackage` dal link sopra (v2.1.1+).
+5. Reinstalla il `.mpackage` dal link sopra (v2.1.2+).
 6. Digita **una volta** `nfix`, poi `nsetup` e `nclass +`.
 
 Se dopo il riavvio compaiono errori `onPrompt` (nil) **prima** di reinstallare, i trigger `perm` vecchi sono ancora nel profilo: ripeti i passi 2–4 oppure usa la pulizia d’emergenza sotto.

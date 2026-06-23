@@ -510,6 +510,8 @@ def build_legacy_perm_names(spells):
         prefix = f"{pkg}::"
         aliases.extend(prefix + s for s in static_alias)
         triggers.extend(prefix + s for s in static_triggers)
+        aliases.extend(static_alias)
+        triggers.extend(static_triggers)
         for slot in range(1, 10):
             aliases.append(f"{prefix}quick slot {slot}")
         seen_abbr = set()

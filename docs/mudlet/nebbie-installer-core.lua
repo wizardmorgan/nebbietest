@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.1"
+Nebbie.version = "2.1.2"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -80,23 +80,73 @@ function Nebbie.stripQuotes(token)
 end
 
 function Nebbie.killAllByName(name, typ)
-  if not name or name == "" or type(exists) ~= "function" then return end
+  if not name or name == "" then return end
   typ = typ or "trigger"
+  if type(findItems) == "function" then
+    local ids = findItems(name, typ, true)
+    if type(ids) == "table" then
+      for _, id in ipairs(ids) do
+        if typ == "alias" then
+          if type(disableAlias) == "function" then pcall(function() disableAlias(id) end) end
+          if type(killAlias) == "function" then pcall(function() killAlias(id) end) end
+        elseif typ == "trigger" then
+          if type(disableTrigger) == "function" then pcall(function() disableTrigger(id) end) end
+          if type(killTrigger) == "function" then pcall(function() killTrigger(id) end) end
+        end
+      end
+    end
+  end
+  if type(exists) ~= "function" then return end
   local tries = 0
   while exists(name, typ) > 0 and tries < 64 do
     local before = exists(name, typ)
     if typ == "alias" then
-      if type(killAlias) == "function" then killAlias(name) end
+      if type(killAlias) == "function" then pcall(function() killAlias(name) end) end
       if exists(name, typ) >= before and type(disableAlias) == "function" then
         disableAlias(name)
       end
     elseif typ == "trigger" then
-      if type(killTrigger) == "function" then killTrigger(name) end
+      if type(killTrigger) == "function" then pcall(function() killTrigger(name) end) end
       if exists(name, typ) >= before and type(disableTrigger) == "function" then
         disableTrigger(name)
       end
     end
     tries = tries + 1
+  end
+end
+
+function Nebbie.killAllByNameVariants(short, typ)
+  if not short or short == "" then return end
+  Nebbie.killAllByName(PKG .. "::" .. short, typ)
+  Nebbie.killAllByName(short, typ)
+  Nebbie.killAllByName("nebbie-spells-skills::" .. short, typ)
+end
+
+function Nebbie.killAllTrackedTemps()
+  for _, id in pairs(Nebbie._aliasIds or {}) do
+    if type(killAlias) == "function" then pcall(function() killAlias(id) end) end
+  end
+  for _, ids in pairs(Nebbie._triggerIds or {}) do
+    for _, id in ipairs(ids) do
+      if type(killTrigger) == "function" then pcall(function() killTrigger(id) end) end
+    end
+  end
+  local seenA, seenT = {}, {}
+  for _, name in ipairs(Nebbie._aliasNames or {}) do
+    if not seenA[name] then
+      seenA[name] = true
+      Nebbie.killAllByName(name, "alias")
+      local short = name:match("::(.+)$")
+      if short then Nebbie.killAllByName(short, "alias") end
+    end
+  end
+  for _, name in ipairs(Nebbie._triggerNames or {}) do
+    if not seenT[name] then
+      seenT[name] = true
+      Nebbie.killAllByName(name, "trigger")
+      local short = name:match("::(.+)$")
+      if short then Nebbie.killAllByName(short, "trigger") end
+    end
   end
 end
 
@@ -126,7 +176,15 @@ function Nebbie.purgeLegacyPermItems(silent)
     local before = exists(name, "trigger")
     if before > 0 then
       Nebbie.killAllByName(name, "trigger")
-      ta = ta + before
+      tt = tt + before
+    end
+    local short = name:match("::(.+)$")
+    if short then
+      local b2 = exists(short, "trigger")
+      if b2 > 0 then
+        Nebbie.killAllByName(short, "trigger")
+        tt = tt + b2
+      end
     end
   end
   for _, name in ipairs(Nebbie.legacyPermAliases or {}) do
@@ -135,6 +193,14 @@ function Nebbie.purgeLegacyPermItems(silent)
       if before > 0 then
         Nebbie.killAllByName(name, "alias")
         ta = ta + before
+      end
+      local short = name:match("::(.+)$")
+      if short and not Nebbie.isKeepPackageAlias(short) then
+        local b2 = exists(short, "alias")
+        if b2 > 0 then
+          Nebbie.killAllByName(short, "alias")
+          ta = ta + b2
+        end
       end
     end
   end
@@ -631,7 +697,7 @@ Nebbie.guiW = 300
 Nebbie.guiH = 340
 Nebbie.guiHeaderH = 18
 Nebbie.guiMargin = 8
-Nebbie.guiLayoutVer = 3
+Nebbie.guiLayoutVer = 4
 Nebbie.guiGaugeH = 12
 Nebbie.guiGaugeGap = 3
 Nebbie.guiGaugeArea = 54
@@ -676,8 +742,22 @@ function Nebbie.calcGUIPos()
 end
 
 function Nebbie.moveGaugeSafe(name, x, y, w, h)
-  if type(moveGauge) == "function" then moveGauge(name, x, y) end
-  if type(resizeGauge) == "function" then resizeGauge(name, w, h) end
+  if type(moveGauge) ~= "function" then return false end
+  local ok = pcall(function() moveGauge(name, x, y) end)
+  if ok and type(resizeGauge) == "function" then
+    pcall(function() resizeGauge(name, w, h) end)
+  end
+  return ok
+end
+
+function Nebbie.createGaugeEntry(spec, gx, gy2, gw)
+  if type(createGauge) ~= "function" then return false end
+  createGauge(spec.key, gw, Nebbie.guiGaugeH, gx, gy2)
+  if type(setGaugeColor) == "function" then
+    setGaugeColor(spec.key, spec.color, {35, 35, 45})
+  end
+  Nebbie._gauges[spec.key] = true
+  return true
 end
 
 function Nebbie.ensureGauges(x, y, w)
@@ -690,16 +770,14 @@ function Nebbie.ensureGauges(x, y, w)
   }
   for i, spec in ipairs(specs) do
     local gy2 = gy + (i - 1) * (Nebbie.guiGaugeH + Nebbie.guiGaugeGap)
-    if not Nebbie._gauges[spec.key] then
-      if type(createGauge) == "function" then
-        createGauge(spec.key, gw, Nebbie.guiGaugeH, gx, gy2)
-        if type(setGaugeColor) == "function" then
-          setGaugeColor(spec.key, spec.color, {35, 35, 45})
-        end
-        Nebbie._gauges[spec.key] = true
+    if Nebbie._gauges[spec.key] then
+      if not Nebbie.moveGaugeSafe(spec.key, gx, gy2, gw, Nebbie.guiGaugeH) then
+        Nebbie._gauges[spec.key] = nil
+        if type(deleteGauge) == "function" then pcall(function() deleteGauge(spec.key) end) end
       end
-    else
-      Nebbie.moveGaugeSafe(spec.key, gx, gy2, gw, Nebbie.guiGaugeH)
+    end
+    if not Nebbie._gauges[spec.key] then
+      Nebbie.createGaugeEntry(spec, gx, gy2, gw)
     end
   end
 end
@@ -1097,16 +1175,13 @@ end
 function Nebbie.runFix()
   if Nebbie._fixRunning then return end
   Nebbie._fixRunning = true
+  Nebbie.killAllTrackedTemps()
   Nebbie.purgeLegacyPermItems(true)
   Nebbie.disablePackagePermItems()
-  Nebbie.killAllByName(PKG .. "::reinstall fix", "alias")
+  Nebbie.killAllByNameVariants("reinstall fix", "alias")
   Nebbie.stopGUI()
   Nebbie.destroyGUI()
   Nebbie._installedVer = nil
-  Nebbie._aliasNames = {}
-  Nebbie._triggerNames = {}
-  Nebbie._aliasIds = {}
-  Nebbie._triggerIds = {}
   Nebbie.install()
   Nebbie.loadClass()
   if not Nebbie.playerClass then Nebbie.setClass("+", true) end
@@ -1123,8 +1198,7 @@ function Nebbie.install()
   if Nebbie._installing then return end
   Nebbie._installing = true
   Nebbie.stopGUI()
-  for full, _ in pairs(Nebbie._aliasIds or {}) do Nebbie.killTempAlias(full) end
-  for full, _ in pairs(Nebbie._triggerIds or {}) do Nebbie.killTempTriggers(full) end
+  Nebbie.killAllTrackedTemps()
   Nebbie.disablePackagePermItems()
   Nebbie.purgeTrackedAliases()
   Nebbie.purgeTrackedTriggers()
@@ -1141,7 +1215,7 @@ function Nebbie.install()
     if type(tempAlias) ~= "function" then return end
     local full = PKG .. "::" .. short
     Nebbie.killTempAlias(full)
-    Nebbie.killAllByName(full, "alias")
+    Nebbie.killAllByNameVariants(short, "alias")
     local id = tempAlias(pattern, script)
     if id then
       Nebbie._aliasIds[full] = id
@@ -1154,7 +1228,7 @@ function Nebbie.install()
   local function trig(short, patterns, script, isRegex)
     local full = PKG .. "::" .. short
     Nebbie.killTempTriggers(full)
-    Nebbie.killAllByName(full, "trigger")
+    Nebbie.killAllByNameVariants(short, "trigger")
     local ids = {}
     if isRegex then
       if type(tempRegexTrigger) ~= "function" then return end
