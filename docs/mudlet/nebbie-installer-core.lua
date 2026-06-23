@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.0"
+Nebbie.version = "2.2.1"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -709,6 +709,54 @@ function Nebbie.shouldTrackBuff(spell)
   return false
 end
 
+function Nebbie.normalizeBuffSpell(spell)
+  if not spell or spell == "" then return nil end
+  spell = spell:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%.$", "")
+  if spell == "" then return nil end
+  if Nebbie.buffDurations and Nebbie.buffDurations[spell] then return spell end
+  local lower = spell:lower()
+  for name, _ in pairs(Nebbie.buffDurations or {}) do
+    if name:lower() == lower then return name end
+  end
+  for _, entry in ipairs(Nebbie.wearOff or {}) do
+    if entry.name:lower() == lower then return entry.name end
+  end
+  for _, entry in ipairs(Nebbie.wearOffSoon or {}) do
+    if entry.name:lower() == lower then return entry.name end
+  end
+  return spell
+end
+
+function Nebbie.buffTimeLeft(data, now)
+  now = now or Nebbie.now()
+  if not data or not data.since then return nil end
+  if data.duration and data.duration > 0 then
+    return data.duration - (now - data.since)
+  end
+  return nil
+end
+
+function Nebbie.isBuffExpired(data, now)
+  local left = Nebbie.buffTimeLeft(data, now)
+  if left == nil then return false end
+  return left <= 0
+end
+
+function Nebbie.pruneExpiredBuffs()
+  local now = Nebbie.now()
+  local remove = {}
+  for spell, data in pairs(Nebbie.buffs or {}) do
+    if type(spell) == "string" and spell:sub(1, 1) ~= "_" and type(data) == "table" then
+      if Nebbie.isBuffExpired(data, now) then
+        table.insert(remove, spell)
+      end
+    end
+  end
+  for _, spell in ipairs(remove) do
+    Nebbie.buffs[spell] = nil
+  end
+end
+
 function Nebbie.pruneInvalidBuffs()
   for spell, _ in pairs(Nebbie.buffs or {}) do
     if type(spell) == "string" and spell:sub(1, 1) ~= "_" and not Nebbie.shouldTrackBuff(spell) then
@@ -718,7 +766,14 @@ function Nebbie.pruneInvalidBuffs()
 end
 
 function Nebbie.onBuffApplied(spell)
-  if not Nebbie.shouldTrackBuff(spell) then return end
+  spell = Nebbie.normalizeBuffSpell(spell)
+  if not spell or not Nebbie.shouldTrackBuff(spell) then return end
+  local lower = spell:lower()
+  for key, _ in pairs(Nebbie.buffs or {}) do
+    if type(key) == "string" and key:sub(1, 1) ~= "_" and key:lower() == lower and key ~= spell then
+      Nebbie.buffs[key] = nil
+    end
+  end
   local dur = Nebbie.buffDurations[spell] or 0
   Nebbie.buffs[spell] = { since = Nebbie.now(), duration = dur, soon = false, active = true }
   Nebbie.buffs._lastCast = spell
@@ -726,14 +781,16 @@ function Nebbie.onBuffApplied(spell)
 end
 
 function Nebbie.onBuffWearOff(spell)
-  Nebbie.buffs[spell] = nil
+  spell = Nebbie.normalizeBuffSpell(spell)
+  if spell then Nebbie.buffs[spell] = nil end
   Nebbie.refreshGUI()
 end
 
 function Nebbie.onBuffSoon(spell)
-  if not Nebbie.shouldTrackBuff(spell) then return end
+  spell = Nebbie.normalizeBuffSpell(spell)
+  if not spell or not Nebbie.shouldTrackBuff(spell) then return end
   if Nebbie.buffs[spell] then Nebbie.buffs[spell].soon = true
-  else Nebbie.buffs[spell] = { since = Nebbie.now(), duration = 0, soon = true, active = true } end
+  else Nebbie.buffs[spell] = { since = Nebbie.now(), duration = Nebbie.buffDurations[spell] or 0, soon = true, active = true } end
   Nebbie.refreshGUI()
 end
 
@@ -1438,10 +1495,15 @@ end
 function Nebbie.parseAttribSpellLine(line)
   local plain = Nebbie.stripColors(line)
   local spell, dur = plain:match("Spell%s*:%s*'(.-)'%s*%-%s*(%d+)")
-  if spell and dur and Nebbie.shouldTrackBuff(spell) then
-    local n = tonumber(dur) or 0
-    Nebbie.buffs[spell] = { since = Nebbie.now(), duration = n * 4, soon = false, active = true, source = "attribute" }
+  if not spell or not dur then return end
+  spell = Nebbie.normalizeBuffSpell(spell)
+  if not spell or not Nebbie.shouldTrackBuff(spell) then return end
+  local n = tonumber(dur) or 0
+  if n <= 0 then
+    Nebbie.buffs[spell] = nil
+    return
   end
+  Nebbie.buffs[spell] = { since = Nebbie.now(), duration = n * 4, soon = false, active = true, source = "attribute" }
 end
 
 function Nebbie.onAttribLine(line)
@@ -1511,6 +1573,7 @@ function Nebbie.refreshGUI()
   if not Nebbie.guiExists() then return end
   if not Nebbie.stats then Nebbie.pollPromptFromBuffer() end
   Nebbie.pruneInvalidBuffs()
+  Nebbie.pruneExpiredBuffs()
   local ok, err = pcall(function()
     clearWindow(Nebbie.guiConsole)
     local s = Nebbie.stats or {}
@@ -1542,9 +1605,9 @@ function Nebbie.refreshGUI()
         local timeTxt = Nebbie.formatTime(elapsed)
         if data.soon then status = "<orange>!" end
         if data.duration and data.duration > 0 then
-          local left = data.duration - elapsed
-          timeTxt = Nebbie.formatTime(left)
-          if left <= 0 then status = "<red>SCAD" end
+          local left = Nebbie.buffTimeLeft(data, now)
+          timeTxt = Nebbie.formatTime(left or 0)
+          if left and left <= 0 then status = "<red>SCAD" end
         end
         cecho("NebbieHUD", " " .. status .. " <white>" .. spell .. "  <grey>" .. timeTxt .. "\n")
       end
@@ -1825,7 +1888,7 @@ function Nebbie.install()
   trig("cast started", {"Pronunci le parole"}, [[
     if Nebbie and Nebbie.stripColors and Nebbie.onBuffApplied then
       local plain = Nebbie.stripColors(line)
-      local spell = plain:match("Pronunci le parole, '(.+)'")
+      local spell = plain:match("Pronunci le parole, '(.-)'")
       if spell then Nebbie.onBuffApplied(spell) end
     end
   ]])
@@ -1887,6 +1950,7 @@ function Nebbie.boot()
   if Nebbie._settings.lootAuto == false then Nebbie.lootAuto = false end
   Nebbie.warnLegacyPackages()
   Nebbie.pruneInvalidBuffs()
+  Nebbie.pruneExpiredBuffs()
   Nebbie.purgeLegacyPermItems(true)
   if Nebbie._installedVer == Nebbie.version and Nebbie._aliasIds and next(Nebbie._aliasIds) ~= nil then
     if not Nebbie.guiExists() then Nebbie.initGUI() end
