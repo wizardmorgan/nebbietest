@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.8"
+Nebbie.version = "2.2.9"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1091,18 +1091,38 @@ function Nebbie.parseEqSlotLine(line)
   return nil, nil
 end
 
+Nebbie.EQ_SWAP_FIRST_WAIT = 4.0
+Nebbie.EQ_SWAP_AFTER_EQ = 2.0
+Nebbie.EQ_SWAP_RETRY_WAIT = 2.5
+Nebbie.EQ_SWAP_MAX_RETRIES = 2
+Nebbie.EQ_SWAP_POLL_LINES = 200
+
 function Nebbie.onEqParseLine(line)
   if not Nebbie._eqParseActive or not Nebbie._weaponSwap then return end
+  local plain = Nebbie.stripColors(line or "")
+  if plain:find("Stai usando", 1, true) then
+    Nebbie._weaponSwap._eqSeen = true
+    Nebbie.scheduleWeaponSwapTimeout(Nebbie.EQ_SWAP_AFTER_EQ)
+    return
+  end
   local slot, item = Nebbie.parseEqSlotLine(line)
-  if slot == "wield" then Nebbie._weaponSwap.wield = item
-  elseif slot == "back" then Nebbie._weaponSwap.back = item end
+  if slot == "wield" then
+    Nebbie._weaponSwap.wield = item
+  elseif slot == "back" then
+    Nebbie._weaponSwap.back = item
+    if not Nebbie._weaponSwap._finishScheduled then
+      Nebbie._weaponSwap._finishScheduled = true
+      Nebbie.scheduleWeaponSwapTimeout(0.35)
+    end
+  end
 end
 
-function Nebbie.pollEqFromBuffer()
+function Nebbie.pollEqFromBuffer(maxLines)
   if type(getLastLineNumber) ~= "function" or type(getLines) ~= "function" then return end
   local last = getLastLineNumber()
   if not last or last < 1 then return end
-  local from = math.max(1, last - 80)
+  local span = maxLines or (Nebbie._eqParseActive and Nebbie.EQ_SWAP_POLL_LINES or 80)
+  local from = math.max(1, last - span)
   local lines = getLines(from, last)
   if type(lines) ~= "table" then return end
   for _, text in ipairs(lines) do
@@ -1110,6 +1130,31 @@ function Nebbie.pollEqFromBuffer()
       Nebbie.onEqParseLine(text)
     end
   end
+end
+
+function Nebbie.scheduleWeaponSwapTimeout(delay)
+  if Nebbie._weaponSwapTimer then killTimer(Nebbie._weaponSwapTimer) end
+  Nebbie._weaponSwapTimer = tempTimer(delay, function()
+    Nebbie._weaponSwapTimer = nil
+    Nebbie.pollEqFromBuffer(Nebbie.EQ_SWAP_POLL_LINES)
+    local ws = Nebbie._weaponSwap
+    if ws and ws.back then
+      Nebbie.finishWeaponSwap(ws._verbose)
+      return
+    end
+    if ws and (ws._retries or 0) < Nebbie.EQ_SWAP_MAX_RETRIES then
+      ws._retries = (ws._retries or 0) + 1
+      ws._eqSeen = false
+      ws._finishScheduled = false
+      if ws._retries == 1 then
+        cecho("<grey>Nebbie: eq in ritardo (fight?) — riprovo...\n")
+      end
+      send("eq")
+      Nebbie.scheduleWeaponSwapTimeout(Nebbie.EQ_SWAP_RETRY_WAIT)
+      return
+    end
+    Nebbie.finishWeaponSwap(ws and ws._verbose)
+  end)
 end
 
 function Nebbie.buildWeaponSwapCommands(ws)
@@ -1137,13 +1182,16 @@ function Nebbie.finishWeaponSwap(verbose)
     killTimer(Nebbie._weaponSwapTimer)
     Nebbie._weaponSwapTimer = nil
   end
-  Nebbie._eqParseActive = false
   local ws = Nebbie._weaponSwap
+  if ws then Nebbie.pollEqFromBuffer(Nebbie.EQ_SWAP_POLL_LINES) end
+  Nebbie._eqParseActive = false
   Nebbie._weaponSwap = nil
   if not ws then return end
-  Nebbie.pollEqFromBuffer()
   if not ws.back then
     cecho("<red>Nebbie: nessun oggetto nello slot <sulla schiena> — controlla con eq.\n")
+    if not ws._eqSeen then
+      cecho("<grey>  (in combattimento eq puo' arrivare in ritardo — riprova fuori fight)\n")
+    end
     return
   end
   local cmds = Nebbie.buildWeaponSwapCommands(ws)
@@ -1171,15 +1219,14 @@ function Nebbie.swapWeapon(weaponKw, verbose)
     if verbose ~= false then cecho("<orange>Nebbie: cambio arma gia' in corso.\n") end
     return
   end
-  Nebbie._weaponSwap = { weapon = weaponKw, wield = nil, back = nil }
+  Nebbie._weaponSwap = {
+    weapon = weaponKw, wield = nil, back = nil,
+    _eqSeen = false, _retries = 0, _finishScheduled = false,
+    _verbose = verbose ~= false,
+  }
   Nebbie._eqParseActive = true
   send("eq")
-  if Nebbie._weaponSwapTimer then killTimer(Nebbie._weaponSwapTimer) end
-  Nebbie._weaponSwapTimer = tempTimer(1.5, function()
-    Nebbie._weaponSwapTimer = nil
-    Nebbie.pollEqFromBuffer()
-    Nebbie.finishWeaponSwap(verbose ~= false)
-  end)
+  Nebbie.scheduleWeaponSwapTimeout(Nebbie.EQ_SWAP_FIRST_WAIT)
 end
 
 function Nebbie.onMobKillExp(line)
@@ -2022,7 +2069,7 @@ function Nebbie.install()
   trig("prompt parse", {[[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
 
-  trig("eq parse wield", {"<impugnato>", "<sulla schiena>"}, [[
+  trig("eq parse wield", {"Stai usando", "<impugnato>", "<sulla schiena>"}, [[
     if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
   ]])
 
