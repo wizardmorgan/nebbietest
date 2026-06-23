@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
+PKG_VER = "2.2.7"
 INSTALLER_CORE = ROOT / "nebbie-installer-core.lua"
 
 # Never shadow common MUD command prefixes (inventory, equipment, rest, …)
@@ -599,6 +600,8 @@ Nebbie_purgeLegacyPerm()
 def build_install_lua(spells):
     cast_spells = build_cast_spell_list(spells)
     lines = []
+    lines.append(f"-- NEBBIE_INSTALL_VER={PKG_VER}")
+    lines.append(f'Nebbie.version = "{PKG_VER}"')
     lines.append("-- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)")
     lines.append("Nebbie = Nebbie or {}")
     lines.append("")
@@ -704,7 +707,7 @@ def build_install_lua(spells):
 
 def build_xml(legacy_aliases, legacy_triggers):
     purge_lua = build_bootstrap_purge_lua(legacy_aliases, legacy_triggers)
-    pkg_ver = "2.2.6"
+    pkg_ver = PKG_VER
     dl_url = "https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage"
     bootstrap = (
         r'''-- Nebbie Arcane play-all bootstrap
@@ -725,8 +728,11 @@ Nebbie._mainLoaded = false
 local function Nebbie_installFileOk(path)
   local f = io.open(path, "r")
   if not f then return false, "manca" end
-  local head = f:read(4096) or ""
+  local head = f:read(512) or ""
   f:close()
+  if head:find("NEBBIE_INSTALL_VER=" .. NEBBIE_PKG_VER, 1, true) then
+    return true
+  end
   if head:find('Nebbie.version = "' .. NEBBIE_PKG_VER .. '"', 1, true) then
     return true
   end
