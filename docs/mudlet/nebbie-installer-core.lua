@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.0.6"
+Nebbie.version = "2.0.7"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -459,8 +459,31 @@ Nebbie.guiConsole = "NebbieHUD"
 Nebbie._gauges = Nebbie._gauges or {}
 
 function Nebbie.guiExists()
-  local ok = pcall(function() return isHidden(Nebbie.guiConsole) end)
-  return ok
+  return Nebbie._guiBuilt == true
+end
+
+function Nebbie.guiHidden()
+  return Nebbie._guiHidden == true
+end
+
+function Nebbie.showGUI()
+  if type(showWindow) ~= "function" then return end
+  showWindow(Nebbie.guiConsole)
+  showWindow(Nebbie.guiBar)
+  for key, _ in pairs(Nebbie._gauges) do
+    if type(showGauge) == "function" then showGauge(key) end
+  end
+  Nebbie._guiHidden = false
+end
+
+function Nebbie.hideGUI()
+  if type(hideWindow) ~= "function" then return end
+  hideWindow(Nebbie.guiConsole)
+  hideWindow(Nebbie.guiBar)
+  for key, _ in pairs(Nebbie._gauges) do
+    if type(hideGauge) == "function" then hideGauge(key) end
+  end
+  Nebbie._guiHidden = true
 end
 
 function Nebbie.calcGUIPos()
@@ -613,6 +636,8 @@ function Nebbie.buildGUI()
   setFgColor(Nebbie.guiConsole, 200, 200, 200)
   showWindow(Nebbie.guiBar)
   showWindow(Nebbie.guiConsole)
+  Nebbie._guiBuilt = true
+  Nebbie._guiHidden = false
   Nebbie.buffConsole = true
   Nebbie.setupDragBar()
   Nebbie.applyGUIPosition(x, y, w, h)
@@ -625,6 +650,8 @@ function Nebbie.destroyGUI()
   Nebbie._gauges = {}
   if type(deleteMiniConsole) == "function" then pcall(function() deleteMiniConsole(Nebbie.guiConsole) end) end
   if type(deleteLabel) == "function" then pcall(function() deleteLabel(Nebbie.guiBar) end) end
+  Nebbie._guiBuilt = false
+  Nebbie._guiHidden = nil
   Nebbie.buffConsole = false
   Nebbie._dragReady = false
 end
@@ -669,15 +696,11 @@ function Nebbie.initGUI()
 end
 
 function Nebbie.toggleGUI()
-  if isHidden(Nebbie.guiConsole) then
-    showWindow(Nebbie.guiConsole)
-    showWindow(Nebbie.guiBar)
-    for key, _ in pairs(Nebbie._gauges) do if type(showGauge) == "function" then showGauge(key) end end
-  else
-    hideWindow(Nebbie.guiConsole)
-    hideWindow(Nebbie.guiBar)
-    for key, _ in pairs(Nebbie._gauges) do if type(hideGauge) == "function" then hideGauge(key) end end
+  if not Nebbie.guiExists() then
+    Nebbie.initGUI()
+    return
   end
+  if Nebbie.guiHidden() then Nebbie.showGUI() else Nebbie.hideGUI() end
 end
 
 function Nebbie.parsePromptCodes(raw)
