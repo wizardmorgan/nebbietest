@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.0.4"
+Nebbie.version = "2.0.5"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -15,6 +15,7 @@ Nebbie.lootAuto = true
 Nebbie._lootBusy = false
 
 local PKG = Nebbie.package
+local LEGACY_PKGS = {"nebbie-play-all", "nebbie-spells-skills"}
 local CLASS_VAR = "nebbie_class"
 Nebbie._settingsFile = getMudletHomeDir() .. "/nebbie-play-all-settings.lua"
 
@@ -65,6 +66,17 @@ function Nebbie.saveSettings()
   end
 end
 
+function Nebbie.stripQuotes(token)
+  if not token then return "" end
+  local s = token:match("^%s*(.-)%s*$")
+  while true do
+    local inner = s:match("^['\"](.+)['\"]$")
+    if not inner then break end
+    s = inner
+  end
+  return s
+end
+
 function Nebbie.purgePackageAliases()
   if type(getAliasList) ~= "function" then return end
   for _, entry in ipairs(getAliasList()) do
@@ -73,15 +85,25 @@ function Nebbie.purgePackageAliases()
       local ok, n = pcall(function() return getAliasName(entry) end)
       if ok and n and n ~= "" then name = n end
     end
-    if type(name) == "string" and name:find(PKG, 1, true) then
-      killAlias(name)
+    if type(name) == "string" then
+      for _, pkg in ipairs(LEGACY_PKGS) do
+        if name:find(pkg, 1, true) then
+          killAlias(name)
+          break
+        end
+      end
     end
   end
 end
 
 function Nebbie.purgeOrphanNebbieAliases()
   if type(getAliasList) ~= "function" then return end
-  local patterns = {"set class", "list classes", "reinstall fix", "reposition gui", "attrib sync", "setup hud", "toggle hud", "loot manual", "loot on", "loot off"}
+  local patterns = {
+    "set class", "list classes", "reinstall fix", "reposition gui", "attrib sync",
+    "setup hud", "toggle hud", "toggle gui", "loot manual", "loot on", "loot off",
+    "generic cast", "recall shortcut", "mind shortcut", "memorize", "mode cast",
+    "mode recall", "mode mind", "abbr cast", "quick slot", "return form",
+  }
   for _, entry in ipairs(getAliasList()) do
     local name = entry
     if type(getAliasName) == "function" then
@@ -96,6 +118,19 @@ function Nebbie.purgeOrphanNebbieAliases()
         end
       end
     end
+  end
+end
+
+function Nebbie.warnLegacyPackages()
+  if type(getPackageList) ~= "function" then return end
+  local ok, pkgs = pcall(getPackageList)
+  if not ok or type(pkgs) ~= "table" then return end
+  local legacy = false
+  for _, name in ipairs(pkgs) do
+    if name == "nebbie-spells-skills" then legacy = true break end
+  end
+  if legacy then
+    cecho("<orange>Nebbie: disinstalla il package vecchio <yellow>nebbie-spells-skills<orange> (Alt+O) per evitare cast doppi.\n")
   end
 end
 
@@ -811,7 +846,7 @@ function Nebbie.refreshGUI()
 end
 
 function Nebbie.resolveSpell(token)
-  local lower = token:lower()
+  local lower = Nebbie.stripQuotes(token):lower()
   for spell, abbr in pairs(Nebbie.abbrevs) do
     if abbr == lower then return spell end
   end
@@ -915,6 +950,7 @@ function Nebbie.install()
     local spell, target = rest:match("^(%S+)%s+(.+)$")
     if not spell then spell, target = rest, nil end
     spell = Nebbie.resolveSpell(spell)
+    if target then target = Nebbie.stripQuotes(target) end
     Nebbie.sendCast(spell, target)
   ]])
   perm("generic cast word", [[^cast (.+)$]], [[
@@ -922,6 +958,7 @@ function Nebbie.install()
     local spell, target = rest:match("^(%S+)%s+(.+)$")
     if not spell then spell, target = rest, nil end
     spell = Nebbie.resolveSpell(spell)
+    if target then target = Nebbie.stripQuotes(target) end
     Nebbie.sendCast(spell, target)
   ]])
 
@@ -1047,6 +1084,7 @@ function Nebbie.boot()
   Nebbie.loadSettings()
   if Nebbie._settings.attribAuto then Nebbie.attribAuto = true end
   if Nebbie._settings.lootAuto == false then Nebbie.lootAuto = false end
+  Nebbie.warnLegacyPackages()
   if Nebbie._installedVer == Nebbie.version and Nebbie._aliasNames and #Nebbie._aliasNames > 0 then
     if not Nebbie.guiExists() then Nebbie.initGUI() end
     if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
