@@ -589,12 +589,17 @@ def build_xml():
     bootstrap = r'''-- Nebbie Arcane play-all bootstrap
 Nebbie = Nebbie or {}
 Nebbie.package = "nebbie-play-all"
+if Nebbie._bootScheduled then return end
+Nebbie._bootScheduled = true
 local function Nebbie_loadMain()
+  if Nebbie._mainLoaded then return end
+  Nebbie._mainLoaded = true
   local path = getMudletHomeDir() .. "/nebbie-play-all/nebbie-install.lua"
   local ok, err = pcall(dofile, path)
   if not ok then
     cecho("<red>[Nebbie] errore caricamento: " .. tostring(err) .. "\n")
     cecho("<grey>File atteso: <yellow>" .. path .. "\n")
+    Nebbie._mainLoaded = false
   end
 end
 if type(tempTimer) == "function" then

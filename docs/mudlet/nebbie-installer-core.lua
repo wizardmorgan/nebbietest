@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.0.7"
+Nebbie.version = "2.0.8"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -77,6 +77,95 @@ function Nebbie.stripQuotes(token)
   return s
 end
 
+function Nebbie.killAllByName(name, typ)
+  if not name or name == "" or type(exists) ~= "function" then return end
+  typ = typ or "trigger"
+  local tries = 0
+  while exists(name, typ) > 0 and tries < 64 do
+    if typ == "alias" and type(killAlias) == "function" then
+      killAlias(name)
+    elseif typ == "trigger" and type(killTrigger) == "function" then
+      killTrigger(name)
+    end
+    if typ == "trigger" and exists(name, typ) > 0 and type(disableTrigger) == "function" then
+      disableTrigger(name)
+    end
+    tries = tries + 1
+  end
+end
+
+function Nebbie.purgeTrackedAliases()
+  local seen = {}
+  for _, name in ipairs(Nebbie._aliasNames or {}) do
+    if not seen[name] then
+      seen[name] = true
+      Nebbie.killAllByName(name, "alias")
+    end
+  end
+end
+
+function Nebbie.purgeTrackedTriggers()
+  local seen = {}
+  for _, name in ipairs(Nebbie._triggerNames or {}) do
+    if not seen[name] then
+      seen[name] = true
+      Nebbie.killAllByName(name, "trigger")
+    end
+  end
+end
+
+function Nebbie.purgePackageTriggers()
+  if type(getTriggerList) ~= "function" then return end
+  for _, entry in ipairs(getTriggerList()) do
+    local name = entry
+    if type(getTriggerName) == "function" then
+      local ok, n = pcall(function() return getTriggerName(entry) end)
+      if ok and n and n ~= "" then name = n end
+    end
+    if type(name) == "string" then
+      for _, pkg in ipairs(LEGACY_PKGS) do
+        if name:find(pkg, 1, true) then
+          Nebbie.killAllByName(name, "trigger")
+          break
+        end
+      end
+    end
+  end
+end
+
+function Nebbie.purgeOrphanNebbieTriggers()
+  local patterns = {
+    "debuff on", "debuff off", "wear off", "soon ", "fail ", "cast started",
+    "prompt parse", "attrib gag", "look loot", "mob kill", "coin loot",
+  }
+  if type(getTriggerList) == "function" then
+    for _, entry in ipairs(getTriggerList()) do
+      local name = entry
+      if type(getTriggerName) == "function" then
+        local ok, n = pcall(function() return getTriggerName(entry) end)
+        if ok and n and n ~= "" then name = n end
+      end
+      if type(name) == "string" then
+        for _, frag in ipairs(patterns) do
+          if name:find(frag, 1, true) then
+            Nebbie.killAllByName(name, "trigger")
+            break
+          end
+        end
+      end
+    end
+    return
+  end
+  for _, name in ipairs(Nebbie._triggerNames or {}) do
+    for _, frag in ipairs(patterns) do
+      if name:find(frag, 1, true) then
+        Nebbie.killAllByName(name, "trigger")
+        break
+      end
+    end
+  end
+end
+
 function Nebbie.purgePackageAliases()
   if type(getAliasList) ~= "function" then return end
   for _, entry in ipairs(getAliasList()) do
@@ -88,7 +177,7 @@ function Nebbie.purgePackageAliases()
     if type(name) == "string" then
       for _, pkg in ipairs(LEGACY_PKGS) do
         if name:find(pkg, 1, true) then
-          killAlias(name)
+          Nebbie.killAllByName(name, "alias")
           break
         end
       end
@@ -102,7 +191,7 @@ function Nebbie.purgeOrphanNebbieAliases()
     "set class", "list classes", "reinstall fix", "reposition gui", "attrib sync",
     "setup hud", "toggle hud", "toggle gui", "loot manual", "loot on", "loot off",
     "generic cast", "recall shortcut", "mind shortcut", "memorize", "mode cast",
-    "mode recall", "mode mind", "abbr cast", "quick slot", "return form",
+    "mode recall", "mode mind", "abbr cast", "fav cast", "quick slot", "return form",
   }
   for _, entry in ipairs(getAliasList()) do
     local name = entry
@@ -113,7 +202,7 @@ function Nebbie.purgeOrphanNebbieAliases()
     if type(name) == "string" then
       for _, frag in ipairs(patterns) do
         if name:find(frag, 1, true) then
-          killAlias(name)
+          Nebbie.killAllByName(name, "alias")
           break
         end
       end
@@ -799,10 +888,13 @@ function Nebbie.syncAttribTimer()
 end
 
 function Nebbie.setupHUD()
+  if Nebbie._setupRunning then return end
+  Nebbie._setupRunning = true
   cecho("<green>Nebbie HUD v" .. Nebbie.version .. ": parser prompt attivo.\n")
   cecho("<grey>Comandi MUD liberi: <yellow>inv<grey>, <yellow>eq<grey>. Loot mob: <yellow>nloot<grey> | auto <yellow>nloot on<grey>\n")
   if not Nebbie.playerClass or Nebbie.playerClass == "" then Nebbie.setClass("+", true) end
   Nebbie.initGUI()
+  Nebbie._setupRunning = false
 end
 
 function Nebbie.refreshGUI()
@@ -897,31 +989,37 @@ function Nebbie.sendCast(spell, target)
 end
 
 function Nebbie.uninstall()
-  for _, name in ipairs(Nebbie._aliasNames) do
-    if exists(name, "alias") ~= 0 then killAlias(name) end
+  for _, name in ipairs(Nebbie._aliasNames or {}) do
+    Nebbie.killAllByName(name, "alias")
   end
-  for _, name in ipairs(Nebbie._triggerNames) do
-    if exists(name, "trigger") ~= 0 then disableTrigger(name) end
+  for _, name in ipairs(Nebbie._triggerNames or {}) do
+    Nebbie.killAllByName(name, "trigger")
   end
+  Nebbie.purgePackageAliases()
+  Nebbie.purgePackageTriggers()
   Nebbie.stopGUI()
   Nebbie.destroyGUI()
   Nebbie._aliasNames = {}
   Nebbie._triggerNames = {}
-  cecho("<orange>Nebbie play-all: alias disattivati.\n")
+  cecho("<orange>Nebbie play-all: alias/trigger disattivati.\n")
 end
 
 function Nebbie.install()
+  if Nebbie._installing then return end
+  Nebbie._installing = true
   Nebbie.stopGUI()
+  Nebbie.purgeTrackedAliases()
+  Nebbie.purgeTrackedTriggers()
   Nebbie.purgePackageAliases()
+  Nebbie.purgePackageTriggers()
   Nebbie.purgeOrphanNebbieAliases()
-  for _, name in ipairs(Nebbie._aliasNames) do
-    if exists(name, "alias") ~= 0 then killAlias(name) end
-  end
+  Nebbie.purgeOrphanNebbieTriggers()
   Nebbie._aliasNames = {}
+  Nebbie._triggerNames = {}
 
   local function perm(short, pattern, script)
     local full = PKG .. "::" .. short
-    if exists(full, "alias") ~= 0 then killAlias(full) end
+    Nebbie.killAllByName(full, "alias")
     permAlias(full, "", pattern, script)
     if exists(full, "alias") == 0 then
       cecho("<red>[Nebbie] alias non creato: " .. full .. "\n")
@@ -932,7 +1030,7 @@ function Nebbie.install()
 
   local function trig(short, patterns, script, isRegex)
     local full = PKG .. "::" .. short
-    if exists(full, "trigger") ~= 0 then disableTrigger(full) end
+    Nebbie.killAllByName(full, "trigger")
     if isRegex then
       permRegexTrigger(full, "", patterns, script)
     elseif type(patterns) == "string" then
@@ -957,15 +1055,25 @@ function Nebbie.install()
   perm("loot on", [[^nloot on$]], [[Nebbie.setLootAuto(true)]])
   perm("loot off", [[^nloot off$]], [[Nebbie.setLootAuto(false)]])
   perm("reinstall fix", [[^nfix$]], [[
+    if Nebbie._fixRunning then return end
+    Nebbie._fixRunning = true
+    Nebbie.purgeTrackedAliases()
+    Nebbie.purgeTrackedTriggers()
     Nebbie.purgePackageAliases()
+    Nebbie.purgePackageTriggers()
     Nebbie.purgeOrphanNebbieAliases()
+    Nebbie.purgeOrphanNebbieTriggers()
     Nebbie.stopGUI()
     Nebbie.destroyGUI()
     Nebbie._installedVer = nil
+    Nebbie._aliasNames = {}
+    Nebbie._triggerNames = {}
     Nebbie.install()
     Nebbie.loadClass()
     if not Nebbie.playerClass then Nebbie.setClass("+", true) end
+    Nebbie._fixRunning = false
     cecho("<green>Nebbie v" .. Nebbie.version .. " reinstallato.\n")
+    cecho("<grey>Se vedi ancora cast doppi: Scripts → elimina copie extra di <yellow>Nebbie Play All<grey>.\n")
   ]])
 
   perm("generic cast c", [[^c (.+)$]], [[
@@ -1114,10 +1222,13 @@ function Nebbie.install()
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
   cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>fb<grey>, <yellow>ngui<grey>, <yellow>nattrib<grey>, <yellow>nloot<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
+  Nebbie._installing = false
   Nebbie.initGUI()
 end
 
 function Nebbie.boot()
+  if Nebbie._bootInProgress then return end
+  Nebbie._bootInProgress = true
   Nebbie.loadSettings()
   if Nebbie._settings.attribAuto then Nebbie.attribAuto = true end
   if Nebbie._settings.lootAuto == false then Nebbie.lootAuto = false end
@@ -1126,12 +1237,14 @@ function Nebbie.boot()
     if not Nebbie.guiExists() then Nebbie.initGUI() end
     if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
     Nebbie.syncAttribTimer()
+    Nebbie._bootInProgress = false
     return
   end
   Nebbie._installedVer = Nebbie.version
   Nebbie.install()
   if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
   Nebbie.syncAttribTimer()
+  Nebbie._bootInProgress = false
 end
 
 Nebbie.boot()
