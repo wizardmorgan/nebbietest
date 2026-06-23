@@ -704,7 +704,7 @@ def build_install_lua(spells):
 
 def build_xml(legacy_aliases, legacy_triggers):
     purge_lua = build_bootstrap_purge_lua(legacy_aliases, legacy_triggers)
-    pkg_ver = "2.2.4"
+    pkg_ver = "2.2.5"
     bootstrap = (
         r'''-- Nebbie Arcane play-all bootstrap
 Nebbie = Nebbie or {}

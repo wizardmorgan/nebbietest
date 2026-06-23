@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.4"
+Nebbie.version = "2.2.5"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1752,7 +1752,8 @@ function Nebbie.refreshGUI()
         if data.duration and data.duration > 0 then
           local left = Nebbie.buffTimeLeft(data, now)
           timeTxt = Nebbie.formatTime(left or 0)
-          if data.synced and left and left <= 0 then status = "<red>SCAD" end
+          if data.synced and left and left <= 0 then
+            status = "<red>SCAD"
           elseif not data.synced and left and left <= 0 then
             timeTxt = timeTxt .. " ~"
           end
