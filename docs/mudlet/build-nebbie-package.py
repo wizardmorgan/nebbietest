@@ -516,7 +516,7 @@ def build_legacy_perm_names(spells):
         "reposition gui", "setup hud", "attrib sync", "attrib on", "attrib off",
         "loot manual", "loot on", "loot off", "generic cast c", "generic cast word",
         "memorize", "recall shortcut", "mind shortcut", "list classes", "set class",
-        "return form", "reinstall fix",
+        "return form", "reinstall fix", "prompt debug",
     ]
     static_triggers = [
         "prompt parse", "attrib gag", "look loot parse", "mob kill exp loot", "cast started",
@@ -732,7 +732,7 @@ end'''
     npurge_script = (
         'if Nebbie_purgeLegacyPerm then Nebbie_purgeLegacyPerm() end '
         'if Nebbie and Nebbie.purgeLegacyPermItems then Nebbie.purgeLegacyPermItems(false) end '
-        'cecho("<green>Nebbie: perm vecchi disattivati. Riavvia Mudlet, reinstalla v2.1.5, poi nfix.\\n")'
+        'cecho("<green>Nebbie: perm vecchi disattivati. Riavvia Mudlet, reinstalla v2.1.6, poi nfix.\\n")'
     )
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE MudletPackage>

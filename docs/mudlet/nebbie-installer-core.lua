@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.5"
+Nebbie.version = "2.1.6"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -54,25 +54,34 @@ function Nebbie.normalizePromptLine(line)
   return plain
 end
 
+function Nebbie.parsePromptPair(plain, letter)
+  local cur, maxv = plain:match(letter .. ":(%d+)/(%d+)")
+  if cur then return tonumber(cur), tonumber(maxv) end
+  cur, maxv = plain:match(letter .. "(%d+)/(%d+)")
+  if cur then return tonumber(cur), tonumber(maxv) end
+  cur = plain:match(letter .. ":(%d+)")
+  if cur then local n = tonumber(cur); return n, n end
+  cur = plain:match(letter .. "(%d+)")
+  if cur then local n = tonumber(cur); return n, n end
+  return nil, nil
+end
+
 function Nebbie.parsePromptStats(line)
   local plain = Nebbie.normalizePromptLine(line)
-  if plain == "" or not plain:find("H:%d+/%d+") then return nil end
+  if plain == "" then return nil end
 
-  local name, hp, hpmax, mana, manamax, move, movemax, xp = plain:match(
-    "^(%S+)%s+H:(%d+)/(%d+)%s+M:(%d+)/(%d+)%s+V:(%d+)/(%d+)%s+X:(%d+)"
-  )
-  if not name then
-    name, hp, hpmax, mana, manamax, move, movemax, xp = plain:match(
-      "(%S+)%s+H:(%d+)/(%d+)%s+M:(%d+)/(%d+)%s+V:(%d+)/(%d+)%s+X:(%d+)"
-    )
-  end
-  if not name then return nil end
+  local hp, hpmax = Nebbie.parsePromptPair(plain, "H")
+  local mana, manamax = Nebbie.parsePromptPair(plain, "M")
+  local move, movemax = Nebbie.parsePromptPair(plain, "V")
+  local xp = tonumber(plain:match("X:(%d+)") or plain:match("X(%d+)"))
+  if not hp or not mana or not move or not xp then return nil end
 
-  local gold = tonumber(plain:match("G:(%d+)")) or tonumber(plain:match("g:(%d+)"))
+  local name = plain:match("^(%S+)%s+H") or plain:match("^(%S+)")
+  local gold = tonumber(plain:match("G:(%d+)") or plain:match("g:(%d+)"))
   local codes = plain:match("%[%[([^%]]*)%]%]") or plain:match("%[([^%]]*)%]")
 
   local tankC, tankN, mobC, mobT = "*", "*", "*", "*"
-  local tail = plain:match("X:%d+%s*(.*)$") or ""
+  local tail = plain:match("X:%d+%s*(.*)$") or plain:match("X%d+%s*(.*)$") or ""
   local fc, ft, mc, mt = tail:match("-%s+([^/]+)/(%S+)%s+%-%s+([^%-]+)%-(%S+)")
   if fc then
     tankC, tankN = Nebbie.stripColors(fc), ft
@@ -81,16 +90,99 @@ function Nebbie.parsePromptStats(line)
 
   return {
     name = name,
-    hp = tonumber(hp), hpmax = tonumber(hpmax),
-    mana = tonumber(mana), manamax = tonumber(manamax),
-    move = tonumber(move), movemax = tonumber(movemax),
-    xp = tonumber(xp), gold = gold,
+    hp = hp, hpmax = hpmax or hp,
+    mana = mana, manamax = manamax or mana,
+    move = move, movemax = movemax or move,
+    xp = xp, gold = gold,
     tankCond = Nebbie.stripColors(tankC or "*"),
     tankName = (tankN ~= "*" and tankN) or nil,
     mobCond = Nebbie.stripColors(mobC or "*"),
     mobName = (mobT ~= "*" and mobT) or nil,
     codes = codes or "",
   }
+end
+
+function Nebbie.resolveTriggerLine()
+  local text = line
+  if (not text or text == "") and type(getCurrentLine) == "function" then
+    text = getCurrentLine()
+  end
+  return text or ""
+end
+
+function Nebbie.pollPromptFromBuffer()
+  if type(getLastLineNumber) ~= "function" or type(getLines) ~= "function" then return false end
+  local last = getLastLineNumber()
+  if not last or last < 1 then return false end
+  local from = math.max(1, last - 5)
+  local lines = getLines(from, last)
+  if type(lines) ~= "table" then return false end
+  for abs = last, from, -1 do
+    local rel = abs - from + 1
+    local text = lines[rel]
+    if type(text) == "string" and text ~= "" then
+      local parsed = Nebbie.parsePromptStats(text)
+      if parsed then
+        Nebbie.stats = parsed
+        Nebbie.promptBuffs = Nebbie.parsePromptCodes(parsed.codes or "")
+        Nebbie._lastPromptRaw = text
+        return true
+      end
+    end
+  end
+  return false
+end
+
+function Nebbie.onPrompt(line)
+  Nebbie._lastPromptRaw = line
+  local parsed = Nebbie.parsePromptStats(line)
+  if not parsed then return end
+  Nebbie.stats = parsed
+  Nebbie.promptBuffs = Nebbie.parsePromptCodes(parsed.codes or "")
+  Nebbie.updateGauges()
+  Nebbie.refreshGUI()
+end
+
+function Nebbie.onPromptLine()
+  Nebbie.onPrompt(Nebbie.resolveTriggerLine())
+end
+
+function Nebbie.debugPrompt()
+  local polled = false
+  if not Nebbie.stats then polled = Nebbie.pollPromptFromBuffer() end
+  cecho("<cyan>Nebbie v" .. Nebbie.version .. " — debug prompt\n")
+  cecho("<grey>versione package: <yellow>" .. tostring(Nebbie.version) .. "\n")
+  cecho("<grey>ultima riga vista: <white>" .. tostring(Nebbie._lastPromptRaw or "(nessuna)") .. "\n")
+  cecho("<grey>poll buffer: <yellow>" .. tostring(polled) .. "\n")
+  if Nebbie.stats then
+    local s = Nebbie.stats
+    cecho(string.format("<green>stats ok: HP %s/%s MN %s/%s MV %s/%s\n",
+      tostring(s.hp), tostring(s.hpmax), tostring(s.mana), tostring(s.manamax),
+      tostring(s.move), tostring(s.movemax)))
+    Nebbie.updateGauges()
+  else
+    cecho("<orange>stats=nil — il trigger prompt non ha ancora letto nulla.\n")
+    cecho("<grey>Prova: <yellow>nprompt<grey> subito dopo che vedi il prompt in gioco.\n")
+  end
+end
+
+function Nebbie.installPromptHooks()
+  Nebbie._promptTrigIds = Nebbie._promptTrigIds or {}
+  for _, id in ipairs(Nebbie._promptTrigIds) do
+    pcall(function() killTrigger(id) end)
+  end
+  Nebbie._promptTrigIds = {}
+  local hook = [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]]
+  if type(tempSubstringTrigger) == "function" then
+    local id = tempSubstringTrigger(" H:", hook)
+    if id then table.insert(Nebbie._promptTrigIds, id) end
+  end
+  if type(tempPromptTrigger) == "function" then
+    pcall(function()
+      local id = tempPromptTrigger(hook)
+      if id then table.insert(Nebbie._promptTrigIds, id) end
+    end)
+  end
 end
 
 function Nebbie.setCastMode(mode)
@@ -1078,15 +1170,6 @@ function Nebbie.parsePromptCodes(raw)
   return out
 end
 
-function Nebbie.onPrompt(line)
-  local parsed = Nebbie.parsePromptStats(line)
-  if not parsed then return end
-  Nebbie.stats = parsed
-  Nebbie.promptBuffs = Nebbie.parsePromptCodes(parsed.codes or "")
-  Nebbie.updateGauges()
-  Nebbie.refreshGUI()
-end
-
 function Nebbie.parseAttribSpellLine(line)
   local plain = Nebbie.stripColors(line)
   local spell, dur = plain:match("Spell%s*:%s*'(.-)'%s*%-%s*(%d+)")
@@ -1154,12 +1237,14 @@ function Nebbie.setupHUD()
   cecho("<grey>Comandi MUD liberi: <yellow>inv<grey>, <yellow>eq<grey>. Loot mob: <yellow>nloot<grey> | auto <yellow>nloot on<grey>\n")
   if not Nebbie.playerClass or Nebbie.playerClass == "" then Nebbie.setClass("+", true) end
   Nebbie.initGUI()
+  Nebbie.pollPromptFromBuffer()
   Nebbie.updateGauges()
   Nebbie._setupRunning = false
 end
 
 function Nebbie.refreshGUI()
   if not Nebbie.guiExists() then return end
+  if not Nebbie.stats then Nebbie.pollPromptFromBuffer() end
   Nebbie.pruneInvalidBuffs()
   local ok, err = pcall(function()
     clearWindow(Nebbie.guiConsole)
@@ -1354,6 +1439,7 @@ function Nebbie.install()
   perm("toggle hud", [[^nhud$]], [[Nebbie.toggleGUI()]])
   perm("reposition gui", [[^npos$]], [[Nebbie.resetGUIPosition()]])
   perm("setup hud", [[^nsetup$]], [[Nebbie.setupHUD()]])
+  perm("prompt debug", [[^nprompt$]], [[Nebbie.debugPrompt()]])
   perm("attrib sync", [[^nattrib$]], [[Nebbie.requestAttrib(false)]])
   perm("attrib on", [[^nattrib on$]], [[Nebbie.setAttribAuto(true)]])
   perm("attrib off", [[^nattrib off$]], [[Nebbie.setAttribAuto(false)]])
@@ -1455,7 +1541,7 @@ function Nebbie.install()
 
   perm("return form", [[^return$]], [[send("return")]])
 
-  trig("prompt parse", {[[H:\d+/\d+\s+M:\d+/\d+\s+V:\d+/\d+\s+X:\d+]]}, [[if Nebbie and Nebbie.onPrompt then Nebbie.onPrompt(line) end]], true)
+  trig("prompt parse", {[[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
 
   trig("look loot parse", {"il corpo di", "corpo sfigurato", "pile of dust", "Pile of dust"}, [[
@@ -1511,8 +1597,10 @@ function Nebbie.install()
     trig("fail " .. entry.name, {entry.pattern}, "")
   end
 
+  Nebbie.installPromptHooks()
+
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
-  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>fb<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>npurge<grey>\n")
+  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
   Nebbie._installing = false
   Nebbie.initGUI()
