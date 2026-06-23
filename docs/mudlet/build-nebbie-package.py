@@ -704,7 +704,8 @@ def build_install_lua(spells):
 
 def build_xml(legacy_aliases, legacy_triggers):
     purge_lua = build_bootstrap_purge_lua(legacy_aliases, legacy_triggers)
-    pkg_ver = "2.2.5"
+    pkg_ver = "2.2.6"
+    dl_url = "https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage"
     bootstrap = (
         r'''-- Nebbie Arcane play-all bootstrap
 Nebbie = Nebbie or {}
@@ -712,21 +713,49 @@ Nebbie.package = "nebbie-play-all"
 local NEBBIE_PKG_VER = "'''
         + pkg_ver
         + r'''"
+local NEBBIE_DL_URL = "'''
+        + dl_url
+        + r'''"
 if Nebbie._loadedPkgVer == NEBBIE_PKG_VER and Nebbie._mainLoaded then return end
 Nebbie._loadedPkgVer = NEBBIE_PKG_VER
 Nebbie._mainLoaded = false
 '''
         + purge_lua
         + r'''
+local function Nebbie_installFileOk(path)
+  local f = io.open(path, "r")
+  if not f then return false, "manca" end
+  local head = f:read(4096) or ""
+  f:close()
+  if head:find('Nebbie.version = "' .. NEBBIE_PKG_VER .. '"', 1, true) then
+    return true
+  end
+  return false, "versione vecchia nel profilo"
+end
+local function Nebbie_showReinstallHelp(reason)
+  cecho("<red>[Nebbie] install.lua non aggiornato (" .. tostring(reason) .. ").\n")
+  cecho("<yellow>1)<grey> Package Manager: <white>disinstalla<grey> <yellow>nebbie-play-all\n")
+  cecho("<yellow>2)<grey> Cancella cartella: <white>" .. getMudletHomeDir() .. "/nebbie-play-all/\n")
+  cecho("<yellow>3)<grey> Scarica e reinstalla:\n")
+  cecho("<cyan>" .. NEBBIE_DL_URL .. "\n")
+  cecho("<yellow>4)<grey> Riavvia Mudlet, poi <white>nfix\n")
+end
 local function Nebbie_loadMain()
   if Nebbie._mainLoaded and Nebbie._loadedPkgVer == NEBBIE_PKG_VER then return end
   Nebbie._mainLoaded = false
   Nebbie_purgeLegacyPerm()
   local path = getMudletHomeDir() .. "/nebbie-play-all/nebbie-install.lua"
+  local okFile, why = Nebbie_installFileOk(path)
+  if not okFile then
+    Nebbie_showReinstallHelp(why)
+    pcall(function() os.remove(path) end)
+    return
+  end
   local ok, err = pcall(dofile, path)
   if not ok then
     cecho("<red>[Nebbie] errore caricamento: " .. tostring(err) .. "\n")
-    cecho("<grey>File atteso: <yellow>" .. path .. "\n")
+    cecho("<grey>File: <yellow>" .. path .. "\n")
+    Nebbie_showReinstallHelp("errore Lua")
     Nebbie._mainLoaded = false
   else
     Nebbie._mainLoaded = true

@@ -36,11 +36,15 @@ Generato dal sorgente MUD (`src/spell_parser.cpp`, `src/interpreter.cpp`, `src/c
 |------|-------------|
 | **`nebbie-play-all.mpackage`** | Unico file da importare in Mudlet (script, alias, trigger, HUD). |
 
-**Download (branch `mudlet`):**
+**Download (branch `mudlet`) — usa uno di questi link:**
+
+https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage
 
 https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-play-all.mpackage
 
 Salva il file con estensione `.mpackage` e installalo con **Alt+O** → *Install New Package*.
+
+**Se vedi errori Lua o versione vecchia:** disinstalla `nebbie-play-all` da Package Manager, cancella la cartella `nebbie-play-all` nel profilo Mudlet, reinstalla il `.mpackage`, riavvia Mudlet, poi `nfix`.
 
 ### Opzionale — riferimento spell/skill
 
@@ -120,7 +124,7 @@ Nella riga di comando Mudlet:
 lua cecho("<yellow>"..Nebbie.version)
 ```
 
-Deve mostrare la versione corrente (es. `2.1.1`).
+Deve mostrare la versione corrente (es. `2.1.2`).
 
 ---
 
@@ -430,7 +434,10 @@ In console Mudlet compaiono righe `[buff]` o `[cast]` colorate.
 | `nclass` non salva                    | `table.save` non disponibile        | Aggiorna Mudlet; la v1.0.7+ usa file nel profilo                                              |
 | `getAliasList` (a nil value)          | API assente su alcune versioni Mudlet | Usa `npurge` o pulizia d’emergenza con `exists()` (vedi sopra)                              |
 | `onPrompt` (a nil value) × molti trigger | Trigger `perm` orfani nel profilo | Elimina trigger `nebbie-play-all` in Scripts, oppure pulizia d’emergenza, poi reinstall v2.1.1+ |
-| `nfix` eseguito molte volte           | Alias `reinstall fix` duplicati     | `npurge`, riavvio Mudlet, reinstall; v2.1.1+ ha un solo `nfix` nel package                    |
+| `nfix` eseguito molte volte           | Alias `reinstall fix` duplicati     | `npurge`, riavvio Mudlet, reinstall; v2.1.2+ ha un solo `nfix` nel package                    |
+| `nclass +` stampato due volte       | Alias `perm`/`temp` duplicati       | Aggiorna a v2.1.2+, `nfix` una volta; elimina alias `set class` in Scripts se restano         |
+| `moveGauge: no such gauge` su nsetup | Alias HUD vecchio o gauge assente  | v2.1.2+ ricrea le gauge; `nfix` poi `nsetup`                                                  |
+| `class +` → Pardon?                   | Comando MUD (manca la `n`)          | Usa `nclass +` (con **n** iniziale)                                                           |
 
 
 ### Reinstall rapida
