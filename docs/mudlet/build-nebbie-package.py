@@ -20,7 +20,12 @@ ALWAYS_RESERVED_ABBREVS = {
 }
 
 # Explicit player-approved abbreviations (may share MUD prefix but must work standalone)
-FORCE_STANDALONE_ABBREVS = {"invis", "ea"}
+FORCE_STANDALONE_ABBREVS = {"invis", "ea", "ble"}  # ble → cast 'bless' (non bleed/blessing MUD)
+
+# Alias sempre su nome intero spell (oltre alle abbreviazioni)
+FAVORITE_SPELL_ALIASES = [
+    "aid", "armor", "bless", "shield", "stone skin", "mirror images",
+]
 
 # Skill indices in spells[] (not cast via cast/recall/mind)
 RESERVED_SKILL_IDS = {45, 46, 47, 48, 49, 50, 51, 52}
@@ -150,7 +155,7 @@ ABBREVS = {
     "acid blast": "ab", "water breath": "wb", "fly": "fly", "cone of cold": "coc",
     "meteor swarm": "ms", "ice storm": "is", "shield": "shld", "fireshield": "fshld",
     "charm monster": "cmon", "refresh": "ref", "second wind": "sw",
-    "stone skin": "sskin", "true sight": "tsight", "faerie fire": "ffire",
+    "stone skin": "sskin", "mirror images": "mirr", "true sight": "tsight", "faerie fire": "ffire",
     "polymorph self": "poly", "mana": "mana", "resurrection": "resu",
     "chain lightning": "chain", "haste": "haste", "slowness": "slow",
     "entangle": "ent", "snare": "snare", "barkskin": "bark", "silence": "sil",
@@ -291,9 +296,9 @@ CLASS_PRESETS = {
     "+": {
         "name": "Cast universale", "mode": "cast",
         "quick": [
-            ("heal", "cast", "heal"), ("arm", "cast", "armor"), ("san", "cast", "sanctuary"),
-            ("fb", "cast", "fireball"), ("mm", "cast", "magic missile"), ("lb", "cast", "lightning bolt"),
-            ("fly", "cast", "fly"), ("ble", "cast", "bless"), ("invis", "cast", "invisibility"),
+            ("aid", "cast", "aid"), ("arm", "cast", "armor"), ("ble", "cast", "bless"),
+            ("shld", "cast", "shield"), ("sskin", "cast", "stone skin"), ("mirr", "cast", "mirror images"),
+            ("heal", "cast", "heal"), ("san", "cast", "sanctuary"), ("invis", "cast", "invisibility"),
         ],
     },
     "m": {
@@ -568,6 +573,11 @@ def build_install_lua(spells):
             )
         lines.append("    },")
         lines.append("  },")
+    lines.append("}")
+    lines.append("")
+    lines.append("Nebbie.favoriteSpells = {")
+    for n in FAVORITE_SPELL_ALIASES:
+        lines.append(f"  '{lua_escape(n)}',")
     lines.append("}")
     lines.append("")
     core = INSTALLER_CORE.read_text(encoding="utf-8")

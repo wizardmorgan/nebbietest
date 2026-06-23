@@ -160,7 +160,7 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   mount
   spring leap
   geyser
-  mirror images
+  mirror images  [mirr]
   green slime
   darkness
   minor invulnerability
@@ -315,7 +315,7 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
 
 === PANNELLO HUD ===
   Gauge HP/Mana/Move + buff/debuff + parser prompt [%s]
-  + (Cast universale): q1=heal, q2=arm, q3=san, q4=fb, q5=mm, q6=lb, q7=fly, q8=ble, q9=invis
+  + (Cast universale): q1=aid, q2=arm, q3=ble, q4=shld, q5=sskin, q6=mirr, q7=heal, q8=san, q9=invis
   I (Psionista): q1=pshld, q2=mb, q3=pcrush, q4=lev, q5=ptel, q6=medit, q7=blast, q8=dw, q9=psiport
   b (Barbaro): q1=berz, q2=bel, q3=kick, q4=bash, q5=camo, q6=ffood, q7=fwater, q8=tan, q9=faid
   c (Chierico): q1=heal, q2=cser, q3=cc, q4=clight, q5=ble, q6=san, q7=pevil, q8=devl, q9=aid

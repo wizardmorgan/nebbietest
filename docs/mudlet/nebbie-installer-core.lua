@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.0.5"
+Nebbie.version = "2.0.6"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -993,6 +993,20 @@ function Nebbie.install()
         local target = matches[2]
         Nebbie.sendCast('%s', target)
       ]], s))
+    end
+  end
+
+  for _, spell in ipairs(Nebbie.favoriteSpells or {}) do
+    if Nebbie.castSpells[spell] or Nebbie.mindSpells[spell] then
+      local s = spell:gsub("'", "\\'")
+      local abbr = Nebbie.abbrevs[spell]
+      if not abbr or abbr ~= spell then
+        local p = spell:gsub("([%(%)%.%+%-%*%?%[%]%^%$%%])", "%%%1")
+        perm("fav cast " .. spell, "^" .. p .. "(?: (.+))?$", string.format([[
+          local target = matches[2]
+          Nebbie.sendCast('%s', target)
+        ]], s))
+      end
     end
   end
 
