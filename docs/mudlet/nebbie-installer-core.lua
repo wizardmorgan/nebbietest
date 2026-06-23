@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.2"
+Nebbie.version = "2.2.3"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -777,9 +777,15 @@ function Nebbie.onBuffApplied(spell)
       Nebbie.buffs[key] = nil
     end
   end
-  Nebbie.buffs[spell] = { since = Nebbie.now(), duration = 0, soon = false, active = true, synced = false }
+  local est = Nebbie.buffDurations[spell] or 0
+  Nebbie.buffs[spell] = {
+    since = Nebbie.now(),
+    duration = est,
+    soon = false,
+    active = true,
+    synced = false,
+  }
   Nebbie.buffs._lastCast = spell
-  Nebbie.scheduleAttribSync()
   Nebbie.refreshGUI()
 end
 
@@ -793,7 +799,15 @@ function Nebbie.onBuffSoon(spell)
   spell = Nebbie.normalizeBuffSpell(spell)
   if not spell or not Nebbie.shouldTrackBuff(spell) then return end
   if Nebbie.buffs[spell] then Nebbie.buffs[spell].soon = true
-  else Nebbie.buffs[spell] = { since = Nebbie.now(), duration = 0, soon = true, active = true, synced = false } end
+  else
+    Nebbie.buffs[spell] = {
+      since = Nebbie.now(),
+      duration = Nebbie.buffDurations[spell] or 0,
+      soon = true,
+      active = true,
+      synced = false,
+    }
+  end
   Nebbie.refreshGUI()
 end
 
@@ -1502,49 +1516,20 @@ function Nebbie.parseAttribSpellLine(line)
   spell = Nebbie.normalizeBuffSpell(spell)
   if not spell or not Nebbie.shouldTrackBuff(spell) then return end
   local n = tonumber(dur) or 0
-  Nebbie._attribSeenSpells = Nebbie._attribSeenSpells or {}
   if n <= 0 then
     Nebbie.buffs[spell] = nil
     return
   end
-  Nebbie._attribSeenSpells[spell] = true
+  local prev = Nebbie.buffs[spell]
   Nebbie.buffs[spell] = {
     since = Nebbie.now(),
     duration = n * Nebbie.TICK_SECONDS,
     ticks = n,
-    soon = false,
+    soon = prev and prev.soon or false,
     active = true,
     source = "attribute",
     synced = true,
   }
-end
-
-function Nebbie.reconcileAttribBuffs()
-  local seen = Nebbie._attribSeenSpells
-  if not seen then return end
-  local remove = {}
-  for spell, data in pairs(Nebbie.buffs or {}) do
-    if type(spell) == "string" and spell:sub(1, 1) ~= "_"
-        and type(data) == "table" and data.synced and not seen[spell] then
-      table.insert(remove, spell)
-    end
-  end
-  for _, spell in ipairs(remove) do
-    Nebbie.buffs[spell] = nil
-  end
-  Nebbie._attribSeenSpells = nil
-end
-
-function Nebbie.scheduleAttribSync()
-  if Nebbie._attribSyncTimer then return end
-  Nebbie._attribSyncTimer = tempTimer(2, function()
-    Nebbie._attribSyncTimer = nil
-    if Nebbie._attribBusy then
-      Nebbie.scheduleAttribSync()
-      return
-    end
-    Nebbie.requestAttrib(true)
-  end)
 end
 
 function Nebbie.onAttribLine(line)
@@ -1571,12 +1556,10 @@ function Nebbie.requestAttrib(silent)
   if Nebbie._attribBusy then return end
   Nebbie._attribBusy = true
   Nebbie.attribGag = true
-  Nebbie._attribSeenSpells = {}
   send("attribute")
   tempTimer(2, function()
     Nebbie.attribGag = false
     Nebbie._attribBusy = false
-    Nebbie.reconcileAttribBuffs()
     Nebbie.refreshGUI()
     if not silent then cecho("<green>Nebbie: attribute sincronizzato.\n") end
   end)
@@ -1647,13 +1630,13 @@ function Nebbie.refreshGUI()
         local status = "<green>OK"
         local timeTxt = Nebbie.formatTime(elapsed)
         if data.soon then status = "<orange>!" end
-        if data.synced and data.duration and data.duration > 0 then
+        if data.duration and data.duration > 0 then
           local left = Nebbie.buffTimeLeft(data, now)
           timeTxt = Nebbie.formatTime(left or 0)
-          if left and left <= 0 then status = "<red>SCAD" end
-        elseif not data.synced then
-          if data.ticks then timeTxt = tostring(data.ticks) .. "t"
-          else timeTxt = "…" end
+          if data.synced and left and left <= 0 then status = "<red>SCAD" end
+          elseif not data.synced and left and left <= 0 then
+            timeTxt = timeTxt .. " ~"
+          end
         end
         cecho("NebbieHUD", " " .. status .. " <white>" .. spell .. "  <grey>" .. timeTxt .. "\n")
       end
