@@ -1,5 +1,18 @@
 
-Nebbie.version = "2.2.3"
+Nebbie.version = "2.2.4"
+
+Nebbie.DEFAULT_EQ_KEYWORDS = {
+  { match = "borsa inesauribile dei korred", key = "korred" },
+  { match = "forza della natura", key = "forza" },
+  { match = "elf slayer", key = "elf" },
+  { match = "verdespina", key = "verdespina" },
+}
+
+Nebbie.EQ_STOPWORDS = {
+  ["del"] = true, ["dei"] = true, ["della"] = true, ["delle"] = true, ["degli"] = true,
+  ["de"] = true, ["di"] = true, ["da"] = true, ["in"] = true, ["su"] = true,
+  ["the"] = true, ["pair"] = true, ["paio"] = true,
+}
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -247,6 +260,7 @@ function Nebbie.loadSettings()
   if type(table.load) == "function" then
     pcall(function() table.load(Nebbie._settingsFile, Nebbie._settings) end)
   end
+  Nebbie._settings.eqKeywords = Nebbie._settings.eqKeywords or {}
 end
 
 function Nebbie.saveSettings()
@@ -535,7 +549,7 @@ function Nebbie.purgeOrphanNebbieAliases()
   local patterns = {
     "set class", "list classes", "reinstall fix", "reposition gui", "attrib sync",
     "setup hud", "toggle hud", "toggle gui", "loot manual", "loot on", "loot off",
-    "swap weapon", "generic cast", "recall shortcut", "mind shortcut", "memorize", "mode cast",
+    "swap weapon", "eq key", "generic cast", "recall shortcut", "mind shortcut", "memorize", "mode cast",
     "mode recall", "mode mind", "abbr cast", "fav cast", "quick slot", "return form",
   }
   for _, entry in ipairs(getAliasList()) do
@@ -956,14 +970,118 @@ function Nebbie.lootMobRemains(verbose)
 end
 
 -- Cambio arma da borsa sulla schiena: usa <arma>
-function Nebbie.eqItemKeyword(desc)
+function Nebbie.normalizeEqDesc(desc)
   if not desc or desc == "" then return "" end
   local plain = Nebbie.stripColors(desc)
-  plain = plain:gsub("%s*%b()", ""):gsub("^%s+", ""):gsub("%s+$", "")
+  plain = plain:gsub("%s*%b()", ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  return plain:lower()
+end
+
+function Nebbie.getEqKeywordRules()
+  Nebbie.loadSettings()
+  local rules = {}
+  for _, r in ipairs(Nebbie.DEFAULT_EQ_KEYWORDS or {}) do
+    table.insert(rules, r)
+  end
+  for _, r in ipairs(Nebbie._settings.eqKeywords or {}) do
+    if type(r) == "table" and r.match and r.key then
+      table.insert(rules, r)
+    end
+  end
+  return rules
+end
+
+function Nebbie.guessEqKeyword(desc)
+  local plain = Nebbie.normalizeEqDesc(desc)
+  if plain == "" then return "" end
+  local orig = Nebbie.stripColors(desc):gsub("%s*%b()", "")
+  for word in orig:gmatch("[%w']+") do
+    if word:match("^%u") and #word >= 4 then
+      local low = word:lower()
+      if not Nebbie.EQ_STOPWORDS[low] then return low end
+    end
+  end
   plain = plain:gsub("^un[oa']%s+", ""):gsub("^uno%s+", ""):gsub("^il%s+", "")
   plain = plain:gsub("^la%s+", ""):gsub("^lo%s+", ""):gsub("^i%s+", "")
   plain = plain:gsub("^le%s+", ""):gsub("^gli%s+", ""):gsub("^l['']", "")
-  return plain
+  plain = plain:gsub("^a%s+", ""):gsub("^an%s+", "")
+  local first = plain:match("^(%S+)")
+  return first or plain
+end
+
+function Nebbie.lookupEqKeyword(desc)
+  local norm = Nebbie.normalizeEqDesc(desc)
+  if norm == "" then return "" end
+  local bestKey, bestLen = nil, 0
+  for _, r in ipairs(Nebbie.getEqKeywordRules()) do
+    local m = (r.match or ""):lower()
+    if m ~= "" and norm:find(m, 1, true) and #m > bestLen then
+      bestKey = r.key
+      bestLen = #m
+    end
+  end
+  if bestKey then return bestKey end
+  return Nebbie.guessEqKeyword(desc)
+end
+
+function Nebbie.eqItemKeyword(desc)
+  return Nebbie.lookupEqKeyword(desc)
+end
+
+function Nebbie.addEqKey(key, pattern)
+  key = Nebbie.stripQuotes(key or ""):lower()
+  pattern = Nebbie.stripQuotes(pattern or ""):lower()
+  if key == "" or pattern == "" then
+    cecho("<orange>Nebbie: <yellow>nkey add <chiave> <testo nel nome eq><orange>\n")
+    cecho("<grey>Esempio: <yellow>nkey add korred borsa inesauribile korred\n")
+    return
+  end
+  Nebbie.loadSettings()
+  Nebbie._settings.eqKeywords = Nebbie._settings.eqKeywords or {}
+  for i, r in ipairs(Nebbie._settings.eqKeywords) do
+    if r.match == pattern then
+      Nebbie._settings.eqKeywords[i] = { match = pattern, key = key }
+      Nebbie.saveSettings()
+      cecho("<green>Nebbie: aggiornato <yellow>" .. pattern .. " <green>→ <yellow>" .. key .. "\n")
+      return
+    end
+  end
+  table.insert(Nebbie._settings.eqKeywords, { match = pattern, key = key })
+  Nebbie.saveSettings()
+  cecho("<green>Nebbie: chiave <yellow>" .. key .. " <green>per nome che contiene <yellow>" .. pattern .. "\n")
+end
+
+function Nebbie.delEqKey(pattern)
+  pattern = Nebbie.stripQuotes(pattern or ""):lower()
+  if pattern == "" then
+    cecho("<orange>Nebbie: <yellow>nkey del <testo><orange>\n")
+    return
+  end
+  Nebbie.loadSettings()
+  local kept, removed = {}, false
+  for _, r in ipairs(Nebbie._settings.eqKeywords or {}) do
+    if r.match == pattern then removed = true
+    else table.insert(kept, r) end
+  end
+  Nebbie._settings.eqKeywords = kept
+  Nebbie.saveSettings()
+  if removed then
+    cecho("<green>Nebbie: rimossa regola per <yellow>" .. pattern .. "\n")
+  else
+    cecho("<orange>Nebbie: nessuna regola custom per <yellow>" .. pattern .. "\n")
+  end
+end
+
+function Nebbie.listEqKeys()
+  cecho("<cyan><b>Chiavi eq Nebbie</b> <grey>(match nel nome da eq → parola MUD)\n")
+  for _, r in ipairs(Nebbie.DEFAULT_EQ_KEYWORDS or {}) do
+    cecho("<grey>  <yellow>" .. r.key .. " <grey>← <white>" .. r.match .. " <dark_green>(default)\n")
+  end
+  Nebbie.loadSettings()
+  for _, r in ipairs(Nebbie._settings.eqKeywords or {}) do
+    cecho("<grey>  <yellow>" .. r.key .. " <grey>← <white>" .. r.match .. "\n")
+  end
+  cecho("<grey>Aggiungi: <yellow>nkey add korred borsa korred<grey> | <yellow>nkey del testo\n")
 end
 
 function Nebbie.parseEqSlotLine(line)
@@ -987,7 +1105,7 @@ function Nebbie.pollEqFromBuffer()
   if type(getLastLineNumber) ~= "function" or type(getLines) ~= "function" then return end
   local last = getLastLineNumber()
   if not last or last < 1 then return end
-  local from = math.max(1, last - 30)
+  local from = math.max(1, last - 80)
   local lines = getLines(from, last)
   if type(lines) ~= "table" then return end
   for _, text in ipairs(lines) do
@@ -1038,9 +1156,9 @@ function Nebbie.finishWeaponSwap(verbose)
   end
   if verbose then
     cecho("<green>Nebbie: cambio arma → <yellow>" .. ws.weapon
-      .. "<green> (borsa: <grey>" .. Nebbie.eqItemKeyword(ws.back)
-      .. "<grey>, impugnato: <grey>" .. tostring(ws.wield and Nebbie.eqItemKeyword(ws.wield) or "(vuoto)")
-      .. "<grey>).\n")
+      .. "<green> (borsa: <yellow>" .. Nebbie.lookupEqKeyword(ws.back)
+      .. "<green>, impugnato: <yellow>" .. tostring(ws.wield and Nebbie.lookupEqKeyword(ws.wield) or "(vuoto)")
+      .. "<green>).\n")
   end
   Nebbie._weaponSwapBusy = true
   Nebbie.runCmdQueue(cmds, 1, function() Nebbie._weaponSwapBusy = false end)
@@ -1060,8 +1178,9 @@ function Nebbie.swapWeapon(weaponKw, verbose)
   Nebbie._eqParseActive = true
   send("eq")
   if Nebbie._weaponSwapTimer then killTimer(Nebbie._weaponSwapTimer) end
-  Nebbie._weaponSwapTimer = tempTimer(0.8, function()
+  Nebbie._weaponSwapTimer = tempTimer(1.5, function()
     Nebbie._weaponSwapTimer = nil
+    Nebbie.pollEqFromBuffer()
     Nebbie.finishWeaponSwap(verbose ~= false)
   end)
 end
@@ -1804,6 +1923,9 @@ function Nebbie.install()
   perm("loot on", [[^nloot on$]], [[Nebbie.setLootAuto(true)]])
   perm("loot off", [[^nloot off$]], [[Nebbie.setLootAuto(false)]])
   perm("swap weapon", [[^usa (.+)$]], [[Nebbie.swapWeapon(matches[2], true)]])
+  perm("eq key list", [[^nkey$]], [[Nebbie.listEqKeys()]])
+  perm("eq key add", [[^nkey add (.+) (.+)$]], [[Nebbie.addEqKey(matches[2], matches[3])]])
+  perm("eq key del", [[^nkey del (.+)$]], [[Nebbie.delEqKey(matches[2])]])
   -- nfix: unico alias XML nel package (nebbie-fix), non crearlo qui
 
   perm("generic cast c", [[^c (.+)$]], [[
