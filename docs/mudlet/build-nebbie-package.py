@@ -291,6 +291,22 @@ BUFF_DURATIONS = {
     "chameleon": 96, "levitation": 96, "psionic strength": 96,
 }
 
+# Cast che non sono buff sul personaggio (utility, danno, creazione oggetti, ecc.)
+NO_BUFF_SPELLS = [
+    "heroes feast", "create food", "create water", "create light", "continual light",
+    "identify", "locate object", "word of recall", "teleport", "summon",
+    "enchant weapon", "enchant armor", "remove curse", "dispel magic", "dispel evil",
+    "dispel good", "resurrection", "reincarnate", "animate dead", "turn",
+    "fireball", "magic missile", "lightning bolt", "harm", "heal", "cure light",
+    "cure serious", "cure critic", "flamestrike", "earthquake", "meteor swarm",
+    "cone of cold", "acid blast", "chain lightning", "ice storm", "burning hands",
+    "chill touch", "shocking grasp", "colour spray", "sleep", "charm person",
+    "charm monster", "blindness", "poison", "curse", "energy drain", "feeblemind",
+    "paralyze", "fear", "weakness", "knock", "refresh", "second wind",
+    "messenger", "wizardeye", "clairvoyance", "astral walk", "geyser",
+    "faerie fog", "ice storm", "green slime", "darkness", "incendiary cloud",
+]
+
 # Scorciatoie rapide per classe (lettera practice in-game) — 9 slot ciascuna (q1-q9)
 CLASS_PRESETS = {
     "+": {

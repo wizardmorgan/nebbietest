@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.3"
+Nebbie.version = "2.1.4"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -509,7 +509,29 @@ function Nebbie.formatTime(secs)
   return string.format("%02d:%02d", m, s)
 end
 
+function Nebbie.shouldTrackBuff(spell)
+  if not spell or spell == "" then return false end
+  if Nebbie.noBuffSpells and Nebbie.noBuffSpells[spell] then return false end
+  if Nebbie.buffDurations and Nebbie.buffDurations[spell] then return true end
+  for _, entry in ipairs(Nebbie.wearOff or {}) do
+    if entry.name == spell then return true end
+  end
+  for _, entry in ipairs(Nebbie.wearOffSoon or {}) do
+    if entry.name == spell then return true end
+  end
+  return false
+end
+
+function Nebbie.pruneInvalidBuffs()
+  for spell, _ in pairs(Nebbie.buffs or {}) do
+    if type(spell) == "string" and spell:sub(1, 1) ~= "_" and not Nebbie.shouldTrackBuff(spell) then
+      Nebbie.buffs[spell] = nil
+    end
+  end
+end
+
 function Nebbie.onBuffApplied(spell)
+  if not Nebbie.shouldTrackBuff(spell) then return end
   local dur = Nebbie.buffDurations[spell] or 0
   Nebbie.buffs[spell] = { since = Nebbie.now(), duration = dur, soon = false, active = true }
   Nebbie.buffs._lastCast = spell
@@ -522,6 +544,7 @@ function Nebbie.onBuffWearOff(spell)
 end
 
 function Nebbie.onBuffSoon(spell)
+  if not Nebbie.shouldTrackBuff(spell) then return end
   if Nebbie.buffs[spell] then Nebbie.buffs[spell].soon = true
   else Nebbie.buffs[spell] = { since = Nebbie.now(), duration = 0, soon = true, active = true } end
   Nebbie.refreshGUI()
@@ -697,7 +720,7 @@ Nebbie.guiW = 300
 Nebbie.guiH = 340
 Nebbie.guiHeaderH = 18
 Nebbie.guiMargin = 8
-Nebbie.guiLayoutVer = 5
+Nebbie.guiLayoutVer = 6
 Nebbie.guiGaugeH = 12
 Nebbie.guiGaugeGap = 3
 Nebbie.guiGaugeArea = 54
@@ -750,10 +773,28 @@ function Nebbie.moveGaugeSafe(name, x, y, w, h)
   return ok
 end
 
+function Nebbie.styleGauge(key, frontHex, backHex)
+  if type(setGaugeStyleSheet) ~= "function" then return end
+  local cssFront = "background-color:" .. frontHex .. ";border-radius:2px;"
+  local cssBack = "background-color:" .. backHex .. ";border-radius:2px;"
+  pcall(function() setGaugeStyleSheet(key, cssFront, cssBack, "") end)
+end
+
 function Nebbie.createGaugeEntry(spec, gx, gy2, gw)
   if type(createGauge) ~= "function" then return false end
-  local r, g, b = spec.color[1], spec.color[2], spec.color[3]
-  createGauge(spec.key, gw, Nebbie.guiGaugeH, gx, gy2, spec.label or "", r, g, b)
+  local x, y = math.floor(gx), math.floor(gy2)
+  local ok = pcall(function()
+    createGauge(spec.key, gw, Nebbie.guiGaugeH, x, y, nil, spec.colorName)
+  end)
+  if not ok then
+    ok = pcall(function()
+      local r, g, b = spec.color[1], spec.color[2], spec.color[3]
+      createGauge(spec.key, gw, Nebbie.guiGaugeH, x, y, nil, r, g, b)
+    end)
+  end
+  if not ok then return false end
+  if spec.front and spec.back then Nebbie.styleGauge(spec.key, spec.front, spec.back) end
+  if type(showGauge) == "function" then pcall(function() showGauge(spec.key) end) end
   Nebbie._gauges[spec.key] = true
   return true
 end
@@ -762,9 +803,9 @@ function Nebbie.ensureGauges(x, y, w)
   local gx, gy = x + 8, y + Nebbie.guiHeaderH + 4
   local gw = w - 16
   local specs = {
-    { key = "NebbieHP", label = "HP", color = {30, 180, 60} },
-    { key = "NebbieMN", label = "MN", color = {80, 140, 255} },
-    { key = "NebbieMV", label = "MV", color = {220, 180, 40} },
+    { key = "NebbieHP", label = "HP", colorName = "green", front = "#2db44a", back = "#2a2a38", color = {30, 180, 60} },
+    { key = "NebbieMN", label = "MN", colorName = "cyan", front = "#4f8cff", back = "#2a2a38", color = {80, 140, 255} },
+    { key = "NebbieMV", label = "MV", colorName = "yellow", front = "#dcb428", back = "#2a2a38", color = {220, 180, 40} },
   }
   for i, spec in ipairs(specs) do
     local gy2 = gy + (i - 1) * (Nebbie.guiGaugeH + Nebbie.guiGaugeGap)
@@ -776,24 +817,28 @@ function Nebbie.ensureGauges(x, y, w)
     end
     if not Nebbie._gauges[spec.key] then
       Nebbie.createGaugeEntry(spec, gx, gy2, gw)
+    else
+      Nebbie.styleGauge(spec.key, spec.front, spec.back)
     end
   end
+  Nebbie.updateGauges()
+end
+
+function Nebbie.applyGaugeValue(key, cur, max, label)
+  local setFn = (type(setGauge) == "function" and setGauge) or (type(setGaugeValue) == "function" and setGaugeValue)
+  if not setFn or not cur or not max or max <= 0 then return end
+  local text = label .. " " .. cur .. "/" .. max
+  local ok = pcall(function() setFn(key, cur, max, text) end)
+  if not ok then pcall(function() setFn(key, cur, max) end) end
+  if type(showGauge) == "function" then pcall(function() showGauge(key) end) end
 end
 
 function Nebbie.updateGauges()
   local s = Nebbie.stats
   if not s then return end
-  local setFn = (type(setGauge) == "function" and setGauge) or (type(setGaugeValue) == "function" and setGaugeValue)
-  if not setFn then return end
-  if s.hp and s.hpmax and s.hpmax > 0 then
-    setFn("NebbieHP", s.hp, s.hpmax, "HP " .. s.hp .. "/" .. s.hpmax)
-  end
-  if s.mana and s.manamax and s.manamax > 0 then
-    setFn("NebbieMN", s.mana, s.manamax, "MN " .. s.mana .. "/" .. s.manamax)
-  end
-  if s.move and s.movemax and s.movemax > 0 then
-    setFn("NebbieMV", s.move, s.movemax, "MV " .. s.move .. "/" .. s.movemax)
-  end
+  Nebbie.applyGaugeValue("NebbieHP", s.hp, s.hpmax, "HP")
+  Nebbie.applyGaugeValue("NebbieMN", s.mana, s.manamax, "MN")
+  Nebbie.applyGaugeValue("NebbieMV", s.move, s.movemax, "MV")
 end
 
 function Nebbie.applyGUIPosition(x, y, w, h)
@@ -1004,7 +1049,7 @@ end
 function Nebbie.parseAttribSpellLine(line)
   local plain = Nebbie.stripColors(line)
   local spell, dur = plain:match("Spell%s*:%s*'(.-)'%s*%-%s*(%d+)")
-  if spell and dur then
+  if spell and dur and Nebbie.shouldTrackBuff(spell) then
     local n = tonumber(dur) or 0
     Nebbie.buffs[spell] = { since = Nebbie.now(), duration = n * 4, soon = false, active = true, source = "attribute" }
   end
@@ -1074,6 +1119,7 @@ end
 
 function Nebbie.refreshGUI()
   if not Nebbie.guiExists() then return end
+  Nebbie.pruneInvalidBuffs()
   local ok, err = pcall(function()
     clearWindow(Nebbie.guiConsole)
     local s = Nebbie.stats or {}
@@ -1133,6 +1179,7 @@ function Nebbie.refreshGUI()
     end
   end)
   if not ok then cecho("<red>[Nebbie GUI] " .. tostring(err) .. "\n") end
+  Nebbie.updateGauges()
 end
 
 function Nebbie.resolveSpell(token)
@@ -1437,6 +1484,7 @@ function Nebbie.boot()
   if Nebbie._settings.attribAuto then Nebbie.attribAuto = true end
   if Nebbie._settings.lootAuto == false then Nebbie.lootAuto = false end
   Nebbie.warnLegacyPackages()
+  Nebbie.pruneInvalidBuffs()
   Nebbie.purgeLegacyPermItems(true)
   if Nebbie._installedVer == Nebbie.version and Nebbie._aliasIds and next(Nebbie._aliasIds) ~= nil then
     if not Nebbie.guiExists() then Nebbie.initGUI() end
