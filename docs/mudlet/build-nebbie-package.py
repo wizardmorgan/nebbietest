@@ -701,7 +701,7 @@ def build_install_lua(spells):
 
 def build_xml(legacy_aliases, legacy_triggers):
     purge_lua = build_bootstrap_purge_lua(legacy_aliases, legacy_triggers)
-    pkg_ver = "2.1.7"
+    pkg_ver = "2.1.8"
     bootstrap = (
         r'''-- Nebbie Arcane play-all bootstrap
 Nebbie = Nebbie or {}
@@ -756,7 +756,7 @@ end'''
     nprompt_script = (
         reload_lua
         + 'if Nebbie and Nebbie.debugPrompt then Nebbie.debugPrompt() else '
-        'cecho("<orange>Nebbie: reinstalla package v'
+        + 'cecho("<orange>Nebbie: reinstalla package v'
         + pkg_ver
         + ' da GitHub, poi nfix.\\n") end'
     )

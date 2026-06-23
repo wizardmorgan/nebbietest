@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.7"
+Nebbie.version = "2.1.8"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -903,14 +903,15 @@ function Nebbie.execQuick(entry, target)
   end
 end
 
-Nebbie.guiW = 300
-Nebbie.guiH = 340
-Nebbie.guiHeaderH = 18
-Nebbie.guiMargin = 8
-Nebbie.guiLayoutVer = 6
-Nebbie.guiGaugeH = 12
-Nebbie.guiGaugeGap = 3
-Nebbie.guiGaugeArea = 54
+Nebbie.guiW = 600
+Nebbie.guiH = 680
+Nebbie.guiHeaderH = 28
+Nebbie.guiMargin = 12
+Nebbie.guiLayoutVer = 7
+Nebbie.guiGaugeH = 22
+Nebbie.guiGaugeGap = 6
+Nebbie.guiGaugeArea = 96
+Nebbie.guiFontSize = 11
 Nebbie.guiBar = "NebbieHUDBar"
 Nebbie.guiConsole = "NebbieHUD"
 Nebbie._gauges = Nebbie._gauges or {}
@@ -960,39 +961,76 @@ function Nebbie.moveGaugeSafe(name, x, y, w, h)
   return ok
 end
 
+function Nebbie.raiseGaugeLayers(key)
+  if type(raiseWindow) ~= "function" then return end
+  for _, suffix in ipairs({"_back", "_front", "_text"}) do
+    pcall(function() raiseWindow(key .. suffix) end)
+  end
+end
+
+function Nebbie.paintGauge(key, rgb, backRgb)
+  backRgb = backRgb or {42, 42, 56}
+  local r, g, b = rgb[1], rgb[2], rgb[3]
+  if type(setGaugeStyleSheet) == "function" then
+    local cssFront = string.format(
+      "background-color:QLinearGradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgb(%d,%d,%d),stop:1 rgb(%d,%d,%d));border:1px solid #222;border-radius:4px;",
+      r, g, b, math.max(0, r - 25), math.max(0, g - 25), math.max(0, b - 25))
+    local cssBack = string.format(
+      "background-color:rgb(%d,%d,%d);border:1px solid #222;border-radius:4px;",
+      backRgb[1], backRgb[2], backRgb[3])
+    pcall(function() setGaugeStyleSheet(key, cssFront, cssBack, "") end)
+  end
+  if type(setBackgroundColor) == "function" then
+    pcall(function() setBackgroundColor(key .. "_front", r, g, b, 255) end)
+    pcall(function() setBackgroundColor(key .. "_back", backRgb[1], backRgb[2], backRgb[3], 255) end)
+  end
+  if type(setFgColor) == "function" then
+    pcall(function() setFgColor(key .. "_text", 240, 240, 240) end)
+  end
+  Nebbie.raiseGaugeLayers(key)
+end
+
 function Nebbie.styleGauge(key, frontHex, backHex)
-  if type(setGaugeStyleSheet) ~= "function" then return end
-  local cssFront = "background-color:" .. frontHex .. ";border-radius:2px;"
-  local cssBack = "background-color:" .. backHex .. ";border-radius:2px;"
-  pcall(function() setGaugeStyleSheet(key, cssFront, cssBack, "") end)
+  local function hex(n)
+    n = n:gsub("#", "")
+    return tonumber(n:sub(1, 2), 16) or 80, tonumber(n:sub(3, 4), 16) or 80, tonumber(n:sub(5, 6), 16) or 80
+  end
+  local fr, fg, fb = hex(frontHex or "#808080")
+  local br, bg, bb = hex(backHex or "#2a2a38")
+  Nebbie.paintGauge(key, {fr, fg, fb}, {br, bg, bb})
 end
 
 function Nebbie.createGaugeEntry(spec, gx, gy2, gw)
   if type(createGauge) ~= "function" then return false end
   local x, y = math.floor(gx), math.floor(gy2)
+  local r, g, b = spec.color[1], spec.color[2], spec.color[3]
   local ok = pcall(function()
-    createGauge(spec.key, gw, Nebbie.guiGaugeH, x, y, nil, spec.colorName)
+    createGauge(spec.key, gw, Nebbie.guiGaugeH, x, y, "", r, g, b)
   end)
   if not ok then
     ok = pcall(function()
-      local r, g, b = spec.color[1], spec.color[2], spec.color[3]
-      createGauge(spec.key, gw, Nebbie.guiGaugeH, x, y, nil, r, g, b)
+      createGauge(spec.key, gw, Nebbie.guiGaugeH, x, y, "", spec.colorName)
     end)
   end
   if not ok then return false end
-  if spec.front and spec.back then Nebbie.styleGauge(spec.key, spec.front, spec.back) end
+  Nebbie.paintGauge(spec.key, spec.color, {42, 42, 56})
   if type(showGauge) == "function" then pcall(function() showGauge(spec.key) end) end
   Nebbie._gauges[spec.key] = true
   return true
 end
 
 function Nebbie.ensureGauges(x, y, w)
-  local gx, gy = x + 8, y + Nebbie.guiHeaderH + 4
-  local gw = w - 16
+  local gx, gy = x + 12, y + Nebbie.guiHeaderH + 6
+  local gw = w - 24
+  Nebbie._gaugeSpecs = {
+    NebbieHP = { key = "NebbieHP", label = "HP", colorName = "green", front = "#2db44a", back = "#2a2a38", color = {45, 200, 70} },
+    NebbieMN = { key = "NebbieMN", label = "MN", colorName = "cyan", front = "#4f8cff", back = "#2a2a38", color = {70, 150, 255} },
+    NebbieMV = { key = "NebbieMV", label = "MV", colorName = "yellow", front = "#dcb428", back = "#2a2a38", color = {230, 190, 50} },
+  }
   local specs = {
-    { key = "NebbieHP", label = "HP", colorName = "green", front = "#2db44a", back = "#2a2a38", color = {30, 180, 60} },
-    { key = "NebbieMN", label = "MN", colorName = "cyan", front = "#4f8cff", back = "#2a2a38", color = {80, 140, 255} },
-    { key = "NebbieMV", label = "MV", colorName = "yellow", front = "#dcb428", back = "#2a2a38", color = {220, 180, 40} },
+    Nebbie._gaugeSpecs.NebbieHP,
+    Nebbie._gaugeSpecs.NebbieMN,
+    Nebbie._gaugeSpecs.NebbieMV,
   }
   for i, spec in ipairs(specs) do
     local gy2 = gy + (i - 1) * (Nebbie.guiGaugeH + Nebbie.guiGaugeGap)
@@ -1005,7 +1043,7 @@ function Nebbie.ensureGauges(x, y, w)
     if not Nebbie._gauges[spec.key] then
       Nebbie.createGaugeEntry(spec, gx, gy2, gw)
     else
-      Nebbie.styleGauge(spec.key, spec.front, spec.back)
+      Nebbie.paintGauge(spec.key, spec.color, {42, 42, 56})
     end
   end
   Nebbie.updateGauges()
@@ -1017,7 +1055,10 @@ function Nebbie.applyGaugeValue(key, cur, max, label)
   local text = label .. " " .. cur .. "/" .. max
   local ok = pcall(function() setFn(key, cur, max, text) end)
   if not ok then pcall(function() setFn(key, cur, max) end) end
+  local spec = Nebbie._gaugeSpecs and Nebbie._gaugeSpecs[key]
+  if spec then Nebbie.paintGauge(key, spec.color, {42, 42, 56}) end
   if type(showGauge) == "function" then pcall(function() showGauge(key) end) end
+  Nebbie.raiseGaugeLayers(key)
 end
 
 function Nebbie.updateGauges()
@@ -1045,6 +1086,7 @@ function Nebbie.applyGUIPosition(x, y, w, h)
     if type(raiseWindow) == "function" then raiseWindow(bar) end
   end
   Nebbie.ensureGauges(x, y, w)
+  for key, _ in pairs(Nebbie._gauges or {}) do Nebbie.raiseGaugeLayers(key) end
   Nebbie._guiX, Nebbie._guiY = x, y
 end
 
@@ -1131,7 +1173,7 @@ function Nebbie.buildGUI()
   echo(Nebbie.guiBar, " Nebbie HUD — trascina qui")
   local conY = y + hh + Nebbie.guiGaugeArea
   createMiniConsole(Nebbie.guiConsole, x, conY, w, h - hh - Nebbie.guiGaugeArea, true)
-  setMiniConsoleFontSize(Nebbie.guiConsole, 9)
+  setMiniConsoleFontSize(Nebbie.guiConsole, Nebbie.guiFontSize or 11)
   setBackgroundColor(Nebbie.guiConsole, 20, 20, 30, 200)
   setFgColor(Nebbie.guiConsole, 200, 200, 200)
   showWindow(Nebbie.guiBar)
