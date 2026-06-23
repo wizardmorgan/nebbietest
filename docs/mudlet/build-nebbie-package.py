@@ -711,7 +711,7 @@ end'''
     npurge_script = (
         'if Nebbie_purgeLegacyPerm then Nebbie_purgeLegacyPerm() end '
         'if Nebbie and Nebbie.purgeLegacyPermItems then Nebbie.purgeLegacyPermItems(false) end '
-        'cecho("<green>Nebbie: perm vecchi disattivati. Riavvia Mudlet, reinstalla v2.1.1, poi nfix.\\n")'
+        'cecho("<green>Nebbie: perm vecchi disattivati. Riavvia Mudlet, reinstalla v2.1.3, poi nfix.\\n")'
     )
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE MudletPackage>

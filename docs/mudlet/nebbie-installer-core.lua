@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.2"
+Nebbie.version = "2.1.3"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -697,7 +697,7 @@ Nebbie.guiW = 300
 Nebbie.guiH = 340
 Nebbie.guiHeaderH = 18
 Nebbie.guiMargin = 8
-Nebbie.guiLayoutVer = 4
+Nebbie.guiLayoutVer = 5
 Nebbie.guiGaugeH = 12
 Nebbie.guiGaugeGap = 3
 Nebbie.guiGaugeArea = 54
@@ -752,10 +752,8 @@ end
 
 function Nebbie.createGaugeEntry(spec, gx, gy2, gw)
   if type(createGauge) ~= "function" then return false end
-  createGauge(spec.key, gw, Nebbie.guiGaugeH, gx, gy2)
-  if type(setGaugeColor) == "function" then
-    setGaugeColor(spec.key, spec.color, {35, 35, 45})
-  end
+  local r, g, b = spec.color[1], spec.color[2], spec.color[3]
+  createGauge(spec.key, gw, Nebbie.guiGaugeH, gx, gy2, spec.label or "", r, g, b)
   Nebbie._gauges[spec.key] = true
   return true
 end
@@ -764,9 +762,9 @@ function Nebbie.ensureGauges(x, y, w)
   local gx, gy = x + 8, y + Nebbie.guiHeaderH + 4
   local gw = w - 16
   local specs = {
-    { key = "NebbieHP", color = {30, 180, 60} },
-    { key = "NebbieMN", color = {80, 140, 255} },
-    { key = "NebbieMV", color = {220, 180, 40} },
+    { key = "NebbieHP", label = "HP", color = {30, 180, 60} },
+    { key = "NebbieMN", label = "MN", color = {80, 140, 255} },
+    { key = "NebbieMV", label = "MV", color = {220, 180, 40} },
   }
   for i, spec in ipairs(specs) do
     local gy2 = gy + (i - 1) * (Nebbie.guiGaugeH + Nebbie.guiGaugeGap)
@@ -785,10 +783,16 @@ end
 function Nebbie.updateGauges()
   local s = Nebbie.stats
   if not s then return end
-  if type(setGaugeValue) == "function" then
-    if s.hp and s.hpmax and s.hpmax > 0 then setGaugeValue("NebbieHP", s.hp, s.hpmax) end
-    if s.mana and s.manamax and s.manamax > 0 then setGaugeValue("NebbieMN", s.mana, s.manamax) end
-    if s.move and s.movemax and s.movemax > 0 then setGaugeValue("NebbieMV", s.move, s.movemax) end
+  local setFn = (type(setGauge) == "function" and setGauge) or (type(setGaugeValue) == "function" and setGaugeValue)
+  if not setFn then return end
+  if s.hp and s.hpmax and s.hpmax > 0 then
+    setFn("NebbieHP", s.hp, s.hpmax, "HP " .. s.hp .. "/" .. s.hpmax)
+  end
+  if s.mana and s.manamax and s.manamax > 0 then
+    setFn("NebbieMN", s.mana, s.manamax, "MN " .. s.mana .. "/" .. s.manamax)
+  end
+  if s.move and s.movemax and s.movemax > 0 then
+    setFn("NebbieMV", s.move, s.movemax, "MV " .. s.move .. "/" .. s.movemax)
   end
 end
 
@@ -1064,6 +1068,7 @@ function Nebbie.setupHUD()
   cecho("<grey>Comandi MUD liberi: <yellow>inv<grey>, <yellow>eq<grey>. Loot mob: <yellow>nloot<grey> | auto <yellow>nloot on<grey>\n")
   if not Nebbie.playerClass or Nebbie.playerClass == "" then Nebbie.setClass("+", true) end
   Nebbie.initGUI()
+  Nebbie.updateGauges()
   Nebbie._setupRunning = false
 end
 
