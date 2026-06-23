@@ -312,6 +312,7 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   inv / eq            → comandi MUD nativi (non aliasati)
   nloot               → look, poi corp/2.corp/… + pile/2.pile/…
   nloot on/off        → loot auto dopo kill mob (exp reale)
+  usa <arma>          → cambio arma da borsa sulla schiena
 
 === PANNELLO HUD ===
   Gauge HP/Mana/Move + buff/debuff + parser prompt [%s]

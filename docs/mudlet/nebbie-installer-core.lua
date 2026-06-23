@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.1.9"
+Nebbie.version = "2.2.0"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie.debuffs = Nebbie.debuffs or {}
 Nebbie.stats = Nebbie.stats or {}
@@ -481,7 +481,7 @@ end
 function Nebbie.purgeOrphanNebbieTriggers()
   local patterns = {
     "debuff on", "debuff off", "wear off", "soon ", "fail ", "cast started",
-    "prompt parse", "attrib gag", "look loot", "mob kill", "coin loot",
+    "prompt parse", "attrib gag", "look loot", "eq parse", "mob kill", "coin loot",
   }
   if type(getTriggerList) == "function" then
     for _, entry in ipairs(getTriggerList()) do
@@ -535,7 +535,7 @@ function Nebbie.purgeOrphanNebbieAliases()
   local patterns = {
     "set class", "list classes", "reinstall fix", "reposition gui", "attrib sync",
     "setup hud", "toggle hud", "toggle gui", "loot manual", "loot on", "loot off",
-    "generic cast", "recall shortcut", "mind shortcut", "memorize", "mode cast",
+    "swap weapon", "generic cast", "recall shortcut", "mind shortcut", "memorize", "mode cast",
     "mode recall", "mode mind", "abbr cast", "fav cast", "quick slot", "return form",
   }
   for _, entry in ipairs(getAliasList()) do
@@ -810,14 +810,18 @@ function Nebbie.onLookLootLine(line)
   end
 end
 
-function Nebbie.runLootQueue(cmds, idx)
+function Nebbie.runCmdQueue(cmds, idx, onDone)
   idx = idx or 1
   if not cmds or idx > #cmds then
-    Nebbie._lootBusy = false
+    if onDone then onDone() end
     return
   end
   send(cmds[idx])
-  tempTimer(0.45, function() Nebbie.runLootQueue(cmds, idx + 1) end)
+  tempTimer(0.5, function() Nebbie.runCmdQueue(cmds, idx + 1, onDone) end)
+end
+
+function Nebbie.runLootQueue(cmds, idx)
+  Nebbie.runCmdQueue(cmds, idx, function() Nebbie._lootBusy = false end)
 end
 
 function Nebbie.buildLootCommands()
@@ -875,6 +879,117 @@ end
 
 function Nebbie.lootMobRemains(verbose)
   Nebbie.startLookLoot(verbose)
+end
+
+-- Cambio arma da borsa sulla schiena: usa <arma>
+function Nebbie.eqItemKeyword(desc)
+  if not desc or desc == "" then return "" end
+  local plain = Nebbie.stripColors(desc)
+  plain = plain:gsub("%s*%b()", ""):gsub("^%s+", ""):gsub("%s+$", "")
+  plain = plain:gsub("^un[oa']%s+", ""):gsub("^uno%s+", ""):gsub("^il%s+", "")
+  plain = plain:gsub("^la%s+", ""):gsub("^lo%s+", ""):gsub("^i%s+", "")
+  plain = plain:gsub("^le%s+", ""):gsub("^gli%s+", ""):gsub("^l['']", "")
+  return plain
+end
+
+function Nebbie.parseEqSlotLine(line)
+  if not line or line == "" then return nil, nil end
+  local plain = Nebbie.stripColors(line)
+  local wield = plain:match("<impugnato>%s+(.+)")
+  if wield and wield ~= "Qualcosa." then return "wield", wield end
+  local back = plain:match("<sulla schiena>%s+(.+)")
+  if back and back ~= "Qualcosa." then return "back", back end
+  return nil, nil
+end
+
+function Nebbie.onEqParseLine(line)
+  if not Nebbie._eqParseActive or not Nebbie._weaponSwap then return end
+  local slot, item = Nebbie.parseEqSlotLine(line)
+  if slot == "wield" then Nebbie._weaponSwap.wield = item
+  elseif slot == "back" then Nebbie._weaponSwap.back = item end
+end
+
+function Nebbie.pollEqFromBuffer()
+  if type(getLastLineNumber) ~= "function" or type(getLines) ~= "function" then return end
+  local last = getLastLineNumber()
+  if not last or last < 1 then return end
+  local from = math.max(1, last - 30)
+  local lines = getLines(from, last)
+  if type(lines) ~= "table" then return end
+  for _, text in ipairs(lines) do
+    if type(text) == "string" and text ~= "" then
+      Nebbie.onEqParseLine(text)
+    end
+  end
+end
+
+function Nebbie.buildWeaponSwapCommands(ws)
+  local backKw = Nebbie.eqItemKeyword(ws.back)
+  local wieldKw = ws.wield and Nebbie.eqItemKeyword(ws.wield) or nil
+  local weapon = ws.weapon
+  if backKw == "" or not weapon or weapon == "" then return nil end
+  local cmds = {
+    "rem " .. backKw,
+    "get " .. weapon .. " " .. backKw,
+  }
+  if wieldKw and wieldKw ~= "" then
+    table.insert(cmds, "rem " .. wieldKw)
+  end
+  table.insert(cmds, "wie " .. weapon)
+  if wieldKw and wieldKw ~= "" then
+    table.insert(cmds, "put " .. wieldKw .. " " .. backKw)
+  end
+  table.insert(cmds, "wear " .. backKw)
+  return cmds
+end
+
+function Nebbie.finishWeaponSwap(verbose)
+  if Nebbie._weaponSwapTimer then
+    killTimer(Nebbie._weaponSwapTimer)
+    Nebbie._weaponSwapTimer = nil
+  end
+  Nebbie._eqParseActive = false
+  local ws = Nebbie._weaponSwap
+  Nebbie._weaponSwap = nil
+  if not ws then return end
+  Nebbie.pollEqFromBuffer()
+  if not ws.back then
+    cecho("<red>Nebbie: nessun oggetto nello slot <sulla schiena> — controlla con eq.\n")
+    return
+  end
+  local cmds = Nebbie.buildWeaponSwapCommands(ws)
+  if not cmds then
+    cecho("<red>Nebbie: impossibile costruire la sequenza cambio arma.\n")
+    return
+  end
+  if verbose then
+    cecho("<green>Nebbie: cambio arma → <yellow>" .. ws.weapon
+      .. "<green> (borsa: <grey>" .. Nebbie.eqItemKeyword(ws.back)
+      .. "<grey>, impugnato: <grey>" .. tostring(ws.wield and Nebbie.eqItemKeyword(ws.wield) or "(vuoto)")
+      .. "<grey>).\n")
+  end
+  Nebbie._weaponSwapBusy = true
+  Nebbie.runCmdQueue(cmds, 1, function() Nebbie._weaponSwapBusy = false end)
+end
+
+function Nebbie.swapWeapon(weaponKw, verbose)
+  weaponKw = Nebbie.stripQuotes(weaponKw or "")
+  if weaponKw == "" then
+    cecho("<orange>Nebbie: sintassi <yellow>usa <arma><orange> (es. <yellow>usa spada<orange>).\n")
+    return
+  end
+  if Nebbie._weaponSwapBusy then
+    if verbose ~= false then cecho("<orange>Nebbie: cambio arma gia' in corso.\n") end
+    return
+  end
+  Nebbie._weaponSwap = { weapon = weaponKw, wield = nil, back = nil }
+  Nebbie._eqParseActive = true
+  send("eq")
+  if Nebbie._weaponSwapTimer then killTimer(Nebbie._weaponSwapTimer) end
+  Nebbie._weaponSwapTimer = tempTimer(0.8, function()
+    Nebbie._weaponSwapTimer = nil
+    Nebbie.finishWeaponSwap(verbose ~= false)
+  end)
 end
 
 function Nebbie.onMobKillExp(line)
@@ -1596,6 +1711,7 @@ function Nebbie.install()
   perm("loot manual", [[^nloot$]], [[Nebbie.lootMobRemains(true)]])
   perm("loot on", [[^nloot on$]], [[Nebbie.setLootAuto(true)]])
   perm("loot off", [[^nloot off$]], [[Nebbie.setLootAuto(false)]])
+  perm("swap weapon", [[^usa (.+)$]], [[Nebbie.swapWeapon(matches[2], true)]])
   -- nfix: unico alias XML nel package (nebbie-fix), non crearlo qui
 
   perm("generic cast c", [[^c (.+)$]], [[
@@ -1693,6 +1809,10 @@ function Nebbie.install()
 
   trig("prompt parse", {[[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
+
+  trig("eq parse wield", {"<impugnato>", "<sulla schiena>"}, [[
+    if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
+  ]])
 
   trig("look loot parse", {"il corpo di", "corpo sfigurato", "pile of dust", "Pile of dust"}, [[
     if Nebbie and Nebbie._lookLootActive and Nebbie.onLookLootLine then Nebbie.onLookLootLine(line) end

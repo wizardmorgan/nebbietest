@@ -515,12 +515,12 @@ def build_legacy_perm_names(spells):
     static_alias = [
         "mode cast", "mode recall", "mode mind", "toggle gui", "toggle hud",
         "reposition gui", "setup hud", "attrib sync", "attrib on", "attrib off",
-        "loot manual", "loot on", "loot off", "generic cast c", "generic cast word",
+        "loot manual", "loot on", "loot off", "swap weapon", "generic cast c", "generic cast word",
         "memorize", "recall shortcut", "mind shortcut", "list classes", "set class",
         "return form", "reinstall fix", "prompt debug",
     ]
     static_triggers = [
-        "prompt parse", "attrib gag", "look loot parse", "mob kill exp loot", "cast started",
+        "prompt parse", "attrib gag", "look loot parse", "eq parse wield", "mob kill exp loot", "cast started",
     ]
 
     for pkg in pkgs:
@@ -702,7 +702,7 @@ def build_install_lua(spells):
 
 def build_xml(legacy_aliases, legacy_triggers):
     purge_lua = build_bootstrap_purge_lua(legacy_aliases, legacy_triggers)
-    pkg_ver = "2.1.9"
+    pkg_ver = "2.2.0"
     bootstrap = (
         r'''-- Nebbie Arcane play-all bootstrap
 Nebbie = Nebbie or {}
@@ -854,6 +854,7 @@ def main():
         f.write("  inv / eq            → comandi MUD nativi (non aliasati)\n")
         f.write("  nloot               → look, poi corp/2.corp/… + pile/2.pile/…\n")
         f.write("  nloot on/off        → loot auto dopo kill mob (exp reale)\n")
+        f.write("  usa <arma>          → cambio arma da borsa sulla schiena\n")
         f.write("\n=== PANNELLO HUD ===\n")
         f.write("  Gauge HP/Mana/Move + buff/debuff + parser prompt [%s]\n")
         for cls, data in sorted(CLASS_PRESETS.items()):
