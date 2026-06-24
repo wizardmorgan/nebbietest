@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.11"
+Nebbie.version = "2.2.12"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1099,14 +1099,43 @@ function Nebbie.listEqKeys()
   cecho("<grey>Aggiungi: <yellow>nkey add korred borsa korred<grey> | <yellow>nkey del testo\n")
 end
 
+function Nebbie.trimEqItemName(item)
+  if not item then return nil end
+  item = item:gsub("^%s+", ""):gsub("%s+$", "")
+  if item == "" or item == "Qualcosa." then return nil end
+  return item
+end
+
 function Nebbie.parseEqSlotLine(line)
   if not line or line == "" then return nil, nil end
   local plain = Nebbie.stripColors(line)
-  local wield = plain:match("<impugnato>%s+(.+)")
-  if wield and wield ~= "Qualcosa." then return "wield", wield end
-  local back = plain:match("<sulla schiena>%s+(.+)")
-  if back and back ~= "Qualcosa." then return "back", back end
+
+  -- eq MUD: "[18] <sulla schiena>         Nome oggetto" — match ovunque nella riga
+  local wield = Nebbie.trimEqItemName(plain:match(".*<impugnato>%s+(.+)"))
+  if wield then return "wield", wield end
+
+  local back = Nebbie.trimEqItemName(plain:match(".*<sulla schiena>%s+(.+)"))
+  if back then return "back", back end
+
+  -- tag senza nome sulla stessa riga (nome sulla riga dopo)
+  if plain:find("<impugnato>", 1, true) and not plain:match(".*<impugnato>%s+%S") then
+    return "wield", ""
+  end
+  if plain:find("<sulla schiena>", 1, true) and not plain:match(".*<sulla schiena>%s+%S") then
+    return "back", ""
+  end
+
   return nil, nil
+end
+
+function Nebbie.isEqListLine(plain)
+  if not plain or plain == "" then return false end
+  if plain:find("Stai usando", 1, true) then return true end
+  if plain:match("^Nulla%.?") then return true end
+  if plain:match("^%[%s*%d+%]") then return true end
+  if plain:find("<impugnato>", 1, true) then return true end
+  if plain:find("<sulla schiena>", 1, true) then return true end
+  return false
 end
 
 Nebbie.EQ_AUTO_INTERVAL = 3600
@@ -1136,6 +1165,106 @@ function Nebbie.eqCacheIsFresh()
   return age ~= nil and age <= Nebbie.EQ_CACHE_MAX_AGE
 end
 
+function Nebbie.isPromptLine(plain)
+  if not plain or plain == "" then return false end
+  return plain:find("H:%d+/%d+") ~= nil or plain:find("H%d+/%d+") ~= nil
+end
+
+function Nebbie.scanEqBufferSnapshot()
+  if type(getLastLineNumber) ~= "function" or type(getLines) ~= "function" then return false end
+  local last = getLastLineNumber()
+  if not last or last < 1 then return false end
+  local from = math.max(1, last - 150)
+  local lines = getLines(from, last)
+  if type(lines) ~= "table" then return false end
+
+  local inEq, wield, back = false, nil, nil
+  local pendingSlot, pendingText = nil, nil
+
+  for _, text in ipairs(lines) do
+    if type(text) == "string" then
+      local plain = Nebbie.stripColors(text)
+      if plain ~= "" then
+        if plain:find("Stai usando", 1, true) then
+          inEq = true
+          wield, back = nil, nil
+          pendingSlot, pendingText = nil, nil
+        elseif inEq and Nebbie.isPromptLine(plain) then
+          break
+        elseif inEq and plain:match("^Nulla%.?") then
+          wield, back = nil, nil
+          break
+        elseif inEq then
+          local slot, item = Nebbie.parseEqSlotLine(text)
+          if slot then
+            if item == "" then
+              pendingSlot = slot
+              pendingText = nil
+            else
+              pendingSlot, pendingText = nil, nil
+              if slot == "wield" then wield = item else back = item end
+            end
+          elseif pendingSlot and plain ~= "" and not plain:match("^%[%s*%d+%]") and not Nebbie.isPromptLine(plain) then
+            pendingText = pendingText and (pendingText .. " " .. plain) or plain
+            local combined = Nebbie.trimEqItemName(pendingText)
+            if combined then
+              if pendingSlot == "wield" then wield = combined else back = combined end
+              pendingSlot, pendingText = nil, nil
+            end
+          end
+        end
+      end
+    end
+  end
+
+  if not inEq then return false end
+
+  Nebbie.eqCache = Nebbie.eqCache or {}
+  Nebbie.eqCache.wield = wield
+  Nebbie.eqCache.back = back
+  Nebbie.eqCache.wieldKey = wield and Nebbie.eqItemKeyword(wield) or nil
+  Nebbie.eqCache.backKey = back and Nebbie.eqItemKeyword(back) or nil
+  Nebbie.eqCache.updatedAt = Nebbie.now()
+  Nebbie.saveEqCache()
+
+  if Nebbie._weaponSwap and Nebbie._eqParseActive then
+    Nebbie._weaponSwap.wield = wield
+    Nebbie._weaponSwap.back = back
+    if back and back ~= "" then
+      Nebbie._weaponSwap._eqSeen = true
+      if not Nebbie._weaponSwap._finishScheduled then
+        Nebbie._weaponSwap._finishScheduled = true
+        Nebbie.scheduleWeaponSwapTimeout(0.25)
+      end
+    end
+  end
+  return true
+end
+
+function Nebbie.scheduleEqCacheScan(delay)
+  delay = delay or 1.5
+  if Nebbie._eqScanTimer then killTimer(Nebbie._eqScanTimer) end
+  Nebbie._eqScanTimer = tempTimer(delay, function()
+    Nebbie._eqScanTimer = nil
+    Nebbie.scanEqBufferSnapshot()
+  end)
+end
+
+function Nebbie.installEqSendHook()
+  if Nebbie._eqSendHookId then return end
+  if type(registerAnonymousEventHandler) ~= "function" then return end
+  local ok, id = pcall(function()
+    return registerAnonymousEventHandler("sysDataSendEvent", function(_, cmd)
+      if type(cmd) ~= "string" then return end
+      local word = cmd:match("^%s*(%S+)")
+      if word and word:lower() == "eq" then
+        Nebbie.scheduleEqCacheScan(2.0)
+      end
+    end)
+  end)
+  if ok and id then Nebbie._eqSendHookId = id end
+end
+
 function Nebbie.beginEqSnapshot()
   Nebbie._eqSnapshot = { wield = nil, back = nil }
 end
@@ -1161,9 +1290,19 @@ function Nebbie.onEqLine(line)
 
   if plain:find("Stai usando", 1, true) then
     isEqOutput = true
+    Nebbie._eqPendingSlot = nil
+    Nebbie._eqPendingText = nil
+    Nebbie.eqCache = Nebbie.eqCache or {}
+    Nebbie.eqCache.wield = nil
+    Nebbie.eqCache.back = nil
+    Nebbie.eqCache.wieldKey = nil
+    Nebbie.eqCache.backKey = nil
     Nebbie.beginEqSnapshot()
+    Nebbie.scheduleEqCacheScan(1.5)
   elseif plain:match("^Nulla%.?") then
     isEqOutput = true
+    Nebbie._eqPendingSlot = nil
+    Nebbie._eqPendingText = nil
     Nebbie.eqCache = Nebbie.eqCache or {}
     Nebbie.eqCache.wield = nil
     Nebbie.eqCache.back = nil
@@ -1176,7 +1315,25 @@ function Nebbie.onEqLine(line)
     local slot, item = Nebbie.parseEqSlotLine(line)
     if slot then
       isEqOutput = true
-      Nebbie.applyEqSlot(slot, item)
+      if item == "" then
+        Nebbie._eqPendingSlot = slot
+        Nebbie._eqPendingText = nil
+      else
+        Nebbie._eqPendingSlot = nil
+        Nebbie._eqPendingText = nil
+        Nebbie.applyEqSlot(slot, item)
+      end
+    elseif Nebbie._eqPendingSlot and plain ~= "" and not plain:match("^%[%s*%d+%]") then
+      isEqOutput = true
+      Nebbie._eqPendingText = Nebbie._eqPendingText and (Nebbie._eqPendingText .. " " .. plain) or plain
+      local combined = Nebbie.trimEqItemName(Nebbie._eqPendingText)
+      if combined then
+        Nebbie.applyEqSlot(Nebbie._eqPendingSlot, combined)
+        Nebbie._eqPendingSlot = nil
+        Nebbie._eqPendingText = nil
+      end
+    elseif Nebbie.isEqListLine(plain) then
+      isEqOutput = true
     end
   end
 
@@ -1218,6 +1375,7 @@ function Nebbie.requestEqCache(silent)
   Nebbie._eqCacheBusy = true
   Nebbie._eqCacheGag = silent == true
   send("eq")
+  Nebbie.scheduleEqCacheScan(2.5)
   tempTimer(3, function()
     Nebbie._eqCacheBusy = false
     Nebbie._eqCacheGag = false
@@ -1262,7 +1420,8 @@ function Nebbie.maybeRefreshEqCacheOnBoot()
   end)
 end
 
-function Nebbie.onEqParseLine(line)
+function Nebbie.onEqParseLine()
+  local line = Nebbie.resolveTriggerLine()
   Nebbie.onEqLine(line)
 
   if not Nebbie._weaponSwap then return end
@@ -2166,7 +2325,14 @@ function Nebbie.install()
   perm("eq key list", [[^nkey$]], [[Nebbie.listEqKeys()]])
   perm("eq key add", [[^nkey add (.+) (.+)$]], [[Nebbie.addEqKey(matches[2], matches[3])]])
   perm("eq key del", [[^nkey del (.+)$]], [[Nebbie.delEqKey(matches[2])]])
-  perm("eq cache sync", [[^neq$]], [[Nebbie.showEqCache(); Nebbie.requestEqCache(false)]])
+  perm("eq cache sync", [[^neq$]], [[
+    if Nebbie.requestEqCache(false) then
+      cecho("<grey>Nebbie: sync eq...\n")
+      tempTimer(2.8, function() Nebbie.showEqCache() end)
+    else
+      Nebbie.showEqCache()
+    end
+  ]])
   perm("eq cache on", [[^neq on$]], [[Nebbie.setEqAuto(true)]])
   perm("eq cache off", [[^neq off$]], [[Nebbie.setEqAuto(false)]])
   -- nfix: unico alias XML nel package (nebbie-fix), non crearlo qui
@@ -2268,7 +2434,7 @@ function Nebbie.install()
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
 
   trig("eq parse wield", {"Stai usando", "<impugnato>", "<sulla schiena>"}, [[
-    if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
+    if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine() end
   ]])
 
   trig("look loot parse", {"il corpo di", "corpo sfigurato", "pile of dust", "Pile of dust"}, [[
@@ -2327,6 +2493,7 @@ function Nebbie.install()
   end
 
   Nebbie.installPromptHooks()
+  Nebbie.installEqSendHook()
   Nebbie.testPromptParse(true)
 
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
@@ -2352,6 +2519,7 @@ function Nebbie.boot()
     if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
     Nebbie.syncAttribTimer()
     Nebbie.syncEqCacheTimer()
+    Nebbie.installEqSendHook()
     Nebbie.maybeRefreshEqCacheOnBoot()
     Nebbie._mainLoaded = true
     Nebbie._bootInProgress = false
