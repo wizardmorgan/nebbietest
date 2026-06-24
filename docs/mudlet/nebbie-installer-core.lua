@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.16"
+Nebbie.version = "2.2.17"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -609,6 +609,7 @@ function Nebbie.purgeOrphanMainScripts(silent)
     "Nebbie Play All v2.2.13",
     "Nebbie Play All v2.2.14",
     "Nebbie Play All v2.2.15",
+    "Nebbie Play All v2.2.16",
   }
   for _, sname in ipairs(legacy) do
     if sname ~= keep then

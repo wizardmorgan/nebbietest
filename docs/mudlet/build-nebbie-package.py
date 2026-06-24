@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.16"
+PKG_VER = "2.2.17"
 MAIN_SCRIPT_NAME = f"Nebbie Play All v{PKG_VER}"
 PKG_URL = "https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage"
 LEGACY_MAIN_SCRIPTS = [
@@ -20,6 +20,7 @@ LEGACY_MAIN_SCRIPTS = [
     "Nebbie Play All v2.2.13",
     "Nebbie Play All v2.2.14",
     "Nebbie Play All v2.2.15",
+    "Nebbie Play All v2.2.16",
 ]
 INSTALLER_CORE = ROOT / "nebbie-installer-core.lua"
 
@@ -734,98 +735,74 @@ def build_install_lua(spells):
 
 def build_nfix_lua():
     legacy = ", ".join(f'"{lua_escape(n)}"' for n in LEGACY_MAIN_SCRIPTS)
-    return f"""local NEBBIE_EXPECT = "{PKG_VER}"
+    return f"""-- Nebbie nfix v{PKG_VER} — sicuro: niente loadstring/uninstall (crash Mudlet)
+local NEBBIE_EXPECT = "{PKG_VER}"
 local MAIN_SCRIPT = "{lua_escape(MAIN_SCRIPT_NAME)}"
-local PKG_URL = "{PKG_URL}"
 
-local function nebbie_script_code(name, occ)
-  if type(getScript) ~= "function" then return nil end
+local function nebbie_script_exists(name, occ)
+  if type(getScript) ~= "function" then return false end
   local ok, code = pcall(function() return getScript(name, occ or 1) end)
-  if not ok or not code or code == -1 or type(code) ~= "string" then return nil end
-  return code
+  return ok and code and code ~= -1 and type(code) == "string" and #code > 50
 end
 
 local function nebbie_disable_legacy()
-  if type(getScript) ~= "function" then return 0 end
-  local wiped = 0
+  if type(disableScript) ~= "function" then return 0 end
+  local n = 0
   for _, sname in ipairs({{{legacy}}}) do
     if sname ~= MAIN_SCRIPT then
-      for occ = 1, 16 do
-        local code = nebbie_script_code(sname, occ)
-        if not code then break end
-        wiped = wiped + 1
-        if type(disableScript) == "function" then pcall(function() disableScript(sname, occ) end) end
-        if type(setScript) == "function" then pcall(function() setScript(sname, "-- disattivato da Nebbie nfix", occ) end) end
+      for occ = 1, 8 do
+        if not nebbie_script_exists(sname, occ) then break end
+        pcall(function() disableScript(sname, occ) end)
+        n = n + 1
       end
     end
   end
-  return wiped
+  return n
 end
 
-local function nebbie_reload_main()
-  local code = nebbie_script_code(MAIN_SCRIPT, 1)
-  if not code or #code < 200 then return false, "script principale assente nel profilo" end
-  Nebbie = Nebbie or {{}}
-  Nebbie._loadedPkgVer = nil
-  Nebbie._mainLoaded = false
-  Nebbie._installedVer = nil
-  local loader = loadstring or load
-  local fn, err = loader(code)
-  if not fn then return false, tostring(err) end
-  local ok, runErr = pcall(fn)
-  if not ok then return false, tostring(runErr) end
-  return true
-end
-
-local function nebbie_force_reinstall()
-  if type(uninstallPackage) ~= "function" then return false end
-  uninstallPackage("{PACKAGE_NAME}")
-  if type(installPackageFromUrl) == "function" then
-    installPackageFromUrl("nebbie-upgrade-tmp.mpackage", PKG_URL)
-    return true
-  end
-  if type(installPackage) == "function" then
-    return false
-  end
-  return false
-end
-
-if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
-  Nebbie.runFix()
-else
-  local wiped = nebbie_disable_legacy()
-  if wiped > 0 then cecho("<grey>Nebbie: neutralizzati " .. wiped .. " script obsoleti.\\n") end
-  local ok, err = nebbie_reload_main()
-  if ok and Nebbie and type(Nebbie.runFix) == "function" then
+local ok, err = pcall(function()
+  if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
     Nebbie.runFix()
-    cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " caricato e reinstallato.\\n")
-  elseif ok and Nebbie and type(Nebbie.boot) == "function" then
-    Nebbie.boot()
-    cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " caricato.\\n")
-  else
-    cecho("<orange>Nebbie: reload fallito (" .. tostring(err) .. ") — reinstall da GitHub...\\n")
-    if nebbie_force_reinstall() then
-      cecho("<green>Download avviato. Al termine: <yellow>riavvia Mudlet<green> e ripeti <yellow>nfix<green>.\\n")
-    else
-      cecho("<red>Installa manualmente il .mpackage (~310 KB) e riavvia Mudlet.\\n")
-    end
+    return
   end
+  local disabled = nebbie_disable_legacy()
+  if nebbie_script_exists(MAIN_SCRIPT, 1) and type(enableScript) == "function" then
+    pcall(function() enableScript(MAIN_SCRIPT, 1) end)
+  end
+  if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
+    Nebbie.runFix()
+    cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " reinstallato.\\n")
+    return
+  end
+  cecho("<orange>Nebbie: versione attuale <yellow>" .. tostring(Nebbie and Nebbie.version or "?")
+    .. "<orange> — serve <yellow>v" .. NEBBIE_EXPECT .. "\\n")
+  if disabled > 0 then
+    cecho("<grey>Disattivati " .. disabled .. " script obsoleti (solo disable, niente reload).\\n")
+  end
+  if not nebbie_script_exists(MAIN_SCRIPT, 1) then
+    cecho("<red>Script «" .. MAIN_SCRIPT .. "» assente nel profilo.\\n")
+    cecho("<grey>Alt+O → installa <yellow>nebbie-play-all.mpackage<grey> (~312 KB):\\n")
+    cecho("<grey>{PKG_URL}\\n")
+  else
+    cecho("<yellow><b>RIAVVIA Mudlet adesso</b><grey>, poi digita di nuovo <yellow>nfix<grey>.\\n")
+  end
+end)
+if not ok then
+  cecho("<red>Nebbie nfix errore: " .. tostring(err) .. "\\n")
+  cecho("<grey>Riavvia Mudlet. Se persiste: Scripts → elimina «Nebbie Play All» vecchio, reinstalla package.\\n")
 end"""
 
 
 def build_bootloader_lua():
     legacy = ", ".join(f'"{lua_escape(n)}"' for n in LEGACY_MAIN_SCRIPTS if n != MAIN_SCRIPT_NAME)
-    return f"""-- Nebbie bootloader v{PKG_VER}: disattiva script obsoleti prima del caricamento
-if type(getScript) ~= "function" then return end
+    return f"""-- Nebbie Bootloader v{PKG_VER}: disattiva script obsoleti (solo disableScript)
+if type(getScript) ~= "function" or type(disableScript) ~= "function" then return end
 local keep = "{lua_escape(MAIN_SCRIPT_NAME)}"
 for _, sname in ipairs({{{legacy}}}) do
-  for occ = 1, 16 do
+  for occ = 1, 8 do
     local ok, code = pcall(function() return getScript(sname, occ) end)
     if not ok or not code or code == -1 then break end
-    if type(disableScript) == "function" then pcall(function() disableScript(sname, occ) end) end
-    if type(setScript) == "function" and type(code) == "string" and not code:find("disattivato da Nebbie", 1, true) then
-      pcall(function() setScript(sname, "-- disattivato da Nebbie bootloader", occ) end)
-    end
+    pcall(function() disableScript(sname, occ) end)
   end
 end
 if type(enableScript) == "function" then
