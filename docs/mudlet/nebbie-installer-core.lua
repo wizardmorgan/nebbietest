@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.18"
+Nebbie.version = "2.2.19"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -608,6 +608,7 @@ function Nebbie.purgeOrphanMainScripts(silent)
     "Nebbie Spells and Skills",
     "nebbie-install",
     "Nebbie Bootloader",
+    "!Nebbie Boot",
     "Nebbie Play All v2.2.12",
     "Nebbie Play All v2.2.13",
     "Nebbie Play All v2.2.14",

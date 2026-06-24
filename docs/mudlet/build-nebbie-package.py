@@ -9,13 +9,14 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.18"
+PKG_VER = "2.2.19"
 MAIN_SCRIPT_NAME = "Nebbie Play All"
 PKG_URL = "https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage"
 LEGACY_MAIN_SCRIPTS = [
     "Nebbie Spells and Skills",
     "nebbie-install",
     "Nebbie Bootloader",
+    "!Nebbie Boot",
     "Nebbie Play All v2.2.12",
     "Nebbie Play All v2.2.13",
     "Nebbie Play All v2.2.14",
@@ -736,7 +737,8 @@ def build_install_lua(spells):
 
 def build_script_cleanup_lua(expect_ver, main_script):
     legacy = ", ".join(f'"{lua_escape(n)}"' for n in LEGACY_MAIN_SCRIPTS)
-    patterns = '"Nebbie", "nebbie", "Play All v", "Spells and Skills", "Bootloader"'
+    # NON usare "Nebbie" da solo: matcha anche lo script principale!
+    patterns = '"Play All v", "Spells and Skills", "Bootloader", "!Nebbie", "nebbie-install"'
     return f"""local NEBBIE_EXPECT = "{expect_ver}"
 local MAIN_SCRIPT = "{lua_escape(main_script)}"
 local LEGACY_NAMES = {{{legacy}}}
@@ -771,7 +773,7 @@ local function nebbie_neutralize(name, occ)
 end
 
 function Nebbie_cleanupScripts(silent)
-  local n_ids, n_names, n_main = 0, 0, false
+  local n_ids, n_names = 0, 0
   for _, pat in ipairs({{{patterns}}}) do
     for _, id in ipairs(nebbie_find_ids(pat)) do
       if type(disableScript) == "function" then
@@ -793,23 +795,28 @@ function Nebbie_cleanupScripts(silent)
     local ver = nebbie_ver_from_code(code)
     if ver and ver ~= NEBBIE_EXPECT then
       nebbie_neutralize(MAIN_SCRIPT, occ)
-      n_main = true
       if not silent then
-        cecho("<orange>Nebbie: «" .. MAIN_SCRIPT .. "» era v" .. ver .. ", neutralizzato.\\n")
+        cecho("<orange>Nebbie: «" .. MAIN_SCRIPT .. " #" .. occ .. "» era v" .. ver .. ", neutralizzato.\\n")
       end
+    elseif type(enableScript) == "function" then
+      pcall(function() enableScript(MAIN_SCRIPT, occ) end)
     end
-  end
-  if type(enableScript) == "function" then
-    pcall(function() enableScript(MAIN_SCRIPT, 1) end)
   end
   if type(saveProfile) == "function" then
     pcall(function() saveProfile() end)
   end
   if not silent then
-    cecho("<grey>Nebbie cleanup: " .. n_ids .. " id, " .. n_names .. " nomi legacy"
-      .. (n_main and ", main vecchio" or "") .. ".\\n")
+    cecho("<grey>Nebbie cleanup: " .. n_ids .. " id legacy, " .. n_names .. " nomi legacy.\\n")
   end
-  return n_ids + n_names + (n_main and 1 or 0)
+  return n_ids + n_names
+end
+
+function Nebbie_wipeMemory()
+  local saved = Nebbie and Nebbie._settings
+  Nebbie = {{ package = "nebbie-play-all", _settings = saved or {{}} }}
+  Nebbie._loadedPkgVer = nil
+  Nebbie._mainLoaded = false
+  Nebbie._installedVer = nil
 end
 Nebbie = Nebbie or {{}}"""
 
@@ -820,34 +827,41 @@ if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "functi
   Nebbie.runFix()
 else
   Nebbie_cleanupScripts(false)
-  if Nebbie then
-    Nebbie._loadedPkgVer = nil
-    Nebbie._mainLoaded = false
-    Nebbie._installedVer = nil
-  end
+  Nebbie_wipeMemory()
   local code = nebbie_code(MAIN_SCRIPT, 1)
   local fileVer = nebbie_ver_from_code(code)
   if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
     Nebbie.runFix()
     cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " ok.\\n")
   elseif fileVer == NEBBIE_EXPECT then
-    cecho("<orange>Script v" .. NEBBIE_EXPECT .. " nel profilo ma non caricato.\\n")
-    cecho("<yellow><b>Riavvia Mudlet</b><grey>, poi <yellow>nfix<grey>.\\n")
+    cecho("<green>Script v" .. NEBBIE_EXPECT .. " nel profilo (attivo).\\n")
+    cecho("<yellow><b>Chiudi Mudlet completamente</b><grey> (File → Esci), riapri, poi <yellow>nfix<grey>.\\n")
+    cecho("<grey>La memoria 2.2.12 è normale finché non riavvii.\\n")
   else
-    cecho("<orange>Nebbie memoria: v" .. tostring(Nebbie and Nebbie.version or "?")
-      .. " — file script: v" .. tostring(fileVer or "assente") .. " — serve v" .. NEBBIE_EXPECT .. "\\n")
-    cecho("<yellow>Passi obbligatori:\\n")
-    cecho("<yellow>1)<grey> Alt+O → reinstalla package (~312 KB)\\n")
+    cecho("<orange>File script: v" .. tostring(fileVer or "assente") .. " — serve v" .. NEBBIE_EXPECT .. "\\n")
+    cecho("<yellow>1)<grey> Alt+O → reinstalla package\\n")
     cecho("<grey>   {PKG_URL}\\n")
-    cecho("<yellow>2)<grey> <b>Riavvia Mudlet</b>\\n")
+    cecho("<yellow>2)<grey> <b>Chiudi e riapri Mudlet</b>\\n")
     cecho("<yellow>3)<grey> <yellow>nfix\\n")
   end
 end"""
     return build_script_cleanup_lua(PKG_VER, MAIN_SCRIPT_NAME) + body
 
 
-def build_bootloader_lua():
-    return build_script_cleanup_lua(PKG_VER, MAIN_SCRIPT_NAME) + "\nNebbie_cleanupScripts(true)\n"
+def build_main_bootstrap_lua(expect_ver):
+    return f"""-- bootstrap v{expect_ver}: non disattivare lo script principale
+if type(findItems) == "function" and type(disableScript) == "function" then
+  for _, pat in ipairs({{"Play All v", "Spells and Skills", "Bootloader", "!Nebbie"}}) do
+    for _, id in ipairs(findItems(pat, "script", false) or {{}}) do
+      pcall(function() disableScript(id) end)
+    end
+  end
+end
+if Nebbie and Nebbie.version and Nebbie.version ~= "{expect_ver}" then
+  local saved = Nebbie._settings
+  Nebbie = {{ package = "nebbie-play-all", _settings = saved or {{}} }}
+end
+"""
 
 
 def build_ndiagnose_lua():
@@ -860,7 +874,7 @@ if type(findItems) == "function" then
   cecho("<grey>findItems Nebbie: <yellow>" .. tostring(ids and #ids or 0) .. " script\\n")
 end
 if type(getScript) == "function" then
-  local names = {{{legacy}, "{lua_escape(MAIN_SCRIPT_NAME)}"}}
+  local names = {{{legacy}, "{lua_escape(MAIN_SCRIPT_NAME)}", "!Nebbie Boot"}}
   for _, sname in ipairs(names) do
     for occ = 1, 4 do
       local ok, code = pcall(function() return getScript(sname, occ) end)
@@ -886,6 +900,9 @@ def build_xml(legacy_aliases, legacy_triggers, install_lua):
         f'Nebbie = Nebbie or {{}}\n'
         f'Nebbie.package = "{PACKAGE_NAME}"\n'
         f'local NEBBIE_PKG_VER = "{PKG_VER}"\n'
+    )
+    bootstrap = build_main_bootstrap_lua(PKG_VER)
+    header += (
         "if Nebbie.version and Nebbie.version ~= NEBBIE_PKG_VER then\n"
         "  Nebbie._mainLoaded = false\n"
         "  Nebbie._installedVer = nil\n"
@@ -898,10 +915,9 @@ def build_xml(legacy_aliases, legacy_triggers, install_lua):
         "Nebbie._loadedPkgVer = NEBBIE_PKG_VER\n"
         "Nebbie._mainLoaded = false\n"
     )
-    main_script = header + purge_lua + "\n" + install_lua
+    main_script = bootstrap + header + purge_lua + "\n" + install_lua
     escaped = main_script.replace("]]>", "]]..']]'..[[")
     nfix_script = build_nfix_lua()
-    bootloader_script = build_bootloader_lua().replace("]]>", "]]..']]'..[[")
     ndiagnose_script = build_ndiagnose_lua()
     npurge_script = (
         'if Nebbie_purgeLegacyPerm then Nebbie_purgeLegacyPerm() end '
@@ -920,12 +936,6 @@ def build_xml(legacy_aliases, legacy_triggers, install_lua):
 <!DOCTYPE MudletPackage>
 <MudletPackage version="1.001">
  <ScriptPackage>
-  <Script isActive="yes" isFolder="no">
-   <name>!Nebbie Boot</name>
-   <script><![CDATA[{bootloader_script}]]></script>
-   <eventHandlerList />
-   <packageName>{PACKAGE_NAME}</packageName>
-  </Script>
   <Script isActive="yes" isFolder="no">
    <name>{MAIN_SCRIPT_NAME}</name>
    <script><![CDATA[{escaped}]]></script>
