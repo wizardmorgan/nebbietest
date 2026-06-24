@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.19"
+Nebbie.version = "2.2.20"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -615,6 +615,8 @@ function Nebbie.purgeOrphanMainScripts(silent)
     "Nebbie Play All v2.2.15",
     "Nebbie Play All v2.2.16",
     "Nebbie Play All v2.2.17",
+    "Nebbie Play All v2.2.18",
+    "Nebbie Play All v2.2.19",
   }
   for _, sname in ipairs(legacy) do
     if sname ~= keep then
@@ -2674,4 +2676,9 @@ function Nebbie.boot()
   Nebbie._bootInProgress = false
 end
 
-Nebbie.boot()
+local _nb_boot_ok, _nb_boot_err = pcall(function() Nebbie.boot() end)
+if not _nb_boot_ok then
+  cecho("<red>[Nebbie] boot error: " .. tostring(_nb_boot_err) .. "\n")
+elseif Nebbie and Nebbie.version then
+  cecho("<green>[Nebbie] v" .. Nebbie.version .. " pronto.\n")
+end

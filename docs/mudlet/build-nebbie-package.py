@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.19"
+PKG_VER = "2.2.20"
 MAIN_SCRIPT_NAME = "Nebbie Play All"
 PKG_URL = "https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage"
 LEGACY_MAIN_SCRIPTS = [
@@ -23,6 +23,8 @@ LEGACY_MAIN_SCRIPTS = [
     "Nebbie Play All v2.2.15",
     "Nebbie Play All v2.2.16",
     "Nebbie Play All v2.2.17",
+    "Nebbie Play All v2.2.18",
+    "Nebbie Play All v2.2.19",
 ]
 INSTALLER_CORE = ROOT / "nebbie-installer-core.lua"
 
@@ -834,9 +836,10 @@ else
     Nebbie.runFix()
     cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " ok.\\n")
   elseif fileVer == NEBBIE_EXPECT then
-    cecho("<green>Script v" .. NEBBIE_EXPECT .. " nel profilo (attivo).\\n")
-    cecho("<yellow><b>Chiudi Mudlet completamente</b><grey> (File → Esci), riapri, poi <yellow>nfix<grey>.\\n")
-    cecho("<grey>La memoria 2.2.12 è normale finché non riavvii.\\n")
+    local ex = (type(exists) == "function") and exists(MAIN_SCRIPT, "script") or "?"
+    cecho("<green>Script v" .. NEBBIE_EXPECT .. " nel profilo (exists=" .. tostring(ex) .. ").\\n")
+    cecho("<yellow><b>Chiudi Mudlet</b><grey> (File → Esci / chiudi finestra), riapri, poi <yellow>nfix<grey>.\\n")
+    cecho("<grey>Se dopo riavvio ancora nil: Scripts → spunta <yellow>Nebbie Play All<grey>, oppure <yellow>nenable<grey>.\\n")
   else
     cecho("<orange>File script: v" .. tostring(fileVer or "assente") .. " — serve v" .. NEBBIE_EXPECT .. "\\n")
     cecho("<yellow>1)<grey> Alt+O → reinstalla package\\n")
@@ -890,7 +893,44 @@ if type(getScript) == "function" then
     end
   end
 end
-cecho("<grey>Atteso: <yellow>{PKG_VER}<grey> in «{lua_escape(MAIN_SCRIPT_NAME)}»\\n")"""
+cecho("<grey>Atteso: <yellow>{PKG_VER}<grey> in «{lua_escape(MAIN_SCRIPT_NAME)}»\\n")
+if type(exists) == "function" then
+  cecho("<grey>exists(MAIN): <yellow>" .. tostring(exists("{lua_escape(MAIN_SCRIPT_NAME)}", "script")) .. "\\n")
+end"""
+
+
+def build_sysload_script():
+    return f"""function Nebbie_sysLoadEvent()
+  local ver = "{PKG_VER}"
+  if type(enableScript) == "function" then
+    pcall(function() enableScript("Nebbie Play All", 1) end)
+  end
+  if Nebbie and Nebbie.version == ver and type(Nebbie.runFix) == "function" then
+    return
+  end
+  if Nebbie and type(Nebbie.boot) == "function" then
+    local ok, err = pcall(Nebbie.boot)
+    if not ok then
+      cecho("<red>[Nebbie] boot error: " .. tostring(err) .. "\\n")
+    elseif Nebbie.version == ver then
+      cecho("<green>[Nebbie] v" .. ver .. " caricato (sysLoad).\\n")
+    end
+  elseif not (Nebbie and Nebbie.version == ver) then
+    cecho("<orange>[Nebbie] script non in memoria — Scripts → abilita «Nebbie Play All», poi <yellow>nenable<grey>.\\n")
+  end
+end"""
+
+
+def build_nenable_lua():
+    return f"""if type(enableScript) == "function" then
+  pcall(function() enableScript("Nebbie Play All", 1) end)
+  for occ = 2, 4 do pcall(function() enableScript("Nebbie Play All", occ) end) end
+end
+if type(saveProfile) == "function" then pcall(function() saveProfile() end) end
+if type(exists) == "function" then
+  cecho("<green>Nebbie Play All exists=" .. tostring(exists("Nebbie Play All", "script")) .. "\\n")
+end
+cecho("<yellow>Chiudi Mudlet (File → Esci), riapri, poi <yellow>nfix<grey>.\\n")"""
 
 
 def build_xml(legacy_aliases, legacy_triggers, install_lua):
@@ -911,13 +951,16 @@ def build_xml(legacy_aliases, legacy_triggers, install_lua):
         "  Nebbie._mainLoaded = false\n"
         "  Nebbie._installedVer = nil\n"
         "end\n"
-        "if Nebbie._loadedPkgVer == NEBBIE_PKG_VER and Nebbie._mainLoaded and Nebbie.version == NEBBIE_PKG_VER then return end\n"
+        "if Nebbie._loadedPkgVer == NEBBIE_PKG_VER and Nebbie._mainLoaded"
+        " and Nebbie.version == NEBBIE_PKG_VER and type(Nebbie.runFix) == \"function\" then return end\n"
         "Nebbie._loadedPkgVer = NEBBIE_PKG_VER\n"
         "Nebbie._mainLoaded = false\n"
     )
     main_script = bootstrap + header + purge_lua + "\n" + install_lua
     escaped = main_script.replace("]]>", "]]..']]'..[[")
     nfix_script = build_nfix_lua()
+    nenable_script = build_nenable_lua()
+    sysload_script = build_sysload_script().replace("]]>", "]]..']]'..[[")
     ndiagnose_script = build_ndiagnose_lua()
     npurge_script = (
         'if Nebbie_purgeLegacyPerm then Nebbie_purgeLegacyPerm() end '
@@ -936,6 +979,14 @@ def build_xml(legacy_aliases, legacy_triggers, install_lua):
 <!DOCTYPE MudletPackage>
 <MudletPackage version="1.001">
  <ScriptPackage>
+  <Script isActive="yes" isFolder="no">
+   <name>Nebbie_sysLoadEvent</name>
+   <script><![CDATA[{sysload_script}]]></script>
+   <eventHandlerList>
+    <string>sysLoadEvent</string>
+   </eventHandlerList>
+   <packageName>{PACKAGE_NAME}</packageName>
+  </Script>
   <Script isActive="yes" isFolder="no">
    <name>{MAIN_SCRIPT_NAME}</name>
    <script><![CDATA[{escaped}]]></script>
@@ -964,6 +1015,13 @@ def build_xml(legacy_aliases, legacy_triggers, install_lua):
    <command></command>
    <packageName>{PACKAGE_NAME}</packageName>
    <regex>^nprompt$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-enable</name>
+   <script><![CDATA[{nenable_script}]]></script>
+   <command></command>
+   <packageName>{PACKAGE_NAME}</packageName>
+   <regex>^nenable$</regex>
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-diagnose</name>
