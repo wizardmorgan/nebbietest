@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.24"
+Nebbie.version = "2.2.25"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -795,7 +795,9 @@ function Nebbie.setClass(cls, silent)
   return true
 end
 
-Nebbie.TICK_SECONDS = 4
+-- 1 unità in attribute = 1 ora MUD (SECS_PER_MUD_HOUR nel sorgente server)
+Nebbie.TICK_SECONDS = 75
+Nebbie.MUD_HOUR_SECONDS = 75
 
 function Nebbie.formatTime(secs)
   secs = math.max(0, math.floor(secs))
@@ -2281,7 +2283,9 @@ function Nebbie.refreshGUI()
           timeTxt = "~attrib"
         end
         local src = ""
-        if data.synced then src = " <dark_grey>[attrib]"
+        if data.synced and data.ticks then
+          src = " <dark_grey>[" .. tostring(data.ticks) .. "h]"
+        elseif data.synced then src = " <dark_grey>[attrib]"
         elseif data.source == "cast" then src = " <dark_grey>[cast]" end
         cecho("NebbieHUD", " " .. status .. " <white>" .. spell .. "  <grey>" .. timeTxt .. src .. "\n")
       end

@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.24
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.24"
+-- NEBBIE_INSTALL_VER=2.2.25
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.25"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.24"
+Nebbie.version = "2.2.25"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.24"
+Nebbie._expectedPkgVer = "2.2.25"
 
 Nebbie.castSpells = {
   ['armor'] = true,
@@ -694,32 +694,32 @@ Nebbie.safeStandalone = {
 }
 
 Nebbie.buffDurations = {
-  ['aid'] = 96,
-  ['anti magic shell'] = 96,
-  ['armor'] = 96,
-  ['barkskin'] = 96,
-  ['bless'] = 96,
-  ['chameleon'] = 96,
-  ['detect invisibility'] = 96,
-  ['detect magic'] = 96,
-  ['faerie fire'] = 48,
-  ['fireshield'] = 96,
-  ['fly'] = 96,
-  ['haste'] = 96,
-  ['invisibility'] = 96,
-  ['levitation'] = 96,
-  ['mana'] = 96,
-  ['mindblank'] = 96,
-  ['minor invulnerability'] = 96,
-  ['mirror images'] = 48,
-  ['protection from evil'] = 96,
-  ['psi shield'] = 96,
-  ['psionic strength'] = 96,
-  ['sanctuary'] = 96,
-  ['shield'] = 96,
-  ['stone skin'] = 96,
-  ['strength'] = 96,
-  ['tower of iron will'] = 96,
+  ['aid'] = 1800,
+  ['anti magic shell'] = 1800,
+  ['armor'] = 1800,
+  ['barkskin'] = 1800,
+  ['bless'] = 1800,
+  ['chameleon'] = 1800,
+  ['detect invisibility'] = 1800,
+  ['detect magic'] = 1800,
+  ['faerie fire'] = 900,
+  ['fireshield'] = 1800,
+  ['fly'] = 1800,
+  ['haste'] = 1800,
+  ['invisibility'] = 1800,
+  ['levitation'] = 1800,
+  ['mana'] = 1800,
+  ['mindblank'] = 1800,
+  ['minor invulnerability'] = 1800,
+  ['mirror images'] = 900,
+  ['protection from evil'] = 1800,
+  ['psi shield'] = 1800,
+  ['psionic strength'] = 1800,
+  ['sanctuary'] = 1800,
+  ['shield'] = 1800,
+  ['stone skin'] = 1800,
+  ['strength'] = 1800,
+  ['tower of iron will'] = 1800,
 }
 
 Nebbie.noBuffSpells = {
@@ -1036,7 +1036,7 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.24"
+Nebbie.version = "2.2.25"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1832,7 +1832,9 @@ function Nebbie.setClass(cls, silent)
   return true
 end
 
-Nebbie.TICK_SECONDS = 4
+-- 1 unità in attribute = 1 ora MUD (SECS_PER_MUD_HOUR nel sorgente server)
+Nebbie.TICK_SECONDS = 75
+Nebbie.MUD_HOUR_SECONDS = 75
 
 function Nebbie.formatTime(secs)
   secs = math.max(0, math.floor(secs))
@@ -3318,7 +3320,9 @@ function Nebbie.refreshGUI()
           timeTxt = "~attrib"
         end
         local src = ""
-        if data.synced then src = " <dark_grey>[attrib]"
+        if data.synced and data.ticks then
+          src = " <dark_grey>[" .. tostring(data.ticks) .. "h]"
+        elseif data.synced then src = " <dark_grey>[attrib]"
         elseif data.source == "cast" then src = " <dark_grey>[cast]" end
         cecho("NebbieHUD", " " .. status .. " <white>" .. spell .. "  <grey>" .. timeTxt .. src .. "\n")
       end

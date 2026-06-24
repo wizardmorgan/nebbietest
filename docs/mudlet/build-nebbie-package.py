@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.24"
+PKG_VER = "2.2.25"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -309,15 +309,15 @@ DEBUFF_WEAR_OFF_TRIGGERS = [
     ("feeblemind", "piu' intelligente"),
 ]
 
-# Stima durata buff in secondi (tick MUD ~4s; molti affect = 24 tick)
+# Stima durata buff in secondi reali (1 unità attribute = 1 ora MUD = SECS_PER_MUD_HOUR)
 BUFF_DURATIONS = {
-    "armor": 96, "bless": 96, "invisibility": 96, "sanctuary": 96, "fly": 96,
-    "haste": 96, "fireshield": 96, "stone skin": 96, "shield": 96, "strength": 96,
-    "barkskin": 96, "detect magic": 96, "detect invisibility": 96,
-    "protection from evil": 96, "anti magic shell": 96, "minor invulnerability": 96,
-    "mana": 96, "aid": 96, "faerie fire": 48, "mirror images": 48,
-    "psi shield": 96, "tower of iron will": 96, "mindblank": 96,
-    "chameleon": 96, "levitation": 96, "psionic strength": 96,
+    "armor": 1800, "bless": 1800, "invisibility": 1800, "sanctuary": 1800, "fly": 1800,
+    "haste": 1800, "fireshield": 1800, "stone skin": 1800, "shield": 1800, "strength": 1800,
+    "barkskin": 1800, "detect magic": 1800, "detect invisibility": 1800,
+    "protection from evil": 1800, "anti magic shell": 1800, "minor invulnerability": 1800,
+    "mana": 1800, "aid": 1800, "faerie fire": 900, "mirror images": 900,
+    "psi shield": 1800, "tower of iron will": 1800, "mindblank": 1800,
+    "chameleon": 1800, "levitation": 1800, "psionic strength": 1800,
 }
 
 # Cast che non sono buff sul personaggio (utility, danno, creazione oggetti, ecc.)
