@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.17"
+Nebbie.version = "2.2.18"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -598,18 +598,22 @@ function Nebbie.warnLegacyPackages()
 end
 
 function Nebbie.purgeOrphanMainScripts(silent)
+  if type(Nebbie_cleanupScripts) == "function" then
+    return Nebbie_cleanupScripts(silent)
+  end
   if type(getScript) ~= "function" or type(disableScript) ~= "function" then return 0 end
   local disabled = 0
-  local keep = Nebbie.MAIN_SCRIPT_NAME or ("Nebbie Play All v" .. (Nebbie.version or ""))
+  local keep = Nebbie.MAIN_SCRIPT_NAME or "Nebbie Play All"
   local legacy = {
-    "Nebbie Play All",
     "Nebbie Spells and Skills",
     "nebbie-install",
+    "Nebbie Bootloader",
     "Nebbie Play All v2.2.12",
     "Nebbie Play All v2.2.13",
     "Nebbie Play All v2.2.14",
     "Nebbie Play All v2.2.15",
     "Nebbie Play All v2.2.16",
+    "Nebbie Play All v2.2.17",
   }
   for _, sname in ipairs(legacy) do
     if sname ~= keep then
