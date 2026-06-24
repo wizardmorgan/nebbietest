@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.22"
+PKG_VER = "2.2.23"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -593,8 +593,14 @@ def build_legacy_perm_names(spells):
     return sorted(set(aliases)), sorted(set(triggers))
 
 
-def lua_string_list(items):
-    return "{" + ", ".join(f'"{lua_escape(x)}"' for x in items) + "}"
+def lua_string_list(items, per_line=10):
+    if not items:
+        return "{}"
+    lines = []
+    for i in range(0, len(items), per_line):
+        chunk = items[i : i + per_line]
+        lines.append("  " + ", ".join(f'"{lua_escape(x)}"' for x in chunk))
+    return "{\n" + ",\n".join(lines) + "\n}"
 
 
 def build_bootstrap_purge_lua(legacy_aliases, legacy_triggers):
@@ -920,20 +926,43 @@ function Nebbie_cacheInstallFromProfile(silent)
   return Nebbie_writeInstallFile(code, silent)
 end
 
-function Nebbie_dofileInstall(silent)
-  local path = Nebbie_installPath()
-  local f = io.open(path, "r")
-  if not f then return false, "manca " .. path end
-  f:close()
-  local ok, err = pcall(function() dofile(path) end)
-  if not ok then return false, tostring(err) end
+function Nebbie_execInstallFile(path, silent)
+  if not path then return false, "path nil" end
+  path = tostring(path):gsub("\\\\", "/")
+  local chunk, lerr = loadfile(path)
+  if not chunk then
+    local f = io.open(path, "rb")
+    if not f then return false, "non apro " .. path .. " (" .. tostring(lerr) .. ")" end
+    local code = f:read("*a") or ""
+    f:close()
+    if #code < 1000 then return false, "file troppo piccolo (" .. #code .. " byte)" end
+    chunk, lerr = loadstring(code, "@" .. path)
+  end
+  if not chunk then return false, "compile: " .. tostring(lerr) end
+  if type(setfenv) == "function" then
+    local env = getfenv(0)
+    if type(env) ~= "table" then env = _G end
+    setfenv(chunk, env)
+  end
+  Nebbie = Nebbie or {{}}
+  Nebbie.package = Nebbie.package or "{PACKAGE_NAME}"
+  local prevDefer = Nebbie._deferBoot
+  Nebbie._deferBoot = true
+  local ok, err = pcall(chunk)
+  Nebbie._deferBoot = prevDefer
+  if not ok then return false, "run: " .. tostring(err) end
   if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
     if not silent then
-      cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " in memoria (dofile).\\n")
+      cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " caricato.\\n")
     end
     return true
   end
-  return false, "dofile ok ma versione=" .. tostring(Nebbie and Nebbie.version)
+  return false, "post ver=" .. tostring(Nebbie and Nebbie.version)
+    .. " runFix=" .. tostring(Nebbie and type(Nebbie.runFix))
+end
+
+function Nebbie_dofileInstall(silent)
+  return Nebbie_execInstallFile(Nebbie_installPath(), silent)
 end
 
 function Nebbie_findPackageInstallFile()
@@ -977,23 +1006,27 @@ function Nebbie_tryPackageInstall(silent)
   if not silent then
     cecho("<grey>Nebbie: install da package <yellow>" .. src .. "\\n")
   end
-  local ok, err = pcall(function() dofile(src) end)
-  if not ok then return false, tostring(err) end
-  if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
+  local ok, err = Nebbie_execInstallFile(src, silent)
+  if ok then
     pcall(function() Nebbie_copyFile(src, Nebbie_installPath(), true) end)
-    if not silent then
-      cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " in memoria (package).\\n")
-    end
     return true
   end
-  return false, "package dofile versione=" .. tostring(Nebbie and Nebbie.version)
+  if not silent then
+    cecho("<orange>Nebbie: package load fallito — " .. tostring(err) .. "\\n")
+  end
+  return false, err
 end
 
 function Nebbie_downloadInstall(callback, silent)
+  if Nebbie._downloadPending then
+    if callback then callback(false, "download gia in corso") end
+    return false, "download gia in corso"
+  end
   if type(downloadFile) ~= "function" then
     if callback then callback(false, "downloadFile non disponibile") end
     return false, "downloadFile non disponibile"
   end
+  Nebbie._downloadPending = true
   local path = Nebbie_installPath()
   local tmp = path .. ".part"
   pcall(function() os.remove(tmp) end)
@@ -1002,6 +1035,7 @@ function Nebbie_downloadInstall(callback, silent)
   okHandler = registerAnonymousEventHandler("sysDownloadDone", function(_, saveTo)
     if done or saveTo ~= tmp then return end
     done = true
+    Nebbie._downloadPending = false
     if okHandler then pcall(function() killAnonymousEventHandler(okHandler) end) end
     if errHandler then pcall(function() killAnonymousEventHandler(errHandler) end) end
     local rf = io.open(tmp, "r")
@@ -1025,6 +1059,7 @@ function Nebbie_downloadInstall(callback, silent)
   errHandler = registerAnonymousEventHandler("sysDownloadError", function(_, msg, saveTo)
     if done or saveTo ~= tmp then return end
     done = true
+    Nebbie._downloadPending = false
     if okHandler then pcall(function() killAnonymousEventHandler(okHandler) end) end
     if errHandler then pcall(function() killAnonymousEventHandler(errHandler) end) end
     pcall(function() os.remove(tmp) end)
@@ -1034,6 +1069,7 @@ function Nebbie_downloadInstall(callback, silent)
     tempTimer(45, function()
       if done then return end
       done = true
+      Nebbie._downloadPending = false
       if okHandler then pcall(function() killAnonymousEventHandler(okHandler) end) end
       if errHandler then pcall(function() killAnonymousEventHandler(errHandler) end) end
       if callback then callback(false, "timeout download (45s)") end
@@ -1082,14 +1118,17 @@ function Nebbie_loadInstall(silent)
     local ok = Nebbie_dofileInstall(silent)
     if ok then return true end
   end
-  local pkgOk = Nebbie_tryPackageInstall(silent)
+  local pkgOk, pkgErr = Nebbie_tryPackageInstall(silent)
   if pkgOk then return true end
+  if not silent and pkgErr then
+    cecho("<grey>Nebbie: " .. tostring(pkgErr) .. "\\n")
+  end
   local cached = Nebbie_cacheInstallFromProfile(true)
   if cached then
     local ok = Nebbie_dofileInstall(silent)
     if ok then return true end
   end
-  return false, "serve download o reinstall package"
+  return false, pkgErr or "serve download o reinstall package"
 end
 
 function Nebbie_loaderBoot()
@@ -1141,25 +1180,36 @@ else
   end
   Nebbie_cleanupScripts(false)
   Nebbie_wipeMemory()
-  local loaded = false
+  local loaded, lerr = false, nil
   if type(Nebbie_loadInstall) == "function" then
-    loaded = Nebbie_loadInstall(false)
+    loaded, lerr = Nebbie_loadInstall(false)
   elseif type(Nebbie_tryPackageInstall) == "function" then
-    loaded = Nebbie_tryPackageInstall(false)
+    loaded, lerr = Nebbie_tryPackageInstall(false)
+  elseif type(Nebbie_execInstallFile) == "function" then
+    loaded, lerr = Nebbie_execInstallFile(Nebbie_installPath(), false)
   elseif type(Nebbie_dofileInstall) == "function" then
-    loaded = Nebbie_dofileInstall(false)
+    loaded, lerr = Nebbie_dofileInstall(false)
   end
   if loaded and Nebbie and type(Nebbie.runFix) == "function" then
     Nebbie.runFix()
     cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " caricato e reinstallato.\\n")
   elseif type(Nebbie_downloadInstall) == "function" then
-    cecho("<yellow>Nebbie: scarico v" .. NEBBIE_EXPECT .. "...\\n")
-    Nebbie_downloadInstall(function(ok, err)
-      if ok and Nebbie_dofileInstall(false) and Nebbie and type(Nebbie.runFix) == "function" then
+    Nebbie_downloadInstall(function(ok, derr)
+      if not ok then
+        cecho("<red>Nebbie: download fallito — " .. tostring(derr) .. "\\n")
+        return
+      end
+      local ok2, lerr2 = false, "exec mancante"
+      if type(Nebbie_execInstallFile) == "function" then
+        ok2, lerr2 = Nebbie_execInstallFile(Nebbie_installPath(), false)
+      elseif type(Nebbie_dofileInstall) == "function" then
+        ok2, lerr2 = Nebbie_dofileInstall(false)
+      end
+      if ok2 and Nebbie and type(Nebbie.runFix) == "function" then
         Nebbie.runFix()
         cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " pronto.\\n")
       else
-        cecho("<red>Nebbie: fix fallito — " .. tostring(err or "dofile") .. "\\n")
+        cecho("<red>Nebbie: fix fallito — " .. tostring(lerr2) .. "\\n")
         cecho("<yellow>Reinstalla package:\\n<grey>   {PKG_URL}\\n")
         cecho("<yellow>Poi <yellow>nfix<grey> di nuovo.\\n")
       end

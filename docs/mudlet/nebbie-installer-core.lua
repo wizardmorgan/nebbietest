@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.22"
+Nebbie.version = "2.2.23"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -36,7 +36,17 @@ Nebbie.eqCache = Nebbie.eqCache or { wield = nil, back = nil, wieldKey = nil, ba
 local PKG = Nebbie.package
 local LEGACY_PKGS = {"nebbie-play-all", "nebbie-spells-skills"}
 local CLASS_VAR = "nebbie_class"
-Nebbie._settingsFile = getMudletHomeDir() .. "/nebbie-play-all-settings.lua"
+function Nebbie.getSettingsFile()
+  if not Nebbie._settingsFile then
+    local home = ""
+    if type(getMudletHomeDir) == "function" then
+      local ok, h = pcall(getMudletHomeDir)
+      if ok and h then home = h end
+    end
+    Nebbie._settingsFile = home .. "/nebbie-play-all-settings.lua"
+  end
+  return Nebbie._settingsFile
+end
 
 Nebbie.PROMPT_SLOTS = {
   { code = "P", name = "polymorph self" },
@@ -259,7 +269,7 @@ end
 function Nebbie.loadSettings()
   Nebbie._settings = Nebbie._settings or {}
   if type(table.load) == "function" then
-    pcall(function() table.load(Nebbie._settingsFile, Nebbie._settings) end)
+    pcall(function() table.load(Nebbie.getSettingsFile(), Nebbie._settings) end)
   end
   Nebbie._settings.eqKeywords = Nebbie._settings.eqKeywords or {}
   if type(Nebbie._settings.eqCache) == "table" then
@@ -280,7 +290,7 @@ end
 
 function Nebbie.saveSettings()
   if type(table.save) == "function" then
-    pcall(function() table.save(Nebbie._settingsFile, Nebbie._settings) end)
+    pcall(function() table.save(Nebbie.getSettingsFile(), Nebbie._settings) end)
   end
 end
 
@@ -2676,9 +2686,11 @@ function Nebbie.boot()
   Nebbie._bootInProgress = false
 end
 
-local _nb_boot_ok, _nb_boot_err = pcall(function() Nebbie.boot() end)
-if not _nb_boot_ok then
-  cecho("<red>[Nebbie] boot error: " .. tostring(_nb_boot_err) .. "\n")
-elseif Nebbie and Nebbie.version then
-  cecho("<green>[Nebbie] v" .. Nebbie.version .. " pronto.\n")
+if not (Nebbie and Nebbie._deferBoot) then
+  local _nb_boot_ok, _nb_boot_err = pcall(function() Nebbie.boot() end)
+  if not _nb_boot_ok then
+    cecho("<red>[Nebbie] boot error: " .. tostring(_nb_boot_err) .. "\n")
+  elseif Nebbie and Nebbie.version then
+    cecho("<green>[Nebbie] v" .. Nebbie.version .. " pronto.\n")
+  end
 end
