@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.13"
+PKG_VER = "2.2.14"
 INSTALLER_CORE = ROOT / "nebbie-installer-core.lua"
 
 # Never shadow common MUD command prefixes (inventory, equipment, rest, …)
@@ -216,6 +216,11 @@ WEAR_OFF_TRIGGERS = [
     ("polymorph", "Ritorni alla tua forma originale"),
     ("web", "ti liberi dalle ragnatele"),
     ("paralyze", "Lentamente ricominci a muoverti"),
+    ("paralyze", "ricominci a muoverti"),
+    ("paralyze", "ricomincia a muoversi"),
+    ("slowness", "movimenti riacquistano la loro velocita"),
+    ("blindness", "svanire la tua"),
+    ("heat stuff", "equipaggiamento finalmente si"),
     ("silence", "Puoi parlare di nuovo"),
     ("mana", "protezione magica scompare"),
     ("aid", "Perdi l'aiuto Divino"),
@@ -249,36 +254,34 @@ SOON_TRIGGERS = [
     ("fly", "stai perdendo la capacita' di volare"),
 ]
 
-# Debuff apply / wear-off (substring triggers; poison/curse hidden from attribute)
+# Affect negativi visibili in attribute (durata da tick, non debuff HUD separato)
+ATTRIB_DEBUFF_SPELLS = [
+    "web", "paralyze", "slowness", "blindness", "fear", "heat stuff", "silence",
+]
+
+# Apply immediato solo su messaggi self (fino al prossimo attribute)
+SELF_AFFECT_APPLY_TRIGGERS = [
+    ("web", "ragnatele che ti avvolgono"),
+    ("web", "ricopert"),
+    ("paralyze", "Sei paralizzato"),
+    ("slowness", "mondo stia rallentando"),
+    ("blindness", "accecat"),
+    ("heat stuff", "frigge"),
+    ("fear", "presa dal panico"),
+    ("silence", "non riesci a parlare"),
+]
+
+# Debuff apply / wear-off: solo affect non in attribute (poison/curse/feeblemind)
 DEBUFF_APPLY_TRIGGERS = [
     ("poison", "appare molto sofferente"),
     ("curse", "maledett"),
-    ("paralyze", "pare impedit"),
-    ("paralyze", "Sei paralizzato"),
-    ("slowness", "rallentatore"),
-    ("slowness", "Sembra che il mondo stia rallentando"),
-    ("web", "dalle ragnatele"),
-    ("web", "della ragnatela"),
-    ("web", "di ragnatele"),
-    ("web", "in ragnatele"),
-    ("heat stuff", "frigge"),
-    ("heat stuff", "bruciare"),
-    ("blindness", "accecat"),
     ("feeblemind", "rimbecillit"),
-    ("fear", "viene presa dal panico"),
 ]
 
 DEBUFF_WEAR_OFF_TRIGGERS = [
     ("poison", "veleno non scorre"),
     ("poison", "sembrano meno forti ora"),
     ("curse", "Ti senti molto meglio"),
-    ("paralyze", "ricominci a muoverti"),
-    ("paralyze", "ricomincia a muoversi"),
-    ("slowness", "movimenti riacquistano la loro velocita"),
-    ("web", "ti liberi dalle"),
-    ("web", "liberarsi dalla ragnatela"),
-    ("heat stuff", "raffredda"),
-    ("blindness", "cecita"),
     ("feeblemind", "piu' intelligente"),
 ]
 
@@ -303,8 +306,8 @@ NO_BUFF_SPELLS = [
     "cure serious", "cure critic", "flamestrike", "earthquake", "meteor swarm",
     "cone of cold", "acid blast", "chain lightning", "ice storm", "burning hands",
     "chill touch", "shocking grasp", "colour spray", "sleep", "charm person",
-    "charm monster", "blindness", "poison", "curse", "energy drain", "feeblemind",
-    "paralyze", "fear", "weakness", "knock", "refresh", "second wind",
+    "charm monster", "poison", "curse", "energy drain", "feeblemind",
+    "weakness", "knock", "refresh", "second wind",
     "messenger", "wizardeye", "clairvoyance", "astral walk", "geyser",
     "faerie fog", "ice storm", "green slime", "darkness", "incendiary cloud",
 ]
@@ -554,6 +557,8 @@ def build_legacy_perm_names(spells):
             triggers.append(f"{prefix}wearoff {name}")
         for name, _pat in SOON_TRIGGERS:
             triggers.append(f"{prefix}soon {name}")
+        for name, pat in SELF_AFFECT_APPLY_TRIGGERS:
+            triggers.append(f"{prefix}affect on {name} {pat}")
         for name, pat in DEBUFF_APPLY_TRIGGERS:
             triggers.append(f"{prefix}debuff on {name} {pat}")
         for name, pat in DEBUFF_WEAR_OFF_TRIGGERS:
@@ -641,6 +646,16 @@ def build_install_lua(spells):
     lines.append("")
     lines.append("Nebbie.failures = {")
     for label, pat in FAIL_TRIGGERS:
+        lines.append(f"  {{ name = '{lua_escape(label)}', pattern = '{lua_escape(pat)}' }},")
+    lines.append("}")
+    lines.append("")
+    lines.append("Nebbie.debuffSpells = {")
+    for n in ATTRIB_DEBUFF_SPELLS:
+        lines.append(f"  ['{lua_escape(n)}'] = true,")
+    lines.append("}")
+    lines.append("")
+    lines.append("Nebbie.selfAffectApply = {")
+    for label, pat in SELF_AFFECT_APPLY_TRIGGERS:
         lines.append(f"  {{ name = '{lua_escape(label)}', pattern = '{lua_escape(pat)}' }},")
     lines.append("}")
     lines.append("")
