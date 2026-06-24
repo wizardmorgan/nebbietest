@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.21"
+PKG_VER = "2.2.22"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -936,6 +936,59 @@ function Nebbie_dofileInstall(silent)
   return false, "dofile ok ma versione=" .. tostring(Nebbie and Nebbie.version)
 end
 
+function Nebbie_findPackageInstallFile()
+  local home = ""
+  if type(getMudletHomeDir) == "function" then
+    local ok, h = pcall(getMudletHomeDir)
+    if ok and h then home = h end
+  end
+  if home == "" then return nil end
+  local sep = "/"
+  if home:sub(-1) == "/" or home:sub(-1) == "\\\\" then sep = "" end
+  local pkg = "{PACKAGE_NAME}"
+  local candidates = {{
+    home .. sep .. pkg .. "/" .. INSTALL_FILE,
+    home .. sep .. INSTALL_FILE,
+  }}
+  for _, p in ipairs(candidates) do
+    local f = io.open(p, "r")
+    if f then
+      local head = f:read(4096) or ""
+      f:close()
+      if nebbie_ver_from_code(head) == NEBBIE_EXPECT then
+        return p
+      end
+    end
+  end
+  return nil
+end
+
+function Nebbie_copyFile(src, dst, silent)
+  local rf = io.open(src, "r")
+  if not rf then return false, "non leggo " .. tostring(src) end
+  local data = rf:read("*a") or ""
+  rf:close()
+  return Nebbie_writeInstallFile(data, silent)
+end
+
+function Nebbie_tryPackageInstall(silent)
+  local src = Nebbie_findPackageInstallFile()
+  if not src then return false, "install non nel package" end
+  if not silent then
+    cecho("<grey>Nebbie: install da package <yellow>" .. src .. "\\n")
+  end
+  local ok, err = pcall(function() dofile(src) end)
+  if not ok then return false, tostring(err) end
+  if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
+    pcall(function() Nebbie_copyFile(src, Nebbie_installPath(), true) end)
+    if not silent then
+      cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " in memoria (package).\\n")
+    end
+    return true
+  end
+  return false, "package dofile versione=" .. tostring(Nebbie and Nebbie.version)
+end
+
 function Nebbie_downloadInstall(callback, silent)
   if type(downloadFile) ~= "function" then
     if callback then callback(false, "downloadFile non disponibile") end
@@ -943,31 +996,53 @@ function Nebbie_downloadInstall(callback, silent)
   end
   local path = Nebbie_installPath()
   local tmp = path .. ".part"
-  downloadFile(INSTALL_URL, tmp,
-    function()
-      local rf = io.open(tmp, "r")
-      if not rf then
-        if callback then callback(false, "download vuoto") end
-        return
-      end
-      local data = rf:read("*a") or ""
-      rf:close()
-      pcall(function() os.remove(tmp) end)
-      local ok, err = Nebbie_writeInstallFile(data, true)
-      if not ok then
-        if callback then callback(false, err) end
-        return
-      end
-      if not silent then
-        cecho("<green>Nebbie: scaricato v" .. NEBBIE_EXPECT .. " da GitHub.\\n")
-      end
-      if callback then callback(true) end
-    end,
-    function(msg)
-      pcall(function() os.remove(tmp) end)
-      if callback then callback(false, tostring(msg)) end
+  pcall(function() os.remove(tmp) end)
+  local done = false
+  local okHandler, errHandler
+  okHandler = registerAnonymousEventHandler("sysDownloadDone", function(_, saveTo)
+    if done or saveTo ~= tmp then return end
+    done = true
+    if okHandler then pcall(function() killAnonymousEventHandler(okHandler) end) end
+    if errHandler then pcall(function() killAnonymousEventHandler(errHandler) end) end
+    local rf = io.open(tmp, "r")
+    if not rf then
+      if callback then callback(false, "download vuoto") end
+      return
     end
-  )
+    local data = rf:read("*a") or ""
+    rf:close()
+    pcall(function() os.remove(tmp) end)
+    local ok, err = Nebbie_writeInstallFile(data, true)
+    if not ok then
+      if callback then callback(false, err) end
+      return
+    end
+    if not silent then
+      cecho("<green>Nebbie: scaricato v" .. NEBBIE_EXPECT .. " da GitHub.\\n")
+    end
+    if callback then callback(true) end
+  end, true)
+  errHandler = registerAnonymousEventHandler("sysDownloadError", function(_, msg, saveTo)
+    if done or saveTo ~= tmp then return end
+    done = true
+    if okHandler then pcall(function() killAnonymousEventHandler(okHandler) end) end
+    if errHandler then pcall(function() killAnonymousEventHandler(errHandler) end) end
+    pcall(function() os.remove(tmp) end)
+    if callback then callback(false, tostring(msg)) end
+  end, true)
+  if type(tempTimer) == "function" then
+    tempTimer(45, function()
+      if done then return end
+      done = true
+      if okHandler then pcall(function() killAnonymousEventHandler(okHandler) end) end
+      if errHandler then pcall(function() killAnonymousEventHandler(errHandler) end) end
+      if callback then callback(false, "timeout download (45s)") end
+    end)
+  end
+  downloadFile(tmp, INSTALL_URL)
+  if not silent then
+    cecho("<yellow>Nebbie: scarico v" .. NEBBIE_EXPECT .. "...\\n")
+  end
   return true
 end
 
@@ -1007,6 +1082,8 @@ function Nebbie_loadInstall(silent)
     local ok = Nebbie_dofileInstall(silent)
     if ok then return true end
   end
+  local pkgOk = Nebbie_tryPackageInstall(silent)
+  if pkgOk then return true end
   local cached = Nebbie_cacheInstallFromProfile(true)
   if cached then
     local ok = Nebbie_dofileInstall(silent)
@@ -1067,6 +1144,8 @@ else
   local loaded = false
   if type(Nebbie_loadInstall) == "function" then
     loaded = Nebbie_loadInstall(false)
+  elseif type(Nebbie_tryPackageInstall) == "function" then
+    loaded = Nebbie_tryPackageInstall(false)
   elseif type(Nebbie_dofileInstall) == "function" then
     loaded = Nebbie_dofileInstall(false)
   end

@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.21"
+Nebbie.version = "2.2.22"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
