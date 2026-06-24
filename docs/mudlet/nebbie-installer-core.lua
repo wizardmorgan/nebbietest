@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.14"
+Nebbie.version = "2.2.15"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -594,6 +594,64 @@ function Nebbie.warnLegacyPackages()
   end
   if legacy then
     cecho("<orange>Nebbie: disinstalla il package vecchio <yellow>nebbie-spells-skills<orange> (Alt+O) per evitare cast doppi.\n")
+  end
+end
+
+function Nebbie.purgeOrphanMainScripts(silent)
+  if type(getScript) ~= "function" or type(disableScript) ~= "function" then return 0 end
+  local disabled = 0
+  local keep = Nebbie.MAIN_SCRIPT_NAME or ("Nebbie Play All v" .. (Nebbie.version or ""))
+  local legacy = {
+    "Nebbie Play All",
+    "Nebbie Spells and Skills",
+    "nebbie-install",
+    "Nebbie Play All v2.2.12",
+    "Nebbie Play All v2.2.13",
+    "Nebbie Play All v2.2.14",
+  }
+  for _, sname in ipairs(legacy) do
+    if sname ~= keep then
+      for occ = 1, 16 do
+        local sid = getScript(sname, occ)
+        if not sid or sid == -1 then break end
+        pcall(function() disableScript(sname, occ) end)
+        disabled = disabled + 1
+      end
+    end
+  end
+  if keep and type(enableScript) == "function" then
+    for occ = 1, 4 do
+      local sid = getScript(keep, occ)
+      if sid and sid ~= -1 then pcall(function() enableScript(keep, occ) end) end
+    end
+  end
+  if not silent and disabled > 0 then
+    cecho("<orange>Nebbie: disattivati " .. disabled .. " script obsoleti.\n")
+    cecho("<grey>Se la versione resta vecchia: <yellow>riavvia Mudlet<grey> e ripeti <yellow>nfix<grey>.\n")
+  end
+  return disabled
+end
+
+function Nebbie.diagnoseInstall()
+  cecho("<cyan><b>Nebbie diagnose</b>\n")
+  cecho("<grey>version: <yellow>" .. tostring(Nebbie.version) .. " <grey>expected: <yellow>" .. tostring(Nebbie._expectedPkgVer or "?") .. "\n")
+  cecho("<grey>runFix: <yellow>" .. tostring(type(Nebbie.runFix)) .. " <grey>mainLoaded: <yellow>" .. tostring(Nebbie._mainLoaded) .. "\n")
+  cecho("<grey>loadedPkgVer: <yellow>" .. tostring(Nebbie._loadedPkgVer) .. " <grey>installedVer: <yellow>" .. tostring(Nebbie._installedVer) .. "\n")
+  cecho("<grey>main script: <yellow>" .. tostring(Nebbie.MAIN_SCRIPT_NAME or "?") .. "\n")
+  if type(getScript) == "function" then
+    for _, sname in ipairs({ "Nebbie Play All", Nebbie.MAIN_SCRIPT_NAME or "?", "Nebbie Spells and Skills" }) do
+      for occ = 1, 4 do
+        local sid = getScript(sname, occ)
+        if sid and sid ~= -1 then
+          local active = "?"
+          if type(isActive) == "function" then
+            local ok, a = pcall(function() return isActive(sname, occ) end)
+            if ok then active = tostring(a) end
+          end
+          cecho("<grey> script <white>" .. sname .. " #" .. occ .. " <grey>id=" .. tostring(sid) .. " active=" .. active .. "\n")
+        end
+      end
+    end
   end
 end
 
@@ -2277,6 +2335,7 @@ end
 function Nebbie.runFix()
   if Nebbie._fixRunning then return end
   Nebbie._fixRunning = true
+  Nebbie.purgeOrphanMainScripts(true)
   Nebbie.killAllTrackedTemps()
   Nebbie.purgeLegacyPermItems(true)
   Nebbie.disablePackagePermItems()
@@ -2364,6 +2423,7 @@ function Nebbie.install()
   perm("reposition gui", [[^npos$]], [[Nebbie.resetGUIPosition()]])
   perm("setup hud", [[^nsetup$]], [[Nebbie.setupHUD()]])
   perm("prompt debug", [[^nprompt$]], [[Nebbie.debugPrompt()]])
+  perm("install diagnose", [[^ndiagnose$]], [[Nebbie.diagnoseInstall()]])
   perm("attrib sync", [[^nattrib$]], [[Nebbie.requestAttrib(false)]])
   perm("attrib on", [[^nattrib on$]], [[Nebbie.setAttribAuto(true)]])
   perm("attrib off", [[^nattrib off$]], [[Nebbie.setAttribAuto(false)]])
@@ -2576,6 +2636,11 @@ function Nebbie.boot()
   if Nebbie._settings.lootAuto == false then Nebbie.lootAuto = false end
   if Nebbie._settings.eqAuto == false then Nebbie.eqAuto = false end
   Nebbie.warnLegacyPackages()
+  Nebbie.purgeOrphanMainScripts(true)
+  if Nebbie._expectedPkgVer and Nebbie.version ~= Nebbie._expectedPkgVer then
+    cecho("<orange>Nebbie: versione caricata <yellow>" .. tostring(Nebbie.version)
+      .. "<orange> ≠ package <yellow>" .. Nebbie._expectedPkgVer .. "<orange> — esegui <yellow>nfix<orange>.\n")
+  end
   Nebbie.pruneStaleDebuffs()
   Nebbie.pruneInvalidBuffs()
   Nebbie.pruneExpiredBuffs()

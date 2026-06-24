@@ -9,7 +9,8 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.14"
+PKG_VER = "2.2.15"
+MAIN_SCRIPT_NAME = f"Nebbie Play All v{PKG_VER}"
 INSTALLER_CORE = ROOT / "nebbie-installer-core.lua"
 
 # Never shadow common MUD command prefixes (inventory, equipment, rest, …)
@@ -611,8 +612,8 @@ def build_install_lua(spells):
     lines.append("-- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)")
     lines.append("Nebbie = Nebbie or {}")
     lines.append("")
-    lines.append("Nebbie.package = 'nebbie-play-all'")
-    lines.append("Nebbie.castMode = Nebbie.castMode or 'cast'  -- cast | recall | mind")
+    lines.append(f'Nebbie.MAIN_SCRIPT_NAME = "{MAIN_SCRIPT_NAME}"')
+    lines.append(f'Nebbie._expectedPkgVer = "{PKG_VER}"')
     lines.append("")
     lines.append("Nebbie.castSpells = {")
     for n in cast_spells:
@@ -728,17 +729,43 @@ def build_xml(legacy_aliases, legacy_triggers, install_lua):
         f'Nebbie = Nebbie or {{}}\n'
         f'Nebbie.package = "{PACKAGE_NAME}"\n'
         f'local NEBBIE_PKG_VER = "{PKG_VER}"\n'
-        "if Nebbie._loadedPkgVer == NEBBIE_PKG_VER and Nebbie._mainLoaded then return end\n"
+        "if Nebbie.version and Nebbie.version ~= NEBBIE_PKG_VER then\n"
+        "  Nebbie._mainLoaded = false\n"
+        "  Nebbie._installedVer = nil\n"
+        "end\n"
+        "if Nebbie._loadedPkgVer and Nebbie._loadedPkgVer ~= NEBBIE_PKG_VER then\n"
+        "  Nebbie._mainLoaded = false\n"
+        "  Nebbie._installedVer = nil\n"
+        "end\n"
+        "if Nebbie._loadedPkgVer == NEBBIE_PKG_VER and Nebbie._mainLoaded and Nebbie.version == NEBBIE_PKG_VER then return end\n"
         "Nebbie._loadedPkgVer = NEBBIE_PKG_VER\n"
         "Nebbie._mainLoaded = false\n"
     )
     main_script = header + purge_lua + "\n" + install_lua
     escaped = main_script.replace("]]>", "]]..']]'..[[")
     nfix_script = (
-        'if Nebbie and Nebbie.runFix then Nebbie.runFix() else '
-        + 'cecho("<orange>Nebbie v'
-        + PKG_VER
-        + ': riavvia Mudlet dopo install package, poi nfix.\\n") end'
+        f'local NEBBIE_EXPECT = "{PKG_VER}"\n'
+        "if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == \"function\" then\n"
+        "  Nebbie.runFix()\n"
+        "else\n"
+        "  if Nebbie and type(Nebbie.purgeOrphanMainScripts) == \"function\" then\n"
+        "    Nebbie.purgeOrphanMainScripts(false)\n"
+        "  elseif type(disableScript) == \"function\" and type(getScript) == \"function\" then\n"
+        "    for _, n in ipairs({\"Nebbie Play All\", \"Nebbie Spells and Skills\"}) do\n"
+        "      for occ = 1, 12 do\n"
+        "        if getScript(n, occ) ~= -1 then pcall(function() disableScript(n, occ) end) end\n"
+        "      end\n"
+        "    end\n"
+        f'    if getScript("{MAIN_SCRIPT_NAME}", 1) ~= -1 then pcall(function() enableScript("{MAIN_SCRIPT_NAME}", 1) end) end\n'
+        "  end\n"
+        "  if Nebbie then Nebbie._loadedPkgVer = nil; Nebbie._mainLoaded = false; Nebbie._installedVer = nil end\n"
+        "  if Nebbie and type(Nebbie.runFix) == \"function\" then Nebbie.runFix()\n"
+        "  elseif Nebbie and type(Nebbie.boot) == \"function\" then Nebbie.boot()\n"
+        "  else\n"
+        f'    cecho("<orange>Nebbie v{PKG_VER}: script non caricato (hai v"..tostring(Nebbie and Nebbie.version or "?")..").\\n")\n'
+        "    cecho(\"<grey>Scripts → elimina «Nebbie Play All» duplicati, riavvia Mudlet, reinstalla package, nfix.\\n\")\n"
+        "  end\n"
+        "end"
     )
     npurge_script = (
         'if Nebbie_purgeLegacyPerm then Nebbie_purgeLegacyPerm() end '
@@ -758,7 +785,7 @@ def build_xml(legacy_aliases, legacy_triggers, install_lua):
 <MudletPackage version="1.001">
  <ScriptPackage>
   <Script isActive="yes" isFolder="no">
-   <name>Nebbie Play All</name>
+   <name>{MAIN_SCRIPT_NAME}</name>
    <script><![CDATA[{escaped}]]></script>
    <eventHandlerList />
    <packageName>{PACKAGE_NAME}</packageName>
