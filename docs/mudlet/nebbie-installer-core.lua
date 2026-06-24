@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.23"
+Nebbie.version = "2.2.24"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1335,32 +1335,33 @@ function Nebbie.scanEqBufferSnapshot()
 
   for i = startIdx + 1, #lines do
     local text = lines[i]
-    if type(text) ~= "string" then goto continue end
-    local plain = Nebbie.stripColors(text)
-    if plain == "" then goto continue end
-    if Nebbie.isPromptLine(plain) then break end
-    if plain:match("^Nulla%.?") then
-      wield, back = nil, nil
-      break
-    end
-    local slot, item = Nebbie.parseEqSlotLine(text)
-    if slot then
-      if item == "" then
-        pendingSlot = slot
-        pendingText = nil
-      else
-        pendingSlot, pendingText = nil, nil
-        if slot == "wield" then wield = item else back = item end
+    if type(text) == "string" then
+      local plain = Nebbie.stripColors(text)
+      if plain ~= "" then
+        if Nebbie.isPromptLine(plain) then break end
+        if plain:match("^Nulla%.?") then
+          wield, back = nil, nil
+          break
+        end
+        local slot, item = Nebbie.parseEqSlotLine(text)
+        if slot then
+          if item == "" then
+            pendingSlot = slot
+            pendingText = nil
+          else
+            pendingSlot, pendingText = nil, nil
+            if slot == "wield" then wield = item else back = item end
+          end
+        elseif pendingSlot and plain ~= "" and not plain:match("^%[%s*%d+%]") and not Nebbie.isPromptLine(plain) then
+          pendingText = pendingText and (pendingText .. " " .. plain) or plain
+          local combined = Nebbie.trimEqItemName(pendingText)
+          if combined then
+            if pendingSlot == "wield" then wield = combined else back = combined end
+            pendingSlot, pendingText = nil, nil
+          end
+        end
       end
-    elseif pendingSlot and plain ~= "" and not plain:match("^%[%s*%d+%]") and not Nebbie.isPromptLine(plain) then
-      pendingText = pendingText and (pendingText .. " " .. plain) or plain
-      local combined = Nebbie.trimEqItemName(pendingText)
-      if combined then
-        if pendingSlot == "wield" then wield = combined else back = combined end
-        pendingSlot, pendingText = nil, nil
-      end
     end
-    ::continue::
   end
 
   Nebbie.eqCache = Nebbie.eqCache or {}
