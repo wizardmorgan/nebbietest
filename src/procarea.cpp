@@ -20,6 +20,7 @@
 #include "interpreter.hpp"
 #include "procarea.hpp"
 #include "procarea_internal.hpp"
+#include "procarea_fatigue.hpp"
 #include "fight.hpp"
 #include "snew.hpp"
 #include "utility.hpp"
@@ -1503,7 +1504,12 @@ static void procarea_on_mob_death_impl(struct char_data* victim) {
 	}
 
 	if(victim->commandp == static_cast<int>(ProcMobKind::Boss)) {
-		procarea_internal::break_treasure_seals(*inst, victim);
+		const int treasure_tier = procarea_fatigue_treasure_tier_for_instance(*inst);
+		inst->treasure_fatigue_tier = treasure_tier;
+		if(!inst->treasure_vnums.empty()) {
+			procarea_internal::break_treasure_seals(*inst, victim);
+		}
+		procarea_fatigue_on_boss_killed(*inst, treasure_tier);
 	}
 
 	if(inst->exit_portal_open) {
@@ -1773,6 +1779,10 @@ long procarea_vnum_to_instance(long vnum) {
 }
 
 bool procarea_is_generated_room(long vnum) {
+	struct room_data* rp = real_roomp(vnum);
+	if(rp != nullptr && IS_SET(rp->room_flags, INSTANCE)) {
+		return true;
+	}
 	return procarea_internal::find_instance_by_vnum(vnum) != nullptr;
 }
 
@@ -1914,6 +1924,60 @@ static void procarea_append_mobs_by_kind(std::ostringstream& info, const ProcAre
 	info << "\n\r";
 }
 
+static void procarea_append_fatigue_immortal_info(std::ostringstream& info,
+												  const ProcAreaInstance& inst) {
+	const int today = procarea_fatigue_day_id();
+	info << "Fatigue (giorno " << today << ", reset a mezzanotte locale):\n\r";
+
+	const int locked_tier = inst.treasure_fatigue_tier;
+	const int predicted_tier = procarea_fatigue_treasure_tier_for_instance(inst);
+	const int tier = locked_tier > 0 ? locked_tier : predicted_tier;
+	const int gear_pct = procarea_fatigue_gear_drop_pct(1, tier);
+	const int gold_pct = procarea_fatigue_gold_drop_pct(tier);
+
+	info << "  Tier tesoro: " << tier;
+	if(locked_tier > 0) {
+		info << " (fissato al boss)";
+	} else {
+		info << " (previsto pre-boss)";
+	}
+	info << " | gear 1° hoard " << gear_pct << "% | oro " << gold_pct << "%\n\r";
+
+	if(!inst.solo_mode) {
+		const float effective = procarea_fatigue_group_effective_clears_for_instance(inst);
+		info << "  Gruppo effective clears: " << std::fixed << std::setprecision(1) << effective
+			 << " (80% media + 20% picco)\n\r";
+	}
+
+	std::unordered_set<std::string> names;
+	auto track = [&](const char* name) {
+		if(name != nullptr && *name != '\0') {
+			names.insert(name);
+		}
+	};
+	track(inst.owner_name.c_str());
+	for(const std::string& member : inst.member_names) {
+		track(member.c_str());
+	}
+	if(names.empty()) {
+		info << "  Nessun PG registrato sull'istanza.\n\r";
+		return;
+	}
+
+	for(const std::string& name : names) {
+		const int solo = procarea_fatigue_solo_clears_for_name(name.c_str());
+		const int group = procarea_fatigue_group_clears_for_name(name.c_str());
+		const int solo_tier = procarea_fatigue_tier_for_name(name, true);
+		const int group_tier = procarea_fatigue_tier_for_name(name, false);
+		info << "  " << name << ": solo " << solo << " (tier " << solo_tier << ") | gruppo "
+			 << group << " (tier " << group_tier << ")";
+		if(!inst.owner_name.empty() && name == inst.owner_name) {
+			info << " [capo]";
+		}
+		info << "\n\r";
+	}
+}
+
 static void procarea_send_dimension_immortal_info(char_data* ch, const ProcAreaInstance& inst) {
 	if(ch == nullptr) {
 		return;
@@ -1969,6 +2033,7 @@ static void procarea_send_dimension_immortal_info(char_data* ch, const ProcAreaI
 	}
 
 	info << "Ingresso [" << inst.entrance_vnum << "] | sala finale [" << inst.boss_vnum << "]\n\r";
+	procarea_append_fatigue_immortal_info(info, inst);
 	send_to_char(info.str().c_str(), ch);
 }
 
