@@ -1,17 +1,9 @@
 #!/usr/bin/env bash
-# Crea un git worktree per il branch mudlet (package Mudlet) accanto al clone Server.
-#
-# Cos'è un worktree?
-#   Una seconda cartella di lavoro collegata allo STESSO repository .git,
-#   ma con un branch diverso checkato (qui: mudlet). Modifiche, commit e push
-#   restano nello stesso repo remoto (mine → wizardmorgan/nebbietest).
+# Crea (o ripara) un git worktree per il branch mudlet.
 #
 # Uso (da /home/nebbie/docker-vms/Server):
 #   ./scripts/setup-mudlet-worktree.sh
-#   cd ../nebbietest-mudlet
-#   git status
-#
-# Path default worktree: ../nebbietest-mudlet (sibling di Server)
+#   cd ../nebbietest-mudlet && git status   # deve dire: On branch mudlet
 
 set -euo pipefail
 
@@ -29,10 +21,27 @@ else
   git fetch --all --prune
 fi
 
+REMOTE_REF="$REMOTE/$BRANCH"
+git show-ref --verify --quiet "refs/remotes/$REMOTE_REF" \
+  || { echo "ERRORE: manca $REMOTE_REF — fetch fallito?" >&2; exit 1; }
+
+repair_detached() {
+  local path="$1"
+  echo "Riparo worktree in detached HEAD: $path"
+  git -C "$path" checkout -B "$BRANCH" "$REMOTE_REF"
+  git -C "$path" branch --set-upstream-to="$REMOTE_REF" "$BRANCH"
+  git -C "$path" status -sb
+}
+
 if [[ -d "$WORKTREE_PATH" ]]; then
   if git -C "$WORKTREE_PATH" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "Worktree già presente: $WORKTREE_PATH"
-    git -C "$WORKTREE_PATH" status -sb
+    CURRENT="$(git -C "$WORKTREE_PATH" symbolic-ref -q HEAD || echo DETACHED)"
+    if [[ "$CURRENT" == "refs/heads/$BRANCH" ]]; then
+      echo "Worktree ok: $WORKTREE_PATH (branch $BRANCH)"
+      git -C "$WORKTREE_PATH" status -sb
+      exit 0
+    fi
+    repair_detached "$WORKTREE_PATH"
     exit 0
   fi
   echo "ERRORE: $WORKTREE_PATH esiste ma non è un worktree git" >&2
@@ -40,11 +49,11 @@ if [[ -d "$WORKTREE_PATH" ]]; then
 fi
 
 mkdir -p "$(dirname "$WORKTREE_PATH")"
-git worktree add "$WORKTREE_PATH" "$REMOTE/$BRANCH" 2>/dev/null \
-  || git worktree add "$WORKTREE_PATH" "$BRANCH"
+# -B: crea branch locale 'mudlet' che punta a mine/mudlet (NON detached HEAD)
+git worktree add -B "$BRANCH" "$WORKTREE_PATH" "$REMOTE_REF"
+git -C "$WORKTREE_PATH" branch --set-upstream-to="$REMOTE_REF" "$BRANCH"
 
 echo ""
 echo "Worktree mudlet creato:"
 echo "  cd $WORKTREE_PATH"
-echo "  # lavori su docs/mudlet/, poi:"
-echo "  git add ... && git commit -m '...' && git push $REMOTE $BRANCH"
+git -C "$WORKTREE_PATH" status -sb

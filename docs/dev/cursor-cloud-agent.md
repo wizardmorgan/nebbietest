@@ -1,49 +1,67 @@
-# Cursor Cloud Agent — dipendenze persistenti
+# Cursor Cloud Agent — sshpass (guida breve)
 
-## sshpass (e altri pacchetti di sistema)
+## Cosa abbiamo messo nel repo (già pushato)
 
-I Cloud Agent partono da VM Ubuntu pulite. Per avere **sshpass su ogni agent**, committa nel repo:
+```
+.cursor/Dockerfile              → installa sshpass nell'immagine VM
+.cursor/environment.json        → dice a Cursor di usare quel Dockerfile
+scripts/cursor-cloud-agent-install.sh  → fallback se manca qualcosa
+```
 
-| File | Ruolo |
-|------|--------|
-| `.cursor/Dockerfile` | Installa `sshpass`, `git`, `sudo`, toolchain base nell'immagine |
-| `.cursor/environment.json` | Punta al Dockerfile + script `install` idempotente |
-| `scripts/cursor-cloud-agent-install.sh` | Fallback `apt install sshpass` + `./getworldlocal` |
+**Tu non devi installare sshpass a mano su ogni agent.**  
+Cursor lo installa quando **costruisce l'ambiente** da questi file.
 
-Cursor risolve la config in questo ordine: **`.cursor/environment.json` nel repo** → ambiente personale → ambiente team.
+---
 
-Dopo il primo merge di questi file:
+## Cosa devi fare TU (una volta)
 
-1. Avvia un **nuovo Cloud Agent** sul branch `feature/istances2.0`
-2. Cursor ricostruisce l'immagine dal Dockerfile (con cache dei layer)
-3. Esegue `install` → snapshot interno → boot successivi più veloci
+### Passo 1 — Assicurati che il repo sul fork abbia i file
 
-### Cosa NON basta
+Su nucbuntu (cartella Server):
 
-- Installare `sshpass` a mano in una sessione → perso al reboot (a meno di snapshot manuale dashboard)
-- Solo `install-user.sh` nella config utente Cursor (fuori repo) → vale solo per te, non per il team
+```bash
+cd ~/docker-vms/Server
+git fetch mine
+git merge mine/feature/istances2.0
+ls -la .cursor/    # deve mostrare Dockerfile e environment.json
+```
 
-### Verifica su un agent
+### Passo 2 — Avvia un NUOVO Cloud Agent
+
+1. Apri **Cursor** → **Cloud Agents** (o lancia un agent su questo repo)
+2. Scegli branch **`feature/istances2.0`** (o quello che usi di solito)
+3. Cursor legge `.cursor/environment.json`, costruisce l'immagine, installa sshpass
+
+> Se hai un **vecchio snapshot** salvato nella dashboard Cursor, può ignorare il Dockerfile nuovo.  
+> In quel caso: Dashboard → Cloud Agents → Environments → elimina/aggiorna il vecchio ambiente per questo repo.
+
+### Passo 3 — Verifica nell'agent
 
 ```bash
 which sshpass
 sshpass -V
 ```
 
-### SSH verso nucbuntu (VPN)
+Se vedi `sshpass 1.09` (o simile) → ok per sempre su quel tipo di agent.
+
+---
+
+## Cosa NON serve
+
+| Azione | Perché no |
+|--------|-----------|
+| `apt install sshpass` a mano ogni volta | si perde al reboot |
+| Solo `install-user.sh` nella config personale Cursor | non è nel repo, non vale per tutti |
+| Modifiche solo su nucbuntu | i Cloud Agent sono VM separate in cloud |
+
+---
+
+## SSH verso nucbuntu dall'agent (opzionale)
+
+Metti la password in **Cursor → Settings → Cloud Agent → Secrets** come `NUC_SSH_PASS`, poi:
 
 ```bash
-sshpass -p 'PASSWORD' ssh -o StrictHostKeyChecking=no nebbie@100.112.168.62 'hostname'
+sshpass -p "$NUC_SSH_PASS" ssh -o StrictHostKeyChecking=no nebbie@100.112.168.62 'hostname'
 ```
 
-**Non committare password.** Usa Cursor Secrets per `NUC_SSH_PASS` se serve all'agent.
-
-### Aggiornare install-user.sh personale (opzionale)
-
-Se hai ancora uno script in Cursor Dashboard → Cloud Agent → Install, puoi allinearlo:
-
-```bash
-bash scripts/cursor-cloud-agent-install.sh
-```
-
-Il file repo `.cursor/environment.json` ha priorità sul repo e sostituisce la necessità di duplicare logica lì.
+Non committare mai la password nel repo.

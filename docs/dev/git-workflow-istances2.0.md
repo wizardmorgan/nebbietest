@@ -57,7 +57,23 @@ Senza duplicare tutto il clone e senza switch continuo di branch.
 cd /home/nebbie/docker-vms/Server
 ./scripts/setup-mudlet-worktree.sh
 cd ../nebbietest-mudlet
-# lavori su docs/mudlet/, commit, push mine mudlet
+git status   # deve dire: On branch mudlet
+```
+
+Se vedi `Not currently on any branch`, ripara così:
+
+```bash
+cd /home/nebbie/docker-vms/Server
+./scripts/setup-mudlet-worktree.sh   # versione aggiornata ripara da sola
+```
+
+Oppure manualmente:
+
+```bash
+cd ~/docker-vms/nebbietest-mudlet
+git checkout -B mudlet mine/mudlet
+git branch --set-upstream-to=mine/mudlet
+git status
 ```
 
 Per rimuovere il worktree in futuro: `git worktree remove ../nebbietest-mudlet`
