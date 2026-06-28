@@ -1,6 +1,8 @@
 #No dot files
 .*
 !.github
+!.cursor
+!.cursor/**
 # apart gitignore
 !.gitignore
 # and travis

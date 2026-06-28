@@ -1,7 +1,9 @@
+# Runtime locale (mail in-game, log, ecc.) — mai versionare
 *
 !.gitignore
 !myst.act
 !myst.dam
 !myst.gui
 !myst.pos
+# mud_mail: file runtime, cambia sempre (vedi docs/dev/git-workflow-istances2.0.md)
 

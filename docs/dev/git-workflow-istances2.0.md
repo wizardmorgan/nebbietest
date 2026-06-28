@@ -29,7 +29,38 @@ Clone di lavoro: `/home/nebbie/docker-vms/Server`
   - `2c50ec7` flag INSTANCE
   - `2f0da2e` fatigue tesoro
   - `9188132` tier gruppo + identify affect
-- Modifica locale non committata: `mudroot/lib/mud_mail`
+- Modifica locale non committata: `mudroot/lib/mud_mail` → **runtime**, rimosso dal tracking git
+
+### mud_mail (runtime)
+
+Il file `mudroot/lib/mud_mail` cambia sempre durante il gioco. Non va committato.
+
+Su nucbuntu, dopo il prossimo pull:
+
+```bash
+git rm --cached mudroot/lib/mud_mail   # una tantum se ancora tracciato
+git status   # non deve più comparire come modified
+```
+
+È già coperto da `mudroot/lib/.gitignore` (`*` con whitelist).
+
+## Git worktree per Mudlet
+
+Un **worktree** è una seconda cartella sul disco che condivide lo stesso repository `.git`, ma con un **branch diverso** estratto (qui `mudlet`). Così:
+
+- `/home/nebbie/docker-vms/Server` → `feature/istances2.0` (MUD + Docker)
+- `/home/nebbie/docker-vms/nebbietest-mudlet` → `mudlet` (package Mudlet)
+
+Senza duplicare tutto il clone e senza switch continuo di branch.
+
+```bash
+cd /home/nebbie/docker-vms/Server
+./scripts/setup-mudlet-worktree.sh
+cd ../nebbietest-mudlet
+# lavori su docs/mudlet/, commit, push mine mudlet
+```
+
+Per rimuovere il worktree in futuro: `git worktree remove ../nebbietest-mudlet`
 
 ## Sync routine (consigliato)
 
