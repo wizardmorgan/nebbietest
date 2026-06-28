@@ -1,0 +1,25 @@
+# Ambiente Sirio — porta 4003 esposta su tutte le interfacce (LAN + port forwarding).
+# Build context: directory parent Server/ (vedi dockerfile path).
+# MySQL interno al container; dump importato al primo avvio se il DB è vuoto.
+
+services:
+  nebbieserver-sirio:
+    build:
+      context: ..
+      dockerfile: sirio_dockers/Dockerfile
+      target: runtime
+      args:
+        TARGETPLATFORM: ${DOCKER_PLATFORM:-linux/amd64}
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
+    image: nebbieserver-sirio:latest
+    container_name: nebbieserver-sirio
+    volumes:
+      - ./mudroot/lib:/app/mudroot/lib
+      - ./mysql_data:/var/lib/mysql
+      - ./init/database_backup.sql:/docker-init/database_backup.sql:ro
+    ports:
+      - "0.0.0.0:4003:4003"
+    tty: true
+    environment:
+      - SERVER_PORT=4003
+      - MYSQL_IMPORT_FILE=/docker-init/database_backup.sql

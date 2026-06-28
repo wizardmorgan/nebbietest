@@ -12,6 +12,12 @@ services:
         volumes:
             - ./mysql_data:/var/lib/mysql
         command: ["mysqld", "--port=33306"]
+        healthcheck:
+            test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-P", "33306", "-uroot", "-psecret"]
+            interval: 5s
+            timeout: 5s
+            retries: 30
+            start_period: 30s
     adminer:
         image: adminer
         ports:
@@ -28,21 +34,21 @@ services:
         image: nebbiearcane/mudcompiler:latest
         platform: ${DOCKER_PLATFORM:-linux/amd64}
         user: "${LOCAL_UID}:${LOCAL_GID}"
-        entrypoint: ["/usr/local/bin/docker-entrypoint.sh"]
-        command: []
+        entrypoint: ["/bin/bash", "/app/scripts/docker-entrypoint-consumer.sh"]
+        working_dir: /app
         stdin_open: true
-        tty: true
         volumes:
             - ./:/app
             - /etc/group:/etc/group:ro
             - /etc/passwd:/etc/passwd:ro
         ports:
-            - 4000:4000
+            - "${SERVER_PORT:-4000}:${SERVER_PORT:-4000}"
             - 4001:4001
             - 4002:4002
+            - 4003:4003
             - 10000:10000
         environment:
-            - SERVER_PORT=4000
+            - SERVER_PORT=${SERVER_PORT:-4000}
             - MYSQL_HOST=mysql
             - MYSQL_DATABASE=nebbie
             - MYSQL_USER=root
@@ -51,5 +57,5 @@ services:
             - DATABASE_URL=mysql://root:secret@mysql:33306/nebbie
             - HOME=/app
         depends_on:
-            - mysql
-            - adminer
+            mysql:
+                condition: service_healthy
