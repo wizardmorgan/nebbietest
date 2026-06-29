@@ -181,9 +181,14 @@ async function api(path, timeoutMs = 20000) {
 
 function renderStats() {
   const counts = state.meta?.counts || {};
-  $("#stats").innerHTML = Object.entries(counts).map(([k, v]) =>
+  const pills = Object.entries(counts).map(([k, v]) =>
     `<span class="stat-pill"><strong>${v}</strong> ${k}</span>`
-  ).join("");
+  );
+  if (state.meta?.lib_dir) {
+    const when = state.meta.imported_at ? ` · ${state.meta.imported_at}` : "";
+    pills.push(`<span class="stat-pill" title="Directory myst.obj usata all'ultimo import">sorgente: ${escapeHtml(state.meta.lib_dir)}${escapeHtml(when)}</span>`);
+  }
+  $("#stats").innerHTML = pills.join("");
 }
 
 function optionList(items, emptyLabel = "Tutti") {

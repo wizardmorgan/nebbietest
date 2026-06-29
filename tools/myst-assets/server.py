@@ -89,6 +89,11 @@ def ensure_database() -> None:
 
 @app.get("/api/meta")
 def meta() -> Dict[str, Any]:
+    import_meta: Dict[str, Any] = {}
+    meta_path = DB_PATH.with_name("import_meta.json")
+    if meta_path.exists():
+        import_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
     with get_conn() as conn:
         counts = {
             row[0]: row[1]
@@ -113,6 +118,9 @@ def meta() -> Dict[str, Any]:
     return {
         "counts": counts,
         "zones": zones,
+        "lib_dir": import_meta.get("lib_dir", str(LIB_DIR)),
+        "imported_at": import_meta.get("imported_at"),
+        "source_counts": import_meta.get("counts"),
         "enums": {
             "item_types": enum_options("ITEM_")[:40],
             "acts": enum_options("ACT_"),

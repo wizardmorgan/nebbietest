@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
@@ -397,6 +398,19 @@ def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
         "specials": len(specials),
     }
     conn.close()
+
+    meta_path = db_path.with_name("import_meta.json")
+    meta_path.write_text(
+        json.dumps(
+            {
+                "lib_dir": str(lib_dir.resolve()),
+                "imported_at": datetime.now(timezone.utc).isoformat(),
+                "counts": counts,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     return counts
 
 

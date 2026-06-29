@@ -46,6 +46,16 @@ def candidate_lib_dirs() -> list[Path]:
     return ordered
 
 
+def _count_objects_in_file(obj_path: Path) -> int:
+    """Conteggio rapido oggetti (#vnum) in myst.obj."""
+    count = 0
+    with obj_path.open(encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if len(line) > 1 and line[0] == "#" and line[1].isdigit():
+                count += 1
+    return count
+
+
 def resolve_lib_dir(explicit: Path | None = None) -> Path:
     if explicit is not None:
         lib_dir = explicit.resolve()
@@ -57,17 +67,25 @@ def resolve_lib_dir(explicit: Path | None = None) -> Path:
             )
         return lib_dir
 
+    valid: list[Path] = []
     for path in candidate_lib_dirs():
         if _has_myst_lib(path):
-            return path
+            valid.append(path)
 
-    searched = "\n".join(f"  - {path}" for path in candidate_lib_dirs())
-    raise FileNotFoundError(
-        "Impossibile trovare i file Myst (myst.zon, myst.obj, myst.mob, myst.wld, ...).\n"
-        f"Percorsi controllati:\n{searched}\n\n"
-        "Suggerimenti:\n"
-        "  - sul branch mudlet i file sono spesso nella root del repository\n"
-        "  - in sviluppo locale possono essere in mudroot/lib/\n"
-        "  - imposta MYST_LIB_DIR=/percorso/alla/directory\n"
-        "  - oppure: python import_db.py --lib-dir /percorso/alla/directory"
-    )
+    if not valid:
+        searched = "\n".join(f"  - {path}" for path in candidate_lib_dirs())
+        raise FileNotFoundError(
+            "Impossibile trovare i file Myst (myst.zon, myst.obj, myst.mob, myst.wld, ...).\n"
+            f"Percorsi controllati:\n{searched}\n\n"
+            "Suggerimenti:\n"
+            "  - sul branch mudlet i file sono spesso nella root del repository\n"
+            "  - in sviluppo locale possono essere in mudroot/lib/\n"
+            "  - imposta MYST_LIB_DIR=/percorso/alla/directory\n"
+            "  - oppure: python import_db.py --lib-dir /percorso/alla/directory"
+        )
+
+    if len(valid) == 1:
+        return valid[0]
+
+    # Se esistono più copie (es. mudroot/lib vs root repo), usa quella con più oggetti.
+    return max(valid, key=lambda path: _count_objects_in_file(path / "myst.obj"))

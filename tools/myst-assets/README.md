@@ -339,6 +339,20 @@ Oppure reinstalla senza cancellare il venv:
 .venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 8765 --reload
 ```
 
+**Oggetti mancanti nel browser ma presenti in gioco (es. vnum 6204)** — il database riflette solo i file `myst.obj` sulla macchina. Se il MUD live usa world più aggiornati del repository git, punta esplicitamente alla lib del server e reimporta:
+
+```bash
+# trova dove sta il myst.obj del MUD live (deve contenere l'oggetto)
+grep -n '^#6204' /percorso/lib/myst.obj
+
+export MYST_LIB_DIR=/percorso/lib/del/mud/live
+cd tools/myst-assets
+.venv/bin/python import_db.py
+./daemon.sh restart
+```
+
+In alto nell'interfaccia compare **sorgente:** con il percorso usato all'ultimo import: verifica che sia quello giusto.
+
 **`FileNotFoundError: myst.zon`** — imposta la directory asset:
 
 ```bash
@@ -362,7 +376,5 @@ Dopo modifiche al parser o allo schema:
 
 ## Note
 
-- La directory asset viene **rilevata automaticamente** (`myst_paths.py`). Sul branch `mudlet` i file sono nella root del repo, non in `mudroot/lib` (quella cartella ignora i `.obj`/`.zon` in git).
-- Il record `#99999` in fondo a `myst.obj` (sentinel `%%`) viene ignorato se incompleto.
-- Mob con VNUM duplicato nel file: vince l'ultima occorrenza (`INSERT OR REPLACE`).
-- La directory `mudroot/lib` usata di default in assenza di auto-detect è la prima candidata valida tra quelle elencate in `myst_paths.py`.
+- La directory asset viene **rilevata automaticamente** (`myst_paths.py`). Se esistono più copie (es. `mudroot/lib` e root repo), viene scelta quella con **più oggetti** in `myst.obj`. Sul branch `mudlet` i file versionati sono spesso nella root del repo.
+- Il browser non legge il MUD in esecuzione: solo i file su disco al momento del reimport.
