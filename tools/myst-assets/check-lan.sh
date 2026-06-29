@@ -7,8 +7,13 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 source "$ROOT/_common.sh"
 
 PORT="${PORT:-8765}"
-HOST="${HOST:-0.0.0.0}"
 LAN_IP="$(myst_assets_primary_ip || true)"
+PIDFILE="$ROOT/myst-assets.pid"
+
+daemon_is_running() {
+  [[ -f "$PIDFILE" ]] || return 1
+  kill -0 "$(cat "$PIDFILE")" 2>/dev/null
+}
 
 echo "=== Myst Asset Browser — check LAN ==="
 echo "Porta: $PORT"
@@ -21,8 +26,8 @@ if command -v ss >/dev/null 2>&1; then
   echo
 fi
 
-if ! daemon_is_running 2>/dev/null; then
-  if [[ -f "$ROOT/myst-assets.pid" ]]; then
+if ! daemon_is_running; then
+  if [[ -f "$PIDFILE" ]]; then
     echo "ATTENZIONE: PID file presente ma processo non attivo."
   else
     echo "Server non in esecuzione. Avvia con: ./daemon.sh start"
@@ -40,11 +45,6 @@ check_url() {
   fi
   echo "FAIL $url"
   return 1
-}
-
-daemon_is_running() {
-  [[ -f "$ROOT/myst-assets.pid" ]] || return 1
-  kill -0 "$(cat "$ROOT/myst-assets.pid")" 2>/dev/null
 }
 
 FAIL=0

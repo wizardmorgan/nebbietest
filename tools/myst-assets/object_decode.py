@@ -80,6 +80,43 @@ WEAPON_TYPES = [
     "BITE", "STING", "PIERCE", "BLAST", "RANGE_WEAPON",
 ]
 
+ALIGNMENT_FLAGS = {"ANTI-GOOD", "ANTI-EVIL", "ANTI-NEUTRAL"}
+GENDER_FLAGS = {"ANTI-MEN", "ANTI-WOMEN"}
+
+# Bit ITEM_ANTI_* / ONLY_CLASS (autoenums.hpp) — allineati a GetItemClassRestrictions()
+ITEM_ANTI_CLERIC = 4096
+ITEM_ANTI_MAGE = 8192
+ITEM_ANTI_THIEF = 16384
+ITEM_ANTI_FIGHTER = 32768
+ITEM_ANTI_BARBARIAN = 4194304
+ITEM_ANTI_RANGER = 8388608
+ITEM_ANTI_PALADIN = 16777216
+ITEM_ANTI_PSI = 33554432
+ITEM_ANTI_MONK = 67108864
+ITEM_ANTI_DRUID = 134217728
+ITEM_ANTI_SORCERER = 2147483648
+ITEM_ONLY_CLASS = 268435456
+
+CLASS_ANTI_BITS = [
+    (ITEM_ANTI_MAGE, "MAGE"),
+    (ITEM_ANTI_CLERIC, "CLERIC"),
+    (ITEM_ANTI_FIGHTER, "WARRIOR"),
+    (ITEM_ANTI_THIEF, "THIEF"),
+    (ITEM_ANTI_DRUID, "DRUID"),
+    (ITEM_ANTI_MONK, "MONK"),
+    (ITEM_ANTI_BARBARIAN, "BARBARIAN"),
+    (ITEM_ANTI_SORCERER, "SORCERER"),
+    (ITEM_ANTI_PALADIN, "PALADIN"),
+    (ITEM_ANTI_RANGER, "RANGER"),
+    (ITEM_ANTI_PSI, "PSIONIST"),
+]
+
+CLASS_ANTI_LABELS = {
+    "ANTI-CLERIC", "ANTI-MAGE", "ANTI-THIEF", "ANTI-WARRIOR", "ANTI-BARBARIAN",
+    "ANTI-RANGER", "ANTI-PALADIN", "ANTI-PSIONIST", "ANTI-MONK", "ANTI-DRUID",
+    "ANTI-SORCERER",
+}
+
 ALIGN_SLAYER_BITS = ["GOOD", "NEUTRAL", "EVIL"]
 
 APPLY_IMMUNE = 26
@@ -187,6 +224,67 @@ def format_affect(location: int, modifier: int) -> Optional[Dict[str, str]]:
     }
 
 
+def get_item_class_restrictions(extra_flags: int, only_class: bool) -> List[str]:
+    """Come GetItemClassRestrictions() + regola wear.cpp (ANTI_MAGE → anche SORCERER se ONLY_CLASS)."""
+    classes: List[str] = []
+    for bit, name in CLASS_ANTI_BITS:
+        if extra_flags & bit:
+            classes.append(name)
+    if only_class and (extra_flags & ITEM_ANTI_MAGE) and "SORCERER" not in classes:
+        classes.append("SORCERER")
+    return classes
+
+
+def decode_class_and_extra_lines(extra_flags: int, extra_flags2: int) -> Dict[str, Any]:
+    """Separa flag estetici/allineamento da restrizioni classe (ONLY-CLASS inverte ANTI-*)."""
+    all_labels = sprintbit2(extra_flags, EXTRA_BITS, extra_flags2, EXTRA_BITS2)
+    only_class = bool(extra_flags & ITEM_ONLY_CLASS) or "ONLY-CLASS" in all_labels
+
+    other_flags: List[str] = []
+    alignment: List[str] = []
+    gender: List[str] = []
+
+    for label in all_labels:
+        if label in CLASS_ANTI_LABELS or label == "ONLY-CLASS":
+            continue
+        if label in ALIGNMENT_FLAGS:
+            alignment.append(label.replace("ANTI-", ""))
+        elif label in GENDER_FLAGS:
+            gender.append("uomini" if label == "ANTI-MEN" else "donne")
+        else:
+            other_flags.append(label)
+
+    class_names = get_item_class_restrictions(extra_flags, only_class)
+    lines: List[str] = []
+
+    if other_flags:
+        lines.append(f"L'oggetto e': {' '.join(other_flags)}")
+
+    if only_class:
+        if class_names:
+            lines.append(
+                "ONLY-CLASS: usabile solo da " + ", ".join(class_names)
+            )
+        else:
+            lines.append("ONLY-CLASS (nessun flag ANTI-classe impostato)")
+    elif class_names:
+        lines.append("Vietato alle classi: " + ", ".join(class_names))
+
+    if alignment:
+        lines.append("Vietato allineamento: " + ", ".join(alignment))
+    if gender:
+        lines.append("Vietato a: " + ", ".join(gender))
+
+    return {
+        "only_class": only_class,
+        "allowed_classes": class_names if only_class else [],
+        "forbidden_classes": class_names if not only_class else [],
+        "other_flags": other_flags,
+        "restriction_lines": lines,
+        "all_extra_labels": all_labels,
+    }
+
+
 def decode_type_specific(type_flag: int, values: List[int]) -> List[Dict[str, str]]:
     v0, v1, v2, v3 = (values + [0, 0, 0, 0])[:4]
     lines: List[Dict[str, str]] = []
@@ -247,6 +345,7 @@ def decode_object_characteristics(obj: Dict[str, Any]) -> Dict[str, Any]:
     rent = int(obj.get("cost_per_day") or 0)
 
     extra_labels = sprintbit2(extra_flags, EXTRA_BITS, extra_flags2, EXTRA_BITS2)
+    class_info = decode_class_and_extra_lines(extra_flags, extra_flags2)
     affects_raw = obj.get("affects")
     if isinstance(affects_raw, str):
         affects_raw = json.loads(affects_raw or "[]")
@@ -263,8 +362,7 @@ def decode_object_characteristics(obj: Dict[str, Any]) -> Dict[str, Any]:
     lines: List[str] = []
     title = obj.get("short_desc") or obj.get("keywords") or f"#{obj.get('vnum')}"
     lines.append(f"Oggetto: '{title}', Tipo di Oggetto {item_type}")
-    if extra_labels:
-        lines.append(f"L'oggetto e': {' '.join(extra_labels)}")
+    lines.extend(class_info["restriction_lines"])
     rent_part = f"{rent}"
     if rare:
         rent_part += " [RARO]"
@@ -292,6 +390,10 @@ def decode_object_characteristics(obj: Dict[str, Any]) -> Dict[str, Any]:
         "title": title,
         "item_type": item_type,
         "extra_flags": extra_labels,
+        "only_class": class_info["only_class"],
+        "allowed_classes": class_info["allowed_classes"],
+        "forbidden_classes": class_info["forbidden_classes"],
+        "other_extra_flags": class_info["other_flags"],
         "weight": weight,
         "value": cost,
         "rent_cost": rent,

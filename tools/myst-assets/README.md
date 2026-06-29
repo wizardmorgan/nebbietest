@@ -98,7 +98,39 @@ http://192.168.0.60:8765/
    ```
    Se funziona in locale ma non dall'altro PC, il problema è firewall o rete (guest Wi‑Fi isolato, VLAN, ecc.).
 
-5. **`run.sh` in foreground** va bene per sviluppo; per uso continuativo preferisci `./daemon.sh start` (senza `--reload`).
+### Se curl funziona ma il browser va in timeout
+
+Causa più frequente: il browser usa **HTTPS** (Firefox “HTTPS-Only”, Chrome “Always use secure connections”). Il server espone solo **HTTP** sulla porta 8765.
+
+```
+✗  https://192.168.0.60:8765/   → timeout
+✓  http://192.168.0.60:8765/    → corretto
+```
+
+Digita `http://` esplicitamente, oppure disattiva HTTPS-Only nelle impostazioni del browser per gli indirizzi locali.
+
+Script di diagnostica (dalla macchina host):
+
+```bash
+./check-lan.sh
+```
+
+Verifica anche dal **PC client** (non solo dall'host):
+
+```bash
+curl -v http://192.168.0.60:8765/health
+curl -v http://192.168.0.60:8765/static/app.js
+```
+
+Se `/api/meta` risponde a curl ma `/` o `/static/app.js` no, il problema è sul frontend statico.
+
+Dopo `git pull`, riavvia il demone per caricare le correzioni:
+
+```bash
+./daemon.sh restart
+```
+
+Usa `./daemon.sh start` (non `run.sh` con `RELOAD=1`) per l'accesso LAN: `--reload` di uvicorn può creare problemi da altri PC.
 
 Variabili utili:
 
@@ -113,6 +145,7 @@ tools/myst-assets/
 ├── README.md           # questa documentazione
 ├── run.sh              # avvio foreground (sviluppo)
 ├── daemon.sh           # start/stop/status demone in background
+├── check-lan.sh        # diagnostica accesso HTTP/LAN
 ├── _common.sh          # setup condiviso venv e lib dir
 ├── myst-assets.service.example  # unit systemd opzionale
 ├── requirements.txt    # dipendenze Python (FastAPI, uvicorn)
