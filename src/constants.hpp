@@ -106,6 +106,7 @@ extern const char *affected_bits2[];
 extern const char *special_user_flags[];
 
 extern const char *immunity_names[];
+#define IMMUNITY_TYPE_COUNT 19 /* entries in immunity_names[] before trailing "\\n" */
 
 extern const char *apply_types[];
 
