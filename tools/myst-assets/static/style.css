@@ -89,15 +89,21 @@ h1 {
 }
 
 .filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
 
-.filters label {
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.filter-row label {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -112,6 +118,59 @@ h1 {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.55rem 0.7rem;
+}
+
+.flag-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  padding: 0.5rem 0.75rem;
+}
+
+.flag-panel summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text);
+  user-select: none;
+}
+
+.flag-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: normal;
+}
+
+.flag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.65rem;
+  max-height: 11rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.flag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.flag-chip:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(94, 177, 255, 0.12);
+}
+
+.flag-chip input {
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .filter-actions {

@@ -407,8 +407,12 @@ def decode_object_characteristics(obj: Dict[str, Any]) -> Dict[str, Any]:
     id_part = f"R#{rnum}" if rnum is not None else f"#{vnum}"
     if rnum is not None and vnum is not None:
         id_part = f"R#{rnum} (V#{vnum})"
+    lines.append(f"Nome: '{title}'")
     lines.append(f"Oggetto {id_part}, Tipo di Oggetto {item_type}")
     lines.extend(class_info["restriction_lines"])
+    wear_labels = sprintbit(int(obj.get("wear_flags") or 0), WEAR_BITS)
+    if wear_labels:
+        lines.append("Indossabile su: " + " ".join(wear_labels))
     rent_part = f"{rent}"
     if rare:
         rent_part += " [RARO]"
@@ -440,6 +444,7 @@ def decode_object_characteristics(obj: Dict[str, Any]) -> Dict[str, Any]:
         "allowed_classes": class_info["allowed_classes"],
         "forbidden_classes": class_info["forbidden_classes"],
         "other_extra_flags": class_info["other_flags"],
+        "wear_flags": wear_labels,
         "weight": weight,
         "value": cost,
         "rent_cost": rent,

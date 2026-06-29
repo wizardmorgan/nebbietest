@@ -253,10 +253,13 @@ def get_object_by_vnum(vnum: int) -> Dict[str, Any]:
 
 
 def _object_payload(data: Dict[str, Any]) -> Dict[str, Any]:
-    data["affects"] = json.loads(data.pop("affects_json") or "[]")
-    data["extra_descriptions"] = json.loads(data.pop("extra_json") or "[]")
-    data["characteristics"] = decode_object_characteristics(data)
-    return data
+    try:
+        data["affects"] = json.loads(data.pop("affects_json") or "[]")
+        data["extra_descriptions"] = json.loads(data.pop("extra_json") or "[]")
+        data["characteristics"] = decode_object_characteristics(data)
+        return data
+    except Exception as exc:
+        return {"error": "decode_failed", "message": str(exc), "rnum": data.get("rnum")}
 
 
 @app.get("/api/mobiles")

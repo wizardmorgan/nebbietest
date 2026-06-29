@@ -29,8 +29,8 @@ const TAB_CONFIG = {
       { id: "vnum_max", label: "V# max (prototipo file)", type: "number" },
       { id: "zone_index", label: "Zona", type: "zone" },
       { id: "type_flag", label: "Tipo oggetto", type: "item_type" },
-      { id: "flags", label: "Extra flags (tutti)", type: "text", placeholder: "only-class, anti-ranger, artifact" },
-      { id: "wear", label: "Wear flags (tutti)", type: "text", placeholder: "head, back, wield" },
+      { id: "flags", label: "Extra flags", type: "flag_checkboxes", enumKey: "extra_flags" },
+      { id: "wear", label: "Wear flags", type: "flag_checkboxes", enumKey: "wear_flags" },
     ],
   },
   mobiles: {
@@ -210,36 +210,65 @@ function renderFilters() {
     .concat(zones.map(z => `<option value="${z.zone_index}">#${z.zone_num} ${z.name} [${z.bottom}-${z.top}]</option>`))
     .join("");
 
-  const fields = cfg.filters.map((f) => {
+  const scalarFields = [];
+  const panelFields = [];
+
+  for (const f of cfg.filters) {
     if (f.type === "zone") {
-      return `<label>${f.label}<select data-filter="${f.id}">${zoneOptions}</select></label>`;
+      scalarFields.push(`<label>${f.label}<select data-filter="${f.id}">${zoneOptions}</select></label>`);
+      continue;
     }
     if (f.type === "item_type") {
-      return `<label>${f.label}<select data-filter="${f.id}">${optionList(enums.item_types)}</select></label>`;
+      scalarFields.push(`<label>${f.label}<select data-filter="${f.id}">${optionList(enums.item_types)}</select></label>`);
+      continue;
     }
     if (f.type === "race") {
-      return `<label>${f.label}<select data-filter="${f.id}">${optionList(enums.races)}</select></label>`;
+      scalarFields.push(`<label>${f.label}<select data-filter="${f.id}">${optionList(enums.races)}</select></label>`);
+      continue;
     }
     if (f.type === "sector") {
-      return `<label>${f.label}<select data-filter="${f.id}">${optionList(enums.sectors)}</select></label>`;
+      scalarFields.push(`<label>${f.label}<select data-filter="${f.id}">${optionList(enums.sectors)}</select></label>`);
+      continue;
     }
-    return `<label>${f.label}<input data-filter="${f.id}" type="${f.type}" placeholder="${f.placeholder || ""}"></label>`;
-  }).join("");
+    if (f.type === "flag_checkboxes") {
+      const names = enums[f.enumKey] || [];
+      const chips = names.map((name) =>
+        `<label class="flag-chip"><input type="checkbox" data-filter="${f.id}" value="${name}"><span>${escapeHtml(name)}</span></label>`
+      ).join("");
+      panelFields.push(
+        `<details class="flag-panel" open>` +
+        `<summary>${escapeHtml(f.label)} <span class="flag-hint">— tutti quelli spuntati</span></summary>` +
+        `<div class="flag-grid">${chips}</div></details>`
+      );
+      continue;
+    }
+    scalarFields.push(
+      `<label>${f.label}<input data-filter="${f.id}" type="${f.type}" placeholder="${f.placeholder || ""}"></label>`
+    );
+  }
 
-  $("#filters").innerHTML = `${fields}
+  $("#filters").innerHTML = `
+    <div class="filter-row">${scalarFields.join("")}</div>
+    ${panelFields.join("")}
     <div class="filter-actions">
-      <button id="searchBtn">Cerca</button>
-      <button id="resetBtn" class="ghost">Reset</button>
+      <button id="searchBtn" type="button">Cerca</button>
+      <button id="resetBtn" class="ghost" type="button">Reset</button>
     </div>`;
 
   $("#searchBtn").onclick = () => { state.page = 0; loadResults(); };
   $("#resetBtn").onclick = () => {
-    $("#filters").querySelectorAll("[data-filter]").forEach((el) => { el.value = ""; });
+    $("#filters").querySelectorAll("[data-filter]").forEach((el) => {
+      if (el.type === "checkbox") {
+        el.checked = false;
+      } else {
+        el.value = "";
+      }
+    });
     state.page = 0;
     loadResults();
   };
 
-  $("#filters").querySelectorAll("[data-filter]").forEach((el) => {
+  $("#filters").querySelectorAll("input[data-filter]:not([type=checkbox]), select[data-filter]").forEach((el) => {
     el.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
@@ -252,9 +281,24 @@ function renderFilters() {
 
 function currentFilterParams() {
   const params = new URLSearchParams();
+  const checkboxGroups = {};
+
   $("#filters").querySelectorAll("[data-filter]").forEach((el) => {
+    if (el.type === "checkbox") {
+      if (el.checked) {
+        const id = el.dataset.filter;
+        if (!checkboxGroups[id]) checkboxGroups[id] = [];
+        checkboxGroups[id].push(el.value);
+      }
+      return;
+    }
     if (el.value !== "") params.set(el.dataset.filter, el.value);
   });
+
+  for (const [id, values] of Object.entries(checkboxGroups)) {
+    if (values.length) params.set(id, values.join(","));
+  }
+
   params.set("limit", state.pageSize);
   params.set("offset", state.page * state.pageSize);
   return params;
@@ -291,15 +335,30 @@ function escapeHtml(text) {
 function renderDetail(row) {
   const cfg = TAB_CONFIG[state.tab];
   const body = $("#detailBody");
+  const id = row.rnum != null ? row.rnum : row.vnum;
 
-  if (cfg.detailEndpoint && (row.rnum !== undefined || row.vnum !== undefined)) {
-    api(cfg.detailEndpoint(row)).then((data) => {
-      if (data.error) {
-        body.innerHTML = `<div class="muted">${data.error}</div>`;
-        return;
-      }
-      body.innerHTML = renderDetailObject(data);
-    });
+  if (cfg.detailEndpoint && id != null) {
+    body.innerHTML = `<div class="muted">Caricamento identify…</div>`;
+    api(cfg.detailEndpoint(row))
+      .then((data) => {
+        if (data.error) {
+          body.innerHTML =
+            `<div class="muted">${escapeHtml(data.error)}` +
+            (data.error === "not found"
+              ? "<br><br>Prova <strong>Reimporta da lib</strong> se hai aggiornato myst.obj."
+              : "") +
+            `</div>`;
+          return;
+        }
+        if (!data.characteristics?.summary_lines?.length) {
+          body.innerHTML = `<div class="muted">Dettaglio senza blocco identify. Reimporta il database.</div>`;
+          return;
+        }
+        body.innerHTML = renderDetailObject(data);
+      })
+      .catch((err) => {
+        body.innerHTML = `<div class="muted">Errore dettaglio: ${escapeHtml(err.message)}</div>`;
+      });
     return;
   }
 
