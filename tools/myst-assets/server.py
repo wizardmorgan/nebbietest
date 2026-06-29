@@ -43,18 +43,27 @@ def _table_query(
     columns: List[str],
     *,
     q: Optional[str] = None,
+    rnum_min: Optional[int] = None,
+    rnum_max: Optional[int] = None,
     vnum_min: Optional[int] = None,
     vnum_max: Optional[int] = None,
     zone_index: Optional[int] = None,
     extra_where: Optional[str] = None,
     extra_params: Optional[List[Any]] = None,
     order_by: str = "vnum",
+    fts_id_column: str = "vnum",
     limit: int = 100,
     offset: int = 0,
 ) -> Dict[str, Any]:
     where: List[str] = []
     params: List[Any] = list(extra_params or [])
 
+    if rnum_min is not None:
+        where.append("rnum >= ?")
+        params.append(rnum_min)
+    if rnum_max is not None:
+        where.append("rnum <= ?")
+        params.append(rnum_max)
     if vnum_min is not None:
         where.append("vnum >= ?")
         params.append(vnum_min)
@@ -68,7 +77,9 @@ def _table_query(
         where.append(extra_where)
 
     if q and fts_table:
-        where.append(f"vnum IN (SELECT vnum FROM {fts_table} WHERE {fts_table} MATCH ?)")
+        where.append(
+            f"{fts_id_column} IN (SELECT rowid FROM {fts_table} WHERE {fts_table} MATCH ?)"
+        )
         params.append(q)
 
     where_sql = f"WHERE {' AND '.join(where)}" if where else ""
@@ -134,6 +145,8 @@ def meta() -> Dict[str, Any]:
 @app.get("/api/objects")
 def list_objects(
     q: Optional[str] = None,
+    rnum_min: Optional[int] = None,
+    rnum_max: Optional[int] = None,
     vnum_min: Optional[int] = None,
     vnum_max: Optional[int] = None,
     zone_index: Optional[int] = None,
@@ -171,6 +184,7 @@ def list_objects(
         "objects",
         "objects_fts",
         [
+            "rnum",
             "vnum",
             "zone_index",
             "keywords",
@@ -181,23 +195,39 @@ def list_objects(
             "flags_text",
         ],
         q=q,
+        rnum_min=rnum_min,
+        rnum_max=rnum_max,
         vnum_min=vnum_min,
         vnum_max=vnum_max,
         zone_index=zone_index,
         extra_where=" AND ".join(extra_where) if extra_where else None,
         extra_params=extra_params,
+        order_by="rnum",
+        fts_id_column="rnum",
         limit=limit,
         offset=offset,
     )
 
 
-@app.get("/api/objects/{vnum}")
-def get_object(vnum: int) -> Dict[str, Any]:
+@app.get("/api/objects/{rnum}")
+def get_object(rnum: int) -> Dict[str, Any]:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM objects WHERE rnum = ?", (rnum,)).fetchone()
+    if not row:
+        return {"error": "not found"}
+    return _object_payload(dict(row))
+
+
+@app.get("/api/objects/by-vnum/{vnum}")
+def get_object_by_vnum(vnum: int) -> Dict[str, Any]:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM objects WHERE vnum = ?", (vnum,)).fetchone()
     if not row:
         return {"error": "not found"}
-    data = dict(row)
+    return _object_payload(dict(row))
+
+
+def _object_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     data["affects"] = json.loads(data.pop("affects_json") or "[]")
     data["extra_descriptions"] = json.loads(data.pop("extra_json") or "[]")
     data["characteristics"] = decode_object_characteristics(data)

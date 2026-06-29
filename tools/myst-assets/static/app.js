@@ -11,18 +11,21 @@ const TAB_CONFIG = {
   objects: {
     endpoint: "/api/objects",
     columns: [
-      ["vnum", "VNUM"],
+      ["rnum", "R#"],
+      ["vnum", "V#"],
       ["short_desc", "Nome"],
       ["type_name", "Tipo"],
       ["weight", "Peso"],
       ["cost", "Valore"],
       ["flags_text", "L'oggetto e'"],
     ],
-    detailEndpoint: (vnum) => `/api/objects/${vnum}`,
+    detailEndpoint: (row) => `/api/objects/${row.rnum}`,
     filters: [
       { id: "q", label: "Ricerca testo (FTS)", type: "text", placeholder: "spada, elmo, corona..." },
-      { id: "vnum_min", label: "VNUM min", type: "number" },
-      { id: "vnum_max", label: "VNUM max", type: "number" },
+      { id: "rnum_min", label: "R# min", type: "number" },
+      { id: "rnum_max", label: "R# max", type: "number" },
+      { id: "vnum_min", label: "V# min (prototipo file)", type: "number" },
+      { id: "vnum_max", label: "V# max (prototipo file)", type: "number" },
       { id: "zone_index", label: "Zona", type: "zone" },
       { id: "type_flag", label: "Tipo oggetto", type: "item_type" },
       { id: "flags", label: "Extra flags (tutti)", type: "text", placeholder: "ONLY-CLASS, ANTI-RANGER" },
@@ -279,8 +282,8 @@ function renderDetail(row) {
   const cfg = TAB_CONFIG[state.tab];
   const body = $("#detailBody");
 
-  if (cfg.detailEndpoint && row.vnum !== undefined) {
-    api(cfg.detailEndpoint(row.vnum)).then((data) => {
+  if (cfg.detailEndpoint && (row.rnum !== undefined || row.vnum !== undefined)) {
+    api(cfg.detailEndpoint(row)).then((data) => {
       if (data.error) {
         body.innerHTML = `<div class="muted">${data.error}</div>`;
         return;

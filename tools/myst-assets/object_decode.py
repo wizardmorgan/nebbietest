@@ -374,8 +374,13 @@ def decode_object_characteristics(obj: Dict[str, Any]) -> Dict[str, Any]:
     rare = cost >= LIM_ITEM_COST_MIN
 
     lines: List[str] = []
-    title = obj.get("short_desc") or obj.get("keywords") or f"#{obj.get('vnum')}"
-    lines.append(f"Oggetto: '{title}', Tipo di Oggetto {item_type}")
+    title = obj.get("short_desc") or obj.get("keywords") or f"R#{obj.get('rnum')}"
+    rnum = obj.get("rnum")
+    vnum = obj.get("vnum")
+    id_part = f"R#{rnum}" if rnum is not None else f"#{vnum}"
+    if rnum is not None and vnum is not None:
+        id_part = f"R#{rnum} (V#{vnum})"
+    lines.append(f"Oggetto {id_part}, Tipo di Oggetto {item_type}")
     lines.extend(class_info["restriction_lines"])
     rent_part = f"{rent}"
     if rare:

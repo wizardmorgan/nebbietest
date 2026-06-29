@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List
 
 from myst_enums import decode_flags, decode_item_type, decode_race, decode_sector
 from object_decode import decode_object_characteristics, sprintbit2, EXTRA_BITS, EXTRA_BITS2, ITEM_TYPES
+from myst_index import load_indexed_objects
 from myst_paths import resolve_lib_dir
 from myst_parser import MystMob, MystObject, MystRoom, MystShop, MystSpecial, MystZone, load_world, zone_for_vnum
 
@@ -29,7 +30,8 @@ CREATE TABLE IF NOT EXISTS zones (
 );
 
 CREATE TABLE IF NOT EXISTS objects (
-    vnum INTEGER PRIMARY KEY,
+    rnum INTEGER PRIMARY KEY,
+    vnum INTEGER UNIQUE NOT NULL,
     zone_index INTEGER,
     keywords TEXT,
     short_desc TEXT,
@@ -155,13 +157,14 @@ CREATE TABLE IF NOT EXISTS specials (
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS objects_fts USING fts5(
+    rnum UNINDEXED,
     vnum UNINDEXED,
     keywords,
     short_desc,
     long_desc,
     search_text,
     content='objects',
-    content_rowid='vnum'
+    content_rowid='rnum'
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS mobiles_fts USING fts5(
@@ -198,7 +201,7 @@ def _zone_index(zones: List[MystZone], vnum: int) -> int | None:
 def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
     world = load_world(lib_dir)
     zones: List[MystZone] = world["zones"]
-    objects: List[MystObject] = world["objects"]
+    indexed_objects = load_indexed_objects(lib_dir)
     mobiles: List[MystMob] = world["mobiles"]
     rooms: List[MystRoom] = world["rooms"]
     shops: List[MystShop] = world["shops"]
@@ -219,9 +222,10 @@ def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
     )
 
     conn.executemany(
-        """INSERT OR REPLACE INTO objects VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        """INSERT OR REPLACE INTO objects VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         [
             (
+                entry.rnum,
                 o.vnum,
                 _zone_index(zones, o.vnum),
                 o.keywords,
@@ -247,7 +251,7 @@ def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
                 " ".join(sprintbit2(o.extra_flags, EXTRA_BITS, o.extra_flags2, EXTRA_BITS2)),
                 _search_blob(o.keywords, o.short_desc, o.long_desc, o.action_desc),
             )
-            for o in objects
+            for entry, o in indexed_objects
         ],
     )
 
@@ -390,7 +394,7 @@ def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
     conn.commit()
     counts = {
         "zones": len(zones),
-        "objects": len(objects),
+        "objects": len(indexed_objects),
         "mobiles": len(mobiles),
         "rooms": len(rooms),
         "zone_resets": len(reset_rows),
