@@ -17,7 +17,7 @@ Type=simple
 User=nebbie
 Group=nebbie
 WorkingDirectory=/home/nebbie/docker-vms/nebbietest-mudlet/tools/myst-assets
-Environment=MYST_LIB_DIR=/home/nebbie/docker-vms/nebbietest-mudlet
+Environment=MYST_LIB_DIR=/home/nebbie/docker-vms/Server/mudroot/lib
 Environment=HOST=0.0.0.0
 Environment=PORT=8765
 ExecStart=/home/nebbie/docker-vms/nebbietest-mudlet/tools/myst-assets/.venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 8765

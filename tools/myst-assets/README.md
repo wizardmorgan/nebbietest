@@ -199,8 +199,9 @@ All'apertura del browser sono disponibili sette tab:
 - R# min / max, V# min / max
 - Zona (per range VNUM)
 - Tipo oggetto (`ITEM_WEAPON`, `ITEM_ARMOR`, …)
-- **Extra flags (tutti)** — nomi separati da virgola; l'oggetto deve averli tutti (es. `ONLY-CLASS, ANTI-RANGER` per oggetti riservati ai ranger; con ONLY-CLASS i flag ANTI-* indicano le classi ammesse)
-- Extra flag (bit, uno qualsiasi) e wear flag (valore bitmask)
+- **Extra flags (tutti)** — parole chiave separate da virgola, case-insensitive (es. `only-class, anti-ranger, artifact`)
+- **Wear flags (tutti)** — parole chiave per slot indossabile (es. `head, back, wield`)
+- Extra flag (bit, uno qualsiasi) e wear flag (bit) — rimossi dall'interfaccia; usa i campi testuali sopra
 
 **Mob**
 
@@ -347,10 +348,10 @@ Oppure reinstalla senza cancellare il venv:
 # trova il prototipo (V-number) del MUD live
 grep -n '^#6204' /percorso/lib/myst.obj
 
-export MYST_LIB_DIR=/percorso/lib/del/mud/live
+export MYST_LIB_DIR=/home/nebbie/docker-vms/Server/mudroot/lib
 cd tools/myst-assets
-.venv/bin/python import_db.py
 ./daemon.sh restart
+# oppure: .venv/bin/python import_db.py && clic "Reimporta da lib"
 ```
 
 Poi cerca per **R#** (come in `ostat`), es. `R# min` = `1448`, oppure filtra `ONLY-CLASS, ANTI-RANGER`.
