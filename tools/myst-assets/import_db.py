@@ -8,6 +8,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from myst_enums import decode_flags, decode_item_type, decode_race, decode_sector
 from myst_paths import resolve_lib_dir
 from myst_parser import MystMob, MystObject, MystRoom, MystShop, MystSpecial, MystZone, load_world, zone_for_vnum
 
