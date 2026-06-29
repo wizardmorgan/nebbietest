@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 from myst_enums import decode_flags, decode_item_type, decode_race, decode_sector
+from object_decode import decode_object_characteristics, sprintbit2, EXTRA_BITS, EXTRA_BITS2, ITEM_TYPES
 from myst_paths import resolve_lib_dir
 from myst_parser import MystMob, MystObject, MystRoom, MystShop, MystSpecial, MystZone, load_world, zone_for_vnum
 
@@ -227,7 +228,7 @@ def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
                 o.long_desc,
                 o.action_desc,
                 o.type_flag,
-                decode_item_type(o.type_flag),
+                ITEM_TYPES.get(o.type_flag, decode_item_type(o.type_flag)),
                 o.extra_flags,
                 o.wear_flags,
                 o.extra_flags2,
@@ -242,7 +243,7 @@ def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
                 json.dumps([e.__dict__ for e in o.extra_descriptions]),
                 o.forbidden_wear_char,
                 o.forbidden_wear_room,
-                ", ".join(decode_flags(o.extra_flags, "ITEM_")),
+                " ".join(sprintbit2(o.extra_flags, EXTRA_BITS, o.extra_flags2, EXTRA_BITS2)),
                 _search_blob(o.keywords, o.short_desc, o.long_desc, o.action_desc),
             )
             for o in objects

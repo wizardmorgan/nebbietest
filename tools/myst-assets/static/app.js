@@ -14,9 +14,9 @@ const TAB_CONFIG = {
       ["vnum", "VNUM"],
       ["short_desc", "Nome"],
       ["type_name", "Tipo"],
-      ["cost", "Costo"],
       ["weight", "Peso"],
-      ["flags_text", "Flag"],
+      ["cost", "Valore"],
+      ["flags_text", "L'oggetto e'"],
     ],
     detailEndpoint: (vnum) => `/api/objects/${vnum}`,
     filters: [
@@ -287,8 +287,33 @@ function renderDetail(row) {
   body.innerHTML = renderDetailObject(row);
 }
 
+function renderObjectCharacteristics(data) {
+  const ch = data.characteristics;
+  if (!ch) return "";
+
+  const parts = [`<div class="obj-identify">`];
+  for (const line of ch.summary_lines || []) {
+    if (line === "Caratteristiche:") {
+      parts.push(`<div class="obj-identify-heading">${escapeHtml(line)}</div>`);
+    } else if (line.startsWith("    ")) {
+      parts.push(`<div class="obj-identify-aff">${escapeHtml(line.trim())}</div>`);
+    } else {
+      parts.push(`<div class="obj-identify-line">${escapeHtml(line)}</div>`);
+    }
+  }
+  parts.push("</div>");
+  return parts.join("");
+}
+
 function renderDetailObject(data) {
-  const skip = new Set(["affects_json", "extra_json", "exits_json", "producing_json", "trade_types_json", "messages_json", "search_text"]);
+  if (data.characteristics) {
+    return renderObjectCharacteristics(data);
+  }
+
+  const skip = new Set([
+    "affects_json", "extra_json", "exits_json", "producing_json", "trade_types_json",
+    "messages_json", "search_text", "characteristics",
+  ]);
   const parts = ["<dl class='kv'>"];
   for (const [key, value] of Object.entries(data)) {
     if (skip.has(key)) continue;

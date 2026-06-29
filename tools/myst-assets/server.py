@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from myst_enums import enum_options
+from object_decode import decode_object_characteristics
 from myst_paths import resolve_lib_dir
 from import_db import import_world
 
@@ -154,12 +155,6 @@ def list_objects(
             "keywords",
             "short_desc",
             "type_name",
-            "extra_flags",
-            "wear_flags",
-            "value0",
-            "value1",
-            "value2",
-            "value3",
             "weight",
             "cost",
             "flags_text",
@@ -184,6 +179,7 @@ def get_object(vnum: int) -> Dict[str, Any]:
     data = dict(row)
     data["affects"] = json.loads(data.pop("affects_json") or "[]")
     data["extra_descriptions"] = json.loads(data.pop("extra_json") or "[]")
+    data["characteristics"] = decode_object_characteristics(data)
     return data
 
 

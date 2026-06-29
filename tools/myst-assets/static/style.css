@@ -221,6 +221,28 @@ tbody tr.selected {
   border-radius: 4px;
 }
 
+.obj-identify {
+  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.obj-identify-line {
+  margin-bottom: 0.35rem;
+}
+
+.obj-identify-heading {
+  margin: 0.75rem 0 0.35rem;
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.obj-identify-aff {
+  padding-left: 1rem;
+  color: var(--text);
+}
+
 .loading-banner {
   padding: 0.5rem 1.5rem;
   color: var(--muted);
