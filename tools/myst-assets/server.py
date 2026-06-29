@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, Query
-from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from myst_enums import enum_options
@@ -21,9 +22,16 @@ LIB_DIR = resolve_lib_dir()
 
 app = FastAPI(title="Myst Asset Browser", version="1.0.0")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -471,9 +479,22 @@ def reimport() -> Dict[str, Any]:
     return {"status": "ok", "counts": counts}
 
 
-app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
+@app.get("/health")
+def health() -> PlainTextResponse:
+    return PlainTextResponse("ok")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(APP_DIR / "static" / "index.html")
+    return FileResponse(
+        APP_DIR / "static" / "index.html",
+        media_type="text/html; charset=utf-8",
+    )
+
+
+app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")

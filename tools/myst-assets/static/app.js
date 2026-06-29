@@ -140,10 +140,42 @@ const TAB_CONFIG = {
 
 function $(sel) { return document.querySelector(sel); }
 
-async function api(path) {
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+function showNetBanner(message) {
+  const el = $("#netBanner");
+  if (!el) return;
+  el.hidden = false;
+  el.innerHTML = message;
+}
+
+function checkProtocol() {
+  if (location.protocol === "https:") {
+    const httpUrl = `http://${location.host}${location.pathname}`;
+    showNetBanner(
+      `Stai usando <strong>HTTPS</strong> su una porta senza TLS. Il browser va in timeout. ` +
+      `Apri <a href="${httpUrl}"><code>${httpUrl}</code></a> (con <strong>http://</strong>).`
+    );
+    return false;
+  }
+  return true;
+}
+
+async function api(path, timeoutMs = 20000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(path, { signal: ctrl.signal, cache: "no-store" });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} su ${path}`);
+    }
+    return res.json();
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error(`Timeout (${timeoutMs / 1000}s) su ${path} — server irraggiungibile o bloccato`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function renderStats() {
@@ -301,7 +333,32 @@ function switchTab(tab) {
 }
 
 async function init() {
-  state.meta = await api("/api/meta");
+  if (!checkProtocol()) {
+    $("#detailBody").innerHTML = `<div class="muted">Correggi l'URL (usa http://) e ricarica.</div>`;
+    return;
+  }
+
+  const loading = document.createElement("div");
+  loading.className = "loading-banner";
+  loading.id = "loadingBanner";
+  loading.textContent = "Connessione al server…";
+  document.body.prepend(loading);
+
+  try {
+    state.meta = await api("/api/meta");
+  } catch (err) {
+    loading.remove();
+    const origin = location.origin;
+    showNetBanner(
+      `Impossibile contattare l'API: <code>${escapeHtml(err.message)}</code>. ` +
+      `Verifica <a href="${origin}/health"><code>${origin}/health</code></a> nel browser ` +
+      `e che l'URL sia <code>http://</code> (non https).`
+    );
+    $("#detailBody").innerHTML = `<div class="muted">${escapeHtml(err.message)}</div>`;
+    return;
+  }
+
+  loading.remove();
   renderStats();
   renderFilters();
   await loadResults();

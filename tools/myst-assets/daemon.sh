@@ -42,6 +42,8 @@ daemon_start() {
   nohup .venv/bin/python -m uvicorn server:app \
     --host "$HOST" \
     --port "$PORT" \
+    --access-log \
+    --log-level info \
     >>"$LOGFILE" 2>&1 &
 
   echo $! >"$PIDFILE"

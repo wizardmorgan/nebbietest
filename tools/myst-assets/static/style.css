@@ -207,6 +207,26 @@ tbody tr.selected {
 
 .muted { color: var(--muted); }
 
+.net-banner {
+  padding: 0.75rem 1.5rem;
+  background: #3d1f1f;
+  border-bottom: 1px solid #7a3030;
+  color: #ffb4b4;
+  font-size: 0.9rem;
+}
+
+.net-banner code {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.loading-banner {
+  padding: 0.5rem 1.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .kv {
   display: grid;
   grid-template-columns: 140px 1fr;

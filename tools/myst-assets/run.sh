@@ -8,7 +8,8 @@ source "$ROOT/_common.sh"
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8765}"
-RELOAD="${RELOAD:-1}"
+# --reload può dare problemi in accesso LAN; usa RELOAD=1 solo in sviluppo locale.
+RELOAD="${RELOAD:-0}"
 
 myst_assets_ensure_venv "$ROOT"
 
