@@ -193,8 +193,10 @@ All'apertura del browser sono disponibili sette tab:
 
 **Oggetti**
 
+- **R# (R-number)** — indice in `obj_index[]`, come in `ostat` / `stat` immortale (identificatore principale)
+- **V# (V-number)** — numero nel file prototipo (`#6204` in `myst.obj` o in `objects/6204`); usato nei reset di zona nel file `myst.zon` prima della conversione a R-number
 - Ricerca testo (FTS) su keywords, nome, descrizioni
-- VNUM min / max
+- R# min / max, V# min / max
 - Zona (per range VNUM)
 - Tipo oggetto (`ITEM_WEAPON`, `ITEM_ARMOR`, …)
 - **Extra flags (tutti)** — nomi separati da virgola; l'oggetto deve averli tutti (es. `ONLY-CLASS, ANTI-RANGER` per oggetti riservati ai ranger; con ONLY-CLASS i flag ANTI-* indicano le classi ammesse)
@@ -339,10 +341,10 @@ Oppure reinstalla senza cancellare il venv:
 .venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 8765 --reload
 ```
 
-**Oggetti mancanti nel browser ma presenti in gioco (es. vnum 6204)** — il database riflette solo i file `myst.obj` sulla macchina. Se il MUD live usa world più aggiornati del repository git, punta esplicitamente alla lib del server e reimporta:
+**Oggetti mancanti nel browser ma presenti in gioco (es. R#1448 / Lama Danzante)** — il database riflette solo i file `myst.obj` (+ eventuale cartella `objects/`) sulla macchina. Se il MUD live ha world più aggiornati del repository git, punta alla lib del server e reimporta:
 
 ```bash
-# trova dove sta il myst.obj del MUD live (deve contenere l'oggetto)
+# trova il prototipo (V-number) del MUD live
 grep -n '^#6204' /percorso/lib/myst.obj
 
 export MYST_LIB_DIR=/percorso/lib/del/mud/live
@@ -351,7 +353,7 @@ cd tools/myst-assets
 ./daemon.sh restart
 ```
 
-In alto nell'interfaccia compare **sorgente:** con il percorso usato all'ultimo import: verifica che sia quello giusto.
+Poi cerca per **R#** (come in `ostat`), es. `R# min` = `1448`, oppure filtra `ONLY-CLASS, ANTI-RANGER`.
 
 **`FileNotFoundError: myst.zon`** — imposta la directory asset:
 
