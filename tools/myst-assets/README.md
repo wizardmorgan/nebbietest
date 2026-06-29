@@ -7,13 +7,13 @@ Utile per builder, wizard e chi sviluppa su Mudlet: trovare rapidamente oggetti,
 ## Requisiti
 
 - Python 3.10+
-- File sorgente in `mudroot/lib/`:
-  - `myst.obj` — prototipi oggetti
-  - `myst.mob` — prototipi mob
-  - `myst.zon` — definizioni zone e comandi di reset
-  - `myst.wld` — stanze
-  - `myst.shp` — negozi
-  - `myst.spe` — assegnazione special procedure
+- File sorgente Myst in una directory accessibile. Il tool li cerca automaticamente in:
+  1. `$MYST_LIB_DIR` (se impostata)
+  2. `mudroot/lib/` (setup di sviluppo / Docker)
+  3. **root del repository** (branch `mudlet`: `myst.zon`, `myst.obj`, … sono versionati qui)
+  4. `sirio_dockers/mudroot/lib/`
+
+  File richiesti: `myst.obj`, `myst.mob`, `myst.zon`, `myst.wld`, `myst.shp`, `myst.spe`
 
 ## Avvio rapido
 
@@ -28,6 +28,13 @@ Porta personalizzata:
 
 ```bash
 PORT=9000 ./run.sh
+```
+
+Directory asset personalizzata (se non è in root repo né in `mudroot/lib`):
+
+```bash
+export MYST_LIB_DIR=/percorso/con/myst.zon
+./run.sh
 ```
 
 ## Struttura del progetto
@@ -226,6 +233,7 @@ Dopo modifiche al parser o allo schema:
 
 ## Note
 
+- La directory asset viene **rilevata automaticamente** (`myst_paths.py`). Sul branch `mudlet` i file sono nella root del repo, non in `mudroot/lib` (quella cartella ignora i `.obj`/`.zon` in git).
 - Il record `#99999` in fondo a `myst.obj` (sentinel `%%`) viene ignorato se incompleto.
 - Mob con VNUM duplicato nel file: vince l'ultima occorrenza (`INSERT OR REPLACE`).
-- La directory `mudroot/lib` usata di default è `../../mudroot/lib` rispetto a `tools/myst-assets`.
+- La directory `mudroot/lib` usata di default in assenza di auto-detect è la prima candidata valida tra quelle elencate in `myst_paths.py`.

@@ -12,11 +12,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from myst_enums import enum_options
+from myst_paths import resolve_lib_dir
 from import_db import import_world
 
 APP_DIR = Path(__file__).resolve().parent
 DB_PATH = APP_DIR / "myst_assets.db"
-LIB_DIR = APP_DIR.parents[1] / "mudroot" / "lib"
+LIB_DIR = resolve_lib_dir()
 
 app = FastAPI(title="Myst Asset Browser", version="1.0.0")
 

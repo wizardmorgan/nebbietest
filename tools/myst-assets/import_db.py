@@ -8,7 +8,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
-from myst_enums import decode_flags, decode_item_type, decode_race, decode_sector
+from myst_paths import resolve_lib_dir
 from myst_parser import MystMob, MystObject, MystRoom, MystShop, MystSpecial, MystZone, load_world, zone_for_vnum
 
 SCHEMA = """
@@ -403,7 +403,8 @@ def main() -> None:
     parser.add_argument(
         "--lib-dir",
         type=Path,
-        default=Path(__file__).resolve().parents[2] / "mudroot" / "lib",
+        default=None,
+        help="Directory con myst.obj/mob/zon/wld (default: auto-detect)",
     )
     parser.add_argument(
         "--db",
@@ -411,7 +412,9 @@ def main() -> None:
         default=Path(__file__).resolve().parent / "myst_assets.db",
     )
     args = parser.parse_args()
-    counts = import_world(args.lib_dir, args.db)
+    lib_dir = resolve_lib_dir(args.lib_dir)
+    counts = import_world(lib_dir, args.db)
+    print(f"Asset source: {lib_dir}")
     print(f"Database written to {args.db}")
     for key, value in counts.items():
         print(f"  {key}: {value}")
