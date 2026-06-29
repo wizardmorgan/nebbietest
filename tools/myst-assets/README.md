@@ -378,3 +378,5 @@ Dopo modifiche al parser o allo schema:
 
 - La directory asset viene **rilevata automaticamente** (`myst_paths.py`). Se esistono più copie (es. `mudroot/lib` e root repo), viene scelta quella con **più oggetti** in `myst.obj`. Sul branch `mudlet` i file versionati sono spesso nella root del repo.
 - Il browser non legge il MUD in esecuzione: solo i file su disco al momento del reimport.
+- Il record `#99999` in fondo a `myst.obj` (sentinel `%%`) viene ignorato se incompleto.
+- Mob con VNUM duplicato nel file: vince l'ultima occorrenza (`INSERT OR REPLACE`).
