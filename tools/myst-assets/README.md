@@ -217,12 +217,35 @@ I campi `*_text` e `type_name` / `race_name` / `sector_name` sono etichette legg
 
 Il tool **non** sostituisce il boot del gioco: è un ausilio offline per consultazione e analisi.
 
+## Risoluzione problemi
+
+**`uvicorn: No such file or directory`** — il virtualenv esiste ma le dipendenze non sono state installate:
+
+```bash
+rm -rf .venv
+./run.sh
+```
+
+Oppure reinstalla senza cancellare il venv:
+
+```bash
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 8765 --reload
+```
+
+**`FileNotFoundError: myst.zon`** — imposta la directory asset:
+
+```bash
+export MYST_LIB_DIR=~/docker-vms/nebbietest-mudlet   # root repo su mudlet
+./run.sh
+```
+
 ## Sviluppo
 
 Avvio con reload automatico (già in `run.sh`):
 
 ```bash
-.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8765 --reload
+.venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 8765 --reload
 ```
 
 Dopo modifiche al parser o allo schema:
