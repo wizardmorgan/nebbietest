@@ -29,8 +29,8 @@
 
   <section class="filters" id="filters"></section>
 
-  <main class="layout">
-    <div class="table-wrap">
+  <main class="workspace">
+    <section class="table-panel">
       <div class="table-meta">
         <span id="resultCount">0 risultati</span>
         <div class="pager">
@@ -39,15 +39,21 @@
           <button id="nextPage" class="ghost">Succ</button>
         </div>
       </div>
-      <table id="resultsTable">
-        <thead></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <aside class="detail" id="detail">
-      <h2>Dettaglio</h2>
-      <div id="detailBody" class="detail-body muted">Seleziona una riga per vedere il dettaglio completo.</div>
-    </aside>
+      <div class="table-scroll" id="tableScroll">
+        <table id="resultsTable">
+          <colgroup id="resultsColgroup"></colgroup>
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="identify-panel" id="detail">
+      <div class="identify-head">
+        <h2 id="identifyTitle">Identify</h2>
+        <span id="identifyHint" class="muted">Seleziona una riga nella tabella</span>
+      </div>
+      <div id="detailBody" class="detail-body muted">Nessun oggetto selezionato.</div>
+    </section>
   </main>
 
   <script src="/static/app.js"></script>

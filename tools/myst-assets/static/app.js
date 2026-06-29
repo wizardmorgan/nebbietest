@@ -10,6 +10,12 @@ const state = {
 const TAB_CONFIG = {
   objects: {
     endpoint: "/api/objects",
+    pinnedColumns: 9,
+    cellClass: {
+      short_desc: "col-name",
+      flags_text: "col-flags",
+      wear_text: "col-flags",
+    },
     columns: [
       ["rnum", "R#"],
       ["vnum", "V#"],
@@ -305,19 +311,42 @@ function currentFilterParams() {
   return params;
 }
 
+function setIdentifyHint(text) {
+  const hint = $("#identifyHint");
+  if (hint) hint.textContent = text || "Seleziona una riga nella tabella";
+}
+
 function renderTable(items) {
   const cfg = TAB_CONFIG[state.tab];
-  const thead = $("#resultsTable thead");
-  const tbody = $("#resultsTable tbody");
-  thead.innerHTML = `<tr>${cfg.columns.map(([, label]) => `<th>${label}</th>`).join("")}</tr>`;
+  const table = $("#resultsTable");
+  const thead = table.querySelector("thead");
+  const tbody = table.querySelector("tbody");
+  const pinned = cfg.pinnedColumns || 0;
+
+  table.classList.toggle("grid-pinned", pinned > 0);
+
+  thead.innerHTML = `<tr>${cfg.columns.map(([, label], index) => {
+    const pinClass = pinned > index ? `pin-${index + 1}` : "";
+    return `<th class="${pinClass}">${label}</th>`;
+  }).join("")}</tr>`;
+
   tbody.innerHTML = items.map((row, idx) => {
-    const cells = cfg.columns.map(([key]) => `<td>${escapeHtml(String(row[key] ?? ""))}</td>`).join("");
-    return `<tr data-idx="${idx}">${cells}</tr>`;
+    const isSelected = state.selected
+      && state.selected.rnum === row.rnum
+      && state.selected.vnum === row.vnum;
+    const cells = cfg.columns.map(([key], index) => {
+      const classes = [
+        pinned > index ? `pin-${index + 1}` : "",
+        cfg.cellClass?.[key] || "",
+      ].filter(Boolean).join(" ");
+      return `<td class="${classes}">${escapeHtml(String(row[key] ?? ""))}</td>`;
+    }).join("");
+    return `<tr data-idx="${idx}" class="${isSelected ? "selected" : ""}">${cells}</tr>`;
   }).join("");
 
   tbody.querySelectorAll("tr").forEach((tr) => {
     tr.onclick = () => {
-      tbody.querySelectorAll("tr").forEach(r => r.classList.remove("selected"));
+      tbody.querySelectorAll("tr").forEach((r) => r.classList.remove("selected"));
       tr.classList.add("selected");
       const row = items[Number(tr.dataset.idx)];
       state.selected = row;
@@ -337,6 +366,8 @@ function renderDetail(row) {
   const cfg = TAB_CONFIG[state.tab];
   const body = $("#detailBody");
   const id = row.rnum != null ? row.rnum : row.vnum;
+  const rowLabel = row.short_desc || row.name || (id != null ? `#${id}` : "Riga selezionata");
+  setIdentifyHint(rowLabel);
 
   if (cfg.detailEndpoint && id != null) {
     body.innerHTML = `<div class="muted">Caricamento identify…</div>`;
@@ -356,7 +387,9 @@ function renderDetail(row) {
           body.innerHTML = `<div class="muted">Dettaglio senza blocco identify. Reimporta il database.</div>`;
           return;
         }
+        setIdentifyHint(data.characteristics.title || rowLabel);
         body.innerHTML = renderDetailObject(data);
+        $("#detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       })
       .catch((err) => {
         body.innerHTML = `<div class="muted">Errore dettaglio: ${escapeHtml(err.message)}</div>`;
@@ -365,6 +398,7 @@ function renderDetail(row) {
   }
 
   body.innerHTML = renderDetailObject(row);
+  $("#detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function renderObjectCharacteristics(data) {
@@ -431,7 +465,10 @@ async function loadResults() {
   $("#pageInfo").textContent = `${state.page + 1} / ${pages}`;
   $("#prevPage").disabled = state.page <= 0;
   $("#nextPage").disabled = state.page + 1 >= pages;
-  $("#detailBody").innerHTML = `<div class="muted">Seleziona una riga per vedere il dettaglio completo.</div>`;
+  if (!state.selected) {
+    setIdentifyHint("Seleziona una riga nella tabella");
+    $("#detailBody").innerHTML = `<div class="muted">Nessun oggetto selezionato.</div>`;
+  }
 }
 
 function switchTab(tab) {
