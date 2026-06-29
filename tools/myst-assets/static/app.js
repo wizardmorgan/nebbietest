@@ -17,7 +17,8 @@ const TAB_CONFIG = {
       ["type_name", "Tipo"],
       ["weight", "Peso"],
       ["cost", "Valore"],
-      ["flags_text", "L'oggetto e'"],
+      ["flags_text", "Extra"],
+      ["wear_text", "Wear"],
     ],
     detailEndpoint: (row) => `/api/objects/${row.rnum}`,
     filters: [
@@ -28,9 +29,8 @@ const TAB_CONFIG = {
       { id: "vnum_max", label: "V# max (prototipo file)", type: "number" },
       { id: "zone_index", label: "Zona", type: "zone" },
       { id: "type_flag", label: "Tipo oggetto", type: "item_type" },
-      { id: "flags", label: "Extra flags (tutti)", type: "text", placeholder: "ONLY-CLASS, ANTI-RANGER" },
-      { id: "extra_flag", label: "Extra flag (bit, uno qualsiasi)", type: "number", placeholder: "es. 64" },
-      { id: "wear_flag", label: "Wear flag (bit)", type: "number", placeholder: "es. 8192" },
+      { id: "flags", label: "Extra flags (tutti)", type: "text", placeholder: "only-class, anti-ranger, artifact" },
+      { id: "wear", label: "Wear flags (tutti)", type: "text", placeholder: "head, back, wield" },
     ],
   },
   mobiles: {
@@ -238,6 +238,16 @@ function renderFilters() {
     state.page = 0;
     loadResults();
   };
+
+  $("#filters").querySelectorAll("[data-filter]").forEach((el) => {
+    el.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        state.page = 0;
+        loadResults();
+      }
+    });
+  });
 }
 
 function currentFilterParams() {
@@ -347,7 +357,15 @@ async function loadResults() {
   const data = await api(`${cfg.endpoint}?${params}`);
   state.total = data.total;
   renderTable(data.items || []);
-  $("#resultCount").textContent = `${data.total} risultati`;
+  let countLabel = `${data.total} risultati`;
+  const unknown = [
+    ...(data.unknown_flags || []),
+    ...(data.unknown_wear_flags || []),
+  ];
+  if (unknown.length) {
+    countLabel += ` — flag sconosciuti: ${unknown.join(", ")}`;
+  }
+  $("#resultCount").textContent = countLabel;
   const pages = Math.max(1, Math.ceil(data.total / state.pageSize));
   $("#pageInfo").textContent = `${state.page + 1} / ${pages}`;
   $("#prevPage").disabled = state.page <= 0;
@@ -410,7 +428,8 @@ async function init() {
     renderStats();
     await loadResults();
     $("#reimportBtn").disabled = false;
-    alert(`Reimport completato: ${JSON.stringify(data.counts)}`);
+    const src = data.lib_dir || state.meta?.lib_dir || "?";
+    alert(`Reimport completato da:\n${src}\n\n${JSON.stringify(data.counts)}`);
   };
 }
 

@@ -13,7 +13,14 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from myst_enums import enum_options
-from object_decode import decode_object_characteristics, extra_flag_masks_from_names
+from object_decode import (
+    EXTRA_BITS,
+    EXTRA_BITS2,
+    WEAR_BITS,
+    decode_object_characteristics,
+    extra_flag_masks_from_names,
+    wear_flag_mask_from_names,
+)
 from myst_paths import resolve_lib_dir
 from import_db import import_world
 
@@ -138,8 +145,16 @@ def meta() -> Dict[str, Any]:
             "affs": enum_options("AFF_"),
             "sectors": enum_options("SECT_"),
             "races": enum_options("RACE_"),
+            "extra_flags": EXTRA_BITS + EXTRA_BITS2,
+            "wear_flags": WEAR_BITS,
         },
     }
+
+
+def _parse_flag_names(raw: Optional[str]) -> List[str]:
+    if not raw:
+        return []
+    return [part.strip() for part in raw.replace(";", ",").split(",") if part.strip()]
 
 
 @app.get("/api/objects")
@@ -151,12 +166,14 @@ def list_objects(
     vnum_max: Optional[int] = None,
     zone_index: Optional[int] = None,
     type_flag: Optional[int] = None,
-    extra_flag: Optional[int] = None,
     flags: Optional[str] = Query(
         None,
-        description="Nomi flag separati da virgola; l'oggetto deve averli tutti (es. ONLY-CLASS,ANTI-RANGER)",
+        description="Nomi extra flag separati da virgola, tutti richiesti (es. only-class, anti-ranger)",
     ),
-    wear_flag: Optional[int] = None,
+    wear: Optional[str] = Query(
+        None,
+        description="Nomi wear flag separati da virgola, tutti richiesti (es. head, back, wield)",
+    ),
     limit: int = Query(100, le=500),
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -165,21 +182,28 @@ def list_objects(
     if type_flag is not None:
         extra_where.append("type_flag = ?")
         extra_params.append(type_flag)
-    if flags:
-        names = [part.strip() for part in flags.replace(";", ",").split(",") if part.strip()]
-        mask1, mask2 = extra_flag_masks_from_names(names)
+    flag_names = _parse_flag_names(flags)
+    if flag_names:
+        mask1, mask2, unknown = extra_flag_masks_from_names(flag_names)
+        if unknown:
+            return {"total": 0, "items": [], "unknown_flags": unknown}
         if mask1:
             extra_where.append("(extra_flags & ?) = ?")
             extra_params.extend([mask1, mask1])
         if mask2:
             extra_where.append("(extra_flags2 & ?) = ?")
             extra_params.extend([mask2, mask2])
-    if extra_flag is not None:
-        extra_where.append("(extra_flags & ?) != 0")
-        extra_params.append(extra_flag)
-    if wear_flag is not None:
-        extra_where.append("(wear_flags & ?) != 0")
-        extra_params.append(wear_flag)
+        if not mask1 and not mask2:
+            return {"total": 0, "items": [], "unknown_flags": flag_names}
+    wear_names = _parse_flag_names(wear)
+    if wear_names:
+        wear_mask, unknown_wear = wear_flag_mask_from_names(wear_names)
+        if unknown_wear:
+            return {"total": 0, "items": [], "unknown_wear_flags": unknown_wear}
+        if not wear_mask:
+            return {"total": 0, "items": [], "unknown_wear_flags": wear_names}
+        extra_where.append("(wear_flags & ?) = ?")
+        extra_params.extend([wear_mask, wear_mask])
     return _table_query(
         "objects",
         "objects_fts",
@@ -193,6 +217,7 @@ def list_objects(
             "weight",
             "cost",
             "flags_text",
+            "wear_text",
         ],
         q=q,
         rnum_min=rnum_min,
@@ -522,8 +547,9 @@ def list_specials(
 
 @app.post("/api/reimport")
 def reimport() -> Dict[str, Any]:
-    counts = import_world(LIB_DIR, DB_PATH)
-    return {"status": "ok", "counts": counts}
+    lib_dir = resolve_lib_dir()
+    counts = import_world(lib_dir, DB_PATH)
+    return {"status": "ok", "counts": counts, "lib_dir": str(lib_dir)}
 
 
 @app.get("/health")

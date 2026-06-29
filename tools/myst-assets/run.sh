@@ -13,8 +13,12 @@ RELOAD="${RELOAD:-0}"
 
 myst_assets_ensure_venv "$ROOT"
 
-LIB_DIR="$(myst_assets_resolve_lib_dir "$ROOT")"
-export MYST_LIB_DIR="$LIB_DIR"
+if [[ -n "${MYST_LIB_DIR:-}" ]]; then
+  LIB_DIR="$(cd "$MYST_LIB_DIR" && pwd)"
+else
+  LIB_DIR="$(myst_assets_resolve_lib_dir "$ROOT")"
+  export MYST_LIB_DIR="$LIB_DIR"
+fi
 echo "Myst asset source: $LIB_DIR"
 
 myst_assets_ensure_db "$ROOT" "$LIB_DIR"

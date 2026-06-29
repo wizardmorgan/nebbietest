@@ -80,6 +80,12 @@ WEAPON_TYPES = [
     "BITE", "STING", "PIERCE", "BLAST", "RANGE_WEAPON",
 ]
 
+WEAR_BITS = [
+    "TAKE", "FINGER", "NECK", "BODY", "HEAD", "LEGS", "FEET", "HANDS",
+    "ARMS", "SHIELD", "ABOUT", "WAIST", "WRIST", "WIELD", "HOLD", "THROW",
+    "LIGHT-SOURCE", "BACK", "EARS", "EYES",
+]
+
 ALIGNMENT_FLAGS = {"ANTI-GOOD", "ANTI-EVIL", "ANTI-NEUTRAL"}
 GENDER_FLAGS = {"ANTI-MEN", "ANTI-WOMEN"}
 
@@ -224,18 +230,39 @@ def format_affect(location: int, modifier: int) -> Optional[Dict[str, str]]:
     }
 
 
-def extra_flag_masks_from_names(names: List[str]) -> tuple[int, int]:
-    """Risolve nomi flag (es. ONLY-CLASS, ANTI-RANGER) in maschere extra_flags / extra_flags2."""
-    wanted = {n.strip().upper() for n in names if n.strip()}
-    mask1 = 0
-    mask2 = 0
-    for i, label in enumerate(EXTRA_BITS):
-        if label.upper() in wanted:
-            mask1 |= 1 << i
-    for i, label in enumerate(EXTRA_BITS2):
-        if label.upper() in wanted:
-            mask2 |= 1 << i
-    return mask1, mask2
+def normalize_flag_token(name: str) -> str:
+    """Normalizza token flag: case-insensitive, spazi/underscore → trattino."""
+    token = name.strip().upper().replace("_", "-")
+    return re.sub(r"\s+", "-", token)
+
+
+def _match_flag_tokens(names: List[str], labels: List[str]) -> int:
+    wanted = [normalize_flag_token(n) for n in names if n.strip()]
+    label_by_norm = {normalize_flag_token(label): bit for bit, label in enumerate(labels)}
+    mask = 0
+    for token in wanted:
+        bit = label_by_norm.get(token)
+        if bit is not None:
+            mask |= 1 << bit
+    return mask
+
+
+def extra_flag_masks_from_names(names: List[str]) -> tuple[int, int, List[str]]:
+    """Risolve nomi extra flag (es. only-class, artifact) in maschere bitmask."""
+    wanted = [normalize_flag_token(n) for n in names if n.strip()]
+    all_known = {normalize_flag_token(label) for label in EXTRA_BITS + EXTRA_BITS2}
+    unknown = [token for token in wanted if token not in all_known]
+    mask1 = _match_flag_tokens(names, EXTRA_BITS)
+    mask2 = _match_flag_tokens(names, EXTRA_BITS2)
+    return mask1, mask2, unknown
+
+
+def wear_flag_mask_from_names(names: List[str]) -> tuple[int, List[str]]:
+    """Risolve nomi wear flag (es. head, back, wield) in maschera bitmask."""
+    wanted = [normalize_flag_token(n) for n in names if n.strip()]
+    all_known = {normalize_flag_token(label) for label in WEAR_BITS}
+    unknown = [token for token in wanted if token not in all_known]
+    return _match_flag_tokens(names, WEAR_BITS), unknown
 
 
 def get_item_class_restrictions(extra_flags: int, only_class: bool) -> List[str]:

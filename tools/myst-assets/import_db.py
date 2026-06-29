@@ -10,7 +10,15 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 from myst_enums import decode_flags, decode_item_type, decode_race, decode_sector
-from object_decode import decode_object_characteristics, sprintbit2, EXTRA_BITS, EXTRA_BITS2, ITEM_TYPES
+from object_decode import (
+    EXTRA_BITS,
+    EXTRA_BITS2,
+    ITEM_TYPES,
+    WEAR_BITS,
+    decode_object_characteristics,
+    sprintbit,
+    sprintbit2,
+)
 from myst_index import load_indexed_objects
 from myst_paths import resolve_lib_dir
 from myst_parser import MystMob, MystObject, MystRoom, MystShop, MystSpecial, MystZone, load_world, zone_for_vnum
@@ -54,6 +62,7 @@ CREATE TABLE IF NOT EXISTS objects (
     forbidden_wear_char TEXT,
     forbidden_wear_room TEXT,
     flags_text TEXT,
+    wear_text TEXT,
     search_text TEXT
 );
 
@@ -222,7 +231,7 @@ def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
     )
 
     conn.executemany(
-        """INSERT OR REPLACE INTO objects VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        """INSERT OR REPLACE INTO objects VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         [
             (
                 entry.rnum,
@@ -249,6 +258,7 @@ def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
                 o.forbidden_wear_char,
                 o.forbidden_wear_room,
                 " ".join(sprintbit2(o.extra_flags, EXTRA_BITS, o.extra_flags2, EXTRA_BITS2)),
+                " ".join(sprintbit(o.wear_flags, WEAR_BITS)),
                 _search_blob(o.keywords, o.short_desc, o.long_desc, o.action_desc),
             )
             for entry, o in indexed_objects

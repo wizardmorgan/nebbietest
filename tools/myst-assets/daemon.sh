@@ -19,7 +19,7 @@ daemon_is_running() {
   [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
 }
 
-daemon_start() {
+  daemon_start() {
   if daemon_is_running; then
     echo "Già in esecuzione (PID $(cat "$PIDFILE"))."
     daemon_status
@@ -28,7 +28,11 @@ daemon_start() {
 
   myst_assets_ensure_venv "$ROOT"
 
-  LIB_DIR="$(myst_assets_resolve_lib_dir "$ROOT")"
+  if [[ -n "${MYST_LIB_DIR:-}" ]]; then
+    LIB_DIR="$(cd "$MYST_LIB_DIR" && pwd)"
+  else
+    LIB_DIR="$(myst_assets_resolve_lib_dir "$ROOT")"
+  fi
   export MYST_LIB_DIR="$LIB_DIR"
   myst_assets_ensure_db "$ROOT" "$LIB_DIR"
 
