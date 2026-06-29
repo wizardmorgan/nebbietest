@@ -197,7 +197,8 @@ All'apertura del browser sono disponibili sette tab:
 - VNUM min / max
 - Zona (per range VNUM)
 - Tipo oggetto (`ITEM_WEAPON`, `ITEM_ARMOR`, …)
-- Extra flag e wear flag (valore bitmask)
+- **Extra flags (tutti)** — nomi separati da virgola; l'oggetto deve averli tutti (es. `ONLY-CLASS, ANTI-RANGER` per oggetti riservati ai ranger; con ONLY-CLASS i flag ANTI-* indicano le classi ammesse)
+- Extra flag (bit, uno qualsiasi) e wear flag (valore bitmask)
 
 **Mob**
 

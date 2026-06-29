@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from myst_enums import enum_options
-from object_decode import decode_object_characteristics
+from object_decode import decode_object_characteristics, extra_flag_masks_from_names
 from myst_paths import resolve_lib_dir
 from import_db import import_world
 
@@ -131,6 +131,10 @@ def list_objects(
     zone_index: Optional[int] = None,
     type_flag: Optional[int] = None,
     extra_flag: Optional[int] = None,
+    flags: Optional[str] = Query(
+        None,
+        description="Nomi flag separati da virgola; l'oggetto deve averli tutti (es. ONLY-CLASS,ANTI-RANGER)",
+    ),
     wear_flag: Optional[int] = None,
     limit: int = Query(100, le=500),
     offset: int = 0,
@@ -140,6 +144,15 @@ def list_objects(
     if type_flag is not None:
         extra_where.append("type_flag = ?")
         extra_params.append(type_flag)
+    if flags:
+        names = [part.strip() for part in flags.replace(";", ",").split(",") if part.strip()]
+        mask1, mask2 = extra_flag_masks_from_names(names)
+        if mask1:
+            extra_where.append("(extra_flags & ?) = ?")
+            extra_params.extend([mask1, mask1])
+        if mask2:
+            extra_where.append("(extra_flags2 & ?) = ?")
+            extra_params.extend([mask2, mask2])
     if extra_flag is not None:
         extra_where.append("(extra_flags & ?) != 0")
         extra_params.append(extra_flag)

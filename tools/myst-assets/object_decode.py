@@ -224,6 +224,20 @@ def format_affect(location: int, modifier: int) -> Optional[Dict[str, str]]:
     }
 
 
+def extra_flag_masks_from_names(names: List[str]) -> tuple[int, int]:
+    """Risolve nomi flag (es. ONLY-CLASS, ANTI-RANGER) in maschere extra_flags / extra_flags2."""
+    wanted = {n.strip().upper() for n in names if n.strip()}
+    mask1 = 0
+    mask2 = 0
+    for i, label in enumerate(EXTRA_BITS):
+        if label.upper() in wanted:
+            mask1 |= 1 << i
+    for i, label in enumerate(EXTRA_BITS2):
+        if label.upper() in wanted:
+            mask2 |= 1 << i
+    return mask1, mask2
+
+
 def get_item_class_restrictions(extra_flags: int, only_class: bool) -> List[str]:
     """Come GetItemClassRestrictions() + regola wear.cpp (ANTI_MAGE → anche SORCERER se ONLY_CLASS)."""
     classes: List[str] = []
