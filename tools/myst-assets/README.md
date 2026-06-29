@@ -9,11 +9,12 @@ Utile per builder, wizard e chi sviluppa su Mudlet: trovare rapidamente oggetti,
 - Python 3.10+
 - File sorgente Myst in una directory accessibile. Il tool li cerca automaticamente in:
   1. `$MYST_LIB_DIR` (se impostata)
-  2. `mudroot/lib/` (setup di sviluppo / Docker)
-  3. **root del repository** (branch `mudlet`: `myst.zon`, `myst.obj`, … sono versionati qui)
-  4. `sirio_dockers/mudroot/lib/`
+  2. **`/home/nebbie/files_myst`** (directory predefinita sul server)
+  3. `mudroot/lib/` (setup di sviluppo / Docker)
+  4. **root del repository** (branch `mudlet`)
+  5. `sirio_dockers/mudroot/lib/`
 
-  File richiesti: `myst.obj`, `myst.mob`, `myst.zon`, `myst.wld`, `myst.shp`, `myst.spe`
+  File richiesti: `myst.obj`, `myst.mob`, `myst.zon`, `myst.wld`, `myst.shp`, `myst.spe`, più la cartella **`objects/`** (oggetti salvati con `osave`)
 
 ## Avvio rapido
 

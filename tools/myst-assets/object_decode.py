@@ -404,9 +404,12 @@ def decode_object_characteristics(obj: Dict[str, Any]) -> Dict[str, Any]:
     title = obj.get("short_desc") or obj.get("keywords") or f"R#{obj.get('rnum')}"
     rnum = obj.get("rnum")
     vnum = obj.get("vnum")
+    original_vnum = int(obj.get("original_vnum") or 0)
     id_part = f"R#{rnum}" if rnum is not None else f"#{vnum}"
     if rnum is not None and vnum is not None:
         id_part = f"R#{rnum} (V#{vnum})"
+        if original_vnum and original_vnum != vnum:
+            id_part += f", originale V#{original_vnum}"
     lines.append(f"Nome: '{title}'")
     lines.append(f"Oggetto {id_part}, Tipo di Oggetto {item_type}")
     lines.extend(class_info["restriction_lines"])
@@ -439,6 +442,7 @@ def decode_object_characteristics(obj: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "title": title,
         "item_type": item_type,
+        "original_vnum": original_vnum or None,
         "extra_flags": extra_labels,
         "only_class": class_info["only_class"],
         "allowed_classes": class_info["allowed_classes"],

@@ -13,6 +13,7 @@ const TAB_CONFIG = {
     columns: [
       ["rnum", "R#"],
       ["vnum", "V#"],
+      ["original_vnum", "V# orig"],
       ["short_desc", "Nome"],
       ["type_name", "Tipo"],
       ["weight", "Peso"],
@@ -342,10 +343,11 @@ function renderDetail(row) {
     api(cfg.detailEndpoint(row))
       .then((data) => {
         if (data.error) {
+          const msg = data.message || data.error;
           body.innerHTML =
-            `<div class="muted">${escapeHtml(data.error)}` +
-            (data.error === "not found"
-              ? "<br><br>Prova <strong>Reimporta da lib</strong> se hai aggiornato myst.obj."
+            `<div class="muted">${escapeHtml(msg)}` +
+            (data.error === "not found" || data.error === "decode_failed"
+              ? "<br><br>Prova <strong>Reimporta da lib</strong> (MYST_LIB_DIR + schema aggiornato)."
               : "") +
             `</div>`;
           return;

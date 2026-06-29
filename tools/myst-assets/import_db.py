@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS zones (
 CREATE TABLE IF NOT EXISTS objects (
     rnum INTEGER PRIMARY KEY,
     vnum INTEGER UNIQUE NOT NULL,
+    original_vnum INTEGER,
     zone_index INTEGER,
     keywords TEXT,
     short_desc TEXT,
@@ -236,6 +237,7 @@ def import_world(lib_dir: Path, db_path: Path) -> Dict[str, int]:
             (
                 entry.rnum,
                 o.vnum,
+                o.original_vnum or None,
                 _zone_index(zones, o.vnum),
                 o.keywords,
                 o.short_desc,

@@ -14,6 +14,11 @@ REQUIRED_FILES = (
     "myst.spe",
 )
 
+# Directory dati predefinita sul server Nebbie (override con MYST_LIB_DIR se serve).
+DEFAULT_MYST_LIB_DIRS = (
+    Path("/home/nebbie/files_myst"),
+)
+
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -28,6 +33,7 @@ def candidate_lib_dirs() -> list[Path]:
     tool_dir = Path(__file__).resolve().parent
     candidates = [
         Path(os.environ["MYST_LIB_DIR"]) if os.environ.get("MYST_LIB_DIR") else None,
+        *DEFAULT_MYST_LIB_DIRS,
         root / "mudroot" / "lib",
         root,
         root / "sirio_dockers" / "mudroot" / "lib",
@@ -78,6 +84,7 @@ def resolve_lib_dir(explicit: Path | None = None) -> Path:
             "Impossibile trovare i file Myst (myst.zon, myst.obj, myst.mob, myst.wld, ...).\n"
             f"Percorsi controllati:\n{searched}\n\n"
             "Suggerimenti:\n"
+            "  - copia i file live in /home/nebbie/files_myst (directory predefinita)\n"
             "  - sul branch mudlet i file sono spesso nella root del repository\n"
             "  - in sviluppo locale possono essere in mudroot/lib/\n"
             "  - imposta MYST_LIB_DIR=/percorso/alla/directory\n"

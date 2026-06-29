@@ -210,6 +210,7 @@ def list_objects(
         [
             "rnum",
             "vnum",
+            "original_vnum",
             "zone_index",
             "keywords",
             "short_desc",

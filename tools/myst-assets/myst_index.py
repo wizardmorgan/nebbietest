@@ -63,6 +63,15 @@ def build_object_index(lib_dir: Path) -> List[ObjIndexEntry]:
     return [ObjIndexEntry(rnum=rnum, vnum=vnum) for rnum, vnum in enumerate(sorted_vnums)]
 
 
+def _attach_index_vnum(obj: MystObject, index_vnum: int) -> MystObject:
+    """Allinea al boot MUD: V-number = indice (nome file in objects/), originale = # nel file."""
+    header_vnum = obj.vnum
+    obj.vnum = index_vnum
+    if header_vnum != index_vnum:
+        obj.original_vnum = header_vnum
+    return obj
+
+
 def load_indexed_objects(lib_dir: Path) -> List[tuple[ObjIndexEntry, MystObject]]:
     """Carica prototipi oggetto con R-number come in obj_index[]."""
     index = build_object_index(lib_dir)
@@ -76,15 +85,18 @@ def load_indexed_objects(lib_dir: Path) -> List[tuple[ObjIndexEntry, MystObject]
         for entry in obj_dir.iterdir():
             if not entry.name.isdigit():
                 continue
+            index_vnum = int(entry.name)
             parsed = parse_objects(entry)
             if parsed:
-                by_vnum[int(entry.name)] = parsed[0]
+                by_vnum[index_vnum] = _attach_index_vnum(parsed[0], index_vnum)
 
     rows: List[tuple[ObjIndexEntry, MystObject]] = []
     for entry in index:
         obj = by_vnum.get(entry.vnum)
         if obj is None:
             continue
+        if obj.vnum != entry.vnum:
+            obj = _attach_index_vnum(obj, entry.vnum)
         rows.append((entry, obj))
     return rows
 

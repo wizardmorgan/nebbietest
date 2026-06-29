@@ -37,6 +37,7 @@ class MystObject:
     affects: List[ObjAffect] = field(default_factory=list)
     extra_descriptions: List[ExtraDescr] = field(default_factory=list)
     extra_flags2: int = 0
+    original_vnum: int = 0
     forbidden_wear_char: str = ""
     forbidden_wear_room: str = ""
 
