@@ -37,12 +37,84 @@ export MYST_LIB_DIR=/percorso/con/myst.zon
 ./run.sh
 ```
 
+## Avvio come demone (senza shell impegnata)
+
+Per lasciare il server in background sulla LAN:
+
+```bash
+cd tools/myst-assets
+./daemon.sh start      # avvia in background
+./daemon.sh status     # verifica PID e URL LAN
+./daemon.sh logs       # segue il log
+./daemon.sh stop       # ferma il servizio
+./daemon.sh restart
+```
+
+Il demone scrive il log in `logs/server.log` e il PID in `myst-assets.pid`.
+
+### Systemd (opzionale, riavvio automatico al boot)
+
+```bash
+# Modifica User e percorsi in myst-assets.service.example, poi:
+sudo cp myst-assets.service.example /etc/systemd/system/myst-assets.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now myst-assets
+journalctl -u myst-assets -f
+```
+
+## Accesso da altri PC sulla rete
+
+Il server ascolta su **tutte le interfacce** (`HOST=0.0.0.0`, default). Da un altro dispositivo sulla stessa LAN:
+
+```
+http://192.168.0.60:8765/
+```
+
+(sostituisci con l'IP reale della macchina host).
+
+### Se hai timeout dalla LAN
+
+1. **Verifica che il demone sia in esecuzione** sulla macchina host:
+   ```bash
+   ./daemon.sh status
+   curl -s http://127.0.0.1:8765/api/meta | head
+   ```
+
+2. **Verifica l'ascolto su 0.0.0.0** (non solo localhost):
+   ```bash
+   ss -tlnp | grep 8765
+   # deve mostrare 0.0.0.0:8765 o *:8765
+   ```
+
+3. **Firewall Ubuntu (ufw)** — causa più frequente del timeout:
+   ```bash
+   sudo ufw allow 8765/tcp
+   sudo ufw status
+   ```
+
+4. **Test dalla macchina host** usando l'IP LAN:
+   ```bash
+   curl -s http://192.168.0.60:8765/api/meta | head
+   ```
+   Se funziona in locale ma non dall'altro PC, il problema è firewall o rete (guest Wi‑Fi isolato, VLAN, ecc.).
+
+5. **`run.sh` in foreground** va bene per sviluppo; per uso continuativo preferisci `./daemon.sh start` (senza `--reload`).
+
+Variabili utili:
+
+```bash
+HOST=0.0.0.0 PORT=8765 ./daemon.sh start
+```
+
 ## Struttura del progetto
 
 ```
 tools/myst-assets/
 ├── README.md           # questa documentazione
-├── run.sh              # avvio one-click
+├── run.sh              # avvio foreground (sviluppo)
+├── daemon.sh           # start/stop/status demone in background
+├── _common.sh          # setup condiviso venv e lib dir
+├── myst-assets.service.example  # unit systemd opzionale
 ├── requirements.txt    # dipendenze Python (FastAPI, uvicorn)
 ├── myst_parser.py      # parser dei file Myst (allineato a db.cpp)
 ├── myst_enums.py       # decodifica flag da shutils/enums.json

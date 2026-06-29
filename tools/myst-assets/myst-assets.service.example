@@ -1,0 +1,28 @@
+# Esempio unit systemd — installazione:
+#
+#   1. Modifica User, WorkingDirectory e MYST_LIB_DIR qui sotto
+#   2. sudo cp myst-assets.service.example /etc/systemd/system/myst-assets.service
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable --now myst-assets
+#
+# Log: journalctl -u myst-assets -f
+
+[Unit]
+Description=Myst Asset Browser (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nebbie
+Group=nebbie
+WorkingDirectory=/home/nebbie/docker-vms/nebbietest-mudlet/tools/myst-assets
+Environment=MYST_LIB_DIR=/home/nebbie/docker-vms/nebbietest-mudlet
+Environment=HOST=0.0.0.0
+Environment=PORT=8765
+ExecStart=/home/nebbie/docker-vms/nebbietest-mudlet/tools/myst-assets/.venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 8765
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
