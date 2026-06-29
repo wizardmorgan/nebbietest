@@ -1,4 +1,5 @@
 .venv/
 myst_assets.db
+myst_assets.db-*
 __pycache__/
 *.pyc
