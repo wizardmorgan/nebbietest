@@ -1,0 +1,1 @@
+mpackage = "nebbie-play-all"

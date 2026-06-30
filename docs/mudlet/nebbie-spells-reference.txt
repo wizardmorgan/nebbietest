@@ -158,6 +158,7 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   portal  [psiport]
   dragon ride
   mount
+  minor heal
   spring leap
   geyser
   mirror images  [mirr]

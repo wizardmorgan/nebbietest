@@ -1,11 +1,12 @@
 
-Nebbie.version = "2.2.25"
+Nebbie.version = "2.2.28"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
   { match = "forza della natura", key = "forza" },
   { match = "elf slayer", key = "elf" },
-  { match = "verdespina", key = "verdespina" },
+  { match = "il redentore", key = "redentore" },
+  { match = "lama danzante", key = "lama" },
 }
 
 Nebbie.EQ_STOPWORDS = {
@@ -28,10 +29,18 @@ Nebbie.attribGag = false
 Nebbie._attribBusy = false
 Nebbie.lootAuto = true
 Nebbie._lootBusy = false
+Nebbie.weaponDropRecover = true
+Nebbie._weaponDropBusy = false
+Nebbie.foodDrinkAuto = true
+Nebbie._foodDrinkBusy = false
 Nebbie.eqAuto = true
 Nebbie._eqCacheBusy = false
 Nebbie._eqCacheGag = false
-Nebbie.eqCache = Nebbie.eqCache or { wield = nil, back = nil, wieldKey = nil, backKey = nil, updatedAt = 0 }
+Nebbie.eqCache = Nebbie.eqCache or {
+  wield = nil, back = nil, hold = nil,
+  wieldKey = nil, backKey = nil, holdKey = nil,
+  updatedAt = 0, wieldScannedAt = 0,
+}
 
 local PKG = Nebbie.package
 local LEGACY_PKGS = {"nebbie-play-all", "nebbie-spells-skills"}
@@ -273,12 +282,16 @@ function Nebbie.loadSettings()
   end
   Nebbie._settings.eqKeywords = Nebbie._settings.eqKeywords or {}
   if type(Nebbie._settings.eqCache) == "table" then
+    local sc = Nebbie._settings.eqCache
     Nebbie.eqCache = {
-      wield = Nebbie._settings.eqCache.wield,
-      back = Nebbie._settings.eqCache.back,
-      wieldKey = Nebbie._settings.eqCache.wieldKey,
-      backKey = Nebbie._settings.eqCache.backKey,
-      updatedAt = Nebbie._settings.eqCache.updatedAt or 0,
+      wield = sc.wield,
+      back = sc.back,
+      hold = sc.hold,
+      wieldKey = sc.wieldKey,
+      backKey = sc.backKey,
+      holdKey = sc.holdKey,
+      updatedAt = sc.updatedAt or 0,
+      wieldScannedAt = sc.wieldScannedAt or 0,
     }
   end
   if Nebbie._settings.eqAuto == false then
@@ -286,6 +299,9 @@ function Nebbie.loadSettings()
   else
     Nebbie.eqAuto = true
   end
+  Nebbie.weaponDropRecover = Nebbie._settings.weaponDropRecover ~= false
+  Nebbie.foodDrinkAuto = Nebbie._settings.foodDrinkAuto ~= false
+  Nebbie._settings.foodItemKey = Nebbie._settings.foodItemKey or "cornu"
 end
 
 function Nebbie.saveSettings()
@@ -1212,34 +1228,53 @@ end
 function Nebbie.delEqKey(pattern)
   pattern = Nebbie.stripQuotes(pattern or ""):lower()
   if pattern == "" then
-    cecho("<orange>Nebbie: <yellow>nkey del <testo><orange>\n")
+    cecho("<orange>Nebbie: <yellow>nkey del <testo nel nome eq><orange>\n")
+    cecho("<grey>  oppure: <yellow>nkey del key <parola MUD>\n")
     return
   end
   Nebbie.loadSettings()
   local kept, removed = {}, false
   for _, r in ipairs(Nebbie._settings.eqKeywords or {}) do
-    if r.match == pattern then removed = true
-    else table.insert(kept, r) end
+    if r.match == pattern or r.key == pattern then
+      removed = true
+    else
+      table.insert(kept, r)
+    end
   end
   Nebbie._settings.eqKeywords = kept
   Nebbie.saveSettings()
   if removed then
-    cecho("<green>Nebbie: rimossa regola per <yellow>" .. pattern .. "\n")
+    cecho("<green>Nebbie: rimossa regola custom <yellow>" .. pattern .. "\n")
   else
     cecho("<orange>Nebbie: nessuna regola custom per <yellow>" .. pattern .. "\n")
+    cecho("<grey>  I default (korred, elf, …) non si cancellano.\n")
   end
 end
 
 function Nebbie.listEqKeys()
-  cecho("<cyan><b>Chiavi eq Nebbie</b> <grey>(match nel nome da eq → parola MUD)\n")
+  cecho("<cyan><b>Chiavi eq Nebbie</b>\n")
+  cecho("<grey>Da un nome lungo in <white>eq<grey> alla parola per <white>get / rem / wie / hold<grey>.\n\n")
+  cecho("<dark_green><b>Default</b> <grey>(integrate, non cancellabili):\n")
   for _, r in ipairs(Nebbie.DEFAULT_EQ_KEYWORDS or {}) do
-    cecho("<grey>  <yellow>" .. r.key .. " <grey>← <white>" .. r.match .. " <dark_green>(default)\n")
-  end
-  Nebbie.loadSettings()
-  for _, r in ipairs(Nebbie._settings.eqKeywords or {}) do
     cecho("<grey>  <yellow>" .. r.key .. " <grey>← <white>" .. r.match .. "\n")
   end
-  cecho("<grey>Aggiungi: <yellow>nkey add korred borsa korred<grey> | <yellow>nkey del testo\n")
+  Nebbie.loadSettings()
+  local custom = Nebbie._settings.eqKeywords or {}
+  cecho("<grey><b>Custom</b> <grey>(tue regole):\n")
+  if #custom == 0 then
+    cecho("<grey>  (nessuna)\n")
+  else
+    for _, r in ipairs(custom) do
+      cecho("<grey>  <yellow>" .. r.key .. " <grey>← <white>" .. r.match .. "\n")
+    end
+  end
+  cecho("\n<yellow>nkey add <parola> <testo nel nome eq>\n")
+  cecho("<grey>  es. <white>nkey add redentore il redentore\n")
+  cecho("<yellow>nkey del <testo nel nome eq>\n")
+  cecho("<grey>  es. <white>nkey del il redentore<grey> — cancella la regola con quel testo\n")
+  cecho("<yellow>nkey del key <parola>\n")
+  cecho("<grey>  es. <white>nkey del key redentore<grey> — cancella per parola MUD\n")
+  cecho("<yellow>neq clear<grey> — azzera impugnato in cache (se rimasta una chiave sbagliata)\n")
 end
 
 function Nebbie.trimEqItemName(item)
@@ -1257,12 +1292,18 @@ function Nebbie.parseEqSlotLine(line)
   local wield = Nebbie.trimEqItemName(plain:match(".*<impugnato>%s+(.+)"))
   if wield then return "wield", wield end
 
+  local hold = Nebbie.trimEqItemName(plain:match(".*<tenuto>%s+(.+)"))
+  if hold then return "hold", hold end
+
   local back = Nebbie.trimEqItemName(plain:match(".*<sulla schiena>%s+(.+)"))
   if back then return "back", back end
 
   -- tag senza nome sulla stessa riga (nome sulla riga dopo)
   if plain:find("<impugnato>", 1, true) and not plain:match(".*<impugnato>%s+%S") then
     return "wield", ""
+  end
+  if plain:find("<tenuto>", 1, true) and not plain:match(".*<tenuto>%s+%S") then
+    return "hold", ""
   end
   if plain:find("<sulla schiena>", 1, true) and not plain:match(".*<sulla schiena>%s+%S") then
     return "back", ""
@@ -1277,12 +1318,14 @@ function Nebbie.isEqListLine(plain)
   if plain:match("^Nulla%.?") then return true end
   if plain:match("^%[%s*%d+%]") then return true end
   if plain:find("<impugnato>", 1, true) then return true end
+  if plain:find("<tenuto>", 1, true) then return true end
   if plain:find("<sulla schiena>", 1, true) then return true end
   return false
 end
 
 Nebbie.EQ_AUTO_INTERVAL = 3600
 Nebbie.EQ_CACHE_MAX_AGE = 3600
+Nebbie.EQ_WIELD_TRUST_AGE = 600
 Nebbie.EQ_SWAP_FIRST_WAIT = 4.0
 Nebbie.EQ_SWAP_AFTER_EQ = 2.0
 Nebbie.EQ_SWAP_RETRY_WAIT = 2.5
@@ -1306,6 +1349,33 @@ function Nebbie.eqCacheIsFresh()
   if not c.back or c.back == "" then return false end
   local age = Nebbie.eqCacheAge()
   return age ~= nil and age <= Nebbie.EQ_CACHE_MAX_AGE
+end
+
+function Nebbie.eqCacheWieldTrustworthy()
+  local c = Nebbie.eqCache or {}
+  if not c.wieldScannedAt or c.wieldScannedAt <= 0 then return false end
+  return (Nebbie.now() - c.wieldScannedAt) <= Nebbie.EQ_WIELD_TRUST_AGE
+end
+
+function Nebbie.eqCacheIsFreshForSwap()
+  return Nebbie.eqCacheIsFresh()
+end
+
+function Nebbie.inCombat()
+  local s = Nebbie.stats
+  if not s then return false end
+  if s.mobName and s.mobName ~= "" and s.mobName ~= "*" then return true end
+  if s.tankName and s.tankName ~= "" and s.tankName ~= "*" then return true end
+  return false
+end
+
+function Nebbie.clearEqCacheWield()
+  Nebbie.eqCache = Nebbie.eqCache or {}
+  Nebbie.eqCache.wield = nil
+  Nebbie.eqCache.wieldKey = nil
+  Nebbie.eqCache.wieldScannedAt = 0
+  Nebbie.saveEqCache()
+  cecho("<green>Nebbie: cache <impugnato> azzerata. Usa <yellow>neq<green> per aggiornare.\n")
 end
 
 function Nebbie.isPromptLine(plain)
@@ -1332,7 +1402,7 @@ function Nebbie.scanEqBufferSnapshot()
   end
   if not startIdx then return false end
 
-  local wield, back = nil, nil
+  local wield, back, hold = nil, nil, nil
   local pendingSlot, pendingText = nil, nil
 
   for i = startIdx + 1, #lines do
@@ -1342,7 +1412,7 @@ function Nebbie.scanEqBufferSnapshot()
       if plain ~= "" then
         if Nebbie.isPromptLine(plain) then break end
         if plain:match("^Nulla%.?") then
-          wield, back = nil, nil
+          wield, back, hold = nil, nil, nil
           break
         end
         local slot, item = Nebbie.parseEqSlotLine(text)
@@ -1352,13 +1422,17 @@ function Nebbie.scanEqBufferSnapshot()
             pendingText = nil
           else
             pendingSlot, pendingText = nil, nil
-            if slot == "wield" then wield = item else back = item end
+            if slot == "wield" then wield = item
+            elseif slot == "hold" then hold = item
+            else back = item end
           end
         elseif pendingSlot and plain ~= "" and not plain:match("^%[%s*%d+%]") and not Nebbie.isPromptLine(plain) then
           pendingText = pendingText and (pendingText .. " " .. plain) or plain
           local combined = Nebbie.trimEqItemName(pendingText)
           if combined then
-            if pendingSlot == "wield" then wield = combined else back = combined end
+            if pendingSlot == "wield" then wield = combined
+            elseif pendingSlot == "hold" then hold = combined
+            else back = combined end
             pendingSlot, pendingText = nil, nil
           end
         end
@@ -1369,14 +1443,19 @@ function Nebbie.scanEqBufferSnapshot()
   Nebbie.eqCache = Nebbie.eqCache or {}
   Nebbie.eqCache.wield = wield
   Nebbie.eqCache.back = back
+  Nebbie.eqCache.hold = hold
   Nebbie.eqCache.wieldKey = wield and Nebbie.eqItemKeyword(wield) or nil
   Nebbie.eqCache.backKey = back and Nebbie.eqItemKeyword(back) or nil
+  Nebbie.eqCache.holdKey = hold and Nebbie.eqItemKeyword(hold) or nil
   Nebbie.eqCache.updatedAt = Nebbie.now()
+  Nebbie.eqCache.wieldScannedAt = Nebbie.now()
   Nebbie.saveEqCache()
 
   if Nebbie._weaponSwap and Nebbie._eqParseActive then
     Nebbie._weaponSwap.wield = wield
     Nebbie._weaponSwap.back = back
+    Nebbie._weaponSwap.hold = hold
+    Nebbie._weaponSwap.wieldConfirmed = true
     if back and back ~= "" then
       Nebbie._weaponSwap._eqSeen = true
       if not Nebbie._weaponSwap._finishScheduled then
@@ -1422,6 +1501,10 @@ function Nebbie.applyEqSlot(slot, item)
   if slot == "wield" then
     Nebbie.eqCache.wield = item
     Nebbie.eqCache.wieldKey = (item and item ~= "") and Nebbie.eqItemKeyword(item) or nil
+    Nebbie.eqCache.wieldScannedAt = Nebbie.now()
+  elseif slot == "hold" then
+    Nebbie.eqCache.hold = item
+    Nebbie.eqCache.holdKey = (item and item ~= "") and Nebbie.eqItemKeyword(item) or nil
   elseif slot == "back" then
     Nebbie.eqCache.back = item
     Nebbie.eqCache.backKey = (item and item ~= "") and Nebbie.eqItemKeyword(item) or nil
@@ -1476,7 +1559,7 @@ end
 function Nebbie.showEqCache()
   Nebbie.loadSettings()
   local c = Nebbie.eqCache or {}
-  cecho("<cyan><b>Cache eq Nebbie</b> <grey>(impugnato + sulla schiena)\n")
+  cecho("<cyan><b>Cache eq Nebbie</b> <grey>(schiena + impugnato + tenuto)\n")
   cecho("<grey>  schiena: <white>" .. tostring(c.back or "(vuoto)"))
   if c.backKey and c.backKey ~= "" then
     cecho(" <dark_green>[" .. c.backKey .. "]")
@@ -1485,6 +1568,16 @@ function Nebbie.showEqCache()
   cecho("<grey>  impugnato: <white>" .. tostring(c.wield or "(vuoto)"))
   if c.wieldKey and c.wieldKey ~= "" then
     cecho(" <dark_green>[" .. c.wieldKey .. "]")
+  end
+  if Nebbie.eqCacheWieldTrustworthy() then
+    cecho(" <dark_green>(affidabile)")
+  elseif c.wieldKey and c.wieldKey ~= "" then
+    cecho(" <orange>(vecchia — <yellow>neq clear<orange> o <yellow>neq<orange> per aggiornare)")
+  end
+  cecho("\n")
+  cecho("<grey>  tenuto: <white>" .. tostring(c.hold or "(vuoto)"))
+  if c.holdKey and c.holdKey ~= "" then
+    cecho(" <dark_green>[" .. c.holdKey .. "]")
   end
   cecho("\n")
   local age = Nebbie.eqCacheAge()
@@ -1502,6 +1595,13 @@ end
 
 function Nebbie.requestEqCache(silent)
   if Nebbie._eqCacheBusy then return false end
+  if Nebbie.inCombat() then
+    if not silent then
+      cecho("<orange>Nebbie: <yellow>eq<orange> automatico saltato in combattimento (evita lag).\n")
+      cecho("<grey>  <yellow>usa<grey> usa la cache; <yellow>neq clear<grey> se impugnato in cache e' sbagliato.\n")
+    end
+    return false
+  end
   Nebbie._eqCacheBusy = true
   Nebbie._eqCacheGag = silent == true
   send("eq")
@@ -1520,7 +1620,7 @@ function Nebbie.setEqAuto(on)
   Nebbie.syncEqCacheTimer()
   if on then
     cecho("<green>Nebbie: sync eq ogni 1h attivo (gagged).\n")
-    if not Nebbie.eqCacheIsFresh() then
+    if not Nebbie.eqCacheIsFresh() and not Nebbie.inCombat() then
       tempTimer(1, function() Nebbie.requestEqCache(true) end)
     end
   else
@@ -1532,7 +1632,7 @@ function Nebbie.syncEqCacheTimer()
   if Nebbie.eqCacheTimer then killTimer(Nebbie.eqCacheTimer); Nebbie.eqCacheTimer = nil end
   if Nebbie.eqAuto then
     Nebbie.eqCacheTimer = tempTimer(Nebbie.EQ_AUTO_INTERVAL, function()
-      if Nebbie.eqAuto and not Nebbie._weaponSwapBusy then
+      if Nebbie.eqAuto and not Nebbie._weaponSwapBusy and not Nebbie.inCombat() then
         Nebbie.requestEqCache(true)
       end
     end, true)
@@ -1542,7 +1642,7 @@ end
 function Nebbie.maybeRefreshEqCacheOnBoot()
   if not Nebbie.eqAuto then return end
   tempTimer(8, function()
-    if Nebbie._weaponSwapBusy or Nebbie._eqCacheBusy then return end
+    if Nebbie._weaponSwapBusy or Nebbie._eqCacheBusy or Nebbie.inCombat() then return end
     local age = Nebbie.eqCacheAge()
     if not age or age >= Nebbie.EQ_AUTO_INTERVAL then
       Nebbie.requestEqCache(true)
@@ -1560,6 +1660,8 @@ function Nebbie.onEqParseLine()
     Nebbie._weaponSwap._eqSeen = true
     Nebbie._weaponSwap.wield = nil
     Nebbie._weaponSwap.back = nil
+    Nebbie._weaponSwap.hold = nil
+    Nebbie._weaponSwap.wieldConfirmed = false
     Nebbie.scheduleWeaponSwapTimeout(Nebbie.EQ_SWAP_AFTER_EQ)
     Nebbie.scheduleEqCacheScan(2.0)
   end
@@ -1594,8 +1696,13 @@ function Nebbie.scheduleWeaponSwapTimeout(delay)
       ws._retries = (ws._retries or 0) + 1
       ws._eqSeen = false
       ws._finishScheduled = false
+      if Nebbie.inCombat() then
+        cecho("<grey>Nebbie: eq in combattimento saltato — uso cache borsa.\n")
+        Nebbie.finishWeaponSwap(ws._verbose)
+        return
+      end
       if ws._retries == 1 then
-        cecho("<grey>Nebbie: eq in ritardo (fight?) — riprovo...\n")
+        cecho("<grey>Nebbie: eq in ritardo — riprovo...\n")
       end
       send("eq")
       Nebbie.scheduleWeaponSwapTimeout(Nebbie.EQ_SWAP_RETRY_WAIT)
@@ -1614,11 +1721,11 @@ function Nebbie.buildWeaponSwapCommands(ws)
     "rem " .. backKw,
     "get " .. weapon .. " " .. backKw,
   }
-  if wieldKw and wieldKw ~= "" then
+  if ws.wieldConfirmed and wieldKw and wieldKw ~= "" then
     table.insert(cmds, "rem " .. wieldKw)
   end
   table.insert(cmds, "wie " .. weapon)
-  if wieldKw and wieldKw ~= "" then
+  if ws.wieldConfirmed and wieldKw and wieldKw ~= "" then
     table.insert(cmds, "put " .. wieldKw .. " " .. backKw)
   end
   table.insert(cmds, "wear " .. backKw)
@@ -1630,7 +1737,7 @@ function Nebbie.finishWeaponSwapFromState(ws)
   if not ws.back then
     cecho("<red>Nebbie: nessun oggetto nello slot <sulla schiena> — controlla con eq.\n")
     if not ws._eqSeen then
-      cecho("<grey>  (in combattimento eq puo' arrivare in ritardo — riprova fuori fight)\n")
+      cecho("<grey>  (eq non ancora parsato — riprova o fai <yellow>neq<grey>)\n")
     end
     return
   end
@@ -1641,15 +1748,24 @@ function Nebbie.finishWeaponSwapFromState(ws)
   end
   if ws._verbose then
     local src = ws._fromCache and "cache eq" or "eq live"
+    local wieldLabel = "(vuoto)"
+    if ws.wield and ws.wield ~= "" then
+      wieldLabel = Nebbie.lookupEqKeyword(ws.wield)
+      if not ws.wieldConfirmed then wieldLabel = wieldLabel .. "?" end
+    end
     cecho("<green>Nebbie: cambio arma → <yellow>" .. ws.weapon
       .. "<green> (" .. src .. ", borsa: <yellow>" .. Nebbie.lookupEqKeyword(ws.back)
-      .. "<green>, impugnato: <yellow>" .. tostring(ws.wield and Nebbie.lookupEqKeyword(ws.wield) or "(vuoto)")
+      .. "<green>, impugnato: <yellow>" .. wieldLabel
       .. "<green>).\n")
   end
   Nebbie._weaponSwapBusy = true
   Nebbie.runCmdQueue(cmds, 1, function()
     Nebbie._weaponSwapBusy = false
-    tempTimer(1.5, function() Nebbie.requestEqCache(true) end)
+    tempTimer(1.5, function()
+      if not Nebbie.inCombat() then
+        Nebbie.requestEqCache(true)
+      end
+    end)
   end)
 end
 
@@ -1670,7 +1786,7 @@ end
 function Nebbie.swapWeapon(weaponKw, verbose)
   weaponKw = Nebbie.stripQuotes(weaponKw or "")
   if weaponKw == "" then
-    cecho("<orange>Nebbie: sintassi <yellow>usa <arma><orange> (es. <yellow>usa spada<orange>).\n")
+    cecho("<orange>Nebbie: sintassi <yellow>usa <arma><orange> (es. <yellow>usa redentore<orange>).\n")
     return
   end
   if Nebbie._weaponSwapBusy then
@@ -1678,25 +1794,182 @@ function Nebbie.swapWeapon(weaponKw, verbose)
     return
   end
   Nebbie.loadSettings()
-  if Nebbie.eqCacheIsFresh() then
-    local ws = {
+  Nebbie.pollPromptFromBuffer()
+
+  local function buildWsFromCache()
+    local wieldConfirmed = Nebbie.eqCacheWieldTrustworthy()
+    return {
       weapon = weaponKw,
-      wield = Nebbie.eqCache.wield,
+      wield = wieldConfirmed and Nebbie.eqCache.wield or nil,
       back = Nebbie.eqCache.back,
+      hold = Nebbie.eqCache.hold,
+      wieldConfirmed = wieldConfirmed,
       _verbose = verbose ~= false,
       _fromCache = true,
     }
+  end
+
+  if Nebbie.inCombat() then
+    if not Nebbie.eqCacheIsFreshForSwap() then
+      cecho("<red>Nebbie: in combattimento serve la cache borsa — fai <yellow>neq<red> fuori fight.\n")
+      return
+    end
+    local ws = buildWsFromCache()
+    if not ws.wieldConfirmed and Nebbie.eqCache.wieldKey and Nebbie.eqCache.wieldKey ~= "" then
+      if verbose ~= false then
+        cecho("<grey>Nebbie: impugnato in cache non affidabile — salto <yellow>rem "
+          .. Nebbie.eqCache.wieldKey .. "<grey>.\n")
+      end
+    end
     Nebbie.finishWeaponSwapFromState(ws)
     return
   end
+
+  if Nebbie.eqCacheIsFreshForSwap() then
+    Nebbie.finishWeaponSwapFromState(buildWsFromCache())
+    return
+  end
   Nebbie._weaponSwap = {
-    weapon = weaponKw, wield = nil, back = nil,
+    weapon = weaponKw, wield = nil, back = nil, hold = nil,
+    wieldConfirmed = false,
     _eqSeen = false, _retries = 0, _finishScheduled = false,
     _verbose = verbose ~= false,
   }
   Nebbie._eqParseActive = true
   send("eq")
   Nebbie.scheduleWeaponSwapTimeout(Nebbie.EQ_SWAP_FIRST_WAIT)
+end
+
+function Nebbie.getBackBagKeyword()
+  Nebbie.loadSettings()
+  local c = Nebbie.eqCache or {}
+  if c.backKey and c.backKey ~= "" then return c.backKey end
+  if c.back and c.back ~= "" then
+    local kw = Nebbie.lookupEqKeyword(c.back)
+    if kw and kw ~= "" then return kw end
+  end
+  return nil
+end
+
+function Nebbie.setWeaponDropRecover(on)
+  Nebbie.weaponDropRecover = on
+  Nebbie._settings.weaponDropRecover = on
+  Nebbie.saveSettings()
+  cecho("<green>Nebbie: recupero armi cadute <yellow>" .. (on and "on" or "off") .. "\n")
+end
+
+function Nebbie._weaponDropKeyword(slot, dropDesc)
+  local c = Nebbie.eqCache or {}
+  if slot == "hold" and c.holdKey and c.holdKey ~= "" then
+    return c.holdKey
+  end
+  if slot == "wield" and c.wieldKey and c.wieldKey ~= "" and Nebbie.eqCacheWieldTrustworthy() then
+    return c.wieldKey
+  end
+  if dropDesc and dropDesc ~= "" then
+    return Nebbie.lookupEqKeyword(dropDesc)
+  end
+  return nil
+end
+
+function Nebbie._pumpWeaponDropQueue()
+  if Nebbie._weaponDropBusy then return end
+  local q = Nebbie._weaponDropQueue
+  if not q or #q == 0 then return end
+
+  local job = table.remove(q, 1)
+  local key = Nebbie._weaponDropKeyword(job.slot, job.desc)
+  if not key or key == "" then
+    cecho("<orange>Nebbie drop: keyword sconosciuta per <yellow>"
+      .. tostring(job.desc) .. "<orange> — <yellow>neq<orange> o <yellow>nkey add ...\n")
+    Nebbie._pumpWeaponDropQueue()
+    return
+  end
+
+  local reeq = (job.slot == "hold") and ("hold " .. key) or ("wie " .. key)
+  Nebbie._weaponDropBusy = true
+  Nebbie.runCmdQueue({"get " .. key, reeq}, 1, function()
+    Nebbie._weaponDropBusy = false
+    tempTimer(0.8, function()
+      if not Nebbie.inCombat() and Nebbie.requestEqCache then
+        Nebbie.requestEqCache(true)
+      end
+      Nebbie._pumpWeaponDropQueue()
+    end)
+  end)
+end
+
+function Nebbie.enqueueWeaponDrop(slot, dropDesc)
+  if Nebbie.weaponDropRecover == false then return end
+  dropDesc = (dropDesc or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if dropDesc == "" then return end
+  Nebbie._weaponDropQueue = Nebbie._weaponDropQueue or {}
+  table.insert(Nebbie._weaponDropQueue, { slot = slot, desc = dropDesc })
+  Nebbie._pumpWeaponDropQueue()
+end
+
+function Nebbie.onWeaponDropHoldLine(line)
+  if not Nebbie.enqueueWeaponDrop then return end
+  local plain = Nebbie.stripColors(line or "")
+  local desc = plain:match("^(.-)%s+ti cade dalle mani%.?$")
+  if desc then Nebbie.enqueueWeaponDrop("hold", desc) end
+end
+
+function Nebbie.onWeaponDropWieldLine(line)
+  if not Nebbie.enqueueWeaponDrop then return end
+  local plain = Nebbie.stripColors(line or "")
+  local desc = plain:match("^e ti casca anche%s+(.+)!$")
+  if desc then Nebbie.enqueueWeaponDrop("wield", desc) end
+end
+
+function Nebbie.setFoodDrinkAuto(on)
+  Nebbie.foodDrinkAuto = on
+  Nebbie._settings.foodDrinkAuto = on
+  Nebbie.saveSettings()
+  cecho("<green>Nebbie: fame/sete automatiche <yellow>" .. (on and "on" or "off") .. "\n")
+end
+
+function Nebbie.setFoodItemKey(itemKw)
+  itemKw = Nebbie.stripQuotes(itemKw or ""):lower()
+  if itemKw == "" then
+    cecho("<orange>Nebbie: <yellow>nfood item <cornu|carne|...><orange>\n")
+    return
+  end
+  Nebbie._settings.foodItemKey = itemKw
+  Nebbie.saveSettings()
+  cecho("<green>Nebbie: oggetto fame/sete → <yellow>" .. itemKw .. "\n")
+end
+
+function Nebbie.buildFoodDrinkCommands()
+  local bagKw = Nebbie.getBackBagKeyword()
+  if not bagKw or bagKw == "" then return nil end
+  Nebbie.loadSettings()
+  local itemKw = Nebbie._settings.foodItemKey or "cornu"
+  return {
+    "rem " .. bagKw,
+    "get " .. itemKw .. " " .. bagKw,
+    "dri " .. itemKw,
+    "dri " .. itemKw,
+    "dri " .. itemKw,
+    "dri " .. itemKw,
+    "dri " .. itemKw,
+    "put " .. itemKw .. " " .. bagKw,
+    "wear " .. bagKw,
+  }
+end
+
+function Nebbie.autoFoodDrink()
+  if Nebbie.foodDrinkAuto == false then return end
+  if Nebbie._foodDrinkBusy then return end
+  local cmds = Nebbie.buildFoodDrinkCommands()
+  if not cmds then
+    cecho("<orange>Nebbie: fame/sete — borsa sconosciuta (<yellow>neq<orange> per aggiornare cache).\n")
+    return
+  end
+  Nebbie._foodDrinkBusy = true
+  Nebbie.runCmdQueue(cmds, 1, function()
+    Nebbie._foodDrinkBusy = false
+  end)
 end
 
 function Nebbie.onMobKillExp(line)
@@ -2458,6 +2731,13 @@ function Nebbie.install()
   perm("eq key list", [[^nkey$]], [[Nebbie.listEqKeys()]])
   perm("eq key add", [[^nkey add (.+) (.+)$]], [[Nebbie.addEqKey(matches[2], matches[3])]])
   perm("eq key del", [[^nkey del (.+)$]], [[Nebbie.delEqKey(matches[2])]])
+  perm("eq cache clear", [[^neq clear$]], [[Nebbie.clearEqCacheWield()]])
+  perm("drop recover on", [[^ndrop on$]], [[Nebbie.setWeaponDropRecover(true)]])
+  perm("drop recover off", [[^ndrop off$]], [[Nebbie.setWeaponDropRecover(false)]])
+  perm("food auto on", [[^nfood on$]], [[Nebbie.setFoodDrinkAuto(true)]])
+  perm("food auto off", [[^nfood off$]], [[Nebbie.setFoodDrinkAuto(false)]])
+  perm("food item set", [[^nfood item (.+)$]], [[Nebbie.setFoodItemKey(matches[2])]])
+  perm("food manual", [[^nfood$]], [[Nebbie.autoFoodDrink()]])
   perm("eq cache sync", [[^neq$]], [[
     if Nebbie.requestEqCache(false) then
       cecho("<grey>Nebbie: sync eq...\n")
@@ -2569,7 +2849,7 @@ function Nebbie.install()
   trig("prompt parse", {[[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
 
-  trig("eq parse wield", {"Stai usando", "<impugnato>", "<sulla schiena>"}, [[
+  trig("eq parse wield", {"Stai usando", "<impugnato>", "<tenuto>", "<sulla schiena>"}, [[
     if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine() end
   ]])
 
@@ -2580,6 +2860,18 @@ function Nebbie.install()
   trig("mob kill exp loot", {[[^La tua esperienza e' aumentata di \d+ punti\.?$]]}, [[
     if Nebbie and Nebbie.onMobKillExp then Nebbie.onMobKillExp(line) end
   ]], true)
+
+  trig("weapon drop hold", {" ti cade dalle mani"}, [[
+    if Nebbie and Nebbie.onWeaponDropHoldLine then Nebbie.onWeaponDropHoldLine(line) end
+  ]])
+
+  trig("weapon drop wield", {"e ti casca anche"}, [[
+    if Nebbie and Nebbie.onWeaponDropWieldLine then Nebbie.onWeaponDropWieldLine(line) end
+  ]])
+
+  trig("hunger thirst", {"Hai Fame.", "Hai fame.", "Hai sete.", "Hai Sete."}, [[
+    if Nebbie and Nebbie.autoFoodDrink then Nebbie.autoFoodDrink() end
+  ]])
 
   trig("cast started", {"Pronunci le parole"}, [[
     if Nebbie and Nebbie.stripColors and Nebbie.onBuffApplied then
@@ -2648,6 +2940,7 @@ function Nebbie.install()
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
   cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
+  cecho("<grey>Armi cadute: <yellow>ndrop off<grey> | Fame/sete: <yellow>nfood off<grey> | Oggetto: <yellow>nfood item cornu\n")
   Nebbie._installing = false
   Nebbie.initGUI()
 end

@@ -1,0 +1,656 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE MudletPackage>
+<MudletPackage version="1.001">
+ <ScriptPackage>
+  <Script isActive="yes" isFolder="no">
+   <name>Nebbie_sysLoadEvent</name>
+   <script><![CDATA[function Nebbie_sysLoadEvent()
+  local ver = "2.2.27"
+  if type(enableScript) == "function" then
+    pcall(function() enableScript("Nebbie Loader", 1) end)
+  end
+  if Nebbie and Nebbie.version == ver and type(Nebbie.runFix) == "function" and Nebbie._mainLoaded then
+    return
+  end
+  if type(Nebbie_loaderBoot) == "function" then
+    local ok, err = pcall(Nebbie_loaderBoot)
+    if not ok then
+      cecho("<red>[Nebbie] loader error: " .. tostring(err) .. "\n")
+    elseif Nebbie and Nebbie.version == ver then
+      cecho("<green>[Nebbie] v" .. ver .. " caricato (sysLoad).\n")
+    end
+  elseif not (Nebbie and Nebbie.version == ver) then
+    cecho("<orange>[Nebbie] Loader assente — reinstalla package, poi <yellow>nfix<grey>.\n")
+  end
+end]]></script>
+   <eventHandlerList>
+    <string>sysLoadEvent</string>
+   </eventHandlerList>
+   <packageName>nebbie-play-all</packageName>
+  </Script>
+  <Script isActive="yes" isFolder="no">
+   <name>Nebbie Loader</name>
+   <script><![CDATA[-- NEBBIE_LOADER_VER=2.2.27
+Nebbie = Nebbie or {}
+Nebbie.package = "nebbie-play-all"
+local NEBBIE_EXPECT = "2.2.27"
+local MAIN_SCRIPT = "Nebbie Play All"
+local INSTALL_FILE = "nebbie-install.lua"
+local INSTALL_URL = "https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all-build/nebbie-install.lua"
+local LOADER_NAME = "Nebbie Loader"
+
+local function nebbie_find_ids(substr)
+  if type(findItems) ~= "function" then return {} end
+  local ok, ids = pcall(function() return findItems(substr, "script", false) end)
+  if ok and type(ids) == "table" then return ids end
+  return {}
+end
+
+local function nebbie_code(name, occ)
+  if type(getScript) ~= "function" then return nil end
+  local ok, code = pcall(function() return getScript(name, occ or 1) end)
+  if not ok or not code or code == -1 or type(code) ~= "string" then return nil end
+  return code
+end
+
+local function nebbie_ver_from_code(code)
+  if not code then return nil end
+  return code:match("NEBBIE_INSTALL_VER=([%d%.]+)")
+    or code:match("NEBBIE_PKG_VER=([%d%.]+)")
+    or code:match('Nebbie%.version = "([%d%.]+)"')
+end
+
+function Nebbie_installPath()
+  local home = ""
+  if type(getMudletHomeDir) == "function" then
+    local ok, h = pcall(getMudletHomeDir)
+    if ok and h then home = h end
+  end
+  if home == "" then home = "." end
+  if home:sub(-1) == "/" or home:sub(-1) == "\\" then
+    return home .. INSTALL_FILE
+  end
+  return home .. "/" .. INSTALL_FILE
+end
+
+function Nebbie_fileVer(path)
+  path = path or Nebbie_installPath()
+  local f = io.open(path, "r")
+  if not f then return nil end
+  local head = f:read(4096) or ""
+  f:close()
+  return nebbie_ver_from_code(head)
+end
+
+function Nebbie_writeInstallFile(code, silent)
+  if not code or type(code) ~= "string" or #code < 1000 then
+    return false, "codice install non valido"
+  end
+  local ver = nebbie_ver_from_code(code)
+  if ver ~= NEBBIE_EXPECT then
+    return false, "versione " .. tostring(ver) .. " (attesa " .. NEBBIE_EXPECT .. ")"
+  end
+  local path = Nebbie_installPath()
+  local f = io.open(path, "w")
+  if not f then return false, "impossibile scrivere " .. path end
+  f:write(code)
+  f:close()
+  if not silent then
+    cecho("<green>Nebbie: install salvato in <yellow>" .. path .. "<green> (v" .. ver .. ").\n")
+  end
+  return true
+end
+
+function Nebbie_cacheInstallFromProfile(silent)
+  local code = nebbie_code(MAIN_SCRIPT, 1)
+  if not code then
+    for occ = 2, 4 do
+      code = nebbie_code(MAIN_SCRIPT, occ)
+      if code then break end
+    end
+  end
+  if not code then return false, "nessuno script «" .. MAIN_SCRIPT .. "» nel profilo" end
+  local ver = nebbie_ver_from_code(code)
+  if ver ~= NEBBIE_EXPECT then
+    return false, "profilo v" .. tostring(ver) .. " (serve v" .. NEBBIE_EXPECT .. ")"
+  end
+  return Nebbie_writeInstallFile(code, silent)
+end
+
+function Nebbie_execInstallFile(path, silent)
+  if not path then return false, "path nil" end
+  path = tostring(path):gsub("\\", "/")
+  local chunk, lerr = loadfile(path)
+  if not chunk then
+    local f = io.open(path, "rb")
+    if not f then return false, "non apro " .. path .. " (" .. tostring(lerr) .. ")" end
+    local code = f:read("*a") or ""
+    f:close()
+    if #code < 1000 then return false, "file troppo piccolo (" .. #code .. " byte)" end
+    chunk, lerr = loadstring(code, "@" .. path)
+  end
+  if not chunk then return false, "compile: " .. tostring(lerr) end
+  if type(setfenv) == "function" then
+    local env = getfenv(0)
+    if type(env) ~= "table" then env = _G end
+    setfenv(chunk, env)
+  end
+  Nebbie = Nebbie or {}
+  Nebbie.package = Nebbie.package or "nebbie-play-all"
+  local prevDefer = Nebbie._deferBoot
+  Nebbie._deferBoot = true
+  local ok, err = pcall(chunk)
+  Nebbie._deferBoot = prevDefer
+  if not ok then return false, "run: " .. tostring(err) end
+  if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
+    if not silent then
+      cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " caricato.\n")
+    end
+    return true
+  end
+  return false, "post ver=" .. tostring(Nebbie and Nebbie.version)
+    .. " runFix=" .. tostring(Nebbie and type(Nebbie.runFix))
+end
+
+function Nebbie_dofileInstall(silent)
+  return Nebbie_execInstallFile(Nebbie_installPath(), silent)
+end
+
+function Nebbie_findPackageInstallFile()
+  local home = ""
+  if type(getMudletHomeDir) == "function" then
+    local ok, h = pcall(getMudletHomeDir)
+    if ok and h then home = h end
+  end
+  if home == "" then return nil end
+  local sep = "/"
+  if home:sub(-1) == "/" or home:sub(-1) == "\\" then sep = "" end
+  local pkg = "nebbie-play-all"
+  local candidates = {
+    home .. sep .. pkg .. "/" .. INSTALL_FILE,
+    home .. sep .. INSTALL_FILE,
+  }
+  for _, p in ipairs(candidates) do
+    local f = io.open(p, "r")
+    if f then
+      local head = f:read(4096) or ""
+      f:close()
+      if nebbie_ver_from_code(head) == NEBBIE_EXPECT then
+        return p
+      end
+    end
+  end
+  return nil
+end
+
+function Nebbie_copyFile(src, dst, silent)
+  local rf = io.open(src, "r")
+  if not rf then return false, "non leggo " .. tostring(src) end
+  local data = rf:read("*a") or ""
+  rf:close()
+  return Nebbie_writeInstallFile(data, silent)
+end
+
+function Nebbie_tryPackageInstall(silent)
+  local src = Nebbie_findPackageInstallFile()
+  if not src then return false, "install non nel package" end
+  if not silent then
+    cecho("<grey>Nebbie: install da package <yellow>" .. src .. "\n")
+  end
+  local ok, err = Nebbie_execInstallFile(src, silent)
+  if ok then
+    pcall(function() Nebbie_copyFile(src, Nebbie_installPath(), true) end)
+    return true
+  end
+  if not silent then
+    cecho("<orange>Nebbie: package load fallito — " .. tostring(err) .. "\n")
+  end
+  return false, err
+end
+
+function Nebbie_downloadInstall(callback, silent)
+  if Nebbie._downloadPending then
+    if callback then callback(false, "download gia in corso") end
+    return false, "download gia in corso"
+  end
+  if type(downloadFile) ~= "function" then
+    if callback then callback(false, "downloadFile non disponibile") end
+    return false, "downloadFile non disponibile"
+  end
+  Nebbie._downloadPending = true
+  local path = Nebbie_installPath()
+  local tmp = path .. ".part"
+  pcall(function() os.remove(tmp) end)
+  local done = false
+  local okHandler, errHandler
+  okHandler = registerAnonymousEventHandler("sysDownloadDone", function(_, saveTo)
+    if done or saveTo ~= tmp then return end
+    done = true
+    Nebbie._downloadPending = false
+    if okHandler then pcall(function() killAnonymousEventHandler(okHandler) end) end
+    if errHandler then pcall(function() killAnonymousEventHandler(errHandler) end) end
+    local rf = io.open(tmp, "r")
+    if not rf then
+      if callback then callback(false, "download vuoto") end
+      return
+    end
+    local data = rf:read("*a") or ""
+    rf:close()
+    pcall(function() os.remove(tmp) end)
+    local ok, err = Nebbie_writeInstallFile(data, true)
+    if not ok then
+      if callback then callback(false, err) end
+      return
+    end
+    if not silent then
+      cecho("<green>Nebbie: scaricato v" .. NEBBIE_EXPECT .. " da GitHub.\n")
+    end
+    if callback then callback(true) end
+  end, true)
+  errHandler = registerAnonymousEventHandler("sysDownloadError", function(_, msg, saveTo)
+    if done or saveTo ~= tmp then return end
+    done = true
+    Nebbie._downloadPending = false
+    if okHandler then pcall(function() killAnonymousEventHandler(okHandler) end) end
+    if errHandler then pcall(function() killAnonymousEventHandler(errHandler) end) end
+    pcall(function() os.remove(tmp) end)
+    if callback then callback(false, tostring(msg)) end
+  end, true)
+  if type(tempTimer) == "function" then
+    tempTimer(45, function()
+      if done then return end
+      done = true
+      Nebbie._downloadPending = false
+      if okHandler then pcall(function() killAnonymousEventHandler(okHandler) end) end
+      if errHandler then pcall(function() killAnonymousEventHandler(errHandler) end) end
+      if callback then callback(false, "timeout download (45s)") end
+    end)
+  end
+  downloadFile(tmp, INSTALL_URL)
+  if not silent then
+    cecho("<yellow>Nebbie: scarico v" .. NEBBIE_EXPECT .. "...\n")
+  end
+  return true
+end
+
+function Nebbie_neutralizeLegacyScripts(silent)
+  local legacy = {"Nebbie Spells and Skills", "nebbie-install", "Nebbie Bootloader", "!Nebbie Boot", "Nebbie Play All", "Nebbie Play All v2.2.12", "Nebbie Play All v2.2.13", "Nebbie Play All v2.2.14", "Nebbie Play All v2.2.15", "Nebbie Play All v2.2.16", "Nebbie Play All v2.2.17", "Nebbie Play All v2.2.18", "Nebbie Play All v2.2.19", "Nebbie Play All v2.2.20"}
+  local patterns = {"Play All v", "Spells and Skills", "Bootloader", "!Nebbie", "nebbie-install"}
+  local n = 0
+  for _, pat in ipairs(patterns) do
+    for _, id in ipairs(nebbie_find_ids(pat)) do
+      if type(disableScript) == "function" and pcall(function() disableScript(id) end) then
+        n = n + 1
+      end
+    end
+  end
+  if type(setScript) == "function" and type(disableScript) == "function" then
+    for _, sname in ipairs(legacy) do
+      for occ = 1, 6 do
+        local code = nebbie_code(sname, occ)
+        if not code then break end
+        pcall(function() setScript(sname, "-- disattivato da Nebbie Loader\nreturn\n", occ) end)
+        pcall(function() disableScript(sname, occ) end)
+        n = n + 1
+      end
+    end
+  end
+  if not silent and n > 0 then
+    cecho("<grey>Nebbie: " .. n .. " script legacy disattivati.\n")
+  end
+  return n
+end
+
+function Nebbie_loadInstall(silent)
+  if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" and Nebbie._mainLoaded then
+    return true
+  end
+  if Nebbie_fileVer() == NEBBIE_EXPECT then
+    local ok = Nebbie_dofileInstall(silent)
+    if ok then return true end
+  end
+  local pkgOk, pkgErr = Nebbie_tryPackageInstall(silent)
+  if pkgOk then return true end
+  if not silent and pkgErr then
+    cecho("<grey>Nebbie: " .. tostring(pkgErr) .. "\n")
+  end
+  local cached = Nebbie_cacheInstallFromProfile(true)
+  if cached then
+    local ok = Nebbie_dofileInstall(silent)
+    if ok then return true end
+  end
+  return false, pkgErr or "serve download o reinstall package"
+end
+
+function Nebbie_loaderBoot()
+  if Nebbie and Nebbie._loaderBootDone and Nebbie.version == NEBBIE_EXPECT and Nebbie._mainLoaded then
+    return
+  end
+  Nebbie._loaderBootDone = true
+
+local function Nebbie_killNamed(name, typ)
+  if type(exists) ~= "function" then return end
+  local n = 0
+  while exists(name, typ) > 0 and n < 64 do
+    if typ == "trigger" then
+      if type(disableTrigger) == "function" then disableTrigger(name) end
+      if type(killTrigger) == "function" then killTrigger(name) end
+    else
+      if type(disableAlias) == "function" then disableAlias(name) end
+      if type(killAlias) == "function" then killAlias(name) end
+    end
+    n = n + 1
+  end
+end
+function Nebbie_purgeLegacyPerm()
+  local triggers = {
+  "attrib gag", "cast started", "eq parse wield", "look loot parse", "mob kill exp loot", "nebbie-play-all::affect on blindness accecat", "nebbie-play-all::affect on fear presa dal panico", "nebbie-play-all::affect on heat stuff frigge", "nebbie-play-all::affect on paralyze Sei paralizzato", "nebbie-play-all::affect on silence non riesci a parlare",
+  "nebbie-play-all::affect on slowness mondo stia rallentando", "nebbie-play-all::affect on web ragnatele che ti avvolgono", "nebbie-play-all::affect on web ricopert", "nebbie-play-all::attrib gag", "nebbie-play-all::cast started", "nebbie-play-all::debuff off curse Ti senti molto meglio", "nebbie-play-all::debuff off feeblemind piu\' intelligente", "nebbie-play-all::debuff off poison sembrano meno forti ora", "nebbie-play-all::debuff off poison veleno non scorre", "nebbie-play-all::debuff on curse maledett",
+  "nebbie-play-all::debuff on feeblemind rimbecillit", "nebbie-play-all::debuff on poison appare molto sofferente", "nebbie-play-all::eq parse wield", "nebbie-play-all::fail anti_magic", "nebbie-play-all::fail backfire", "nebbie-play-all::fail backstab_fail", "nebbie-play-all::fail concentrazione", "nebbie-play-all::fail first_aid_cd", "nebbie-play-all::fail fizzle", "nebbie-play-all::fail kick_fail",
+  "nebbie-play-all::fail no_level", "nebbie-play-all::fail no_magic_zone", "nebbie-play-all::fail no_mana", "nebbie-play-all::fail no_mem", "nebbie-play-all::fail no_mind_zone", "nebbie-play-all::fail no_quotes", "nebbie-play-all::fail unimplemented", "nebbie-play-all::fail unknown", "nebbie-play-all::fail usa_mind", "nebbie-play-all::fail usa_recall",
+  "nebbie-play-all::look loot parse", "nebbie-play-all::mob kill exp loot", "nebbie-play-all::prompt parse", "nebbie-play-all::soon armor", "nebbie-play-all::soon fly", "nebbie-play-all::soon invisibility", "nebbie-play-all::soon sanctuary", "nebbie-play-all::soon shield", "nebbie-play-all::wearoff adrenalize", "nebbie-play-all::wearoff aid",
+  "nebbie-play-all::wearoff anti magic shell", "nebbie-play-all::wearoff armor", "nebbie-play-all::wearoff barkskin", "nebbie-play-all::wearoff bless", "nebbie-play-all::wearoff blessing", "nebbie-play-all::wearoff blindness", "nebbie-play-all::wearoff detect invisibility", "nebbie-play-all::wearoff detect magic", "nebbie-play-all::wearoff disguise", "nebbie-play-all::wearoff faerie fire",
+  "nebbie-play-all::wearoff fireshield", "nebbie-play-all::wearoff first aid", "nebbie-play-all::wearoff fly", "nebbie-play-all::wearoff globe darkness", "nebbie-play-all::wearoff haste", "nebbie-play-all::wearoff heat stuff", "nebbie-play-all::wearoff invisibility", "nebbie-play-all::wearoff lay on hands", "nebbie-play-all::wearoff mana", "nebbie-play-all::wearoff meditate",
+  "nebbie-play-all::wearoff minor invulnerability", "nebbie-play-all::wearoff mirror images", "nebbie-play-all::wearoff paralyze", "nebbie-play-all::wearoff polymorph", "nebbie-play-all::wearoff protection from evil", "nebbie-play-all::wearoff psi shield", "nebbie-play-all::wearoff psionic blast", "nebbie-play-all::wearoff sanctuary", "nebbie-play-all::wearoff shield", "nebbie-play-all::wearoff silence",
+  "nebbie-play-all::wearoff slowness", "nebbie-play-all::wearoff sneak", "nebbie-play-all::wearoff spy", "nebbie-play-all::wearoff stone skin", "nebbie-play-all::wearoff strength", "nebbie-play-all::wearoff web", "nebbie-spells-skills::affect on blindness accecat", "nebbie-spells-skills::affect on fear presa dal panico", "nebbie-spells-skills::affect on heat stuff frigge", "nebbie-spells-skills::affect on paralyze Sei paralizzato",
+  "nebbie-spells-skills::affect on silence non riesci a parlare", "nebbie-spells-skills::affect on slowness mondo stia rallentando", "nebbie-spells-skills::affect on web ragnatele che ti avvolgono", "nebbie-spells-skills::affect on web ricopert", "nebbie-spells-skills::attrib gag", "nebbie-spells-skills::cast started", "nebbie-spells-skills::debuff off curse Ti senti molto meglio", "nebbie-spells-skills::debuff off feeblemind piu\' intelligente", "nebbie-spells-skills::debuff off poison sembrano meno forti ora", "nebbie-spells-skills::debuff off poison veleno non scorre",
+  "nebbie-spells-skills::debuff on curse maledett", "nebbie-spells-skills::debuff on feeblemind rimbecillit", "nebbie-spells-skills::debuff on poison appare molto sofferente", "nebbie-spells-skills::eq parse wield", "nebbie-spells-skills::fail anti_magic", "nebbie-spells-skills::fail backfire", "nebbie-spells-skills::fail backstab_fail", "nebbie-spells-skills::fail concentrazione", "nebbie-spells-skills::fail first_aid_cd", "nebbie-spells-skills::fail fizzle",
+  "nebbie-spells-skills::fail kick_fail", "nebbie-spells-skills::fail no_level", "nebbie-spells-skills::fail no_magic_zone", "nebbie-spells-skills::fail no_mana", "nebbie-spells-skills::fail no_mem", "nebbie-spells-skills::fail no_mind_zone", "nebbie-spells-skills::fail no_quotes", "nebbie-spells-skills::fail unimplemented", "nebbie-spells-skills::fail unknown", "nebbie-spells-skills::fail usa_mind",
+  "nebbie-spells-skills::fail usa_recall", "nebbie-spells-skills::look loot parse", "nebbie-spells-skills::mob kill exp loot", "nebbie-spells-skills::prompt parse", "nebbie-spells-skills::soon armor", "nebbie-spells-skills::soon fly", "nebbie-spells-skills::soon invisibility", "nebbie-spells-skills::soon sanctuary", "nebbie-spells-skills::soon shield", "nebbie-spells-skills::wearoff adrenalize",
+  "nebbie-spells-skills::wearoff aid", "nebbie-spells-skills::wearoff anti magic shell", "nebbie-spells-skills::wearoff armor", "nebbie-spells-skills::wearoff barkskin", "nebbie-spells-skills::wearoff bless", "nebbie-spells-skills::wearoff blessing", "nebbie-spells-skills::wearoff blindness", "nebbie-spells-skills::wearoff detect invisibility", "nebbie-spells-skills::wearoff detect magic", "nebbie-spells-skills::wearoff disguise",
+  "nebbie-spells-skills::wearoff faerie fire", "nebbie-spells-skills::wearoff fireshield", "nebbie-spells-skills::wearoff first aid", "nebbie-spells-skills::wearoff fly", "nebbie-spells-skills::wearoff globe darkness", "nebbie-spells-skills::wearoff haste", "nebbie-spells-skills::wearoff heat stuff", "nebbie-spells-skills::wearoff invisibility", "nebbie-spells-skills::wearoff lay on hands", "nebbie-spells-skills::wearoff mana",
+  "nebbie-spells-skills::wearoff meditate", "nebbie-spells-skills::wearoff minor invulnerability", "nebbie-spells-skills::wearoff mirror images", "nebbie-spells-skills::wearoff paralyze", "nebbie-spells-skills::wearoff polymorph", "nebbie-spells-skills::wearoff protection from evil", "nebbie-spells-skills::wearoff psi shield", "nebbie-spells-skills::wearoff psionic blast", "nebbie-spells-skills::wearoff sanctuary", "nebbie-spells-skills::wearoff shield",
+  "nebbie-spells-skills::wearoff silence", "nebbie-spells-skills::wearoff slowness", "nebbie-spells-skills::wearoff sneak", "nebbie-spells-skills::wearoff spy", "nebbie-spells-skills::wearoff stone skin", "nebbie-spells-skills::wearoff strength", "nebbie-spells-skills::wearoff web", "prompt parse"
+}
+  local aliases = {
+  "attrib off", "attrib on", "attrib sync", "eq cache off", "eq cache on", "eq cache sync", "eq key add", "eq key del", "eq key list", "generic cast c",
+  "generic cast word", "list classes", "loot manual", "loot off", "loot on", "memorize", "mind shortcut", "mode cast", "mode mind", "mode recall",
+  "nebbie-play-all::abbr cast ab", "nebbie-play-all::abbr cast adead", "nebbie-play-all::abbr cast aid", "nebbie-play-all::abbr cast arm", "nebbie-play-all::abbr cast bark", "nebbie-play-all::abbr cast ble", "nebbie-play-all::abbr cast blind", "nebbie-play-all::abbr cast cblind", "nebbie-play-all::abbr cast cc", "nebbie-play-all::abbr cast cfood",
+  "nebbie-play-all::abbr cast chain", "nebbie-play-all::abbr cast charm", "nebbie-play-all::abbr cast clight", "nebbie-play-all::abbr cast clightn", "nebbie-play-all::abbr cast cmd", "nebbie-play-all::abbr cast cmon", "nebbie-play-all::abbr cast coc", "nebbie-play-all::abbr cast cs", "nebbie-play-all::abbr cast cser", "nebbie-play-all::abbr cast csleep",
+  "nebbie-play-all::abbr cast ct", "nebbie-play-all::abbr cast curse", "nebbie-play-all::abbr cast cwater", "nebbie-play-all::abbr cast dev", "nebbie-play-all::abbr cast devl", "nebbie-play-all::abbr cast dinv", "nebbie-play-all::abbr cast disint", "nebbie-play-all::abbr cast dmag", "nebbie-play-all::abbr cast dom", "nebbie-play-all::abbr cast dpois",
+  "nebbie-play-all::abbr cast ea", "nebbie-play-all::abbr cast earmor", "nebbie-play-all::abbr cast edrain", "nebbie-play-all::abbr cast ewep", "nebbie-play-all::abbr cast fb", "nebbie-play-all::abbr cast fear", "nebbie-play-all::abbr cast feeble", "nebbie-play-all::abbr cast ffire", "nebbie-play-all::abbr cast fly", "nebbie-play-all::abbr cast fs",
+  "nebbie-play-all::abbr cast fshld", "nebbie-play-all::abbr cast harm", "nebbie-play-all::abbr cast haste", "nebbie-play-all::abbr cast heal", "nebbie-play-all::abbr cast ident", "nebbie-play-all::abbr cast infra", "nebbie-play-all::abbr cast invis", "nebbie-play-all::abbr cast is", "nebbie-play-all::abbr cast kalign", "nebbie-play-all::abbr cast knock",
+  "nebbie-play-all::abbr cast lb", "nebbie-play-all::abbr cast mana", "nebbie-play-all::abbr cast mburn", "nebbie-play-all::abbr cast mirr", "nebbie-play-all::abbr cast mm", "nebbie-play-all::abbr cast ms", "nebbie-play-all::abbr cast mwipe", "nebbie-play-all::abbr cast para", "nebbie-play-all::abbr cast pcrush", "nebbie-play-all::abbr cast pevil",
+  "nebbie-play-all::abbr cast pois", "nebbie-play-all::abbr cast poly", "nebbie-play-all::abbr cast prism", "nebbie-play-all::abbr cast psiport", "nebbie-play-all::abbr cast ptel", "nebbie-play-all::abbr cast rcurse", "nebbie-play-all::abbr cast reinc", "nebbie-play-all::abbr cast resu", "nebbie-play-all::abbr cast rpara", "nebbie-play-all::abbr cast rpois",
+  "nebbie-play-all::abbr cast san", "nebbie-play-all::abbr cast sg", "nebbie-play-all::abbr cast shld", "nebbie-play-all::abbr cast slife", "nebbie-play-all::abbr cast slow", "nebbie-play-all::abbr cast snare", "nebbie-play-all::abbr cast sskin", "nebbie-play-all::abbr cast telek", "nebbie-play-all::abbr cast tsight", "nebbie-play-all::abbr cast wb",
+  "nebbie-play-all::abbr cast weak", "nebbie-play-all::abbr cast wrec", "nebbie-play-all::attrib off", "nebbie-play-all::attrib on", "nebbie-play-all::attrib sync", "nebbie-play-all::eq cache off", "nebbie-play-all::eq cache on", "nebbie-play-all::eq cache sync", "nebbie-play-all::eq key add", "nebbie-play-all::eq key del",
+  "nebbie-play-all::eq key list", "nebbie-play-all::fav cast aid", "nebbie-play-all::fav cast armor", "nebbie-play-all::fav cast bless", "nebbie-play-all::fav cast mirror images", "nebbie-play-all::fav cast shield", "nebbie-play-all::fav cast stone skin", "nebbie-play-all::generic cast c", "nebbie-play-all::generic cast word", "nebbie-play-all::list classes",
+  "nebbie-play-all::loot manual", "nebbie-play-all::loot off", "nebbie-play-all::loot on", "nebbie-play-all::memorize", "nebbie-play-all::mind shortcut", "nebbie-play-all::mode cast", "nebbie-play-all::mode mind", "nebbie-play-all::mode recall", "nebbie-play-all::prompt debug", "nebbie-play-all::quick slot 1",
+  "nebbie-play-all::quick slot 2", "nebbie-play-all::quick slot 3", "nebbie-play-all::quick slot 4", "nebbie-play-all::quick slot 5", "nebbie-play-all::quick slot 6", "nebbie-play-all::quick slot 7", "nebbie-play-all::quick slot 8", "nebbie-play-all::quick slot 9", "nebbie-play-all::recall shortcut", "nebbie-play-all::reinstall fix",
+  "nebbie-play-all::reposition gui", "nebbie-play-all::return form", "nebbie-play-all::set class", "nebbie-play-all::setup hud", "nebbie-play-all::skill aura", "nebbie-play-all::skill backstab", "nebbie-play-all::skill bash", "nebbie-play-all::skill berserk", "nebbie-play-all::skill blast", "nebbie-play-all::skill blessing",
+  "nebbie-play-all::skill bodyguard", "nebbie-play-all::skill brew", "nebbie-play-all::skill carve", "nebbie-play-all::skill climb", "nebbie-play-all::skill disarm", "nebbie-play-all::skill disguise", "nebbie-play-all::skill doorbash", "nebbie-play-all::skill esp", "nebbie-play-all::skill feign death", "nebbie-play-all::skill find food",
+  "nebbie-play-all::skill find traps", "nebbie-play-all::skill find water", "nebbie-play-all::skill first aid", "nebbie-play-all::skill flame", "nebbie-play-all::skill forge", "nebbie-play-all::skill great", "nebbie-play-all::skill hide", "nebbie-play-all::skill kick", "nebbie-play-all::skill lay on hands", "nebbie-play-all::skill parry",
+  "nebbie-play-all::skill pick", "nebbie-play-all::skill portal", "nebbie-play-all::skill pray", "nebbie-play-all::skill quivering palm", "nebbie-play-all::skill scry", "nebbie-play-all::skill shield", "nebbie-play-all::skill sign", "nebbie-play-all::skill sneak", "nebbie-play-all::skill spot", "nebbie-play-all::skill springleap",
+  "nebbie-play-all::skill spy", "nebbie-play-all::skill steal", "nebbie-play-all::skill swim", "nebbie-play-all::skill tan", "nebbie-play-all::skill track", "nebbie-play-all::skill tspy", "nebbie-play-all::skill warcry", "nebbie-play-all::swap weapon", "nebbie-play-all::toggle gui", "nebbie-play-all::toggle hud",
+  "nebbie-spells-skills::abbr cast ab", "nebbie-spells-skills::abbr cast adead", "nebbie-spells-skills::abbr cast aid", "nebbie-spells-skills::abbr cast arm", "nebbie-spells-skills::abbr cast bark", "nebbie-spells-skills::abbr cast ble", "nebbie-spells-skills::abbr cast blind", "nebbie-spells-skills::abbr cast cblind", "nebbie-spells-skills::abbr cast cc", "nebbie-spells-skills::abbr cast cfood",
+  "nebbie-spells-skills::abbr cast chain", "nebbie-spells-skills::abbr cast charm", "nebbie-spells-skills::abbr cast clight", "nebbie-spells-skills::abbr cast clightn", "nebbie-spells-skills::abbr cast cmd", "nebbie-spells-skills::abbr cast cmon", "nebbie-spells-skills::abbr cast coc", "nebbie-spells-skills::abbr cast cs", "nebbie-spells-skills::abbr cast cser", "nebbie-spells-skills::abbr cast csleep",
+  "nebbie-spells-skills::abbr cast ct", "nebbie-spells-skills::abbr cast curse", "nebbie-spells-skills::abbr cast cwater", "nebbie-spells-skills::abbr cast dev", "nebbie-spells-skills::abbr cast devl", "nebbie-spells-skills::abbr cast dinv", "nebbie-spells-skills::abbr cast disint", "nebbie-spells-skills::abbr cast dmag", "nebbie-spells-skills::abbr cast dom", "nebbie-spells-skills::abbr cast dpois",
+  "nebbie-spells-skills::abbr cast ea", "nebbie-spells-skills::abbr cast earmor", "nebbie-spells-skills::abbr cast edrain", "nebbie-spells-skills::abbr cast ewep", "nebbie-spells-skills::abbr cast fb", "nebbie-spells-skills::abbr cast fear", "nebbie-spells-skills::abbr cast feeble", "nebbie-spells-skills::abbr cast ffire", "nebbie-spells-skills::abbr cast fly", "nebbie-spells-skills::abbr cast fs",
+  "nebbie-spells-skills::abbr cast fshld", "nebbie-spells-skills::abbr cast harm", "nebbie-spells-skills::abbr cast haste", "nebbie-spells-skills::abbr cast heal", "nebbie-spells-skills::abbr cast ident", "nebbie-spells-skills::abbr cast infra", "nebbie-spells-skills::abbr cast invis", "nebbie-spells-skills::abbr cast is", "nebbie-spells-skills::abbr cast kalign", "nebbie-spells-skills::abbr cast knock",
+  "nebbie-spells-skills::abbr cast lb", "nebbie-spells-skills::abbr cast mana", "nebbie-spells-skills::abbr cast mburn", "nebbie-spells-skills::abbr cast mirr", "nebbie-spells-skills::abbr cast mm", "nebbie-spells-skills::abbr cast ms", "nebbie-spells-skills::abbr cast mwipe", "nebbie-spells-skills::abbr cast para", "nebbie-spells-skills::abbr cast pcrush", "nebbie-spells-skills::abbr cast pevil",
+  "nebbie-spells-skills::abbr cast pois", "nebbie-spells-skills::abbr cast poly", "nebbie-spells-skills::abbr cast prism", "nebbie-spells-skills::abbr cast psiport", "nebbie-spells-skills::abbr cast ptel", "nebbie-spells-skills::abbr cast rcurse", "nebbie-spells-skills::abbr cast reinc", "nebbie-spells-skills::abbr cast resu", "nebbie-spells-skills::abbr cast rpara", "nebbie-spells-skills::abbr cast rpois",
+  "nebbie-spells-skills::abbr cast san", "nebbie-spells-skills::abbr cast sg", "nebbie-spells-skills::abbr cast shld", "nebbie-spells-skills::abbr cast slife", "nebbie-spells-skills::abbr cast slow", "nebbie-spells-skills::abbr cast snare", "nebbie-spells-skills::abbr cast sskin", "nebbie-spells-skills::abbr cast telek", "nebbie-spells-skills::abbr cast tsight", "nebbie-spells-skills::abbr cast wb",
+  "nebbie-spells-skills::abbr cast weak", "nebbie-spells-skills::abbr cast wrec", "nebbie-spells-skills::attrib off", "nebbie-spells-skills::attrib on", "nebbie-spells-skills::attrib sync", "nebbie-spells-skills::eq cache off", "nebbie-spells-skills::eq cache on", "nebbie-spells-skills::eq cache sync", "nebbie-spells-skills::eq key add", "nebbie-spells-skills::eq key del",
+  "nebbie-spells-skills::eq key list", "nebbie-spells-skills::fav cast aid", "nebbie-spells-skills::fav cast armor", "nebbie-spells-skills::fav cast bless", "nebbie-spells-skills::fav cast mirror images", "nebbie-spells-skills::fav cast shield", "nebbie-spells-skills::fav cast stone skin", "nebbie-spells-skills::generic cast c", "nebbie-spells-skills::generic cast word", "nebbie-spells-skills::list classes",
+  "nebbie-spells-skills::loot manual", "nebbie-spells-skills::loot off", "nebbie-spells-skills::loot on", "nebbie-spells-skills::memorize", "nebbie-spells-skills::mind shortcut", "nebbie-spells-skills::mode cast", "nebbie-spells-skills::mode mind", "nebbie-spells-skills::mode recall", "nebbie-spells-skills::prompt debug", "nebbie-spells-skills::quick slot 1",
+  "nebbie-spells-skills::quick slot 2", "nebbie-spells-skills::quick slot 3", "nebbie-spells-skills::quick slot 4", "nebbie-spells-skills::quick slot 5", "nebbie-spells-skills::quick slot 6", "nebbie-spells-skills::quick slot 7", "nebbie-spells-skills::quick slot 8", "nebbie-spells-skills::quick slot 9", "nebbie-spells-skills::recall shortcut", "nebbie-spells-skills::reinstall fix",
+  "nebbie-spells-skills::reposition gui", "nebbie-spells-skills::return form", "nebbie-spells-skills::set class", "nebbie-spells-skills::setup hud", "nebbie-spells-skills::skill aura", "nebbie-spells-skills::skill backstab", "nebbie-spells-skills::skill bash", "nebbie-spells-skills::skill berserk", "nebbie-spells-skills::skill blast", "nebbie-spells-skills::skill blessing",
+  "nebbie-spells-skills::skill bodyguard", "nebbie-spells-skills::skill brew", "nebbie-spells-skills::skill carve", "nebbie-spells-skills::skill climb", "nebbie-spells-skills::skill disarm", "nebbie-spells-skills::skill disguise", "nebbie-spells-skills::skill doorbash", "nebbie-spells-skills::skill esp", "nebbie-spells-skills::skill feign death", "nebbie-spells-skills::skill find food",
+  "nebbie-spells-skills::skill find traps", "nebbie-spells-skills::skill find water", "nebbie-spells-skills::skill first aid", "nebbie-spells-skills::skill flame", "nebbie-spells-skills::skill forge", "nebbie-spells-skills::skill great", "nebbie-spells-skills::skill hide", "nebbie-spells-skills::skill kick", "nebbie-spells-skills::skill lay on hands", "nebbie-spells-skills::skill parry",
+  "nebbie-spells-skills::skill pick", "nebbie-spells-skills::skill portal", "nebbie-spells-skills::skill pray", "nebbie-spells-skills::skill quivering palm", "nebbie-spells-skills::skill scry", "nebbie-spells-skills::skill shield", "nebbie-spells-skills::skill sign", "nebbie-spells-skills::skill sneak", "nebbie-spells-skills::skill spot", "nebbie-spells-skills::skill springleap",
+  "nebbie-spells-skills::skill spy", "nebbie-spells-skills::skill steal", "nebbie-spells-skills::skill swim", "nebbie-spells-skills::skill tan", "nebbie-spells-skills::skill track", "nebbie-spells-skills::skill tspy", "nebbie-spells-skills::skill warcry", "nebbie-spells-skills::swap weapon", "nebbie-spells-skills::toggle gui", "nebbie-spells-skills::toggle hud",
+  "prompt debug", "recall shortcut", "reinstall fix", "reposition gui", "return form", "set class", "setup hud", "swap weapon", "toggle gui", "toggle hud"
+}
+  for _, name in ipairs(triggers) do Nebbie_killNamed(name, "trigger") end
+  for _, name in ipairs(aliases) do
+    if name ~= "nebbie-fix" and not name:find("nebbie%-fix", 1, true) and name ~= "nebbie-nprompt" then
+      Nebbie_killNamed(name, "alias")
+    end
+  end
+end
+Nebbie_purgeLegacyPerm()
+
+  if Nebbie_loadInstall(true) then
+    Nebbie_neutralizeLegacyScripts(true)
+    if type(Nebbie.boot) == "function" then
+      local ok, err = pcall(Nebbie.boot)
+      if not ok then
+        cecho("<red>[Nebbie] boot error: " .. tostring(err) .. "\n")
+      end
+    end
+    return
+  end
+  if Nebbie_fileVer() ~= NEBBIE_EXPECT then
+    Nebbie_downloadInstall(function(ok, err)
+      if ok and Nebbie_dofileInstall(false) then
+        Nebbie_neutralizeLegacyScripts(true)
+        if type(Nebbie.boot) == "function" then pcall(Nebbie.boot) end
+      elseif err then
+        cecho("<orange>[Nebbie] download fallito: " .. tostring(err) .. " — prova <yellow>nfix<grey>.\n")
+      end
+    end, true)
+  end
+end
+
+if type(enableScript) == "function" then
+  pcall(function() enableScript(LOADER_NAME, 1) end)
+end
+Nebbie_loaderBoot()
+]]></script>
+   <eventHandlerList />
+   <packageName>nebbie-play-all</packageName>
+  </Script>
+ </ScriptPackage>
+ <AliasPackage>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-fix</name>
+   <script><![CDATA[local NEBBIE_EXPECT = "2.2.27"
+local MAIN_SCRIPT = "Nebbie Play All"
+local LEGACY_NAMES = {"Nebbie Spells and Skills", "nebbie-install", "Nebbie Bootloader", "!Nebbie Boot", "Nebbie Play All", "Nebbie Play All v2.2.12", "Nebbie Play All v2.2.13", "Nebbie Play All v2.2.14", "Nebbie Play All v2.2.15", "Nebbie Play All v2.2.16", "Nebbie Play All v2.2.17", "Nebbie Play All v2.2.18", "Nebbie Play All v2.2.19", "Nebbie Play All v2.2.20"}
+
+local function nebbie_find_ids(substr)
+  if type(findItems) ~= "function" then return {} end
+  local ok, ids = pcall(function() return findItems(substr, "script", false) end)
+  if ok and type(ids) == "table" then return ids end
+  return {}
+end
+
+local function nebbie_code(name, occ)
+  if type(getScript) ~= "function" then return nil end
+  local ok, code = pcall(function() return getScript(name, occ or 1) end)
+  if not ok or not code or code == -1 or type(code) ~= "string" then return nil end
+  return code
+end
+
+local function nebbie_ver_from_code(code)
+  if not code then return nil end
+  return code:match("NEBBIE_PKG_VER=([%d%.]+)") or code:match('Nebbie%.version = "([%d%.]+)"')
+end
+
+local function nebbie_neutralize(name, occ)
+  occ = occ or 1
+  if type(setScript) == "function" then
+    pcall(function() setScript(name, "-- disattivato da Nebbie\nreturn\n", occ) end)
+  end
+  if type(disableScript) == "function" then
+    pcall(function() disableScript(name, occ) end)
+  end
+end
+
+function Nebbie_cleanupScripts(silent)
+  local n_ids, n_names = 0, 0
+  for _, pat in ipairs({"Play All v", "Spells and Skills", "Bootloader", "!Nebbie", "nebbie-install"}) do
+    for _, id in ipairs(nebbie_find_ids(pat)) do
+      if type(disableScript) == "function" then
+        if pcall(function() disableScript(id) end) then n_ids = n_ids + 1 end
+      end
+    end
+  end
+  for _, sname in ipairs(LEGACY_NAMES) do
+    for occ = 1, 8 do
+      local code = nebbie_code(sname, occ)
+      if not code then break end
+      nebbie_neutralize(sname, occ)
+      n_names = n_names + 1
+    end
+  end
+  for occ = 1, 4 do
+    local code = nebbie_code(MAIN_SCRIPT, occ)
+    if not code then break end
+    local ver = nebbie_ver_from_code(code)
+    if ver then
+      nebbie_neutralize(MAIN_SCRIPT, occ)
+      if not silent and ver ~= NEBBIE_EXPECT then
+        cecho("<orange>Nebbie: «" .. MAIN_SCRIPT .. " #" .. occ .. "» era v" .. ver .. ", neutralizzato.\n")
+      end
+    end
+  end
+  if type(saveProfile) == "function" then
+    pcall(function() saveProfile() end)
+  end
+  if not silent then
+    cecho("<grey>Nebbie cleanup: " .. n_ids .. " id legacy, " .. n_names .. " nomi legacy.\n")
+  end
+  return n_ids + n_names
+end
+
+function Nebbie_wipeMemory()
+  local saved = Nebbie and Nebbie._settings
+  Nebbie = { package = "nebbie-play-all", _settings = saved or {} }
+  Nebbie._loadedPkgVer = nil
+  Nebbie._mainLoaded = false
+  Nebbie._installedVer = nil
+end
+Nebbie = Nebbie or {}
+if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
+  Nebbie.runFix()
+  cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " ok.\n")
+else
+  local cached = false
+  if type(Nebbie_cacheInstallFromProfile) == "function" then
+    cached = Nebbie_cacheInstallFromProfile(true)
+  end
+  Nebbie_cleanupScripts(false)
+  Nebbie_wipeMemory()
+  local loaded, lerr = false, nil
+  if type(Nebbie_loadInstall) == "function" then
+    loaded, lerr = Nebbie_loadInstall(false)
+  elseif type(Nebbie_tryPackageInstall) == "function" then
+    loaded, lerr = Nebbie_tryPackageInstall(false)
+  elseif type(Nebbie_execInstallFile) == "function" then
+    loaded, lerr = Nebbie_execInstallFile(Nebbie_installPath(), false)
+  elseif type(Nebbie_dofileInstall) == "function" then
+    loaded, lerr = Nebbie_dofileInstall(false)
+  end
+  if loaded and Nebbie and type(Nebbie.runFix) == "function" then
+    Nebbie.runFix()
+    cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " caricato e reinstallato.\n")
+  elseif type(Nebbie_downloadInstall) == "function" then
+    Nebbie_downloadInstall(function(ok, derr)
+      if not ok then
+        cecho("<red>Nebbie: download fallito — " .. tostring(derr) .. "\n")
+        return
+      end
+      local ok2, lerr2 = false, "exec mancante"
+      if type(Nebbie_execInstallFile) == "function" then
+        ok2, lerr2 = Nebbie_execInstallFile(Nebbie_installPath(), false)
+      elseif type(Nebbie_dofileInstall) == "function" then
+        ok2, lerr2 = Nebbie_dofileInstall(false)
+      end
+      if ok2 and Nebbie and type(Nebbie.runFix) == "function" then
+        Nebbie.runFix()
+        cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " pronto.\n")
+      else
+        cecho("<red>Nebbie: fix fallito — " .. tostring(lerr2) .. "\n")
+        cecho("<yellow>Reinstalla package:\n<grey>   https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage\n")
+        cecho("<yellow>Poi <yellow>nfix<grey> di nuovo.\n")
+      end
+    end, false)
+  else
+    local code = nebbie_code(MAIN_SCRIPT, 1)
+    local fileVer = (type(Nebbie_fileVer) == "function" and Nebbie_fileVer()) or nebbie_ver_from_code(code)
+    cecho("<orange>Install: v" .. tostring(fileVer or "assente") .. " — serve v" .. NEBBIE_EXPECT .. "\n")
+    cecho("<yellow>1)<grey> Alt+O → reinstalla package\n")
+    cecho("<grey>   https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage\n")
+    cecho("<yellow>2)<grey> <yellow>nfix\n")
+  end
+end]]></script>
+   <command></command>
+   <packageName>nebbie-play-all</packageName>
+   <regex>^nfix$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-purge</name>
+   <script><![CDATA[if Nebbie_purgeLegacyPerm then Nebbie_purgeLegacyPerm() end if Nebbie and Nebbie.purgeLegacyPermItems then Nebbie.purgeLegacyPermItems(false) end cecho("<green>Nebbie: perm vecchi disattivati. Poi <yellow>nfix<grey>.\n")]]></script>
+   <command></command>
+   <packageName>nebbie-play-all</packageName>
+   <regex>^npurge$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-nprompt</name>
+   <script><![CDATA[if Nebbie and Nebbie.debugPrompt then Nebbie.debugPrompt() else cecho("<orange>Nebbie v2.2.27: esegui <yellow>nfix<orange> dopo install package.\n") end]]></script>
+   <command></command>
+   <packageName>nebbie-play-all</packageName>
+   <regex>^nprompt$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-enable</name>
+   <script><![CDATA[if type(enableScript) == "function" then
+  pcall(function() enableScript("Nebbie Loader", 1) end)
+end
+if type(saveProfile) == "function" then pcall(function() saveProfile() end) end
+if type(exists) == "function" then
+  cecho("<green>Nebbie Loader exists=" .. tostring(exists("Nebbie Loader", "script")) .. "\n")
+end
+if type(Nebbie_loaderBoot) == "function" then
+  pcall(Nebbie_loaderBoot)
+elseif type(Nebbie_loadInstall) == "function" then
+  pcall(Nebbie_loadInstall)
+end
+cecho("<grey>Se Nebbie.version è ancora nil: <yellow>nfix<grey>.\n")]]></script>
+   <command></command>
+   <packageName>nebbie-play-all</packageName>
+   <regex>^nenable$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-diagnose</name>
+   <script><![CDATA[cecho("<cyan><b>Nebbie diagnose v2.2.27</b>\n")
+cecho("<grey>memoria Nebbie.version: <yellow>" .. tostring(Nebbie and Nebbie.version) .. "\n")
+cecho("<grey>runFix: <yellow>" .. tostring(Nebbie and type(Nebbie.runFix)) .. "\n")
+cecho("<grey>mainLoaded: <yellow>" .. tostring(Nebbie and Nebbie._mainLoaded) .. "\n")
+if type(Nebbie_installPath) == "function" then
+  local path = Nebbie_installPath()
+  local fv = (type(Nebbie_fileVer) == "function" and Nebbie_fileVer()) or "?"
+  cecho("<grey>install file: <yellow>" .. path .. " <grey>ver=<yellow>" .. tostring(fv) .. "\n")
+end
+if type(findItems) == "function" then
+  local ids = findItems("Nebbie", "script", false)
+  cecho("<grey>findItems Nebbie: <yellow>" .. tostring(ids and #ids or 0) .. " script\n")
+end
+if type(getScript) == "function" then
+  local names = {"Nebbie Spells and Skills", "nebbie-install", "Nebbie Bootloader", "!Nebbie Boot", "Nebbie Play All", "Nebbie Play All v2.2.12", "Nebbie Play All v2.2.13", "Nebbie Play All v2.2.14", "Nebbie Play All v2.2.15", "Nebbie Play All v2.2.16", "Nebbie Play All v2.2.17", "Nebbie Play All v2.2.18", "Nebbie Play All v2.2.19", "Nebbie Play All v2.2.20", "Nebbie Play All", "Nebbie Loader"}
+  for _, sname in ipairs(names) do
+    for occ = 1, 4 do
+      local ok, code = pcall(function() return getScript(sname, occ) end)
+      if ok and code and code ~= -1 and type(code) == "string" then
+        local ver = code:match("NEBBIE_INSTALL_VER=([%d%.]+)") or code:match("NEBBIE_LOADER_VER=([%d%.]+)") or code:match("NEBBIE_PKG_VER=([%d%.]+)") or code:match('Nebbie%.version = "([%d%.]+)"') or "?"
+        local active = "?"
+        if type(isActive) == "function" then
+          local ok2, a = pcall(function() return isActive(sname, occ) end)
+          if ok2 then active = tostring(a) end
+        end
+        cecho("<grey> " .. sname .. " #" .. occ .. " ver=" .. ver .. " active=" .. active .. " len=" .. #code .. "\n")
+      end
+    end
+  end
+end
+cecho("<grey>Atteso: <yellow>2.2.27<grey> via Loader + dofile\n")
+if type(exists) == "function" then
+  cecho("<grey>exists(Loader): <yellow>" .. tostring(exists("Nebbie Loader", "script")) .. "\n")
+end]]></script>
+   <command></command>
+   <packageName>nebbie-play-all</packageName>
+   <regex>^ndiagnose$</regex>
+  </Alias>
+ </AliasPackage>
+</MudletPackage>
