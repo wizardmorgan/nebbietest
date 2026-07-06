@@ -69,6 +69,16 @@ void PrintStatus(int level) {
 		mudlog(LOG_SYSERR, "Mud status when crashed: '%s'",gszMudStatus);
 	}
 	mudlog(LOG_SYSERR, "  Last Name '%s'", gszName);
+	if(gpGeneric) {
+		auto* crash_ch = static_cast<struct char_data*>(gpGeneric);
+		if(crash_ch->nMagicNumber == CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "  Crash ch room=%d act=0x%lx fighting=%p",
+				   crash_ch->in_room,
+				   static_cast<unsigned long>(crash_ch->specials.act),
+				   static_cast<void*>(crash_ch->specials.fighting));
+		}
+	}
 	if(gnPtr>=0) {
 		mudlog(LOG_SYSERR,    " Calling Stack");
 		for(i=0; i<=gnPtr; i++) {
@@ -231,6 +241,16 @@ void badcrash(int dummy) {
 	fprintf(stderr,
 			"MYST SIGSEGV: status='%s' name='%s' file='%s' line=%d\n",
 			gszMudStatus, gszName, currentfile, currentline);
+	if(gpGeneric) {
+		auto* crash_ch = static_cast<struct char_data*>(gpGeneric);
+		if(crash_ch->nMagicNumber == CHAR_VALID_MAGIC) {
+			fprintf(stderr,
+					"MYST SIGSEGV: ch room=%d act=0x%lx fighting=%p\n",
+					crash_ch->in_room,
+					static_cast<unsigned long>(crash_ch->specials.act),
+					static_cast<void*>(crash_ch->specials.fighting));
+		}
+	}
 	if(gnPtr >= 0) {
 		fprintf(stderr, "MYST SIGSEGV stack:\n");
 		for(int i = 0; i <= gnPtr && i < STACK_SIZE; ++i) {

@@ -661,7 +661,7 @@ void mobile_activity(struct char_data* ch) {
 			return;
 		}
 
-		SetStatus("Gestione Aggressivi", ch->player.short_descr);
+		SetStatus("Gestione Aggressivi", ch->player.short_descr, ch);
 		if(IS_SET(ch->specials.act, ACT_AGGRESSIVE)) {
 			if((tmp_ch = FindVictim(ch)) != NULL) {
 				if(check_peaceful(ch, "You can't seem to exercise your violent "
@@ -691,6 +691,8 @@ void mobile_activity(struct char_data* ch) {
 				}
 			}
 		}
+
+		SetStatus("Post Aggressivi", ch->player.short_descr, ch);
 
 		if(ch->nMagicNumber != CHAR_VALID_MAGIC) {
 			mudlog(LOG_SYSERR,
