@@ -198,8 +198,10 @@ cmd_doctor() {
     echo "Log consumer:"
     docker compose logs --tail=40 consumer 2>/dev/null || true
     echo ""
-    echo "Log mysql:"
-    docker compose logs --tail=20 mysql 2>/dev/null || true
+    echo "Diagnostica avvio myst:"
+    echo "  SERVER_PORT=${SERVER_PORT:-4000} ./scripts/myst-boot-check.sh"
+    echo "  docker compose run --rm --entrypoint /bin/bash consumer -c \\"
+    echo "    'SERVER_PORT=${SERVER_PORT:-4000} ./scripts/myst-boot-check.sh'"
 }
 
 if [ "${1:-}" = "doctor" ]; then

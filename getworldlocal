@@ -1,5 +1,16 @@
 #!/bin/bash
-(
-cd $(dirname $0)
-cp -v myst.* mudroot/lib
+# Copia il mudlib da root a mudroot/lib (esclude file runtime come myst.pid).
+set -euo pipefail
+cd "$(dirname "$0")"
+
+files=(
+  myst.mob myst.obj myst.wld myst.zon myst.spe myst.shp
 )
+
+for f in "${files[@]}"; do
+  if [ ! -f "$f" ]; then
+    echo "getworldlocal: manca $f nella root del repo" >&2
+    exit 1
+  fi
+  cp -v "$f" mudroot/lib/
+done

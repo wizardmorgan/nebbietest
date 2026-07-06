@@ -1782,11 +1782,17 @@ void InterpretaRoll(struct descriptor_data *d, char *riga)
   return;
 }
 void slackNotify(const char *message, const char *emoj) {
-  slack::Slacking slack("xxx-xxx"); // where "xxx-xxx" is your Slack API token
-  // slack.set_proxy("http://10.0.22.1:8080");
-  slack.hook.Id = "/T9EQH2QB0/B9E96TMPV/rJPnMU8yqgv8NzbKWh8Twfgd";
-  slack.hook.channel_username_iconemoji("", "", emoj);
-  slack.hook.postMessage(message);
+  try {
+    slack::Slacking slack("xxx-xxx"); // where "xxx-xxx" is your Slack API token
+    // slack.set_proxy("http://10.0.22.1:8080");
+    slack.hook.Id = "/T9EQH2QB0/B9E96TMPV/rJPnMU8yqgv8NzbKWh8Twfgd";
+    slack.hook.channel_username_iconemoji("", "", emoj);
+    slack.hook.postMessage(message);
+  } catch (const std::exception &e) {
+    mudlog(LOG_SYSERR, "slackNotify failed: %s", e.what());
+  } catch (...) {
+    mudlog(LOG_SYSERR, "slackNotify failed: unknown error");
+  }
 }
 void toonList(struct descriptor_data *d, const string &optional_message = "") {
   string message(optional_message);

@@ -69,7 +69,11 @@ fi
 if [ ! -f /app/mudroot/lib/myst.mob ]; then
   if [ -f /app/myst.mob ]; then
     echo "[consumer] mudlib assente in mudroot/lib — copia da ./getworldlocal"
-    cp -v /app/myst.??? /app/mudroot/lib/ 2>/dev/null || cp -v /app/myst.mob /app/myst.obj /app/myst.wld /app/myst.zon /app/myst.spe /app/myst.shp /app/mudroot/lib/ 2>/dev/null || true
+    if [ -x /app/getworldlocal ]; then
+      /app/getworldlocal
+    else
+      cp -v /app/myst.mob /app/myst.obj /app/myst.wld /app/myst.zon /app/myst.spe /app/myst.shp /app/mudroot/lib/ 2>/dev/null || true
+    fi
   fi
 fi
 
@@ -83,5 +87,34 @@ fi
 export MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DB="${MYSQL_DB:-nebbie}"
 
 cd /app
+
+if command -v ss >/dev/null 2>&1; then
+  if ss -tlnH 2>/dev/null | grep -qE "[:.]${SERVER_PORT}[[:space:]]"; then
+    echo "[consumer] ERROR: port ${SERVER_PORT} already in use inside the container."
+    echo "[consumer] Stop the other myst or use a different SERVER_PORT."
+    ss -tlnp 2>/dev/null | grep -E "[:.]${SERVER_PORT}[[:space:]]" || true
+    exit 1
+  fi
+fi
+
+if command -v mysql >/dev/null 2>&1; then
+  if ! mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" --protocol=TCP \
+      -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE \`${MYSQL_DB}\`" >/dev/null 2>&1; then
+    echo "[consumer] ERROR: database '${MYSQL_DB}' missing or not accessible."
+    echo "[consumer] Import a dump, e.g.:"
+    echo "  ./scripts/import-mysql-dump.sh ~/docker-vms/database_backup_2306.sql"
+    exit 1
+  fi
+  table_count="$(mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" --protocol=TCP \
+    -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -N -e \
+    "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='${MYSQL_DB}';" 2>/dev/null || echo 0)"
+  if [ "${table_count:-0}" -lt 5 ]; then
+    echo "[consumer] WARN: only ${table_count} tables in ${MYSQL_DB}."
+    echo "[consumer] myst may exit with: FATAL: cannot initialize MySQL/ODB schema"
+    echo "[consumer] Recommended: ./scripts/import-mysql-dump.sh <dump.sql>"
+  fi
+fi
+
 echo "[consumer] starting myst -P ${SERVER_PORT} -d ${DATA_DIR}"
+echo "[consumer] on failure run: ./scripts/myst-boot-check.sh"
 exec /app/mudroot/myst -P "${SERVER_PORT}" -d "${DATA_DIR}" -v 4
