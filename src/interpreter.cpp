@@ -64,6 +64,7 @@
 #include "regen.hpp"
 #include "security.hpp"
 #include "skills.hpp"
+#include "thief_tactics.hpp"
 #include "spec_procs3.hpp"
 #include "spell_parser.hpp"
 #include "toon_migration.hpp"
@@ -1265,6 +1266,19 @@ void assign_command_pointers() {
 	AddCommand( "tspy",                 do_tspy,            CMD_TSPY,                   POSITION_STANDING,  1                       );
 	AddCommand( "bid",                  do_auction,         CMD_BID,                    POSITION_RESTING,   ALLIEVO                 );
 	AddCommand( "eavesdrop",            do_eavesdrop,       CMD_EAVESDROP,              POSITION_STANDING,  INIZIATO                );
+	AddCommand( "sand",                 do_sand,            CMD_SAND,                   POSITION_STANDING,  1                       );
+	AddCommand( "tumble",               do_tumble,          CMD_TUMBLE,                 POSITION_FIGHTING,  1                       );
+	AddCommand( "feint",                do_feint,           CMD_FEINT,                  POSITION_FIGHTING,  1                       );
+	AddCommand( "hamstring",            do_hamstring,       CMD_HAMSTRING,              POSITION_FIGHTING,  1                       );
+	AddCommand( "ckick",                do_ckick,           CMD_CKICK,                  POSITION_FIGHTING,  1                       );
+	AddCommand( "gouge",                do_gouge,           CMD_GOUGE,                  POSITION_FIGHTING,  1                       );
+	AddCommand( "gag",                  do_gag,             CMD_GAG,                    POSITION_FIGHTING,  1                       );
+	AddCommand( "vault",                do_vault,           CMD_VAULT,                  POSITION_FIGHTING,  1                       );
+	AddCommand( "snatch",               do_snatch,          CMD_SNATCH,                 POSITION_FIGHTING,  1                       );
+	AddCommand( "poison",               do_poisoncraft,     CMD_POISONCRAFT,            POSITION_STANDING,  1                       );
+	AddCommand( "envenom",              do_envenom,         CMD_ENVENOM,                POSITION_STANDING,  1                       );
+	AddCommand( "mix",                  do_mix,             CMD_MIX,                    POSITION_STANDING,  1                       );
+	AddCommand( "throwpotion",          do_throwpotion,     CMD_THROWPOTION,            POSITION_STANDING,  1                       );
 	AddCommand( "pquest",               do_pquest,          CMD_PQUEST,                 POSITION_STANDING,  QUESTMASTER             );  /*  395 */
   AddCommand( "setalign",             do_setalign,        CMD_SETALIGN,               POSITION_RESTING,   TUTTI                   );
   AddCommand( "wreset",               do_wreset,          CMD_WRESET,                 POSITION_STANDING,  CREATORE                );

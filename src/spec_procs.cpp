@@ -681,6 +681,13 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 		"disarm trap",
 		"tspy",
 		"eavesdrop",
+		"sand",
+		"tumble",
+		"feint",
+		"hamstring",
+		"ckick",
+		"gouge",
+		"gag",
 		"\n",
 	};
 	int number=0;
@@ -812,6 +819,20 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 			send_to_char(buf,ch);
 			sprintf(buf," eavesdrop       :  %s\n\r",how_good(ch->skills[SKILL_EAVESDROP].learned));
 			send_to_char(buf,ch);
+			sprintf(buf," sand            :  %s\n\r",how_good(ch->skills[SKILL_POCKET_SAND].learned));
+			send_to_char(buf,ch);
+			sprintf(buf," tumble          :  %s\n\r",how_good(ch->skills[SKILL_TUMBLE].learned));
+			send_to_char(buf,ch);
+			sprintf(buf," feint           :  %s\n\r",how_good(ch->skills[SKILL_FEINT].learned));
+			send_to_char(buf,ch);
+			sprintf(buf," hamstring       :  %s\n\r",how_good(ch->skills[SKILL_HAMSTRING].learned));
+			send_to_char(buf,ch);
+			sprintf(buf," ckick           :  %s\n\r",how_good(ch->skills[SKILL_CIRCLE_KICK].learned));
+			send_to_char(buf,ch);
+			sprintf(buf," gouge           :  %s\n\r",how_good(ch->skills[SKILL_GOUGE].learned));
+			send_to_char(buf,ch);
+			sprintf(buf," gag             :  %s\n\r",how_good(ch->skills[SKILL_GAG].learned));
+			send_to_char(buf,ch);
 
 			return(TRUE);
 		}
@@ -858,6 +879,27 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 				break;
 			case 11:
 				sk_num = SKILL_EAVESDROP;
+				break;
+			case 12:
+				sk_num = SKILL_POCKET_SAND;
+				break;
+			case 13:
+				sk_num = SKILL_TUMBLE;
+				break;
+			case 14:
+				sk_num = SKILL_FEINT;
+				break;
+			case 15:
+				sk_num = SKILL_HAMSTRING;
+				break;
+			case 16:
+				sk_num = SKILL_CIRCLE_KICK;
+				break;
+			case 17:
+				sk_num = SKILL_GOUGE;
+				break;
+			case 18:
+				sk_num = SKILL_GAG;
 				break;
 
 			default:

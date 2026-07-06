@@ -28,6 +28,7 @@
 #include "act.info.hpp"
 #include "act.move.hpp"
 #include "act.off.hpp"
+#include "thief_tactics.hpp"
 #include "act.other.hpp"
 #include "comm.hpp"
 #include "db.hpp"
@@ -2043,7 +2044,9 @@ int DamageTrivia(struct char_data* ch, struct char_data* v,
     if(IS_NPC(ch) && IS_NPC(v) && !IS_SET(ch->specials.act, (ACT_MONK)) && !IS_SET(ch->specials.act, (ACT_BARBARIAN))) {
     	classe = -1;
     }
+	const int raw_dam = dam;
 	dam = PreProcDam(v, type, dam, classe);
+	dam = thief_adjust_pierce_damage(ch, v, type, dam, raw_dam);
 
 
 #if PREVENT_PKILL
@@ -3675,12 +3678,13 @@ DamageResult HitVictim(struct char_data* ch, struct char_data* v, int dam,
 	}
 	else {
 		/* reduce damage for dodge skill: */
-		if(v->skills && v->skills[ SKILL_DODGE ].learned) {
+		if(!thief_is_feinted(v) && v->skills && v->skills[ SKILL_DODGE ].learned) {
 			if(number(1,101) <= v->skills[SKILL_DODGE].learned) {
 				dam -= number(1,3);
 				if(HasClass(v, CLASS_MONK)) {
 					MonkDodge(ch, v, &dam);
 				}
+				thief_on_dodge_success(v, ch);
 			}
 		}
 		dead = (*dam_func)(ch, v, dam, w_type, location);

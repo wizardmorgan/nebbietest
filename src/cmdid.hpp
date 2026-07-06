@@ -518,7 +518,20 @@ namespace Alarmud {
 #define CMD_LEGACYLOADCHECK     507 /* compare load_char(file) vs load_char_mysql(db) */
 #define CMD_FORGIVE             508
 #define CMD_ANTRO               509
-#define MAX_CMD_LIST            510
+#define CMD_SAND                510
+#define CMD_TUMBLE              511
+#define CMD_FEINT               512
+#define CMD_HAMSTRING           513
+#define CMD_CKICK               514
+#define CMD_GOUGE               515
+#define CMD_GAG                 516
+#define CMD_VAULT               517
+#define CMD_SNATCH              518
+#define CMD_POISONCRAFT         519
+#define CMD_ENVENOM             520
+#define CMD_MIX                 521
+#define CMD_THROWPOTION         522
+#define MAX_CMD_LIST            523
 } // namespace Alarmud
 
 #endif
