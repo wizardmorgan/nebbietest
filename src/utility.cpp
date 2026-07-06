@@ -4903,7 +4903,9 @@ int CAN_SEE(struct char_data* s, struct char_data* o) {
 	struct affected_type* aff;
 	int s_inv=0;
 	int o_inv=0;
-	if(!o || s->in_room < 0 || o->in_room < 0) {
+	if(!s || !o || s->nMagicNumber != CHAR_VALID_MAGIC ||
+			o->nMagicNumber != CHAR_VALID_MAGIC ||
+			s->in_room < 0 || o->in_room < 0) {
 		return(FALSE);
 	}
 

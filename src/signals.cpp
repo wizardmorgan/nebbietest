@@ -96,6 +96,9 @@ void SetLine(const char* srcfile,int srcline) {
 
 void SetStatus(const char* szStatus, const char* szString, void* pGeneric) {
 	int i;
+	if(pGeneric) {
+		gpGeneric = pGeneric;
+	}
 	if(szStatus) {
 		i=MIN(strlen(szStatus)+1,sizeof(gszMudStatus));
 		memcpy(gszMudStatus, szStatus, i);
@@ -106,10 +109,6 @@ void SetStatus(const char* szStatus, const char* szString, void* pGeneric) {
 		i=MIN(strlen(szString)+1,sizeof(gszName));
 		memcpy(gszName, szString, i);
 		gszName[ i - 1 ] = 0;
-	}
-
-	if(pGeneric) {
-		gpGeneric = pGeneric;
 	}
 }
 void SetStatus(const char* szStatus) {

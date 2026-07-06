@@ -4212,6 +4212,11 @@ int GetBonusToAttack(struct char_data* pChar, struct char_data* pNewChar) {
 	};
 	int iBonus = 0, iIntIdx;
 
+	if(!pChar || !pNewChar ||
+			pChar->nMagicNumber != CHAR_VALID_MAGIC ||
+			pNewChar->nMagicNumber != CHAR_VALID_MAGIC) {
+		return -10;
+	}
 
 	if(IS_AFFECTED(pNewChar, AFF_FIRESHIELD)) {
 #if ALAR
@@ -4396,6 +4401,12 @@ struct char_data* FindVictim(struct char_data* pChar) {
 
 	for(pLoopChar = rp->people; pLoopChar;
 			pLoopChar = pLoopChar->next_in_room) {
+		if(pLoopChar->nMagicNumber != CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "FindVictim: skipping invalid char in room %ld",
+				   static_cast<long>(pChar->in_room));
+			continue;
+		}
 		if(IS_PC(pLoopChar) ||
 				((zone_ok &&
 				  pLoopChar->specials.zone != mob_zone &&
@@ -4442,6 +4453,12 @@ struct char_data* FindAnyVictim(struct char_data* pChar) {
 	PushStatus("FindAnyVictim");
 	for(pLoopChar = rp->people; pLoopChar;
 			pLoopChar = pLoopChar->next_in_room) {
+		if(pLoopChar->nMagicNumber != CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "FindAnyVictim: skipping invalid char in room %ld",
+				   static_cast<long>(pChar->in_room));
+			continue;
+		}
 		if(IS_PC(pLoopChar) || !SameRace(pChar, pLoopChar)) {
 			if(!IS_AFFECTED(pChar, AFF_CHARM) || pChar->master != pLoopChar) {
 				if((IS_NPC(pLoopChar) ||
@@ -5241,6 +5258,12 @@ struct char_data* FindMetaVictim(struct char_data* ch) {
 
 	for(tmp_ch = rp->people; tmp_ch;
 			tmp_ch=tmp_ch->next_in_room) {
+		if(tmp_ch->nMagicNumber != CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "FindMetaVictim: skipping invalid char in room %ld",
+				   static_cast<long>(ch->in_room));
+			continue;
+		}
 		if(CAN_SEE(ch,tmp_ch) && !IS_SET(tmp_ch->specials.act,PLR_NOHASSLE)) {
 			if(!(IS_AFFECTED(ch, AFF_CHARM)) || (ch->master != tmp_ch)) {
 				if(!SameRace(ch, tmp_ch)) {
@@ -5262,6 +5285,12 @@ struct char_data* FindMetaVictim(struct char_data* ch) {
 
 	for(tmp_ch = rp->people; tmp_ch;
 			tmp_ch=tmp_ch->next_in_room) {
+		if(tmp_ch->nMagicNumber != CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "FindMetaVictim: skipping invalid char in room %ld",
+				   static_cast<long>(ch->in_room));
+			continue;
+		}
 		if(CAN_SEE(ch,tmp_ch) && !IS_SET(tmp_ch->specials.act,PLR_NOHASSLE)) {
 			if(!SameRace(tmp_ch, ch)) {
 				total--;
