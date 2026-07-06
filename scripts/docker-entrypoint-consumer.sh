@@ -67,7 +67,16 @@ if [ ! -x /app/mudroot/myst ]; then
 fi
 
 if [ ! -f /app/mudroot/lib/myst.mob ]; then
+  if [ -f /app/myst.mob ]; then
+    echo "[consumer] mudlib assente in mudroot/lib — copia da ./getworldlocal"
+    cp -v /app/myst.??? /app/mudroot/lib/ 2>/dev/null || cp -v /app/myst.mob /app/myst.obj /app/myst.wld /app/myst.zon /app/myst.spe /app/myst.shp /app/mudroot/lib/ 2>/dev/null || true
+  fi
+fi
+
+if [ ! -f /app/mudroot/lib/myst.mob ]; then
   echo "[consumer] ERROR: /app/mudroot/lib/myst.mob missing (mudlib not installed)."
+  echo "[consumer] Dalla root del repo esegui: ./getworldlocal"
+  echo "[consumer]   (copia myst.mob myst.obj myst.wld ... da /app/ a mudroot/lib/)"
   exit 1
 fi
 

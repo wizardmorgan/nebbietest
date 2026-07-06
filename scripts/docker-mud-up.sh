@@ -15,14 +15,25 @@ export MYSQL_DUMP="${MYSQL_DUMP:-${HOME}/docker-vms/database_backup_2306.sql}"
 echo "==> 1/4 MySQL"
 ./docker-run.sh up -d mysql
 
-echo "==> 2/4 Build myst (sirio-docker, porta ${SERVER_PORT})"
+echo "==> 2/5 Mudlib"
+if ! [ -f ./mudroot/lib/myst.mob ]; then
+    if [ -f ./myst.mob ]; then
+        ./getworldlocal
+    else
+        echo "ERRORE: myst.mob non trovato ne' in root ne' in mudroot/lib"
+        echo "  ./getworld   # da server Nebbie"
+        exit 1
+    fi
+fi
+
+echo "==> 3/5 Build myst (sirio-docker, porta ${SERVER_PORT})"
 if [ ! -x ./mudroot/myst ]; then
     ./docker-run.sh run --rm consumer ./build.sh sirio-docker
 else
     echo "    mudroot/myst gia' presente, salto build"
 fi
 
-echo "==> 3/4 Database"
+echo "==> 4/5 Database"
 if [ -f "$MYSQL_DUMP" ]; then
     ./scripts/import-mysql-dump.sh "$MYSQL_DUMP"
 else
@@ -30,7 +41,7 @@ else
     echo "    (il MUD potrebbe richiedere schema/tabelle: importa un dump se myst non parte)"
 fi
 
-echo "==> 4/4 Avvio consumer (MUD)"
+echo "==> 5/5 Avvio consumer (MUD)"
 ./docker-run.sh up -d consumer
 
 echo ""

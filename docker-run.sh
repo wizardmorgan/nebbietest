@@ -116,6 +116,25 @@ echo "ADMINER_HOST_PORT=$ADMINER_HOST_PORT"
 echo "SERVER_PORT=${SERVER_PORT:-4000}"
 cd "$(dirname "$0")"
 
+myst_lib_ready() {
+    [ -f "./mudroot/lib/myst.mob" ]
+}
+
+mudlib_source_ready() {
+    [ -f "./myst.mob" ]
+}
+
+ensure_mudlib() {
+    if myst_lib_ready; then
+        return 0
+    fi
+    if mudlib_source_ready && [ -x "./getworldlocal" ]; then
+        echo "Copia mudlib (myst.*) in mudroot/lib/..."
+        ./getworldlocal
+    fi
+    myst_lib_ready
+}
+
 myst_binary_ready() {
     [ -x "./mudroot/myst" ]
 }
@@ -170,8 +189,10 @@ cmd_doctor() {
     fi
     if [ -f ./mudroot/lib/myst.mob ]; then
         echo "OK  mudlib (mudroot/lib/myst.mob)"
+    elif [ -f ./myst.mob ]; then
+        echo "WARN myst.mob in root ma non in mudroot/lib — esegui: ./getworldlocal"
     else
-        echo "MISS mudlib — ./getworld o copia mudroot/lib"
+        echo "MISS mudlib — ./getworld (scp) o copia myst.* in mudroot/lib/"
     fi
     echo ""
     echo "Log consumer:"
@@ -187,10 +208,19 @@ if [ "${1:-}" = "doctor" ]; then
 fi
 
 if [ "${1:-}" = "up" ] && will_start_consumer "$@" && printf '%s\n' "$@" | grep -qE '(^| )-d($| )'; then
+    ensure_mudlib || true
     if ! myst_binary_ready; then
         print_build_instructions
         echo "Avvio solo mysql e adminer (senza MUD)..."
         docker compose up -d mysql adminer
+        exit 1
+    fi
+    if ! myst_lib_ready; then
+        echo ""
+        echo "=== mudlib mancante in mudroot/lib/ ==="
+        echo "  ./getworldlocal"
+        echo "  SERVER_PORT=${SERVER_PORT:-4003} ./docker-run.sh up -d consumer"
+        echo ""
         exit 1
     fi
 fi
