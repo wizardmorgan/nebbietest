@@ -37,6 +37,14 @@ namespace Alarmud {
 #define OBJ_RESI_PIERCE     111
 #define OBJ_SPY             112
 
+/* Thief crafting ingredients (myst.obj) */
+#define THIEF_ING_TOXIC_EXTRACT  18500
+#define THIEF_ING_NIGHTSHADE     18501
+#define THIEF_ING_ALKALI_SALT    18502
+#define THIEF_ING_VOLATILE_OIL   18503
+#define THIEF_ING_BINDING_AGENT  18504
+#define THIEF_ING_GLASS_VIAL     18505
+
 #define RM_BLOOD(rm)   (real_roomp(rm)->blood)
 
 #define TANNED(obj)     ((   obj_index[obj->item_number].iVNum == TAN_BAG || obj_index[obj->item_number].iVNum == TAN_SHIELD       \

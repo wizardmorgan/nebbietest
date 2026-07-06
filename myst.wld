@@ -6897,8 +6897,9 @@ S
 #3076
 La stanza del maestro dei Ladri~
 Un  halfling  ricoperto  da  un  mantello  nero,  e' seduto ad un
-tavolo, la stanza e' vuota fatta eccezione per il tavolo e alcune
-lanterne. Noti un piccolo $c0015bassorilievo $c0007nella parete a nord.
+tavolo. Sul piano ci sono $c0010fiale di vetro$c0007, $c0010estratto tossico$c0007,
+$c0010resina di morella$c0007 e altri reagenti da ladro. Noti un piccolo
+$c0015bassorilievo $c0007nella parete a nord.
 ~
 -1 16|8388608 0 
 D4
@@ -15716,6 +15717,8 @@ La vera stanza del maestro~
 Scendi in una piccola stanza scarsamente  illuminata, ma hai
 finalmente  trovato  il  maestro  dei  ladri!  Dopotutto  le
 indicazioni all'ingresso erano corrette.
+Sul tavolo noti $c0010fiale$c0007, $c0010reagenti alchemici$c0007 e barattoli
+per la preparazione di veleni e fiale.
 Sul muro scorgi una targa e un avviso.
 ~
 0 16|32|64|8388608|16777216 0 
