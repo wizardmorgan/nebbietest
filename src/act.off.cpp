@@ -1288,6 +1288,12 @@ ACTION_FUNC(do_flee) {
 		return;
 	}
 
+	if(thief_is_hamstrung(ch)) {
+		send_to_char("Le gambe ferite non ti permettono di fuggire!\n\r", ch);
+		WAIT_STATE(ch, PULSE_VIOLENCE);
+		return;
+	}
+
 	if(GET_POS(ch) < POSITION_SLEEPING) {
 		send_to_char("Non in questa posizione!\n\r", ch);
 		return;

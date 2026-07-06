@@ -7,6 +7,24 @@
 #include "typedefs.hpp"
 namespace Alarmud {
 
+enum ThiefPoisonType : int {
+	THIEF_POISON_WEAK = 1,
+	THIEF_POISON_NUMB,
+	THIEF_POISON_BLEED,
+	THIEF_POISON_PARALYTIC,
+	THIEF_POISON_NIGHTFALL,
+	THIEF_POISON_BLACKLOTUS
+};
+
+enum ThiefPotionType : int {
+	THIEF_POTION_ACID = 1,
+	THIEF_POTION_SMOKE,
+	THIEF_POTION_FIRE,
+	THIEF_POTION_CHOKING,
+	THIEF_POTION_SHRAPNEL,
+	THIEF_POTION_SAND
+};
+
 int thief_skill_min_level(int skill);
 bool thief_has_skill(struct char_data* ch, int skill);
 void thief_on_advance_level(struct char_data* ch);
@@ -17,6 +35,9 @@ void thief_on_backstab_failed(struct char_data* attacker, struct char_data* vict
 void thief_on_victim_fell(struct char_data* victim, struct char_data* attacker);
 bool thief_is_feinted(struct char_data* ch);
 bool thief_is_hamstrung(struct char_data* ch);
+void thief_on_weapon_hit(struct char_data* ch, struct char_data* victim, DamageResult result);
+int thief_poison_type_from_obj(struct obj_data* obj);
+int thief_potion_type_from_obj(struct obj_data* obj);
 
 ACTION_FUNC(do_sand);
 ACTION_FUNC(do_tumble);

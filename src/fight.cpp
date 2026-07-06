@@ -3734,6 +3734,7 @@ DamageResult HitVictim(struct char_data* ch, struct char_data* v, int dam,
 	/*  if the victim survives, lets hit him with a weapon spell */
 	if(dead == AllLiving) {
 		WeaponSpell(ch, v, 0, w_type);
+		thief_on_weapon_hit(ch, v, dead);
 	}
 
 	return dead;

@@ -3,15 +3,23 @@
  *ALARMUD* See COPYING for licence information
  *ALARMUD*/
 #include "thief_tactics.hpp"
-#include "act.move.hpp"
-#include "fight.hpp"
-#include "handler.hpp"
-#include "constants.hpp"
-#include "multiclass.hpp"
-#include "spells.hpp"
+#include "config.hpp"
+#include "typedefs.hpp"
+#include "flags.hpp"
+#include "autoenums.hpp"
 #include "structs.hpp"
+#include "constants.hpp"
 #include "utility.hpp"
 #include "utils.hpp"
+#include "act.move.hpp"
+#include "comm.hpp"
+#include "db.hpp"
+#include "fight.hpp"
+#include "handler.hpp"
+#include "interpreter.hpp"
+#include "multiclass.hpp"
+#include "regen.hpp"
+#include "spells.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -109,6 +117,7 @@ void spend_move(struct char_data* ch, int amount) {
 }
 
 void apply_blind_light(struct char_data* victim, struct char_data* ch, int duration) {
+	(void)ch;
 	struct affected_type af;
 	af.type = SPELL_BLINDNESS;
 	af.location = APPLY_HITROLL;
@@ -142,6 +151,292 @@ void cheap_shot_strike(struct char_data* ch, struct char_data* victim) {
 	damage(ch, victim, (dam * pct) / 100, TYPE_STAB, 0);
 }
 
+struct thief_craft_recipe {
+	const char* keyword;
+	const char* ingredients[6];
+	int poison_type;
+	int potion_type;
+	int charges;
+	int min_level;
+	const char* obj_name;
+	const char* obj_short;
+};
+
+const thief_craft_recipe kPoisonRecipes[] = {
+	{"weak",      {"toxic extract", "glass vial", nullptr}, THIEF_POISON_WEAK, 0, 4, 15,
+	 "vial poison weak", "un vial di veleno debole"},
+	{"numb",      {"toxic extract", "nightshade resin", "glass vial", nullptr}, THIEF_POISON_NUMB, 0, 5, 18,
+	 "vial poison numb", "un vial di veleno paralizzante"},
+	{"bleed",     {"toxic extract", "volatile oil", "glass vial", nullptr}, THIEF_POISON_BLEED, 0, 5, 20,
+	 "vial poison bleed", "un vial di veleno emorragico"},
+	{"paralytic", {"nightshade resin", "binding agent", "glass vial", nullptr}, THIEF_POISON_PARALYTIC, 0, 4, 24,
+	 "vial poison paralytic", "un vial di veleno paralitico"},
+	{"nightfall", {"nightshade resin", "toxic extract", "volatile oil", "glass vial", nullptr}, THIEF_POISON_NIGHTFALL, 0, 6, 30,
+	 "vial poison nightfall", "un vial di veleno notturno"},
+	{"blacklotus", {"nightshade resin", "toxic extract", "alkali salt", "binding agent", "glass vial", nullptr},
+	 THIEF_POISON_BLACKLOTUS, 0, 8, 40, "vial poison blacklotus", "un vial di veleno loto nero"},
+	{nullptr, {nullptr}, 0, 0, 0, 0, nullptr, nullptr}
+};
+
+const thief_craft_recipe kPotionRecipes[] = {
+	{"acid",    {"alkali salt", "volatile oil", "glass vial", nullptr}, 0, THIEF_POTION_ACID, 1, 15,
+	 "vial acid", "una fiala di acido"},
+	{"smoke",   {"volatile oil", "binding agent", "glass vial", nullptr}, 0, THIEF_POTION_SMOKE, 1, 20,
+	 "vial smoke", "una fiala di fumo"},
+	{"fire",    {"volatile oil", "alkali salt", "glass vial", nullptr}, 0, THIEF_POTION_FIRE, 1, 25,
+	 "vial fire", "una fiala incendiaria"},
+	{"choking", {"nightshade resin", "alkali salt", "glass vial", nullptr}, 0, THIEF_POTION_CHOKING, 1, 30,
+	 "vial choking", "una fiala soffocante"},
+	{"shrapnel", {"alkali salt", "binding agent", "glass vial", nullptr}, 0, THIEF_POTION_SHRAPNEL, 1, 35,
+	 "vial shrapnel", "una fiala di schegge"},
+	{"sand",    {"alkali salt", "binding agent", nullptr}, 0, THIEF_POTION_SAND, 1, 5,
+	 "pouch sand", "un sacchetto di sabbia"},
+	{nullptr, {nullptr}, 0, 0, 0, 0, nullptr, nullptr}
+};
+
+const thief_craft_recipe* find_recipe(const thief_craft_recipe* list, const char* keyword) {
+	if(keyword == nullptr || keyword[0] == '\0') {
+		return nullptr;
+	}
+	for(int i = 0; list[i].keyword != nullptr; ++i) {
+		if(!strcasecmp(keyword, list[i].keyword)) {
+			return &list[i];
+		}
+	}
+	return nullptr;
+}
+
+bool has_ingredient(struct char_data* ch, const char* keyword) {
+	if(ch == nullptr || keyword == nullptr) {
+		return false;
+	}
+	for(struct obj_data* obj = ch->carrying; obj != nullptr; obj = obj->next_content) {
+		if(isname(keyword, obj->name)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool consume_ingredient(struct char_data* ch, const char* keyword) {
+	if(ch == nullptr || keyword == nullptr) {
+		return false;
+	}
+	for(struct obj_data* obj = ch->carrying; obj != nullptr; obj = obj->next_content) {
+		if(isname(keyword, obj->name)) {
+			extract_obj(obj);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool consume_recipe_ingredients(struct char_data* ch, const thief_craft_recipe* recipe) {
+	if(ch == nullptr || recipe == nullptr) {
+		return false;
+	}
+	for(int i = 0; recipe->ingredients[i] != nullptr; ++i) {
+		if(!has_ingredient(ch, recipe->ingredients[i])) {
+			return false;
+		}
+	}
+	for(int i = 0; recipe->ingredients[i] != nullptr; ++i) {
+		if(!consume_ingredient(ch, recipe->ingredients[i])) {
+			return false;
+		}
+	}
+	return true;
+}
+
+struct obj_data* create_thief_craft_item(struct char_data* ch, const thief_craft_recipe* recipe) {
+	if(ch == nullptr || recipe == nullptr) {
+		return nullptr;
+	}
+	const int vnum = real_object(POT_REWARD);
+	if(vnum < 0) {
+		return nullptr;
+	}
+	struct obj_data* obj = read_object(vnum, REAL);
+	if(obj == nullptr) {
+		return nullptr;
+	}
+	if(obj->name) {
+		free(obj->name);
+	}
+	if(obj->short_description) {
+		free(obj->short_description);
+	}
+	obj->name = strdup(recipe->obj_name);
+	obj->short_description = strdup(recipe->obj_short);
+	obj->obj_flags.type_flag = ITEM_POTION;
+	obj->obj_flags.value[0] = thief_level(ch);
+	obj->obj_flags.value[1] = recipe->poison_type > 0 ? recipe->poison_type : recipe->potion_type;
+	obj->obj_flags.value[2] = recipe->charges;
+	obj->obj_flags.value[3] = recipe->poison_type > 0 ? 1 : 2;
+	obj->obj_flags.weight = 1;
+	obj->obj_flags.cost = 10;
+	return obj;
+}
+
+struct obj_data* find_poison_vial(struct char_data* ch, const char* keyword) {
+	if(ch == nullptr) {
+		return nullptr;
+	}
+	for(struct obj_data* obj = ch->carrying; obj != nullptr; obj = obj->next_content) {
+		if(obj->obj_flags.value[3] != 1) {
+			continue;
+		}
+		if(keyword == nullptr || keyword[0] == '\0') {
+			return obj;
+		}
+		if(isname(keyword, obj->name)) {
+			return obj;
+		}
+	}
+	return nullptr;
+}
+
+struct obj_data* find_throw_vial(struct char_data* ch, const char* keyword) {
+	if(ch == nullptr) {
+		return nullptr;
+	}
+	for(struct obj_data* obj = ch->carrying; obj != nullptr; obj = obj->next_content) {
+		if(obj->obj_flags.value[3] != 2) {
+			continue;
+		}
+		if(keyword == nullptr || keyword[0] == '\0') {
+			return obj;
+		}
+		if(isname(keyword, obj->name)) {
+			return obj;
+		}
+	}
+	return nullptr;
+}
+
+__attribute__((noinline)) void apply_poison_effect(struct char_data* victim, struct char_data* ch, int poison_type, int level) {
+	if(victim == nullptr || ch == nullptr || poison_type <= 0) {
+		return;
+	}
+	struct affected_type af;
+	memset(&af, 0, sizeof(af));
+	af.duration = MAX(1, level / 8);
+
+	switch(poison_type) {
+		case THIEF_POISON_WEAK:
+			af.type = SPELL_POISON;
+			af.bitvector = AFF_POISON;
+			affect_join(victim, &af, false, false);
+			damage(ch, victim, MAX(1, level / 6), SPELL_POISON, 5);
+			break;
+		case THIEF_POISON_NUMB:
+			af.type = SKILL_POISONCRAFT;
+			af.location = APPLY_DEX;
+			{
+				int penalty = 2 + level / 12;
+				if(penalty > 6) {
+					penalty = 6;
+				}
+				af.modifier = -penalty;
+			}
+			af.duration = MAX(2, level / 10);
+			affect_to_char(victim, &af);
+			break;
+		case THIEF_POISON_BLEED:
+			af.type = SPELL_POISON;
+			af.bitvector = AFF_POISON;
+			af.duration = MAX(3, level / 6);
+			affect_join(victim, &af, false, false);
+			damage(ch, victim, MAX(2, level / 4), TYPE_STAB, 0);
+			break;
+		case THIEF_POISON_PARALYTIC:
+			af.type = SPELL_PARALYSIS;
+			af.bitvector = AFF_PARALYSIS;
+			af.duration = MAX(1, level / 20);
+			affect_to_char(victim, &af);
+			break;
+		case THIEF_POISON_NIGHTFALL:
+			apply_blind_light(victim, ch, MAX(2, level / 12));
+			af.type = SPELL_POISON;
+			af.bitvector = AFF_POISON;
+			af.duration = MAX(3, level / 8);
+			affect_join(victim, &af, false, false);
+			break;
+		case THIEF_POISON_BLACKLOTUS:
+			af.type = SPELL_POISON;
+			af.bitvector = AFF_POISON;
+			af.duration = MAX(4, level / 5);
+			affect_join(victim, &af, false, false);
+			damage(ch, victim, MAX(4, level / 2), SPELL_POISON, 5);
+			break;
+		default:
+			break;
+	}
+}
+
+void throw_potion_single(struct char_data* ch, struct char_data* victim, int potion_type, int level) {
+	if(ch == nullptr || victim == nullptr) {
+		return;
+	}
+	switch(potion_type) {
+		case THIEF_POTION_ACID: {
+			const int dam = dice(2, 6) + level / 3;
+			damage(ch, victim, dam, TYPE_GENERIC_ACID, 0);
+			break;
+		}
+		case THIEF_POTION_FIRE: {
+			const int dam = dice(2, 8) + level / 2;
+			damage(ch, victim, dam, TYPE_GENERIC_FIRE, 0);
+			break;
+		}
+		default:
+			break;
+	}
+}
+
+void throw_potion_room(struct char_data* ch, int potion_type, int level) {
+	if(ch == nullptr) {
+		return;
+	}
+	struct room_data* rp = real_roomp(ch->in_room);
+	if(rp == nullptr) {
+		return;
+	}
+	for(struct char_data* vict = rp->people; vict != nullptr; ) {
+		struct char_data* const next = vict->next_in_room;
+		if(vict == ch) {
+			vict = next;
+			continue;
+		}
+		switch(potion_type) {
+			case THIEF_POTION_SMOKE:
+				apply_blind_light(vict, ch, MAX(1, level / 15));
+				break;
+			case THIEF_POTION_CHOKING: {
+				struct affected_type af;
+				af.type = SKILL_GAG;
+				af.duration = MAX(1, level / 18);
+				af.modifier = 0;
+				af.location = APPLY_NONE;
+				af.bitvector = AFF_SILENCE;
+				affect_to_char(vict, &af);
+				damage(ch, vict, MAX(1, level / 8), TYPE_BLUDGEON, 0);
+				break;
+			}
+			case THIEF_POTION_SHRAPNEL:
+				damage(ch, vict, MAX(2, dice(1, 6) + level / 6), TYPE_PIERCE, 0);
+				break;
+			default:
+				break;
+		}
+		vict = next;
+	}
+}
+
+__attribute__((noinline)) bool thief_poison_proc_roll(int chance) {
+	return number(1, 101) <= chance;
+}
+
 } // namespace
 
 int thief_skill_min_level(int skill) {
@@ -159,6 +454,9 @@ bool thief_has_skill(struct char_data* ch, int skill) {
 	}
 	if(thief_level(ch) < thief_skill_min_level(skill)) {
 		return false;
+	}
+	if(skill == SKILL_FIND_THE_SEAM && thief_level(ch) >= 51 && OnlyClass(ch, CLASS_THIEF)) {
+		return true;
 	}
 	if(skill == SKILL_VAULT || skill == SKILL_SNATCH || skill == SKILL_POISONCRAFT ||
 			skill == SKILL_MIX_THROW || skill == SKILL_FIND_THE_SEAM) {
@@ -294,8 +592,8 @@ ACTION_FUNC(do_sand) {
 	}
 	spend_move(ch, 15);
 	int percent = number(1, 101);
-	percent -= dex_app_skill[static_cast<int>(GET_DEX(ch))].reaction * 5;
-	percent += dex_app_skill[static_cast<int>(GET_DEX(victim))].reaction * 5;
+	percent -= dex_app[static_cast<int>(GET_DEX(ch))].reaction * 5;
+	percent += dex_app[static_cast<int>(GET_DEX(victim))].reaction * 5;
 	percent += GetMaxLevel(victim) - GetMaxLevel(ch);
 	if(roll_failed(ch, SKILL_POCKET_SAND, dex_app_skill[static_cast<int>(GET_DEX(ch))].sneak)) {
 		LearnFromMistake(ch, SKILL_POCKET_SAND, 0, 90);
@@ -318,6 +616,10 @@ ACTION_FUNC(do_tumble) {
 	}
 	if(!thief_has_skill(ch, SKILL_TUMBLE)) {
 		send_to_char("Non conosci questa tecnica.\n\r", ch);
+		return;
+	}
+	if(thief_is_hamstrung(ch)) {
+		send_to_char("Le gambe ferite non ti permettono di rotolare via.\n\r", ch);
 		return;
 	}
 	char dirTok[MAX_INPUT_LENGTH];
@@ -481,8 +783,8 @@ ACTION_FUNC(do_gouge) {
 	}
 	spend_move(ch, 20);
 	int percent = number(1, 101);
-	percent -= dex_app_skill[static_cast<int>(GET_DEX(ch))].reaction * 10;
-	percent += dex_app_skill[static_cast<int>(GET_DEX(victim))].reaction * 10;
+	percent -= dex_app[static_cast<int>(GET_DEX(ch))].reaction * 10;
+	percent += dex_app[static_cast<int>(GET_DEX(victim))].reaction * 10;
 	percent += GetMaxLevel(victim) - GetMaxLevel(ch);
 	if(IS_AFFECTED(ch, AFF_HIDE)) {
 		percent -= 10;
@@ -501,7 +803,7 @@ ACTION_FUNC(do_gouge) {
 	af.duration = MAX(1, thief_level(ch) / 10);
 	af.bitvector = AFF_BLIND;
 	affect_to_char(victim, &af);
-	const int dam = dice(2, 4) + dex_app_skill[static_cast<int>(GET_DEX(ch))].reaction;
+	const int dam = dice(2, 4) + dex_app[static_cast<int>(GET_DEX(ch))].reaction;
 	damage(ch, victim, dam, TYPE_PIERCE, 0);
 	act("$n colpisce gli occhi di $N con la punta dell'arma!", TRUE, ch, 0, victim, TO_NOTVICT);
 	act("Colpisci gli occhi di $N!", FALSE, ch, 0, victim, TO_CHAR);
@@ -642,17 +944,40 @@ ACTION_FUNC(do_poisoncraft) {
 	}
 	char recipe[MAX_INPUT_LENGTH];
 	one_argument(arg, recipe);
-	if(recipe[0] == '\0') {
+	const thief_craft_recipe* const spec = find_recipe(kPoisonRecipes, recipe);
+	if(spec == nullptr) {
 		send_to_char("Sintassi: poison <weak|numb|bleed|paralytic|nightfall|blacklotus>\n\r", ch);
+		send_to_char("Ingredienti: toxic extract, nightshade resin, alkali salt, volatile oil, binding agent, glass vial.\n\r", ch);
 		return;
+	}
+	if(thief_level(ch) < spec->min_level) {
+		send_to_char("Non hai ancora la maestria per questo veleno.\n\r", ch);
+		return;
+	}
+	for(int i = 0; spec->ingredients[i] != nullptr; ++i) {
+		if(!has_ingredient(ch, spec->ingredients[i])) {
+			send_to_char("Ti mancano gli ingredienti per questa ricetta.\n\r", ch);
+			return;
+		}
 	}
 	if(roll_failed(ch, SKILL_POISONCRAFT)) {
 		LearnFromMistake(ch, SKILL_POISONCRAFT, 0, 90);
+		consume_recipe_ingredients(ch, spec);
 		send_to_char("Rovini il composto.\n\r", ch);
 		WAIT_STATE(ch, PULSE_VIOLENCE * 6);
 		return;
 	}
-	send_to_char("Prepari un vial di veleno.\n\r", ch);
+	if(!consume_recipe_ingredients(ch, spec)) {
+		send_to_char("Non riesci a trovare tutti gli ingredienti.\n\r", ch);
+		return;
+	}
+	struct obj_data* vial = create_thief_craft_item(ch, spec);
+	if(vial == nullptr) {
+		send_to_char("Non riesci a preparare il vial.\n\r", ch);
+		return;
+	}
+	obj_to_char(vial, ch);
+	act("Prepari $p.", FALSE, ch, vial, 0, TO_CHAR);
 	act("$n prepara un composto tossico.", TRUE, ch, 0, 0, TO_ROOM);
 	WAIT_STATE(ch, PULSE_VIOLENCE * 6);
 }
@@ -666,11 +991,19 @@ ACTION_FUNC(do_envenom) {
 		send_to_char("Devi impugnare un'arma.\n\r", ch);
 		return;
 	}
-	if(!get_obj_in_list_vis(ch, "vial poison", ch->carrying)) {
+	char vialName[MAX_INPUT_LENGTH];
+	one_argument(arg, vialName);
+	struct obj_data* vial = find_poison_vial(ch, vialName);
+	if(vial == nullptr) {
 		send_to_char("Non hai un vial di veleno pronto.\n\r", ch);
 		return;
 	}
-	ch->equipment[WIELD]->obj_flags.value[2] = MAX(ch->equipment[WIELD]->obj_flags.value[2], 1);
+	const int poison_type = vial->obj_flags.value[1];
+	const int charges = MAX(1, vial->obj_flags.value[2]);
+	struct obj_data* weapon = ch->equipment[WIELD];
+	weapon->iGeneric1 = poison_type;
+	weapon->iGeneric2 = charges;
+	extract_obj(vial);
 	send_to_char("Avveleni la tua arma.\n\r", ch);
 	act("$n avvelena la propria arma.", TRUE, ch, 0, 0, TO_ROOM);
 	WAIT_STATE(ch, PULSE_VIOLENCE * 2);
@@ -683,17 +1016,40 @@ ACTION_FUNC(do_mix) {
 	}
 	char recipe[MAX_INPUT_LENGTH];
 	one_argument(arg, recipe);
-	if(recipe[0] == '\0') {
-		send_to_char("Sintassi: mix <acid|smoke|fire|choking|shrapnel>\n\r", ch);
+	const thief_craft_recipe* const spec = find_recipe(kPotionRecipes, recipe);
+	if(spec == nullptr) {
+		send_to_char("Sintassi: mix <acid|smoke|fire|choking|shrapnel|sand>\n\r", ch);
+		send_to_char("Ingredienti: alkali salt, volatile oil, nightshade resin, binding agent, glass vial.\n\r", ch);
 		return;
+	}
+	if(thief_level(ch) < spec->min_level) {
+		send_to_char("Non hai ancora la maestria per questo composto.\n\r", ch);
+		return;
+	}
+	for(int i = 0; spec->ingredients[i] != nullptr; ++i) {
+		if(!has_ingredient(ch, spec->ingredients[i])) {
+			send_to_char("Ti mancano gli ingredienti per questa ricetta.\n\r", ch);
+			return;
+		}
 	}
 	if(roll_failed(ch, SKILL_MIX_THROW)) {
 		LearnFromMistake(ch, SKILL_MIX_THROW, 0, 90);
+		consume_recipe_ingredients(ch, spec);
 		send_to_char("Il composto esplode tra le tue mani... quasi.\n\r", ch);
 		WAIT_STATE(ch, PULSE_VIOLENCE * 6);
 		return;
 	}
-	send_to_char("Prepari una fiala lanciabile.\n\r", ch);
+	if(!consume_recipe_ingredients(ch, spec)) {
+		send_to_char("Non riesci a trovare tutti gli ingredienti.\n\r", ch);
+		return;
+	}
+	struct obj_data* vial = create_thief_craft_item(ch, spec);
+	if(vial == nullptr) {
+		send_to_char("Non riesci a preparare la fiala.\n\r", ch);
+		return;
+	}
+	obj_to_char(vial, ch);
+	act("Prepari $p.", FALSE, ch, vial, 0, TO_CHAR);
 	act("$n prepara una fiala chimica.", TRUE, ch, 0, 0, TO_ROOM);
 	WAIT_STATE(ch, PULSE_VIOLENCE * 6);
 }
@@ -703,16 +1059,87 @@ ACTION_FUNC(do_throwpotion) {
 		send_to_char("Solo un ladro puro conosce questa arte.\n\r", ch);
 		return;
 	}
-	struct char_data* victim = resolve_victim(ch, arg);
-	if(victim == nullptr) {
+	if(check_peaceful(ch, "Non in questa stanza di pace.\n\r")) {
+		return;
+	}
+	char vialTok[MAX_INPUT_LENGTH];
+	char victimTok[MAX_INPUT_LENGTH];
+	half_chop(arg, vialTok, victimTok);
+	struct char_data* victim = resolve_victim(ch, victimTok[0] ? victimTok : vialTok);
+	struct obj_data* vial = find_throw_vial(ch, victimTok[0] ? vialTok : nullptr);
+	if(vial == nullptr) {
+		send_to_char("Non hai una fiala lanciabile pronta.\n\r", ch);
+		return;
+	}
+	const int potion_type = vial->obj_flags.value[1];
+	const int level = MAX(thief_level(ch), vial->obj_flags.value[0]);
+	const bool room_effect = potion_type == THIEF_POTION_SMOKE ||
+	                         potion_type == THIEF_POTION_CHOKING ||
+	                         potion_type == THIEF_POTION_SHRAPNEL;
+	if(!room_effect && victim == nullptr) {
 		send_to_char("Chi vuoi colpire con la fiala?\n\r", ch);
 		return;
 	}
+	if(!room_effect && victim == ch) {
+		send_to_char("Molto divertente.\n\r", ch);
+		return;
+	}
 	spend_move(ch, 20);
-	const int dam = dice(2, 6) + thief_level(ch) / 3;
-	damage(ch, victim, dam, TYPE_GENERIC_ACID, 0);
-	act("$n lancia una fiala contro $N!", TRUE, ch, 0, victim, TO_NOTVICT);
+	extract_obj(vial);
+	act("$n lancia una fiala!", TRUE, ch, 0, 0, TO_ROOM);
+	if(room_effect) {
+		throw_potion_room(ch, potion_type, level);
+		send_to_char("La fiala esplode riempiendo la stanza di vapori letali!\n\r", ch);
+	}
+	else {
+		throw_potion_single(ch, victim, potion_type, level);
+		act("$n lancia una fiala contro $N!", TRUE, ch, 0, victim, TO_NOTVICT);
+		act("Lanci una fiala contro $N!", FALSE, ch, 0, victim, TO_CHAR);
+		act("$n ti colpisce con una fiala!", TRUE, ch, 0, victim, TO_VICT);
+	}
 	WAIT_STATE(ch, PULSE_VIOLENCE * 2);
+}
+
+int thief_poison_type_from_obj(struct obj_data* obj) {
+	if(obj == nullptr || obj->obj_flags.value[3] != 1) {
+		return 0;
+	}
+	return obj->obj_flags.value[1];
+}
+
+int thief_potion_type_from_obj(struct obj_data* obj) {
+	if(obj == nullptr || obj->obj_flags.value[3] != 2) {
+		return 0;
+	}
+	return obj->obj_flags.value[1];
+}
+
+__attribute__((noinline)) void thief_on_weapon_hit(struct char_data* ch, struct char_data* victim, DamageResult result) {
+	if(ch == nullptr || victim == nullptr || result == VictimDead) {
+		return;
+	}
+	if(!HasClass(ch, CLASS_THIEF) || ch->equipment[WIELD] == nullptr) {
+		return;
+	}
+	struct obj_data* weapon = ch->equipment[WIELD];
+	if(weapon->iGeneric1 <= 0 || weapon->iGeneric2 <= 0) {
+		return;
+	}
+	const int proc_chance = 25 + thief_level(ch) / 4;
+	if(!thief_poison_proc_roll(proc_chance)) {
+		return;
+	}
+	apply_poison_effect(victim, ch, weapon->iGeneric1, thief_level(ch));
+	const int remaining = weapon->iGeneric2;
+	if(remaining <= 1) {
+		weapon->iGeneric1 = 0;
+		weapon->iGeneric2 = 0;
+		act("Il veleno sulla tua arma si esaurisce.", FALSE, ch, weapon, 0, TO_CHAR);
+	}
+	else {
+		weapon->iGeneric2 = remaining - 1;
+		act("Il veleno sulla tua arma contamina $N!", FALSE, ch, 0, victim, TO_CHAR);
+	}
 }
 
 } // namespace Alarmud
