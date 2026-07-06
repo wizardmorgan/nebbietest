@@ -174,7 +174,14 @@ rm -f "$log"
 
 echo ""
 if [ "$rc" -eq 124 ]; then
-  echo "OK  myst ancora in esecuzione dopo 15s (probabile boot riuscito)"
+  echo "OK  myst ha completato il boot ed era in game loop dopo 15s."
+  echo ""
+  echo "ATTENZIONE: il test ha terminato myst (SIGTERM). Non e' piu' in ascolto."
+  echo "Per giocare, avvia il servizio persistente:"
+  echo "  SERVER_PORT=${SERVER_PORT} ./docker-run.sh up -d consumer"
+  echo "  telnet localhost ${SERVER_PORT}"
+  echo ""
+  echo "Verifica: ./docker-run.sh doctor"
   exit 0
 fi
 
