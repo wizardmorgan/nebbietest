@@ -116,5 +116,39 @@ if command -v mysql >/dev/null 2>&1; then
 fi
 
 echo "[consumer] starting myst -P ${SERVER_PORT} -d ${DATA_DIR}"
-echo "[consumer] on failure run: ./scripts/myst-boot-check.sh"
-exec /app/mudroot/myst -P "${SERVER_PORT}" -d "${DATA_DIR}" -v 4
+echo "[consumer] on failure run: ./scripts/myst-crash-report.sh"
+
+myst_pid=0
+shutdown=0
+
+on_shutdown() {
+  shutdown=1
+  if [ "$myst_pid" -gt 0 ] 2>/dev/null; then
+    kill -TERM "$myst_pid" 2>/dev/null || true
+  fi
+}
+trap on_shutdown TERM INT
+
+while [ "$shutdown" -eq 0 ]; do
+  /app/mudroot/myst -P "${SERVER_PORT}" -d "${DATA_DIR}" -v 4 &
+  myst_pid=$!
+  wait "$myst_pid"
+  rc=$?
+  myst_pid=0
+  echo "[consumer] myst exited with code ${rc} at $(date -Is)"
+  for log in /app/mudroot/lib/alarmud.log /app/mudroot/lib/errors.log; do
+    if [ -f "$log" ]; then
+      echo "[consumer] --- tail ${log} ---"
+      tail -20 "$log" || true
+    fi
+  done
+  if [ "$shutdown" -ne 0 ]; then
+    exit 0
+  fi
+  case "$rc" in
+    0) sleep 2 ;;
+    134) echo "[consumer] abort() — cerca CHECKPOINT o SIGSEGV in alarmud.log"; sleep 5 ;;
+    139) echo "[consumer] SIGSEGV — esegui ./scripts/myst-crash-report.sh"; sleep 5 ;;
+    *) sleep 5 ;;
+  esac
+done

@@ -198,10 +198,16 @@ cmd_doctor() {
     echo "Log consumer:"
     docker compose logs --tail=40 consumer 2>/dev/null || true
     echo ""
-    echo "Diagnostica avvio myst:"
-    echo "  SERVER_PORT=${SERVER_PORT:-4000} ./scripts/myst-boot-check.sh"
-    echo "  docker compose run --rm --entrypoint /bin/bash consumer -c \\"
-    echo "    'SERVER_PORT=${SERVER_PORT:-4000} ./scripts/myst-boot-check.sh'"
+    echo "Log myst su disco (se presenti):"
+    for log in ./mudroot/lib/alarmud.log ./mudroot/lib/errors.log; do
+        if [ -f "$log" ]; then
+            echo "--- tail $log ---"
+            tail -15 "$log" 2>/dev/null || true
+        fi
+    done
+    echo ""
+    echo "Dopo un crash:"
+    echo "  ./scripts/myst-crash-report.sh"
 }
 
 if [ "${1:-}" = "doctor" ]; then

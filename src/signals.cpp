@@ -31,6 +31,9 @@ namespace Alarmud {
 /* La ridefinizione di funzioni di memoria qui causerebbe ricorsione
  * */
 #define LOG_CRASH 0 // Alar, abbiamo gdb, meglio non modificare i crash
+#ifndef MYST_LOG_CRASH
+#define MYST_LOG_CRASH LOG_CRASH
+#endif
 #define MAX_FNAME_LEN 32
 #define STACK_SIZE 15
 int gnPtr =-1;
@@ -149,7 +152,7 @@ void signal_setup() {
 	signal(SIGINT, diesig);
 	signal(SIGALRM, logsig);
 	signal(SIGTERM, diesig);
-#if LOG_CRASH
+#if MYST_LOG_CRASH
 	signal(SIGSEGV, badcrash);
 	signal(SIGBUS, buscrash);
 
