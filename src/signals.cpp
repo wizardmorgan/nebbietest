@@ -219,7 +219,7 @@ void logsig(int dummy) {
 	signal(SIGALRM, logsig);
 }
 
-#if LOG_CRASH
+#if MYST_LOG_CRASH
 void badcrash(int dummy) {
 	static int graceful_tried = 0;
 	struct descriptor_data* desc;
