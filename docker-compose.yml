@@ -1,9 +1,8 @@
 # Su Apple Silicon (arm64) mudcompiler è solo linux/amd64: forzare la piattaforma.
-# UID/GID: runEnv scrive .env con LOCAL_UID/LOCAL_GID (stesso utente di consumer e mysql).
+# UID/GID: runEnv scrive .env con LOCAL_UID/LOCAL_GID (consumer).
 services:
     mysql:
         image: mysql:8
-        user: "${LOCAL_UID}:${LOCAL_GID}"
         environment:
             - MYSQL_ROOT_PASSWORD=secret
             - MYSQL_DATABASE=nebbie

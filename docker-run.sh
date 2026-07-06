@@ -82,6 +82,30 @@ elif [ -z "${ADMINER_HOST_PORT:-}" ]; then
     export ADMINER_HOST_PORT=8080
 fi
 
+prepare_mysql_data() {
+    if [ ! -d mysql_data ]; then
+        mkdir -p mysql_data
+        echo "Creata directory mysql_data/"
+        return
+    fi
+    if [ -z "$(ls -A mysql_data 2>/dev/null)" ]; then
+        return
+    fi
+    mysql_owner=$(stat -c %u mysql_data 2>/dev/null || stat -f %u mysql_data 2>/dev/null)
+    if [ "$mysql_owner" != "999" ] && [ "$mysql_owner" != "0" ]; then
+        echo "⚠️  mysql_data/ appartiene a uid $mysql_owner (il container MySQL usa uid 999)."
+        echo "    Se mysql non parte, esegui una volta:"
+        echo "      ./docker-run.sh down"
+        echo "      sudo rm -rf mysql_data/*"
+        echo "      SERVER_PORT=${SERVER_PORT:-4000} ./docker-run.sh up -d"
+        echo "    Oppure: sudo chown -R 999:999 mysql_data"
+    fi
+}
+
+if [ "${1:-}" = "up" ]; then
+    prepare_mysql_data
+fi
+
 printf 'LOCAL_UID=%s\nLOCAL_GID=%s\nDOCKER_PLATFORM=%s\nMYSQL_HOST_PORT=%s\nADMINER_HOST_PORT=%s\n' \
     "$LOCAL_UID" "$LOCAL_GID" "$DOCKER_PLATFORM" "$MYSQL_HOST_PORT" "$ADMINER_HOST_PORT" > "$(dirname "$0")/.env"
 
