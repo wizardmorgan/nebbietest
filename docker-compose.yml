@@ -41,11 +41,12 @@ services:
             - /etc/group:/etc/group:ro
             - /etc/passwd:/etc/passwd:ro
         ports:
-            - "${SERVER_PORT:-4000}:${SERVER_PORT:-4000}"
-            - 4001:4001
-            - 4002:4002
-            - 4003:4003
-            - 10000:10000
+            - "0.0.0.0:${SERVER_PORT:-4000}:${SERVER_PORT:-4000}"
+            - "0.0.0.0:4001:4001"
+            - "0.0.0.0:4002:4002"
+            - "0.0.0.0:4003:4003"
+            - "0.0.0.0:10000:10000"
+        restart: unless-stopped
         environment:
             - SERVER_PORT=${SERVER_PORT:-4000}
             - MYSQL_HOST=mysql

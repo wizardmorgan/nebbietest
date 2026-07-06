@@ -106,13 +106,94 @@ if [ "${1:-}" = "up" ]; then
     prepare_mysql_data
 fi
 
-printf 'LOCAL_UID=%s\nLOCAL_GID=%s\nDOCKER_PLATFORM=%s\nMYSQL_HOST_PORT=%s\nADMINER_HOST_PORT=%s\n' \
-    "$LOCAL_UID" "$LOCAL_GID" "$DOCKER_PLATFORM" "$MYSQL_HOST_PORT" "$ADMINER_HOST_PORT" > "$(dirname "$0")/.env"
+printf 'LOCAL_UID=%s\nLOCAL_GID=%s\nDOCKER_PLATFORM=%s\nMYSQL_HOST_PORT=%s\nADMINER_HOST_PORT=%s\nSERVER_PORT=%s\n' \
+    "$LOCAL_UID" "$LOCAL_GID" "$DOCKER_PLATFORM" "$MYSQL_HOST_PORT" "$ADMINER_HOST_PORT" \
+    "${SERVER_PORT:-4000}" > "$(dirname "$0")/.env"
 
 echo "DOCKER_PLATFORM=$DOCKER_PLATFORM"
 echo "MYSQL_HOST_PORT=$MYSQL_HOST_PORT (host -> container mysql:33306)"
 echo "ADMINER_HOST_PORT=$ADMINER_HOST_PORT"
+echo "SERVER_PORT=${SERVER_PORT:-4000}"
 cd "$(dirname "$0")"
+
+myst_binary_ready() {
+    [ -x "./mudroot/myst" ]
+}
+
+will_start_consumer() {
+    local has_consumer=false
+    local named_services=0
+    for arg in "$@"; do
+        case "$arg" in
+            consumer) has_consumer=true ;;
+            mysql|adminer) named_services=$((named_services + 1)) ;;
+            -d|--detach|up) ;;
+        esac
+    done
+    if [ "$has_consumer" = true ]; then
+        return 0
+    fi
+    if [ "$named_services" -eq 0 ]; then
+        return 0
+    fi
+    return 1
+}
+
+print_build_instructions() {
+    echo ""
+    echo "=== mudroot/myst non compilato ==="
+    echo "Il servizio consumer (il MUD) non puo' partire senza build."
+    echo ""
+    echo "  1. Compila (prima volta: anche 15-30 minuti):"
+    echo "       ./docker-run.sh run --rm consumer ./build.sh sirio-docker"
+    echo ""
+    echo "  2. Importa il DB se hai il dump (consigliato):"
+    echo "       ./scripts/import-mysql-dump.sh ~/docker-vms/database_backup_2306.sql"
+    echo ""
+    echo "  3. Avvia tutto:"
+    echo "       SERVER_PORT=4003 ./docker-run.sh up -d"
+    echo ""
+    echo "Oppure tutto in uno:"
+    echo "       SERVER_PORT=4003 ./scripts/docker-mud-up.sh"
+    echo ""
+}
+
+cmd_doctor() {
+    echo "=== Docker MUD doctor ==="
+    docker compose ps
+    echo ""
+    if myst_binary_ready; then
+        echo "OK  mudroot/myst presente"
+        ls -la ./mudroot/myst
+    else
+        echo "MISS mudroot/myst — esegui build (vedi sopra)"
+    fi
+    if [ -f ./mudroot/lib/myst.mob ]; then
+        echo "OK  mudlib (mudroot/lib/myst.mob)"
+    else
+        echo "MISS mudlib — ./getworld o copia mudroot/lib"
+    fi
+    echo ""
+    echo "Log consumer:"
+    docker compose logs --tail=40 consumer 2>/dev/null || true
+    echo ""
+    echo "Log mysql:"
+    docker compose logs --tail=20 mysql 2>/dev/null || true
+}
+
+if [ "${1:-}" = "doctor" ]; then
+    cmd_doctor
+    exit 0
+fi
+
+if [ "${1:-}" = "up" ] && will_start_consumer "$@" && printf '%s\n' "$@" | grep -qE '(^| )-d($| )'; then
+    if ! myst_binary_ready; then
+        print_build_instructions
+        echo "Avvio solo mysql e adminer (senza MUD)..."
+        docker compose up -d mysql adminer
+        exit 1
+    fi
+fi
 
 # run --rm consumer <cmd> : compila/one-off senza passare dall'entrypoint myst
 if [ "${1:-}" = "run" ] && [ "${2:-}" = "--rm" ] && [ "${3:-}" = "consumer" ] && [ $# -ge 4 ]; then
