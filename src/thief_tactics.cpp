@@ -68,7 +68,7 @@ int thief_level(struct char_data* ch) {
 }
 
 int skill_roll(struct char_data* ch, int skill) {
-	if(ch == nullptr || ch->skills == nullptr || skill <= 0) {
+	if(ch == nullptr || ch->skills == nullptr || skill <= 0 || skill >= MAX_SKILLS) {
 		return 0;
 	}
 	return MIN(100, ch->skills[skill].learned);
@@ -119,6 +119,7 @@ void spend_move(struct char_data* ch, int amount) {
 void apply_blind_light(struct char_data* victim, struct char_data* ch, int duration) {
 	(void)ch;
 	struct affected_type af;
+	memset(&af, 0, sizeof(af));
 	af.type = SPELL_BLINDNESS;
 	af.location = APPLY_HITROLL;
 	af.modifier = -2;
@@ -449,7 +450,8 @@ int thief_skill_min_level(int skill) {
 }
 
 bool thief_has_skill(struct char_data* ch, int skill) {
-	if(ch == nullptr || !HasClass(ch, CLASS_THIEF) || ch->skills == nullptr || skill <= 0) {
+	if(ch == nullptr || !HasClass(ch, CLASS_THIEF) || ch->skills == nullptr || skill <= 0 ||
+	   skill >= MAX_SKILLS) {
 		return false;
 	}
 	if(thief_level(ch) < thief_skill_min_level(skill)) {
@@ -678,6 +680,7 @@ ACTION_FUNC(do_feint) {
 		return;
 	}
 	struct affected_type af;
+	memset(&af, 0, sizeof(af));
 	af.type = SKILL_FEINT;
 	af.duration = 1;
 	af.modifier = 0;
@@ -715,6 +718,7 @@ ACTION_FUNC(do_hamstring) {
 		return;
 	}
 	struct affected_type af;
+	memset(&af, 0, sizeof(af));
 	af.type = SKILL_HAMSTRING;
 	af.duration = 2 + thief_level(ch) / 12;
 	af.modifier = -MIN(6, 3 + thief_level(ch) / 15);

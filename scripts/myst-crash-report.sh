@@ -30,7 +30,11 @@ if docker compose ps --status running consumer 2>/dev/null | grep -q consumer; t
   echo ""
 fi
 
-echo "--- OOM kernel (ultime righe) ---"
+echo "--- crash context (SIGSEGV/SIGBUS / PrintStatus) ---"
+docker compose logs consumer 2>/dev/null | grep -E \
+  "SIGSEGV|SIGBUS|MYST SIG|myst exited|Mud status when crashed|LastTrack|Last Name|Calling Stack|CHECKPOINT shutdown" \
+  | tail -40 || true
+echo ""
 dmesg -T 2>/dev/null | grep -iE 'oom|killed process|out of memory' | tail -10 || echo "(nessun OOM recente o dmesg non disponibile)"
 echo ""
 

@@ -219,15 +219,25 @@ void logsig(int dummy) {
 	signal(SIGALRM, logsig);
 }
 
-#if MYST_LOG_CRASH
 void badcrash(int dummy) {
 	static int graceful_tried = 0;
 	struct descriptor_data* desc;
 
+	(void)dummy;
 	mudlog(LOG_CHECK,
 		   "SIGSEGV received. Trying to shut down gracefully.");
 
 	PrintStatus();
+	fprintf(stderr,
+			"MYST SIGSEGV: status='%s' name='%s' file='%s' line=%d\n",
+			gszMudStatus, gszName, currentfile, currentline);
+	if(gnPtr >= 0) {
+		fprintf(stderr, "MYST SIGSEGV stack:\n");
+		for(int i = 0; i <= gnPtr && i < STACK_SIZE; ++i) {
+			fprintf(stderr, "  %2d. %s\n", i, gszStack[i]);
+		}
+	}
+	fflush(stderr);
 
 	if(!graceful_tried) {
 #if 0
@@ -245,10 +255,15 @@ void buscrash(int dummy) {
 	static int graceful_tried = 0;
 	struct descriptor_data* desc;
 
+	(void)dummy;
 	mudlog(LOG_CHECK,
 		   "SIGBUS received. Trying to shut down gracefully.");
 
 	PrintStatus();
+	fprintf(stderr,
+			"MYST SIGBUS: status='%s' name='%s' file='%s' line=%d\n",
+			gszMudStatus, gszName, currentfile, currentline);
+	fflush(stderr);
 
 	if(!graceful_tried) {
 #if 0
@@ -262,7 +277,7 @@ void buscrash(int dummy) {
 	}
 	abort();
 }
-#endif
+
 float AverageEqIndex(float toadd) {
 	static float curmedia=0.0;
 	static float numerocasi=0.0;
