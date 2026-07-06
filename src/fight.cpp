@@ -4381,18 +4381,25 @@ struct char_data* SwitchVictimToPrince(struct char_data* pAtt,
 struct char_data* FindVictim(struct char_data* pChar) {
 	struct char_data* pLoopChar, *pBetterChar = NULL;
 	int iBonus, iBetterBonus = -1;
+	struct room_data* rp;
+	const int mob_zone = pChar ? pChar->specials.zone : -1;
+	const bool zone_ok = (mob_zone >= 0 && mob_zone <= top_of_zone_table);
 
-	if(pChar->in_room < 0) {
+	if(!pChar || pChar->in_room < 0) {
+		return NULL;
+	}
+	rp = real_roomp(pChar->in_room);
+	if(!rp) {
 		return NULL;
 	}
 	PushStatus("FindVictim");
 
-	for(pLoopChar = (real_roomp(pChar->in_room))->people; pLoopChar;
+	for(pLoopChar = rp->people; pLoopChar;
 			pLoopChar = pLoopChar->next_in_room) {
 		if(IS_PC(pLoopChar) ||
-				((pLoopChar->specials.zone != pChar->specials.zone &&
-				  !strchr(zone_table[ pChar->specials.zone ].races,
-						  GET_RACE(pLoopChar))) ||
+				((zone_ok &&
+				  pLoopChar->specials.zone != mob_zone &&
+				  !strchr(zone_table[mob_zone].races, GET_RACE(pLoopChar))) ||
 				 IS_SET(pLoopChar->specials.act, ACT_ANNOYING))) {
 			if(!IS_SET(pChar->specials.act, ACT_WIMPY) || !AWAKE(pLoopChar)) {
 				if(!in_group(pChar, pLoopChar)) {
@@ -4423,12 +4430,17 @@ struct char_data* FindVictim(struct char_data* pChar) {
 struct char_data* FindAnyVictim(struct char_data* pChar) {
 	struct char_data* pLoopChar, *pBetterChar = NULL;
 	int iBonus, iBetterBonus = -1;
+	struct room_data* rp;
 
-	if(pChar->in_room < 0) {
+	if(!pChar || pChar->in_room < 0) {
+		return NULL;
+	}
+	rp = real_roomp(pChar->in_room);
+	if(!rp) {
 		return NULL;
 	}
 	PushStatus("FindAnyVictim");
-	for(pLoopChar = (real_roomp(pChar->in_room))->people; pLoopChar;
+	for(pLoopChar = rp->people; pLoopChar;
 			pLoopChar = pLoopChar->next_in_room) {
 		if(IS_PC(pLoopChar) || !SameRace(pChar, pLoopChar)) {
 			if(!IS_AFFECTED(pChar, AFF_CHARM) || pChar->master != pLoopChar) {
@@ -5215,13 +5227,19 @@ struct char_data* FindMetaVictim(struct char_data* ch) {
 	struct char_data* tmp_ch;
 	unsigned char found=FALSE;
 	unsigned short total=0;
+	struct room_data* rp;
 
-	PushStatus("FindMetaVictim");
-	if(ch->in_room < 0) {
+	if(!ch || ch->in_room < 0) {
+		return(0);
+	}
+	rp = real_roomp(ch->in_room);
+	if(!rp) {
 		return(0);
 	}
 
-	for(tmp_ch = (real_roomp(ch->in_room))->people; tmp_ch;
+	PushStatus("FindMetaVictim");
+
+	for(tmp_ch = rp->people; tmp_ch;
 			tmp_ch=tmp_ch->next_in_room) {
 		if(CAN_SEE(ch,tmp_ch) && !IS_SET(tmp_ch->specials.act,PLR_NOHASSLE)) {
 			if(!(IS_AFFECTED(ch, AFF_CHARM)) || (ch->master != tmp_ch)) {
@@ -5242,7 +5260,7 @@ struct char_data* FindMetaVictim(struct char_data* ch) {
 
 	total = number(1,(int)total);
 
-	for(tmp_ch = (real_roomp(ch->in_room))->people; tmp_ch;
+	for(tmp_ch = rp->people; tmp_ch;
 			tmp_ch=tmp_ch->next_in_room) {
 		if(CAN_SEE(ch,tmp_ch) && !IS_SET(tmp_ch->specials.act,PLR_NOHASSLE)) {
 			if(!SameRace(tmp_ch, ch)) {

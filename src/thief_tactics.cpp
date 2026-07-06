@@ -415,6 +415,7 @@ void throw_potion_room(struct char_data* ch, int potion_type, int level) {
 				break;
 			case THIEF_POTION_CHOKING: {
 				struct affected_type af;
+				memset(&af, 0, sizeof(af));
 				af.type = SKILL_GAG;
 				af.duration = MAX(1, level / 18);
 				af.modifier = 0;
@@ -801,6 +802,7 @@ ACTION_FUNC(do_gouge) {
 		return;
 	}
 	struct affected_type af;
+	memset(&af, 0, sizeof(af));
 	af.type = SKILL_GOUGE;
 	af.location = APPLY_HITROLL;
 	af.modifier = -3;
@@ -844,6 +846,7 @@ ACTION_FUNC(do_gag) {
 		return;
 	}
 	struct affected_type af;
+	memset(&af, 0, sizeof(af));
 	af.type = SKILL_GAG;
 	af.duration = MIN(4, 1 + thief_level(ch) / 15);
 	af.modifier = 0;

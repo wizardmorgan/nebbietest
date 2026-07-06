@@ -661,7 +661,7 @@ void mobile_activity(struct char_data* ch) {
 			return;
 		}
 
-		SetStatus("Gestione Aggressivi", NULL);
+		SetStatus("Gestione Aggressivi", ch->player.short_descr);
 		if(IS_SET(ch->specials.act, ACT_AGGRESSIVE)) {
 			if((tmp_ch = FindVictim(ch)) != NULL) {
 				if(check_peaceful(ch, "You can't seem to exercise your violent "
@@ -670,6 +670,7 @@ void mobile_activity(struct char_data* ch) {
 					act("$n ruggisce impotente.", TRUE, ch, 0, 0, TO_ROOM);
 				}
 				else {
+					SetStatus("MobHit aggressive", tmp_ch->player.short_descr);
 					MobHit(ch, tmp_ch, 0);
 				}
 
@@ -684,6 +685,7 @@ void mobile_activity(struct char_data* ch) {
 						act("$n ruggisce impotente.", TRUE, ch, 0, 0, TO_ROOM);
 						return;
 					}
+					SetStatus("MobHit meta-agg", tmp_ch->player.short_descr);
 					MobHit(ch, tmp_ch, 0);
 					return;
 				}
@@ -715,11 +717,11 @@ void mobile_activity(struct char_data* ch) {
 	}
 
 	if(!IS_PC(ch) && ch->specials.fighting && GET_INT(ch)>9) {
-		if(IS_AFFECTED(ch->specials.fighting, AFF_FIRESHIELD)) {
-			struct char_data* vict;
+		struct char_data* vict;
+		struct char_data* foe = ch->specials.fighting;
+		if(foe && foe->nMagicNumber == CHAR_VALID_MAGIC &&
+				IS_AFFECTED(foe, AFF_FIRESHIELD)) {
 			vict = FindVictim(ch);
-			/* if person we are fighting is protected by fireshield */
-			/* switch to a new target */
 			if(vict && vict != ch->specials.fighting) {
 				stop_fighting(ch);
 				set_fighting(ch, vict);
@@ -751,8 +753,13 @@ int UseViolentHeldItem(struct char_data* ch) {
 					 *   un = in meno
 					 * */
 					struct char_data* v;
+					struct room_data* rp;
 					i = 0;
-					v = real_roomp(ch->in_room)->people;
+					rp = real_roomp(ch->in_room);
+					if(!rp) {
+						return FALSE;
+					}
+					v = rp->people;
 					while(v && ch->specials.fighting != v) {
 						i++;
 						v = v->next_in_room;
@@ -1271,6 +1278,12 @@ void MobHit(struct char_data* ch, struct char_data* v, int type) {
 	int base, percent, learned;
 	struct obj_data* o;
 	int location = 12;
+
+	if(!ch || !v ||
+			ch->nMagicNumber != CHAR_VALID_MAGIC ||
+			v->nMagicNumber != CHAR_VALID_MAGIC) {
+		return;
+	}
 	if(type != 0) {
 		hit(ch,v,type);
 	}
