@@ -4,6 +4,7 @@
 # Uso:
 #   ./docker-run.sh up -d              # myst su porta 4000 (default)
 #   SERVER_PORT=4003 ./docker-run.sh up -d   # Sirio su 4003 (dopo build.sh sirio-docker)
+#   MYSQL_HOST_PORT=33307 ./docker-run.sh up -d   # se la 3306 host e' gia' occupata
 #   ./docker-run.sh run --rm consumer ./build.sh devel
 #   ./docker-run.sh logs -f consumer
 
@@ -53,10 +54,40 @@ fi
 
 export LOCAL_UID="${LOCAL_UID:-$(id -u)}"
 export LOCAL_GID="${LOCAL_GID:-$(id -g)}"
-printf 'LOCAL_UID=%s\nLOCAL_GID=%s\nDOCKER_PLATFORM=%s\n' \
-    "$LOCAL_UID" "$LOCAL_GID" "$DOCKER_PLATFORM" > "$(dirname "$0")/.env"
+
+host_port_in_use() {
+    local port="$1"
+    if command -v ss >/dev/null 2>&1; then
+        ss -tlnH 2>/dev/null | grep -qE "[:.]${port}[[:space:]]"
+        return $?
+    fi
+    if command -v netstat >/dev/null 2>&1; then
+        netstat -tln 2>/dev/null | grep -qE "[:.]${port}[[:space:]]"
+        return $?
+    fi
+    return 1
+}
+
+if [ -z "${MYSQL_HOST_PORT:-}" ] && host_port_in_use 3306; then
+    export MYSQL_HOST_PORT=33307
+    echo "Porta host 3306 occupata: uso MYSQL_HOST_PORT=${MYSQL_HOST_PORT} per questo stack."
+elif [ -z "${MYSQL_HOST_PORT:-}" ]; then
+    export MYSQL_HOST_PORT=3306
+fi
+
+if [ -z "${ADMINER_HOST_PORT:-}" ] && host_port_in_use 8080; then
+    export ADMINER_HOST_PORT=8081
+    echo "Porta host 8080 occupata: uso ADMINER_HOST_PORT=${ADMINER_HOST_PORT} per Adminer."
+elif [ -z "${ADMINER_HOST_PORT:-}" ]; then
+    export ADMINER_HOST_PORT=8080
+fi
+
+printf 'LOCAL_UID=%s\nLOCAL_GID=%s\nDOCKER_PLATFORM=%s\nMYSQL_HOST_PORT=%s\nADMINER_HOST_PORT=%s\n' \
+    "$LOCAL_UID" "$LOCAL_GID" "$DOCKER_PLATFORM" "$MYSQL_HOST_PORT" "$ADMINER_HOST_PORT" > "$(dirname "$0")/.env"
 
 echo "DOCKER_PLATFORM=$DOCKER_PLATFORM"
+echo "MYSQL_HOST_PORT=$MYSQL_HOST_PORT (host -> container mysql:33306)"
+echo "ADMINER_HOST_PORT=$ADMINER_HOST_PORT"
 cd "$(dirname "$0")"
 
 # run --rm consumer <cmd> : compila/one-off senza passare dall'entrypoint myst
