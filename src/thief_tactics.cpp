@@ -25,6 +25,8 @@
 
 namespace Alarmud {
 
+char* how_good(int percent);
+
 namespace {
 
 struct thief_skill_gate {
@@ -49,6 +51,52 @@ const thief_skill_gate kThiefSkillGates[] = {
 	{SKILL_FIND_THE_SEAM, 51},
 	{0, 0}
 };
+
+struct thief_guild_entry {
+	const char* keywords;
+	const char* label;
+	int skill;
+	int min_level;
+	bool mono_only;
+};
+
+const thief_guild_entry kThiefGuildEntries[] = {
+	{"sneak", "sneak", SKILL_SNEAK, 0, false},
+	{"hide", "hide", SKILL_HIDE, 0, false},
+	{"steal", "steal", SKILL_STEAL, 0, false},
+	{"backstab", "backstab", SKILL_BACKSTAB, 0, false},
+	{"pick picklock", "pick", SKILL_PICK_LOCK, 0, false},
+	{"spy", "spy", SKILL_SPY, 0, false},
+	{"retreat", "retreat", SKILL_RETREAT, 0, false},
+	{"findtrap find-trap", "find trap", SKILL_FIND_TRAP, 0, false},
+	{"disarmtrap disarm-trap removetrap", "disarm trap", SKILL_REMOVE_TRAP, 0, false},
+	{"tspy", "tspy", SKILL_TSPY, 0, false},
+	{"eavesdrop", "eavesdrop", SKILL_EAVESDROP, 0, false},
+	{"sand pocketsand pocket-sand", "sand", SKILL_POCKET_SAND, 5, false},
+	{"cheapshot cheap-shot", "cheap shot", SKILL_CHEAP_SHOT, 8, false},
+	{"tumble", "tumble", SKILL_TUMBLE, 12, false},
+	{"poisoncraft poison", "poisoncraft", SKILL_POISONCRAFT, 15, true},
+	{"feint", "feint", SKILL_FEINT, 16, false},
+	{"riposte", "riposte", SKILL_RIPOSTE, 20, false},
+	{"hamstring", "hamstring", SKILL_HAMSTRING, 24, false},
+	{"ckick circlekick circle-kick", "ckick", SKILL_CIRCLE_KICK, 28, false},
+	{"gouge", "gouge", SKILL_GOUGE, 32, false},
+	{"gag", "gag", SKILL_GAG, 36, false},
+	{"vault", "vault", SKILL_VAULT, 42, true},
+	{"mixthrow mix-throw throwpotion", "mix throw", SKILL_MIX_THROW, 45, true},
+	{"snatch", "snatch", SKILL_SNATCH, 48, true},
+	{"findseam find-seam seam", "find the seam", SKILL_FIND_THE_SEAM, 51, true},
+	{nullptr, nullptr, 0, 0, false}
+};
+
+const thief_guild_entry* thief_guild_lookup_skill(int skill) {
+	for(int i = 0; kThiefGuildEntries[i].skill != 0; ++i) {
+		if(kThiefGuildEntries[i].skill == skill) {
+			return &kThiefGuildEntries[i];
+		}
+	}
+	return nullptr;
+}
 
 bool pierce_weapon_valid(struct char_data* ch) {
 	if(ch == nullptr || ch->equipment[WIELD] == nullptr) {
@@ -448,6 +496,58 @@ int thief_skill_min_level(int skill) {
 		}
 	}
 	return 0;
+}
+
+bool thief_skill_practice_allowed(struct char_data* ch, int skill) {
+	if(ch == nullptr || !HasClass(ch, CLASS_THIEF) || ch->skills == nullptr) {
+		return false;
+	}
+	const thief_guild_entry* ent = thief_guild_lookup_skill(skill);
+	if(ent == nullptr) {
+		return false;
+	}
+	if(thief_level(ch) < ent->min_level) {
+		return false;
+	}
+	if(ent->mono_only && !OnlyClass(ch, CLASS_THIEF)) {
+		return false;
+	}
+	return true;
+}
+
+int thief_resolve_guild_practice(const char* arg) {
+	if(arg == nullptr) {
+		return -1;
+	}
+	while(*arg == ' ') {
+		++arg;
+	}
+	if(*arg == '\0') {
+		return -1;
+	}
+	for(int i = 0; kThiefGuildEntries[i].skill != 0; ++i) {
+		if(isname(arg, kThiefGuildEntries[i].keywords)) {
+			return kThiefGuildEntries[i].skill;
+		}
+	}
+	return -1;
+}
+
+void thief_send_guild_practice_list(struct char_data* ch) {
+	char buf[256];
+	if(ch == nullptr || ch->skills == nullptr) {
+		return;
+	}
+	send_to_char("Abilita' disponibili al tuo livello:\n\r", ch);
+	for(int i = 0; kThiefGuildEntries[i].skill != 0; ++i) {
+		const thief_guild_entry& ent = kThiefGuildEntries[i];
+		if(!thief_skill_practice_allowed(ch, ent.skill)) {
+			continue;
+		}
+		std::snprintf(buf, sizeof(buf), " %-16s:  %s\n\r", ent.label,
+				how_good(ch->skills[ent.skill].learned));
+		send_to_char(buf, ch);
+	}
 }
 
 bool thief_has_skill(struct char_data* ch, int skill) {

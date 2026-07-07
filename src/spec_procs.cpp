@@ -34,6 +34,7 @@
 #include "comm.hpp"
 #include "db.hpp"
 #include "fight.hpp"
+#include "thief_tactics.hpp"
 #include "handler.hpp"
 #include "interpreter.hpp"
 #include "magic2.hpp"
@@ -669,29 +670,8 @@ MOBSPECIAL_FUNC(ClericGuildMaster) {
 MOBSPECIAL_FUNC(ThiefGuildMaster) {
 	char buf[256];
 	struct char_data* guildmaster;
-	const static char* n_skills[] = {
-		"sneak",     /* 1 */
-		"hide",
-		"steal",
-		"backstab",
-		"pick",         /* 5 */
-		"spy",
-		"retreat",
-		"find trap",
-		"disarm trap",
-		"tspy",
-		"eavesdrop",
-		"sand",
-		"tumble",
-		"feint",
-		"hamstring",
-		"ckick",
-		"gouge",
-		"gag",
-		"\n",
-	};
-	int number=0;
 	int sk_num;
+	int number = 0;
 
 	if(!AWAKE(ch)) {
 		return(FALSE);
@@ -796,147 +776,51 @@ MOBSPECIAL_FUNC(ThiefGuildMaster) {
 			sprintf(buf,"Hai %d sessioni di pratica.\n\r",
 					ch->specials.spells_to_learn);
 			send_to_char(buf,ch);
-
-			sprintf(buf," sneak           :  %s\n\r",how_good(ch->skills[SKILL_SNEAK].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," hide            :  %s\n\r",how_good(ch->skills[SKILL_HIDE].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," steal           :  %s\n\r",how_good(ch->skills[SKILL_STEAL].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," backstab        :  %s\n\r",how_good(ch->skills[SKILL_BACKSTAB].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," pick            :  %s\n\r",how_good(ch->skills[SKILL_PICK_LOCK].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," spy             :  %s\n\r",how_good(ch->skills[SKILL_SPY].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," retreat         :  %s\n\r",how_good(ch->skills[SKILL_RETREAT].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," find trap       :  %s\n\r",how_good(ch->skills[SKILL_FIND_TRAP].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," disarm trap     :  %s\n\r",how_good(ch->skills[SKILL_REMOVE_TRAP].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," tspy            :  %s\n\r",how_good(ch->skills[SKILL_TSPY].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," eavesdrop       :  %s\n\r",how_good(ch->skills[SKILL_EAVESDROP].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," sand            :  %s\n\r",how_good(ch->skills[SKILL_POCKET_SAND].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," tumble          :  %s\n\r",how_good(ch->skills[SKILL_TUMBLE].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," feint           :  %s\n\r",how_good(ch->skills[SKILL_FEINT].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," hamstring       :  %s\n\r",how_good(ch->skills[SKILL_HAMSTRING].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," ckick           :  %s\n\r",how_good(ch->skills[SKILL_CIRCLE_KICK].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," gouge           :  %s\n\r",how_good(ch->skills[SKILL_GOUGE].learned));
-			send_to_char(buf,ch);
-			sprintf(buf," gag             :  %s\n\r",how_good(ch->skills[SKILL_GAG].learned));
-			send_to_char(buf,ch);
-
+			thief_send_guild_practice_list(ch);
 			return(TRUE);
 		}
-		else {
-			number = old_search_block(arg,0,strlen(arg),n_skills,FALSE);
-			send_to_char("Il Maestro dei Ladri dice ",ch);
 
-			if(number == -1) {
-				send_to_char("'Non conosco questa abilita'.'\n\r", ch);
-				return(TRUE);
-			}
+		sk_num = thief_resolve_guild_practice(arg);
+		send_to_char("Il Maestro dei Ladri dice ",ch);
 
-			switch(number) {
-			case 0:
-			case 1:
-				sk_num = SKILL_SNEAK;
-				break;
-			case 2:
-				sk_num = SKILL_HIDE;
-				break;
-			case 3:
-				sk_num = SKILL_STEAL;
-				break;
-			case 4:
-				sk_num = SKILL_BACKSTAB;
-				break;
-			case 5:
-				sk_num = SKILL_PICK_LOCK;
-				break;
-			case 6:
-				sk_num = SKILL_SPY;
-				break;
-			case 7:
-				sk_num = SKILL_RETREAT;
-				break;
-			case 8:
-				sk_num = SKILL_FIND_TRAP;
-				break;
-			case 9:
-				sk_num = SKILL_REMOVE_TRAP;
-				break;
-			case 10:
-				sk_num = SKILL_TSPY;
-				break;
-			case 11:
-				sk_num = SKILL_EAVESDROP;
-				break;
-			case 12:
-				sk_num = SKILL_POCKET_SAND;
-				break;
-			case 13:
-				sk_num = SKILL_TUMBLE;
-				break;
-			case 14:
-				sk_num = SKILL_FEINT;
-				break;
-			case 15:
-				sk_num = SKILL_HAMSTRING;
-				break;
-			case 16:
-				sk_num = SKILL_CIRCLE_KICK;
-				break;
-			case 17:
-				sk_num = SKILL_GOUGE;
-				break;
-			case 18:
-				sk_num = SKILL_GAG;
-				break;
-
-			default:
-				mudlog(LOG_SYSERR, "Strangeness in Thief Guildmaster (%d)", number);
-				send_to_char("'Ack!  Mi sento male!'\n\r", ch);
-				return(TRUE);
-			} /* end switch */
-
-			if(ch->skills[sk_num].learned > 45
-					&&sk_num!=SKILL_RETREAT
-					&&sk_num!=SKILL_TSPY
-					&&sk_num!=SKILL_EAVESDROP) {
-				send_to_char("'You must learn from practice and experience now.'\n\r", ch);
-				return(TRUE);
-			}
-
-			if(ch->specials.spells_to_learn <= 0) {
-				send_to_char
-				("'You must first use the knowledge you already have.'\n\r",ch);
-				return(FALSE);
-			}
-
-			send_to_char("'This is how you do it...'\n\r",ch);
-			ch->specials.spells_to_learn--;
-
-			if(!IS_SET(ch->skills[sk_num].flags, SKILL_KNOWN)) {
-				SET_BIT(ch->skills[sk_num].flags, SKILL_KNOWN);
-				SET_BIT(ch->skills[sk_num].flags, SKILL_KNOWN_THIEF);
-			}
-
-			ch->skills[ sk_num ].learned += int_app[(int)GET_INT(ch) ].learn;
-
-			if(ch->skills[sk_num].learned >= 95) {
-				send_to_char("'You are now a master of this art.'\n\r", ch);
-			}
+		if(sk_num < 0) {
+			send_to_char("'Non conosco questa abilita'.'\n\r", ch);
 			return(TRUE);
 		}
+
+		if(!thief_skill_practice_allowed(ch, sk_num)) {
+			send_to_char("'Devi essere piu' esperto prima di studiare questa tecnica.'\n\r", ch);
+			return(TRUE);
+		}
+
+		if(ch->skills[sk_num].learned > 45
+				&& sk_num != SKILL_RETREAT
+				&& sk_num != SKILL_TSPY
+				&& sk_num != SKILL_EAVESDROP) {
+			send_to_char("'You must learn from practice and experience now.'\n\r", ch);
+			return(TRUE);
+		}
+
+		if(ch->specials.spells_to_learn <= 0) {
+			send_to_char
+			("'You must first use the knowledge you already have.'\n\r",ch);
+			return(FALSE);
+		}
+
+		send_to_char("'This is how you do it...'\n\r",ch);
+		ch->specials.spells_to_learn--;
+
+		if(!IS_SET(ch->skills[sk_num].flags, SKILL_KNOWN)) {
+			SET_BIT(ch->skills[sk_num].flags, SKILL_KNOWN);
+			SET_BIT(ch->skills[sk_num].flags, SKILL_KNOWN_THIEF);
+		}
+
+		ch->skills[ sk_num ].learned += int_app[(int)GET_INT(ch) ].learn;
+
+		if(ch->skills[sk_num].learned >= 95) {
+			send_to_char("'You are now a master of this art.'\n\r", ch);
+		}
+		return(TRUE);
 	}
 	return(FALSE);
 }

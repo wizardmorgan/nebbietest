@@ -43,6 +43,7 @@
 #include "opinion.hpp"
 #include "reception.hpp"
 #include "skills.hpp"
+#include "thief_tactics.hpp"
 #include "sound.hpp"
 #include "spell_parser.hpp"
 #include "trap.hpp"
@@ -9811,6 +9812,11 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 		SKILL_CIRCLE_KICK,
 		SKILL_GOUGE,
 		SKILL_GAG,
+		SKILL_VAULT,
+		SKILL_SNATCH,
+		SKILL_POISONCRAFT,
+		SKILL_MIX_THROW,
+		SKILL_FIND_THE_SEAM,
 		0
 	};
 
@@ -9890,6 +9896,9 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 	case CLASS_THIEF:
 		for(f=0; kthi[f]; f++) {
 			if(id == kthi[f]) {
+				if(thief_skill_min_level(id) > liv) {
+					return FALSE;
+				}
 				return TRUE;
 			}
 		}
