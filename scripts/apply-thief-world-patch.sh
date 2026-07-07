@@ -17,11 +17,18 @@ TARGET_DIR="$ROOT/mudroot/lib"
 DO_FLAVOR=0
 CHECK_ONLY=0
 
-# Allineati a world-patches/thief-crafting/VNUMS.txt (produzione: 18500-18505 occupati)
 THIEF_VNUMS=(18000 18001 18002 18003 18004 18005)
 THIEF_VNUM_FIRST=18000
 THIEF_VNUM_LAST=18005
-THIEF_MARKER_OBJ='toxic extract estratto tossico'
+# keyword atteso nella riga nome oggetto (myst.obj), per vnum
+THIEF_OBJ_KEYWORDS=(
+  "toxic extract"
+  "nightshade resin"
+  "alkali salt"
+  "volatile oil"
+  "binding agent"
+  "glass vial"
+)
 ACT_THIEF=16777216
 
 usage() {
@@ -46,37 +53,65 @@ OBJ="$TARGET_DIR/myst.obj"
 ZON="$TARGET_DIR/myst.zon"
 WLD="$TARGET_DIR/myst.wld"
 MOB="$TARGET_DIR/myst.mob"
+SHP="$TARGET_DIR/myst.shp"
 
-for f in "$OBJ" "$ZON"; do
+for f in "$OBJ" "$ZON" "$SHP"; do
   if [ ! -f "$f" ]; then
     echo "apply-thief-world-patch: manca $f" >&2
     exit 1
   fi
 done
 
-patch_present() {
-  grep -q "^#${THIEF_VNUM_FIRST}$" "$OBJ" \
-    && grep -qF "$THIEF_MARKER_OBJ" "$OBJ" \
-    && grep -qF '018000 [un estratto tossico] dato al MOB 003022' "$ZON" \
-    && grep -qF '018000 [un estratto tossico] dato al MOB 007811' "$ZON"
+thief_obj_ok() {
+  local idx="$1"
+  local v="${THIEF_VNUMS[$idx]}"
+  local kw="${THIEF_OBJ_KEYWORDS[$idx]}"
+  grep -q "^#${v}$" "$OBJ" \
+    && awk -v target="$v" -v kw="$kw" '
+      $0 == "#" target { show=1 }
+      show && index($0, kw) { found=1; exit }
+      show && $0 == "~" { exit }
+      END { exit(found ? 0 : 1) }
+    ' "$OBJ"
+}
+
+thief_objs_present() {
+  local i
+  for i in 0 1 2 3 4 5; do
+    thief_obj_ok "$i" || return 1
+  done
+  return 0
 }
 
 vnums_conflict() {
-  local v
-  for v in "${THIEF_VNUMS[@]}"; do
-    if grep -q "^#${v}$" "$OBJ"; then
-      if ! grep -qF "$THIEF_MARKER_OBJ" "$OBJ" || ! grep -A6 "^#${v}$" "$OBJ" | grep -qF "$THIEF_MARKER_OBJ"; then
-        echo "apply-thief-world-patch: vnum #$v già occupato in myst.obj" >&2
-        awk -v target="$v" '
-          $0 == "#" target { show=1 }
-          show { print }
-          show && $0 == "~" { exit }
-        ' "$OBJ" | sed 's/^/  /' >&2
-        return 0
-      fi
+  local i v
+  for i in 0 1 2 3 4 5; do
+    v="${THIEF_VNUMS[$i]}"
+    if grep -q "^#${v}$" "$OBJ" && ! thief_obj_ok "$i"; then
+      echo "apply-thief-world-patch: vnum #$v già occupato da altro oggetto" >&2
+      awk -v target="$v" '
+        $0 == "#" target { show=1 }
+        show { print }
+        show && $0 == "~" { exit }
+      ' "$OBJ" | sed 's/^/  /' >&2
+      return 0
     fi
   done
   return 1
+}
+
+shops_have_ingredients() {
+  local v
+  for v in "${THIEF_VNUMS[@]}"; do
+    if ! grep -qE "^${v}$" "$SHP"; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+patch_present() {
+  thief_objs_present && shops_have_ingredients
 }
 
 strip_thief_zone_lines() {
@@ -112,6 +147,7 @@ clean_guild_room_objects() {
       room = $4 + 0
       vnum = $2 + 0
       if ((room == 3076 || room == 7828) && (vnum < 18000 || vnum > 18005)) next
+      if ((room == 3076 || room == 7828) && (vnum >= 18000 && vnum <= 18005)) next
     }
     { print }
   ' "$ZON" > "$tmp"
@@ -151,31 +187,44 @@ remove_act_flag_from_mob() {
   mv "$tmp" "$MOB"
 }
 
-zone_needs_repair() {
-  grep -q '018500 \[un estratto tossico\]' "$ZON" 2>/dev/null \
-    || [ "$(grep -cF '018000 [un estratto tossico] dato al MOB 003022' "$ZON" || true)" -gt 1 ]
-}
-
-insert_zon_block() {
-  local anchor="$1"
-  local fragment="$2"
-  local tmp_zon
-  tmp_zon="$(mktemp)"
-  awk -v anchor="$anchor" -v frag="$fragment" '
-    BEGIN { while ((getline line < frag) > 0) block = block line ORS; close(frag) }
-    index($0, anchor) {
-      print
-      if (!done) { printf "%s", block; done = 1 }
-      next
-    }
-    { print }
-  ' "$ZON" > "$tmp_zon"
-  if ! grep -qF "$(head -1 "$fragment")" "$tmp_zon"; then
-    echo "apply-thief-world-patch: anchor non trovato in myst.zon: $anchor" >&2
-    rm -f "$tmp_zon"
+apply_shop_products() {
+  local patch="$PATCH_DIR/myst.shp.products"
+  local tmp
+  if [ ! -f "$patch" ]; then
+    echo "apply-thief-world-patch: manca $patch" >&2
     exit 1
   fi
-  mv "$tmp_zon" "$ZON"
+  tmp="$(mktemp)"
+  awk -v patch="$patch" '
+    BEGIN {
+      while ((getline line < patch) > 0) {
+        if (line ~ /^#/ || line ~ /^[[:space:]]*$/) continue
+        split(line, kv, ":")
+        shop = kv[1]
+        n = split(kv[2], prods, ",")
+        shop_count[shop] = n
+        for (i = 1; i <= n; i++) shop_prod[shop, i] = prods[i]
+      }
+      close(patch)
+    }
+    /^\#[0-9]+~$/ {
+      id = substr($0, 2)
+      sub(/~$/, "", id)
+      if (id in shop_count) {
+        print
+        for (i = 1; i <= 5; i++) {
+          if (i <= shop_count[id]) print shop_prod[id, i]
+          else print -1
+        }
+        skip = 5
+        in_shop = 1
+        next
+      }
+    }
+    skip > 0 { skip--; next }
+    { print }
+  ' "$SHP" > "$tmp"
+  mv "$tmp" "$SHP"
 }
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
@@ -187,20 +236,14 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   exit 1
 fi
 
-echo "apply-thief-world-patch: pulizia reset gilde / stanza 3076-7828 / Drunky"
+echo "apply-thief-world-patch: pulizia reset gilde / Drunky"
 strip_thief_zone_lines
 clean_guild_room_objects
 remove_act_flag_from_mob 3007 "$ACT_THIEF"
 
-need_zone_insert=1
-if patch_present && ! zone_needs_repair; then
-  need_zone_insert=0
-  echo "apply-thief-world-patch: patch gia' presente, zone ok"
-fi
-
-if ! patch_present; then
+if ! thief_objs_present; then
   if vnums_conflict; then
-    echo "apply-thief-world-patch: scegli altri vnum liberi (vedi world-reference/snippets/vnum-suggestions.txt)" >&2
+    echo "apply-thief-world-patch: vnum in conflitto — vedi world-reference/snippets/vnum-suggestions.txt" >&2
     exit 1
   fi
   echo "apply-thief-world-patch: myst.obj (#${THIEF_VNUM_FIRST}-#${THIEF_VNUM_LAST})"
@@ -211,35 +254,28 @@ if ! patch_present; then
     { print }
   ' "$OBJ" > "$tmp_obj"
   mv "$tmp_obj" "$OBJ"
-  need_zone_insert=1
-elif zone_needs_repair; then
-  echo "apply-thief-world-patch: riparo reset duplicati in myst.zon"
-  need_zone_insert=1
+else
+  echo "apply-thief-world-patch: myst.obj ingredienti già presenti"
 fi
 
-if [ "$need_zone_insert" -eq 1 ]; then
-  echo "apply-thief-world-patch: myst.zon (Spanky / gilda Myst)"
-  insert_zon_block "M 0 3022 1 3076" "$PATCH_DIR/myst.zon.after-spanky.fragment"
-  echo "apply-thief-world-patch: myst.zon (Flasite / Colosseo)"
-  insert_zon_block "M 0 7811 1 7828" "$PATCH_DIR/myst.zon.after-flasite.fragment"
+if ! shops_have_ingredients; then
+  echo "apply-thief-world-patch: myst.shp (mercanti Myst)"
+  apply_shop_products
+else
+  echo "apply-thief-world-patch: myst.shp già aggiornato"
 fi
 
-if [ "$DO_FLAVOR" -eq 1 ]; then
-  if [ ! -f "$WLD" ]; then
-    echo "apply-thief-world-patch: --flavor richiede $WLD" >&2
-    exit 1
-  fi
-  if grep -q 'estratto tossico' "$WLD"; then
-    echo "apply-thief-world-patch: flavor myst.wld gia' presente"
+if [ "$DO_FLAVOR" -eq 1 ] && [ -f "$WLD" ]; then
+  if grep -q 'reagenti da ladro' "$WLD"; then
+    echo "apply-thief-world-patch: flavor myst.wld già presente"
   else
-    echo "apply-thief-world-patch: myst.wld (descrizioni opzionali gilde ladro)"
+    echo "apply-thief-world-patch: myst.wld (testo gilde ladro)"
     tmp_wld="$(mktemp)"
     awk '
       /^#3076$/ { in3076 = 1; print; next }
       in3076 {
         if ($0 == "~" && !done3076) {
-          print "Sul piano ci sono $c0010fiale di vetro$c0007, $c0010estratto tossico$c0007,"
-          print "$c0010resina di morella$c0007 e altri reagenti da ladro."
+          print "Nell aria aleggia un debole odore di reagenti alchemici."
           done3076 = 1
           in3076 = 0
         }
@@ -249,8 +285,7 @@ if [ "$DO_FLAVOR" -eq 1 ]; then
       /^#7828$/ { in7828 = 1; print; next }
       in7828 {
         if ($0 == "~" && !done7828) {
-          print "Sul tavolo noti $c0010fiale$c0007, $c0010reagenti alchemici$c0007 e barattoli"
-          print "per la preparazione di veleni e fiale."
+          print "Senti un tenue odore di essenze e polveri da laboratorio."
           done7828 = 1
           in7828 = 0
         }
@@ -264,17 +299,15 @@ if [ "$DO_FLAVOR" -eq 1 ]; then
 fi
 
 echo "apply-thief-world-patch: verifica"
-if [ "$(grep -c "^#${THIEF_VNUM_LAST}$" "$OBJ" || true)" -ne 1 ]; then
-  echo "apply-thief-world-patch: myst.obj non contiene esattamente #${THIEF_VNUM_LAST}" >&2
+if ! thief_objs_present; then
+  echo "apply-thief-world-patch: myst.obj incompleto" >&2
   exit 1
 fi
-if [ "$(grep -cF '018000 [un estratto tossico] dato al MOB 003022' "$ZON" || true)" -ne 1 ]; then
-  echo "apply-thief-world-patch: myst.zon reset Spanky mancante" >&2
+if ! shops_have_ingredients; then
+  echo "apply-thief-world-patch: myst.shp senza ingredienti 18000-18005" >&2
   exit 1
 fi
-if [ "$(grep -cF '018000 [un estratto tossico] dato al MOB 007811' "$ZON" || true)" -ne 1 ]; then
-  echo "apply-thief-world-patch: myst.zon reset Flasite mancante" >&2
-  exit 1
-fi
-echo "OK: ingredienti ${THIEF_VNUM_FIRST}-${THIEF_VNUM_LAST} e reset gilde ladro applicati in $TARGET_DIR"
+echo "OK: ingredienti ${THIEF_VNUM_FIRST}-${THIEF_VNUM_LAST} in myst.obj; vendita in myst.shp"
+echo "  Tricky (negozio #3003, stanza 3010): estratto, resina, sale"
+echo "  Attendente (negozio #3006, stanza 3003): olio, legante, fiale"
 echo "Prossimo passo: SERVER_PORT=4003 ./docker-run.sh up -d consumer"

@@ -1,12 +1,1 @@
-G 1 18005 0 *! 018005 [una fiala di vetro] dato al MOB 007811 [Flasite, il maestro dei ladri]
-G 1 18000 0 *! 018000 [un estratto tossico] dato al MOB 007811 [Flasite, il maestro dei ladri]
-G 1 18001 0 *! 018001 [resina di morella] dato al MOB 007811 [Flasite, il maestro dei ladri]
-G 1 18002 0 *! 018002 [sale alcalino] dato al MOB 007811 [Flasite, il maestro dei ladri]
-G 1 18003 0 *! 018003 [olio volatile] dato al MOB 007811 [Flasite, il maestro dei ladri]
-G 1 18004 0 *! 018004 [agente legante] dato al MOB 007811 [Flasite, il maestro dei ladri]
-O 0 18005 3 7828 0 *! 018005 [fiale di vetro] nella gilda dei ladri del Colosseo
-O 0 18000 2 7828 0 *! 018000 [estratto tossico] nella gilda dei ladri del Colosseo
-O 0 18001 2 7828 0 *! 018001 [resina di morella] nella gilda dei ladri del Colosseo
-O 0 18002 2 7828 0 *! 018002 [sale alcalino] nella gilda dei ladri del Colosseo
-O 0 18003 2 7828 0 *! 018003 [olio volatile] nella gilda dei ladri del Colosseo
-O 0 18004 2 7828 0 *! 018004 [agente legante] nella gilda dei ladri del Colosseo
+# Nessun reset zona: ingredienti solo in vendita (vedi myst.shp.products)

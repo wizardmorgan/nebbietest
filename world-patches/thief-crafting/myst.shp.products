@@ -1,0 +1,7 @@
+# Ingredienti ladro (18000-18005) venduti da mercanti a Myst — non in gilda/Spanky
+# Formato: shop_vnum:prod1,prod2,prod3,prod4,prod5
+#
+# #3003 Tricky il mercante (stanza 3010)
+3003:3005,3006,18000,18001,18002
+# #3006 Attendente cappella (stanza 3003)
+3006:3002,3004,18003,18004,18005
