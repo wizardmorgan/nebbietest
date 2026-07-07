@@ -1,5 +1,10 @@
 #!/bin/bash
 # Copia il mudlib da root a mudroot/lib (esclude file runtime come myst.pid).
+#
+# Con mondo di produzione:
+#   1. copia i myst.* di produzione nella root del repo
+#   2. ./scripts/apply-thief-world-patch.sh [--flavor]
+#   3. ./getworldlocal
 set -euo pipefail
 cd "$(dirname "$0")"
 
