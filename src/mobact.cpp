@@ -662,22 +662,14 @@ void mobile_activity(struct char_data* ch) {
 		}
 
 		SetStatus("Gestione Aggressivi", GET_NAME(ch), ch);
-		mudlog(LOG_CHECK,
-			   "Gestione Aggressivi: %s act=0x%lx room=%d",
-			   GET_NAME(ch),
-			   static_cast<unsigned long>(ch->specials.act),
-			   ch->in_room);
 		if(IS_SET(ch->specials.act, ACT_AGGRESSIVE)) {
-			SetStatus("Aggressive FindVictim", GET_NAME(ch), ch);
 			if((tmp_ch = FindVictim(ch)) != NULL) {
-				SetStatus("Aggressive victim", GET_NAME(tmp_ch), ch);
 				if(check_peaceful(ch, "You can't seem to exercise your violent "
 								  "tendencies.\n\r")) {
 
 					act("$n ruggisce impotente.", TRUE, ch, 0, 0, TO_ROOM);
 				}
 				else {
-					SetStatus("MobHit aggressive", GET_NAME(tmp_ch), ch);
 					MobHit(ch, tmp_ch, 0);
 				}
 
@@ -685,23 +677,18 @@ void mobile_activity(struct char_data* ch) {
 			}
 		}
 		if(IS_SET(ch->specials.act, ACT_META_AGG)) {
-			SetStatus("Meta agg scan", GET_NAME(ch), ch);
 			for(k=0; k<=5; k++) {
 				tmp_ch = FindMetaVictim(ch);
 				if(tmp_ch) {
-					SetStatus("Meta agg victim", GET_NAME(tmp_ch), ch);
 					if(check_peaceful(ch, "You can't seem to exercise your violent tendencies.\n\r")) {
 						act("$n ruggisce impotente.", TRUE, ch, 0, 0, TO_ROOM);
 						return;
 					}
-					SetStatus("MobHit meta-agg", GET_NAME(tmp_ch), ch);
 					MobHit(ch, tmp_ch, 0);
 					return;
 				}
 			}
 		}
-
-		SetStatus("Post Aggressivi", GET_NAME(ch), ch);
 
 		if(ch->nMagicNumber != CHAR_VALID_MAGIC) {
 			mudlog(LOG_SYSERR,
