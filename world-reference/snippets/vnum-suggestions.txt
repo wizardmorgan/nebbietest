@@ -1,0 +1,8 @@
+max_object_vnum=99999
+
+# Primi blocchi liberi di 6 vnum consecutivi (>= 18000):
+  18000-18005
+  18001-18006
+  18002-18007
+  18003-18008
+  18004-18009

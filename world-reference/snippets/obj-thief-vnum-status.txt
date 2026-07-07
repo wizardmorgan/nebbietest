@@ -1,0 +1,38 @@
+# Stato vnum ingredienti ladro (attesi 18500-18505 in codice)
+OCCUPIED #18500
+  #18500
+  portale~
+  Un portale~
+  Il portale aleggia nell'aria come uno strappo nello spazio circostante.~
+  ~
+
+OCCUPIED #18501
+  #18501
+  clessidra avorio~
+  Una Clessidra d'Avorio~
+  Una fragile clessidra e' qui su un ripiano.~
+  ~
+
+OCCUPIED #18502
+  #18502
+  otre abbondanza~
+  L'Otre dell'Abbondanza~
+  Un otre di pelle e' qui per terra.~
+  ~
+
+FREE #18503
+
+OCCUPIED #18504
+  #18504
+  lente monocolo individuazione~
+  Il Monocolo dell'Individuazione~
+  Una fragile lente di cristallo e' qui per terra.~
+  ~
+
+OCCUPIED #18505
+  #18505
+  gemma potere~
+  La Gemma del Potere~
+  Una gemma e' stata abbandonata qui.~
+  ~
+

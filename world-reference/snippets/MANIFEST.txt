@@ -1,0 +1,9 @@
+generated_at=2026-07-07T19:09:43+02:00
+source_dir=/home/nebbie/docker-vms/nebbietest-new-thief/mudroot/lib
+file myst.mob size=1203689 lines=50709
+file myst.obj size=927052 lines=54827
+file myst.wld size=4341830 lines=210422
+file myst.zon size=1811610 lines=32682
+file myst.spe size=23158 lines=1124
+file myst.shp size=28674 lines=2292
+full_copy_dir=/home/nebbie/docker-vms/nebbietest-new-thief/world-reference/production
