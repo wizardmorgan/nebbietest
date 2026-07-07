@@ -207,7 +207,7 @@ apply_shop_products() {
       }
       return 0
     }
-    /^\#[0-9]+~$/ {
+    /^#[0-9]+~$/ {
       id = substr($0, 2)
       sub(/~$/, "", id)
       print
