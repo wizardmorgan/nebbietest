@@ -102,10 +102,11 @@ else
   fail=1
 fi
 
-if grep -q '^#18500' "./${DATA_DIR}/myst.obj" 2>/dev/null; then
-  echo "OK  ingredienti ladro #18500 in ${DATA_DIR}/myst.obj"
+if grep -q '^#18000' "./${DATA_DIR}/myst.obj" 2>/dev/null \
+    && grep -qF 'toxic extract estratto tossico' "./${DATA_DIR}/myst.obj" 2>/dev/null; then
+  echo "OK  ingredienti ladro #18000 in ${DATA_DIR}/myst.obj"
 else
-  echo "WARN #18500 non trovato — ./scripts/prepare-mudlib.sh"
+  echo "WARN #18000 (ingredienti ladro) non trovato — ./scripts/apply-production-world-patch.sh"
 fi
 
 if [ -f "./${DATA_DIR}/myst.pid" ]; then

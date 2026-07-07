@@ -17,6 +17,13 @@ TARGET_DIR="$ROOT/mudroot/lib"
 DO_FLAVOR=0
 CHECK_ONLY=0
 
+# Allineati a world-patches/thief-crafting/VNUMS.txt (produzione: 18500-18505 occupati)
+THIEF_VNUMS=(18000 18001 18002 18003 18004 18005)
+THIEF_VNUM_FIRST=18000
+THIEF_VNUM_LAST=18005
+THIEF_MARKER_OBJ='toxic extract estratto tossico'
+THIEF_MARKER_ZON='018000 \[un estratto tossico\] dato al MOB 003022'
+
 usage() {
   sed -n '2,12p' "$0"
 }
@@ -59,9 +66,28 @@ for f in "$OBJ" "$ZON"; do
 done
 
 patch_present() {
-  grep -q '^#18500$' "$OBJ" \
-    && grep -q '018500 \[un estratto tossico\] dato al MOB 003022' "$ZON" \
-    && grep -q '018500 \[un estratto tossico\] dato al MOB 007811' "$ZON"
+  grep -q "^#${THIEF_VNUM_FIRST}$" "$OBJ" \
+    && grep -qF "$THIEF_MARKER_OBJ" "$OBJ" \
+    && grep -qF '018000 [un estratto tossico] dato al MOB 003022' "$ZON" \
+    && grep -qF '018000 [un estratto tossico] dato al MOB 007811' "$ZON"
+}
+
+vnums_conflict() {
+  local v
+  for v in "${THIEF_VNUMS[@]}"; do
+    if grep -q "^#${v}$" "$OBJ"; then
+      if ! grep -qF "$THIEF_MARKER_OBJ" "$OBJ" || ! grep -A6 "^#${v}$" "$OBJ" | grep -qF "$THIEF_MARKER_OBJ"; then
+        echo "apply-thief-world-patch: vnum #$v già occupato in myst.obj" >&2
+        awk -v target="$v" '
+          $0 == "#" target { show=1 }
+          show { print }
+          show && $0 == "~" { exit }
+        ' "$OBJ" | sed 's/^/  /' >&2
+        return 0
+      fi
+    fi
+  done
+  return 1
 }
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
@@ -76,7 +102,11 @@ fi
 if patch_present; then
   echo "apply-thief-world-patch: già applicata in $TARGET_DIR"
 else
-  echo "apply-thief-world-patch: myst.obj (#18500-18505)"
+  if vnums_conflict; then
+    echo "apply-thief-world-patch: scegli altri vnum liberi (vedi world-reference/snippets/vnum-suggestions.txt)" >&2
+    exit 1
+  fi
+  echo "apply-thief-world-patch: myst.obj (#${THIEF_VNUM_FIRST}-#${THIEF_VNUM_LAST})"
   tmp_obj="$(mktemp)"
   awk -v frag="$PATCH_DIR/myst.obj.fragment" '
     BEGIN { while ((getline line < frag) > 0) block = block line ORS; close(frag) }
@@ -154,13 +184,17 @@ if [ "$DO_FLAVOR" -eq 1 ]; then
 fi
 
 echo "apply-thief-world-patch: verifica"
-if [ "$(grep -c '^#18505$' "$OBJ" || true)" -ne 1 ]; then
-  echo "apply-thief-world-patch: myst.obj non contiene esattamente #18505" >&2
+if [ "$(grep -c "^#${THIEF_VNUM_LAST}$" "$OBJ" || true)" -ne 1 ]; then
+  echo "apply-thief-world-patch: myst.obj non contiene esattamente #${THIEF_VNUM_LAST}" >&2
   exit 1
 fi
-if [ "$(grep -c '018500 \[un estratto tossico\]' "$ZON" || true)" -ne 2 ]; then
-  echo "apply-thief-world-patch: myst.zon non contiene i reset ingredienti attesi" >&2
+if [ "$(grep -cF '018000 [un estratto tossico] dato al MOB 003022' "$ZON" || true)" -ne 1 ]; then
+  echo "apply-thief-world-patch: myst.zon reset Spanky mancante" >&2
   exit 1
 fi
-echo "OK: ingredienti 18500-18505 e reset gilde ladro applicati in $TARGET_DIR"
+if [ "$(grep -cF '018000 [un estratto tossico] dato al MOB 007811' "$ZON" || true)" -ne 1 ]; then
+  echo "apply-thief-world-patch: myst.zon reset Flasite mancante" >&2
+  exit 1
+fi
+echo "OK: ingredienti ${THIEF_VNUM_FIRST}-${THIEF_VNUM_LAST} e reset gilde ladro applicati in $TARGET_DIR"
 echo "Prossimo passo: SERVER_PORT=4003 ./docker-run.sh up -d consumer"

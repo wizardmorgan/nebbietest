@@ -967,6 +967,18 @@ M 0 3013 1 3005 *!003013 [La Custode del tempio di Eros] caricato nella stanza 0
 M 0 3020 1 3050 *!003020 [Mork il maestro dei maghi] caricato nella stanza 003050 [La Cima della Torre]
 M 0 3021 1 3044 *!003021 [Opus il maestro dei chierici] caricato nella stanza 003044 [L'altare]
 M 0 3022 1 3076 *!003022 [Spanky il maestro dei ladri] caricato nella stanza 003076 [La stanza del maestro dei Ladri]
+G 1 18005 0 *! 018005 [una fiala di vetro] dato al MOB 003022 [Spanky il maestro dei ladri]
+G 1 18000 0 *! 018000 [un estratto tossico] dato al MOB 003022 [Spanky il maestro dei ladri]
+G 1 18001 0 *! 018001 [resina di morella] dato al MOB 003022 [Spanky il maestro dei ladri]
+G 1 18002 0 *! 018002 [sale alcalino] dato al MOB 003022 [Spanky il maestro dei ladri]
+G 1 18003 0 *! 018003 [olio volatile] dato al MOB 003022 [Spanky il maestro dei ladri]
+G 1 18004 0 *! 018004 [agente legante] dato al MOB 003022 [Spanky il maestro dei ladri]
+O 0 18005 3 3076 0 *! 018005 [fiale di vetro] nella gilda dei ladri Myst
+O 0 18000 2 3076 0 *! 018000 [estratto tossico] nella gilda dei ladri Myst
+O 0 18001 2 3076 0 *! 018001 [resina di morella] nella gilda dei ladri Myst
+O 0 18002 2 3076 0 *! 018002 [sale alcalino] nella gilda dei ladri Myst
+O 0 18003 2 3076 0 *! 018003 [olio volatile] nella gilda dei ladri Myst
+O 0 18004 2 3076 0 *! 018004 [agente legante] nella gilda dei ladri Myst
 G 1 18505 0 *! 018505 [una fiala di vetro] dato al MOB 003022 [Spanky il maestro dei ladri]
 G 1 18500 0 *! 018500 [un estratto tossico] dato al MOB 003022 [Spanky il maestro dei ladri]
 G 1 18501 0 *! 018501 [resina di morella] dato al MOB 003022 [Spanky il maestro dei ladri]
@@ -1927,6 +1939,18 @@ M 0 7808 1 7825 *!007808 [Alrani, il maestro degli psionici] caricato nella stan
 M 0 7806 1 7824 *!007806 [Mei-Chan, il maestro dei monaci] caricato nella stanza 007824 [Stanza dei Monaci]
 M 0 7810 1 7820 *!007810 [Ayle, il maestro dei barbari] caricato nella stanza 007820 [Stanza dei Barbari]
 M 0 7811 1 7828 *!007811 [Flasite, il maestro dei ladri] caricato nella stanza 007828 [La vera stanza del maestro]
+G 1 18005 0 *! 018005 [una fiala di vetro] dato al MOB 007811 [Flasite, il maestro dei ladri]
+G 1 18000 0 *! 018000 [un estratto tossico] dato al MOB 007811 [Flasite, il maestro dei ladri]
+G 1 18001 0 *! 018001 [resina di morella] dato al MOB 007811 [Flasite, il maestro dei ladri]
+G 1 18002 0 *! 018002 [sale alcalino] dato al MOB 007811 [Flasite, il maestro dei ladri]
+G 1 18003 0 *! 018003 [olio volatile] dato al MOB 007811 [Flasite, il maestro dei ladri]
+G 1 18004 0 *! 018004 [agente legante] dato al MOB 007811 [Flasite, il maestro dei ladri]
+O 0 18005 3 7828 0 *! 018005 [fiale di vetro] nella gilda dei ladri del Colosseo
+O 0 18000 2 7828 0 *! 018000 [estratto tossico] nella gilda dei ladri del Colosseo
+O 0 18001 2 7828 0 *! 018001 [resina di morella] nella gilda dei ladri del Colosseo
+O 0 18002 2 7828 0 *! 018002 [sale alcalino] nella gilda dei ladri del Colosseo
+O 0 18003 2 7828 0 *! 018003 [olio volatile] nella gilda dei ladri del Colosseo
+O 0 18004 2 7828 0 *! 018004 [agente legante] nella gilda dei ladri del Colosseo
 G 1 18505 0 *! 018505 [una fiala di vetro] dato al MOB 007811 [Flasite, il maestro dei ladri]
 G 1 18500 0 *! 018500 [un estratto tossico] dato al MOB 007811 [Flasite, il maestro dei ladri]
 G 1 18501 0 *! 018501 [resina di morella] dato al MOB 007811 [Flasite, il maestro dei ladri]

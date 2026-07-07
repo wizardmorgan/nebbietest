@@ -29,7 +29,7 @@ Poi avvio:
 
 Cosa aggiunge la patch (solo in lib, non in root)
 -------------------------------------------------
-  myst.obj  — vnum 18500-18505
+  myst.obj  — vnum 18000-18005 (vedi VNUMS.txt; 18500-18505 occupati in produzione)
   myst.zon  — reset ingredienti gilde ladro
   myst.wld  — testo opzionale (--flavor) stanze 3076 / 7828
 
