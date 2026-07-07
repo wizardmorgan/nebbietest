@@ -34,3 +34,13 @@ Cosa aggiunge la patch (solo in lib, non in root)
   myst.wld  — testo opzionale (--flavor) stanze 3076 / 7828
 
 In git restano solo i fragment in questa cartella.
+
+Riferimento produzione per agenti
+---------------------------------
+I vnum 18500-18505 possono essere GIÀ occupati nel mondo live. Prima di patchare:
+
+  ./scripts/export-production-world-reference.sh
+  git add world-reference/snippets/ && git commit -m "Update production world reference"
+
+Gli agent leggono world-reference/snippets/ (e .cursor/rules/production-world.mdc).
+Vedi world-reference/README.md.

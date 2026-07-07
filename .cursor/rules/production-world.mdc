@@ -1,0 +1,36 @@
+---
+description: Riferimento mondo produzione per patch world e vnum
+globs:
+  - world-patches/**
+  - world-reference/**
+  - mudroot/lib/**
+  - myst.*
+  - scripts/*world*
+  - scripts/*mudlib*
+---
+
+# Mondo produzione vs stub
+
+- **Root `myst.*`**: stub dev del progetto, in git. Non usare per vnum live.
+- **`mudroot/lib/myst.*`**: runtime; sulla macchina dell’utente è il mondo di produzione.
+- **`world-reference/snippets/`**: estratti committati dal mondo produzione reale — **leggere sempre prima di patchare**.
+
+## Prima di modificare patch ladro o vnum
+
+1. Leggi `world-reference/snippets/obj-thief-vnum-status.txt` (18500–18505 occupati?)
+2. Leggi `world-reference/snippets/vnum-suggestions.txt` (blocchi liberi)
+3. Leggi `zone-spanky.context.txt` e `zone-flasite.context.txt` per ancore zone
+4. Se esiste `world-reference/production/myst.obj` (locale), usalo come sorgente canonica
+
+## Non fare
+
+- Non assumere che la patch in `world-patches/thief-crafting/` sia applicabile così com’è se i vnum sono occupati.
+- Non eseguire `getworldlocal` dopo aver copiato il mondo di produzione in `mudroot/lib/`.
+
+## Rigenerare riferimento (utente)
+
+```bash
+./scripts/export-production-world-reference.sh
+# opzionale copia completa locale: --full-copy
+git add world-reference/snippets/
+```
