@@ -119,6 +119,11 @@ strip_thief_zone_lines() {
   tmp="$(mktemp)"
   awk '
     function is_ing_line(line,    i, v) {
+      if (line ~ /^O 0 /) {
+        v = $2 + 0
+        if (v >= 18000 && v <= 18005) return 1
+        if (v >= 18500 && v <= 18505) return 1
+      }
       if (line !~ /^[GO] /) return 0
       for (i = 0; i < 6; i++) {
         v = 18000 + i
@@ -128,7 +133,7 @@ strip_thief_zone_lines() {
         v = 18500 + i
         if (index(line, " " v " ")) return 1
       }
-      if (line ~ /^G 1 (1800|1850)/ && (index(line, "003022") || index(line, "007811"))) return 1
+      if (line ~ /^G 1 (1800|1850)/) return 1
       return 0
     }
     {
@@ -140,18 +145,7 @@ strip_thief_zone_lines() {
 }
 
 clean_guild_room_objects() {
-  local tmp
-  tmp="$(mktemp)"
-  awk '
-    /^O 0 / {
-      room = $4 + 0
-      vnum = $2 + 0
-      if ((room == 3076 || room == 7828) && (vnum < 18000 || vnum > 18005)) next
-      if ((room == 3076 || room == 7828) && (vnum >= 18000 && vnum <= 18005)) next
-    }
-    { print }
-  ' "$ZON" > "$tmp"
-  mv "$tmp" "$ZON"
+  : # tutti gli O ingredienti rimossi da strip_thief_zone_lines
 }
 
 remove_act_flag_from_mob() {
@@ -201,27 +195,42 @@ apply_shop_products() {
         if (line ~ /^#/ || line ~ /^[[:space:]]*$/) continue
         split(line, kv, ":")
         shop = kv[1]
-        n = split(kv[2], prods, ",")
-        shop_count[shop] = n
-        for (i = 1; i <= n; i++) shop_prod[shop, i] = prods[i]
+        n = split(kv[2], adds, ",")
+        add_count[shop] = n
+        for (i = 1; i <= n; i++) add_vnum[shop, i] = adds[i] + 0
       }
       close(patch)
+    }
+    function shop_has_vnum(v,    i) {
+      for (i = 1; i <= 5; i++) {
+        if (cur_prod[i] == v) return 1
+      }
+      return 0
     }
     /^\#[0-9]+~$/ {
       id = substr($0, 2)
       sub(/~$/, "", id)
-      if (id in shop_count) {
-        print
+      print
+      if (id in add_count) {
         for (i = 1; i <= 5; i++) {
-          if (i <= shop_count[id]) print shop_prod[id, i]
-          else print -1
+          getline line
+          cur_prod[i] = line + 0
         }
-        skip = 5
-        in_shop = 1
+        ai = 1
+        for (i = 1; i <= 5; i++) {
+          if (cur_prod[i] == -1 && ai <= add_count[id]) {
+            while (ai <= add_count[id] && shop_has_vnum(add_vnum[id, ai])) ai++
+            if (ai <= add_count[id]) {
+              cur_prod[i] = add_vnum[id, ai]
+              ai++
+            }
+          }
+        }
+        for (i = 1; i <= 5; i++) print cur_prod[i]
         next
       }
+      next
     }
-    skip > 0 { skip--; next }
     { print }
   ' "$SHP" > "$tmp"
   mv "$tmp" "$SHP"
@@ -308,6 +317,7 @@ if ! shops_have_ingredients; then
   exit 1
 fi
 echo "OK: ingredienti ${THIEF_VNUM_FIRST}-${THIEF_VNUM_LAST} in myst.obj; vendita in myst.shp"
-echo "  Tricky (negozio #3003, stanza 3010): estratto, resina, sale"
-echo "  Attendente (negozio #3006, stanza 3003): olio, legante, fiale"
+echo "  Negozio #3005 (stanza 3018): +estratto, resina, sale"
+echo "  Negozio #3006 (stanza 3003): +olio, legante, fiale"
+echo "  (solo slot liberi — nessun oggetto a terra)"
 echo "Prossimo passo: SERVER_PORT=4003 ./docker-run.sh up -d consumer"

@@ -17,9 +17,10 @@ Workflow produzione (il tuo caso)
   ./scripts/apply-production-world-patch.sh
   ./scripts/apply-production-world-patch.sh --check
 
-Ingredienti ladro (vnum 18000-18005): venduti da mercanti a Myst, non in gilda.
-  Tricky — negozio #3003, stanza 3010 (estratto, resina, sale)
-  Attendente — negozio #3006, stanza 3003 (olio, legante, fiale)
+Ingredienti ladro (vnum 18000-18005): solo in vendita, mai a terra.
+  Negozio #3005 (stanza 3018) — aggiunge 3 prodotti negli slot liberi
+  Negozio #3006 (stanza 3003) — aggiunge 3 prodotti negli slot liberi
+  I prodotti esistenti dei negozianti non vengono sostituiti.
 
 Cosa aggiunge la patch
 ----------------------
