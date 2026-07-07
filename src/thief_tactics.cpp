@@ -549,7 +549,6 @@ void thief_send_guild_practice_list(struct char_data* ch) {
 				how_good(ch->skills[ent.skill].learned));
 		send_to_char(buf, ch);
 	}
-	send_to_char("Usa 'skills t' per l'elenco completo della classe ladro.\n\r", ch);
 }
 
 bool thief_append_skill_sheet_line(struct char_data* ch, std::string& buffer,
