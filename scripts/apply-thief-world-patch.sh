@@ -1,9 +1,9 @@
 #!/bin/bash
 # Applica al mudlib di produzione solo le modifiche mondo per il crafting ladro.
 #
-# I myst.* di produzione non sono in git. Usa prepare-mudlib.sh:
-#   MYST_WORLD_SRC=/path/produzione ./scripts/prepare-mudlib.sh
-#   oppure copia in mudroot/lib/ e: ./scripts/prepare-mudlib.sh
+# Applica solo i fragment ladro su myst.* già in mudroot/lib (tipicamente produzione).
+# Gli stub in root del repo non vanno patchati da qui — usa APPLY_THIEF_WORLD_PATCH=1 ./getworldlocal
+# Produzione: ./scripts/apply-production-world-patch.sh [--flavor]
 #
 # Opzioni:
 #   --dir PATH   directory con myst.obj / myst.zon / myst.wld (default: mudroot/lib)

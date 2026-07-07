@@ -1,38 +1,36 @@
-Patch crafting ladro (oggetti 18500-18505) — mondo di produzione NON in git
-================================================================================
+Patch crafting ladro — mondo di PRODUZIONE (non in git)
+========================================================
 
-Nel repository ci sono solo i fragment in questa cartella:
-  myst.obj.fragment
-  myst.zon.after-spanky.fragment
-  myst.zon.after-flasite.fragment
+Due mondi distinti
+------------------
+1. Root repo (myst.mob, myst.obj, …) — stub "monchi" del progetto, IN GIT.
+   Copiati in lib con:  ./getworldlocal
 
-I file myst.mob / myst.obj / myst.wld / myst.zon / myst.spe / myst.shp di
-produzione restano sulla macchina locale (es. mudroot/lib/) e non vanno pushati.
+2. mudroot/lib/myst.* — runtime Docker. Se copi qui il mondo di produzione
+   completo, resta SOLO LOCALE (già escluso da git via mudroot/lib/.gitignore).
 
-Workflow nucbuntu / Docker
---------------------------
-1. Copia il mondo di produzione (una tantum o dopo aggiornamento produzione):
+NON fare getworldlocal dopo aver messo il mondo di produzione in mudroot/lib:
+sostituiresti i file buoni con gli stub.
 
-     cp /path/backup/produzione/myst.{mob,obj,wld,zon,spe,shp} mudroot/lib/
+Workflow produzione (il tuo caso)
+---------------------------------
+Hai già copiato i file buoni in mudroot/lib per fixare i crash:
 
-   Oppure:
+  ./scripts/apply-production-world-patch.sh --flavor
+  ./scripts/apply-production-world-patch.sh --check
 
-     MYST_WORLD_SRC=/path/backup/produzione ./scripts/prepare-mudlib.sh
+Oppure da backup esterno:
 
-2. Applica la patch ladro (idempotente):
+  MYST_WORLD_SRC=/path/backup/produzione ./scripts/apply-production-world-patch.sh --flavor
 
-     ./scripts/prepare-mudlib.sh --flavor
+Poi avvio:
 
-3. Avvia il MUD:
+  SERVER_PORT=4003 ./docker-run.sh up -d consumer
 
-     SERVER_PORT=4003 ./docker-run.sh up -d consumer
+Cosa aggiunge la patch (solo in lib, non in root)
+-------------------------------------------------
+  myst.obj  — vnum 18500-18505
+  myst.zon  — reset ingredienti gilde ladro
+  myst.wld  — testo opzionale (--flavor) stanze 3076 / 7828
 
-4. Verifica:
-
-     ./scripts/prepare-mudlib.sh --check
-
-File toccati dalla patch
-------------------------
-  myst.obj  — vnum 18500-18505 (ingredienti e fiale)
-  myst.zon  — reset G/O gilde ladro Myst (3076) e Colosseo (7828)
-  myst.wld  — solo con --flavor (testo descrittivo stanze)
+In git restano solo i fragment in questa cartella.

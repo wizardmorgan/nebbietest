@@ -233,13 +233,6 @@ bugs
 utilities/convert
 /build/
 /release.h
-# Mondo di produzione (privato) — mai committare; patch in world-patches/
-/myst.mob
-/myst.obj
-/myst.wld
-/myst.zon
-/myst.spe
-/myst.shp
 mudroot/log.txt
 myst.pid
 mudroot/lib/myst.pid

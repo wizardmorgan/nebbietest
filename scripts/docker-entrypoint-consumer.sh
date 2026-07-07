@@ -70,15 +70,17 @@ if [ ! -f /app/mudroot/lib/myst.mob ]; then
   if [ -n "${MYST_WORLD_SRC:-}" ] && [ -x /app/scripts/prepare-mudlib.sh ]; then
     echo "[consumer] mudlib assente — prepare-mudlib da MYST_WORLD_SRC"
     /app/scripts/prepare-mudlib.sh
+  elif [ -f /app/myst.mob ] && [ -x /app/getworldlocal ]; then
+    echo "[consumer] mudlib assente — copia stub da root con getworldlocal"
+    /app/getworldlocal
   fi
 fi
 
 if [ ! -f /app/mudroot/lib/myst.mob ]; then
   echo "[consumer] ERROR: /app/mudroot/lib/myst.mob missing (mudlib not installed)."
-  echo "[consumer] Il mondo di produzione non è nel repository git."
-  echo "[consumer]   cp /path/produzione/myst.* mudroot/lib/"
-  echo "[consumer]   ./scripts/prepare-mudlib.sh"
-  echo "[consumer]   oppure: MYST_WORLD_SRC=/path/produzione ./scripts/prepare-mudlib.sh"
+  echo "[consumer] Dev: ./getworldlocal  |  Produzione: cp myst.* in mudroot/lib/"
+  echo "[consumer]   ./scripts/apply-production-world-patch.sh"
+  echo "[consumer]   oppure: MYST_WORLD_SRC=/path/produzione ./scripts/apply-production-world-patch.sh"
   exit 1
 fi
 

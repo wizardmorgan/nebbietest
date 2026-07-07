@@ -124,11 +124,12 @@ ensure_mudlib() {
     if myst_lib_ready; then
         return 0
     fi
-    if [ -x "./scripts/prepare-mudlib.sh" ]; then
-        if [ -n "${MYST_WORLD_SRC:-}" ]; then
-            echo "Prepara mudlib da MYST_WORLD_SRC in mudroot/lib/..."
-            ./scripts/prepare-mudlib.sh
-        fi
+    if [ -n "${MYST_WORLD_SRC:-}" ] && [ -x "./scripts/prepare-mudlib.sh" ]; then
+        echo "Prepara mudlib produzione da MYST_WORLD_SRC in mudroot/lib/..."
+        ./scripts/prepare-mudlib.sh
+    elif [ -f "./myst.mob" ] && [ -x "./getworldlocal" ]; then
+        echo "Copia stub mudlib (root -> mudroot/lib) con ./getworldlocal"
+        ./getworldlocal
     fi
     myst_lib_ready
 }
@@ -190,9 +191,12 @@ cmd_doctor() {
         if [ -x ./scripts/prepare-mudlib.sh ]; then
             ./scripts/prepare-mudlib.sh --check 2>/dev/null || echo "WARN patch ladro non applicata — ./scripts/prepare-mudlib.sh"
         fi
+    elif [ -f ./myst.mob ]; then
+        echo "WARN stub in root ma non in mudroot/lib — dev: ./getworldlocal"
+        echo "     produzione: cp myst.* mudroot/lib/ && ./scripts/apply-production-world-patch.sh"
     else
-        echo "MISS mudlib — copia myst.* di produzione in mudroot/lib/ (non in git)"
-        echo "      MYST_WORLD_SRC=/path/produzione ./scripts/prepare-mudlib.sh"
+        echo "MISS mudlib — dev: ./getworldlocal  |  produzione: cp myst.* in mudroot/lib/"
+        echo "      MYST_WORLD_SRC=/path/produzione ./scripts/apply-production-world-patch.sh"
     fi
     echo ""
     echo "Log consumer:"
@@ -226,8 +230,9 @@ if [ "${1:-}" = "up" ] && will_start_consumer "$@" && printf '%s\n' "$@" | grep 
     if ! myst_lib_ready; then
         echo ""
         echo "=== mudlib mancante in mudroot/lib/ ==="
-        echo "  cp /path/produzione/myst.* mudroot/lib/"
-        echo "  ./scripts/prepare-mudlib.sh"
+        echo "  Dev (stub):     ./getworldlocal"
+        echo "  Produzione:     cp /path/produzione/myst.* mudroot/lib/"
+        echo "                  ./scripts/apply-production-world-patch.sh --flavor"
         echo "  SERVER_PORT=${SERVER_PORT:-4003} ./docker-run.sh up -d consumer"
         echo ""
         exit 1
