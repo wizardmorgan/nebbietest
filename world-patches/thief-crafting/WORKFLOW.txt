@@ -1,0 +1,38 @@
+Patch crafting ladro (oggetti 18500-18505) — mondo di produzione NON in git
+================================================================================
+
+Nel repository ci sono solo i fragment in questa cartella:
+  myst.obj.fragment
+  myst.zon.after-spanky.fragment
+  myst.zon.after-flasite.fragment
+
+I file myst.mob / myst.obj / myst.wld / myst.zon / myst.spe / myst.shp di
+produzione restano sulla macchina locale (es. mudroot/lib/) e non vanno pushati.
+
+Workflow nucbuntu / Docker
+--------------------------
+1. Copia il mondo di produzione (una tantum o dopo aggiornamento produzione):
+
+     cp /path/backup/produzione/myst.{mob,obj,wld,zon,spe,shp} mudroot/lib/
+
+   Oppure:
+
+     MYST_WORLD_SRC=/path/backup/produzione ./scripts/prepare-mudlib.sh
+
+2. Applica la patch ladro (idempotente):
+
+     ./scripts/prepare-mudlib.sh --flavor
+
+3. Avvia il MUD:
+
+     SERVER_PORT=4003 ./docker-run.sh up -d consumer
+
+4. Verifica:
+
+     ./scripts/prepare-mudlib.sh --check
+
+File toccati dalla patch
+------------------------
+  myst.obj  — vnum 18500-18505 (ingredienti e fiale)
+  myst.zon  — reset G/O gilde ladro Myst (3076) e Colosseo (7828)
+  myst.wld  — solo con --flavor (testo descrittivo stanze)

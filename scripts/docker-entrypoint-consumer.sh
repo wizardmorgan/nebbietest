@@ -67,21 +67,27 @@ if [ ! -x /app/mudroot/myst ]; then
 fi
 
 if [ ! -f /app/mudroot/lib/myst.mob ]; then
-  if [ -f /app/myst.mob ]; then
-    echo "[consumer] mudlib assente in mudroot/lib — copia da ./getworldlocal"
-    if [ -x /app/getworldlocal ]; then
-      /app/getworldlocal
-    else
-      cp -v /app/myst.mob /app/myst.obj /app/myst.wld /app/myst.zon /app/myst.spe /app/myst.shp /app/mudroot/lib/ 2>/dev/null || true
-    fi
+  if [ -n "${MYST_WORLD_SRC:-}" ] && [ -x /app/scripts/prepare-mudlib.sh ]; then
+    echo "[consumer] mudlib assente — prepare-mudlib da MYST_WORLD_SRC"
+    /app/scripts/prepare-mudlib.sh
   fi
 fi
 
 if [ ! -f /app/mudroot/lib/myst.mob ]; then
   echo "[consumer] ERROR: /app/mudroot/lib/myst.mob missing (mudlib not installed)."
-  echo "[consumer] Dalla root del repo esegui: ./getworldlocal"
-  echo "[consumer]   (copia myst.mob myst.obj myst.wld ... da /app/ a mudroot/lib/)"
+  echo "[consumer] Il mondo di produzione non è nel repository git."
+  echo "[consumer]   cp /path/produzione/myst.* mudroot/lib/"
+  echo "[consumer]   ./scripts/prepare-mudlib.sh"
+  echo "[consumer]   oppure: MYST_WORLD_SRC=/path/produzione ./scripts/prepare-mudlib.sh"
   exit 1
+fi
+
+# Applica patch ladro se mudlib presente ma non ancora patchato
+if [ -x /app/scripts/apply-thief-world-patch.sh ]; then
+  if ! /app/scripts/apply-thief-world-patch.sh --dir /app/mudroot/lib --check 2>/dev/null; then
+    echo "[consumer] applico patch crafting ladro su mudroot/lib..."
+    /app/scripts/apply-thief-world-patch.sh --dir /app/mudroot/lib || true
+  fi
 fi
 
 export MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DB="${MYSQL_DB:-nebbie}"

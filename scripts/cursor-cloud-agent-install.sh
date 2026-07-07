@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bootstrap idempotente per Cursor Cloud Agents (vedi .cursor/environment.json).
-# Installa dipendenze di sistema mancanti + bootstrap repo (getworldlocal).
+# Installa dipendenze di sistema mancanti (mudlib produzione non è in git).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,8 +29,9 @@ install_apt sshpass || true
 install_apt git || true
 install_apt openssh-client || true
 
-if [[ -x "$ROOT/getworldlocal" ]]; then
-  "$ROOT/getworldlocal"
+# Mudlib di produzione non è in git — prepare-mudlib solo se MYST_WORLD_SRC è impostato
+if [[ -n "${MYST_WORLD_SRC:-}" && -x "$ROOT/scripts/prepare-mudlib.sh" ]]; then
+  "$ROOT/scripts/prepare-mudlib.sh"
 fi
 
 if command -v sshpass >/dev/null 2>&1; then

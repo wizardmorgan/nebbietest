@@ -1,20 +1,19 @@
 #!/bin/bash
 # Applica al mudlib di produzione solo le modifiche mondo per il crafting ladro.
 #
-# Uso (dopo aver copiato i myst.* di produzione nella root del repo):
-#   cp /path/produzione/myst.* .
-#   ./scripts/apply-thief-world-patch.sh
-#   ./getworldlocal
+# I myst.* di produzione non sono in git. Usa prepare-mudlib.sh:
+#   MYST_WORLD_SRC=/path/produzione ./scripts/prepare-mudlib.sh
+#   oppure copia in mudroot/lib/ e: ./scripts/prepare-mudlib.sh
 #
 # Opzioni:
-#   --dir PATH   directory con myst.obj / myst.zon / myst.wld (default: repo root)
+#   --dir PATH   directory con myst.obj / myst.zon / myst.wld (default: mudroot/lib)
 #   --flavor     aggiorna anche le descrizioni stanza 3076 e 7828 in myst.wld
 #   --check      verifica che la patch sia presente, senza modificare file
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PATCH_DIR="$ROOT/world-patches/thief-crafting"
-TARGET_DIR="$ROOT"
+TARGET_DIR="$ROOT/mudroot/lib"
 DO_FLAVOR=0
 CHECK_ONLY=0
 
@@ -155,7 +154,13 @@ if [ "$DO_FLAVOR" -eq 1 ]; then
 fi
 
 echo "apply-thief-world-patch: verifica"
-grep -c '^#1850[0-5]$' "$OBJ" | xargs -I{} test {} -eq 6
-grep -c '01850[0-5]' "$ZON" | xargs -I{} test {} -eq 24
+if [ "$(grep -c '^#18505$' "$OBJ" || true)" -ne 1 ]; then
+  echo "apply-thief-world-patch: myst.obj non contiene esattamente #18505" >&2
+  exit 1
+fi
+if [ "$(grep -c '018500 \[un estratto tossico\]' "$ZON" || true)" -ne 2 ]; then
+  echo "apply-thief-world-patch: myst.zon non contiene i reset ingredienti attesi" >&2
+  exit 1
+fi
 echo "OK: ingredienti 18500-18505 e reset gilde ladro applicati in $TARGET_DIR"
-echo "Prossimo passo: ./getworldlocal"
+echo "Prossimo passo: SERVER_PORT=4003 ./docker-run.sh up -d consumer"

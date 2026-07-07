@@ -17,13 +17,16 @@ echo "==> 1/4 MySQL"
 
 echo "==> 2/5 Mudlib"
 if ! [ -f ./mudroot/lib/myst.mob ]; then
-    if [ -f ./myst.mob ]; then
-        ./getworldlocal
+    if [ -n "${MYST_WORLD_SRC:-}" ]; then
+        ./scripts/prepare-mudlib.sh
     else
-        echo "ERRORE: myst.mob non trovato ne' in root ne' in mudroot/lib"
-        echo "  ./getworld   # da server Nebbie"
+        echo "ERRORE: myst.mob non trovato in mudroot/lib"
+        echo "  cp /path/produzione/myst.* mudroot/lib/"
+        echo "  oppure: MYST_WORLD_SRC=/path/produzione ./scripts/prepare-mudlib.sh"
         exit 1
     fi
+elif [ -x ./scripts/prepare-mudlib.sh ]; then
+    ./scripts/prepare-mudlib.sh --check 2>/dev/null || ./scripts/prepare-mudlib.sh
 fi
 
 echo "==> 3/5 Build myst (sirio-docker, porta ${SERVER_PORT})"

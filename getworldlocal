@@ -1,21 +1,8 @@
 #!/bin/bash
-# Copia il mudlib da root a mudroot/lib (esclude file runtime come myst.pid).
+# Prepara mudroot/lib dal mondo di produzione locale + patch ladro.
+# I myst.* di produzione non sono nel repository git.
 #
-# Con mondo di produzione:
-#   1. copia i myst.* di produzione nella root del repo
-#   2. ./scripts/apply-thief-world-patch.sh [--flavor]
-#   3. ./getworldlocal
+# Vedi: ./scripts/prepare-mudlib.sh --help
 set -euo pipefail
-cd "$(dirname "$0")"
-
-files=(
-  myst.mob myst.obj myst.wld myst.zon myst.spe myst.shp
-)
-
-for f in "${files[@]}"; do
-  if [ ! -f "$f" ]; then
-    echo "getworldlocal: manca $f nella root del repo" >&2
-    exit 1
-  fi
-  cp -v "$f" mudroot/lib/
-done
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+exec "$ROOT/scripts/prepare-mudlib.sh" "$@"

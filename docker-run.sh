@@ -120,17 +120,15 @@ myst_lib_ready() {
     [ -f "./mudroot/lib/myst.mob" ]
 }
 
-mudlib_source_ready() {
-    [ -f "./myst.mob" ]
-}
-
 ensure_mudlib() {
     if myst_lib_ready; then
         return 0
     fi
-    if mudlib_source_ready && [ -x "./getworldlocal" ]; then
-        echo "Copia mudlib (myst.*) in mudroot/lib/..."
-        ./getworldlocal
+    if [ -x "./scripts/prepare-mudlib.sh" ]; then
+        if [ -n "${MYST_WORLD_SRC:-}" ]; then
+            echo "Prepara mudlib da MYST_WORLD_SRC in mudroot/lib/..."
+            ./scripts/prepare-mudlib.sh
+        fi
     fi
     myst_lib_ready
 }
@@ -189,10 +187,12 @@ cmd_doctor() {
     fi
     if [ -f ./mudroot/lib/myst.mob ]; then
         echo "OK  mudlib (mudroot/lib/myst.mob)"
-    elif [ -f ./myst.mob ]; then
-        echo "WARN myst.mob in root ma non in mudroot/lib — esegui: ./getworldlocal"
+        if [ -x ./scripts/prepare-mudlib.sh ]; then
+            ./scripts/prepare-mudlib.sh --check 2>/dev/null || echo "WARN patch ladro non applicata — ./scripts/prepare-mudlib.sh"
+        fi
     else
-        echo "MISS mudlib — ./getworld (scp) o copia myst.* in mudroot/lib/"
+        echo "MISS mudlib — copia myst.* di produzione in mudroot/lib/ (non in git)"
+        echo "      MYST_WORLD_SRC=/path/produzione ./scripts/prepare-mudlib.sh"
     fi
     echo ""
     echo "Log consumer:"
@@ -226,7 +226,8 @@ if [ "${1:-}" = "up" ] && will_start_consumer "$@" && printf '%s\n' "$@" | grep 
     if ! myst_lib_ready; then
         echo ""
         echo "=== mudlib mancante in mudroot/lib/ ==="
-        echo "  ./getworldlocal"
+        echo "  cp /path/produzione/myst.* mudroot/lib/"
+        echo "  ./scripts/prepare-mudlib.sh"
         echo "  SERVER_PORT=${SERVER_PORT:-4003} ./docker-run.sh up -d consumer"
         echo ""
         exit 1

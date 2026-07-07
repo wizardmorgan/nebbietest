@@ -98,14 +98,14 @@ fi
 if [ -f "./${DATA_DIR}/myst.mob" ]; then
   echo "OK  ${DATA_DIR}/myst.mob"
 else
-  echo "FAIL mudlib — ./getworldlocal"
+  echo "FAIL mudlib — copia myst.* di produzione in ${DATA_DIR}/ e ./scripts/prepare-mudlib.sh"
   fail=1
 fi
 
-if grep -q '^#18500' myst.obj 2>/dev/null; then
-  echo "OK  ingredienti ladro #18500 in myst.obj (root)"
+if grep -q '^#18500' "./${DATA_DIR}/myst.obj" 2>/dev/null; then
+  echo "OK  ingredienti ladro #18500 in ${DATA_DIR}/myst.obj"
 else
-  echo "WARN #18500 non trovato in myst.obj root"
+  echo "WARN #18500 non trovato — ./scripts/prepare-mudlib.sh"
 fi
 
 if [ -f "./${DATA_DIR}/myst.pid" ]; then
@@ -189,7 +189,7 @@ echo "FAIL myst terminato con codice $rc"
 echo "Cause frequenti:"
 echo "  - FATAL: cannot initialize MySQL/ODB schema  -> importa dump o verifica MYSQL_*"
 echo "  - bind: Address already in use               -> SERVER_PORT occupata"
-echo "  - Opening mob file                           -> ./getworldlocal"
+echo "  - Opening mob file                           -> ./scripts/prepare-mudlib.sh"
 echo ""
 echo "Log completo consumer:"
 echo "  ./docker-run.sh logs --tail=100 consumer"
