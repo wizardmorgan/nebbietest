@@ -557,6 +557,13 @@ bool thief_append_skill_sheet_line(struct char_data* ch, std::string& buffer,
 	if(ch == nullptr || ch->skills == nullptr) {
 		return false;
 	}
+	std::string line = "[";
+	if(ent.min_level > 0) {
+		line += std::to_string(ent.min_level);
+	} else {
+		line += "1";
+	}
+	line += "] ";
 	line += ent.label;
 	if(ent.mono_only) {
 		line += " (mono)";
