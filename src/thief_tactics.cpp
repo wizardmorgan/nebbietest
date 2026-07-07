@@ -22,6 +22,7 @@
 #include "spells.hpp"
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 namespace Alarmud {
 
@@ -547,6 +548,35 @@ void thief_send_guild_practice_list(struct char_data* ch) {
 		std::snprintf(buf, sizeof(buf), " %-16s:  %s\n\r", ent.label,
 				how_good(ch->skills[ent.skill].learned));
 		send_to_char(buf, ch);
+	}
+	send_to_char("Usa 'skills t' per l'elenco completo della classe ladro.\n\r", ch);
+}
+
+bool thief_append_skill_sheet_line(struct char_data* ch, std::string& buffer,
+		const thief_guild_entry& ent) {
+	if(ch == nullptr || ch->skills == nullptr) {
+		return false;
+	}
+	line += ent.label;
+	if(ent.mono_only) {
+		line += " (mono)";
+	}
+	line += " ";
+	line += how_good(ch->skills[ent.skill].learned);
+	line += " \n\r";
+	if(buffer.size() + line.size() + 1 > static_cast<std::size_t>((MAX_STRING_LENGTH * 2) - 2)) {
+		return false;
+	}
+	buffer += line;
+	buffer += "\r";
+	return true;
+}
+
+void thief_append_skill_sheet(struct char_data* ch, std::string& buffer) {
+	for(int i = 0; kThiefGuildEntries[i].skill != 0; ++i) {
+		if(!thief_append_skill_sheet_line(ch, buffer, kThiefGuildEntries[i])) {
+			return;
+		}
 	}
 }
 

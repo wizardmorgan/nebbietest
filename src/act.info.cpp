@@ -6043,26 +6043,16 @@ void show_skill_append_cylinder_sheet(struct char_data* ch, ShowSkillSpellColumn
 }
 
 void show_skill_append_martial_sheet(struct char_data* ch, int classe, std::string& buffer) {
-	const int liv = (classe == CLASS_THIEF) ? GET_LEVEL(ch, THIEF_LEVEL_IND) : GetMaxLevel(ch);
+	if(classe == CLASS_THIEF) {
+		thief_append_skill_sheet(ch, buffer);
+		return;
+	}
+	const int liv = GetMaxLevel(ch);
 	for(int i = 0; i < MAX_SPL_LIST && spells[i] != nullptr && *spells[i] != '\n'; ++i) {
-		if(classe == CLASS_THIEF) {
-			if(!thief_skill_practice_allowed(ch, i + 1)) {
-				continue;
-			}
-		}
-		else if(!CheckPrac(classe, i + 1, liv)) {
+		if(!CheckPrac(classe, i + 1, liv)) {
 			continue;
 		}
-		int shown_level = 1;
-		if(classe == CLASS_THIEF) {
-			shown_level = thief_skill_min_level(i + 1);
-			if(shown_level <= 0) {
-				shown_level = 1;
-			}
-		}
-		std::string line = "[";
-		line += std::to_string(shown_level);
-		line += "] ";
+		std::string line = "[1] ";
 		line += spells[i];
 		line += " ";
 		line += how_good(ch->skills[i + 1].learned);

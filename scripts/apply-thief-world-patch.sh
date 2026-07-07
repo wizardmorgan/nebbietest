@@ -22,7 +22,7 @@ THIEF_VNUMS=(18000 18001 18002 18003 18004 18005)
 THIEF_VNUM_FIRST=18000
 THIEF_VNUM_LAST=18005
 THIEF_MARKER_OBJ='toxic extract estratto tossico'
-THIEF_MARKER_ZON='018000 \[un estratto tossico\] dato al MOB 003022'
+ACT_THIEF=16777216
 
 usage() {
   sed -n '2,12p' "$0"
@@ -30,22 +30,10 @@ usage() {
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dir)
-      TARGET_DIR="$2"
-      shift 2
-      ;;
-    --flavor)
-      DO_FLAVOR=1
-      shift
-      ;;
-    --check)
-      CHECK_ONLY=1
-      shift
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
+    --dir) TARGET_DIR="$2"; shift 2 ;;
+    --flavor) DO_FLAVOR=1; shift ;;
+    --check) CHECK_ONLY=1; shift ;;
+    -h|--help) usage; exit 0 ;;
     *)
       echo "apply-thief-world-patch: opzione sconosciuta: $1" >&2
       usage >&2
@@ -57,6 +45,7 @@ done
 OBJ="$TARGET_DIR/myst.obj"
 ZON="$TARGET_DIR/myst.zon"
 WLD="$TARGET_DIR/myst.wld"
+MOB="$TARGET_DIR/myst.mob"
 
 for f in "$OBJ" "$ZON"; do
   if [ ! -f "$f" ]; then
@@ -90,6 +79,105 @@ vnums_conflict() {
   return 1
 }
 
+strip_thief_zone_lines() {
+  local tmp
+  tmp="$(mktemp)"
+  awk '
+    function is_ing_line(line,    i, v) {
+      if (line !~ /^[GO] /) return 0
+      for (i = 0; i < 6; i++) {
+        v = 18000 + i
+        if (index(line, " " v " ")) return 1
+      }
+      for (i = 0; i < 6; i++) {
+        v = 18500 + i
+        if (index(line, " " v " ")) return 1
+      }
+      if (line ~ /^G 1 (1800|1850)/ && (index(line, "003022") || index(line, "007811"))) return 1
+      return 0
+    }
+    {
+      if (is_ing_line($0)) next
+      print
+    }
+  ' "$ZON" > "$tmp"
+  mv "$tmp" "$ZON"
+}
+
+clean_guild_room_objects() {
+  local tmp
+  tmp="$(mktemp)"
+  awk '
+    /^O 0 / {
+      room = $4 + 0
+      vnum = $2 + 0
+      if ((room == 3076 || room == 7828) && (vnum < 18000 || vnum > 18005)) next
+    }
+    { print }
+  ' "$ZON" > "$tmp"
+  mv "$tmp" "$ZON"
+}
+
+remove_act_flag_from_mob() {
+  local mob_vnum="$1"
+  local flag="$2"
+  local tmp
+  if [ ! -f "$MOB" ]; then
+    return 0
+  fi
+  tmp="$(mktemp)"
+  awk -v mob="#$mob_vnum" -v flag="$flag" '
+    function strip_field(field,    n, parts, i, out, cnt) {
+      n = split(field, parts, "|")
+      out = ""
+      cnt = 0
+      for (i = 1; i <= n; i++) {
+        if (parts[i] == flag || parts[i] == "") continue
+        if (cnt == 0) out = parts[i]; else out = out "|" parts[i]
+        cnt++
+      }
+      return out
+    }
+    $0 == mob { inmob = 1; print; next }
+    inmob && /^#/ { inmob = 0 }
+    inmob && /^[0-9]/ {
+      $1 = strip_field($1)
+      $2 = strip_field($2)
+      print
+      next
+    }
+    { print }
+  ' "$MOB" > "$tmp"
+  mv "$tmp" "$MOB"
+}
+
+zone_needs_repair() {
+  grep -q '018500 \[un estratto tossico\]' "$ZON" 2>/dev/null \
+    || [ "$(grep -cF '018000 [un estratto tossico] dato al MOB 003022' "$ZON" || true)" -gt 1 ]
+}
+
+insert_zon_block() {
+  local anchor="$1"
+  local fragment="$2"
+  local tmp_zon
+  tmp_zon="$(mktemp)"
+  awk -v anchor="$anchor" -v frag="$fragment" '
+    BEGIN { while ((getline line < frag) > 0) block = block line ORS; close(frag) }
+    index($0, anchor) {
+      print
+      if (!done) { printf "%s", block; done = 1 }
+      next
+    }
+    { print }
+  ' "$ZON" > "$tmp_zon"
+  if ! grep -qF "$(head -1 "$fragment")" "$tmp_zon"; then
+    echo "apply-thief-world-patch: anchor non trovato in myst.zon: $anchor" >&2
+    rm -f "$tmp_zon"
+    exit 1
+  fi
+  mv "$tmp_zon" "$ZON"
+}
+
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if patch_present; then
     echo "OK: patch crafting ladro presente in $TARGET_DIR"
@@ -99,9 +187,18 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   exit 1
 fi
 
-if patch_present; then
-  echo "apply-thief-world-patch: già applicata in $TARGET_DIR"
-else
+echo "apply-thief-world-patch: pulizia reset gilde / stanza 3076-7828 / Drunky"
+strip_thief_zone_lines
+clean_guild_room_objects
+remove_act_flag_from_mob 3007 "$ACT_THIEF"
+
+need_zone_insert=1
+if patch_present && ! zone_needs_repair; then
+  need_zone_insert=0
+  echo "apply-thief-world-patch: patch gia' presente, zone ok"
+fi
+
+if ! patch_present; then
   if vnums_conflict; then
     echo "apply-thief-world-patch: scegli altri vnum liberi (vedi world-reference/snippets/vnum-suggestions.txt)" >&2
     exit 1
@@ -114,32 +211,15 @@ else
     { print }
   ' "$OBJ" > "$tmp_obj"
   mv "$tmp_obj" "$OBJ"
+  need_zone_insert=1
+elif zone_needs_repair; then
+  echo "apply-thief-world-patch: riparo reset duplicati in myst.zon"
+  need_zone_insert=1
+fi
 
-  insert_zon_block() {
-    local anchor="$1"
-    local fragment="$2"
-    local tmp_zon
-    tmp_zon="$(mktemp)"
-    awk -v anchor="$anchor" -v frag="$fragment" '
-      BEGIN { while ((getline line < frag) > 0) block = block line ORS; close(frag) }
-      index($0, anchor) {
-        print
-        if (!done) { printf "%s", block; done = 1 }
-        next
-      }
-      { print }
-    ' "$ZON" > "$tmp_zon"
-    if ! grep -qF "$(head -1 "$fragment")" "$tmp_zon"; then
-      echo "apply-thief-world-patch: anchor non trovato in myst.zon: $anchor" >&2
-      rm -f "$tmp_zon"
-      exit 1
-    fi
-    mv "$tmp_zon" "$ZON"
-  }
-
+if [ "$need_zone_insert" -eq 1 ]; then
   echo "apply-thief-world-patch: myst.zon (Spanky / gilda Myst)"
   insert_zon_block "M 0 3022 1 3076" "$PATCH_DIR/myst.zon.after-spanky.fragment"
-
   echo "apply-thief-world-patch: myst.zon (Flasite / Colosseo)"
   insert_zon_block "M 0 7811 1 7828" "$PATCH_DIR/myst.zon.after-flasite.fragment"
 fi
@@ -150,7 +230,7 @@ if [ "$DO_FLAVOR" -eq 1 ]; then
     exit 1
   fi
   if grep -q 'estratto tossico' "$WLD"; then
-    echo "apply-thief-world-patch: flavor myst.wld già presente"
+    echo "apply-thief-world-patch: flavor myst.wld gia' presente"
   else
     echo "apply-thief-world-patch: myst.wld (descrizioni opzionali gilde ladro)"
     tmp_wld="$(mktemp)"

@@ -5,6 +5,7 @@
 #ifndef __THIEF_TACTICS_HPP
 #define __THIEF_TACTICS_HPP
 #include "typedefs.hpp"
+#include <string>
 namespace Alarmud {
 
 enum ThiefPoisonType : int {
@@ -30,6 +31,7 @@ bool thief_has_skill(struct char_data* ch, int skill);
 bool thief_skill_practice_allowed(struct char_data* ch, int skill);
 int thief_resolve_guild_practice(const char* arg);
 void thief_send_guild_practice_list(struct char_data* ch);
+void thief_append_skill_sheet(struct char_data* ch, std::string& buffer);
 void thief_on_advance_level(struct char_data* ch);
 int thief_adjust_pierce_damage(struct char_data* attacker, struct char_data* victim,
                                int type, int dam, int raw_dam);
