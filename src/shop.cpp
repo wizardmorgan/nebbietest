@@ -305,10 +305,7 @@ void shopping_buy(char* arg, struct char_data* ch,
 				shop_index[shop_nr].no_such_item1
 				,GET_NAME(ch));
 		do_tell(keeper,buf,CMD_TELL);
-		if(transient) {
-			extract_obj(temp1);
-		}
-		else {
+		if(transient || !shop_producing(temp1, shop_nr)) {
 			extract_obj(temp1);
 		}
 		return;

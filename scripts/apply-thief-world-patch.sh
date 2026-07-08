@@ -110,6 +110,35 @@ shops_have_ingredients() {
   return 0
 }
 
+shops_products_ok() {
+  awk '
+    function bad_slot(v, expected) {
+      return v + 0 != expected
+    }
+    /^#3005~$/ { shop = 3005; n = 0; next }
+    /^#3006~$/ { shop = 3006; n = 0; next }
+    shop == 3005 && n < 5 {
+      n++
+      if (n == 1 && bad_slot($1, 18000)) exit 1
+      if (n == 2 && bad_slot($1, 18001)) exit 1
+      if (n == 3 && bad_slot($1, 18002)) exit 1
+      if (n > 3 && ($1 + 0) != -1) exit 1
+      if (n == 5) shop = 0
+      next
+    }
+    shop == 3006 && n < 5 {
+      n++
+      if (n == 1 && bad_slot($1, 18003)) exit 1
+      if (n == 2 && bad_slot($1, 18004)) exit 1
+      if (n == 3 && bad_slot($1, 18005)) exit 1
+      if (n > 3 && ($1 + 0) != -1) exit 1
+      if (n == 5) shop = 0
+      next
+    }
+    END { exit(shop ? 1 : 0) }
+  ' "$SHP"
+}
+
 reagent_vendors_present() {
   grep -qE 'G 1 18000 0' "$ZON" \
     && grep -qE 'G 1 18005 0' "$ZON" \
@@ -131,7 +160,8 @@ shop_rooms_ok() {
 }
 
 patch_present() {
-  thief_objs_present && shops_have_ingredients && reagent_vendors_present && shop_rooms_ok
+  thief_objs_present && shops_have_ingredients && shops_products_ok \
+    && reagent_vendors_present && shop_rooms_ok
 }
 
 strip_thief_zone_lines() {
@@ -229,12 +259,6 @@ apply_shop_products() {
       }
       close(patch)
     }
-    function shop_has_vnum(v,    i) {
-      for (i = 1; i <= 5; i++) {
-        if (cur_prod[i] == v) return 1
-      }
-      return 0
-    }
     /^#[0-9]+~$/ {
       id = substr($0, 2)
       sub(/~$/, "", id)
@@ -242,19 +266,13 @@ apply_shop_products() {
       if (id in add_count) {
         for (i = 1; i <= 5; i++) {
           getline line
-          cur_prod[i] = line + 0
-        }
-        ai = 1
-        for (i = 1; i <= 5; i++) {
-          if (cur_prod[i] == -1 && ai <= add_count[id]) {
-            while (ai <= add_count[id] && shop_has_vnum(add_vnum[id, ai])) ai++
-            if (ai <= add_count[id]) {
-              cur_prod[i] = add_vnum[id, ai]
-              ai++
-            }
+          if (i <= add_count[id]) {
+            print add_vnum[id, i]
+          }
+          else {
+            print -1
           }
         }
-        for (i = 1; i <= 5; i++) print cur_prod[i]
         next
       }
       next
@@ -346,11 +364,11 @@ else
   echo "apply-thief-world-patch: myst.obj ingredienti già presenti"
 fi
 
-if ! shops_have_ingredients; then
-  echo "apply-thief-world-patch: myst.shp (mercanti Myst)"
+if ! shops_products_ok; then
+  echo "apply-thief-world-patch: myst.shp (prodotti negozi reagenti #3005/#3006)"
   apply_shop_products
 else
-  echo "apply-thief-world-patch: myst.shp già aggiornato"
+  echo "apply-thief-world-patch: myst.shp prodotti reagenti già corretti"
 fi
 
 if ! shop_rooms_ok; then
@@ -403,8 +421,8 @@ if ! thief_objs_present; then
   echo "apply-thief-world-patch: myst.obj incompleto" >&2
   exit 1
 fi
-if ! shops_have_ingredients; then
-  echo "apply-thief-world-patch: myst.shp senza ingredienti 18000-18005" >&2
+if ! shops_products_ok; then
+  echo "apply-thief-world-patch: myst.shp prodotti negozi #3005/#3006 non corretti" >&2
   exit 1
 fi
 if ! reagent_vendors_present; then

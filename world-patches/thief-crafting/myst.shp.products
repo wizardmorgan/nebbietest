@@ -1,7 +1,7 @@
-# Aggiunge ingredienti ladro solo negli slot liberi (-1) dei negozi — non sostituisce nulla
+# Sostituisce i prodotti dei negozi reagenti (solo ingredienti ladro, niente bibite 3002-3004)
 # Formato: shop_vnum:vnum1,vnum2,...
 #
-# #3005 Attendente mago (stanza 3047 — torre della magia, non 3018)
+# #3005 Attendente mago (stanza 3047 — torre della magia)
 3005:18000,18001,18002
 # #3006 Attendente cappella (stanza 3003 — ingresso cappella, est piazza)
 3006:18003,18004,18005
