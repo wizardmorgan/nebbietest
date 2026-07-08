@@ -132,9 +132,29 @@ sync_help_tables() {
     exit 1
   fi
   mkdir -p "$TARGET_DIR"
-  sed 's/\r$//' "$HELPTBL_SRC" > "$HELPTBL_DST"
+
+  # Non fare SRC > DST se sono lo stesso file (symlink): trunca il file e lo corrompe.
+  copy_help_file() {
+    local src="$1" dst="$2"
+    if [ ! -f "$src" ]; then
+      return 0
+    fi
+    if [ -e "$dst" ] && [ "$src" -ef "$dst" ]; then
+      sed -i 's/\r$//' "$src"
+      return 0
+    fi
+    if [ -L "$dst" ]; then
+      rm -f "$dst"
+    fi
+    local tmp
+    tmp="$(mktemp)"
+    sed 's/\r$//' "$src" > "$tmp"
+    mv "$tmp" "$dst"
+  }
+
+  copy_help_file "$HELPTBL_SRC" "$HELPTBL_DST"
   if [ -f "$WIZHELPTBL_SRC" ]; then
-    sed 's/\r$//' "$WIZHELPTBL_SRC" > "$WIZHELPTBL_DST"
+    copy_help_file "$WIZHELPTBL_SRC" "$WIZHELPTBL_DST"
   fi
   if [ -x "$ROOT/scripts/validate-helptbl.sh" ]; then
     "$ROOT/scripts/validate-helptbl.sh" "$TARGET_DIR" || {

@@ -84,18 +84,9 @@ if [ ! -f /app/mudroot/lib/myst.mob ]; then
   exit 1
 fi
 
-# Applica patch ladro se mudlib presente ma non ancora patchato
-if [ -x /app/scripts/apply-thief-world-patch.sh ]; then
-  if ! /app/scripts/apply-thief-world-patch.sh --dir /app/mudroot/lib --check 2>/dev/null; then
-    echo "[consumer] applico patch crafting ladro su mudroot/lib..."
-    /app/scripts/apply-thief-world-patch.sh --dir /app/mudroot/lib || true
-  fi
-fi
-
-export MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DB="${MYSQL_DB:-nebbie}"
-
 cd /app
 
+# Symlink help prima del patch (evita sync che trunca pages/helptbl se SRC == DST)
 if [ -f /app/pages/helptbl ]; then
   ln -sfn /app/pages/helptbl /app/helptbl
   mkdir -p /app/mudroot/lib
@@ -106,6 +97,16 @@ if [ -f /app/pages/wizhelptbl ]; then
   mkdir -p /app/mudroot/lib
   ln -sfn /app/pages/wizhelptbl /app/mudroot/lib/wizhelptbl
 fi
+
+# Applica patch ladro se mudlib presente ma non ancora patchato
+if [ -x /app/scripts/apply-thief-world-patch.sh ]; then
+  if ! /app/scripts/apply-thief-world-patch.sh --dir /app/mudroot/lib --check 2>/dev/null; then
+    echo "[consumer] applico patch crafting ladro su mudroot/lib..."
+    /app/scripts/apply-thief-world-patch.sh --dir /app/mudroot/lib || true
+  fi
+fi
+
+export MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DB="${MYSQL_DB:-nebbie}"
 
 if [ -x /app/scripts/validate-helptbl.sh ]; then
   if ! /app/scripts/validate-helptbl.sh /app/mudroot/lib; then

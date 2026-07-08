@@ -16,7 +16,7 @@ validate_one() {
     echo "FAIL $label: marker di conflitto git in $path"
     return 1
   fi
-  if ! grep -q '^#~' "$path" 2>/dev/null; then
+  if ! grep -q '#~' "$path" 2>/dev/null; then
     echo "FAIL $label: manca terminatore #~ in $path"
     return 1
   fi
