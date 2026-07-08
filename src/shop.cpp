@@ -176,16 +176,14 @@ int shop_producing(struct obj_data* item, int shop_nr) {
 	return(FALSE);
 }
 
-static bool shop_carries_item_number(struct char_data* keeper, int item_number) {
-	if(keeper == nullptr || item_number < 0) {
-		return false;
+static struct obj_data* shop_product_template(int item_nr) {
+	struct obj_data* temp1;
+
+	if(item_nr < 0) {
+		return nullptr;
 	}
-	for(struct obj_data* item = keeper->carrying; item; item = item->next_content) {
-		if(item->item_number == item_number) {
-			return true;
-		}
-	}
-	return false;
+	temp1 = read_object(item_nr, REAL);
+	return temp1;
 }
 
 static bool shopping_append_product_line(char* buf, struct char_data* ch,
@@ -228,14 +226,13 @@ static struct obj_data* shop_find_product(struct char_data* ch, char* argm,
 
 	*transient = false;
 	if((temp1 = get_obj_in_list_vis(ch, argm, keeper->carrying))) {
-		return temp1;
+		if(temp1->obj_flags.cost > 0 || !shop_producing(temp1, shop_nr)) {
+			return temp1;
+		}
 	}
 	for(counter = 0; counter < MAX_PROD; counter++) {
 		const int item_nr = shop_index[shop_nr].producing[counter];
-		if(item_nr < 0) {
-			continue;
-		}
-		temp1 = read_object(item_nr, REAL);
+		temp1 = shop_product_template(item_nr);
 		if(temp1 == nullptr) {
 			continue;
 		}
@@ -569,19 +566,9 @@ void shopping_list(char* arg, struct char_data* ch,
 #endif
 	strcpy(buf,"You can buy:\n\r");
 	found_obj = FALSE;
-	if(keeper->carrying) {
-		for(temp1 = keeper->carrying; temp1; temp1 = temp1->next_content) {
-			if(shopping_append_product_line(buf, ch, temp1, shop_nr)) {
-				found_obj = TRUE;
-			}
-		}
-	}
 	for(int counter = 0; counter < MAX_PROD; counter++) {
 		const int item_nr = shop_index[shop_nr].producing[counter];
-		if(item_nr < 0 || shop_carries_item_number(keeper, item_nr)) {
-			continue;
-		}
-		temp1 = read_object(item_nr, REAL);
+		temp1 = shop_product_template(item_nr);
 		if(temp1 == nullptr) {
 			continue;
 		}
@@ -589,6 +576,16 @@ void shopping_list(char* arg, struct char_data* ch,
 			found_obj = TRUE;
 		}
 		extract_obj(temp1);
+	}
+	if(keeper->carrying) {
+		for(temp1 = keeper->carrying; temp1; temp1 = temp1->next_content) {
+			if(shop_producing(temp1, shop_nr)) {
+				continue;
+			}
+			if(shopping_append_product_line(buf, ch, temp1, shop_nr)) {
+				found_obj = TRUE;
+			}
+		}
 	}
 
 	if(!found_obj) {
