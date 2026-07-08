@@ -181,6 +181,14 @@ remove_act_flag_from_mob() {
   mv "$tmp" "$MOB"
 }
 
+remove_guild_master_thief_flag() {
+  # Drunky (#3007), Spanky (#3022), Flasite (#7811) — non devono derubare i PG in gilda/taverna
+  local mob
+  for mob in 3007 3022 7811; do
+    remove_act_flag_from_mob "$mob" "$ACT_THIEF"
+  done
+}
+
 apply_shop_products() {
   local patch="$PATCH_DIR/myst.shp.products"
   local tmp
@@ -245,10 +253,10 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
   exit 1
 fi
 
-echo "apply-thief-world-patch: pulizia reset gilde / Drunky"
+echo "apply-thief-world-patch: pulizia reset gilde / ACT_THIEF (Drunky, Spanky, Flasite)"
 strip_thief_zone_lines
 clean_guild_room_objects
-remove_act_flag_from_mob 3007 "$ACT_THIEF"
+remove_guild_master_thief_flag
 
 if ! thief_objs_present; then
   if vnums_conflict; then

@@ -27,7 +27,7 @@ Cosa aggiunge la patch
   myst.obj  — definizioni 18000-18005 (vedi VNUMS.txt)
   myst.shp  — prodotti nei negozi sopra
   myst.zon  — rimuove eventuali reset spurii in gilde 3076/7828
-  myst.mob  — toglie ACT_THIEF da Drunky (#3007)
+  myst.mob  — toglie ACT_THIEF da Drunky (#3007), Spanky (#3022), Flasite (#7811)
 
 In git restano solo i fragment in questa cartella.
 
