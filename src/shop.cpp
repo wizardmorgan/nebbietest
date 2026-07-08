@@ -176,6 +176,78 @@ int shop_producing(struct obj_data* item, int shop_nr) {
 	return(FALSE);
 }
 
+static bool shop_carries_item_number(struct char_data* keeper, int item_number) {
+	if(keeper == nullptr || item_number < 0) {
+		return false;
+	}
+	for(struct obj_data* item = keeper->carrying; item; item = item->next_content) {
+		if(item->item_number == item_number) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool shopping_append_product_line(char* buf, struct char_data* ch,
+		struct obj_data* temp1, int shop_nr) {
+	char buf2[256];
+	char buf3[256];
+	long actualcost;
+
+	if(temp1 == nullptr || !CAN_SEE_OBJ(ch, temp1) || temp1->obj_flags.cost <= 0) {
+		return false;
+	}
+	actualcost = object_cost(temp1, ch, shop_nr, 0);
+	if(temp1->obj_flags.type_flag != ITEM_DRINKCON) {
+		std::snprintf(buf2, sizeof(buf2), "%.220s for %d gold coins.\n\r",
+				(temp1->short_description), (int)actualcost);
+	}
+	else {
+		if(temp1->obj_flags.value[1]) {
+			std::snprintf(buf3, sizeof(buf3), "%.180s of %.60s", (temp1->short_description),
+					drinks[temp1->obj_flags.value[2]]);
+		}
+		else {
+			std::snprintf(buf3, sizeof(buf3), "%.240s", (temp1->short_description));
+		}
+		std::snprintf(buf2, sizeof(buf2), "%.220s for %d gold coins.\n\r", buf3,
+				(int)actualcost);
+	}
+	CAP(buf2);
+	if(strlen(buf) + strlen(buf2) + 1 >= MAX_STRING_LENGTH) {
+		return false;
+	}
+	strcat(buf, buf2);
+	return true;
+}
+
+static struct obj_data* shop_find_product(struct char_data* ch, char* argm,
+		struct char_data* keeper, int shop_nr, bool* transient) {
+	struct obj_data* temp1;
+	int counter;
+
+	*transient = false;
+	if((temp1 = get_obj_in_list_vis(ch, argm, keeper->carrying))) {
+		return temp1;
+	}
+	for(counter = 0; counter < MAX_PROD; counter++) {
+		const int item_nr = shop_index[shop_nr].producing[counter];
+		if(item_nr < 0) {
+			continue;
+		}
+		temp1 = read_object(item_nr, REAL);
+		if(temp1 == nullptr) {
+			continue;
+		}
+		if(isname(argm, temp1->name) && CAN_SEE_OBJ(ch, temp1)) {
+			*transient = true;
+			return temp1;
+		}
+		extract_obj(temp1);
+	}
+	return nullptr;
+}
+
 void shopping_buy(char* arg, struct char_data* ch,
 				  struct char_data* keeper, int shop_nr) {
 	char argm[100], buf[MAX_STRING_LENGTH], newarg[100];
@@ -218,21 +290,27 @@ void shopping_buy(char* arg, struct char_data* ch,
 		num = 1;
 	}
 
-	if(!(temp1 =
-				get_obj_in_list_vis(ch,argm,keeper->carrying))) {
+	bool transient = false;
+	if(!(temp1 = shop_find_product(ch, argm, keeper, shop_nr, &transient))) {
 		sprintf(buf,
 				shop_index[shop_nr].no_such_item1
 				,GET_NAME(ch));
 		do_tell(keeper,buf,CMD_TELL);
 		return;
 	}
+	const int product_template = temp1->item_number;
 
 	if(temp1->obj_flags.cost <= 0) {
 		sprintf(buf,
 				shop_index[shop_nr].no_such_item1
 				,GET_NAME(ch));
 		do_tell(keeper,buf,CMD_TELL);
-		extract_obj(temp1);
+		if(transient) {
+			extract_obj(temp1);
+		}
+		else {
+			extract_obj(temp1);
+		}
 		return;
 	}
 	actualcost=(long)(object_cost(temp1,ch,shop_nr,0)* mult);
@@ -243,19 +321,26 @@ void shopping_buy(char* arg, struct char_data* ch,
 		switch(shop_index[shop_nr].temper1) {
 		case 0:
 			do_action(keeper,GET_NAME(ch),30);
-			return;
+			break;
 		case 1:
 			do_emote(keeper,"grins happily",36);
-			return;
+			break;
 		default:
-			return;
+			break;
 		}
+		if(transient) {
+			extract_obj(temp1);
+		}
+		return;
 	}
 
 	/*if (!CheckEgoGet(ch, temp1))
 		   return;*/
 
 	if(!CheckGetBarbarianOK(ch, temp1)) {
+		if(transient) {
+			extract_obj(temp1);
+		}
 		return;
 	}
 
@@ -263,6 +348,9 @@ void shopping_buy(char* arg, struct char_data* ch,
 		sprintf(buf,"%s : You can't carry that many items.\n\r",
 				fname(temp1->name));
 		send_to_char(buf, ch);
+		if(transient) {
+			extract_obj(temp1);
+		}
 		return;
 	}
 
@@ -270,6 +358,9 @@ void shopping_buy(char* arg, struct char_data* ch,
 		sprintf(buf,"%s : You can't carry that much weight.\n\r",
 				fname(temp1->name));
 		send_to_char(buf, ch);
+		if(transient) {
+			extract_obj(temp1);
+		}
 		return;
 	}
 
@@ -308,9 +399,9 @@ void shopping_buy(char* arg, struct char_data* ch,
 
 		GET_GOLD(keeper) += actualcost;
 
-		/* Test if producing shop ! */
-		if(shop_producing(temp1,shop_nr)) {
-			temp1 = read_object(temp1->item_number, REAL);
+		struct obj_data* giving = nullptr;
+		if(transient || shop_producing(temp1, shop_nr)) {
+			giving = read_object(product_template, REAL);
 		}
 		else {
 			obj_from_char(temp1);
@@ -319,10 +410,18 @@ void shopping_buy(char* arg, struct char_data* ch,
 				GET_GOLD(ch) += actualcost;
 				return;
 			}
+			giving = temp1;
 		}
+		if(giving == nullptr) {
+			send_to_char("Sorry, I just ran out of those.\n\r", ch);
+			GET_GOLD(ch) += actualcost;
+			return;
+		}
+		obj_to_char(giving, ch);
 
-		obj_to_char(temp1,ch);
-
+	}
+	if(transient) {
+		extract_obj(temp1);
 	}
 	return;
 }
@@ -447,10 +546,9 @@ void shopping_value(char* arg, struct char_data* ch,
 
 void shopping_list(char* arg, struct char_data* ch,
 				   struct char_data* keeper, int shop_nr) {
-	char buf[MAX_STRING_LENGTH], buf2[256],buf3[256];
+	char buf[MAX_STRING_LENGTH];
 	struct obj_data* temp1;
 	int found_obj;
-	long actualcost;
 	if(!(is_ok(keeper,ch,shop_nr))) {
 		return;
 	}
@@ -474,32 +572,27 @@ void shopping_list(char* arg, struct char_data* ch,
 #endif
 	strcpy(buf,"You can buy:\n\r");
 	found_obj = FALSE;
-	if(keeper->carrying)
-		for(temp1=keeper->carrying; temp1; temp1 = temp1->next_content) {
-			actualcost=object_cost(temp1,ch,shop_nr,0);
-
-			if((CAN_SEE_OBJ(ch,temp1)) && (temp1->obj_flags.cost>0)) {
+	if(keeper->carrying) {
+		for(temp1 = keeper->carrying; temp1; temp1 = temp1->next_content) {
+			if(shopping_append_product_line(buf, ch, temp1, shop_nr)) {
 				found_obj = TRUE;
-				if(temp1->obj_flags.type_flag != ITEM_DRINKCON)
-					std::snprintf(buf2, sizeof(buf2), "%.220s for %d gold coins.\n\r",
-							(temp1->short_description),
-							(int)actualcost);
-
-				else {
-					if(temp1->obj_flags.value[1])
-						std::snprintf(buf3, sizeof(buf3), "%.180s of %.60s", (temp1->short_description),
-								drinks[temp1->obj_flags.value[2]]);
-					else {
-						std::snprintf(buf3, sizeof(buf3), "%.240s", (temp1->short_description));
-					}
-					std::snprintf(buf2, sizeof(buf2), "%.220s for %d gold coins.\n\r",buf3,
-							(int)actualcost);
-				}
-				CAP(buf2);
-				strcat(buf, buf2);
 			}
 		}
-
+	}
+	for(int counter = 0; counter < MAX_PROD; counter++) {
+		const int item_nr = shop_index[shop_nr].producing[counter];
+		if(item_nr < 0 || shop_carries_item_number(keeper, item_nr)) {
+			continue;
+		}
+		temp1 = read_object(item_nr, REAL);
+		if(temp1 == nullptr) {
+			continue;
+		}
+		if(shopping_append_product_line(buf, ch, temp1, shop_nr)) {
+			found_obj = TRUE;
+		}
+		extract_obj(temp1);
+	}
 
 	if(!found_obj) {
 		strcat(buf,"Nothing!\n\r");
