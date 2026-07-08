@@ -483,9 +483,17 @@ fi
 echo "apply-thief-world-patch: myst.obj (ingredienti ladro, sync definizioni)"
 sync_thief_obj_definitions
 
-echo "apply-thief-world-patch: myst.shp (prodotti negozi reagenti #3005/#3006)"
-apply_shop_products
-fix_shop_rooms
+if ! shops_products_ok; then
+  echo "apply-thief-world-patch: myst.shp (prodotti negozi reagenti #3005/#3006)"
+  apply_shop_products
+else
+  echo "apply-thief-world-patch: myst.shp prodotti reagenti già corretti"
+fi
+
+if ! shop_rooms_ok; then
+  echo "apply-thief-world-patch: myst.shp (stanza negozio #3005 → 3047)"
+  fix_shop_rooms
+fi
 
 if ! reagent_vendors_present; then
   echo "apply-thief-world-patch: myst.zon (spawn negozianti reagenti)"
