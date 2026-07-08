@@ -86,7 +86,7 @@ Livello = **livello ladro** (classe thief), non livello totale PG.
 | 295 | Pocket Sand | 5 | no | `sand <bersaglio>` | attiva |
 | 296 | Cheap Shot | 8 | no | *(passiva in combattimento)* | passiva |
 | 297 | Tumble | 12 | no | `tumble <direzione>` | attiva |
-| 306 | Poisoncraft | 15 | **sì** | `poison <ricetta>`, `envenom <vial>` | crafting |
+| 306 | Poisoncraft | 15 | **sì** | `poison <ricetta>`, `envenom <fiala>` | crafting |
 | 298 | Feint | 16 | no | `feint` | attiva |
 | 299 | Riposte | 20 | no | *(passiva su schivata)* | passiva |
 | 300 | Hamstring | 24 | no | `hamstring` | attiva |
@@ -94,7 +94,7 @@ Livello = **livello ladro** (classe thief), non livello totale PG.
 | 302 | Gouge | 32 | no | `gouge <bersaglio>` | attiva |
 | 303 | Gag | 36 | no | `gag <bersaglio>` | attiva |
 | 304 | Vault | 42 | **sì** | `vault <alleato>` | attiva |
-| 307 | Mix / Throw | 45 | **sì** | `mix <ricetta>`, `throwpotion <vial> <bersaglio>` | crafting |
+| 307 | Mix / Throw | 45 | **sì** | `mix <ricetta>`, `throwpotion <fiala> <bersaglio>` | crafting |
 | 305 | Snatch | 48 | **sì** | `snatch` | attiva |
 | 308 | Find the Seam | 51 | **sì** | *(passiva su perforante/backstab)* | passiva |
 
@@ -119,8 +119,8 @@ Dopo deploy: verificare `grep 'POCKET SAND' mudroot/lib/helptbl` e **riavviare**
 **Requisiti:** ladro puro, skill poisoncraft, ingredienti in inventario (keyword inglesi).
 
 ```text
-poison <weak|numb|bleed|paralytic|nightfall|blacklotus>
-envenom <vial>          # arma impugnata
+poison <weak|numb|bleed|paralizzante|nightfall|blacklotus>
+envenom <fiala>          # arma impugnata
 ```
 
 | Ricetta | Liv. min | Ingredienti |
@@ -128,11 +128,11 @@ envenom <vial>          # arma impugnata
 | weak | 15 | toxic extract, glass vial |
 | numb | 18 | toxic extract, nightshade resin, glass vial |
 | bleed | 20 | toxic extract, volatile oil, glass vial |
-| paralytic | 24 | nightshade resin, binding agent, glass vial |
+| paralizzante | 24 | nightshade resin, binding agent, glass vial |
 | nightfall | 30 | nightshade resin, toxic extract, volatile oil, glass vial |
 | blacklotus | 40 | nightshade resin, toxic extract, alkali salt, binding agent, glass vial |
 
-Dopo `poison …` si ottiene un vial in inventario. `envenom vial` (o `envenom blacklotus`) applica il veleno all’arma impugnata.
+Dopo `poison …` si ottiene una fiala in inventario (es. «una fiala di veleno debole»). `envenom fiala` (o `envenom paralizzante`) applica il veleno all’arma impugnata.
 
 ---
 
@@ -142,7 +142,7 @@ Dopo `poison …` si ottiene un vial in inventario. `envenom vial` (o `envenom b
 
 ```text
 mix <acid|smoke|fire|choking|shrapnel|sand>
-throwpotion <vial> <bersaglio>
+throwpotion <fiala> <bersaglio>
 ```
 
 | Ricetta | Liv. min | Ingredienti | Effetto |
@@ -204,8 +204,8 @@ Ladro 51 mono per Find the Seam:
 ### Checklist in gioco
 
 1. `list` nei negozi cappella + torre → 3 reagenti ciascuno
-2. `poison weak` → `envenom vial` → combattimento
-3. `mix acid` → `throwpotion vial <mob>`
+2. `poison weak` → `envenom fiala` → combattimento
+3. `mix acid` → `throwpotion fiala <mob>`
 4. `sand`, `feint`, `hamstring`, `ckick`, `gouge`, `gag` in fight
 5. `vault <alleato>`, `snatch` (mono)
 6. Perforante vs mob armato per Find the Seam (mono 51)
