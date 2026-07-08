@@ -67,12 +67,103 @@ if [ ! -x /app/mudroot/myst ]; then
 fi
 
 if [ ! -f /app/mudroot/lib/myst.mob ]; then
+  if [ -n "${MYST_WORLD_SRC:-}" ] && [ -x /app/scripts/prepare-mudlib.sh ]; then
+    echo "[consumer] mudlib assente — prepare-mudlib da MYST_WORLD_SRC"
+    /app/scripts/prepare-mudlib.sh
+  elif [ -f /app/myst.mob ] && [ -x /app/getworldlocal ]; then
+    echo "[consumer] mudlib assente — copia stub da root con getworldlocal"
+    /app/getworldlocal
+  fi
+fi
+
+if [ ! -f /app/mudroot/lib/myst.mob ]; then
   echo "[consumer] ERROR: /app/mudroot/lib/myst.mob missing (mudlib not installed)."
+  echo "[consumer] Dev: ./getworldlocal  |  Produzione: cp myst.* in mudroot/lib/"
+  echo "[consumer]   ./scripts/apply-production-world-patch.sh"
+  echo "[consumer]   oppure: MYST_WORLD_SRC=/path/produzione ./scripts/apply-production-world-patch.sh"
   exit 1
+fi
+
+# Applica patch ladro se mudlib presente ma non ancora patchato
+if [ -x /app/scripts/apply-thief-world-patch.sh ]; then
+  if ! /app/scripts/apply-thief-world-patch.sh --dir /app/mudroot/lib --check 2>/dev/null; then
+    echo "[consumer] applico patch crafting ladro su mudroot/lib..."
+    /app/scripts/apply-thief-world-patch.sh --dir /app/mudroot/lib || true
+  fi
 fi
 
 export MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DB="${MYSQL_DB:-nebbie}"
 
 cd /app
+
+if [ -f /app/pages/helptbl ]; then
+  ln -sfn pages/helptbl /app/helptbl
+fi
+if [ -f /app/pages/wizhelptbl ]; then
+  ln -sfn pages/wizhelptbl /app/wizhelptbl
+fi
+
+if command -v ss >/dev/null 2>&1; then
+  if ss -tlnH 2>/dev/null | grep -qE "[:.]${SERVER_PORT}[[:space:]]"; then
+    echo "[consumer] ERROR: port ${SERVER_PORT} already in use inside the container."
+    echo "[consumer] Stop the other myst or use a different SERVER_PORT."
+    ss -tlnp 2>/dev/null | grep -E "[:.]${SERVER_PORT}[[:space:]]" || true
+    exit 1
+  fi
+fi
+
+if command -v mysql >/dev/null 2>&1; then
+  if ! mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" --protocol=TCP \
+      -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE \`${MYSQL_DB}\`" >/dev/null 2>&1; then
+    echo "[consumer] ERROR: database '${MYSQL_DB}' missing or not accessible."
+    echo "[consumer] Import a dump, e.g.:"
+    echo "  ./scripts/import-mysql-dump.sh ~/docker-vms/database_backup_2306.sql"
+    exit 1
+  fi
+  table_count="$(mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" --protocol=TCP \
+    -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -N -e \
+    "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='${MYSQL_DB}';" 2>/dev/null || echo 0)"
+  if [ "${table_count:-0}" -lt 5 ]; then
+    echo "[consumer] WARN: only ${table_count} tables in ${MYSQL_DB}."
+    echo "[consumer] myst may exit with: FATAL: cannot initialize MySQL/ODB schema"
+    echo "[consumer] Recommended: ./scripts/import-mysql-dump.sh <dump.sql>"
+  fi
+fi
+
 echo "[consumer] starting myst -P ${SERVER_PORT} -d ${DATA_DIR}"
-exec /app/mudroot/myst -P "${SERVER_PORT}" -d "${DATA_DIR}" -v 4
+echo "[consumer] on failure run: ./scripts/myst-crash-report.sh"
+
+myst_pid=0
+shutdown=0
+
+on_shutdown() {
+  shutdown=1
+  if [ "$myst_pid" -gt 0 ] 2>/dev/null; then
+    kill -TERM "$myst_pid" 2>/dev/null || true
+  fi
+}
+trap on_shutdown TERM INT
+
+while [ "$shutdown" -eq 0 ]; do
+  /app/mudroot/myst -P "${SERVER_PORT}" -d "${DATA_DIR}" -v 4 &
+  myst_pid=$!
+  wait "$myst_pid"
+  rc=$?
+  myst_pid=0
+  echo "[consumer] myst exited with code ${rc} at $(date -Is)"
+  for log in /app/mudroot/lib/alarmud.log /app/mudroot/lib/errors.log; do
+    if [ -f "$log" ]; then
+      echo "[consumer] --- tail ${log} ---"
+      tail -20 "$log" || true
+    fi
+  done
+  if [ "$shutdown" -ne 0 ]; then
+    exit 0
+  fi
+  case "$rc" in
+    0) sleep 2 ;;
+    134) echo "[consumer] abort() — cerca CHECKPOINT o SIGSEGV in alarmud.log"; sleep 5 ;;
+    139) echo "[consumer] SIGSEGV — esegui ./scripts/myst-crash-report.sh"; sleep 5 ;;
+    *) sleep 5 ;;
+  esac
+done

@@ -43,6 +43,7 @@
 #include "opinion.hpp"
 #include "reception.hpp"
 #include "skills.hpp"
+#include "thief_tactics.hpp"
 #include "sound.hpp"
 #include "spell_parser.hpp"
 #include "trap.hpp"
@@ -4903,7 +4904,9 @@ int CAN_SEE(struct char_data* s, struct char_data* o) {
 	struct affected_type* aff;
 	int s_inv=0;
 	int o_inv=0;
-	if(!o || s->in_room < 0 || o->in_room < 0) {
+	if(!s || !o || s->nMagicNumber != CHAR_VALID_MAGIC ||
+			o->nMagicNumber != CHAR_VALID_MAGIC ||
+			s->in_room < 0 || o->in_room < 0) {
 		return(FALSE);
 	}
 
@@ -9423,6 +9426,20 @@ int IsMagicSpell(int spell_num) {
 	case SKILL_DUAL_WIELD:
 	case SKILL_PSI_SHIELD:
 	case SKILL_EAVESDROP:
+	case SKILL_POCKET_SAND:
+	case SKILL_CHEAP_SHOT:
+	case SKILL_TUMBLE:
+	case SKILL_FEINT:
+	case SKILL_RIPOSTE:
+	case SKILL_HAMSTRING:
+	case SKILL_CIRCLE_KICK:
+	case SKILL_GOUGE:
+	case SKILL_GAG:
+	case SKILL_VAULT:
+	case SKILL_SNATCH:
+	case SKILL_POISONCRAFT:
+	case SKILL_MIX_THROW:
+	case SKILL_FIND_THE_SEAM:
 	case LANG_COMMON:
 	case LANG_ELVISH:
 	case LANG_HALFLING:
@@ -9786,6 +9803,20 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 		SKILL_REMOVE_TRAP,
 		SKILL_TSPY,
 		SKILL_EAVESDROP,
+		SKILL_POCKET_SAND,
+		SKILL_CHEAP_SHOT,
+		SKILL_TUMBLE,
+		SKILL_FEINT,
+		SKILL_RIPOSTE,
+		SKILL_HAMSTRING,
+		SKILL_CIRCLE_KICK,
+		SKILL_GOUGE,
+		SKILL_GAG,
+		SKILL_VAULT,
+		SKILL_SNATCH,
+		SKILL_POISONCRAFT,
+		SKILL_MIX_THROW,
+		SKILL_FIND_THE_SEAM,
 		0
 	};
 
@@ -9865,6 +9896,9 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 	case CLASS_THIEF:
 		for(f=0; kthi[f]; f++) {
 			if(id == kthi[f]) {
+				if(thief_skill_min_level(id) > liv) {
+					return FALSE;
+				}
 				return TRUE;
 			}
 		}

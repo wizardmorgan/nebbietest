@@ -1,0 +1,8 @@
+# Sostituisce i prodotti dei negozi reagenti (solo ingredienti ladro, niente bibite 3002-3004)
+# Formato: shop_vnum:vnum1,vnum2,...
+# Vnum senza overlay in mudroot/lib/objects/ — vedi VNUMS.txt e OVERLAYS.txt
+#
+# #3005 Attendente mago (stanza 3047 — torre della magia)
+3005:18072,18001,18002
+# #3006 Attendente cappella (stanza 3003 — ingresso cappella, est piazza)
+3006:18003,18073,18074

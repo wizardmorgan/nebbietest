@@ -1,0 +1,7 @@
+grep 18500 in myst.zon:
+24220:O 0 18500 1 18570 1 *! 018500 [Un portale] caricato nella stanza 018570 [Verso la Luce]
+24232:M 0 18500 1 18506 *!018500 [il comandante] caricato nella stanza 018506 [Cabina del Comandante]
+24233:E 1 18504 0 21 *! 018504 [Il Monocolo dell'Individuazione] indossato dal MOB 018500 [il comandante] eyes
+
+grep estratto tossico in myst.obj:
+(nessuna)

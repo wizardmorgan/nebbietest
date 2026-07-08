@@ -23,6 +23,7 @@
 /***************************  Local    include ************************************/
 #include "maximums.hpp"
 #include "act.other.hpp"
+#include "thief_tactics.hpp"
 #include "act.wizard.hpp"
 #include "comm.hpp"
 #include "db.hpp"
@@ -756,6 +757,9 @@ void advance_level(struct char_data* ch, int iClass)
 
 	GET_LEVEL(ch, iClass) += 1;
 
+	if(iClass == THIEF_LEVEL_IND) {
+		thief_on_advance_level(ch);
+	}
 
 	check_hp=GetHpGain(ch,iClass,GET_LEVEL(ch,iClass),0);
 

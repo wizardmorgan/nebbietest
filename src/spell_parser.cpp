@@ -352,6 +352,20 @@ const char* spells[]= {
     "forge",
     "determine",
     "equilibrium",
+	"pocket sand",
+	"cheap shot",
+	"tumble",
+	"feint",
+	"riposte",
+	"hamstring",
+	"circle kick",
+	"gouge",
+	"gag",
+	"vault",
+	"snatch",
+	"poisoncraft",
+	"mix throw",
+	"find the seam",
 	"\n"
 };
 

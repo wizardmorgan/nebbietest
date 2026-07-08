@@ -1,0 +1,262 @@
+#18490
+(vnum assente)
+~
+
+#18491
+(vnum assente)
+~
+
+#18492
+(vnum assente)
+~
+
+#18493
+(vnum assente)
+~
+
+#18494
+(vnum assente)
+~
+
+#18495
+(vnum assente)
+~
+
+#18496
+(vnum assente)
+~
+
+#18497
+(vnum assente)
+~
+
+#18498
+(vnum assente)
+~
+
+#18499
+(vnum assente)
+~
+
+#18500
+portale~
+Un portale~
+Il portale aleggia nell'aria come uno strappo nello spazio circostante.~
+~
+12 1 0
+0 0 0 0
+999 0 0
+E
+portale~
+attraverso esso di pare di intravedere la piazza di una citta'.
+~
+
+#18501
+clessidra avorio~
+Una Clessidra d'Avorio~
+Una fragile clessidra e' qui su un ripiano.~
+~
+4 1|2|64 1|16384
+46 4 4 155
+2 6500 0
+A
+4 2
+A
+50 5
+
+#18502
+otre abbondanza~
+L'Otre dell'Abbondanza~
+Un otre di pelle e' qui per terra.~
+~
+17 64 1|16384
+75 75 2 0
+4 4000 0
+
+#18503
+(vnum assente)
+~
+
+#18504
+lente monocolo individuazione~
+Il Monocolo dell'Individuazione~
+Una fragile lente di cristallo e' qui per terra.~
+~
+9 1|64|65536 1|524288
+1 1 0 0
+1 3000 0
+A
+29 32776
+A
+3 1
+
+#18505
+gemma potere~
+La Gemma del Potere~
+Una gemma e' stata abbandonata qui.~
+~
+8 1|64|128|131072 1|16384
+0 0 0 0
+1 50000 0
+A
+12 30
+
+#18506
+grassopuffo~
+Un Grassopuffo~
+Dal suolo spunta un fungo grande come uno scudo, ricoperto di bolle verdi e macchie purpuree.~
+~
+19 0 1|16384
+1 0 0 1
+1 0 -1
+E
+grassopuffo~
+Appena ti avvicini al fungo questo esplode in una nuvola di spore verdastre,
+diffondendo un odore acre e disgustoso nei paraggi.
+~
+
+#18507
+muschione~
+Un Muschione~
+Un fungo ovoidale, blu e di odore simile a quello di un uovo marcio,
+cresce sulle rocce.~
+~
+19 0 1|16384
+4 0 0 0
+1 10 -1
+
+#18508
+sofora antica albero tree erminia~
+Un'Antica Sofora~
+Una grande sofora, dai rami tipicamente intrecciati, cresce rigogliosa,
+formando cupole con il suo fogliame.~
+~
+25 262144 0
+0 0 0 0
+999 0 0
+
+#18509
+gerla pelle~
+Una Gerla di Pelle~
+Una piccola gerla di pelle e' qui per terra.~
+~
+15 0 1|131072
+50 1 0 0
+5 500 0
+
+#18510
+cappello fungo~
+Un Cappello di Fungo~
+Un piccolo cappello ricavato da un fungo sta marcendo qui.~
+~
+9 0 1|16
+3 3 0 0
+3 5500 500
+A
+25 -2
+
+#18511
+polvere gialla~
+Polvere Gialla~
+Un sacchettino di pelle con della polvere gialla.~
+~
+10 64 1|16384
+31 35 0 0
+1 500 0
+
+#18512
+polvere rossa~
+Polvere Rossa~
+Un sacchettino di pelle con della polvere rossa.~
+~
+10 0 1|16384
+30 17 0 0
+1 500 0
+
+#18513
+polvere azzurra~
+Polvere Azzurra~
+Un sacchettino di pelle con della polvere azzurra.~
+~
+10 0 1|16384
+30 1 0 0
+1 500 0
+
+#18514
+polvere verde~
+Polvere Verde~
+Un sacchettino di pelle con della polvere verde.~
+~
+10 65536 1|16384
+30 83 0 0
+1 500 0
+
+#18515
+scettro ossa~
+Lo Scettro d'Ossa~
+Un bastone sormontato da un teschio di coboldo.~
+~
+4 2|64|256 1|16384
+25 5 5 60
+2 8000 0
+E
+bastone scettro~
+e' intagliato da un ramo di acero e ad un'estremita' e' saldamente infilato
+il teschio levigato di un coboldo.
+~
+A
+29 8
+
+#18516
+armatura pelle tritone~
+Un'Armatura di Pelle di Tritone~
+Un'armatura di spessa pelle scura.~
+~
+9 16|16384|4194304|8388608|67108864|134217728|268435456 1|8
+9 9 0 0
+35 45000 12000
+E
+armatura pelle~
+e' realizzata con pelle di tritone.
+~
+A
+26 896
+
+#18517
+lancia pietra~
+Una Lancia di Pietra~
+Una rozza lancia di pietra.~
+~
+5 0 1|8192|32768
+0 2 8 11
+15 2000 0
+
+#18518
+scudo pelle coboldo~
+Uno Scudo di Pelle di Coboldo~
+Uno scudo di pelle verde.~
+~
+9 0 1|512
+4 4 0 0
+7 1500 0
+A
+17 -5
+
+#18519
+clava melmoide~
+Una Clava di Melmoide~
+Una clava ricavata da un fungo.~
+~
+5 16 1|8192
+0 2 4 7
+5 500 0
+
+#18520
+tesoro~
+Il Tesoro del Groll~
+Una pila di monete d'oro luccica sul pavimento.~
+~
+20 262144 1
+10000 0 0 0
+1 0 0
+

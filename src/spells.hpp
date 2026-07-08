@@ -364,7 +364,23 @@ namespace Alarmud {
 #define SKILL_DETERMINE      293   /* ACIDUS 2003 skill determine established per determinazione teleport */
 #define SKILL_EQUILIBRIUM      294   /* ACIDUS 2003 skill better equilibrium per equilibrio nanesco */
 
-#define MAX_EXIST_SPELL         294   /* max number of skills/spells/status */
+/* Thief tactical expansion */
+#define SKILL_POCKET_SAND        295
+#define SKILL_CHEAP_SHOT         296
+#define SKILL_TUMBLE             297
+#define SKILL_FEINT              298
+#define SKILL_RIPOSTE            299
+#define SKILL_HAMSTRING          300
+#define SKILL_CIRCLE_KICK        301
+#define SKILL_GOUGE              302
+#define SKILL_GAG                303
+#define SKILL_VAULT              304
+#define SKILL_SNATCH             305
+#define SKILL_POISONCRAFT        306
+#define SKILL_MIX_THROW          307
+#define SKILL_FIND_THE_SEAM      308
+
+#define MAX_EXIST_SPELL         308   /* max number of skills/spells/status */
 
 
 

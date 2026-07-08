@@ -26,6 +26,7 @@
 #include "utils.hpp"
 /***************************  Local    include ************************************/
 #include "act.off.hpp"
+#include "thief_tactics.hpp"
 #include "act.info.hpp"
 #include "act.move.hpp"
 #include "act.other.hpp"
@@ -556,6 +557,7 @@ bool off_backstab_resolve(struct char_data* ch, struct char_data* victim, int cm
 
 	if(percent > MIN(100, ch->skills[SKILL_BACKSTAB].learned)) {
 		LearnFromMistake(ch, SKILL_BACKSTAB, 0, 95);
+		thief_on_backstab_failed(ch, victim);
 		if(AWAKE(victim)) {
 			if(damage(ch, victim, 0, SKILL_BACKSTAB, OFF_BACKSTAB_LOCATION) == AllLiving) {
 				off_backstab_add_hated(ch, victim);
@@ -1283,6 +1285,12 @@ ACTION_FUNC(do_flee) {
 	int special(struct char_data *ch, int cmd, char* tmp);
 	char buf[250];
 	if(IS_AFFECTED(ch, AFF_PARALYSIS)) {
+		return;
+	}
+
+	if(thief_is_hamstrung(ch)) {
+		send_to_char("Le gambe ferite non ti permettono di fuggire!\n\r", ch);
+		WAIT_STATE(ch, PULSE_VIOLENCE);
 		return;
 	}
 

@@ -52,6 +52,7 @@
 #include "spec_procs.hpp"
 #include "spell_parser.hpp"
 #include "spell_parser.hpp"
+#include "thief_tactics.hpp"
 #include "utility.hpp"
 namespace Alarmud {
 
@@ -1128,7 +1129,7 @@ ACTION_FUNC(do_practice) {
 		send_to_char("Conosci le seguenti abilita':\n\r", ch);
 		SET_BIT(ch->player.user_flags,USE_PAGING);
 		for(i=0; *spells[i] != '\n' && i < MAX_SPL_LIST; i++)
-			if(CheckPrac(CLASS_THIEF,i+1,GetMaxLevel(ch)) && ch->skills[i+1].learned  // SALVO uso la nuova funz
+			if(thief_skill_practice_allowed(ch, i + 1) && ch->skills[i+1].learned
 					&& IS_SET(ch->skills[i+1].flags,SKILL_KNOWN)) {
 				sprintf(buf,"%-30s %s",spells[i],
 						how_good(ch->skills[i+1].learned));

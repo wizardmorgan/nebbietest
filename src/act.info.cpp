@@ -58,6 +58,7 @@
 #include "spell_parser.hpp"
 #include "spells.hpp"        // for spell_info_type, SKILL_EVALUATE, SPELL_G...
 #include "Sql.hpp"
+#include "thief_tactics.hpp"
 #include "trap.hpp"
 #include "utility.hpp"
 #include "version.hpp"
@@ -6042,13 +6043,15 @@ void show_skill_append_cylinder_sheet(struct char_data* ch, ShowSkillSpellColumn
 }
 
 void show_skill_append_martial_sheet(struct char_data* ch, int classe, std::string& buffer) {
+	if(classe == CLASS_THIEF) {
+		thief_append_skill_sheet(ch, buffer);
+		return;
+	}
 	const int liv = GetMaxLevel(ch);
 	for(int i = 0; i < MAX_SPL_LIST && spells[i] != nullptr && *spells[i] != '\n'; ++i) {
 		if(!CheckPrac(classe, i + 1, liv)) {
 			continue;
 		}
-		/* Livello mostrato: placeholder 1 finche' spell_info non avra' colonne per guerriero/ladro/monaco/barbaro
-		 * (vedi todo: estendere spell_list / spell_info_type per tutte le classi). */
 		std::string line = "[1] ";
 		line += spells[i];
 		line += " ";

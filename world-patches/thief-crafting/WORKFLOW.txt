@@ -1,0 +1,46 @@
+Patch crafting ladro — mondo di PRODUZIONE (non in git)
+========================================================
+
+Due mondi distinti
+------------------
+1. Root repo (myst.mob, myst.obj, …) — stub "monchi" del progetto, IN GIT.
+   Copiati in lib con:  ./getworldlocal
+
+2. mudroot/lib/myst.* — runtime Docker. Se copi qui il mondo di produzione
+   completo, resta SOLO LOCALE (già escluso da git via mudroot/lib/.gitignore).
+
+NON fare getworldlocal dopo aver messo il mondo di produzione in mudroot/lib:
+sostituiresti i file buoni con gli stub.
+
+Workflow produzione (il tuo caso)
+---------------------------------
+  ./scripts/apply-production-world-patch.sh
+  ./scripts/apply-production-world-patch.sh --check
+
+Ingredienti ladro (vnum 18072, 18001-18003, 18073-18074): solo in vendita, mai a terra.
+  Vedi VNUMS.txt e OVERLAYS.txt — mai usare vnum con file in objects/.
+  Negozio #3005 — mob 3042, stanza 3047 (torre della magia): estratto, resina, sale
+  Negozio #3006 — mob 3043, stanza 3003 (ingresso cappella, est piazza): olio, legante, fiale
+  myst.zon: spawn M/G sui negozianti (senza oggetti a terra)
+  I prodotti esistenti dei negozianti non vengono sostituiti.
+
+Cosa aggiunge la patch
+----------------------
+  myst.obj  — definizioni ingredienti (vedi VNUMS.txt)
+  myst.shp  — prodotti nei negozi sopra; #3005 in stanza 3047 (non 3018)
+  myst.zon  — spawn attendenti 3042/3043 + G reagenti in inventario
+  myst.mob  — toglie ACT_THIEF da Drunky (#3007), Spanky (#3022), Flasite (#7811)
+  pages/helptbl — help delle 14 skill ladro nuove (295-308)
+  Codice: attendenti #3042/#3043 ripopolano con reagenti se uccisi
+
+In git restano solo i fragment in questa cartella.
+
+Riferimento produzione per agenti
+---------------------------------
+I vnum 18500-18505 possono essere GIÀ occupati nel mondo live. Prima di patchare:
+
+  ./scripts/export-production-world-reference.sh
+  git add world-reference/snippets/ && git commit -m "Update production world reference"
+
+Gli agent leggono world-reference/snippets/ (e .cursor/rules/production-world.mdc).
+Vedi world-reference/README.md.

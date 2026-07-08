@@ -31,6 +31,9 @@ namespace Alarmud {
 /* La ridefinizione di funzioni di memoria qui causerebbe ricorsione
  * */
 #define LOG_CRASH 0 // Alar, abbiamo gdb, meglio non modificare i crash
+#ifndef MYST_LOG_CRASH
+#define MYST_LOG_CRASH LOG_CRASH
+#endif
 #define MAX_FNAME_LEN 32
 #define STACK_SIZE 15
 int gnPtr =-1;
@@ -66,6 +69,16 @@ void PrintStatus(int level) {
 		mudlog(LOG_SYSERR, "Mud status when crashed: '%s'",gszMudStatus);
 	}
 	mudlog(LOG_SYSERR, "  Last Name '%s'", gszName);
+	if(gpGeneric) {
+		auto* crash_ch = static_cast<struct char_data*>(gpGeneric);
+		if(crash_ch->nMagicNumber == CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "  Crash ch room=%d act=0x%lx fighting=%p",
+				   crash_ch->in_room,
+				   static_cast<unsigned long>(crash_ch->specials.act),
+				   static_cast<void*>(crash_ch->specials.fighting));
+		}
+	}
 	if(gnPtr>=0) {
 		mudlog(LOG_SYSERR,    " Calling Stack");
 		for(i=0; i<=gnPtr; i++) {
@@ -83,6 +96,9 @@ void SetLine(const char* srcfile,int srcline) {
 
 void SetStatus(const char* szStatus, const char* szString, void* pGeneric) {
 	int i;
+	if(pGeneric) {
+		gpGeneric = pGeneric;
+	}
 	if(szStatus) {
 		i=MIN(strlen(szStatus)+1,sizeof(gszMudStatus));
 		memcpy(gszMudStatus, szStatus, i);
@@ -93,10 +109,6 @@ void SetStatus(const char* szStatus, const char* szString, void* pGeneric) {
 		i=MIN(strlen(szString)+1,sizeof(gszName));
 		memcpy(gszName, szString, i);
 		gszName[ i - 1 ] = 0;
-	}
-
-	if(pGeneric) {
-		gpGeneric = pGeneric;
 	}
 }
 void SetStatus(const char* szStatus) {
@@ -149,7 +161,7 @@ void signal_setup() {
 	signal(SIGINT, diesig);
 	signal(SIGALRM, logsig);
 	signal(SIGTERM, diesig);
-#if LOG_CRASH
+#if MYST_LOG_CRASH
 	signal(SIGSEGV, badcrash);
 	signal(SIGBUS, buscrash);
 
@@ -216,15 +228,35 @@ void logsig(int dummy) {
 	signal(SIGALRM, logsig);
 }
 
-#if LOG_CRASH
 void badcrash(int dummy) {
 	static int graceful_tried = 0;
 	struct descriptor_data* desc;
 
+	(void)dummy;
 	mudlog(LOG_CHECK,
 		   "SIGSEGV received. Trying to shut down gracefully.");
 
 	PrintStatus();
+	fprintf(stderr,
+			"MYST SIGSEGV: status='%s' name='%s' file='%s' line=%d\n",
+			gszMudStatus, gszName, currentfile, currentline);
+	if(gpGeneric) {
+		auto* crash_ch = static_cast<struct char_data*>(gpGeneric);
+		if(crash_ch->nMagicNumber == CHAR_VALID_MAGIC) {
+			fprintf(stderr,
+					"MYST SIGSEGV: ch room=%d act=0x%lx fighting=%p\n",
+					crash_ch->in_room,
+					static_cast<unsigned long>(crash_ch->specials.act),
+					static_cast<void*>(crash_ch->specials.fighting));
+		}
+	}
+	if(gnPtr >= 0) {
+		fprintf(stderr, "MYST SIGSEGV stack:\n");
+		for(int i = 0; i <= gnPtr && i < STACK_SIZE; ++i) {
+			fprintf(stderr, "  %2d. %s\n", i, gszStack[i]);
+		}
+	}
+	fflush(stderr);
 
 	if(!graceful_tried) {
 #if 0
@@ -242,10 +274,15 @@ void buscrash(int dummy) {
 	static int graceful_tried = 0;
 	struct descriptor_data* desc;
 
+	(void)dummy;
 	mudlog(LOG_CHECK,
 		   "SIGBUS received. Trying to shut down gracefully.");
 
 	PrintStatus();
+	fprintf(stderr,
+			"MYST SIGBUS: status='%s' name='%s' file='%s' line=%d\n",
+			gszMudStatus, gszName, currentfile, currentline);
+	fflush(stderr);
 
 	if(!graceful_tried) {
 #if 0
@@ -259,7 +296,7 @@ void buscrash(int dummy) {
 	}
 	abort();
 }
-#endif
+
 float AverageEqIndex(float toadd) {
 	static float curmedia=0.0;
 	static float numerocasi=0.0;

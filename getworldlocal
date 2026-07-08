@@ -1,5 +1,32 @@
 #!/bin/bash
-(
-cd $(dirname $0)
-cp -v myst.* mudroot/lib
+# Copia il mudlib stub (mondo progetto) da root a mudroot/lib.
+#
+# I myst.* in root sono il mondo "monco" originale del repo — vanno in git.
+# NON usare questo script se in mudroot/lib hai già il mondo di produzione
+# completo (sovrascriveresti i file buoni con gli stub).
+#
+# Mondo di produzione (solo locale, mai in git):
+#   cp /path/produzione/myst.* mudroot/lib/
+#   ./scripts/apply-production-world-patch.sh
+#
+# Opzionale: applica anche la patch ladro agli stub (dev):
+#   APPLY_THIEF_WORLD_PATCH=1 ./getworldlocal
+set -euo pipefail
+cd "$(dirname "$0")"
+
+files=(
+  myst.mob myst.obj myst.wld myst.zon myst.spe myst.shp
 )
+
+for f in "${files[@]}"; do
+  if [ ! -f "$f" ]; then
+    echo "getworldlocal: manca $f nella root del repo" >&2
+    exit 1
+  fi
+  cp -v "$f" mudroot/lib/
+done
+
+if [ "${APPLY_THIEF_WORLD_PATCH:-0}" = "1" ] && [ -x ./scripts/apply-thief-world-patch.sh ]; then
+  echo "getworldlocal: applico patch crafting ladro sugli stub in mudroot/lib"
+  ./scripts/apply-thief-world-patch.sh --dir mudroot/lib "${@}"
+fi

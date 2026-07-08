@@ -1,14 +1,13 @@
 # Su Apple Silicon (arm64) mudcompiler è solo linux/amd64: forzare la piattaforma.
-# UID/GID: runEnv scrive .env con LOCAL_UID/LOCAL_GID (stesso utente di consumer e mysql).
+# UID/GID: runEnv scrive .env con LOCAL_UID/LOCAL_GID (consumer).
 services:
     mysql:
         image: mysql:8
-        user: "${LOCAL_UID}:${LOCAL_GID}"
         environment:
             - MYSQL_ROOT_PASSWORD=secret
             - MYSQL_DATABASE=nebbie
         ports:
-            - 3306:33306
+            - "127.0.0.1:${MYSQL_HOST_PORT:-3306}:33306"
         volumes:
             - ./mysql_data:/var/lib/mysql
         command: ["mysqld", "--port=33306"]
@@ -21,7 +20,7 @@ services:
     adminer:
         image: adminer
         ports:
-            - "0.0.0.0:8080:8080"
+            - "127.0.0.1:${ADMINER_HOST_PORT:-8080}:8080"
         depends_on:
             - mysql
         environment:
@@ -42,11 +41,12 @@ services:
             - /etc/group:/etc/group:ro
             - /etc/passwd:/etc/passwd:ro
         ports:
-            - "${SERVER_PORT:-4000}:${SERVER_PORT:-4000}"
-            - 4001:4001
-            - 4002:4002
-            - 4003:4003
-            - 10000:10000
+            - "0.0.0.0:${SERVER_PORT:-4000}:${SERVER_PORT:-4000}"
+            - "0.0.0.0:4001:4001"
+            - "0.0.0.0:4002:4002"
+            - "0.0.0.0:4003:4003"
+            - "0.0.0.0:10000:10000"
+        restart: unless-stopped
         environment:
             - SERVER_PORT=${SERVER_PORT:-4000}
             - MYSQL_HOST=mysql

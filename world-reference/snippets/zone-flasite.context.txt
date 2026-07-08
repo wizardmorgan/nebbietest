@@ -1,0 +1,29 @@
+M 0 7808 1 7825 *!007808 [Alrani, il maestro degli psionici] caricato nella stanza 007825 [Stanza degli Psionici]
+M 0 7806 1 7824 *!007806 [Mei-Chan, il maestro dei monaci] caricato nella stanza 007824 [Stanza dei Monaci]
+M 0 7810 1 7820 *!007810 [Ayle, il maestro dei barbari] caricato nella stanza 007820 [Stanza dei Barbari]
+M 0 7811 1 7828 *!007811 [Flasite, il maestro dei ladri] caricato nella stanza 007828 [La vera stanza del maestro]
+M 0 7807 1 7822 *!007807 [Lorinne, la maestra dei paladini] caricato nella stanza 007822 [Stanza dei Paladini]
+M 0 7814 1 7836 *!007814 [un apprendista guerriero] caricato nella stanza 007836 [La Sala d'Addestramento]
+E 1 7832 100 5 *! 007832 [una maglia di ferro] indossato dal MOB 007814 [un apprendista guerriero] body
+G 1 7851 100 *! 007851 [una gladio] dato al MOB 007814 [un apprendista guerriero]
+M 0 7815 1 7837 *!007815 [un apprendista arciere] caricato nella stanza 007837 [Il Poligono di Tiro]
+E 1 7832 100 5 *! 007832 [una maglia di ferro] indossato dal MOB 007815 [un apprendista arciere] body
+E 1 7833 100 6 *! 007833 [una calotta di pelle] indossato dal MOB 007815 [un apprendista arciere] Head
+E 1 7840 100 16 *! 007840 [un arco di legno] indossato dal MOB 007815 [un apprendista arciere] Wield
+E 1 7839 100 17 *! 007839 [una freccia grigia] indossato dal MOB 007815 [un apprendista arciere] hold
+G 1 7839 100 *! 007839 [una freccia grigia] dato al MOB 007815 [un apprendista arciere]
+G 1 7829 100 *! 007829 [una torcia] caricato all'interno del contenitore 007839 [una freccia grigia]
+M 0 7817 1 7840 *!007817 [il $c0011Campione$c0007] caricato nella stanza 007840 [Il Centro dell'Arena]
+E 1 7832 100 5 *! 007832 [una maglia di ferro] indossato dal MOB 007817 [il $c0011Campione$c0007] body
+E 1 7833 100 6 *! 007833 [una calotta di pelle] indossato dal MOB 007817 [il $c0011Campione$c0007] Head
+E 1 7834 100 8 *! 007834 [degli stivali in cuoio] indossato dal MOB 007817 [il $c0011Campione$c0007] Feet
+E 1 7851 100 16 *! 007851 [una gladio] indossato dal MOB 007817 [il $c0011Campione$c0007] Wield
+M 0 7818 1 7849 *!007818 [un mago strampalato] caricato nella stanza 007849 [Il Laboratorio Segreto]
+E 1 7844 40 17 *! 007844 [bacchetta dei $c0012venti$c0007] indossato dal MOB 007818 [un mago strampalato] hold
+M 0 7819 1 7847 *!007819 [$c0015Darth$c0007, il Cavaliere Guardiano] caricato nella stanza 007847 [Il Tetto Del $c0011Colosseo$c0007]
+E 1 7846 10 5 *! 007846 [$c0015armatura d'argento puro$c0007] indossato dal MOB 007819 [$c0015Darth$c0007, il Cavaliere Guardiano] body
+E 1 7845 100 16 *! 007845 [lo Stocco del Baluardo $c0015Bianco$c0007] indossato dal MOB 007819 [$c0015Darth$c0007, il Cavaliere Guardiano] Wield
+M 0 7813 5 7836 *!007813 [un manichino] caricato nella stanza 007836 [La Sala d'Addestramento]
+M 0 7816 3 7838 *!007816 [un bersaglio] caricato nella stanza 007838 [Tra i bersagli!]
+M 0 7812 1 7833 *!007812 [il guardiano] caricato nella stanza 007833 [Il Magazzino]
+M 0 7822 1 7859 *!007822 [il $c0009Custode della Rabbia$c0007] caricato nella stanza 007859 [Cripta della $c0009Rabbia$c0007]

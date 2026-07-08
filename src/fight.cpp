@@ -28,6 +28,7 @@
 #include "act.info.hpp"
 #include "act.move.hpp"
 #include "act.off.hpp"
+#include "thief_tactics.hpp"
 #include "act.other.hpp"
 #include "comm.hpp"
 #include "db.hpp"
@@ -1023,6 +1024,10 @@ void raw_kill(struct char_data* ch,int killedbytype) {
 	make_corpse(ch,killedbytype);
 	zero_rent(ch);
 	if(IS_NPC(ch)) {
+		const int mob_vnum = mob_index[ch->nr].iVNum;
+		if(mob_vnum == 3042 || mob_vnum == 3043) {
+			thief_respawn_reagent_vendor(mob_vnum, ch->in_room, ch->specials.zone);
+		}
 		procarea_on_mob_death(ch);
 		extract_char(ch);
 	}
@@ -2043,7 +2048,9 @@ int DamageTrivia(struct char_data* ch, struct char_data* v,
     if(IS_NPC(ch) && IS_NPC(v) && !IS_SET(ch->specials.act, (ACT_MONK)) && !IS_SET(ch->specials.act, (ACT_BARBARIAN))) {
     	classe = -1;
     }
+	const int raw_dam = dam;
 	dam = PreProcDam(v, type, dam, classe);
+	dam = thief_adjust_pierce_damage(ch, v, type, dam, raw_dam);
 
 
 #if PREVENT_PKILL
@@ -3675,12 +3682,13 @@ DamageResult HitVictim(struct char_data* ch, struct char_data* v, int dam,
 	}
 	else {
 		/* reduce damage for dodge skill: */
-		if(v->skills && v->skills[ SKILL_DODGE ].learned) {
+		if(!thief_is_feinted(v) && v->skills && v->skills[ SKILL_DODGE ].learned) {
 			if(number(1,101) <= v->skills[SKILL_DODGE].learned) {
 				dam -= number(1,3);
 				if(HasClass(v, CLASS_MONK)) {
 					MonkDodge(ch, v, &dam);
 				}
+				thief_on_dodge_success(v, ch);
 			}
 		}
 		dead = (*dam_func)(ch, v, dam, w_type, location);
@@ -3730,6 +3738,7 @@ DamageResult HitVictim(struct char_data* ch, struct char_data* v, int dam,
 	/*  if the victim survives, lets hit him with a weapon spell */
 	if(dead == AllLiving) {
 		WeaponSpell(ch, v, 0, w_type);
+		thief_on_weapon_hit(ch, v, dead);
 	}
 
 	return dead;
@@ -4207,6 +4216,11 @@ int GetBonusToAttack(struct char_data* pChar, struct char_data* pNewChar) {
 	};
 	int iBonus = 0, iIntIdx;
 
+	if(!pChar || !pNewChar ||
+			pChar->nMagicNumber != CHAR_VALID_MAGIC ||
+			pNewChar->nMagicNumber != CHAR_VALID_MAGIC) {
+		return -10;
+	}
 
 	if(IS_AFFECTED(pNewChar, AFF_FIRESHIELD)) {
 #if ALAR
@@ -4376,18 +4390,31 @@ struct char_data* SwitchVictimToPrince(struct char_data* pAtt,
 struct char_data* FindVictim(struct char_data* pChar) {
 	struct char_data* pLoopChar, *pBetterChar = NULL;
 	int iBonus, iBetterBonus = -1;
+	struct room_data* rp;
+	const int mob_zone = pChar ? pChar->specials.zone : -1;
+	const bool zone_ok = (mob_zone >= 0 && mob_zone <= top_of_zone_table);
 
-	if(pChar->in_room < 0) {
+	if(!pChar || pChar->in_room < 0) {
+		return NULL;
+	}
+	rp = real_roomp(pChar->in_room);
+	if(!rp) {
 		return NULL;
 	}
 	PushStatus("FindVictim");
 
-	for(pLoopChar = (real_roomp(pChar->in_room))->people; pLoopChar;
+	for(pLoopChar = rp->people; pLoopChar;
 			pLoopChar = pLoopChar->next_in_room) {
+		if(pLoopChar->nMagicNumber != CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "FindVictim: skipping invalid char in room %ld",
+				   static_cast<long>(pChar->in_room));
+			continue;
+		}
 		if(IS_PC(pLoopChar) ||
-				((pLoopChar->specials.zone != pChar->specials.zone &&
-				  !strchr(zone_table[ pChar->specials.zone ].races,
-						  GET_RACE(pLoopChar))) ||
+				((zone_ok &&
+				  pLoopChar->specials.zone != mob_zone &&
+				  !strchr(zone_table[mob_zone].races, GET_RACE(pLoopChar))) ||
 				 IS_SET(pLoopChar->specials.act, ACT_ANNOYING))) {
 			if(!IS_SET(pChar->specials.act, ACT_WIMPY) || !AWAKE(pLoopChar)) {
 				if(!in_group(pChar, pLoopChar)) {
@@ -4418,13 +4445,24 @@ struct char_data* FindVictim(struct char_data* pChar) {
 struct char_data* FindAnyVictim(struct char_data* pChar) {
 	struct char_data* pLoopChar, *pBetterChar = NULL;
 	int iBonus, iBetterBonus = -1;
+	struct room_data* rp;
 
-	if(pChar->in_room < 0) {
+	if(!pChar || pChar->in_room < 0) {
+		return NULL;
+	}
+	rp = real_roomp(pChar->in_room);
+	if(!rp) {
 		return NULL;
 	}
 	PushStatus("FindAnyVictim");
-	for(pLoopChar = (real_roomp(pChar->in_room))->people; pLoopChar;
+	for(pLoopChar = rp->people; pLoopChar;
 			pLoopChar = pLoopChar->next_in_room) {
+		if(pLoopChar->nMagicNumber != CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "FindAnyVictim: skipping invalid char in room %ld",
+				   static_cast<long>(pChar->in_room));
+			continue;
+		}
 		if(IS_PC(pLoopChar) || !SameRace(pChar, pLoopChar)) {
 			if(!IS_AFFECTED(pChar, AFF_CHARM) || pChar->master != pLoopChar) {
 				if((IS_NPC(pLoopChar) ||
@@ -5210,14 +5248,26 @@ struct char_data* FindMetaVictim(struct char_data* ch) {
 	struct char_data* tmp_ch;
 	unsigned char found=FALSE;
 	unsigned short total=0;
+	struct room_data* rp;
 
-	PushStatus("FindMetaVictim");
-	if(ch->in_room < 0) {
+	if(!ch || ch->in_room < 0) {
+		return(0);
+	}
+	rp = real_roomp(ch->in_room);
+	if(!rp) {
 		return(0);
 	}
 
-	for(tmp_ch = (real_roomp(ch->in_room))->people; tmp_ch;
+	PushStatus("FindMetaVictim");
+
+	for(tmp_ch = rp->people; tmp_ch;
 			tmp_ch=tmp_ch->next_in_room) {
+		if(tmp_ch->nMagicNumber != CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "FindMetaVictim: skipping invalid char in room %ld",
+				   static_cast<long>(ch->in_room));
+			continue;
+		}
 		if(CAN_SEE(ch,tmp_ch) && !IS_SET(tmp_ch->specials.act,PLR_NOHASSLE)) {
 			if(!(IS_AFFECTED(ch, AFF_CHARM)) || (ch->master != tmp_ch)) {
 				if(!SameRace(ch, tmp_ch)) {
@@ -5237,8 +5287,14 @@ struct char_data* FindMetaVictim(struct char_data* ch) {
 
 	total = number(1,(int)total);
 
-	for(tmp_ch = (real_roomp(ch->in_room))->people; tmp_ch;
+	for(tmp_ch = rp->people; tmp_ch;
 			tmp_ch=tmp_ch->next_in_room) {
+		if(tmp_ch->nMagicNumber != CHAR_VALID_MAGIC) {
+			mudlog(LOG_SYSERR,
+				   "FindMetaVictim: skipping invalid char in room %ld",
+				   static_cast<long>(ch->in_room));
+			continue;
+		}
 		if(CAN_SEE(ch,tmp_ch) && !IS_SET(tmp_ch->specials.act,PLR_NOHASSLE)) {
 			if(!SameRace(tmp_ch, ch)) {
 				total--;

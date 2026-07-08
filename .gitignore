@@ -234,6 +234,8 @@ utilities/convert
 /build/
 /release.h
 mudroot/log.txt
+myst.pid
+mudroot/lib/myst.pid
 src/info
 /check/
 /check.xml
