@@ -110,8 +110,28 @@ shops_have_ingredients() {
   return 0
 }
 
+reagent_vendors_present() {
+  grep -qE 'G 1 18000 0' "$ZON" \
+    && grep -qE 'G 1 18005 0' "$ZON" \
+    && grep -qE '^M 0 3042 1 3047' "$ZON" \
+    && grep -qE '^M 0 3043 1 3003' "$ZON"
+}
+
+shop_rooms_ok() {
+  awk '
+    /^#3005~$/ { shop = 3005; n = 0; next }
+    shop == 3005 {
+      n++
+      if (n == 24 && $1 + 0 != 3047) exit 1
+      if (n >= 28) shop = 0
+      next
+    }
+    END { exit(shop ? 1 : 0) }
+  ' "$SHP"
+}
+
 patch_present() {
-  thief_objs_present && shops_have_ingredients
+  thief_objs_present && shops_have_ingredients && reagent_vendors_present && shop_rooms_ok
 }
 
 strip_thief_zone_lines() {
@@ -244,6 +264,57 @@ apply_shop_products() {
   mv "$tmp" "$SHP"
 }
 
+fix_shop_rooms() {
+  local tmp
+  tmp="$(mktemp)"
+  awk '
+    /^#3005~$/ { in_shop = 1; shop_line = 0; print; next }
+    in_shop {
+      shop_line++
+      if (shop_line == 24 && $1 + 0 == 3018) {
+        $1 = 3047
+      }
+      print
+      if (shop_line >= 28) {
+        in_shop = 0
+      }
+      next
+    }
+    { print }
+  ' "$SHP" > "$tmp"
+  mv "$tmp" "$SHP"
+}
+
+apply_reagent_vendor_zone() {
+  local frag="$PATCH_DIR/myst.zon.reagent-vendors.fragment"
+  local tmp
+  if [ ! -f "$frag" ]; then
+    echo "apply-thief-world-patch: manca $frag" >&2
+    exit 1
+  fi
+  if reagent_vendors_present; then
+    return 0
+  fi
+  tmp="$(mktemp)"
+  awk -v frag="$frag" '
+    BEGIN {
+      while ((getline line < frag) > 0) {
+        if (line ~ /^#/ || line ~ /^[[:space:]]*$/) continue
+        lines[++n] = line
+      }
+      close(frag)
+    }
+    /^M 0 3073 1 3003/ && !done {
+      print
+      for (i = 1; i <= n; i++) print lines[i]
+      done = 1
+      next
+    }
+    { print }
+  ' "$ZON" > "$tmp"
+  mv "$tmp" "$ZON"
+}
+
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if patch_present; then
     echo "OK: patch crafting ladro presente in $TARGET_DIR"
@@ -280,6 +351,18 @@ if ! shops_have_ingredients; then
   apply_shop_products
 else
   echo "apply-thief-world-patch: myst.shp già aggiornato"
+fi
+
+if ! shop_rooms_ok; then
+  echo "apply-thief-world-patch: myst.shp (stanza negozio #3005 → 3047)"
+  fix_shop_rooms
+fi
+
+if ! reagent_vendors_present; then
+  echo "apply-thief-world-patch: myst.zon (spawn negozianti reagenti)"
+  apply_reagent_vendor_zone
+else
+  echo "apply-thief-world-patch: myst.zon negozianti reagenti già presenti"
 fi
 
 if [ "$DO_FLAVOR" -eq 1 ] && [ -f "$WLD" ]; then
@@ -324,8 +407,16 @@ if ! shops_have_ingredients; then
   echo "apply-thief-world-patch: myst.shp senza ingredienti 18000-18005" >&2
   exit 1
 fi
+if ! reagent_vendors_present; then
+  echo "apply-thief-world-patch: myst.zon senza reset negozianti reagenti" >&2
+  exit 1
+fi
+if ! shop_rooms_ok; then
+  echo "apply-thief-world-patch: myst.shp negozio #3005 non punta a stanza 3047" >&2
+  exit 1
+fi
 echo "OK: ingredienti ${THIEF_VNUM_FIRST}-${THIEF_VNUM_LAST} in myst.obj; vendita in myst.shp"
-echo "  Negozio #3005 (stanza 3018): +estratto, resina, sale"
-echo "  Negozio #3006 (stanza 3003): +olio, legante, fiale"
-echo "  (solo slot liberi — nessun oggetto a terra)"
+echo "  Negozio #3005 — L'Attendente mago, stanza 3047 (torre della magia): estratto, resina, sale"
+echo "  Negozio #3006 — L'Attendente, stanza 3003 (ingresso cappella, est piazza): olio, legante, fiale"
+echo "  (list solo dal negoziante con oggetti in inventario — non Tricky, non l'Attendente gilde 3061)"
 echo "Prossimo passo: SERVER_PORT=4003 ./docker-run.sh up -d consumer"

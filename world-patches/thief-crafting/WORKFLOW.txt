@@ -18,15 +18,16 @@ Workflow produzione (il tuo caso)
   ./scripts/apply-production-world-patch.sh --check
 
 Ingredienti ladro (vnum 18000-18005): solo in vendita, mai a terra.
-  Negozio #3005 (stanza 3018) — aggiunge 3 prodotti negli slot liberi
-  Negozio #3006 (stanza 3003) — aggiunge 3 prodotti negli slot liberi
+  Negozio #3005 — mob 3042, stanza 3047 (torre della magia): estratto, resina, sale
+  Negozio #3006 — mob 3043, stanza 3003 (ingresso cappella, est piazza): olio, legante, fiale
+  myst.zon: spawn M/G sui negozianti (senza oggetti a terra)
   I prodotti esistenti dei negozianti non vengono sostituiti.
 
 Cosa aggiunge la patch
 ----------------------
   myst.obj  — definizioni 18000-18005 (vedi VNUMS.txt)
-  myst.shp  — prodotti nei negozi sopra
-  myst.zon  — rimuove eventuali reset spurii in gilde 3076/7828
+  myst.shp  — prodotti nei negozi sopra; #3005 in stanza 3047 (non 3018)
+  myst.zon  — spawn attendenti 3042/3043 + G reagenti in inventario
   myst.mob  — toglie ACT_THIEF da Drunky (#3007), Spanky (#3022), Flasite (#7811)
 
 In git restano solo i fragment in questa cartella.

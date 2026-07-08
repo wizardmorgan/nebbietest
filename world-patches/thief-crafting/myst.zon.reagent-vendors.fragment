@@ -1,0 +1,11 @@
+# Reset negozianti reagenti ladro (idempotente — inseriti dalla patch se assenti)
+# Shop #3005 → mob 3042 in stanza 3047 (torre della magia)
+M 0 3042 1 3047 *!003042 [L'Attendente mago] caricato nella stanza 003047 [La torre della magia]
+G 1 18000 0 *! 0018000 [un estratto tossico] dato al MOB 003042 [L'Attendente mago]
+G 1 18001 0 *! 0018001 [una resina di morella] dato al MOB 003042 [L'Attendente mago]
+G 1 18002 0 *! 0018002 [del sale alcalino] dato al MOB 003042 [L'Attendente mago]
+# Shop #3006 → mob 3043 in stanza 3003 (ingresso cappella, est piazza)
+M 0 3043 1 3003 *!003043 [L'Attendente] caricato nella stanza 003003 [Ingresso alla Cappella]
+G 1 18003 0 *! 0018003 [un olio volatile] dato al MOB 003043 [L'Attendente]
+G 1 18004 0 *! 0018004 [un agente legante] dato al MOB 003043 [L'Attendente]
+G 1 18005 0 *! 0018005 [una fiala di vetro] dato al MOB 003043 [L'Attendente]
