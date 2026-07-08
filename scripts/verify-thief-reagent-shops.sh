@@ -147,7 +147,20 @@ for v in "${LEGACY_VNUMS[@]}"; do
 done
 echo ""
 
-echo "--- Binario myst ---"
+echo "--- helptbl (myst legge mudroot/lib/helptbl dopo chdir -d) ---"
+if [ -f "$DATA_DIR/helptbl" ]; then
+  if grep -q 'POCKET SAND SAND' "$DATA_DIR/helptbl" 2>/dev/null; then
+    echo "OK  helptbl con help skill ladro (POCKET SAND)"
+  else
+    echo "FAIL mudroot/lib/helptbl vecchio — manca help ladro; riesegui patch"
+    fail=1
+  fi
+else
+  echo "FAIL manca $DATA_DIR/helptbl"
+  fail=1
+fi
+echo ""
+
 if [ -x "$ROOT/mudroot/myst" ]; then
   echo "OK  mudroot/myst presente ($(stat -c '%y' "$ROOT/mudroot/myst" 2>/dev/null || stat -f '%Sm' "$ROOT/mudroot/myst"))"
   echo "    Dopo git pull con fix shop.cpp, ricompila:"

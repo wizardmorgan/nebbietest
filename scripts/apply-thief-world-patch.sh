@@ -35,6 +35,11 @@ THIEF_OBJ_COSTS=(80 90 40 50 30 20)
 OBJECTS_DIR="$TARGET_DIR/objects"
 ACT_THIEF=16777216
 
+HELPTBL_SRC="$ROOT/pages/helptbl"
+WIZHELPTBL_SRC="$ROOT/pages/wizhelptbl"
+HELPTBL_DST="$TARGET_DIR/helptbl"
+WIZHELPTBL_DST="$TARGET_DIR/wizhelptbl"
+
 usage() {
   sed -n '2,12p' "$0"
 }
@@ -115,6 +120,21 @@ thief_vnums_overlay_free() {
     fi
   done
   return 0
+}
+
+thief_help_ok() {
+  [ -f "$HELPTBL_DST" ] && grep -q 'POCKET SAND SAND' "$HELPTBL_DST"
+}
+
+sync_help_tables() {
+  if [ ! -f "$HELPTBL_SRC" ]; then
+    echo "apply-thief-world-patch: manca $HELPTBL_SRC" >&2
+    exit 1
+  fi
+  sed 's/\r$//' "$HELPTBL_SRC" > "$HELPTBL_DST"
+  if [ -f "$WIZHELPTBL_SRC" ]; then
+    sed 's/\r$//' "$WIZHELPTBL_SRC" > "$WIZHELPTBL_DST"
+  fi
 }
 
 thief_obj_strip_vnums() {
@@ -292,6 +312,7 @@ shop_rooms_ok() {
 patch_present() {
   thief_objs_complete && thief_objs_before_eof \
     && thief_vnums_overlay_free \
+    && thief_help_ok \
     && shops_have_ingredients && shops_products_ok \
     && reagent_vendors_present && shop_rooms_ok
 }
@@ -483,6 +504,9 @@ fi
 echo "apply-thief-world-patch: myst.obj (ingredienti ladro, sync definizioni)"
 sync_thief_obj_definitions
 
+echo "apply-thief-world-patch: helptbl (help skill ladro in mudroot/lib — myst legge da DATA_DIR)"
+sync_help_tables
+
 if ! shops_products_ok; then
   echo "apply-thief-world-patch: myst.shp (prodotti negozi reagenti #3005/#3006)"
   apply_shop_products
@@ -542,6 +566,10 @@ if ! thief_objs_complete; then
 fi
 if ! thief_objs_before_eof; then
   echo "apply-thief-world-patch: ingredienti ladro assenti o dopo %% in myst.obj (non caricati al boot)" >&2
+  exit 1
+fi
+if ! thief_help_ok; then
+  echo "apply-thief-world-patch: mudroot/lib/helptbl senza help skill ladro (myst fa chdir in DATA_DIR)" >&2
   exit 1
 fi
 if ! thief_vnums_overlay_free; then
