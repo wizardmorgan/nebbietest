@@ -37,6 +37,9 @@ Cosa aggiunge la patch
 
 In git restano solo i fragment in questa cartella.
 
+Documentazione completa (skill, comandi, crafting, deploy):
+  docs/thief-tactics-expansion.md
+
 Riferimento produzione per agenti
 ---------------------------------
 I vnum 18500-18505 possono essere GIÀ occupati nel mondo live. Prima di patchare:
