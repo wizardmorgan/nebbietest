@@ -1,0 +1,12 @@
+# REGOLA ASSOLUTA — mondo produzione
+#
+# mudroot/lib/objects/<vnum> sono overlay oggetto: hanno priorità su myst.obj.
+# Sono parte del mondo live (edit in-game, quest, PG, ecc.).
+#
+# VIETATO per qualsiasi patch o agente:
+#   - cancellare file in objects/
+#   - sovrascrivere file in objects/
+#   - "ripulire" overlay per far funzionare un vnum
+#
+# Se un vnum ladro collide con un overlay esistente, cambiare vnum nel fragment
+# (myst.obj.fragment, myst.shp.products, myst.zon, src/utils.hpp) — non toccare objects/.

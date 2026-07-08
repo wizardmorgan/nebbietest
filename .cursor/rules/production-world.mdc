@@ -12,19 +12,21 @@ globs:
 # Mondo produzione vs stub
 
 - **Root `myst.*`**: stub dev del progetto, in git. Non usare per vnum live.
-- **`mudroot/lib/myst.*`**: runtime; sulla macchina dell’utente è il mondo di produzione.
+- **`mudroot/lib/myst.*`**: runtime; sulla macchina dell'utente è il mondo di produzione.
 - **`world-reference/snippets/`**: estratti committati dal mondo produzione reale — **leggere sempre prima di patchare**.
 
 ## Prima di modificare patch ladro o vnum
 
 1. Leggi `world-reference/snippets/obj-thief-vnum-status.txt` (18500–18505 occupati?)
 2. Leggi `world-reference/snippets/vnum-suggestions.txt` (blocchi liberi)
-3. Leggi `zone-spanky.context.txt` e `zone-flasite.context.txt` per ancore zone
-4. Se esiste `world-reference/production/myst.obj` (locale), usalo come sorgente canonica
+3. Leggi `world-patches/thief-crafting/OVERLAYS.txt` (overlay in `objects/`)
+4. Leggi `zone-spanky.context.txt` e `zone-flasite.context.txt` per ancore zone
+5. Se esiste `world-reference/production/myst.obj` (locale), usalo come sorgente canonica
 
 ## Non fare
 
-- Non assumere che la patch in `world-patches/thief-crafting/` sia applicabile così com’è se i vnum sono occupati.
+- **Non cancellare, non modificare, non sovrascrivere** file in `mudroot/lib/objects/` (overlay oggetto). Se un vnum collide con un overlay, scegliere altri vnum — vedi `world-patches/thief-crafting/OVERLAYS.txt`.
+- Non assumere che la patch in `world-patches/thief-crafting/` sia applicabile così com'è se i vnum sono occupati o hanno overlay.
 - Non eseguire `getworldlocal` dopo aver copiato il mondo di produzione in `mudroot/lib/`.
 
 ## Rigenerare riferimento (utente)

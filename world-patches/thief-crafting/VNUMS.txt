@@ -1,15 +1,19 @@
 # Vnum ingredienti crafting ladro (allineati a produzione)
 #
-# Produzione (world-reference/snippets/obj-thief-vnum-status.txt):
-#   18500 portale, 18501 clessidra, 18502 otre, 18503 libero, 18504 monocolo, 18505 gemma
-# Blocco scelto: 18000-18005 (tutti liberi in produzione)
+# IMPORTANTE: in produzione molti vnum 18xxx hanno file in mudroot/lib/objects/
+# (overlay). Se objects/<vnum> esiste, quella definizione ha priorità su myst.obj.
+# NON cancellare né modificare mai i file in objects/ — scegliere altri vnum liberi.
+#
+# 18000, 18004, 18005 hanno overlay di gioco → NON usare per reagenti ladro.
+# 18001, 18002, 18003: nessun overlay, OK.
+# 18072, 18073, 18074: gap senza overlay (tra 18071 e 18090 in produzione).
 #
 # Codice: src/utils.hpp THIEF_ING_*
-# Patch:  myst.obj.fragment, myst.zon.after-*.fragment
+# Patch:  myst.obj.fragment, myst.zon.reagent-vendors.fragment, myst.shp.products
 
-18000  toxic extract / estratto tossico
+18072  toxic extract / estratto tossico
 18001  nightshade resin / resina morella
 18002  alkali salt / sale alcalino
 18003  volatile oil / olio volatile
-18004  binding agent / agente legante
-18005  glass vial / fiala vetro
+18073  binding agent / agente legante
+18074  glass vial / fiala vetro

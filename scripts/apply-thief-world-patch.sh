@@ -17,9 +17,11 @@ TARGET_DIR="$ROOT/mudroot/lib"
 DO_FLAVOR=0
 CHECK_ONLY=0
 
-THIEF_VNUMS=(18000 18001 18002 18003 18004 18005)
-THIEF_VNUM_FIRST=18000
-THIEF_VNUM_LAST=18005
+THIEF_VNUMS=(18072 18001 18002 18003 18073 18074)
+# Vnum di una patch precedente (solo pulizia zone/myst.obj, mai objects/)
+LEGACY_THIEF_VNUMS=(18000 18004 18005)
+THIEF_VNUM_FIRST=18072
+THIEF_VNUM_LAST=18074
 # keyword atteso nella riga nome oggetto (myst.obj), per vnum
 THIEF_OBJ_KEYWORDS=(
   "toxic extract"
@@ -30,7 +32,7 @@ THIEF_OBJ_KEYWORDS=(
   "glass vial"
 )
 THIEF_OBJ_COSTS=(80 90 40 50 30 20)
-OBJ_OVERRIDE_DIR="$TARGET_DIR/objects"
+OBJECTS_DIR="$TARGET_DIR/objects"
 ACT_THIEF=16777216
 
 usage() {
@@ -98,28 +100,21 @@ thief_objs_complete() {
   return 0
 }
 
-thief_obj_overrides_absent() {
+thief_vnum_has_overlay() {
+  local v="$1"
+  [ -f "$OBJECTS_DIR/$v" ]
+}
+
+thief_vnums_overlay_free() {
   local v
   for v in "${THIEF_VNUMS[@]}"; do
-    if [ -f "$OBJ_OVERRIDE_DIR/$v" ]; then
+    if thief_vnum_has_overlay "$v"; then
+      echo "apply-thief-world-patch: vnum #$v ha overlay ${OBJECTS_DIR}/$v" >&2
+      echo "apply-thief-world-patch: NON cancellare objects/ — scegliere altri vnum (vedi world-patches/thief-crafting/OVERLAYS.txt)" >&2
       return 1
     fi
   done
   return 0
-}
-
-remove_thief_obj_overrides() {
-  local v removed=0
-  for v in "${THIEF_VNUMS[@]}"; do
-    if [ -f "$OBJ_OVERRIDE_DIR/$v" ]; then
-      echo "apply-thief-world-patch: rimuovo override ${OBJ_OVERRIDE_DIR}/$v"
-      rm -f "$OBJ_OVERRIDE_DIR/$v"
-      removed=1
-    fi
-  done
-  if [ "$removed" -eq 0 ]; then
-    echo "apply-thief-world-patch: nessun override objects/18000-18005"
-  fi
 }
 
 sync_thief_obj_definitions() {
@@ -215,7 +210,7 @@ shops_products_ok() {
     /^#3006~$/ { shop = 3006; n = 0; next }
     shop == 3005 && n < 5 {
       n++
-      if (n == 1 && bad_slot($1, 18000)) exit 1
+      if (n == 1 && bad_slot($1, 18072)) exit 1
       if (n == 2 && bad_slot($1, 18001)) exit 1
       if (n == 3 && bad_slot($1, 18002)) exit 1
       if (n > 3 && ($1 + 0) != -1) exit 1
@@ -225,8 +220,8 @@ shops_products_ok() {
     shop == 3006 && n < 5 {
       n++
       if (n == 1 && bad_slot($1, 18003)) exit 1
-      if (n == 2 && bad_slot($1, 18004)) exit 1
-      if (n == 3 && bad_slot($1, 18005)) exit 1
+      if (n == 2 && bad_slot($1, 18073)) exit 1
+      if (n == 3 && bad_slot($1, 18074)) exit 1
       if (n > 3 && ($1 + 0) != -1) exit 1
       if (n == 5) shop = 0
       next
@@ -236,8 +231,8 @@ shops_products_ok() {
 }
 
 reagent_vendors_present() {
-  grep -qE 'G 1 18000 0' "$ZON" \
-    && grep -qE 'G 1 18005 0' "$ZON" \
+  grep -qE 'G 1 18072 0' "$ZON" \
+    && grep -qE 'G 1 18074 0' "$ZON" \
     && grep -qE '^M 0 3042 1 3047' "$ZON" \
     && grep -qE '^M 0 3043 1 3003' "$ZON"
 }
@@ -256,7 +251,7 @@ shop_rooms_ok() {
 }
 
 patch_present() {
-  thief_objs_complete && thief_obj_overrides_absent \
+  thief_objs_complete && thief_vnums_overlay_free \
     && shops_have_ingredients && shops_products_ok \
     && reagent_vendors_present && shop_rooms_ok
 }
@@ -265,22 +260,19 @@ strip_thief_zone_lines() {
   local tmp
   tmp="$(mktemp)"
   awk '
-    function is_ing_line(line,    i, v) {
-      if (line ~ /^O 0 /) {
-        v = $2 + 0
-        if (v >= 18000 && v <= 18005) return 1
-        if (v >= 18500 && v <= 18505) return 1
+    function is_thief_ing_vnum(v) {
+      return v == 18072 || v == 18001 || v == 18002 || v == 18003 || v == 18073 || v == 18074 \
+        || v == 18000 || v == 18004 || v == 18005 \
+        || (v >= 18500 && v <= 18505)
+    }
+    function is_ing_line(line,    n, parts, v) {
+      if (line ~ /^(G|O) /) {
+        n = split(line, parts, " ")
+        if (n >= 3) {
+          v = parts[3] + 0
+          if (is_thief_ing_vnum(v)) return 1
+        }
       }
-      if (line !~ /^[GO] /) return 0
-      for (i = 0; i < 6; i++) {
-        v = 18000 + i
-        if (index(line, " " v " ")) return 1
-      }
-      for (i = 0; i < 6; i++) {
-        v = 18500 + i
-        if (index(line, " " v " ")) return 1
-      }
-      if (line ~ /^G 1 (1800|1850)/) return 1
       return 0
     }
     {
@@ -444,8 +436,11 @@ strip_thief_zone_lines
 clean_guild_room_objects
 remove_guild_master_thief_flag
 
-remove_thief_obj_overrides
-echo "apply-thief-world-patch: myst.obj (#${THIEF_VNUM_FIRST}-#${THIEF_VNUM_LAST}, sync definizioni)"
+if ! thief_vnums_overlay_free; then
+  exit 1
+fi
+
+echo "apply-thief-world-patch: myst.obj (ingredienti ladro, sync definizioni)"
 sync_thief_obj_definitions
 
 if ! shops_products_ok; then
@@ -505,8 +500,8 @@ if ! thief_objs_complete; then
   echo "apply-thief-world-patch: myst.obj ingredienti ladro incompleti o costo errato" >&2
   exit 1
 fi
-if ! thief_obj_overrides_absent; then
-  echo "apply-thief-world-patch: override objects/18000-18005 ancora presenti" >&2
+if ! thief_vnums_overlay_free; then
+  echo "apply-thief-world-patch: vnum ingredienti collidono con overlay objects/" >&2
   exit 1
 fi
 if ! shops_products_ok; then

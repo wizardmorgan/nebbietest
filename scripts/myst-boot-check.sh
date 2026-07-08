@@ -102,23 +102,18 @@ else
   fail=1
 fi
 
-if grep -q '^#18000' "./${DATA_DIR}/myst.obj" 2>/dev/null \
+if grep -q '^#18072' "./${DATA_DIR}/myst.obj" 2>/dev/null \
     && grep -qF 'toxic extract estratto tossico' "./${DATA_DIR}/myst.obj" 2>/dev/null; then
-  echo "OK  ingredienti ladro #18000 in ${DATA_DIR}/myst.obj"
+  echo "OK  ingredienti ladro #18072 in ${DATA_DIR}/myst.obj"
 else
-  echo "WARN #18000 (ingredienti ladro) non trovato — ./scripts/apply-production-world-patch.sh"
+  echo "WARN ingredienti ladro non trovati — ./scripts/apply-production-world-patch.sh"
 fi
 
-obj_override_warn=0
-for v in 18000 18001 18002 18003 18004 18005; do
+for v in 18072 18001 18002 18003 18073 18074; do
   if [ -f "./${DATA_DIR}/objects/$v" ]; then
-    echo "WARN override ${DATA_DIR}/objects/$v — rimuovere e riapplicare patch"
-    obj_override_warn=1
+    echo "WARN overlay ${DATA_DIR}/objects/$v presente — vnum ladro non utilizzabile (non cancellare overlay)"
   fi
 done
-if [ "$obj_override_warn" -eq 0 ] && [ -d "./${DATA_DIR}/objects" ]; then
-  echo "OK  nessun override objects/18000-18005"
-fi
 
 if ./scripts/apply-thief-world-patch.sh --dir "./${DATA_DIR}" --check 2>/dev/null; then
   echo "OK  patch crafting ladro (--check)"

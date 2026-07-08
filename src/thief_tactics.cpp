@@ -1258,8 +1258,8 @@ int thief_potion_type_from_obj(struct obj_data* obj) {
 }
 
 void thief_respawn_reagent_vendor(int mob_vnum, long room, int zone) {
-	static const int kMageStock[] = {18000, 18001, 18002};
-	static const int kChapelStock[] = {18003, 18004, 18005};
+	static const int kMageStock[] = {THIEF_ING_TOXIC_EXTRACT, THIEF_ING_NIGHTSHADE, THIEF_ING_ALKALI_SALT};
+	static const int kChapelStock[] = {THIEF_ING_VOLATILE_OIL, THIEF_ING_BINDING_AGENT, THIEF_ING_GLASS_VIAL};
 	const int* stock = nullptr;
 	int stock_count = 0;
 

@@ -17,7 +17,8 @@ Workflow produzione (il tuo caso)
   ./scripts/apply-production-world-patch.sh
   ./scripts/apply-production-world-patch.sh --check
 
-Ingredienti ladro (vnum 18000-18005): solo in vendita, mai a terra.
+Ingredienti ladro (vnum 18072, 18001-18003, 18073-18074): solo in vendita, mai a terra.
+  Vedi VNUMS.txt e OVERLAYS.txt — mai usare vnum con file in objects/.
   Negozio #3005 — mob 3042, stanza 3047 (torre della magia): estratto, resina, sale
   Negozio #3006 — mob 3043, stanza 3003 (ingresso cappella, est piazza): olio, legante, fiale
   myst.zon: spawn M/G sui negozianti (senza oggetti a terra)
@@ -25,7 +26,7 @@ Ingredienti ladro (vnum 18000-18005): solo in vendita, mai a terra.
 
 Cosa aggiunge la patch
 ----------------------
-  myst.obj  — definizioni 18000-18005 (vedi VNUMS.txt)
+  myst.obj  — definizioni ingredienti (vedi VNUMS.txt)
   myst.shp  — prodotti nei negozi sopra; #3005 in stanza 3047 (non 3018)
   myst.zon  — spawn attendenti 3042/3043 + G reagenti in inventario
   myst.mob  — toglie ACT_THIEF da Drunky (#3007), Spanky (#3022), Flasite (#7811)
