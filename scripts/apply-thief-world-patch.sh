@@ -131,9 +131,16 @@ sync_help_tables() {
     echo "apply-thief-world-patch: manca $HELPTBL_SRC" >&2
     exit 1
   fi
+  mkdir -p "$TARGET_DIR"
   sed 's/\r$//' "$HELPTBL_SRC" > "$HELPTBL_DST"
   if [ -f "$WIZHELPTBL_SRC" ]; then
     sed 's/\r$//' "$WIZHELPTBL_SRC" > "$WIZHELPTBL_DST"
+  fi
+  if [ -x "$ROOT/scripts/validate-helptbl.sh" ]; then
+    "$ROOT/scripts/validate-helptbl.sh" "$TARGET_DIR" || {
+      echo "apply-thief-world-patch: helptbl non valido dopo sync" >&2
+      exit 1
+    }
   fi
 }
 

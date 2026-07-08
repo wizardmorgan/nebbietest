@@ -107,6 +107,15 @@ if [ -f /app/pages/wizhelptbl ]; then
   ln -sfn /app/pages/wizhelptbl /app/mudroot/lib/wizhelptbl
 fi
 
+if [ -x /app/scripts/validate-helptbl.sh ]; then
+  if ! /app/scripts/validate-helptbl.sh /app/mudroot/lib; then
+    echo "[consumer] ERROR: helptbl corrotto — risolvi con:"
+    echo "[consumer]   git checkout -- pages/helptbl mudroot/lib/helptbl"
+    echo "[consumer]   ./scripts/apply-production-world-patch.sh"
+    exit 1
+  fi
+fi
+
 if command -v ss >/dev/null 2>&1; then
   if ss -tlnH 2>/dev/null | grep -qE "[:.]${SERVER_PORT}[[:space:]]"; then
     echo "[consumer] ERROR: port ${SERVER_PORT} already in use inside the container."
