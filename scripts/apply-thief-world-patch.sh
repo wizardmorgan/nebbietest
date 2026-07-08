@@ -117,16 +117,32 @@ thief_vnums_overlay_free() {
   return 0
 }
 
+thief_obj_strip_vnums() {
+  echo "18072 18001 18002 18003 18073 18074 ${LEGACY_THIEF_VNUMS[*]}"
+}
+
 sync_thief_obj_definitions() {
   local frag="$PATCH_DIR/myst.obj.fragment"
-  local tmp
+  local strip_vnums tmp
   if [ ! -f "$frag" ]; then
     echo "apply-thief-world-patch: manca $frag" >&2
     exit 1
   fi
+  strip_vnums="$(thief_obj_strip_vnums)"
   tmp="$(mktemp)"
-  awk -v frag="$frag" '
+  awk -v frag="$frag" -v strip_vnums="$strip_vnums" '
+    function load_strip(    n, parts, i) {
+      n = split(strip_vnums, parts, " ")
+      for (i = 1; i <= n; i++) {
+        if (parts[i] != "") strip[parts[i] + 0] = 1
+      }
+    }
+    function is_strip_vnum(v) {
+      return (v in strip)
+    }
     BEGIN {
+      load_strip()
+      split("18072 18001 18002 18003 18073 18074", insert_order, " ")
       while ((getline line < frag) > 0) {
         if (line ~ /^#[0-9]+$/) {
           if (cur_vnum != "") blocks[cur_vnum] = cur_block
@@ -139,39 +155,62 @@ sync_thief_obj_definitions() {
       }
       if (cur_vnum != "") blocks[cur_vnum] = cur_block
       close(frag)
-      for (vnum in blocks) want[vnum] = 1
+    }
+    /^#99999$/ {
+      skip_block = 0
+      for (i = 1; i <= 6; i++) {
+        vnum = insert_order[i] + 0
+        if (vnum in blocks) printf "%s", blocks[vnum]
+      }
+      print
+      next
     }
     /^#[0-9]+$/ {
       vnum = substr($0, 2) + 0
-      if (skip_vnum) {
-        skip_vnum = 0
-      }
-      if (vnum in want) {
-        printf "%s", blocks[vnum]
-        skip_vnum = vnum
-        delete want[vnum]
+      if (is_strip_vnum(vnum)) {
+        skip_block = 1
         next
       }
+      skip_block = 0
       print
       next
     }
-    skip_vnum { next }
-    /^#99999$/ {
-      for (vnum in want) {
-        if (want[vnum]) printf "%s", blocks[vnum]
-      }
-      delete want
+    skip_block { next }
+    /^%%/ {
       print
+      past_eof = 1
       next
     }
+    past_eof { next }
     { print }
-    END {
-      for (vnum in want) {
-        if (want[vnum]) printf "%s", blocks[vnum]
-      }
-    }
   ' "$OBJ" > "$tmp"
   mv "$tmp" "$OBJ"
+}
+
+thief_objs_before_eof() {
+  awk -v strip_vnums="$(thief_obj_strip_vnums)" '
+    function load_strip(    n, parts, i) {
+      n = split(strip_vnums, parts, " ")
+      for (i = 1; i <= n; i++) {
+        if (parts[i] != "") strip[parts[i] + 0] = 1
+      }
+    }
+    BEGIN {
+      load_strip()
+      split("18072 18001 18002 18003 18073 18074", need, " ")
+      for (i = 1; i <= 6; i++) want[need[i] + 0] = 1
+    }
+    /^%%/ { past_eof = 1 }
+    /^#[0-9]+$/ {
+      vnum = substr($0, 2) + 0
+      if (!past_eof && vnum in want) seen[vnum] = 1
+    }
+    END {
+      for (vnum in want) {
+        if (!seen[vnum]) exit 1
+      }
+    }
+  ' "$OBJ"
 }
 
 vnums_conflict() {
@@ -251,7 +290,8 @@ shop_rooms_ok() {
 }
 
 patch_present() {
-  thief_objs_complete && thief_vnums_overlay_free \
+  thief_objs_complete && thief_objs_before_eof \
+    && thief_vnums_overlay_free \
     && shops_have_ingredients && shops_products_ok \
     && reagent_vendors_present && shop_rooms_ok
 }
@@ -443,17 +483,9 @@ fi
 echo "apply-thief-world-patch: myst.obj (ingredienti ladro, sync definizioni)"
 sync_thief_obj_definitions
 
-if ! shops_products_ok; then
-  echo "apply-thief-world-patch: myst.shp (prodotti negozi reagenti #3005/#3006)"
-  apply_shop_products
-else
-  echo "apply-thief-world-patch: myst.shp prodotti reagenti già corretti"
-fi
-
-if ! shop_rooms_ok; then
-  echo "apply-thief-world-patch: myst.shp (stanza negozio #3005 → 3047)"
-  fix_shop_rooms
-fi
+echo "apply-thief-world-patch: myst.shp (prodotti negozi reagenti #3005/#3006)"
+apply_shop_products
+fix_shop_rooms
 
 if ! reagent_vendors_present; then
   echo "apply-thief-world-patch: myst.zon (spawn negozianti reagenti)"
@@ -498,6 +530,10 @@ fi
 echo "apply-thief-world-patch: verifica"
 if ! thief_objs_complete; then
   echo "apply-thief-world-patch: myst.obj ingredienti ladro incompleti o costo errato" >&2
+  exit 1
+fi
+if ! thief_objs_before_eof; then
+  echo "apply-thief-world-patch: ingredienti ladro assenti o dopo %% in myst.obj (non caricati al boot)" >&2
   exit 1
 fi
 if ! thief_vnums_overlay_free; then
