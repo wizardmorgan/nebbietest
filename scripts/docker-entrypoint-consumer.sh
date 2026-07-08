@@ -96,6 +96,13 @@ export MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DB="${MYSQL_DB:-neb
 
 cd /app
 
+if [ -f /app/pages/helptbl ]; then
+  ln -sfn pages/helptbl /app/helptbl
+fi
+if [ -f /app/pages/wizhelptbl ]; then
+  ln -sfn pages/wizhelptbl /app/wizhelptbl
+fi
+
 if command -v ss >/dev/null 2>&1; then
   if ss -tlnH 2>/dev/null | grep -qE "[:.]${SERVER_PORT}[[:space:]]"; then
     echo "[consumer] ERROR: port ${SERVER_PORT} already in use inside the container."

@@ -41,6 +41,7 @@ void thief_on_victim_fell(struct char_data* victim, struct char_data* attacker);
 bool thief_is_feinted(struct char_data* ch);
 bool thief_is_hamstrung(struct char_data* ch);
 void thief_on_weapon_hit(struct char_data* ch, struct char_data* victim, DamageResult result);
+void thief_respawn_reagent_vendor(int mob_vnum, long room, int zone);
 int thief_poison_type_from_obj(struct obj_data* obj);
 int thief_potion_type_from_obj(struct obj_data* obj);
 

@@ -1024,6 +1024,10 @@ void raw_kill(struct char_data* ch,int killedbytype) {
 	make_corpse(ch,killedbytype);
 	zero_rent(ch);
 	if(IS_NPC(ch)) {
+		const int mob_vnum = mob_index[ch->nr].iVNum;
+		if(mob_vnum == 3042 || mob_vnum == 3043) {
+			thief_respawn_reagent_vendor(mob_vnum, ch->in_room, ch->specials.zone);
+		}
 		procarea_on_mob_death(ch);
 		extract_char(ch);
 	}

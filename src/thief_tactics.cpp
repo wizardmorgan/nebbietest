@@ -1257,6 +1257,38 @@ int thief_potion_type_from_obj(struct obj_data* obj) {
 	return obj->obj_flags.value[1];
 }
 
+void thief_respawn_reagent_vendor(int mob_vnum, long room, int zone) {
+	static const int kMageStock[] = {18000, 18001, 18002};
+	static const int kChapelStock[] = {18003, 18004, 18005};
+	const int* stock = nullptr;
+	int stock_count = 0;
+
+	if(mob_vnum == 3042) {
+		stock = kMageStock;
+		stock_count = 3;
+	}
+	else if(mob_vnum == 3043) {
+		stock = kChapelStock;
+		stock_count = 3;
+	}
+	else {
+		return;
+	}
+
+	struct char_data* vendor = read_mobile(real_mobile(mob_vnum), REAL);
+	if(vendor == nullptr || room < 0) {
+		return;
+	}
+	vendor->specials.zone = zone;
+	char_to_room(vendor, room);
+	for(int i = 0; i < stock_count; ++i) {
+		struct obj_data* obj = read_object(stock[i], REAL);
+		if(obj != nullptr) {
+			obj_to_char(obj, vendor);
+		}
+	}
+}
+
 __attribute__((noinline)) void thief_on_weapon_hit(struct char_data* ch, struct char_data* victim, DamageResult result) {
 	if(ch == nullptr || victim == nullptr || result == VictimDead) {
 		return;

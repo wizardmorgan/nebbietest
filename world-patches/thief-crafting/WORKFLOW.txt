@@ -29,6 +29,8 @@ Cosa aggiunge la patch
   myst.shp  — prodotti nei negozi sopra; #3005 in stanza 3047 (non 3018)
   myst.zon  — spawn attendenti 3042/3043 + G reagenti in inventario
   myst.mob  — toglie ACT_THIEF da Drunky (#3007), Spanky (#3022), Flasite (#7811)
+  pages/helptbl — help delle 14 skill ladro nuove (295-308)
+  Codice: attendenti #3042/#3043 ripopolano con reagenti se uccisi
 
 In git restano solo i fragment in questa cartella.
 

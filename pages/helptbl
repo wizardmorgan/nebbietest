@@ -5403,6 +5403,225 @@ Rivolgersi a Trattok per migliorare il proprio equilibrio.
 Sintassi: nessuna, entra automaticamente.
 
 #
+POCKET SAND SAND
+
+Solo ladri (livello ladro 5+).
+
+Lanci un pugno di sabbia negli occhi di un bersaglio per accecarlo
+brevemente. All'aperto non serve avere sabbia in inventario; al chiuso
+ti serve un sacchetto di sabbia. La riuscita dipende da destrezza,
+livello e skill.
+
+Esempio:
+
+  > sand <bersaglio>
+
+Vedi anche : GOUGE, MIX
+
+#
+CHEAP SHOT
+
+Solo ladri (livello ladro 8+).
+
+Tecnica reattiva: quando un nemico e' vulnerabile (per esempio dopo
+un backstab fallito o mentre e' a terra) puoi sferrargli un colpo basso
+extra. Non ha comando dedicato: si attiva automaticamente in combattimento.
+I ladri puri infliggono il danno pieno; i multiclasse circa la meta'.
+
+Vedi anche : BACKSTAB, HAMSTRING
+
+#
+TUMBLE
+
+Solo ladri (livello ladro 12+).
+
+In combattimento tenti di rotolare via verso un'uscita, interrompendo
+il fight se hai successo. Non funziona se sei affetto da hamstring.
+I ladri puri hanno un bonus alla riuscita.
+
+Esempio:
+
+  > tumble <direzione>
+
+Vedi anche : RETREAT, HAMSTRING
+
+#
+FEINT
+
+Solo ladri (livello ladro 16+).
+
+In combattimento inganni il bersaglio con un finto movimento, rendendolo
+vulnerabile al colpo successivo. Costa movimento e un po' di mana.
+
+Esempio:
+
+  > feint
+
+Vedi anche : CHEAP SHOT, RIPOSTE
+
+#
+RIPOSTE
+
+Solo ladri (livello ladro 20+).
+
+Quando schivi un attacco in combattimento puoi contrattaccare
+immediatamente con una stoccata rapida. Non ha comando dedicato.
+I ladri puri infliggono il danno pieno.
+
+Vedi anche : FEINT, DODGE
+
+#
+HAMSTRING
+
+Solo ladri (livello ladro 24+).
+
+In combattimento colpisci le gambe del nemico con un'arma tagliente
+o appuntita, riducendone la destrezza e infliggendo danno. La vittima
+affetta da hamstring non puo' usare tumble.
+
+Esempio:
+
+  > hamstring
+
+Vedi anche : TUMBLE, GOUGE
+
+#
+CIRCLE KICK CKICK
+
+Solo ladri (livello ladro 28+).
+
+Un calcio circolare che infligge danno e puo' far cadere il bersaglio
+a sedere.
+
+Esempio:
+
+  > ckick <bersaglio>
+
+Vedi anche : CHEAP SHOT, GOUGE
+
+#
+GOUGE
+
+Solo ladri (livello ladro 32+).
+
+Colpisci gli occhi del bersaglio con un'arma perforante o tagliente,
+accecandolo e infliggendo danno. Piu' efficace se sei nascosto (hide).
+
+Esempio:
+
+  > gouge <bersaglio>
+
+Vedi anche : POCKET SAND, GAG
+
+#
+GAG
+
+Solo ladri (livello ladro 36+).
+
+Stringi la gola del bersaglio per impedirgli di parlare e lanciare
+incantesimi. Funziona meglio contro bersagli a terra, alle spalle,
+o gia' in combattimento con te. I psionisti resistono piu' facilmente.
+
+Esempio:
+
+  > gag <bersaglio>
+
+Vedi anche : GOUGE, HAMSTRING
+
+#
+VAULT
+
+Solo ladri puri (livello ladro 42+).
+
+In combattimento salti oltre un alleato piu' robusto di te, passandogli
+addosso l'attenzione dei nemici che stavano combattendo con te.
+Ha un breve tempo di recupero prima di poterla riusare.
+
+Esempio:
+
+  > vault <alleato>
+
+Vedi anche : RETREAT, SNATCH
+
+#
+SNATCH
+
+Solo ladri puri (livello ladro 48+).
+
+In combattimento tenti di strappare l'arma impugnata dal nemico e
+metterla nel tuo inventario. Bersagli molto forti resistono meglio.
+
+Esempio:
+
+  > snatch
+
+Vedi anche : STEAL, DISARM
+
+#
+POISONCRAFT POISON ENVENOM
+
+Solo ladri puri (livello ladro 15+).
+
+Prepari veleni da reagenti acquistati dai mercanti di Myst (estratto,
+resina, sale, olio, legante, fiale). Con poison crei un vial; con
+envenom lo applichi all'arma impugnata. In combattimento il veleno
+puo' proccare sui colpi finche' ha cariche.
+
+Ricette poison (livello minimo ladro):
+
+  weak        (15)  estratto + fiala
+  numb        (18)  estratto + resina + fiala
+  bleed       (20)  estratto + olio + fiala
+  paralytic   (24)  resina + legante + fiale
+  nightfall   (30)  resina + estratto + olio + fiala
+  blacklotus  (40)  resina + estratto + sale + legante + fiala
+
+Esempi:
+
+  > poison weak
+  > envenom vial
+
+Vedi anche : MIX, THROWPOTION
+
+#
+MIX THROW THROWPOTION
+
+Solo ladri puri (livello ladro 45+ per mix; sabbia da livello 5).
+
+Prepari fiale chimiche da reagenti e le lanci con throwpotion. Alcune
+colpiscono un singolo bersaglio, altre riempiono la stanza di vapori
+o schegge (smoke, choking, shrapnel).
+
+Ricette mix:
+
+  sand      (5)   sale + legante  (sacchetto, per pocket sand)
+  acid      (15)  sale + olio + fiala
+  smoke     (20)  olio + legante + fiala
+  fire      (25)  olio + sale + fiala
+  choking   (30)  resina + sale + fiala
+  shrapnel  (35)  sale + legante + fiala
+
+Esempi:
+
+  > mix acid
+  > throwpotion vial <bersaglio>
+
+Vedi anche : POISONCRAFT, POCKET SAND
+
+#
+FIND THE SEAM SEAM
+
+Solo ladri puri (livello ladro 51).
+
+Capstone della classe: con armi perforanti (o backstab) le tue lame
+trocano fessure tra le piastre nemiche. Hai una probabilita' di
+bypassare parzialmente o totalmente l'immunita' al perforante e
+di infliggere danno pieno contro armature pesanti. Non ha comando
+dedicato: si applica automaticamente ai colpi perforanti.
+
+Vedi anche : BACKSTAB, GOUGE
+
+#
 G-DEATH "GROUP DEATH"
 
 Il caso di una morte di un componente di un gruppo comporta una perdita di xp
