@@ -19,6 +19,7 @@
 #include "interpreter.hpp"
 #include "multiclass.hpp"
 #include "regen.hpp"
+#include "signals.hpp"
 #include "spells.hpp"
 #include <cstdio>
 #include <cstring>
@@ -377,6 +378,7 @@ __attribute__((noinline)) void apply_poison_effect(struct char_data* victim, str
 	if(victim == nullptr || ch == nullptr || poison_type <= 0) {
 		return;
 	}
+	PushStatus("thief_poison", GET_NAME_DESC(victim));
 	struct affected_type af;
 	memset(&af, 0, sizeof(af));
 	af.duration = MAX(1, level / 8);
@@ -431,6 +433,7 @@ __attribute__((noinline)) void apply_poison_effect(struct char_data* victim, str
 		default:
 			break;
 	}
+	PopStatus();
 }
 
 void throw_potion_single(struct char_data* ch, struct char_data* victim, int potion_type, int level) {
@@ -1305,6 +1308,7 @@ __attribute__((noinline)) void thief_on_weapon_hit(struct char_data* ch, struct 
 	if(!HasClass(ch, CLASS_THIEF) || ch->equipment[WIELD] == nullptr) {
 		return;
 	}
+	PushStatus("thief_on_hit", GET_NAME_DESC(ch));
 	struct obj_data* weapon = ch->equipment[WIELD];
 	if(weapon->iGeneric1 <= 0 || weapon->iGeneric2 <= 0) {
 		return;
@@ -1324,6 +1328,7 @@ __attribute__((noinline)) void thief_on_weapon_hit(struct char_data* ch, struct 
 		weapon->iGeneric2 = remaining - 1;
 		act("Il veleno sulla tua arma contamina $N!", FALSE, ch, 0, victim, TO_CHAR);
 	}
+	PopStatus();
 }
 
 } // namespace Alarmud
