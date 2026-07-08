@@ -163,27 +163,26 @@ int trade_with(struct obj_data* item, int shop_nr) {
 
 int shop_producing(struct obj_data* item, int shop_nr) {
 	int counter;
+	int vnum;
 
-	if(item->item_number<0) {
+	if(item->item_number < 0) {
 		return(FALSE);
 	}
 
-	for(counter=0; counter<MAX_PROD; counter++)
-		if(shop_index[shop_nr].producing[counter] == item->item_number
-		  ) {
+	vnum = obj_index[item->item_number].iVNum;
+	for(counter = 0; counter < MAX_PROD; counter++) {
+		if(shop_index[shop_nr].producing[counter] == vnum) {
 			return(TRUE);
 		}
+	}
 	return(FALSE);
 }
 
-static struct obj_data* shop_product_template(int item_nr) {
-	struct obj_data* temp1;
-
-	if(item_nr < 0) {
+static struct obj_data* shop_product_template(int item_vnum) {
+	if(item_vnum < 0) {
 		return nullptr;
 	}
-	temp1 = read_object(item_nr, REAL);
-	return temp1;
+	return read_object(item_vnum, VIRTUAL);
 }
 
 static bool shopping_append_product_line(char* buf, struct char_data* ch,
@@ -231,8 +230,8 @@ static struct obj_data* shop_find_product(struct char_data* ch, char* argm,
 		}
 	}
 	for(counter = 0; counter < MAX_PROD; counter++) {
-		const int item_nr = shop_index[shop_nr].producing[counter];
-		temp1 = shop_product_template(item_nr);
+		const int item_vnum = shop_index[shop_nr].producing[counter];
+		temp1 = shop_product_template(item_vnum);
 		if(temp1 == nullptr) {
 			continue;
 		}
@@ -567,8 +566,8 @@ void shopping_list(char* arg, struct char_data* ch,
 	strcpy(buf,"You can buy:\n\r");
 	found_obj = FALSE;
 	for(int counter = 0; counter < MAX_PROD; counter++) {
-		const int item_nr = shop_index[shop_nr].producing[counter];
-		temp1 = shop_product_template(item_nr);
+		const int item_vnum = shop_index[shop_nr].producing[counter];
+		temp1 = shop_product_template(item_vnum);
 		if(temp1 == nullptr) {
 			continue;
 		}
@@ -656,7 +655,11 @@ int shop_keeper(struct char_data* ch, int cmd, char* arg, char* mob, int type) {
 
 
 
-	for(shop_nr=0 ; shop_index[shop_nr].keeper != keeper->nr; shop_nr++);
+	for(shop_nr = 0; shop_nr < number_of_shops
+			&& shop_index[shop_nr].keeper != keeper->nr; shop_nr++);
+	if(shop_nr >= number_of_shops) {
+		return(FALSE);
+	}
 
 
 	if(!cmd) {
@@ -749,12 +752,7 @@ void boot_the_shops() {
 			for(count=0; count<MAX_PROD; count++) {
 				fscanf(shop_f,"%d \n", &temp);
 				mudlog(LOG_SAVE,"Obj %d",temp);
-				if(temp >= 0)
-					shop_index[number_of_shops].producing[count]=
-						real_object(temp);
-				else {
-					shop_index[number_of_shops].producing[count]= temp;
-				}
+				shop_index[number_of_shops].producing[count] = temp;
 			}
 			fscanf(shop_f,"%f \n",
 				   &shop_index[number_of_shops].profit_buy);

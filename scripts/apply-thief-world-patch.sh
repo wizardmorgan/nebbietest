@@ -29,6 +29,8 @@ THIEF_OBJ_KEYWORDS=(
   "binding agent"
   "glass vial"
 )
+THIEF_OBJ_COSTS=(80 90 40 50 30 20)
+OBJ_OVERRIDE_DIR="$TARGET_DIR/objects"
 ACT_THIEF=16777216
 
 usage() {
@@ -75,12 +77,106 @@ thief_obj_ok() {
     ' "$OBJ"
 }
 
-thief_objs_present() {
+thief_obj_cost_ok() {
+  local idx="$1"
+  local v="${THIEF_VNUMS[$idx]}"
+  local cost="${THIEF_OBJ_COSTS[$idx]}"
+  awk -v target="$v" -v cost="$cost" '
+    $0 == "#" target { show=1; costline=-1; next }
+    show && /^[0-9]+ [0-9]+ [0-9]+$/ { costline=$2 + 0 }
+    show && /^#[0-9]+$/ { exit }
+    END { exit(costline == cost ? 0 : 1) }
+  ' "$OBJ"
+}
+
+thief_objs_complete() {
   local i
   for i in 0 1 2 3 4 5; do
     thief_obj_ok "$i" || return 1
+    thief_obj_cost_ok "$i" || return 1
   done
   return 0
+}
+
+thief_obj_overrides_absent() {
+  local v
+  for v in "${THIEF_VNUMS[@]}"; do
+    if [ -f "$OBJ_OVERRIDE_DIR/$v" ]; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+remove_thief_obj_overrides() {
+  local v removed=0
+  for v in "${THIEF_VNUMS[@]}"; do
+    if [ -f "$OBJ_OVERRIDE_DIR/$v" ]; then
+      echo "apply-thief-world-patch: rimuovo override ${OBJ_OVERRIDE_DIR}/$v"
+      rm -f "$OBJ_OVERRIDE_DIR/$v"
+      removed=1
+    fi
+  done
+  if [ "$removed" -eq 0 ]; then
+    echo "apply-thief-world-patch: nessun override objects/18000-18005"
+  fi
+}
+
+sync_thief_obj_definitions() {
+  local frag="$PATCH_DIR/myst.obj.fragment"
+  local tmp
+  if [ ! -f "$frag" ]; then
+    echo "apply-thief-world-patch: manca $frag" >&2
+    exit 1
+  fi
+  tmp="$(mktemp)"
+  awk -v frag="$frag" '
+    BEGIN {
+      while ((getline line < frag) > 0) {
+        if (line ~ /^#[0-9]+$/) {
+          if (cur_vnum != "") blocks[cur_vnum] = cur_block
+          cur_vnum = substr(line, 2) + 0
+          cur_block = line "\n"
+        }
+        else if (cur_vnum != "") {
+          cur_block = cur_block line "\n"
+        }
+      }
+      if (cur_vnum != "") blocks[cur_vnum] = cur_block
+      close(frag)
+      for (vnum in blocks) want[vnum] = 1
+    }
+    /^#[0-9]+$/ {
+      vnum = substr($0, 2) + 0
+      if (skip_vnum) {
+        skip_vnum = 0
+      }
+      if (vnum in want) {
+        printf "%s", blocks[vnum]
+        skip_vnum = vnum
+        delete want[vnum]
+        next
+      }
+      print
+      next
+    }
+    skip_vnum { next }
+    /^#99999$/ {
+      for (vnum in want) {
+        if (want[vnum]) printf "%s", blocks[vnum]
+      }
+      delete want
+      print
+      next
+    }
+    { print }
+    END {
+      for (vnum in want) {
+        if (want[vnum]) printf "%s", blocks[vnum]
+      }
+    }
+  ' "$OBJ" > "$tmp"
+  mv "$tmp" "$OBJ"
 }
 
 vnums_conflict() {
@@ -160,7 +256,8 @@ shop_rooms_ok() {
 }
 
 patch_present() {
-  thief_objs_present && shops_have_ingredients && shops_products_ok \
+  thief_objs_complete && thief_obj_overrides_absent \
+    && shops_have_ingredients && shops_products_ok \
     && reagent_vendors_present && shop_rooms_ok
 }
 
@@ -347,22 +444,9 @@ strip_thief_zone_lines
 clean_guild_room_objects
 remove_guild_master_thief_flag
 
-if ! thief_objs_present; then
-  if vnums_conflict; then
-    echo "apply-thief-world-patch: vnum in conflitto — vedi world-reference/snippets/vnum-suggestions.txt" >&2
-    exit 1
-  fi
-  echo "apply-thief-world-patch: myst.obj (#${THIEF_VNUM_FIRST}-#${THIEF_VNUM_LAST})"
-  tmp_obj="$(mktemp)"
-  awk -v frag="$PATCH_DIR/myst.obj.fragment" '
-    BEGIN { while ((getline line < frag) > 0) block = block line ORS; close(frag) }
-    /^#99999$/ && !done { printf "%s", block; done = 1 }
-    { print }
-  ' "$OBJ" > "$tmp_obj"
-  mv "$tmp_obj" "$OBJ"
-else
-  echo "apply-thief-world-patch: myst.obj ingredienti già presenti"
-fi
+remove_thief_obj_overrides
+echo "apply-thief-world-patch: myst.obj (#${THIEF_VNUM_FIRST}-#${THIEF_VNUM_LAST}, sync definizioni)"
+sync_thief_obj_definitions
 
 if ! shops_products_ok; then
   echo "apply-thief-world-patch: myst.shp (prodotti negozi reagenti #3005/#3006)"
@@ -417,8 +501,12 @@ if [ "$DO_FLAVOR" -eq 1 ] && [ -f "$WLD" ]; then
 fi
 
 echo "apply-thief-world-patch: verifica"
-if ! thief_objs_present; then
-  echo "apply-thief-world-patch: myst.obj incompleto" >&2
+if ! thief_objs_complete; then
+  echo "apply-thief-world-patch: myst.obj ingredienti ladro incompleti o costo errato" >&2
+  exit 1
+fi
+if ! thief_obj_overrides_absent; then
+  echo "apply-thief-world-patch: override objects/18000-18005 ancora presenti" >&2
   exit 1
 fi
 if ! shops_products_ok; then

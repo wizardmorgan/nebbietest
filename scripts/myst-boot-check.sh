@@ -109,6 +109,23 @@ else
   echo "WARN #18000 (ingredienti ladro) non trovato — ./scripts/apply-production-world-patch.sh"
 fi
 
+obj_override_warn=0
+for v in 18000 18001 18002 18003 18004 18005; do
+  if [ -f "./${DATA_DIR}/objects/$v" ]; then
+    echo "WARN override ${DATA_DIR}/objects/$v — rimuovere e riapplicare patch"
+    obj_override_warn=1
+  fi
+done
+if [ "$obj_override_warn" -eq 0 ] && [ -d "./${DATA_DIR}/objects" ]; then
+  echo "OK  nessun override objects/18000-18005"
+fi
+
+if ./scripts/apply-thief-world-patch.sh --dir "./${DATA_DIR}" --check 2>/dev/null; then
+  echo "OK  patch crafting ladro (--check)"
+else
+  echo "WARN patch crafting ladro incompleta — ./scripts/apply-production-world-patch.sh"
+fi
+
 if [ -f "./${DATA_DIR}/myst.pid" ]; then
   pid="$(tr -d ' \n' < "./${DATA_DIR}/myst.pid" 2>/dev/null || true)"
   echo "INFO myst.pid in lib = '${pid}' (solo informativo, non letto al boot)"
