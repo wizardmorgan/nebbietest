@@ -2747,6 +2747,7 @@ NANNY_FUNC(con_nme) {
         d->character->desc = d;
         SET_BIT(d->character->player.user_flags, USE_PAGING);
       }
+      mudlog(LOG_CONNECT, "Starting new char creation for %s", tmp_name);
       CREATE(GET_NAME(d->character), char, strlen(tmp_name) + 1);
       CAP(tmp_name);
       strcpy(GET_NAME(d->character), tmp_name);
@@ -2793,6 +2794,17 @@ NANNY_FUNC(con_nmecnf) {
             .authorized) { // Authorized at account level no need to ask
                            // password again when creating a new toon
       echoOn(d);
+      if(!*d->pwd) {
+        if(!d->AccountData.password.empty()) {
+          strncpy(d->pwd, d->AccountData.password.c_str(), 10);
+          d->pwd[10] = '\0';
+        } else {
+          strncpy(d->pwd,
+                  crypt(d->AccountData.email.c_str(), GET_NAME(d->character)),
+                  10);
+          d->pwd[10] = '\0';
+        }
+      }
       show_race_choice(d);
       STATE(d) = CON_QRACE;
       return false;
@@ -2885,6 +2897,21 @@ NANNY_FUNC(con_register) {
 
     // 4. Ora salva il file .dat (per compatibilita' con refund/ghost)
     save_char(d->character, AUTO_RENT, 0);
+
+    toonPtr saved = Sql::getOne<toon>(toonQuery::name == std::string(GET_NAME(d->character)));
+    if(!saved || !saved->id || !toon_has_playable_body(*saved)) {
+      mudlog(LOG_SYSERR,
+             "con_register: incomplete save for %s (missing body after save_char)",
+             GET_NAME(d->character));
+      if(saved && saved->id) {
+        delete_orphan_toon_record(saved->id);
+      }
+      SEND_TO_Q("Errore nel salvataggio del personaggio (dati incompleti).\n\r",
+                d);
+      close_socket(d);
+      return false;
+    }
+
     mudlog(LOG_CONNECT, "con_register: new synced .dat for %s",
            GET_NAME(d->character));
 
