@@ -5563,23 +5563,23 @@ POISONCRAFT POISON ENVENOM
 Solo ladri puri (livello ladro 15+).
 
 Prepari veleni da reagenti acquistati dai mercanti di Myst (estratto,
-resina, sale, olio, legante, fiale). Con poison crei un vial; con
-envenom lo applichi all'arma impugnata. In combattimento il veleno
-puo' proccare sui colpi finche' ha cariche.
+resina, sale, olio, legante, fiale). Con poison crei una fiala di
+veleno; con envenom la applichi all'arma impugnata. In combattimento
+il veleno puo' proccare sui colpi finche' ha cariche.
 
 Ricette poison (livello minimo ladro):
 
   weak        (15)  estratto + fiala
   numb        (18)  estratto + resina + fiala
   bleed       (20)  estratto + olio + fiala
-  paralytic   (24)  resina + legante + fiale
+  paralizzante (24) resina + legante + fiala
   nightfall   (30)  resina + estratto + olio + fiala
   blacklotus  (40)  resina + estratto + sale + legante + fiala
 
 Esempi:
 
   > poison weak
-  > envenom vial
+  > envenom fiala
 
 Vedi anche : MIX, THROWPOTION
 
@@ -5604,7 +5604,7 @@ Ricette mix:
 Esempi:
 
   > mix acid
-  > throwpotion vial <bersaglio>
+  > throwpotion fiala <bersaglio>
 
 Vedi anche : POISONCRAFT, POCKET SAND
 

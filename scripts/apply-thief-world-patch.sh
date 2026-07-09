@@ -35,6 +35,11 @@ THIEF_OBJ_COSTS=(80 90 40 50 30 20)
 OBJECTS_DIR="$TARGET_DIR/objects"
 ACT_THIEF=16777216
 
+HELPTBL_SRC="$ROOT/pages/helptbl"
+WIZHELPTBL_SRC="$ROOT/pages/wizhelptbl"
+HELPTBL_DST="$TARGET_DIR/helptbl"
+WIZHELPTBL_DST="$TARGET_DIR/wizhelptbl"
+
 usage() {
   sed -n '2,12p' "$0"
 }
@@ -117,16 +122,74 @@ thief_vnums_overlay_free() {
   return 0
 }
 
+thief_help_ok() {
+  [ -f "$HELPTBL_DST" ] && grep -q 'POCKET SAND SAND' "$HELPTBL_DST"
+}
+
+sync_help_tables() {
+  if [ ! -f "$HELPTBL_SRC" ]; then
+    echo "apply-thief-world-patch: manca $HELPTBL_SRC" >&2
+    exit 1
+  fi
+  mkdir -p "$TARGET_DIR"
+
+  # Non fare SRC > DST se sono lo stesso file (symlink): trunca il file e lo corrompe.
+  copy_help_file() {
+    local src="$1" dst="$2"
+    if [ ! -f "$src" ]; then
+      return 0
+    fi
+    if [ -e "$dst" ] && [ "$src" -ef "$dst" ]; then
+      sed -i 's/\r$//' "$src"
+      return 0
+    fi
+    if [ -L "$dst" ]; then
+      rm -f "$dst"
+    fi
+    local tmp
+    tmp="$(mktemp)"
+    sed 's/\r$//' "$src" > "$tmp"
+    mv "$tmp" "$dst"
+  }
+
+  copy_help_file "$HELPTBL_SRC" "$HELPTBL_DST"
+  if [ -f "$WIZHELPTBL_SRC" ]; then
+    copy_help_file "$WIZHELPTBL_SRC" "$WIZHELPTBL_DST"
+  fi
+  if [ -x "$ROOT/scripts/validate-helptbl.sh" ]; then
+    "$ROOT/scripts/validate-helptbl.sh" "$TARGET_DIR" || {
+      echo "apply-thief-world-patch: helptbl non valido dopo sync" >&2
+      exit 1
+    }
+  fi
+}
+
+thief_obj_strip_vnums() {
+  echo "18072 18001 18002 18003 18073 18074 ${LEGACY_THIEF_VNUMS[*]}"
+}
+
 sync_thief_obj_definitions() {
   local frag="$PATCH_DIR/myst.obj.fragment"
-  local tmp
+  local strip_vnums tmp
   if [ ! -f "$frag" ]; then
     echo "apply-thief-world-patch: manca $frag" >&2
     exit 1
   fi
+  strip_vnums="$(thief_obj_strip_vnums)"
   tmp="$(mktemp)"
-  awk -v frag="$frag" '
+  awk -v frag="$frag" -v strip_vnums="$strip_vnums" '
+    function load_strip(    n, parts, i) {
+      n = split(strip_vnums, parts, " ")
+      for (i = 1; i <= n; i++) {
+        if (parts[i] != "") strip[parts[i] + 0] = 1
+      }
+    }
+    function is_strip_vnum(v) {
+      return (v in strip)
+    }
     BEGIN {
+      load_strip()
+      split("18072 18001 18002 18003 18073 18074", insert_order, " ")
       while ((getline line < frag) > 0) {
         if (line ~ /^#[0-9]+$/) {
           if (cur_vnum != "") blocks[cur_vnum] = cur_block
@@ -139,39 +202,62 @@ sync_thief_obj_definitions() {
       }
       if (cur_vnum != "") blocks[cur_vnum] = cur_block
       close(frag)
-      for (vnum in blocks) want[vnum] = 1
+    }
+    /^#99999$/ {
+      skip_block = 0
+      for (i = 1; i <= 6; i++) {
+        vnum = insert_order[i] + 0
+        if (vnum in blocks) printf "%s", blocks[vnum]
+      }
+      print
+      next
     }
     /^#[0-9]+$/ {
       vnum = substr($0, 2) + 0
-      if (skip_vnum) {
-        skip_vnum = 0
-      }
-      if (vnum in want) {
-        printf "%s", blocks[vnum]
-        skip_vnum = vnum
-        delete want[vnum]
+      if (is_strip_vnum(vnum)) {
+        skip_block = 1
         next
       }
+      skip_block = 0
       print
       next
     }
-    skip_vnum { next }
-    /^#99999$/ {
-      for (vnum in want) {
-        if (want[vnum]) printf "%s", blocks[vnum]
-      }
-      delete want
+    skip_block { next }
+    /^%%/ {
       print
+      past_eof = 1
       next
     }
+    past_eof { next }
     { print }
-    END {
-      for (vnum in want) {
-        if (want[vnum]) printf "%s", blocks[vnum]
-      }
-    }
   ' "$OBJ" > "$tmp"
   mv "$tmp" "$OBJ"
+}
+
+thief_objs_before_eof() {
+  awk -v strip_vnums="$(thief_obj_strip_vnums)" '
+    function load_strip(    n, parts, i) {
+      n = split(strip_vnums, parts, " ")
+      for (i = 1; i <= n; i++) {
+        if (parts[i] != "") strip[parts[i] + 0] = 1
+      }
+    }
+    BEGIN {
+      load_strip()
+      split("18072 18001 18002 18003 18073 18074", need, " ")
+      for (i = 1; i <= 6; i++) want[need[i] + 0] = 1
+    }
+    /^%%/ { past_eof = 1 }
+    /^#[0-9]+$/ {
+      vnum = substr($0, 2) + 0
+      if (!past_eof && vnum in want) seen[vnum] = 1
+    }
+    END {
+      for (vnum in want) {
+        if (!seen[vnum]) exit 1
+      }
+    }
+  ' "$OBJ"
 }
 
 vnums_conflict() {
@@ -251,7 +337,9 @@ shop_rooms_ok() {
 }
 
 patch_present() {
-  thief_objs_complete && thief_vnums_overlay_free \
+  thief_objs_complete && thief_objs_before_eof \
+    && thief_vnums_overlay_free \
+    && thief_help_ok \
     && shops_have_ingredients && shops_products_ok \
     && reagent_vendors_present && shop_rooms_ok
 }
@@ -443,6 +531,9 @@ fi
 echo "apply-thief-world-patch: myst.obj (ingredienti ladro, sync definizioni)"
 sync_thief_obj_definitions
 
+echo "apply-thief-world-patch: helptbl (help skill ladro in mudroot/lib — myst legge da DATA_DIR)"
+sync_help_tables
+
 if ! shops_products_ok; then
   echo "apply-thief-world-patch: myst.shp (prodotti negozi reagenti #3005/#3006)"
   apply_shop_products
@@ -498,6 +589,14 @@ fi
 echo "apply-thief-world-patch: verifica"
 if ! thief_objs_complete; then
   echo "apply-thief-world-patch: myst.obj ingredienti ladro incompleti o costo errato" >&2
+  exit 1
+fi
+if ! thief_objs_before_eof; then
+  echo "apply-thief-world-patch: ingredienti ladro assenti o dopo %% in myst.obj (non caricati al boot)" >&2
+  exit 1
+fi
+if ! thief_help_ok; then
+  echo "apply-thief-world-patch: mudroot/lib/helptbl senza help skill ladro (myst fa chdir in DATA_DIR)" >&2
   exit 1
 fi
 if ! thief_vnums_overlay_free; then
