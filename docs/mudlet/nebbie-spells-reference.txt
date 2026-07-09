@@ -1,0 +1,335 @@
+Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
+
+=== INCANTESIMI (cast 'nome' [bersaglio]) ===
+  armor  [arm]
+  teleport  [tele]
+  bless  [ble]
+  blindness  [blind]
+  burning hands  [bh]
+  call lightning  [clightn]
+  charm person  [charm]
+  chill touch  [ct]
+  clone
+  colour spray  [cs]
+  control weather
+  create food  [cfood]
+  create water  [cwater]
+  cure blind  [cblind]
+  cure critic  [cc]
+  cure light  [clight]
+  curse  [curse]
+  detect evil  [dev]
+  detect invisibility  [dinv]
+  detect magic  [dmag]
+  detect poison  [dpois]
+  dispel evil  [devl]
+  earthquake  [ea]
+  enchant weapon  [ewep]
+  energy drain  [edrain]
+  fireball  [fb]
+  harm  [harm]
+  heal  [heal]
+  invisibility  [invis]
+  lightning bolt  [lb]
+  locate object  [loc]
+  magic missile  [mm]
+  poison  [pois]
+  protection from evil  [pevil]
+  remove curse  [rcurse]
+  sanctuary  [san]
+  shocking grasp  [sg]
+  sleep  [csleep]
+  strength  [str]
+  summon  [sum]
+  ventriloquate
+  word of recall  [wrec]
+  remove poison  [rpois]
+  sense life  [slife]
+  identify  [ident]
+  infravision  [infra]
+  cause light  [cal]
+  cause critical  [cac]
+  flamestrike  [fs]
+  dispel good  [dg]
+  weakness  [weak]
+  dispel magic  [dm]
+  knock  [knock]
+  know alignment  [kalign]
+  animate dead  [adead]
+  paralyze  [para]
+  remove paralysis  [rpara]
+  fear  [fear]
+  acid blast  [ab]
+  water breath  [wb]
+  fly  [fly]
+  cone of cold  [coc]
+  meteor swarm  [ms]
+  ice storm  [is]
+  shield  [shld]
+  monsum one
+  monsum two
+  monsum three
+  monsum four
+  monsum five
+  monsum six
+  monsum seven
+  fireshield  [fshld]
+  charm monster  [cmon]
+  cure serious  [cser]
+  cause serious  [cas]
+  refresh  [ref]
+  second wind  [sw]
+  turn
+  succor
+  create light
+  continual light
+  calm
+  stone skin  [sskin]
+  conjure elemental
+  true sight  [tsight]
+  minor creation
+  faerie fire  [ffire]
+  faerie fog
+  cacaodemon
+  polymorph self  [poly]
+  mana  [mana]
+  astral walk
+  resurrection  [resu]
+  heroes feast
+  group fly
+  breath
+  web
+  minor track
+  major track
+  golem
+  find familiar
+  changestaff
+  holy word
+  unholy word
+  power word kill
+  power word blind
+  chain lightning  [chain]
+  scare
+  aid  [aid]
+  command  [cmd]
+  change form
+  feeblemind  [feeble]
+  shillelagh
+  goodberry
+  elemental blade
+  animal growth
+  insect growth
+  creeping death
+  commune
+  animal summon one
+  animal summon two
+  animal summon three
+  fire servant
+  earth servant
+  water servant
+  wind servant
+  reincarnate  [reinc]
+  charm vegetable
+  vegetable growth
+  tree
+  animate rock
+  tree travel
+  travelling
+  animal friendship
+  invis to animals
+  slow poison
+  entangle  [ent]
+  snare  [snare]
+  gust of wind
+  barkskin  [bark]
+  sunray
+  warp weapon
+  heat stuff
+  firestorm
+  haste  [haste]
+  slowness  [slow]
+  dust devil
+  know monster
+  transport via plant
+  speak with plants
+  silence  [sil]
+  sending
+  teleport without error
+  portal  [psiport]
+  dragon ride
+  mount
+  minor heal
+  spring leap
+  geyser
+  mirror images  [mirr]
+  green slime
+  darkness
+  minor invulnerability
+  major invulnerability
+  protection from drain
+  protection from breath
+  anti magic shell
+  psi invisibility
+  protection from evil group
+  prismatic spray  [prism]
+  incendiary cloud
+  disintegrate  [disint]
+  comprehend languages
+  protection from fire
+  protection from cold
+  protection from energy
+  protection from electricity
+  enchant armor  [earmor]
+  messenger
+  protection fire breath
+  protection frost breath
+  protection electric breath
+  protection acid breath
+  protection gas breath
+  wizardeye
+  mind burn  [mburn]
+  clairvoyance
+  psionic danger sense
+  psionic disintegrate
+  telekinesis  [telek]
+  levitation  [lev]
+  cell adjustment
+  chameleon
+  psionic strength
+  mind over body
+  probability travel
+  psionic teleport  [ptel]
+  domination  [dom]
+  mind wipe  [mwipe]
+  psychic crush  [pcrush]
+  tower of iron will
+  mindblank
+  psychic impersonation
+  ultra blast
+  intensify
+  \n
+
+=== PSI via mind 'nome' ===
+  cell adjustment
+  chameleon
+  clairvoyance
+  domination  [dom]
+  hypnosis
+  intensify
+  levitation  [lev]
+  mind burn  [mburn]
+  mind over body
+  mind wipe  [mwipe]
+  mindblank
+  probability travel
+  psi invisibility
+  psionic danger sense
+  psionic disintegrate
+  psionic strength
+  psionic teleport  [ptel]
+  psychic crush  [pcrush]
+  psychic impersonation
+  telekinesis  [telek]
+  tower of iron will
+  ultra blast
+
+=== SKILL (comando diretto) ===
+  adrenalize: adrenalize <bersaglio>  [adr]
+  aura sight: aura   [aura]
+  backstab: backstab <vittima>  [bs]
+  bash: bash <vittima>  [bash]
+  bellow: bellow   [bel]
+  berserk: berserk   [berz]
+  blessing: blessing <bersaglio>  [bld]
+  bodyguard: bodyguard <bersaglio>  [bg]
+  brew: brew   [brew]
+  camouflage: camouflage   [camo]
+  canibalize: canibalize [numero]  [cani]
+  carve: carve <cadavere>  [carve]
+  climb: climb <direzione>  [climb]
+  daimoku: daimoku   [dai]
+  disarm: disarm <vittima>  [disarm]
+  disguise: disguise   [disguise]
+  doorbash: doorbash <porta>  [dbash]
+  doorway: doorway <nome>  [dw]
+  eavesdrop: eavesdrop   [eaves]
+  esp: esp   [esp]
+  feign death: feign death   [fd]
+  find food: find food   [ffood]
+  find traps: find traps   [ftrap]
+  find water: find water   [fwater]
+  finger: finger   [fin]
+  first aid: first aid   [faid]
+  flame shroud: flame   [flm]
+  forge: forge <arma> <materiale>  [forge]
+  great sight: great   [great]
+  heroic rescue: heroic   [hero]
+  hide: hide   [hide]
+  hypnosis: hypnotize <bersaglio>  [hyp]
+  immolation: immolate   [imm]
+  kick: kick <vittima>  [kick]
+  lay on hands: lay on hands [bersaglio]  [loh]
+  mantra: mantra   [man]
+  meditate: meditate   [medit]
+  memorizing: memorize '<incantesimo>'  [mem]
+  parry: parry   [parry]
+  pick: pick <porta/cassa>  [picklock]
+  pray: pray   [pray]
+  psi portal: portal <nome>  [psiport]
+  psi shield: shield   [pshld]
+  psi summon: summon <nome>  [sum]
+  psionic blast: blast <bersaglio>  [blast]
+  quivering palm: quivering palm <vittima>  [qp]
+  ration: carve <cadavere>  [carve]
+  rescue: rescue <persona>  [resc]
+  scry: scry <nome>  [scry]
+  sign language: sign 
+  sneak: sneak   [snk]
+  spot: spot   [spot]
+  springleap: springleap   [leap]
+  spy: spy   [spy]
+  steal: steal <oggetto> <vittima>  [stl]
+  swim: swim   [swim]
+  tan: tan <cadavere> <tipo>  [tan]
+  track: track <nome>  [track]
+  tspy: tspy   [tspy]
+  warcry: warcry   [wc]
+
+=== ALIAS MUDLET ===
+  c <spell> [tgt]     → cast (modalita' corrente)
+  r <spell> [tgt]     → recall (stregone)
+  m <spell> [tgt]     → mind (psi)
+  mem <spell>         → memorize
+  ncast/nrecall/nmind → cambia modalita' predefinita
+  nclass +            → preset cast universale (multiclasse cast)
+  nclass m c          → unisce slot di piu' classi
+  nclass m            → imposta classe (salvata per profilo Mudlet)
+  nclass              → elenca tutte le classi e slot q1-q9
+  q1-q9 [tgt]         → slot rapidi della classe corrente
+  nattrib             → sync attribute (gagged)
+  nattrib on/off      → sync automatico ogni 90s
+  nsetup              → avvia HUD (non cambia il prompt)
+  ngui / nhud         → mostra/nasconde HUD
+  inv / eq            → comandi MUD nativi (non aliasati)
+  nloot               → look, poi corp/2.corp/… + pile/2.pile/…
+  nloot on/off        → loot auto dopo kill mob (exp reale)
+  usa <arma>          → cambio arma da borsa sulla schiena
+  nkey                → elenco chiavi eq (nome → parola MUD)
+  nkey add <k> <txt>  → aggiungi chiave custom
+  neq                 → mostra cache eq + sync ora
+  neq on/off          → sync eq automatico ogni 1h (gagged)
+
+=== PANNELLO HUD ===
+  Gauge HP/Mana/Move + buff/debuff + parser prompt [%s]
+  + (Cast universale): q1=aid, q2=arm, q3=ble, q4=shld, q5=sskin, q6=mirr, q7=heal, q8=san, q9=invis
+  I (Psionista): q1=pshld, q2=mb, q3=pcrush, q4=lev, q5=ptel, q6=medit, q7=blast, q8=dw, q9=psiport
+  b (Barbaro): q1=berz, q2=bel, q3=kick, q4=bash, q5=camo, q6=ffood, q7=fwater, q8=tan, q9=faid
+  c (Chierico): q1=heal, q2=cser, q3=cc, q4=clight, q5=ble, q6=san, q7=pevil, q8=devl, q9=aid
+  d (Druido): q1=bark, q2=clightn, q3=ent, q4=snare, q5=clight, q6=fly, q7=sskin, q8=ffood, q9=brew
+  k (Monaco): q1=man, q2=fin, q3=qp, q4=leap, q5=fd, q6=kick, q7=bash, q8=dai, q9=faid
+  m (Mago): q1=arm, q2=shld, q3=fly, q4=mm, q5=fb, q6=lb, q7=invis, q8=str, q9=tele
+  p (Paladino): q1=heal, q2=loh, q3=wc, q4=ble, q5=san, q6=fs, q7=hero, q8=bld, q9=pray
+  r (Ranger): q1=track, q2=clight, q3=bark, q4=camo, q5=snk, q6=carve, q7=ffood, q8=fwater, q9=ent
+  s (Stregone): q1=arm, q2=shld, q3=mm, q4=fb, q5=lb, q6=invis, q7=str, q8=fly, q9=tele
+  t (Ladro): q1=bs, q2=snk, q3=hide, q4=stl, q5=picklock, q6=spy, q7=tspy, q8=disguise, q9=eaves
+  w (Guerriero): q1=kick, q2=bash, q3=resc, q4=disarm, q5=bel, q6=parry, q7=faid, q8=dbash, q9=climb
