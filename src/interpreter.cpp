@@ -2618,6 +2618,38 @@ NANNY_FUNC(con_slct) {
   }
   return false;
 }
+static bool toon_has_playable_body(const toon& pg) {
+  if(pg.name.empty()) {
+    return false;
+  }
+  char_file_u st {};
+#if USE_MYSQL
+  if(pg.id && load_char_mysql(pg.name.c_str(), &st)) {
+    return true;
+  }
+#endif
+  return load_char(pg.name.c_str(), &st) != FALSE;
+}
+static void delete_orphan_toon_record(unsigned long long toon_id) {
+#if USE_MYSQL
+  if(!toon_id) {
+    return;
+  }
+  try {
+    DB* db = Sql::getMysql();
+    odb::transaction t(db->begin());
+    t.tracer(logTracer);
+    db->execute(("DELETE FROM toon WHERE id = " + std::to_string(toon_id)).c_str());
+    t.commit();
+    mudlog(LOG_CONNECT, "Deleted orphan toon id %llu (no character body)",
+           static_cast<unsigned long long>(toon_id));
+  } catch(const odb::exception& e) {
+    mudlog(LOG_SYSERR, "delete_orphan_toon_record: %s", e.what());
+  }
+#else
+  (void)toon_id;
+#endif
+}
 NANNY_FUNC(con_nme) {
   oldarg(true);
   char tmp_name[100];
@@ -2670,6 +2702,14 @@ NANNY_FUNC(con_nme) {
       return false;
     }
 #endif
+    if(!toon_has_playable_body(*pg)) {
+      mudlog(LOG_CONNECT,
+             "Orphan toon %s (owner_id=%d) has no loadable body — new creation",
+             pg->name.c_str(), pg->owner_id);
+      if(pg->id) {
+        delete_orphan_toon_record(pg->id);
+      }
+    } else {
     mudlog(LOG_CONNECT, "Toon found on db, registered to %d", pg->owner_id);
     found = true;
     strcpy(d->pwd, pg->password.substr(0, 11).c_str());
@@ -2685,6 +2725,7 @@ NANNY_FUNC(con_nme) {
         SEND_TO_Q("Nome: ", d);
         return false;
       }
+    }
     }
   }
   if (not found) {
