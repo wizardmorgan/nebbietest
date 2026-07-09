@@ -29,8 +29,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 #include <charconv>
-#include <optional>
-#include <string_view>
+#include <array>
+#include <unordered_map>
 /***************************  General include ************************************/
 #include "config.hpp"
 #include "typedefs.hpp"
@@ -78,6 +78,8 @@
 #include "toon_migration.hpp"
 #include "toon_nuke_blacklist.hpp"
 namespace Alarmud {
+
+extern const int human_class_choice[];
 
 char EasySummon = true;
 long numero_mob_obj[100000];
@@ -7513,6 +7515,507 @@ ACTION_FUNC(do_ghost) {		// ghost aggiornato per usare il DB
 	act("The soul of $N rises forth from the mortal lands.", FALSE, ch, 0, tmp_ch, TO_ROOM);
 	act("You call forth the soul of $N.", FALSE, ch, 0, tmp_ch, TO_CHAR);
 	send_to_char("Be sure to forcerent them when done!\n\r", ch);
+}
+
+namespace {
+
+static std::unordered_map<std::string, std::string> g_testparty_prefix_by_owner;
+static std::unordered_map<std::string, std::string> g_testparty_owner_by_member;
+
+static void testparty_show_help(struct char_data* ch) {
+	send_to_char(
+		"$c0014=== Test Party (3 PG livello 50 per test) ===$c0007\n\r"
+		"Codici classe: M=Magico C=Chierico W=Guerriero T=Ladro D=Druido\n\r"
+		"               K=Monaco B=Barbaro S=Stregone P=Paladino R=Ranger I=Psi\n\r"
+		"Multiclasse: concatena le lettere (es. WCT = Guerriero/Chierico/Ladro)\n\r\n\r"
+		"  testparty create <prefisso> <cls1> <cls2> <cls3>\n\r"
+		"      Crea prefisso1/2/3 (umano, lv 50, password 'test')\n\r"
+		"  testparty summon <prefisso>\n\r"
+		"      Evoca i 3 PG offline nella tua stanza (ghost, ti seguono)\n\r"
+		"  testparty cmd <1|2|3|all> <comando>\n\r"
+		"      Esegui un comando su un membro del gruppo di test\n\r"
+		"  testparty dismiss <prefisso>\n\r"
+		"      Salva e rimuove i ghost evocati\n\r\n\r"
+		"Flusso tipico: create -> summon -> cmd 1 <azione> ... -> dismiss\n\r",
+		ch);
+}
+
+static std::string testparty_member_name(const std::string& prefix, int slot) {
+	return prefix + std::to_string(slot);
+}
+
+static bool testparty_name_taken(const char* name) {
+	if(!name || !*name) {
+		return true;
+	}
+	char lname[20];
+	std::snprintf(lname, sizeof(lname), "%s", name);
+	if(find_name(lname)) {
+		return true;
+	}
+	if(get_char(name)) {
+		return true;
+	}
+#if USE_MYSQL
+	try {
+		const toonPtr pg = Sql::getOne<toon>(toonQuery::name == std::string(name));
+		if(pg && pg->id) {
+			return true;
+		}
+	}
+	catch(const odb::exception&) {
+	}
+#endif
+	return false;
+}
+
+static std::optional<int> testparty_parse_classes(const char* spec) {
+	if(!spec || !*spec) {
+		return std::nullopt;
+	}
+	int iClass = 0;
+	for(const char* p = spec; *p; ++p) {
+		switch(toupper(static_cast<unsigned char>(*p))) {
+		case 'M':
+			iClass |= CLASS_MAGIC_USER;
+			break;
+		case 'C':
+			iClass |= CLASS_CLERIC;
+			break;
+		case 'W':
+			iClass |= CLASS_WARRIOR;
+			break;
+		case 'T':
+			iClass |= CLASS_THIEF;
+			break;
+		case 'D':
+			iClass |= CLASS_DRUID;
+			break;
+		case 'K':
+			iClass |= CLASS_MONK;
+			break;
+		case 'B':
+			iClass |= CLASS_BARBARIAN;
+			break;
+		case 'S':
+			iClass |= CLASS_SORCERER;
+			break;
+		case 'P':
+			iClass |= CLASS_PALADIN;
+			break;
+		case 'R':
+			iClass |= CLASS_RANGER;
+			break;
+		case 'I':
+			iClass |= CLASS_PSI;
+			break;
+		default:
+			return std::nullopt;
+		}
+	}
+	if(iClass == 0) {
+		return std::nullopt;
+	}
+	if((iClass & CLASS_MAGIC_USER) && (iClass & CLASS_SORCERER)) {
+		return std::nullopt;
+	}
+	bool allowed = false;
+	for(int i = 0; human_class_choice[i] != 0; ++i) {
+		if(human_class_choice[i] == iClass) {
+			allowed = true;
+			break;
+		}
+	}
+	if(!allowed) {
+		return std::nullopt;
+	}
+	return iClass;
+}
+
+static void testparty_free_char(struct char_data* ch) {
+	if(!ch) {
+		return;
+	}
+	if(GET_NAME(ch)) {
+		free(GET_NAME(ch));
+	}
+	if(GET_TITLE(ch)) {
+		free(GET_TITLE(ch));
+	}
+	free(ch);
+}
+
+static bool testparty_save_new_char(struct char_data* ch, const char* plain_pwd) {
+	struct char_file_u st {};
+	char szFileName[200];
+	FILE* fl = nullptr;
+
+	char_to_store(ch, &st);
+	st.load_room = AUTO_RENT;
+	std::snprintf(st.name, sizeof(st.name), "%s", GET_NAME(ch));
+	if(plain_pwd && *plain_pwd) {
+		const char* hashed = crypt(plain_pwd, plain_pwd);
+		if(hashed) {
+			std::snprintf(st.pwd, sizeof(st.pwd), "%s", hashed);
+		}
+	}
+
+	try {
+		toonPtr pg = boost::make_shared<toon>();
+		pg->name = GET_NAME(ch);
+		pg->password = st.pwd;
+		pg->title = (GET_TITLE(ch) ? GET_TITLE(ch) : "");
+		pg->level = GetMaxLevel(ch);
+		pg->lastlogin = boost::posix_time::from_time_t(time(nullptr));
+		pg->lasthost = "testparty";
+		if(!Sql::save(*pg)) {
+			mudlog(LOG_SYSERR, "testparty: Sql::save failed for %s", GET_NAME(ch));
+			return false;
+		}
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "testparty: ODB error for %s: %s", GET_NAME(ch), e.what());
+		return false;
+	}
+
+	std::snprintf(szFileName, sizeof(szFileName), "%s/%s.dat", PLAYERS_DIR,
+				  lower(GET_NAME(ch)));
+	if((fl = fopen(szFileName, "wb")) == nullptr) {
+		mudlog(LOG_ERROR, "testparty: cannot create %s", szFileName);
+		return false;
+	}
+	fwrite(&st, sizeof(struct char_file_u), 1, fl);
+	fclose(fl);
+
+	if(!save_character_to_db(ch, &st, nullptr, CHAR_DB_SAVE_BODY_TOON)) {
+		mudlog(LOG_SYSERR, "testparty: save_character_to_db failed for %s",
+			   GET_NAME(ch));
+		return false;
+	}
+	return true;
+}
+
+static bool testparty_advance_to_barone(struct char_data* ch) {
+	for(int idx = MAGE_LEVEL_IND; idx < MAX_CLASS; ++idx) {
+		if(!GET_LEVEL(ch, idx)) {
+			continue;
+		}
+		while(GET_LEVEL(ch, idx) < BARONE) {
+			const int lvl = GET_LEVEL(ch, idx);
+			if(lvl + 1 >= ABS_MAX_LVL) {
+				return false;
+			}
+			GET_EXP(ch) = titles[idx][lvl + 1].exp;
+			advance_level(ch, idx);
+		}
+	}
+	GET_HIT(ch) = GET_MAX_HIT(ch);
+	GET_MANA(ch) = GET_MAX_MANA(ch);
+	GET_MOVE(ch) = GET_MAX_MOVE(ch);
+	set_title(ch);
+	return true;
+}
+
+static bool testparty_create_one(struct char_data* creator, const char* name,
+								 int iClass) {
+	char buf[MAX_STRING_LENGTH];
+
+	if(testparty_name_taken(name)) {
+		snprintf(buf, sizeof(buf), "Nome '%s' gia' in uso.\n\r", name);
+		send_to_char(buf, creator);
+		return false;
+	}
+
+	struct char_data* ch = nullptr;
+	CREATE(ch, struct char_data, 1);
+	clear_char(ch);
+	CREATE(GET_NAME(ch), char, strlen(name) + 1);
+	strcpy(GET_NAME(ch), name);
+	GET_RACE(ch) = RACE_HUMAN;
+	GET_SEX(ch) = SEX_MALE;
+	ch->player.iClass = iClass;
+	SET_BIT(ch->player.user_flags, USE_ANSI);
+
+	init_char(ch);
+	roll_abilities(ch);
+	StartLevels(ch);
+	do_start(ch);
+	if(!testparty_advance_to_barone(ch)) {
+		send_to_char("Errore avanzamento livello 50.\n\r", creator);
+		testparty_free_char(ch);
+		return false;
+	}
+	if(!testparty_save_new_char(ch, "test")) {
+		send_to_char("Errore salvataggio personaggio di test.\n\r", creator);
+		testparty_free_char(ch);
+		return false;
+	}
+
+	snprintf(buf, sizeof(buf),
+			 "$c0010Creato$c0007 %s (umano, lv %d, classi 0x%x, pwd: test)\n\r",
+			 name, GetMaxLevel(ch), iClass);
+	send_to_char(buf, creator);
+	testparty_free_char(ch);
+	return true;
+}
+
+static struct char_data* testparty_spawn_ghost(struct char_data* controller,
+											   const char* name) {
+	struct char_file_u tmp_store {};
+	struct char_data* tmp_ch = nullptr;
+
+	if(get_char(name)) {
+		return nullptr;
+	}
+
+	switch(ghost_load_char_store(name, tmp_store)) {
+	case GhostLoadStatus::Nuked:
+	case GhostLoadStatus::MysqlFailed:
+	case GhostLoadStatus::NotFound:
+		return nullptr;
+	case GhostLoadStatus::Ok:
+		break;
+	}
+
+	CREATE(tmp_ch, struct char_data, 1);
+	clear_char(tmp_ch);
+	store_to_char(&tmp_store, tmp_ch);
+	reset_char(tmp_ch);
+	load_char_objs(tmp_ch, TRUE);
+	save_ghost_forcerent(tmp_ch);
+	tmp_ch->next = character_list;
+	character_list = tmp_ch;
+	tmp_ch->specials.tick = plr_tick_count++;
+	if(plr_tick_count == PLR_TICK_WRAP) {
+		plr_tick_count = 0;
+	}
+	char_to_room(tmp_ch, controller->in_room);
+	tmp_ch->desc = nullptr;
+	add_follower(tmp_ch, controller);
+	g_testparty_owner_by_member[lower(name)] = GET_NAME(controller);
+	return tmp_ch;
+}
+
+static bool testparty_can_control(struct char_data* controller,
+								  struct char_data* victim) {
+	if(!controller || !victim || !GET_NAME(victim)) {
+		return false;
+	}
+	if(IS_IMMORTAL(controller) && GetMaxLevel(controller) >= MAESTRO_DEL_CREATO) {
+		const auto it = g_testparty_owner_by_member.find(lower(GET_NAME(victim)));
+		if(it != g_testparty_owner_by_member.end() &&
+		   !strcasecmp(it->second.c_str(), GET_NAME(controller))) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static void testparty_dismiss_member(struct char_data* controller,
+									 struct char_data* victim) {
+	if(!victim || !IS_PC(victim) || victim->desc) {
+		return;
+	}
+	if(!testparty_can_control(controller, victim)) {
+		return;
+	}
+	stop_follower(victim);
+	struct obj_cost cost;
+	if(victim->in_room != NOWHERE) {
+		char_from_room(victim);
+	}
+	char_to_room(victim, 4);
+	if(recep_offer(victim, nullptr, &cost, 1)) {
+		cost.total_cost = 100;
+		save_obj(victim, &cost, 1);
+	}
+	save_ghost_forcerent(victim);
+	g_testparty_owner_by_member.erase(lower(GET_NAME(victim)));
+	extract_char(victim);
+}
+
+static struct char_data* testparty_find_member(struct char_data* controller,
+											   const std::string& prefix,
+											   int slot) {
+	const std::string name = testparty_member_name(prefix, slot);
+	struct char_data* vict = get_char(name.c_str());
+	if(!vict || !testparty_can_control(controller, vict)) {
+		return nullptr;
+	}
+	return vict;
+}
+
+} // namespace
+
+ACTION_FUNC(do_testparty) {
+	char subcmd[MAX_INPUT_LENGTH];
+	char prefix[MAX_INPUT_LENGTH];
+	char cls1[MAX_INPUT_LENGTH];
+	char cls2[MAX_INPUT_LENGTH];
+	char cls3[MAX_INPUT_LENGTH];
+	char slotbuf[MAX_INPUT_LENGTH];
+	char cmdbuf[MAX_STRING_LENGTH];
+
+	if(!IS_PC(ch) || !IS_IMMORTAL(ch)) {
+		return;
+	}
+
+	arg = one_argument(arg, subcmd);
+	if(!*subcmd || !strcasecmp(subcmd, "help")) {
+		testparty_show_help(ch);
+		return;
+	}
+
+	if(!strcasecmp(subcmd, "create")) {
+		arg = one_argument(arg, prefix);
+		arg = one_argument(arg, cls1);
+		arg = one_argument(arg, cls2);
+		arg = one_argument(arg, cls3);
+		if(!*prefix || !*cls1 || !*cls2 || !*cls3) {
+			send_to_char("Uso: testparty create <prefisso> <cls1> <cls2> <cls3>\n\r",
+						 ch);
+			return;
+		}
+		if(strlen(prefix) > 12) {
+			send_to_char("Prefisso troppo lungo (max 12 caratteri, i nomi saranno prefisso1/2/3).\n\r",
+						 ch);
+			return;
+		}
+		const std::array<const char*, 3> specs = {cls1, cls2, cls3};
+		for(int i = 0; i < 3; ++i) {
+			const auto parsed = testparty_parse_classes(specs[i]);
+			if(!parsed) {
+				char buf[MAX_STRING_LENGTH];
+				snprintf(buf, sizeof(buf),
+						 "Combinazione classe non valida per umano: '%s'\n\r",
+						 specs[i]);
+				send_to_char(buf, ch);
+				return;
+			}
+		}
+		for(int i = 0; i < 3; ++i) {
+			const std::string name = testparty_member_name(prefix, i + 1);
+			const auto parsed = testparty_parse_classes(specs[i]);
+			if(!testparty_create_one(ch, name.c_str(), *parsed)) {
+				return;
+			}
+		}
+		g_testparty_prefix_by_owner[lower(GET_NAME(ch))] = lower(prefix);
+		send_to_char("Usa 'testparty summon ", ch);
+		send_to_char(prefix, ch);
+		send_to_char("' per evocarli.\n\r", ch);
+		return;
+	}
+
+	if(!strcasecmp(subcmd, "summon")) {
+		arg = one_argument(arg, prefix);
+		if(!*prefix) {
+			const auto it = g_testparty_prefix_by_owner.find(lower(GET_NAME(ch)));
+			if(it == g_testparty_prefix_by_owner.end()) {
+				send_to_char("Uso: testparty summon <prefisso>\n\r", ch);
+				return;
+			}
+			strncpy(prefix, it->second.c_str(), sizeof(prefix) - 1);
+		}
+		int summoned = 0;
+		for(int slot = 1; slot <= 3; ++slot) {
+			const std::string name = testparty_member_name(prefix, slot);
+			if(get_char(name.c_str())) {
+				char buf[MAX_STRING_LENGTH];
+				snprintf(buf, sizeof(buf), "%s e' gia' in gioco.\n\r", name.c_str());
+				send_to_char(buf, ch);
+				continue;
+			}
+			if(testparty_spawn_ghost(ch, name.c_str())) {
+				++summoned;
+			}
+			else {
+				char buf[MAX_STRING_LENGTH];
+				snprintf(buf, sizeof(buf), "Impossibile evocare %s (creato?)\n\r",
+						 name.c_str());
+				send_to_char(buf, ch);
+			}
+		}
+		g_testparty_prefix_by_owner[lower(GET_NAME(ch))] = lower(prefix);
+		if(summoned > 0) {
+			send_to_char("Gruppo evocato. Usa 'testparty cmd <1|2|3|all> <comando>'.\n\r",
+						 ch);
+		}
+		return;
+	}
+
+	if(!strcasecmp(subcmd, "dismiss")) {
+		arg = one_argument(arg, prefix);
+		if(!*prefix) {
+			const auto it = g_testparty_prefix_by_owner.find(lower(GET_NAME(ch)));
+			if(it == g_testparty_prefix_by_owner.end()) {
+				send_to_char("Uso: testparty dismiss <prefisso>\n\r", ch);
+				return;
+			}
+			strncpy(prefix, it->second.c_str(), sizeof(prefix) - 1);
+		}
+		for(int slot = 1; slot <= 3; ++slot) {
+			const std::string name = testparty_member_name(prefix, slot);
+			if(struct char_data* vict = get_char(name.c_str())) {
+				testparty_dismiss_member(ch, vict);
+			}
+		}
+		send_to_char("Gruppo di test congedato.\n\r", ch);
+		return;
+	}
+
+	if(!strcasecmp(subcmd, "cmd")) {
+		arg = one_argument(arg, slotbuf);
+		strncpy(cmdbuf, arg, sizeof(cmdbuf) - 1);
+		cmdbuf[sizeof(cmdbuf) - 1] = '\0';
+		if(!*slotbuf || !*cmdbuf) {
+			send_to_char("Uso: testparty cmd <1|2|3|all> <comando>\n\r", ch);
+			return;
+		}
+		std::string use_prefix;
+		const auto it = g_testparty_prefix_by_owner.find(lower(GET_NAME(ch)));
+		if(it == g_testparty_prefix_by_owner.end()) {
+			send_to_char("Nessun gruppo attivo: usa prima testparty summon.\n\r", ch);
+			return;
+		}
+		use_prefix = it->second;
+
+		auto run_on = [&](int slot) {
+			struct char_data* vict =
+				testparty_find_member(ch, use_prefix, slot);
+			if(!vict) {
+				char buf[MAX_STRING_LENGTH];
+				const std::string name = testparty_member_name(use_prefix, slot);
+				snprintf(buf, sizeof(buf), "%s non presente o non controllabile.\n\r",
+						 name.c_str());
+				send_to_char(buf, ch);
+				return;
+			}
+			command_interpreter(vict, cmdbuf);
+		};
+
+		if(!strcasecmp(slotbuf, "all")) {
+			for(int slot = 1; slot <= 3; ++slot) {
+				run_on(slot);
+			}
+			send_to_char("Ok.\n\r", ch);
+			return;
+		}
+		if(!isdigit(*slotbuf)) {
+			send_to_char("Slot validi: 1, 2, 3 o all\n\r", ch);
+			return;
+		}
+		const int slot = atoi(slotbuf);
+		if(slot < 1 || slot > 3) {
+			send_to_char("Slot validi: 1, 2, 3 o all\n\r", ch);
+			return;
+		}
+		run_on(slot);
+		send_to_char("Ok.\n\r", ch);
+		return;
+	}
+
+	testparty_show_help(ch);
 }
 
 ACTION_FUNC(do_mforce) {
