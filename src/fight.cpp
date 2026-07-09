@@ -5122,6 +5122,13 @@ int GetItemDamageType(int type) {
 		return(ACID_DAMAGE);
 		break;
 
+	case SPELL_HARM:
+	case SPELL_CAUSE_LIGHT:
+	case SPELL_CAUSE_SERIOUS:
+	case SPELL_CAUSE_CRITICAL:
+	case SPELL_HOLY_WORD:
+	case SKILL_HOLY_WARCRY:
+	case SKILL_QUIV_PALM:
 	case TYPE_GENERIC_HOLY:
 		return(HOLY_DAMAGE);
 		break;
