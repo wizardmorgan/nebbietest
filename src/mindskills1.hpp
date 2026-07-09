@@ -27,6 +27,13 @@ void mind_telekinesis(byte level, struct char_data* ch,struct char_data* victim,
 void mind_teleport(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
 void mind_tower_iron_will(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
 void mind_ultra_blast(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
+void mind_ego_whip(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
+void mind_psychic_vampirism(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
+void mind_metapsionic_surge(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
+void mind_thought_barrier(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
+void mind_neural_spike(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
+void mind_mass_confusion(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
+void mind_cataclysm_mind(byte level, struct char_data* ch, struct char_data* victim, struct obj_data* obj);
 } // namespace Alarmud
 #endif // __MINDSKILLS1_HPP
 
