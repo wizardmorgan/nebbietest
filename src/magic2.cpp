@@ -32,6 +32,7 @@
 #include "regen.hpp"
 #include "spell_parser.hpp"
 #include "maximums.hpp"
+#include "proc_cacaodemon.hpp"
 
 namespace Alarmud {
 
@@ -2538,8 +2539,8 @@ void spell_cacaodemon(byte level, struct char_data* ch,
 	if(GET_LEVEL(ch, CLERIC_LEVEL_IND) > 40 && IS_EVIL(ch)) {
 		act("$p emette un po' di $c0008fumo$c0007...", TRUE, ch, obj, 0, TO_ROOM);
 		act("$p emette un po' di $c0008fumo$c0007...", TRUE, ch, obj, 0, TO_CHAR);
-		obj->obj_flags.cost /= 2;
-		if(obj->obj_flags.cost < 100) {
+		obj->obj_flags.cost /= cacaodemon_offering_wear_divisor(ch);
+		if(obj->obj_flags.cost < cacaodemon_min_offering_cost(ch)) {
 			act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!",
 				TRUE, ch, obj, 0, TO_ROOM);
 			act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!",
@@ -2557,6 +2558,7 @@ void spell_cacaodemon(byte level, struct char_data* ch,
 			GET_ALIGNMENT(ch)-=5;
 		}
 	}
+	proc_modify_cacaodemon(ch, victim, level);
 	char_to_room(victim, ch->in_room);
 
 	act("Con una risata $c0001malvagia$c0007 $N emerge dal $c0008fumo$c0007!", TRUE, ch, 0, victim, TO_NOTVICT);
@@ -2591,6 +2593,15 @@ void spell_cacaodemon(byte level, struct char_data* ch,
 	if(!IS_SET(victim->specials.act, ACT_SENTINEL)) {
 		SET_BIT(victim->specials.act, ACT_SENTINEL);
 	}
+
+	cacaodemon_assign_bodyguard(victim, ch);
+	act("$n giura di proteggerti a rischio della sua vita.",
+		FALSE, victim, nullptr, ch, TO_CHAR);
+	if(GetMaxLevel(victim) <= 49) {
+		send_to_char("Estendera' la guardia del corpo a tutto il gruppo.\n\r", ch);
+	}
+	act("$n si impegna a proteggere $N a rischio della sua vita!",
+		FALSE, victim, nullptr, ch, TO_NOTVICT);
 }
 
 /*

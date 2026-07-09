@@ -391,6 +391,13 @@ const char* spell_wear_off_msg[] = {
 	/*	306 SKILL_POISONCRAFT			*/	"!poisoncraft!",
 	/*	307 SKILL_MIX_THROW				*/	"!mix throw!",
 	/*	308 SKILL_FIND_THE_SEAM			*/	"!find the seam!",
+	/*	309 SKILL_EGO_WHIP				*/	"!ego whip!",
+	/*	310 SKILL_PSYCHIC_VAMPIRISM		*/	"!psychic vampirism!",
+	/*	311 SKILL_METAPSIONIC_SURGE		*/	"!metapsionic surge!",
+	/*	312 SKILL_THOUGHT_BARRIER		*/	"!thought barrier!",
+	/*	313 SKILL_NEURAL_SPIKE			*/	"!neural spike!",
+	/*	314 SKILL_MASS_CONFUSION		*/	"!mass confusion!",
+	/*	315 SKILL_CATACLYSM_MIND			*/	"!cataclysm mind!",
 											"\n"
 };
 /*Messaggio per la stanza quando una spell/skill scade*/
@@ -704,6 +711,13 @@ const char* spell_wear_off_room_msg[] = {
 	/*	306 SKILL_POISONCRAFT			*/	"!poisoncraft!",
 	/*	307 SKILL_MIX_THROW				*/	"!mix throw!",
 	/*	308 SKILL_FIND_THE_SEAM			*/	"!find the seam!",
+	/*	309 SKILL_EGO_WHIP				*/	"!ego whip!",
+	/*	310 SKILL_PSYCHIC_VAMPIRISM		*/	"!psychic vampirism!",
+	/*	311 SKILL_METAPSIONIC_SURGE		*/	"!metapsionic surge!",
+	/*	312 SKILL_THOUGHT_BARRIER		*/	"!thought barrier!",
+	/*	313 SKILL_NEURAL_SPIKE			*/	"!neural spike!",
+	/*	314 SKILL_MASS_CONFUSION		*/	"!mass confusion!",
+	/*	315 SKILL_CATACLYSM_MIND			*/	"!cataclysm mind!",
 											"\n"
 };
 /* Messaggio di preavviso di fine spell*/
@@ -1017,6 +1031,13 @@ const char* spell_wear_off_soon_msg[] = {
 	/*	306 SKILL_POISONCRAFT            */	"!poisoncraft!",
 	/*	307 SKILL_MIX_THROW              */	"!mix throw!",
 	/*	308 SKILL_FIND_THE_SEAM           */	"!find the seam!",
+	/*	309 SKILL_EGO_WHIP              */	"!ego whip!",
+	/*	310 SKILL_PSYCHIC_VAMPIRISM     */	"!psychic vampirism!",
+	/*	311 SKILL_METAPSIONIC_SURGE     */	"!metapsionic surge!",
+	/*	312 SKILL_THOUGHT_BARRIER       */	"!thought barrier!",
+	/*	313 SKILL_NEURAL_SPIKE          */	"!neural spike!",
+	/*	314 SKILL_MASS_CONFUSION       */	"!mass confusion!",
+	/*	315 SKILL_CATACLYSM_MIND        */	"!cataclysm mind!",
 											"\n"
 };
 
@@ -1330,6 +1351,13 @@ const char* spell_wear_off_soon_room_msg[] = {
 	/*	306 SKILL_POISONCRAFT            */	"!poisoncraft!",
 	/*	307 SKILL_MIX_THROW              */	"!mix throw!",
 	/*	308 SKILL_FIND_THE_SEAM           */	"!find the seam!",
+	/*	309 SKILL_EGO_WHIP              */	"!ego whip!",
+	/*	310 SKILL_PSYCHIC_VAMPIRISM     */	"!psychic vampirism!",
+	/*	311 SKILL_METAPSIONIC_SURGE     */	"!metapsionic surge!",
+	/*	312 SKILL_THOUGHT_BARRIER       */	"!thought barrier!",
+	/*	313 SKILL_NEURAL_SPIKE          */	"!neural spike!",
+	/*	314 SKILL_MASS_CONFUSION       */	"!mass confusion!",
+	/*	315 SKILL_CATACLYSM_MIND        */	"!cataclysm mind!",
 											"\n"
 
 };
@@ -3929,6 +3957,13 @@ const char* spell_desc[] = {
 	/*  306 SKILL_POISONCRAFT            */	"!poisoncraft!",
 	/*  307 SKILL_MIX_THROW              */	"!mix throw!",
 	/*  308 SKILL_FIND_THE_SEAM           */	"!find the seam!",
+	/*  309 SKILL_EGO_WHIP              */	"!ego whip!",
+	/*  310 SKILL_PSYCHIC_VAMPIRISM     */	"!psychic vampirism!",
+	/*  311 SKILL_METAPSIONIC_SURGE     */	"!metapsionic surge!",
+	/*  312 SKILL_THOUGHT_BARRIER       */	"!thought barrier!",
+	/*  313 SKILL_NEURAL_SPIKE          */	"!neural spike!",
+	/*  314 SKILL_MASS_CONFUSION       */	"!mass confusion!",
+	/*  315 SKILL_CATACLYSM_MIND        */	"!cataclysm mind!",
 											"\n"
 };
 
