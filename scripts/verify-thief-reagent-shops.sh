@@ -147,7 +147,6 @@ for v in "${LEGACY_VNUMS[@]}"; do
 done
 echo ""
 
-<<<<<<< HEAD
 echo "--- helptbl (myst legge mudroot/lib/helptbl dopo chdir -d) ---"
 if [ -f "$DATA_DIR/helptbl" ]; then
   if grep -q 'POCKET SAND SAND' "$DATA_DIR/helptbl" 2>/dev/null; then
@@ -162,9 +161,7 @@ else
 fi
 echo ""
 
-=======
 echo "--- Binario myst ---"
->>>>>>> origin/cursor/fix-reagent-obj-placement-3a37
 if [ -x "$ROOT/mudroot/myst" ]; then
   echo "OK  mudroot/myst presente ($(stat -c '%y' "$ROOT/mudroot/myst" 2>/dev/null || stat -f '%Sm' "$ROOT/mudroot/myst"))"
   echo "    Dopo git pull con fix shop.cpp, ricompila:"
