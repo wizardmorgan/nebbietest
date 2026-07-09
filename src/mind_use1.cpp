@@ -21,6 +21,7 @@
 #include "mind_use1.hpp"
 #include "comm.hpp"
 #include "handler.hpp"
+#include "handler.hpp"
 #include "mindskills1.hpp"
 #include "spells.hpp"
 
@@ -128,33 +129,37 @@ void mind_use_disintegrate(byte level, struct char_data* ch, const char* arg, in
 
 void mind_use_telekinesis(byte level, struct char_data* ch, const char* arg, int type,
 						  struct char_data* victim, struct obj_data* tar_obj) {
+	int dir_num = -1;
 	const char* p;
-	int i=-1;
+	int d;
+
+	(void)tar_obj;
 	switch(type) {
 	case SPELL_TYPE_WAND:
 	case SPELL_TYPE_SPELL:
 	case SPELL_TYPE_STAFF:
 	case SPELL_TYPE_SCROLL:
+		if(!victim) {
+			send_to_char("Non c'e' nessuno su cui usare la telekinesi.\n\r", ch);
+			return;
+		}
 		if(!ch->specials.fighting) {
-			/* get the argument, parse it into a direction */
-			for(; *arg==' '; arg++);
-			if(!*arg) {
-				send_to_char("Devi indicare una direzione!\n\r", ch);
-				return;
-			}
-			p = fname(arg);
-			for(i=0; i<6; i++) {
-				if(strncmp(p,dirs[i],strlen(p))==0) {
-					i++;
-					break;
+			for(; *arg == ' '; arg++);
+			if(*arg) {
+				p = fname(arg);
+				for(d = 0; d < 6; d++) {
+					if(!strncmp(p, dirs[d], strlen(p))) {
+						dir_num = d + 1;
+						break;
+					}
 				}
-				if(i == 6) {
-					send_to_char("Devi indicare una direzione!\n\r", ch);
+				if(dir_num < 1) {
+					send_to_char("Devi indicare una direzione valida!\n\r", ch);
 					return;
 				}
 			}
-		} /* end ! fighting */
-		mind_telekinesis(level, ch, victim, i);
+		}
+		mind_telekinesis(level, ch, victim, dir_num);
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in mind_telekinesis");
@@ -356,6 +361,30 @@ void mind_use_intensify(byte level, struct char_data* ch, const char* arg, int t
 		break;
 	}
 }
+
+#define MIND_USE_STUB(name, func) \
+void mind_use_##name(byte level, struct char_data* ch, const char* arg, int type, \
+					 struct char_data* victim, struct obj_data* tar_obj) { \
+	switch(type) { \
+	case SPELL_TYPE_WAND: \
+	case SPELL_TYPE_SPELL: \
+	case SPELL_TYPE_STAFF: \
+	case SPELL_TYPE_SCROLL: \
+		func(level, ch, victim, 0); \
+		break; \
+	default: \
+		mudlog(LOG_SYSERR, "Serious screw-up in mind_" #name); \
+		break; \
+	} \
+}
+
+MIND_USE_STUB(ego_whip, mind_ego_whip)
+MIND_USE_STUB(psychic_vampirism, mind_psychic_vampirism)
+MIND_USE_STUB(metapsionic_surge, mind_metapsionic_surge)
+MIND_USE_STUB(thought_barrier, mind_thought_barrier)
+MIND_USE_STUB(neural_spike, mind_neural_spike)
+MIND_USE_STUB(mass_confusion, mind_mass_confusion)
+MIND_USE_STUB(cataclysm_mind, mind_cataclysm_mind)
 
 } // namespace Alarmud
 

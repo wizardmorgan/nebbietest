@@ -44,6 +44,7 @@
 { "PrisonGuard" , PrisonGuard } ,
 { "PrydainGuard" , PrydainGuard } ,
 { "PsiGuildmaster" , PsiGuildmaster } ,
+{ "MetapsionicGuildmaster" , MetapsionicGuildmaster } ,
 { "Pungiglione" , Pungiglione } ,
 { "Pungiglione_maggiore" , Pungiglione_maggiore } ,
 { "RangerGuildmaster" , RangerGuildmaster } ,

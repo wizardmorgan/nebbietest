@@ -1276,7 +1276,7 @@ void ChangeMobResist(struct char_data* ch, const char* arg, int type) {
 	update = atoi(arg);
 	update--;
 	if(type != ENTER_CHECK) {
-		if(update < 0 || update > 17) {
+		if(update < 0 || update >= IMMUNITY_TYPE_COUNT) {
 			return;
 		}
 		i=1;
@@ -1301,7 +1301,7 @@ void ChangeMobResist(struct char_data* ch, const char* arg, int type) {
         send_to_char(buf, ch);
 
         row = 0;
-        for(i = 0; i < 18; i++)
+        for(i = 0; i < IMMUNITY_TYPE_COUNT; i++)
         {
             sprintf(buf, VT_CURSPOS, row + 4, ((i & 1) ? 45 : 5));
             if(i & 1)
@@ -1331,7 +1331,7 @@ void ChangeMobResist(struct char_data* ch, const char* arg, int type) {
 
         send_to_char("\n\rMobile Resistances Flags:\n\r\n\r", ch);
 
-        for(i = 0; i < 18; i++)
+        for(i = 0; i < IMMUNITY_TYPE_COUNT; i++)
         {
             check = 1;
             snprintf(buf2, sizeof(buf2), "%%-%d", 45-x);
@@ -1384,7 +1384,7 @@ void ChangeMobImmune(struct char_data* ch, const char* arg, int type) {
 	update = atoi(arg);
 	update--;
 	if(type != ENTER_CHECK) {
-		if(update < 0 || update > 17) {
+		if(update < 0 || update >= IMMUNITY_TYPE_COUNT) {
 			return;
 		}
 		i=1;
@@ -1409,7 +1409,7 @@ void ChangeMobImmune(struct char_data* ch, const char* arg, int type) {
         send_to_char(buf, ch);
 
         row = 0;
-        for(i = 0; i < 18; i++)
+        for(i = 0; i < IMMUNITY_TYPE_COUNT; i++)
         {
             sprintf(buf, VT_CURSPOS, row + 4, ((i & 1) ? 45 : 5));
             if(i & 1)
@@ -1439,7 +1439,7 @@ void ChangeMobImmune(struct char_data* ch, const char* arg, int type) {
 
         send_to_char("\n\rMobile Immunities Flags:\n\r\n\r", ch);
 
-        for(i = 0; i < 18; i++)
+        for(i = 0; i < IMMUNITY_TYPE_COUNT; i++)
         {
             check = 1;
             snprintf(buf2, sizeof(buf2), "%%-%d", 45-x);
@@ -1490,7 +1490,7 @@ void ChangeMobSuscep(struct char_data* ch, const char* arg, int type) {
 	update = atoi(arg);
 	update--;
 	if(type != ENTER_CHECK) {
-		if(update < 0 || update > 17) {
+		if(update < 0 || update >= IMMUNITY_TYPE_COUNT) {
 			return;
 		}
 		i=1;
@@ -1515,7 +1515,7 @@ void ChangeMobSuscep(struct char_data* ch, const char* arg, int type) {
         send_to_char(buf, ch);
 
         row = 0;
-        for(i = 0; i < 18; i++)
+        for(i = 0; i < IMMUNITY_TYPE_COUNT; i++)
         {
             sprintf(buf, VT_CURSPOS, row + 4, ((i & 1) ? 45 : 5));
             if(i & 1)
@@ -1545,7 +1545,7 @@ void ChangeMobSuscep(struct char_data* ch, const char* arg, int type) {
 
         send_to_char("\n\rMobile Susceptibilities Flags:\n\r\n\r", ch);
 
-        for(i = 0; i < 18; i++)
+        for(i = 0; i < IMMUNITY_TYPE_COUNT; i++)
         {
             check = 1;
             snprintf(buf2, sizeof(buf2), "%%-%d", 45-x);
