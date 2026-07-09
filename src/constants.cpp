@@ -1456,7 +1456,7 @@ const char* ItemDamType[] = {
 	"$c0012elettrifica$c0007",
 	"$c0001danneggia$c0007",
 	"$c0010corrode$c0007",
-	"$c0011consacra$c0007"
+	"$c0011dissolve$c0007"
 };
 
 const char* weekdays[7] = {
