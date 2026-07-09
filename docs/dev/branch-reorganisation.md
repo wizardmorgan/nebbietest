@@ -214,18 +214,38 @@ graph TD
 
 ## 8. Stato attuale develop vs revamp
 
-Cosa **manca** ancora in develop (al 2026-07-09):
-
-- [ ] Cacaodemon proc + power index
-- [ ] IMM_HOLY damage type
-- [ ] PSI phase A rebalance
-- [ ] Thief: helptbl completo, shop reagenti, vnum overlay-safe (18000–18005)
-- [ ] Myst asset browser
-- [ ] Mudlet package v2.x
-- [ ] Comando testparty
+Tutto il contenuto del revamp classi e delle utility è ora sui branch
+`feature/class-revamp` e `feature/utilities` (non ancora mergiato in develop).
 
 Cosa **c’è già** in develop:
 
 - [x] Thief tactics core (14 skill L5–51, crafting base, poison) — PR #12
 - [x] Docker consumer tooling parziale
 - [x] PostgreSQL scripts/docs
+
+---
+
+## 9. Stato implementazione (2026-07-09)
+
+### `feature/class-revamp`
+
+Merge completati su base `develop`:
+
+1. `cursor/thief-tactics-expansion-3a37` — merge pulito
+2. `feature/psi-phase-a-rebalance` — merge con risoluzione conflitti; include anche cacaodemon/powerindex dalla storia condivisa
+3. Cherry-pick IMM_HOLY da `cursor/holy-damage-type-a00f` (2 commit)
+4. Cherry-pick power index redesign da `cursor/fix-cacaodemon-4451` (1 commit)
+
+**Conflitto skill ID risolto:** ladro 295–308, metapsionico 309–315.
+
+`fix-reagent-obj-placement-3a37` era già contenuto in thief-tactics.
+
+### `feature/utilities`
+
+Merge completati su base `develop`:
+
+1. `cursor/myst-asset-browser-ce44` — merge pulito
+2. `mudlet` — merge (myst-assets da ce44, docs/mudlet da mudlet)
+3. `cursor/testparty-spawn-901d` — merge pulito
+
+Da valutare: cherry-pick `scripts/associate-pg-account.sh` da `cursor/cloud-agent-1781395667873-cprro`.
