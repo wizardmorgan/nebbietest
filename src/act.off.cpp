@@ -37,6 +37,7 @@
 #include "maximums.hpp"
 #include "multiclass.hpp"
 #include "opinion.hpp"
+#include "proc_cacaodemon.hpp"
 #include "regen.hpp"
 #include "snew.hpp"
 #include "spell_parser.hpp"
@@ -671,6 +672,10 @@ bool off_order_victim_ready_for_command(struct char_data* victim) {
 }
 
 void off_order_obey_charmed(struct char_data* ch, struct char_data* victim, const std::string& command) {
+	if(cacaodemon_order_vigila(ch, victim, command)) {
+		off_order_send_ok(ch);
+		return;
+	}
 	off_order_send_ok(ch);
 	WAIT_STATE(victim, (19 - GET_CHR(ch)) * PULSE_VIOLENCE);
 	command_interpreter(victim, command.c_str());
@@ -708,6 +713,23 @@ void off_order_single_target(struct char_data* ch, struct char_data* victim,
 
 void off_order_followers(struct char_data* ch, const std::string& command) {
 	if(ch == nullptr) {
+		return;
+	}
+	if(cacaodemon_is_vigila_order(command)) {
+		const int orgRoom = ch->in_room;
+		bool found = false;
+		for(struct follow_type* k = ch->followers; k != nullptr; k = k->next) {
+			if(orgRoom == k->follower->in_room && IS_AFFECTED(k->follower, AFF_CHARM) &&
+					is_cacaodemon(k->follower) && k->follower->master == ch) {
+				found = true;
+				cacaodemon_order_vigila(ch, k->follower, command);
+			}
+		}
+		if(!found) {
+			send_to_char("Non hai un cacaodemon in stanza a cui dare quest'ordine.\n\r", ch);
+		} else {
+			off_order_send_ok(ch);
+		}
 		return;
 	}
 	if(!IS_IMMORTALE(ch)) {

@@ -445,18 +445,25 @@ ACTION_FUNC(do_title) {
 	}
 	string argument(arg);
 	boost::trim_left(argument);
-	if(argument.length()>80) {
+	const string new_title = argument.substr(0, 80);
+	if(new_title.length() > 80) {
 		send_to_char("Line too long, truncated\n", ch);
-		free(ch->player.title);
 	}
-	if (argument.length()<5) {
+	if(new_title.length() < 5) {
 		send_to_char("Line too short, title not changed\n", ch);
 	}
 	else {
-		ch->player.title = strdup(argument.substr(0,80).c_str());
-		toonPtr pg=Sql::getOne<toon>(toonQuery::name==string(GET_NAME(ch)));
-		pg->title=argument.substr(0,80);
-		Sql::update(*pg);
+		replace_player_title(ch, new_title.c_str());
+		toonPtr pg = Sql::getOne<toon>(toonQuery::name == string(GET_NAME(ch)));
+		if(!pg || !pg->id) {
+			send_to_char("Errore: personaggio non trovato nel database.\n", ch);
+			return;
+		}
+		pg->title = new_title;
+		if(!Sql::update(*pg)) {
+			send_to_char("Attenzione: titolo aggiornato in gioco ma salvataggio DB fallito.\n", ch);
+			mudlog(LOG_SYSERR, "do_title: Sql::update failed for %s", GET_NAME(ch));
+		}
 	}
 	sprintf(buf, "Il tuo titolo adesso e' : <%s>\n\r", ch->player.title);
 	send_to_char(buf, ch);
