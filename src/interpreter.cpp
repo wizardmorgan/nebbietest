@@ -1405,6 +1405,8 @@ void assign_command_pointers() {
              MAESTRO_DEL_CREATO);
   AddCommand("legacyloadcheck", do_legacyloadcheck, CMD_LEGACYLOADCHECK,
              POSITION_DEAD, MAESTRO_DEL_CREATO);
+  AddCommand("testparty", do_testparty, CMD_TESTPARTY, POSITION_DEAD,
+             MAESTRO_DEL_CREATO);
   AddCommand("checkachie", do_checkachielevel, CMD_CHECKACHIELEVEL,
              POSITION_DEAD, TUTTI);
 }

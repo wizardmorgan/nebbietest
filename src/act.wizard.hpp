@@ -42,6 +42,7 @@ ACTION_FUNC(do_imptest) ;
 ACTION_FUNC(do_legacyprobe) ;
 ACTION_FUNC(do_legacyimport) ;
 ACTION_FUNC(do_legacyloadcheck) ;
+ACTION_FUNC(do_testparty) ;
 ACTION_FUNC(do_invis) ;
 ACTION_FUNC(do_listhosts) ;
 ACTION_FUNC(do_mercy) ;
