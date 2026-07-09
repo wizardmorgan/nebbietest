@@ -4901,6 +4901,11 @@ MOBSPECIAL_FUNC(monk_master) {
 	return(FALSE);
 }
 
+static bool psi_silverleaf_immortal_teaches_level(ubyte skill_level) {
+	/* Livelli reali PSI (1..51); IMMORTALE nel registro = "non PSI". */
+	return skill_level > 0 && skill_level < IMMORTALE;
+}
+
 MOBSPECIAL_FUNC(DruidGuildMaster) {
 	int number, i, max, smax;
 	char buf[MAX_INPUT_LENGTH];
@@ -4971,16 +4976,15 @@ MOBSPECIAL_FUNC(DruidGuildMaster) {
 
 			if(IS_IMMORTAL(ch) && GET_MOB_VNUM(guildmaster) == 641) {
 				send_to_char("Puoi praticare anche queste abilita' psioniche:\n\r", ch);
-				for(max = 1; max <= IMMORTALE; max++) {
+				for(max = 1; max < IMMORTALE; max++) {
 					for(i = 0; *spells[i] != '\n'; i++) {
-						if(spell_info[i + 1].min_level_psi != max) {
+						const ubyte psi_level = spell_info[i + 1].min_level_psi;
+						if(psi_level != max ||
+								!psi_silverleaf_immortal_teaches_level(psi_level)) {
 							continue;
 						}
-						if(spell_info[i + 1].min_level_psi <= 0) {
-							continue;
-						}
-						sprintf(buf, "[%d] %s %s \n\r", spell_info[i + 1].min_level_psi,
-								spells[i], how_good(ch->skills[i + 1].learned));
+						sprintf(buf, "[%d] %s %s \n\r", psi_level, spells[i],
+								how_good(ch->skills[i + 1].learned));
 						send_to_char(buf, ch);
 					}
 				}
@@ -4997,7 +5001,8 @@ MOBSPECIAL_FUNC(DruidGuildMaster) {
 		}
 
 		if(IS_IMMORTAL(ch) && GET_MOB_VNUM(guildmaster) == 641 &&
-				spell_info[number].min_level_psi > 0) {
+				psi_silverleaf_immortal_teaches_level(
+					spell_info[number].min_level_psi)) {
 			if(ch->specials.spells_to_learn <= 0) {
 				send_to_char("You do not seem to be able to practice now.\n\r", ch);
 				return(TRUE);
