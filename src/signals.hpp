@@ -15,6 +15,7 @@ void SetStatus(const char* szStatus, const char* szString);
 void SetStatus(const char* szStatus, const char* szString, void* pGeneric);
 void signal_setup();
 void PushStatus(const char* szStatus);
+void PushStatus(const char* szStatus, const char* szNome);
 void PopStatus();
 void buscrash(int dummy);
 void checkpointing(int dummy);
