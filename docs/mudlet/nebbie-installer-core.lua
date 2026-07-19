@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.32"
+Nebbie.version = "2.2.33"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -2776,7 +2776,8 @@ function Nebbie.listPackageHelp()
   cecho("  <yellow>nebbie-alias-index.txt<grey>    — tutti gli alias\n")
   cecho("  <yellow>nebbie-trigger-index.txt<grey>  — tutti i trigger\n")
   cecho("  <yellow>nebbie-spells-reference.txt<grey> — spell e abbreviazioni\n")
-  cecho("  <yellow>HELP.md<grey>                    — guida completa\n")
+  cecho("  <yellow>HELP.md<grey>                    — guida installazione\n")
+  cecho("  <yellow>PACKAGE-GUIDE.md<grey>            — guida completa logica + alias/trigger\n")
   cecho("<grey>In gioco: <yellow>nlist aliases<grey> | <yellow>nlist triggers<grey> | <yellow>nlist spells\n")
   cecho("<grey>Incantesimi multi-parola: <yellow>c power word kill bersaglio<grey> o <yellow>c 'power word kill' bersaglio\n")
 end

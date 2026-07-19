@@ -54,6 +54,7 @@ Salva il file con estensione `.mpackage` e installalo con **Alt+O** → *Install
 | **`nebbie-spells-reference.txt`** | Elenco completo di incantesimi, skill, abbreviazioni e slot per classe. **Non** si importa in Mudlet: è solo consultazione (blocco note, secondo monitor). |
 | **`nebbie-alias-index.txt`**      | Tutti gli alias e i pattern regex generati dal package.                                                                                                    |
 | **`nebbie-trigger-index.txt`**    | Tutti i trigger e i pattern substring/regex.                                                                                                               |
+| **[`PACKAGE-GUIDE.md`](PACKAGE-GUIDE.md)** | Guida completa: logica del package, alias e trigger spiegati in modo accessibile.                                                              |
 
 
 Stesso branch del package:
@@ -71,7 +72,8 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/neb
 | ------------------------- | ---------------------------------------------- |
 | `nebbie-installer-core.lua` | Sorgente installer v2 (HUD, loot, debuff)      |
 | `build-nebbie-package.py` | Rigenera `.mpackage` e `.txt` dal sorgente C++ |
-| `HELP.md`                 | Questa guida                                   |
+| [`HELP.md`](HELP.md)                 | Guida installazione e troubleshooting          |
+| [`PACKAGE-GUIDE.md`](PACKAGE-GUIDE.md) | **Guida completa**: logica del package + elenco alias/trigger |
 
 
 ---

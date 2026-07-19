@@ -325,7 +325,8 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
 === DOCUMENTAZIONE ALIAS / TRIGGER ===
   nebbie-alias-index.txt    — tutti gli alias e pattern regex
   nebbie-trigger-index.txt  — tutti i trigger e pattern
-  HELP.md                   — guida utente
+  HELP.md                   — guida installazione
+  PACKAGE-GUIDE.md          — guida completa logica + alias/trigger
   In gioco: nlist | nlist aliases | nlist triggers | nlist spells
 
 === INCANTESIMI MULTI-PAROLA ===

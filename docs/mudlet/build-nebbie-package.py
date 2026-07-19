@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.32"
+PKG_VER = "2.2.33"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -1660,7 +1660,8 @@ def main():
         f.write("\n=== DOCUMENTAZIONE ALIAS / TRIGGER ===\n")
         f.write("  nebbie-alias-index.txt    — tutti gli alias e pattern regex\n")
         f.write("  nebbie-trigger-index.txt  — tutti i trigger e pattern\n")
-        f.write("  HELP.md                   — guida utente\n")
+        f.write("  HELP.md                   — guida installazione\n")
+        f.write("  PACKAGE-GUIDE.md          — guida completa logica + alias/trigger\n")
         f.write("  In gioco: nlist | nlist aliases | nlist triggers | nlist spells\n")
         f.write("\n=== INCANTESIMI MULTI-PAROLA ===\n")
         f.write("  c power word kill bersaglio\n")
@@ -1682,6 +1683,7 @@ def main():
     print(f"Wrote {ref}")
     print(f"Wrote {alias_idx}")
     print(f"Wrote {trigger_idx}")
+    print(f"Wrote {ROOT / 'PACKAGE-GUIDE.md'}")
     print(f"Cast spells: {len(cast_spells)}")
 
 
