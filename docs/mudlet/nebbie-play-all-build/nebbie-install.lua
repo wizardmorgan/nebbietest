@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.31
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.31"
+-- NEBBIE_INSTALL_VER=2.2.32
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.32"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.31"
+Nebbie.version = "2.2.32"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.31"
+Nebbie._expectedPkgVer = "2.2.32"
 
 Nebbie.castSpells = {
   ['armor'] = true,
@@ -1041,7 +1041,7 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.31"
+Nebbie.version = "2.2.32"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1479,9 +1479,10 @@ end
 function Nebbie.killPermKeyByName(name)
   if not name or name == "" or type(exists) ~= "function" then return end
   local n = 0
-  while exists(name, "key") > 0 and n < 16 do
+  while (exists(name, "key") or 0) > 0 and n < 16 do
     if type(killKey) == "function" then pcall(function() killKey(name) end) end
-  n = n + 1 end
+    n = n + 1
+  end
 end
 
 function Nebbie.resolveMudletKey(name)
@@ -1520,7 +1521,7 @@ function Nebbie.installKeypadBindings(force)
       local permName = "nebbie-keypad " .. entry.label .. " " .. suffix
       local keyCode = Nebbie.resolveMudletKey(keyName)
       if keyCode then
-        local present = type(exists) == "function" and exists(permName, "key") > 0
+        local present = type(exists) == "function" and (exists(permName, "key") or 0) > 0
         if force or not present then
           Nebbie.killPermKeyByName(permName)
           local script = string.format([[send(%q)]], entry.cmd)
