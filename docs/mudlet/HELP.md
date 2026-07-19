@@ -83,7 +83,8 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/neb
 3. Seleziona `nebbie-play-all.mpackage`.
 4. In console dovresti vedere (dopo 1–3 secondi) un messaggio simile a:
   ```
-   Nebbie v2.2.29: ...
+   Nebbie v2.2.30: ...
+   Tastierino: 8=north 2=south 4=west 6=east 9=up 3=down 5=look
    Pronto: nclass +, q1, ngui | nfix nprompt | nlist
   ```
 5. Setup iniziale:
@@ -130,7 +131,7 @@ Nella riga di comando Mudlet:
 lua cecho("<yellow>"..Nebbie.version)
 ```
 
-Deve mostrare la versione corrente (es. `2.2.29`).
+Deve mostrare la versione corrente (es. `2.2.30`).
 
 ---
 
@@ -287,6 +288,22 @@ Incantesimi con più parole: `c power word kill goblin` oppure `c 'power word ki
 | `nlist triggers` | Elenca trigger installati                     |
 | `nlist spells` | Aiuto incantesimi multi-parola                   |
 | `return` | Torna dalla forma `polymorph self`                    |
+
+### Tastierino numerico
+
+Con **Num Lock attivo**, i tasti del tastierino numerico inviano comandi di movimento:
+
+| Tasto | Comando |
+| ----- | ------- |
+| `5`   | `look`  |
+| `8`   | `north` |
+| `2`   | `south` |
+| `6`   | `east`  |
+| `4`   | `west`  |
+| `9`   | `up`    |
+| `3`   | `down`  |
+
+Layout classico stile roguelike (nord in alto). I binding si attivano automaticamente con `nfix` o all’installazione del package.
 
 
 ### Abbreviazioni incantesimi (esempi)

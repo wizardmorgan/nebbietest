@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.29"
+PKG_VER = "2.2.30"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -1437,6 +1437,15 @@ def write_alias_index(path, cast_spells):
         "  nfood / nfood on/off | fame/sete auto; nfood item <oggetto>",
         "  return               | torna da polymorph self",
         "",
+        "=== TASTIERINO NUMERICO (Num Lock attivo) ===",
+        "  Tasto 5              | look",
+        "  Tasto 8              | north",
+        "  Tasto 2              | south",
+        "  Tasto 6              | east",
+        "  Tasto 4              | west",
+        "  Tasto 9              | up",
+        "  Tasto 3              | down",
+        "",
         "=== CAST GENERICO (incantesimi multi-parola supportati) ===",
         "  c <spell> [tgt]      | cast 'spell' [tgt] — es. c power word kill goblin",
         "  c '<spell>' [tgt]    | con apici — es. c 'power word kill' goblin",
@@ -1599,6 +1608,8 @@ def main():
         f.write("  nkey add <k> <txt>  → aggiungi chiave custom\n")
         f.write("  neq                 → mostra cache eq + sync ora\n")
         f.write("  neq on/off          → sync eq automatico ogni 1h (gagged)\n")
+        f.write("\n=== TASTIERINO NUMERICO (Num Lock attivo) ===\n")
+        f.write("  5=look  8=north  2=south  4=west  6=east  9=up  3=down\n")
         f.write("\n=== DOCUMENTAZIONE ALIAS / TRIGGER ===\n")
         f.write("  nebbie-alias-index.txt    — tutti gli alias e pattern regex\n")
         f.write("  nebbie-trigger-index.txt  — tutti i trigger e pattern\n")

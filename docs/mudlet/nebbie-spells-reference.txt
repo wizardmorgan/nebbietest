@@ -318,6 +318,9 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   neq                 → mostra cache eq + sync ora
   neq on/off          → sync eq automatico ogni 1h (gagged)
 
+=== TASTIERINO NUMERICO (Num Lock attivo) ===
+  5=look  8=north  2=south  4=west  6=east  9=up  3=down
+
 === DOCUMENTAZIONE ALIAS / TRIGGER ===
   nebbie-alias-index.txt    — tutti gli alias e pattern regex
   nebbie-trigger-index.txt  — tutti i trigger e pattern

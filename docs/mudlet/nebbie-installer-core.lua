@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.29"
+Nebbie.version = "2.2.30"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -22,6 +22,18 @@ Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
 Nebbie._aliasIds = Nebbie._aliasIds or {}
 Nebbie._triggerIds = Nebbie._triggerIds or {}
+Nebbie._keyIds = Nebbie._keyIds or {}
+Nebbie._keyNames = Nebbie._keyNames or {}
+
+Nebbie.keypadBindings = {
+  { num = 5, cmd = "look", label = "look" },
+  { num = 8, cmd = "north", label = "north" },
+  { num = 2, cmd = "south", label = "south" },
+  { num = 6, cmd = "east", label = "east" },
+  { num = 4, cmd = "west", label = "west" },
+  { num = 9, cmd = "up", label = "up" },
+  { num = 3, cmd = "down", label = "down" },
+}
 Nebbie._settings = Nebbie._settings or {}
 Nebbie.playerClass = Nebbie.playerClass or nil
 Nebbie.attribAuto = false
@@ -373,6 +385,9 @@ function Nebbie.killAllTrackedTemps()
       if type(killTrigger) == "function" then pcall(function() killTrigger(id) end) end
     end
   end
+  for _, id in pairs(Nebbie._keyIds or {}) do
+    if type(killKey) == "function" then pcall(function() killKey(id) end) end
+  end
   local seenA, seenT = {}, {}
   for _, name in ipairs(Nebbie._aliasNames or {}) do
     if not seenA[name] then
@@ -405,6 +420,34 @@ function Nebbie.killTempTriggers(full)
     pcall(function() killTrigger(id) end)
   end
   Nebbie._triggerIds[full] = nil
+end
+
+function Nebbie.killTempKey(full)
+  if Nebbie._keyIds and Nebbie._keyIds[full] then
+    if type(killKey) == "function" then pcall(function() killKey(Nebbie._keyIds[full]) end) end
+    Nebbie._keyIds[full] = nil
+  end
+end
+
+function Nebbie.installKeypadBindings()
+  if type(tempKey) ~= "function" or not mudlet or not mudlet.keymodifier or not mudlet.key then
+    return 0
+  end
+  local n = 0
+  for _, entry in ipairs(Nebbie.keypadBindings or {}) do
+    local full = PKG .. "::keypad " .. entry.label
+    Nebbie.killTempKey(full)
+    local keyNum = mudlet.key[tostring(entry.num)]
+    if keyNum then
+      local id = tempKey(mudlet.keymodifier.Keypad, keyNum, string.format([[send(%q)]], entry.cmd))
+      if id then
+        Nebbie._keyIds[full] = id
+        table.insert(Nebbie._keyNames, full)
+        n = n + 1
+      end
+    end
+  end
+  return n
 end
 
 function Nebbie.isKeepPackageAlias(name)
@@ -2693,6 +2736,7 @@ end
 function Nebbie.uninstall()
   for full, _ in pairs(Nebbie._aliasIds or {}) do Nebbie.killTempAlias(full) end
   for full, _ in pairs(Nebbie._triggerIds or {}) do Nebbie.killTempTriggers(full) end
+  for full, _ in pairs(Nebbie._keyIds or {}) do Nebbie.killTempKey(full) end
   Nebbie.purgePackageAliases()
   Nebbie.purgePackageTriggers()
   Nebbie.stopGUI()
@@ -2701,6 +2745,8 @@ function Nebbie.uninstall()
   Nebbie._triggerNames = {}
   Nebbie._aliasIds = {}
   Nebbie._triggerIds = {}
+  Nebbie._keyIds = {}
+  Nebbie._keyNames = {}
   cecho("<orange>Nebbie play-all: alias/trigger disattivati.\n")
 end
 
@@ -2743,6 +2789,8 @@ function Nebbie.install()
   Nebbie._triggerNames = {}
   Nebbie._aliasIds = {}
   Nebbie._triggerIds = {}
+  Nebbie._keyIds = {}
+  Nebbie._keyNames = {}
 
   local function perm(short, pattern, script)
     if type(tempAlias) ~= "function" then return end
@@ -3011,8 +3059,12 @@ function Nebbie.install()
   Nebbie.installEqSendHook()
   Nebbie.testPromptParse(true)
   Nebbie.testEqParse(true)
+  local keypadN = Nebbie.installKeypadBindings()
 
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
+  if keypadN > 0 then
+    cecho("<grey>Tastierino: <yellow>8<grey>=north <yellow>2<grey>=south <yellow>4<grey>=west <yellow>6<grey>=east <yellow>9<grey>=up <yellow>3<grey>=down <yellow>5<grey>=look\n")
+  end
   cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey> | <yellow>nlist<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
   cecho("<grey>Armi cadute: <yellow>ndrop off<grey> | Fame/sete: <yellow>nfood off<grey> | Oggetto: <yellow>nfood item cornu\n")
