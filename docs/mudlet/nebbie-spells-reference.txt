@@ -158,7 +158,6 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   portal  [psiport]
   dragon ride
   mount
-  minor heal
   spring leap
   geyser
   mirror images  [mirr]
@@ -318,6 +317,18 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   nkey add <k> <txt>  → aggiungi chiave custom
   neq                 → mostra cache eq + sync ora
   neq on/off          → sync eq automatico ogni 1h (gagged)
+
+=== DOCUMENTAZIONE ALIAS / TRIGGER ===
+  nebbie-alias-index.txt    — tutti gli alias e pattern regex
+  nebbie-trigger-index.txt  — tutti i trigger e pattern
+  HELP.md                   — guida utente
+  In gioco: nlist | nlist aliases | nlist triggers | nlist spells
+
+=== INCANTESIMI MULTI-PAROLA ===
+  c power word kill bersaglio
+  c 'power word kill' bersaglio
+  c magic missile bersaglio
+  c colour spray
 
 === PANNELLO HUD ===
   Gauge HP/Mana/Move + buff/debuff + parser prompt [%s]

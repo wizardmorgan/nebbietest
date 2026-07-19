@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.28"
+PKG_VER = "2.2.29"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -548,10 +548,14 @@ def build_legacy_perm_names(spells):
         "eq cache sync", "eq cache on", "eq cache off",
         "generic cast c", "generic cast word",
         "memorize", "recall shortcut", "mind shortcut", "list classes", "set class",
-        "return form", "reinstall fix", "prompt debug",
+        "list package help", "list aliases", "list triggers", "list spells ref",
+        "return form", "reinstall fix", "prompt debug", "install diagnose",
+        "eq cache clear", "drop recover on", "drop recover off",
+        "food auto on", "food auto off", "food item set", "food manual",
     ]
     static_triggers = [
-        "prompt parse", "attrib gag", "look loot parse", "eq parse wield", "mob kill exp loot", "cast started",
+        "prompt parse", "attrib gag", "look loot parse", "eq parse wield", "mob kill exp loot",
+        "cast started", "weapon drop hold", "weapon drop wield", "hunger thirst",
     ]
 
     for pkg in pkgs:
@@ -1396,6 +1400,145 @@ def build_xml(legacy_aliases, legacy_triggers):
 '''
 
 
+def write_alias_index(path, cast_spells):
+    lines = [
+        "Nebbie Arcane — indice completo alias Mudlet (generato automaticamente)",
+        f"Package: {PACKAGE_NAME} v{PKG_VER} — vedi build-nebbie-package.py",
+        "",
+        "=== COMANDI PACKAGE ===",
+        "  Pattern              | Effetto",
+        "  nsetup               | avvia HUD (non cambia il prompt)",
+        "  ngui / nhud          | mostra/nasconde pannello buff",
+        "  npos                 | riposiziona pannello in alto a destra",
+        "  nfix                 | reinstalla alias/trigger",
+        "  npurge               | disattiva perm vecchi (poi riavvia e nfix)",
+        "  nprompt              | debug parser prompt",
+        "  ndiagnose            | diagnostica installazione",
+        "  nlist                | indice documentazione",
+        "  nlist aliases        | elenca alias installati in Mudlet",
+        "  nlist triggers       | elenca trigger installati",
+        "  nlist spells         | aiuto incantesimi multi-parola",
+        "  ncast                | modalita cast",
+        "  nrecall              | modalita recall (stregone)",
+        "  nmind                | modalita mind (psi)",
+        "  nclass               | elenca classi e slot q1-q9",
+        "  nclass <classe>      | imposta classe (m s c d p r I t w k b + u)",
+        "  nclass m c           | multiclasse (unisce slot)",
+        "  nattrib              | sync attribute (gagged)",
+        "  nattrib on/off       | sync automatico ogni 90s",
+        "  nloot                | look + corp/2.corp/… + pile/2.pile/…",
+        "  nloot on/off         | loot auto dopo kill mob",
+        "  usa <arma>           | cambio arma da borsa sulla schiena",
+        "  nkey                 | elenco chiavi eq",
+        "  nkey add/del         | aggiungi/rimuovi chiave custom",
+        "  neq                  | mostra cache eq + sync ora",
+        "  neq on/off/clear     | sync eq automatico / svuota cache",
+        "  ndrop on/off         | recupero arma caduta",
+        "  nfood / nfood on/off | fame/sete auto; nfood item <oggetto>",
+        "  return               | torna da polymorph self",
+        "",
+        "=== CAST GENERICO (incantesimi multi-parola supportati) ===",
+        "  c <spell> [tgt]      | cast 'spell' [tgt] — es. c power word kill goblin",
+        "  c '<spell>' [tgt]    | con apici — es. c 'power word kill' goblin",
+        "  cast <spell> [tgt]   | come c",
+        "  r <spell> [tgt]      | recall 'spell' [tgt]",
+        "  m <spell> [tgt]      | mind 'spell' [tgt]",
+        "  mem <spell>          | memorize 'spell'",
+        "  q1 … q9 [tgt]        | slot rapidi classe attiva",
+        "",
+        "=== ABBREVIAZIONI INCANTESIMI (pattern ^<abbr>(?: (.+))?$) ===",
+    ]
+    mud_cmds = parse_mud_commands()
+    seen_abbr = set()
+    for spell in sorted(cast_spells):
+        abbr = ABBREVS.get(spell)
+        if abbr and is_safe_standalone_abbr(abbr, mud_cmds) and abbr not in seen_abbr:
+            seen_abbr.add(abbr)
+            lines.append(f"  ^{abbr}(?: (.+))?$  → {spell}")
+    for spell in sorted(MIND_SPELLS):
+        if spell in cast_spells:
+            continue
+        abbr = ABBREVS.get(spell)
+        if abbr and is_safe_standalone_abbr(abbr, mud_cmds) and abbr not in seen_abbr:
+            seen_abbr.add(abbr)
+            lines.append(f"  ^{abbr}(?: (.+))?$  → {spell} (mind)")
+    lines.append("")
+    lines.append("=== ABBREVIAZIONI SKILL (pattern ^<abbr>(?: (.+))?$) ===")
+    seen_skill = set()
+    for name, (cmd, hint) in sorted(DEDICATED_SKILLS.items()):
+        abbr = ABBREVS.get(name) or ABBREVS.get(cmd) or cmd.replace(" ", "")
+        if is_safe_standalone_abbr(abbr, mud_cmds, skill_cmd=cmd) and abbr not in seen_skill:
+            seen_skill.add(abbr)
+            lines.append(f"  ^{abbr}(?: (.+))?$  → {cmd} {hint}".rstrip())
+    lines.append("")
+    static_count = 45
+    abbr_count = len(seen_abbr) + len(seen_skill)
+    fav_count = sum(1 for s in FAVORITE_SPELL_ALIASES if s in cast_spells)
+    lines.append(
+        f"Totale alias generati all'install: ~{static_count + abbr_count + fav_count + 9} "
+        f"(nomi interni: {PACKAGE_NAME}::<nome>)"
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_trigger_index(path):
+    lines = [
+        "Nebbie Arcane — indice completo trigger Mudlet (generato automaticamente)",
+        f"Package: {PACKAGE_NAME} v{PKG_VER}",
+        "",
+        "=== HUD / PROMPT ===",
+        "  [regex] H:\\d+/\\d+.*M:\\d+/\\d+.*V:\\d+/\\d+.*X:\\d+  → parser prompt HP/Mana/Move",
+        "  [substring] Tu hai / Spells attivi / Spell :  → gag attribute + sync buff",
+        "",
+        "=== EQUIP / LOOT ===",
+        "  [substring] Stai usando / <impugnato> / <tenuto> / <sulla schiena>  → cache eq",
+        "  [substring] il corpo di / corpo sfigurato / pile of dust  → loot manuale/auto",
+        "  [regex] La tua esperienza e' aumentata di N punti  → loot auto dopo kill",
+        "  [substring] ti cade dalle mani  → recupero arma caduta",
+        "  [substring] e ti casca anche  → recupero arma impugnata",
+        "  [substring] Hai Fame./sete.  → nfood auto",
+        "",
+        "=== CAST / BUFF ===",
+        "  [substring] Pronunci le parole  → registra buff da messaggio cast",
+        "",
+        "=== BUFF SCADUTI (wearOff) ===",
+    ]
+    for label, pat in WEAR_OFF_TRIGGERS:
+        lines.append(f"  [{label}] substring: {pat}")
+    lines.append("")
+    lines.append("=== PRE-SCADENZA (wearOffSoon) ===")
+    for label, pat in SOON_TRIGGERS:
+        lines.append(f"  [{label}] substring: {pat}")
+    lines.append("")
+    lines.append("=== AFFECT SELF (apply immediato) ===")
+    for label, pat in SELF_AFFECT_APPLY_TRIGGERS:
+        lines.append(f"  [{label}] substring: {pat}")
+    lines.append("")
+    lines.append("=== DEBUFF APPLY ===")
+    for label, pat in DEBUFF_APPLY_TRIGGERS:
+        lines.append(f"  [{label}] substring: {pat}")
+    lines.append("")
+    lines.append("=== DEBUFF WEAR-OFF ===")
+    for label, pat in DEBUFF_WEAR_OFF_TRIGGERS:
+        lines.append(f"  [{label}] substring: {pat}")
+    lines.append("")
+    lines.append("=== ERRORI CAST / SKILL (failures) ===")
+    for label, pat in FAIL_TRIGGERS:
+        lines.append(f"  [{label}] substring: {pat}")
+    lines.append("")
+    total = (
+        8
+        + len(WEAR_OFF_TRIGGERS)
+        + len(SOON_TRIGGERS)
+        + len(SELF_AFFECT_APPLY_TRIGGERS)
+        + len(DEBUFF_APPLY_TRIGGERS)
+        + len(DEBUFF_WEAR_OFF_TRIGGERS)
+        + len(FAIL_TRIGGERS)
+    )
+    lines.append(f"Totale trigger generati all'install: ~{total}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def main():
     spells = parse_spells()
     cast_spells = build_cast_spell_list(spells)
@@ -1456,14 +1599,31 @@ def main():
         f.write("  nkey add <k> <txt>  → aggiungi chiave custom\n")
         f.write("  neq                 → mostra cache eq + sync ora\n")
         f.write("  neq on/off          → sync eq automatico ogni 1h (gagged)\n")
+        f.write("\n=== DOCUMENTAZIONE ALIAS / TRIGGER ===\n")
+        f.write("  nebbie-alias-index.txt    — tutti gli alias e pattern regex\n")
+        f.write("  nebbie-trigger-index.txt  — tutti i trigger e pattern\n")
+        f.write("  HELP.md                   — guida utente\n")
+        f.write("  In gioco: nlist | nlist aliases | nlist triggers | nlist spells\n")
+        f.write("\n=== INCANTESIMI MULTI-PAROLA ===\n")
+        f.write("  c power word kill bersaglio\n")
+        f.write("  c 'power word kill' bersaglio\n")
+        f.write("  c magic missile bersaglio\n")
+        f.write("  c colour spray\n")
         f.write("\n=== PANNELLO HUD ===\n")
         f.write("  Gauge HP/Mana/Move + buff/debuff + parser prompt [%s]\n")
         for cls, data in sorted(CLASS_PRESETS.items()):
             slots = ", ".join(f"q{i+1}={q[0]}" for i, q in enumerate(data["quick"]))
             f.write(f"  {cls} ({data['name']}): {slots}\n")
 
+    write_alias_index(ROOT / "nebbie-alias-index.txt", cast_spells)
+    write_trigger_index(ROOT / "nebbie-trigger-index.txt")
+    alias_idx = ROOT / "nebbie-alias-index.txt"
+    trigger_idx = ROOT / "nebbie-trigger-index.txt"
+
     print(f"Wrote {mpackage} ({mpackage.stat().st_size} bytes)")
     print(f"Wrote {ref}")
+    print(f"Wrote {alias_idx}")
+    print(f"Wrote {trigger_idx}")
     print(f"Cast spells: {len(cast_spells)}")
 
 

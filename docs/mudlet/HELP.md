@@ -51,12 +51,18 @@ Salva il file con estensione `.mpackage` e installalo con **Alt+O** → *Install
 
 | File                              | Descrizione                                                                                                                                                |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `**nebbie-spells-reference.txt`** | Elenco completo di incantesimi, skill, abbreviazioni e slot per classe. **Non** si importa in Mudlet: è solo consultazione (blocco note, secondo monitor). |
+| **`nebbie-spells-reference.txt`** | Elenco completo di incantesimi, skill, abbreviazioni e slot per classe. **Non** si importa in Mudlet: è solo consultazione (blocco note, secondo monitor). |
+| **`nebbie-alias-index.txt`**      | Tutti gli alias e i pattern regex generati dal package.                                                                                                    |
+| **`nebbie-trigger-index.txt`**    | Tutti i trigger e i pattern substring/regex.                                                                                                               |
 
 
 Stesso branch del package:
 
 https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-spells-reference.txt
+
+https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-alias-index.txt
+
+https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-trigger-index.txt
 
 ### Solo per sviluppatori
 
@@ -77,8 +83,8 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/neb
 3. Seleziona `nebbie-play-all.mpackage`.
 4. In console dovresti vedere (dopo 1–3 secondi) un messaggio simile a:
   ```
-   Nebbie v2.0.4: ...
-   Pronto: nsetup, nclass +, ngui
+   Nebbie v2.2.29: ...
+   Pronto: nclass +, q1, ngui | nfix nprompt | nlist
   ```
 5. Setup iniziale:
   ```
@@ -124,7 +130,7 @@ Nella riga di comando Mudlet:
 lua cecho("<yellow>"..Nebbie.version)
 ```
 
-Deve mostrare la versione corrente (es. `2.1.2`).
+Deve mostrare la versione corrente (es. `2.2.29`).
 
 ---
 
@@ -239,11 +245,13 @@ Il MUD controlla quali incantesimi puoi usare; il package configura solo scorcia
 
 | Comando              | Invia al MUD             | Note                          |
 | -------------------- | ------------------------ | ----------------------------- |
-| `c <spell> [tgt]`    | `cast '<spell>' [tgt]`   | Rispetta la modalità corrente |
+| `c <spell> [tgt]`    | `cast '<spell>' [tgt]`   | Rispetta la modalità corrente; supporta nomi multi-parola |
 | `r <spell> [tgt]`    | `recall '<spell>' [tgt]` | Stregone                      |
 | `m <spell> [tgt]`    | `mind '<spell>' [tgt]`   | Psi                           |
 | `mem <spell>`        | `memorize '<spell>'`     | Stregone                      |
 | `cast <spell> [tgt]` | come `c`                 | Alternativa esplicita         |
+
+Incantesimi con più parole: `c power word kill goblin` oppure `c 'power word kill' goblin`. Per l’elenco completo: `nlist spells` o `nebbie-spells-reference.txt`.
 
 
 ### Modalità di cast (`c` usa la modalità attiva)
@@ -274,6 +282,10 @@ Il MUD controlla quali incantesimi puoi usare; il package configura solo scorcia
 | `npos`   | Riposiziona il pannello in alto a destra              |
 | `nfix`   | Reinstalla alias/trigger e ricarica la classe salvata |
 | `npurge` | Disattiva alias/trigger `perm` vecchi (poi riavvia e `nfix`) |
+| `nlist`  | Indice documentazione (alias/trigger/spells)          |
+| `nlist aliases` | Elenca alias installati in Mudlet              |
+| `nlist triggers` | Elenca trigger installati                     |
+| `nlist spells` | Aiuto incantesimi multi-parola                   |
 | `return` | Torna dalla forma `polymorph self`                    |
 
 
@@ -458,8 +470,10 @@ python3 docs/mudlet/build-nebbie-package.py
 
 Genera:
 
-- `docs/mudlet/nebbie-spells-skills.mpackage`
+- `docs/mudlet/nebbie-play-all.mpackage`
 - `docs/mudlet/nebbie-spells-reference.txt`
+- `docs/mudlet/nebbie-alias-index.txt`
+- `docs/mudlet/nebbie-trigger-index.txt`
 
 ---
 

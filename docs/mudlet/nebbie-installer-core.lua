@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.28"
+Nebbie.version = "2.2.29"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -2587,6 +2587,46 @@ function Nebbie.refreshGUI()
   Nebbie.updateGauges()
 end
 
+function Nebbie.getAllSpellNames()
+  if Nebbie._spellNamesByLen then return Nebbie._spellNamesByLen end
+  local names = {}
+  for spell, _ in pairs(Nebbie.castSpells) do names[#names + 1] = spell end
+  for spell, _ in pairs(Nebbie.mindSpells) do names[#names + 1] = spell end
+  table.sort(names, function(a, b) return #a > #b end)
+  Nebbie._spellNamesByLen = names
+  return names
+end
+
+function Nebbie.parseSpellAndTarget(rest)
+  if not rest or rest == "" then return nil, nil end
+  rest = rest:match("^%s*(.-)%s*$")
+  local qspell, qtail = rest:match("^['\"]([^'\"]+)['\"]%s*(.*)$")
+  if qspell then
+    local target = (qtail and qtail ~= "") and Nebbie.stripQuotes(qtail:match("^%s+(.+)$") or qtail) or nil
+    return Nebbie.resolveSpell(qspell), target
+  end
+  local lower = rest:lower()
+  for _, spell in ipairs(Nebbie.getAllSpellNames()) do
+    local sl = spell:lower()
+    if lower == sl or lower:gsub(" ", "") == sl:gsub(" ", "") then
+      return spell, nil
+    end
+    if #lower >= #sl and lower:sub(1, #sl) == sl then
+      local nextc = rest:sub(#sl + 1, #sl + 1)
+      if nextc == "" or nextc:match("%s") then
+        local target = rest:sub(#sl + 1):match("^%s+(.+)$")
+        if target then target = Nebbie.stripQuotes(target) end
+        return spell, target
+      end
+    end
+  end
+  local spell, target = rest:match("^(%S+)%s+(.+)$")
+  if spell then
+    return Nebbie.resolveSpell(spell), Nebbie.stripQuotes(target)
+  end
+  return Nebbie.resolveSpell(rest), nil
+end
+
 function Nebbie.resolveSpell(token)
   local lower = Nebbie.stripQuotes(token):lower()
   for spell, abbr in pairs(Nebbie.abbrevs) do
@@ -2613,6 +2653,41 @@ function Nebbie.sendCast(spell, target)
   else cmd = "cast '" .. spell .. "'" end
   if target and target ~= "" then cmd = cmd .. " " .. target end
   send(cmd)
+end
+
+function Nebbie.listInstalledAliases()
+  cecho("<cyan><b>Alias Nebbie</b> <grey>(" .. #(Nebbie._aliasNames or {}) .. " registrati; indice: nebbie-alias-index.txt):\n")
+  local n = 0
+  for full, _ in pairs(Nebbie._aliasIds or {}) do
+    n = n + 1
+    cecho("<grey>  " .. tostring(full) .. "\n")
+  end
+  if n == 0 then
+    for _, name in ipairs(Nebbie._aliasNames or {}) do
+      cecho("<grey>  " .. name .. "\n")
+    end
+  end
+  if n == 0 and #(Nebbie._aliasNames or {}) == 0 then
+    cecho("<orange>Nessun alias — <yellow>nfix<orange>\n")
+  end
+end
+
+function Nebbie.listInstalledTriggers()
+  cecho("<cyan><b>Trigger Nebbie</b> <grey>(" .. #(Nebbie._triggerNames or {}) .. " registrati; indice: nebbie-trigger-index.txt):\n")
+  for _, name in ipairs(Nebbie._triggerNames or {}) do
+    cecho("<grey>  " .. name .. "\n")
+  end
+end
+
+function Nebbie.listPackageHelp()
+  cecho("<cyan><b>Nebbie v" .. Nebbie.version .. " — indici</b>\n")
+  cecho("<grey>Repository branch <yellow>mudlet<grey> (docs/mudlet/):\n")
+  cecho("  <yellow>nebbie-alias-index.txt<grey>    — tutti gli alias\n")
+  cecho("  <yellow>nebbie-trigger-index.txt<grey>  — tutti i trigger\n")
+  cecho("  <yellow>nebbie-spells-reference.txt<grey> — spell e abbreviazioni\n")
+  cecho("  <yellow>HELP.md<grey>                    — guida completa\n")
+  cecho("<grey>In gioco: <yellow>nlist aliases<grey> | <yellow>nlist triggers<grey> | <yellow>nlist spells\n")
+  cecho("<grey>Incantesimi multi-parola: <yellow>c power word kill bersaglio<grey> o <yellow>c 'power word kill' bersaglio\n")
 end
 
 function Nebbie.uninstall()
@@ -2754,40 +2829,28 @@ function Nebbie.install()
   -- nfix: unico alias XML nel package (nebbie-fix), non crearlo qui
 
   perm("generic cast c", [[^c (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
-    if target then target = Nebbie.stripQuotes(target) end
-    Nebbie.sendCast(spell, target)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if spell then Nebbie.sendCast(spell, target) end
   ]])
   perm("generic cast word", [[^cast (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
-    if target then target = Nebbie.stripQuotes(target) end
-    Nebbie.sendCast(spell, target)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if spell then Nebbie.sendCast(spell, target) end
   ]])
 
   perm("memorize", [[^mem (.+)$]], [[
-    local spell = Nebbie.resolveSpell(matches[2])
-    send("memorize '" .. spell .. "'")
+    local spell = Nebbie.parseSpellAndTarget(matches[2])
+    if spell then send("memorize '" .. spell .. "'") end
   ]])
   perm("recall shortcut", [[^r (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if not spell then return end
     local cmd = "recall '" .. spell .. "'"
     if target then cmd = cmd .. " " .. target end
     send(cmd)
   ]])
   perm("mind shortcut", [[^m (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if not spell then return end
     local cmd = "mind '" .. spell .. "'"
     if target then cmd = cmd .. " " .. target end
     send(cmd)
@@ -2832,6 +2895,18 @@ function Nebbie.install()
 
   perm("list classes", [[^nclass$]], [[Nebbie.listClasses()]])
   perm("set class", [[^nclass (.+)$]], [[Nebbie.setClass(matches[2])]])
+
+  perm("list package help", [[^nlist$]], [[Nebbie.listPackageHelp()]])
+  perm("list aliases", [[^nlist aliases$]], [[Nebbie.listInstalledAliases()]])
+  perm("list triggers", [[^nlist triggers$]], [[Nebbie.listInstalledTriggers()]])
+  perm("list spells ref", [[^nlist spells$]], [[
+    cecho("<cyan><b>Incantesimi multi-parola</b> — esempi:\n")
+    cecho("<grey>  c power word kill goblin\n")
+    cecho("<grey>  c 'power word kill' goblin\n")
+    cecho("<grey>  c magic missile goblin\n")
+    cecho("<grey>  c colour spray\n")
+    cecho("<grey>Elenco: <yellow>nebbie-spells-reference.txt<grey> (branch mudlet).\n")
+  ]])
 
   for slot = 1, 9 do
     perm("quick slot " .. slot, "^q" .. slot .. "(?: (.+))?$", string.format([[
@@ -2938,7 +3013,7 @@ function Nebbie.install()
   Nebbie.testEqParse(true)
 
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
-  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey>\n")
+  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey> | <yellow>nlist<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
   cecho("<grey>Armi cadute: <yellow>ndrop off<grey> | Fame/sete: <yellow>nfood off<grey> | Oggetto: <yellow>nfood item cornu\n")
   Nebbie._installing = false

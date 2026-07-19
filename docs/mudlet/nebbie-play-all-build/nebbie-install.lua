@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.27
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.27"
+-- NEBBIE_INSTALL_VER=2.2.29
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.29"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.27"
+Nebbie.version = "2.2.29"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.27"
+Nebbie._expectedPkgVer = "2.2.29"
 
 Nebbie.castSpells = {
   ['armor'] = true,
@@ -166,7 +166,6 @@ Nebbie.castSpells = {
   ['portal'] = true,
   ['dragon ride'] = true,
   ['mount'] = true,
-  ['minor heal'] = true,
   ['spring leap'] = true,
   ['geyser'] = true,
   ['mirror images'] = true,
@@ -978,66 +977,71 @@ Nebbie.favoriteSpells = {
 }
 
 Nebbie.legacyPermAliases = {
-  "attrib off", "attrib on", "attrib sync", "eq cache off", "eq cache on", "eq cache sync", "eq key add", "eq key del", "eq key list", "generic cast c",
-  "generic cast word", "list classes", "loot manual", "loot off", "loot on", "memorize", "mind shortcut", "mode cast", "mode mind", "mode recall",
-  "nebbie-play-all::abbr cast ab", "nebbie-play-all::abbr cast adead", "nebbie-play-all::abbr cast aid", "nebbie-play-all::abbr cast arm", "nebbie-play-all::abbr cast bark", "nebbie-play-all::abbr cast ble", "nebbie-play-all::abbr cast blind", "nebbie-play-all::abbr cast cblind", "nebbie-play-all::abbr cast cc", "nebbie-play-all::abbr cast cfood",
-  "nebbie-play-all::abbr cast chain", "nebbie-play-all::abbr cast charm", "nebbie-play-all::abbr cast clight", "nebbie-play-all::abbr cast clightn", "nebbie-play-all::abbr cast cmd", "nebbie-play-all::abbr cast cmon", "nebbie-play-all::abbr cast coc", "nebbie-play-all::abbr cast cs", "nebbie-play-all::abbr cast cser", "nebbie-play-all::abbr cast csleep",
-  "nebbie-play-all::abbr cast ct", "nebbie-play-all::abbr cast curse", "nebbie-play-all::abbr cast cwater", "nebbie-play-all::abbr cast dev", "nebbie-play-all::abbr cast devl", "nebbie-play-all::abbr cast dinv", "nebbie-play-all::abbr cast disint", "nebbie-play-all::abbr cast dmag", "nebbie-play-all::abbr cast dom", "nebbie-play-all::abbr cast dpois",
-  "nebbie-play-all::abbr cast ea", "nebbie-play-all::abbr cast earmor", "nebbie-play-all::abbr cast edrain", "nebbie-play-all::abbr cast ewep", "nebbie-play-all::abbr cast fb", "nebbie-play-all::abbr cast fear", "nebbie-play-all::abbr cast feeble", "nebbie-play-all::abbr cast ffire", "nebbie-play-all::abbr cast fly", "nebbie-play-all::abbr cast fs",
-  "nebbie-play-all::abbr cast fshld", "nebbie-play-all::abbr cast harm", "nebbie-play-all::abbr cast haste", "nebbie-play-all::abbr cast heal", "nebbie-play-all::abbr cast ident", "nebbie-play-all::abbr cast infra", "nebbie-play-all::abbr cast invis", "nebbie-play-all::abbr cast is", "nebbie-play-all::abbr cast kalign", "nebbie-play-all::abbr cast knock",
-  "nebbie-play-all::abbr cast lb", "nebbie-play-all::abbr cast mana", "nebbie-play-all::abbr cast mburn", "nebbie-play-all::abbr cast mirr", "nebbie-play-all::abbr cast mm", "nebbie-play-all::abbr cast ms", "nebbie-play-all::abbr cast mwipe", "nebbie-play-all::abbr cast para", "nebbie-play-all::abbr cast pcrush", "nebbie-play-all::abbr cast pevil",
-  "nebbie-play-all::abbr cast pois", "nebbie-play-all::abbr cast poly", "nebbie-play-all::abbr cast prism", "nebbie-play-all::abbr cast psiport", "nebbie-play-all::abbr cast ptel", "nebbie-play-all::abbr cast rcurse", "nebbie-play-all::abbr cast reinc", "nebbie-play-all::abbr cast resu", "nebbie-play-all::abbr cast rpara", "nebbie-play-all::abbr cast rpois",
-  "nebbie-play-all::abbr cast san", "nebbie-play-all::abbr cast sg", "nebbie-play-all::abbr cast shld", "nebbie-play-all::abbr cast slife", "nebbie-play-all::abbr cast slow", "nebbie-play-all::abbr cast snare", "nebbie-play-all::abbr cast sskin", "nebbie-play-all::abbr cast telek", "nebbie-play-all::abbr cast tsight", "nebbie-play-all::abbr cast wb",
-  "nebbie-play-all::abbr cast weak", "nebbie-play-all::abbr cast wrec", "nebbie-play-all::attrib off", "nebbie-play-all::attrib on", "nebbie-play-all::attrib sync", "nebbie-play-all::eq cache off", "nebbie-play-all::eq cache on", "nebbie-play-all::eq cache sync", "nebbie-play-all::eq key add", "nebbie-play-all::eq key del",
-  "nebbie-play-all::eq key list", "nebbie-play-all::fav cast aid", "nebbie-play-all::fav cast armor", "nebbie-play-all::fav cast bless", "nebbie-play-all::fav cast mirror images", "nebbie-play-all::fav cast shield", "nebbie-play-all::fav cast stone skin", "nebbie-play-all::generic cast c", "nebbie-play-all::generic cast word", "nebbie-play-all::list classes",
-  "nebbie-play-all::loot manual", "nebbie-play-all::loot off", "nebbie-play-all::loot on", "nebbie-play-all::memorize", "nebbie-play-all::mind shortcut", "nebbie-play-all::mode cast", "nebbie-play-all::mode mind", "nebbie-play-all::mode recall", "nebbie-play-all::prompt debug", "nebbie-play-all::quick slot 1",
-  "nebbie-play-all::quick slot 2", "nebbie-play-all::quick slot 3", "nebbie-play-all::quick slot 4", "nebbie-play-all::quick slot 5", "nebbie-play-all::quick slot 6", "nebbie-play-all::quick slot 7", "nebbie-play-all::quick slot 8", "nebbie-play-all::quick slot 9", "nebbie-play-all::recall shortcut", "nebbie-play-all::reinstall fix",
-  "nebbie-play-all::reposition gui", "nebbie-play-all::return form", "nebbie-play-all::set class", "nebbie-play-all::setup hud", "nebbie-play-all::skill aura", "nebbie-play-all::skill backstab", "nebbie-play-all::skill bash", "nebbie-play-all::skill berserk", "nebbie-play-all::skill blast", "nebbie-play-all::skill blessing",
-  "nebbie-play-all::skill bodyguard", "nebbie-play-all::skill brew", "nebbie-play-all::skill carve", "nebbie-play-all::skill climb", "nebbie-play-all::skill disarm", "nebbie-play-all::skill disguise", "nebbie-play-all::skill doorbash", "nebbie-play-all::skill esp", "nebbie-play-all::skill feign death", "nebbie-play-all::skill find food",
-  "nebbie-play-all::skill find traps", "nebbie-play-all::skill find water", "nebbie-play-all::skill first aid", "nebbie-play-all::skill flame", "nebbie-play-all::skill forge", "nebbie-play-all::skill great", "nebbie-play-all::skill hide", "nebbie-play-all::skill kick", "nebbie-play-all::skill lay on hands", "nebbie-play-all::skill parry",
-  "nebbie-play-all::skill pick", "nebbie-play-all::skill portal", "nebbie-play-all::skill pray", "nebbie-play-all::skill quivering palm", "nebbie-play-all::skill scry", "nebbie-play-all::skill shield", "nebbie-play-all::skill sign", "nebbie-play-all::skill sneak", "nebbie-play-all::skill spot", "nebbie-play-all::skill springleap",
-  "nebbie-play-all::skill spy", "nebbie-play-all::skill steal", "nebbie-play-all::skill swim", "nebbie-play-all::skill tan", "nebbie-play-all::skill track", "nebbie-play-all::skill tspy", "nebbie-play-all::skill warcry", "nebbie-play-all::swap weapon", "nebbie-play-all::toggle gui", "nebbie-play-all::toggle hud",
-  "nebbie-spells-skills::abbr cast ab", "nebbie-spells-skills::abbr cast adead", "nebbie-spells-skills::abbr cast aid", "nebbie-spells-skills::abbr cast arm", "nebbie-spells-skills::abbr cast bark", "nebbie-spells-skills::abbr cast ble", "nebbie-spells-skills::abbr cast blind", "nebbie-spells-skills::abbr cast cblind", "nebbie-spells-skills::abbr cast cc", "nebbie-spells-skills::abbr cast cfood",
-  "nebbie-spells-skills::abbr cast chain", "nebbie-spells-skills::abbr cast charm", "nebbie-spells-skills::abbr cast clight", "nebbie-spells-skills::abbr cast clightn", "nebbie-spells-skills::abbr cast cmd", "nebbie-spells-skills::abbr cast cmon", "nebbie-spells-skills::abbr cast coc", "nebbie-spells-skills::abbr cast cs", "nebbie-spells-skills::abbr cast cser", "nebbie-spells-skills::abbr cast csleep",
-  "nebbie-spells-skills::abbr cast ct", "nebbie-spells-skills::abbr cast curse", "nebbie-spells-skills::abbr cast cwater", "nebbie-spells-skills::abbr cast dev", "nebbie-spells-skills::abbr cast devl", "nebbie-spells-skills::abbr cast dinv", "nebbie-spells-skills::abbr cast disint", "nebbie-spells-skills::abbr cast dmag", "nebbie-spells-skills::abbr cast dom", "nebbie-spells-skills::abbr cast dpois",
-  "nebbie-spells-skills::abbr cast ea", "nebbie-spells-skills::abbr cast earmor", "nebbie-spells-skills::abbr cast edrain", "nebbie-spells-skills::abbr cast ewep", "nebbie-spells-skills::abbr cast fb", "nebbie-spells-skills::abbr cast fear", "nebbie-spells-skills::abbr cast feeble", "nebbie-spells-skills::abbr cast ffire", "nebbie-spells-skills::abbr cast fly", "nebbie-spells-skills::abbr cast fs",
-  "nebbie-spells-skills::abbr cast fshld", "nebbie-spells-skills::abbr cast harm", "nebbie-spells-skills::abbr cast haste", "nebbie-spells-skills::abbr cast heal", "nebbie-spells-skills::abbr cast ident", "nebbie-spells-skills::abbr cast infra", "nebbie-spells-skills::abbr cast invis", "nebbie-spells-skills::abbr cast is", "nebbie-spells-skills::abbr cast kalign", "nebbie-spells-skills::abbr cast knock",
-  "nebbie-spells-skills::abbr cast lb", "nebbie-spells-skills::abbr cast mana", "nebbie-spells-skills::abbr cast mburn", "nebbie-spells-skills::abbr cast mirr", "nebbie-spells-skills::abbr cast mm", "nebbie-spells-skills::abbr cast ms", "nebbie-spells-skills::abbr cast mwipe", "nebbie-spells-skills::abbr cast para", "nebbie-spells-skills::abbr cast pcrush", "nebbie-spells-skills::abbr cast pevil",
-  "nebbie-spells-skills::abbr cast pois", "nebbie-spells-skills::abbr cast poly", "nebbie-spells-skills::abbr cast prism", "nebbie-spells-skills::abbr cast psiport", "nebbie-spells-skills::abbr cast ptel", "nebbie-spells-skills::abbr cast rcurse", "nebbie-spells-skills::abbr cast reinc", "nebbie-spells-skills::abbr cast resu", "nebbie-spells-skills::abbr cast rpara", "nebbie-spells-skills::abbr cast rpois",
-  "nebbie-spells-skills::abbr cast san", "nebbie-spells-skills::abbr cast sg", "nebbie-spells-skills::abbr cast shld", "nebbie-spells-skills::abbr cast slife", "nebbie-spells-skills::abbr cast slow", "nebbie-spells-skills::abbr cast snare", "nebbie-spells-skills::abbr cast sskin", "nebbie-spells-skills::abbr cast telek", "nebbie-spells-skills::abbr cast tsight", "nebbie-spells-skills::abbr cast wb",
-  "nebbie-spells-skills::abbr cast weak", "nebbie-spells-skills::abbr cast wrec", "nebbie-spells-skills::attrib off", "nebbie-spells-skills::attrib on", "nebbie-spells-skills::attrib sync", "nebbie-spells-skills::eq cache off", "nebbie-spells-skills::eq cache on", "nebbie-spells-skills::eq cache sync", "nebbie-spells-skills::eq key add", "nebbie-spells-skills::eq key del",
-  "nebbie-spells-skills::eq key list", "nebbie-spells-skills::fav cast aid", "nebbie-spells-skills::fav cast armor", "nebbie-spells-skills::fav cast bless", "nebbie-spells-skills::fav cast mirror images", "nebbie-spells-skills::fav cast shield", "nebbie-spells-skills::fav cast stone skin", "nebbie-spells-skills::generic cast c", "nebbie-spells-skills::generic cast word", "nebbie-spells-skills::list classes",
-  "nebbie-spells-skills::loot manual", "nebbie-spells-skills::loot off", "nebbie-spells-skills::loot on", "nebbie-spells-skills::memorize", "nebbie-spells-skills::mind shortcut", "nebbie-spells-skills::mode cast", "nebbie-spells-skills::mode mind", "nebbie-spells-skills::mode recall", "nebbie-spells-skills::prompt debug", "nebbie-spells-skills::quick slot 1",
-  "nebbie-spells-skills::quick slot 2", "nebbie-spells-skills::quick slot 3", "nebbie-spells-skills::quick slot 4", "nebbie-spells-skills::quick slot 5", "nebbie-spells-skills::quick slot 6", "nebbie-spells-skills::quick slot 7", "nebbie-spells-skills::quick slot 8", "nebbie-spells-skills::quick slot 9", "nebbie-spells-skills::recall shortcut", "nebbie-spells-skills::reinstall fix",
-  "nebbie-spells-skills::reposition gui", "nebbie-spells-skills::return form", "nebbie-spells-skills::set class", "nebbie-spells-skills::setup hud", "nebbie-spells-skills::skill aura", "nebbie-spells-skills::skill backstab", "nebbie-spells-skills::skill bash", "nebbie-spells-skills::skill berserk", "nebbie-spells-skills::skill blast", "nebbie-spells-skills::skill blessing",
-  "nebbie-spells-skills::skill bodyguard", "nebbie-spells-skills::skill brew", "nebbie-spells-skills::skill carve", "nebbie-spells-skills::skill climb", "nebbie-spells-skills::skill disarm", "nebbie-spells-skills::skill disguise", "nebbie-spells-skills::skill doorbash", "nebbie-spells-skills::skill esp", "nebbie-spells-skills::skill feign death", "nebbie-spells-skills::skill find food",
-  "nebbie-spells-skills::skill find traps", "nebbie-spells-skills::skill find water", "nebbie-spells-skills::skill first aid", "nebbie-spells-skills::skill flame", "nebbie-spells-skills::skill forge", "nebbie-spells-skills::skill great", "nebbie-spells-skills::skill hide", "nebbie-spells-skills::skill kick", "nebbie-spells-skills::skill lay on hands", "nebbie-spells-skills::skill parry",
-  "nebbie-spells-skills::skill pick", "nebbie-spells-skills::skill portal", "nebbie-spells-skills::skill pray", "nebbie-spells-skills::skill quivering palm", "nebbie-spells-skills::skill scry", "nebbie-spells-skills::skill shield", "nebbie-spells-skills::skill sign", "nebbie-spells-skills::skill sneak", "nebbie-spells-skills::skill spot", "nebbie-spells-skills::skill springleap",
-  "nebbie-spells-skills::skill spy", "nebbie-spells-skills::skill steal", "nebbie-spells-skills::skill swim", "nebbie-spells-skills::skill tan", "nebbie-spells-skills::skill track", "nebbie-spells-skills::skill tspy", "nebbie-spells-skills::skill warcry", "nebbie-spells-skills::swap weapon", "nebbie-spells-skills::toggle gui", "nebbie-spells-skills::toggle hud",
-  "prompt debug", "recall shortcut", "reinstall fix", "reposition gui", "return form", "set class", "setup hud", "swap weapon", "toggle gui", "toggle hud"
+  "attrib off", "attrib on", "attrib sync", "drop recover off", "drop recover on", "eq cache clear", "eq cache off", "eq cache on", "eq cache sync", "eq key add",
+  "eq key del", "eq key list", "food auto off", "food auto on", "food item set", "food manual", "generic cast c", "generic cast word", "install diagnose", "list aliases",
+  "list classes", "list package help", "list spells ref", "list triggers", "loot manual", "loot off", "loot on", "memorize", "mind shortcut", "mode cast",
+  "mode mind", "mode recall", "nebbie-play-all::abbr cast ab", "nebbie-play-all::abbr cast adead", "nebbie-play-all::abbr cast aid", "nebbie-play-all::abbr cast arm", "nebbie-play-all::abbr cast bark", "nebbie-play-all::abbr cast ble", "nebbie-play-all::abbr cast blind", "nebbie-play-all::abbr cast cblind",
+  "nebbie-play-all::abbr cast cc", "nebbie-play-all::abbr cast cfood", "nebbie-play-all::abbr cast chain", "nebbie-play-all::abbr cast charm", "nebbie-play-all::abbr cast clight", "nebbie-play-all::abbr cast clightn", "nebbie-play-all::abbr cast cmd", "nebbie-play-all::abbr cast cmon", "nebbie-play-all::abbr cast coc", "nebbie-play-all::abbr cast cs",
+  "nebbie-play-all::abbr cast cser", "nebbie-play-all::abbr cast csleep", "nebbie-play-all::abbr cast ct", "nebbie-play-all::abbr cast curse", "nebbie-play-all::abbr cast cwater", "nebbie-play-all::abbr cast dev", "nebbie-play-all::abbr cast devl", "nebbie-play-all::abbr cast dinv", "nebbie-play-all::abbr cast disint", "nebbie-play-all::abbr cast dmag",
+  "nebbie-play-all::abbr cast dom", "nebbie-play-all::abbr cast dpois", "nebbie-play-all::abbr cast ea", "nebbie-play-all::abbr cast earmor", "nebbie-play-all::abbr cast edrain", "nebbie-play-all::abbr cast ewep", "nebbie-play-all::abbr cast fb", "nebbie-play-all::abbr cast fear", "nebbie-play-all::abbr cast feeble", "nebbie-play-all::abbr cast ffire",
+  "nebbie-play-all::abbr cast fly", "nebbie-play-all::abbr cast fs", "nebbie-play-all::abbr cast fshld", "nebbie-play-all::abbr cast harm", "nebbie-play-all::abbr cast haste", "nebbie-play-all::abbr cast heal", "nebbie-play-all::abbr cast ident", "nebbie-play-all::abbr cast infra", "nebbie-play-all::abbr cast invis", "nebbie-play-all::abbr cast is",
+  "nebbie-play-all::abbr cast kalign", "nebbie-play-all::abbr cast knock", "nebbie-play-all::abbr cast lb", "nebbie-play-all::abbr cast mana", "nebbie-play-all::abbr cast mburn", "nebbie-play-all::abbr cast mirr", "nebbie-play-all::abbr cast mm", "nebbie-play-all::abbr cast ms", "nebbie-play-all::abbr cast mwipe", "nebbie-play-all::abbr cast para",
+  "nebbie-play-all::abbr cast pcrush", "nebbie-play-all::abbr cast pevil", "nebbie-play-all::abbr cast pois", "nebbie-play-all::abbr cast poly", "nebbie-play-all::abbr cast prism", "nebbie-play-all::abbr cast psiport", "nebbie-play-all::abbr cast ptel", "nebbie-play-all::abbr cast rcurse", "nebbie-play-all::abbr cast reinc", "nebbie-play-all::abbr cast resu",
+  "nebbie-play-all::abbr cast rpara", "nebbie-play-all::abbr cast rpois", "nebbie-play-all::abbr cast san", "nebbie-play-all::abbr cast sg", "nebbie-play-all::abbr cast shld", "nebbie-play-all::abbr cast slife", "nebbie-play-all::abbr cast slow", "nebbie-play-all::abbr cast snare", "nebbie-play-all::abbr cast sskin", "nebbie-play-all::abbr cast telek",
+  "nebbie-play-all::abbr cast tsight", "nebbie-play-all::abbr cast wb", "nebbie-play-all::abbr cast weak", "nebbie-play-all::abbr cast wrec", "nebbie-play-all::attrib off", "nebbie-play-all::attrib on", "nebbie-play-all::attrib sync", "nebbie-play-all::drop recover off", "nebbie-play-all::drop recover on", "nebbie-play-all::eq cache clear",
+  "nebbie-play-all::eq cache off", "nebbie-play-all::eq cache on", "nebbie-play-all::eq cache sync", "nebbie-play-all::eq key add", "nebbie-play-all::eq key del", "nebbie-play-all::eq key list", "nebbie-play-all::fav cast aid", "nebbie-play-all::fav cast armor", "nebbie-play-all::fav cast bless", "nebbie-play-all::fav cast mirror images",
+  "nebbie-play-all::fav cast shield", "nebbie-play-all::fav cast stone skin", "nebbie-play-all::food auto off", "nebbie-play-all::food auto on", "nebbie-play-all::food item set", "nebbie-play-all::food manual", "nebbie-play-all::generic cast c", "nebbie-play-all::generic cast word", "nebbie-play-all::install diagnose", "nebbie-play-all::list aliases",
+  "nebbie-play-all::list classes", "nebbie-play-all::list package help", "nebbie-play-all::list spells ref", "nebbie-play-all::list triggers", "nebbie-play-all::loot manual", "nebbie-play-all::loot off", "nebbie-play-all::loot on", "nebbie-play-all::memorize", "nebbie-play-all::mind shortcut", "nebbie-play-all::mode cast",
+  "nebbie-play-all::mode mind", "nebbie-play-all::mode recall", "nebbie-play-all::prompt debug", "nebbie-play-all::quick slot 1", "nebbie-play-all::quick slot 2", "nebbie-play-all::quick slot 3", "nebbie-play-all::quick slot 4", "nebbie-play-all::quick slot 5", "nebbie-play-all::quick slot 6", "nebbie-play-all::quick slot 7",
+  "nebbie-play-all::quick slot 8", "nebbie-play-all::quick slot 9", "nebbie-play-all::recall shortcut", "nebbie-play-all::reinstall fix", "nebbie-play-all::reposition gui", "nebbie-play-all::return form", "nebbie-play-all::set class", "nebbie-play-all::setup hud", "nebbie-play-all::skill aura", "nebbie-play-all::skill backstab",
+  "nebbie-play-all::skill bash", "nebbie-play-all::skill berserk", "nebbie-play-all::skill blast", "nebbie-play-all::skill blessing", "nebbie-play-all::skill bodyguard", "nebbie-play-all::skill brew", "nebbie-play-all::skill carve", "nebbie-play-all::skill climb", "nebbie-play-all::skill disarm", "nebbie-play-all::skill disguise",
+  "nebbie-play-all::skill doorbash", "nebbie-play-all::skill esp", "nebbie-play-all::skill feign death", "nebbie-play-all::skill find food", "nebbie-play-all::skill find traps", "nebbie-play-all::skill find water", "nebbie-play-all::skill first aid", "nebbie-play-all::skill flame", "nebbie-play-all::skill forge", "nebbie-play-all::skill great",
+  "nebbie-play-all::skill hide", "nebbie-play-all::skill kick", "nebbie-play-all::skill lay on hands", "nebbie-play-all::skill parry", "nebbie-play-all::skill pick", "nebbie-play-all::skill portal", "nebbie-play-all::skill pray", "nebbie-play-all::skill quivering palm", "nebbie-play-all::skill scry", "nebbie-play-all::skill shield",
+  "nebbie-play-all::skill sign", "nebbie-play-all::skill sneak", "nebbie-play-all::skill spot", "nebbie-play-all::skill springleap", "nebbie-play-all::skill spy", "nebbie-play-all::skill steal", "nebbie-play-all::skill swim", "nebbie-play-all::skill tan", "nebbie-play-all::skill track", "nebbie-play-all::skill tspy",
+  "nebbie-play-all::skill warcry", "nebbie-play-all::swap weapon", "nebbie-play-all::toggle gui", "nebbie-play-all::toggle hud", "nebbie-spells-skills::abbr cast ab", "nebbie-spells-skills::abbr cast adead", "nebbie-spells-skills::abbr cast aid", "nebbie-spells-skills::abbr cast arm", "nebbie-spells-skills::abbr cast bark", "nebbie-spells-skills::abbr cast ble",
+  "nebbie-spells-skills::abbr cast blind", "nebbie-spells-skills::abbr cast cblind", "nebbie-spells-skills::abbr cast cc", "nebbie-spells-skills::abbr cast cfood", "nebbie-spells-skills::abbr cast chain", "nebbie-spells-skills::abbr cast charm", "nebbie-spells-skills::abbr cast clight", "nebbie-spells-skills::abbr cast clightn", "nebbie-spells-skills::abbr cast cmd", "nebbie-spells-skills::abbr cast cmon",
+  "nebbie-spells-skills::abbr cast coc", "nebbie-spells-skills::abbr cast cs", "nebbie-spells-skills::abbr cast cser", "nebbie-spells-skills::abbr cast csleep", "nebbie-spells-skills::abbr cast ct", "nebbie-spells-skills::abbr cast curse", "nebbie-spells-skills::abbr cast cwater", "nebbie-spells-skills::abbr cast dev", "nebbie-spells-skills::abbr cast devl", "nebbie-spells-skills::abbr cast dinv",
+  "nebbie-spells-skills::abbr cast disint", "nebbie-spells-skills::abbr cast dmag", "nebbie-spells-skills::abbr cast dom", "nebbie-spells-skills::abbr cast dpois", "nebbie-spells-skills::abbr cast ea", "nebbie-spells-skills::abbr cast earmor", "nebbie-spells-skills::abbr cast edrain", "nebbie-spells-skills::abbr cast ewep", "nebbie-spells-skills::abbr cast fb", "nebbie-spells-skills::abbr cast fear",
+  "nebbie-spells-skills::abbr cast feeble", "nebbie-spells-skills::abbr cast ffire", "nebbie-spells-skills::abbr cast fly", "nebbie-spells-skills::abbr cast fs", "nebbie-spells-skills::abbr cast fshld", "nebbie-spells-skills::abbr cast harm", "nebbie-spells-skills::abbr cast haste", "nebbie-spells-skills::abbr cast heal", "nebbie-spells-skills::abbr cast ident", "nebbie-spells-skills::abbr cast infra",
+  "nebbie-spells-skills::abbr cast invis", "nebbie-spells-skills::abbr cast is", "nebbie-spells-skills::abbr cast kalign", "nebbie-spells-skills::abbr cast knock", "nebbie-spells-skills::abbr cast lb", "nebbie-spells-skills::abbr cast mana", "nebbie-spells-skills::abbr cast mburn", "nebbie-spells-skills::abbr cast mirr", "nebbie-spells-skills::abbr cast mm", "nebbie-spells-skills::abbr cast ms",
+  "nebbie-spells-skills::abbr cast mwipe", "nebbie-spells-skills::abbr cast para", "nebbie-spells-skills::abbr cast pcrush", "nebbie-spells-skills::abbr cast pevil", "nebbie-spells-skills::abbr cast pois", "nebbie-spells-skills::abbr cast poly", "nebbie-spells-skills::abbr cast prism", "nebbie-spells-skills::abbr cast psiport", "nebbie-spells-skills::abbr cast ptel", "nebbie-spells-skills::abbr cast rcurse",
+  "nebbie-spells-skills::abbr cast reinc", "nebbie-spells-skills::abbr cast resu", "nebbie-spells-skills::abbr cast rpara", "nebbie-spells-skills::abbr cast rpois", "nebbie-spells-skills::abbr cast san", "nebbie-spells-skills::abbr cast sg", "nebbie-spells-skills::abbr cast shld", "nebbie-spells-skills::abbr cast slife", "nebbie-spells-skills::abbr cast slow", "nebbie-spells-skills::abbr cast snare",
+  "nebbie-spells-skills::abbr cast sskin", "nebbie-spells-skills::abbr cast telek", "nebbie-spells-skills::abbr cast tsight", "nebbie-spells-skills::abbr cast wb", "nebbie-spells-skills::abbr cast weak", "nebbie-spells-skills::abbr cast wrec", "nebbie-spells-skills::attrib off", "nebbie-spells-skills::attrib on", "nebbie-spells-skills::attrib sync", "nebbie-spells-skills::drop recover off",
+  "nebbie-spells-skills::drop recover on", "nebbie-spells-skills::eq cache clear", "nebbie-spells-skills::eq cache off", "nebbie-spells-skills::eq cache on", "nebbie-spells-skills::eq cache sync", "nebbie-spells-skills::eq key add", "nebbie-spells-skills::eq key del", "nebbie-spells-skills::eq key list", "nebbie-spells-skills::fav cast aid", "nebbie-spells-skills::fav cast armor",
+  "nebbie-spells-skills::fav cast bless", "nebbie-spells-skills::fav cast mirror images", "nebbie-spells-skills::fav cast shield", "nebbie-spells-skills::fav cast stone skin", "nebbie-spells-skills::food auto off", "nebbie-spells-skills::food auto on", "nebbie-spells-skills::food item set", "nebbie-spells-skills::food manual", "nebbie-spells-skills::generic cast c", "nebbie-spells-skills::generic cast word",
+  "nebbie-spells-skills::install diagnose", "nebbie-spells-skills::list aliases", "nebbie-spells-skills::list classes", "nebbie-spells-skills::list package help", "nebbie-spells-skills::list spells ref", "nebbie-spells-skills::list triggers", "nebbie-spells-skills::loot manual", "nebbie-spells-skills::loot off", "nebbie-spells-skills::loot on", "nebbie-spells-skills::memorize",
+  "nebbie-spells-skills::mind shortcut", "nebbie-spells-skills::mode cast", "nebbie-spells-skills::mode mind", "nebbie-spells-skills::mode recall", "nebbie-spells-skills::prompt debug", "nebbie-spells-skills::quick slot 1", "nebbie-spells-skills::quick slot 2", "nebbie-spells-skills::quick slot 3", "nebbie-spells-skills::quick slot 4", "nebbie-spells-skills::quick slot 5",
+  "nebbie-spells-skills::quick slot 6", "nebbie-spells-skills::quick slot 7", "nebbie-spells-skills::quick slot 8", "nebbie-spells-skills::quick slot 9", "nebbie-spells-skills::recall shortcut", "nebbie-spells-skills::reinstall fix", "nebbie-spells-skills::reposition gui", "nebbie-spells-skills::return form", "nebbie-spells-skills::set class", "nebbie-spells-skills::setup hud",
+  "nebbie-spells-skills::skill aura", "nebbie-spells-skills::skill backstab", "nebbie-spells-skills::skill bash", "nebbie-spells-skills::skill berserk", "nebbie-spells-skills::skill blast", "nebbie-spells-skills::skill blessing", "nebbie-spells-skills::skill bodyguard", "nebbie-spells-skills::skill brew", "nebbie-spells-skills::skill carve", "nebbie-spells-skills::skill climb",
+  "nebbie-spells-skills::skill disarm", "nebbie-spells-skills::skill disguise", "nebbie-spells-skills::skill doorbash", "nebbie-spells-skills::skill esp", "nebbie-spells-skills::skill feign death", "nebbie-spells-skills::skill find food", "nebbie-spells-skills::skill find traps", "nebbie-spells-skills::skill find water", "nebbie-spells-skills::skill first aid", "nebbie-spells-skills::skill flame",
+  "nebbie-spells-skills::skill forge", "nebbie-spells-skills::skill great", "nebbie-spells-skills::skill hide", "nebbie-spells-skills::skill kick", "nebbie-spells-skills::skill lay on hands", "nebbie-spells-skills::skill parry", "nebbie-spells-skills::skill pick", "nebbie-spells-skills::skill portal", "nebbie-spells-skills::skill pray", "nebbie-spells-skills::skill quivering palm",
+  "nebbie-spells-skills::skill scry", "nebbie-spells-skills::skill shield", "nebbie-spells-skills::skill sign", "nebbie-spells-skills::skill sneak", "nebbie-spells-skills::skill spot", "nebbie-spells-skills::skill springleap", "nebbie-spells-skills::skill spy", "nebbie-spells-skills::skill steal", "nebbie-spells-skills::skill swim", "nebbie-spells-skills::skill tan",
+  "nebbie-spells-skills::skill track", "nebbie-spells-skills::skill tspy", "nebbie-spells-skills::skill warcry", "nebbie-spells-skills::swap weapon", "nebbie-spells-skills::toggle gui", "nebbie-spells-skills::toggle hud", "prompt debug", "recall shortcut", "reinstall fix", "reposition gui",
+  "return form", "set class", "setup hud", "swap weapon", "toggle gui", "toggle hud"
 }
 Nebbie.legacyPermTriggers = {
-  "attrib gag", "cast started", "eq parse wield", "look loot parse", "mob kill exp loot", "nebbie-play-all::affect on blindness accecat", "nebbie-play-all::affect on fear presa dal panico", "nebbie-play-all::affect on heat stuff frigge", "nebbie-play-all::affect on paralyze Sei paralizzato", "nebbie-play-all::affect on silence non riesci a parlare",
-  "nebbie-play-all::affect on slowness mondo stia rallentando", "nebbie-play-all::affect on web ragnatele che ti avvolgono", "nebbie-play-all::affect on web ricopert", "nebbie-play-all::attrib gag", "nebbie-play-all::cast started", "nebbie-play-all::debuff off curse Ti senti molto meglio", "nebbie-play-all::debuff off feeblemind piu\' intelligente", "nebbie-play-all::debuff off poison sembrano meno forti ora", "nebbie-play-all::debuff off poison veleno non scorre", "nebbie-play-all::debuff on curse maledett",
-  "nebbie-play-all::debuff on feeblemind rimbecillit", "nebbie-play-all::debuff on poison appare molto sofferente", "nebbie-play-all::eq parse wield", "nebbie-play-all::fail anti_magic", "nebbie-play-all::fail backfire", "nebbie-play-all::fail backstab_fail", "nebbie-play-all::fail concentrazione", "nebbie-play-all::fail first_aid_cd", "nebbie-play-all::fail fizzle", "nebbie-play-all::fail kick_fail",
-  "nebbie-play-all::fail no_level", "nebbie-play-all::fail no_magic_zone", "nebbie-play-all::fail no_mana", "nebbie-play-all::fail no_mem", "nebbie-play-all::fail no_mind_zone", "nebbie-play-all::fail no_quotes", "nebbie-play-all::fail unimplemented", "nebbie-play-all::fail unknown", "nebbie-play-all::fail usa_mind", "nebbie-play-all::fail usa_recall",
-  "nebbie-play-all::look loot parse", "nebbie-play-all::mob kill exp loot", "nebbie-play-all::prompt parse", "nebbie-play-all::soon armor", "nebbie-play-all::soon fly", "nebbie-play-all::soon invisibility", "nebbie-play-all::soon sanctuary", "nebbie-play-all::soon shield", "nebbie-play-all::wearoff adrenalize", "nebbie-play-all::wearoff aid",
-  "nebbie-play-all::wearoff anti magic shell", "nebbie-play-all::wearoff armor", "nebbie-play-all::wearoff barkskin", "nebbie-play-all::wearoff bless", "nebbie-play-all::wearoff blessing", "nebbie-play-all::wearoff blindness", "nebbie-play-all::wearoff detect invisibility", "nebbie-play-all::wearoff detect magic", "nebbie-play-all::wearoff disguise", "nebbie-play-all::wearoff faerie fire",
-  "nebbie-play-all::wearoff fireshield", "nebbie-play-all::wearoff first aid", "nebbie-play-all::wearoff fly", "nebbie-play-all::wearoff globe darkness", "nebbie-play-all::wearoff haste", "nebbie-play-all::wearoff heat stuff", "nebbie-play-all::wearoff invisibility", "nebbie-play-all::wearoff lay on hands", "nebbie-play-all::wearoff mana", "nebbie-play-all::wearoff meditate",
-  "nebbie-play-all::wearoff minor invulnerability", "nebbie-play-all::wearoff mirror images", "nebbie-play-all::wearoff paralyze", "nebbie-play-all::wearoff polymorph", "nebbie-play-all::wearoff protection from evil", "nebbie-play-all::wearoff psi shield", "nebbie-play-all::wearoff psionic blast", "nebbie-play-all::wearoff sanctuary", "nebbie-play-all::wearoff shield", "nebbie-play-all::wearoff silence",
-  "nebbie-play-all::wearoff slowness", "nebbie-play-all::wearoff sneak", "nebbie-play-all::wearoff spy", "nebbie-play-all::wearoff stone skin", "nebbie-play-all::wearoff strength", "nebbie-play-all::wearoff web", "nebbie-spells-skills::affect on blindness accecat", "nebbie-spells-skills::affect on fear presa dal panico", "nebbie-spells-skills::affect on heat stuff frigge", "nebbie-spells-skills::affect on paralyze Sei paralizzato",
-  "nebbie-spells-skills::affect on silence non riesci a parlare", "nebbie-spells-skills::affect on slowness mondo stia rallentando", "nebbie-spells-skills::affect on web ragnatele che ti avvolgono", "nebbie-spells-skills::affect on web ricopert", "nebbie-spells-skills::attrib gag", "nebbie-spells-skills::cast started", "nebbie-spells-skills::debuff off curse Ti senti molto meglio", "nebbie-spells-skills::debuff off feeblemind piu\' intelligente", "nebbie-spells-skills::debuff off poison sembrano meno forti ora", "nebbie-spells-skills::debuff off poison veleno non scorre",
-  "nebbie-spells-skills::debuff on curse maledett", "nebbie-spells-skills::debuff on feeblemind rimbecillit", "nebbie-spells-skills::debuff on poison appare molto sofferente", "nebbie-spells-skills::eq parse wield", "nebbie-spells-skills::fail anti_magic", "nebbie-spells-skills::fail backfire", "nebbie-spells-skills::fail backstab_fail", "nebbie-spells-skills::fail concentrazione", "nebbie-spells-skills::fail first_aid_cd", "nebbie-spells-skills::fail fizzle",
-  "nebbie-spells-skills::fail kick_fail", "nebbie-spells-skills::fail no_level", "nebbie-spells-skills::fail no_magic_zone", "nebbie-spells-skills::fail no_mana", "nebbie-spells-skills::fail no_mem", "nebbie-spells-skills::fail no_mind_zone", "nebbie-spells-skills::fail no_quotes", "nebbie-spells-skills::fail unimplemented", "nebbie-spells-skills::fail unknown", "nebbie-spells-skills::fail usa_mind",
-  "nebbie-spells-skills::fail usa_recall", "nebbie-spells-skills::look loot parse", "nebbie-spells-skills::mob kill exp loot", "nebbie-spells-skills::prompt parse", "nebbie-spells-skills::soon armor", "nebbie-spells-skills::soon fly", "nebbie-spells-skills::soon invisibility", "nebbie-spells-skills::soon sanctuary", "nebbie-spells-skills::soon shield", "nebbie-spells-skills::wearoff adrenalize",
-  "nebbie-spells-skills::wearoff aid", "nebbie-spells-skills::wearoff anti magic shell", "nebbie-spells-skills::wearoff armor", "nebbie-spells-skills::wearoff barkskin", "nebbie-spells-skills::wearoff bless", "nebbie-spells-skills::wearoff blessing", "nebbie-spells-skills::wearoff blindness", "nebbie-spells-skills::wearoff detect invisibility", "nebbie-spells-skills::wearoff detect magic", "nebbie-spells-skills::wearoff disguise",
-  "nebbie-spells-skills::wearoff faerie fire", "nebbie-spells-skills::wearoff fireshield", "nebbie-spells-skills::wearoff first aid", "nebbie-spells-skills::wearoff fly", "nebbie-spells-skills::wearoff globe darkness", "nebbie-spells-skills::wearoff haste", "nebbie-spells-skills::wearoff heat stuff", "nebbie-spells-skills::wearoff invisibility", "nebbie-spells-skills::wearoff lay on hands", "nebbie-spells-skills::wearoff mana",
-  "nebbie-spells-skills::wearoff meditate", "nebbie-spells-skills::wearoff minor invulnerability", "nebbie-spells-skills::wearoff mirror images", "nebbie-spells-skills::wearoff paralyze", "nebbie-spells-skills::wearoff polymorph", "nebbie-spells-skills::wearoff protection from evil", "nebbie-spells-skills::wearoff psi shield", "nebbie-spells-skills::wearoff psionic blast", "nebbie-spells-skills::wearoff sanctuary", "nebbie-spells-skills::wearoff shield",
-  "nebbie-spells-skills::wearoff silence", "nebbie-spells-skills::wearoff slowness", "nebbie-spells-skills::wearoff sneak", "nebbie-spells-skills::wearoff spy", "nebbie-spells-skills::wearoff stone skin", "nebbie-spells-skills::wearoff strength", "nebbie-spells-skills::wearoff web", "prompt parse"
+  "attrib gag", "cast started", "eq parse wield", "hunger thirst", "look loot parse", "mob kill exp loot", "nebbie-play-all::affect on blindness accecat", "nebbie-play-all::affect on fear presa dal panico", "nebbie-play-all::affect on heat stuff frigge", "nebbie-play-all::affect on paralyze Sei paralizzato",
+  "nebbie-play-all::affect on silence non riesci a parlare", "nebbie-play-all::affect on slowness mondo stia rallentando", "nebbie-play-all::affect on web ragnatele che ti avvolgono", "nebbie-play-all::affect on web ricopert", "nebbie-play-all::attrib gag", "nebbie-play-all::cast started", "nebbie-play-all::debuff off curse Ti senti molto meglio", "nebbie-play-all::debuff off feeblemind piu\' intelligente", "nebbie-play-all::debuff off poison sembrano meno forti ora", "nebbie-play-all::debuff off poison veleno non scorre",
+  "nebbie-play-all::debuff on curse maledett", "nebbie-play-all::debuff on feeblemind rimbecillit", "nebbie-play-all::debuff on poison appare molto sofferente", "nebbie-play-all::eq parse wield", "nebbie-play-all::fail anti_magic", "nebbie-play-all::fail backfire", "nebbie-play-all::fail backstab_fail", "nebbie-play-all::fail concentrazione", "nebbie-play-all::fail first_aid_cd", "nebbie-play-all::fail fizzle",
+  "nebbie-play-all::fail kick_fail", "nebbie-play-all::fail no_level", "nebbie-play-all::fail no_magic_zone", "nebbie-play-all::fail no_mana", "nebbie-play-all::fail no_mem", "nebbie-play-all::fail no_mind_zone", "nebbie-play-all::fail no_quotes", "nebbie-play-all::fail unimplemented", "nebbie-play-all::fail unknown", "nebbie-play-all::fail usa_mind",
+  "nebbie-play-all::fail usa_recall", "nebbie-play-all::hunger thirst", "nebbie-play-all::look loot parse", "nebbie-play-all::mob kill exp loot", "nebbie-play-all::prompt parse", "nebbie-play-all::soon armor", "nebbie-play-all::soon fly", "nebbie-play-all::soon invisibility", "nebbie-play-all::soon sanctuary", "nebbie-play-all::soon shield",
+  "nebbie-play-all::weapon drop hold", "nebbie-play-all::weapon drop wield", "nebbie-play-all::wearoff adrenalize", "nebbie-play-all::wearoff aid", "nebbie-play-all::wearoff anti magic shell", "nebbie-play-all::wearoff armor", "nebbie-play-all::wearoff barkskin", "nebbie-play-all::wearoff bless", "nebbie-play-all::wearoff blessing", "nebbie-play-all::wearoff blindness",
+  "nebbie-play-all::wearoff detect invisibility", "nebbie-play-all::wearoff detect magic", "nebbie-play-all::wearoff disguise", "nebbie-play-all::wearoff faerie fire", "nebbie-play-all::wearoff fireshield", "nebbie-play-all::wearoff first aid", "nebbie-play-all::wearoff fly", "nebbie-play-all::wearoff globe darkness", "nebbie-play-all::wearoff haste", "nebbie-play-all::wearoff heat stuff",
+  "nebbie-play-all::wearoff invisibility", "nebbie-play-all::wearoff lay on hands", "nebbie-play-all::wearoff mana", "nebbie-play-all::wearoff meditate", "nebbie-play-all::wearoff minor invulnerability", "nebbie-play-all::wearoff mirror images", "nebbie-play-all::wearoff paralyze", "nebbie-play-all::wearoff polymorph", "nebbie-play-all::wearoff protection from evil", "nebbie-play-all::wearoff psi shield",
+  "nebbie-play-all::wearoff psionic blast", "nebbie-play-all::wearoff sanctuary", "nebbie-play-all::wearoff shield", "nebbie-play-all::wearoff silence", "nebbie-play-all::wearoff slowness", "nebbie-play-all::wearoff sneak", "nebbie-play-all::wearoff spy", "nebbie-play-all::wearoff stone skin", "nebbie-play-all::wearoff strength", "nebbie-play-all::wearoff web",
+  "nebbie-spells-skills::affect on blindness accecat", "nebbie-spells-skills::affect on fear presa dal panico", "nebbie-spells-skills::affect on heat stuff frigge", "nebbie-spells-skills::affect on paralyze Sei paralizzato", "nebbie-spells-skills::affect on silence non riesci a parlare", "nebbie-spells-skills::affect on slowness mondo stia rallentando", "nebbie-spells-skills::affect on web ragnatele che ti avvolgono", "nebbie-spells-skills::affect on web ricopert", "nebbie-spells-skills::attrib gag", "nebbie-spells-skills::cast started",
+  "nebbie-spells-skills::debuff off curse Ti senti molto meglio", "nebbie-spells-skills::debuff off feeblemind piu\' intelligente", "nebbie-spells-skills::debuff off poison sembrano meno forti ora", "nebbie-spells-skills::debuff off poison veleno non scorre", "nebbie-spells-skills::debuff on curse maledett", "nebbie-spells-skills::debuff on feeblemind rimbecillit", "nebbie-spells-skills::debuff on poison appare molto sofferente", "nebbie-spells-skills::eq parse wield", "nebbie-spells-skills::fail anti_magic", "nebbie-spells-skills::fail backfire",
+  "nebbie-spells-skills::fail backstab_fail", "nebbie-spells-skills::fail concentrazione", "nebbie-spells-skills::fail first_aid_cd", "nebbie-spells-skills::fail fizzle", "nebbie-spells-skills::fail kick_fail", "nebbie-spells-skills::fail no_level", "nebbie-spells-skills::fail no_magic_zone", "nebbie-spells-skills::fail no_mana", "nebbie-spells-skills::fail no_mem", "nebbie-spells-skills::fail no_mind_zone",
+  "nebbie-spells-skills::fail no_quotes", "nebbie-spells-skills::fail unimplemented", "nebbie-spells-skills::fail unknown", "nebbie-spells-skills::fail usa_mind", "nebbie-spells-skills::fail usa_recall", "nebbie-spells-skills::hunger thirst", "nebbie-spells-skills::look loot parse", "nebbie-spells-skills::mob kill exp loot", "nebbie-spells-skills::prompt parse", "nebbie-spells-skills::soon armor",
+  "nebbie-spells-skills::soon fly", "nebbie-spells-skills::soon invisibility", "nebbie-spells-skills::soon sanctuary", "nebbie-spells-skills::soon shield", "nebbie-spells-skills::weapon drop hold", "nebbie-spells-skills::weapon drop wield", "nebbie-spells-skills::wearoff adrenalize", "nebbie-spells-skills::wearoff aid", "nebbie-spells-skills::wearoff anti magic shell", "nebbie-spells-skills::wearoff armor",
+  "nebbie-spells-skills::wearoff barkskin", "nebbie-spells-skills::wearoff bless", "nebbie-spells-skills::wearoff blessing", "nebbie-spells-skills::wearoff blindness", "nebbie-spells-skills::wearoff detect invisibility", "nebbie-spells-skills::wearoff detect magic", "nebbie-spells-skills::wearoff disguise", "nebbie-spells-skills::wearoff faerie fire", "nebbie-spells-skills::wearoff fireshield", "nebbie-spells-skills::wearoff first aid",
+  "nebbie-spells-skills::wearoff fly", "nebbie-spells-skills::wearoff globe darkness", "nebbie-spells-skills::wearoff haste", "nebbie-spells-skills::wearoff heat stuff", "nebbie-spells-skills::wearoff invisibility", "nebbie-spells-skills::wearoff lay on hands", "nebbie-spells-skills::wearoff mana", "nebbie-spells-skills::wearoff meditate", "nebbie-spells-skills::wearoff minor invulnerability", "nebbie-spells-skills::wearoff mirror images",
+  "nebbie-spells-skills::wearoff paralyze", "nebbie-spells-skills::wearoff polymorph", "nebbie-spells-skills::wearoff protection from evil", "nebbie-spells-skills::wearoff psi shield", "nebbie-spells-skills::wearoff psionic blast", "nebbie-spells-skills::wearoff sanctuary", "nebbie-spells-skills::wearoff shield", "nebbie-spells-skills::wearoff silence", "nebbie-spells-skills::wearoff slowness", "nebbie-spells-skills::wearoff sneak",
+  "nebbie-spells-skills::wearoff spy", "nebbie-spells-skills::wearoff stone skin", "nebbie-spells-skills::wearoff strength", "nebbie-spells-skills::wearoff web", "prompt parse", "weapon drop hold", "weapon drop wield"
 }
 
 
-Nebbie.version = "2.2.27"
+Nebbie.version = "2.2.29"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -2413,7 +2417,7 @@ function Nebbie.clearEqCacheWield()
   Nebbie.eqCache.wieldKey = nil
   Nebbie.eqCache.wieldScannedAt = 0
   Nebbie.saveEqCache()
-  cecho("<green>Nebbie: cache <impugnato> azzerata. Usa <yellow>neq<green> fuori combattimento per aggiornare.\n")
+  cecho("<green>Nebbie: cache <impugnato> azzerata. Usa <yellow>neq<green> per aggiornare.\n")
 end
 
 function Nebbie.isPromptLine(plain)
@@ -2610,7 +2614,7 @@ function Nebbie.showEqCache()
   if Nebbie.eqCacheWieldTrustworthy() then
     cecho(" <dark_green>(affidabile)")
   elseif c.wieldKey and c.wieldKey ~= "" then
-    cecho(" <orange>(vecchia — <yellow>neq clear<orange> o <yellow>neq<orange> fuori fight)")
+    cecho(" <orange>(vecchia — <yellow>neq clear<orange> o <yellow>neq<orange> per aggiornare)")
   end
   cecho("\n")
   cecho("<grey>  tenuto: <white>" .. tostring(c.hold or "(vuoto)"))
@@ -2635,8 +2639,8 @@ function Nebbie.requestEqCache(silent)
   if Nebbie._eqCacheBusy then return false end
   if Nebbie.inCombat() then
     if not silent then
-      cecho("<orange>Nebbie: <yellow>eq<orange> saltato in combattimento (lag / impugnato assente).\n")
-      cecho("<grey>  <yellow>usa<grey> usera' solo la borsa in cache; <yellow>neq clear<grey> se impugnato e' sbagliato.\n")
+      cecho("<orange>Nebbie: <yellow>eq<orange> automatico saltato in combattimento (evita lag).\n")
+      cecho("<grey>  <yellow>usa<grey> usa la cache; <yellow>neq clear<grey> se impugnato in cache e' sbagliato.\n")
     end
     return false
   end
@@ -2775,7 +2779,7 @@ function Nebbie.finishWeaponSwapFromState(ws)
   if not ws.back then
     cecho("<red>Nebbie: nessun oggetto nello slot <sulla schiena> — controlla con eq.\n")
     if not ws._eqSeen then
-      cecho("<grey>  (in combattimento eq puo' arrivare in ritardo — riprova fuori fight)\n")
+      cecho("<grey>  (eq non ancora parsato — riprova o fai <yellow>neq<grey>)\n")
     end
     return
   end
@@ -3625,6 +3629,46 @@ function Nebbie.refreshGUI()
   Nebbie.updateGauges()
 end
 
+function Nebbie.getAllSpellNames()
+  if Nebbie._spellNamesByLen then return Nebbie._spellNamesByLen end
+  local names = {}
+  for spell, _ in pairs(Nebbie.castSpells) do names[#names + 1] = spell end
+  for spell, _ in pairs(Nebbie.mindSpells) do names[#names + 1] = spell end
+  table.sort(names, function(a, b) return #a > #b end)
+  Nebbie._spellNamesByLen = names
+  return names
+end
+
+function Nebbie.parseSpellAndTarget(rest)
+  if not rest or rest == "" then return nil, nil end
+  rest = rest:match("^%s*(.-)%s*$")
+  local qspell, qtail = rest:match("^['\"]([^'\"]+)['\"]%s*(.*)$")
+  if qspell then
+    local target = (qtail and qtail ~= "") and Nebbie.stripQuotes(qtail:match("^%s+(.+)$") or qtail) or nil
+    return Nebbie.resolveSpell(qspell), target
+  end
+  local lower = rest:lower()
+  for _, spell in ipairs(Nebbie.getAllSpellNames()) do
+    local sl = spell:lower()
+    if lower == sl or lower:gsub(" ", "") == sl:gsub(" ", "") then
+      return spell, nil
+    end
+    if #lower >= #sl and lower:sub(1, #sl) == sl then
+      local nextc = rest:sub(#sl + 1, #sl + 1)
+      if nextc == "" or nextc:match("%s") then
+        local target = rest:sub(#sl + 1):match("^%s+(.+)$")
+        if target then target = Nebbie.stripQuotes(target) end
+        return spell, target
+      end
+    end
+  end
+  local spell, target = rest:match("^(%S+)%s+(.+)$")
+  if spell then
+    return Nebbie.resolveSpell(spell), Nebbie.stripQuotes(target)
+  end
+  return Nebbie.resolveSpell(rest), nil
+end
+
 function Nebbie.resolveSpell(token)
   local lower = Nebbie.stripQuotes(token):lower()
   for spell, abbr in pairs(Nebbie.abbrevs) do
@@ -3651,6 +3695,41 @@ function Nebbie.sendCast(spell, target)
   else cmd = "cast '" .. spell .. "'" end
   if target and target ~= "" then cmd = cmd .. " " .. target end
   send(cmd)
+end
+
+function Nebbie.listInstalledAliases()
+  cecho("<cyan><b>Alias Nebbie</b> <grey>(" .. #(Nebbie._aliasNames or {}) .. " registrati; indice: nebbie-alias-index.txt):\n")
+  local n = 0
+  for full, _ in pairs(Nebbie._aliasIds or {}) do
+    n = n + 1
+    cecho("<grey>  " .. tostring(full) .. "\n")
+  end
+  if n == 0 then
+    for _, name in ipairs(Nebbie._aliasNames or {}) do
+      cecho("<grey>  " .. name .. "\n")
+    end
+  end
+  if n == 0 and #(Nebbie._aliasNames or {}) == 0 then
+    cecho("<orange>Nessun alias — <yellow>nfix<orange>\n")
+  end
+end
+
+function Nebbie.listInstalledTriggers()
+  cecho("<cyan><b>Trigger Nebbie</b> <grey>(" .. #(Nebbie._triggerNames or {}) .. " registrati; indice: nebbie-trigger-index.txt):\n")
+  for _, name in ipairs(Nebbie._triggerNames or {}) do
+    cecho("<grey>  " .. name .. "\n")
+  end
+end
+
+function Nebbie.listPackageHelp()
+  cecho("<cyan><b>Nebbie v" .. Nebbie.version .. " — indici</b>\n")
+  cecho("<grey>Repository branch <yellow>mudlet<grey> (docs/mudlet/):\n")
+  cecho("  <yellow>nebbie-alias-index.txt<grey>    — tutti gli alias\n")
+  cecho("  <yellow>nebbie-trigger-index.txt<grey>  — tutti i trigger\n")
+  cecho("  <yellow>nebbie-spells-reference.txt<grey> — spell e abbreviazioni\n")
+  cecho("  <yellow>HELP.md<grey>                    — guida completa\n")
+  cecho("<grey>In gioco: <yellow>nlist aliases<grey> | <yellow>nlist triggers<grey> | <yellow>nlist spells\n")
+  cecho("<grey>Incantesimi multi-parola: <yellow>c power word kill bersaglio<grey> o <yellow>c 'power word kill' bersaglio\n")
 end
 
 function Nebbie.uninstall()
@@ -3792,40 +3871,28 @@ function Nebbie.install()
   -- nfix: unico alias XML nel package (nebbie-fix), non crearlo qui
 
   perm("generic cast c", [[^c (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
-    if target then target = Nebbie.stripQuotes(target) end
-    Nebbie.sendCast(spell, target)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if spell then Nebbie.sendCast(spell, target) end
   ]])
   perm("generic cast word", [[^cast (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
-    if target then target = Nebbie.stripQuotes(target) end
-    Nebbie.sendCast(spell, target)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if spell then Nebbie.sendCast(spell, target) end
   ]])
 
   perm("memorize", [[^mem (.+)$]], [[
-    local spell = Nebbie.resolveSpell(matches[2])
-    send("memorize '" .. spell .. "'")
+    local spell = Nebbie.parseSpellAndTarget(matches[2])
+    if spell then send("memorize '" .. spell .. "'") end
   ]])
   perm("recall shortcut", [[^r (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if not spell then return end
     local cmd = "recall '" .. spell .. "'"
     if target then cmd = cmd .. " " .. target end
     send(cmd)
   ]])
   perm("mind shortcut", [[^m (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if not spell then return end
     local cmd = "mind '" .. spell .. "'"
     if target then cmd = cmd .. " " .. target end
     send(cmd)
@@ -3870,6 +3937,18 @@ function Nebbie.install()
 
   perm("list classes", [[^nclass$]], [[Nebbie.listClasses()]])
   perm("set class", [[^nclass (.+)$]], [[Nebbie.setClass(matches[2])]])
+
+  perm("list package help", [[^nlist$]], [[Nebbie.listPackageHelp()]])
+  perm("list aliases", [[^nlist aliases$]], [[Nebbie.listInstalledAliases()]])
+  perm("list triggers", [[^nlist triggers$]], [[Nebbie.listInstalledTriggers()]])
+  perm("list spells ref", [[^nlist spells$]], [[
+    cecho("<cyan><b>Incantesimi multi-parola</b> — esempi:\n")
+    cecho("<grey>  c power word kill goblin\n")
+    cecho("<grey>  c 'power word kill' goblin\n")
+    cecho("<grey>  c magic missile goblin\n")
+    cecho("<grey>  c colour spray\n")
+    cecho("<grey>Elenco: <yellow>nebbie-spells-reference.txt<grey> (branch mudlet).\n")
+  ]])
 
   for slot = 1, 9 do
     perm("quick slot " .. slot, "^q" .. slot .. "(?: (.+))?$", string.format([[
@@ -3976,7 +4055,7 @@ function Nebbie.install()
   Nebbie.testEqParse(true)
 
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
-  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey>\n")
+  cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey> | <yellow>nlist<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
   cecho("<grey>Armi cadute: <yellow>ndrop off<grey> | Fame/sete: <yellow>nfood off<grey> | Oggetto: <yellow>nfood item cornu\n")
   Nebbie._installing = false

@@ -1,0 +1,108 @@
+Nebbie Arcane — indice completo trigger Mudlet (generato automaticamente)
+Package: nebbie-play-all v2.2.29
+
+=== HUD / PROMPT ===
+  [regex] H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+  → parser prompt HP/Mana/Move
+  [substring] Tu hai / Spells attivi / Spell :  → gag attribute + sync buff
+
+=== EQUIP / LOOT ===
+  [substring] Stai usando / <impugnato> / <tenuto> / <sulla schiena>  → cache eq
+  [substring] il corpo di / corpo sfigurato / pile of dust  → loot manuale/auto
+  [regex] La tua esperienza e' aumentata di N punti  → loot auto dopo kill
+  [substring] ti cade dalle mani  → recupero arma caduta
+  [substring] e ti casca anche  → recupero arma impugnata
+  [substring] Hai Fame./sete.  → nfood auto
+
+=== CAST / BUFF ===
+  [substring] Pronunci le parole  → registra buff da messaggio cast
+
+=== BUFF SCADUTI (wearOff) ===
+  [armor] substring: armatura magica
+  [bless] substring: benedizione Divina
+  [invisibility] substring: Torni visibile.
+  [sanctuary] substring: aura bianca che ti circondava svanisce
+  [fly] substring: capacita' di volare svanisce
+  [haste] substring: Senti i tuoi movimenti rallentare
+  [fireshield] substring: scudo di fuoco
+  [stone skin] substring: pelle torna normale
+  [shield] substring: scudo magico si dissolve
+  [sneak] substring: Smetti di muoverti silenziosamente
+  [meditate] substring: meditato abbastanza
+  [psi shield] substring: creata dalla tua mente tremola
+  [barkskin] substring: pelle perde la consistenza
+  [faerie fire] substring: alone rosa
+  [mirror images] substring: immagine illusoria
+  [strength] substring: Non ti senti piu' cosi'
+  [detect magic] substring: presenza della magia
+  [detect invisibility] substring: vedere l'invisibile
+  [protection from evil] substring: protezione dal Male
+  [anti magic shell] substring: anti-magia
+  [globe darkness] substring: globo di oscurita'
+  [minor invulnerability] substring: globo protettivo attorno al tuo corpo si dissolve
+  [lay on hands] substring: Puoi curarti di nuovo
+  [blessing] substring: Puoi invocare i tuoi Dei di nuovo
+  [first aid] substring: Puoi medicarti di nuovo
+  [spy] substring: Puoi spiare di nuovo
+  [disguise] substring: Puoi mascherarti nuovamente
+  [adrenalize] substring: furia scompare
+  [psionic blast] substring: cervello si sta lentamente riprendendo
+  [polymorph] substring: Ritorni alla tua forma originale
+  [web] substring: ti liberi dalle ragnatele
+  [paralyze] substring: Lentamente ricominci a muoverti
+  [paralyze] substring: ricominci a muoverti
+  [paralyze] substring: ricomincia a muoversi
+  [slowness] substring: movimenti riacquistano la loro velocita
+  [blindness] substring: svanire la tua
+  [heat stuff] substring: equipaggiamento finalmente si
+  [silence] substring: Puoi parlare di nuovo
+  [mana] substring: protezione magica scompare
+  [aid] substring: Perdi l'aiuto Divino
+
+=== PRE-SCADENZA (wearOffSoon) ===
+  [armor] substring: armatura magica vacilla
+  [sanctuary] substring: aura bianca che ti circonda inizia
+  [shield] substring: scudo magico tremola
+  [invisibility] substring: Torni visibile per un momento
+  [fly] substring: stai perdendo la capacita' di volare
+
+=== AFFECT SELF (apply immediato) ===
+  [web] substring: ragnatele che ti avvolgono
+  [web] substring: ricopert
+  [paralyze] substring: Sei paralizzato
+  [slowness] substring: mondo stia rallentando
+  [blindness] substring: accecat
+  [heat stuff] substring: frigge
+  [fear] substring: presa dal panico
+  [silence] substring: non riesci a parlare
+
+=== DEBUFF APPLY ===
+  [poison] substring: appare molto sofferente
+  [curse] substring: maledett
+  [feeblemind] substring: rimbecillit
+
+=== DEBUFF WEAR-OFF ===
+  [poison] substring: veleno non scorre
+  [poison] substring: sembrano meno forti ora
+  [curse] substring: Ti senti molto meglio
+  [feeblemind] substring: piu' intelligente
+
+=== ERRORI CAST / SKILL (failures) ===
+  [concentrazione] substring: Perdi la tua concentrazione
+  [no_mana] substring: Non hai abbastanza
+  [no_level] substring: Devi ancora crescere
+  [no_mem] substring: Non hai questo incantesimo memorizzato
+  [usa_mind] substring: Usa la mente
+  [usa_recall] substring: Usa la memoria
+  [no_quotes] substring: simboli sacri della
+  [unknown] substring: Fantastico! Non e' successo nulla
+  [unimplemented] substring: non e' stato ancora inventato
+  [backfire] substring: ti si ritorce contro
+  [fizzle] substring: fallisce miseramente
+  [no_magic_zone] substring: Il mana si rifusa di scorrere
+  [no_mind_zone] substring: Non riesci a concentrarti abbastanza in questo posto
+  [anti_magic] substring: scudo anti-magia
+  [first_aid_cd] substring: Devi aspettare ancora un po' prima di poter medicare
+  [kick_fail] substring: Non riesci ad avvicinarti abbastanza per calciare
+  [backstab_fail] substring: Non riesci ad avvicinarti abbastanza
+
+Totale trigger generati all'install: ~85
