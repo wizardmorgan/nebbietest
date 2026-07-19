@@ -1,5 +1,5 @@
 Nebbie Arcane — indice completo alias Mudlet (generato automaticamente)
-Package: nebbie-play-all v2.2.30 — vedi build-nebbie-package.py
+Package: nebbie-play-all v2.2.31 — vedi build-nebbie-package.py
 
 === COMANDI PACKAGE ===
   Pattern              | Effetto
@@ -10,6 +10,7 @@ Package: nebbie-play-all v2.2.30 — vedi build-nebbie-package.py
   npurge               | disattiva perm vecchi (poi riavvia e nfix)
   nprompt              | debug parser prompt
   ndiagnose            | diagnostica installazione
+  nkeys                | reinstalla binding tastierino numerico
   nlist                | indice documentazione
   nlist aliases        | elenca alias installati in Mudlet
   nlist triggers       | elenca trigger installati
@@ -33,14 +34,15 @@ Package: nebbie-play-all v2.2.30 — vedi build-nebbie-package.py
   nfood / nfood on/off | fame/sete auto; nfood item <oggetto>
   return               | torna da polymorph self
 
-=== TASTIERINO NUMERICO (Num Lock attivo) ===
-  Tasto 5              | look
-  Tasto 8              | north
-  Tasto 2              | south
-  Tasto 6              | east
-  Tasto 4              | west
-  Tasto 9              | up
-  Tasto 3              | down
+=== TASTIERINO NUMERICO (Num Lock ON o OFF) ===
+  Tasto 5 / Clear      | look
+  Tasto 8 / Freccia su | north
+  Tasto 2 / Freccia giu| south
+  Tasto 6 / Freccia dx | east
+  Tasto 4 / Freccia sx | west
+  Tasto 9 / PagSu      | up
+  Tasto 3 / PagGiu     | down
+  nkeys                | reinstalla binding se non rispondono
 
 === CAST GENERICO (incantesimi multi-parola supportati) ===
   c <spell> [tgt]      | cast 'spell' [tgt] — es. c power word kill goblin

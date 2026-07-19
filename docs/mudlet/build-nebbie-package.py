@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.30"
+PKG_VER = "2.2.31"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -35,6 +35,20 @@ LEGACY_MAIN_SCRIPTS = [
     "Nebbie Play All v2.2.20",
 ]
 INSTALLER_CORE = ROOT / "nebbie-installer-core.lua"
+
+# mudlet.keymodifier.Keypad = 0x20000000 = 536870912
+KEYPAD_MODIFIER = 536870912
+
+# NumLock ON: digit keys; NumLock OFF: numpad sends navigation keys (Up/Down/…)
+KEYPAD_KEYS = [
+    ("look", "look", [0x35, 0x0100000B]),       # 5 / Clear
+    ("north", "north", [0x38, 0x01000013]),     # 8 / Up
+    ("south", "south", [0x32, 0x01000015]),     # 2 / Down
+    ("east", "east", [0x36, 0x01000014]),       # 6 / Right
+    ("west", "west", [0x34, 0x01000012]),       # 4 / Left
+    ("up", "up", [0x39, 0x01000016]),           # 9 / PageUp
+    ("down", "down", [0x33, 0x01000017]),       # 3 / PageDown
+]
 
 # Never shadow common MUD command prefixes (inventory, equipment, rest, …)
 ALWAYS_RESERVED_ABBREVS = {
@@ -549,6 +563,7 @@ def build_legacy_perm_names(spells):
         "generic cast c", "generic cast word",
         "memorize", "recall shortcut", "mind shortcut", "list classes", "set class",
         "list package help", "list aliases", "list triggers", "list spells ref",
+        "keypad refresh",
         "return form", "reinstall fix", "prompt debug", "install diagnose",
         "eq cache clear", "drop recover on", "drop recover off",
         "food auto on", "food auto off", "food item set", "food manual",
@@ -1322,6 +1337,34 @@ end
 cecho("<grey>Se Nebbie.version è ancora nil: <yellow>nfix<grey>.\\n")"""
 
 
+def build_keypackage_xml():
+    lines = [
+        " <KeyPackage>",
+        '  <KeyGroup isActive="yes" isFolder="yes">',
+        "   <name>Nebbie Keypad</name>",
+        "   <script></script>",
+        "   <command></command>",
+        "   <keyCode>-1</keyCode>",
+        f"   <keyModifier>-1</keyModifier>",
+        f"   <packageName>{PACKAGE_NAME}</packageName>",
+    ]
+    for label, cmd, codes in KEYPAD_KEYS:
+        for idx, code in enumerate(codes):
+            suffix = "num" if idx == 0 else "nav"
+            lines.extend([
+                '   <Key isActive="yes" isFolder="no">',
+                f"    <name>nebbie-keypad {label} {suffix}</name>",
+                "    <script></script>",
+                f"    <command>{cmd}</command>",
+                f"    <keyCode>{code}</keyCode>",
+                f"    <keyModifier>{KEYPAD_MODIFIER}</keyModifier>",
+                f"    <packageName>{PACKAGE_NAME}</packageName>",
+                "   </Key>",
+            ])
+    lines.extend(["  </KeyGroup>", " </KeyPackage>"])
+    return "\n".join(lines)
+
+
 def build_xml(legacy_aliases, legacy_triggers):
     loader_lua = build_loader_runtime_lua(legacy_aliases, legacy_triggers)
     escaped_loader = loader_lua.replace("]]>", "]]..']]'..[[")
@@ -1396,6 +1439,7 @@ def build_xml(legacy_aliases, legacy_triggers):
    <regex>^ndiagnose$</regex>
   </Alias>
  </AliasPackage>
+{build_keypackage_xml()}
 </MudletPackage>
 '''
 
@@ -1414,6 +1458,7 @@ def write_alias_index(path, cast_spells):
         "  npurge               | disattiva perm vecchi (poi riavvia e nfix)",
         "  nprompt              | debug parser prompt",
         "  ndiagnose            | diagnostica installazione",
+        "  nkeys                | reinstalla binding tastierino numerico",
         "  nlist                | indice documentazione",
         "  nlist aliases        | elenca alias installati in Mudlet",
         "  nlist triggers       | elenca trigger installati",
@@ -1437,14 +1482,15 @@ def write_alias_index(path, cast_spells):
         "  nfood / nfood on/off | fame/sete auto; nfood item <oggetto>",
         "  return               | torna da polymorph self",
         "",
-        "=== TASTIERINO NUMERICO (Num Lock attivo) ===",
-        "  Tasto 5              | look",
-        "  Tasto 8              | north",
-        "  Tasto 2              | south",
-        "  Tasto 6              | east",
-        "  Tasto 4              | west",
-        "  Tasto 9              | up",
-        "  Tasto 3              | down",
+        "=== TASTIERINO NUMERICO (Num Lock ON o OFF) ===",
+        "  Tasto 5 / Clear      | look",
+        "  Tasto 8 / Freccia su | north",
+        "  Tasto 2 / Freccia giu| south",
+        "  Tasto 6 / Freccia dx | east",
+        "  Tasto 4 / Freccia sx | west",
+        "  Tasto 9 / PagSu      | up",
+        "  Tasto 3 / PagGiu     | down",
+        "  nkeys                | reinstalla binding se non rispondono",
         "",
         "=== CAST GENERICO (incantesimi multi-parola supportati) ===",
         "  c <spell> [tgt]      | cast 'spell' [tgt] — es. c power word kill goblin",
@@ -1608,8 +1654,9 @@ def main():
         f.write("  nkey add <k> <txt>  → aggiungi chiave custom\n")
         f.write("  neq                 → mostra cache eq + sync ora\n")
         f.write("  neq on/off          → sync eq automatico ogni 1h (gagged)\n")
-        f.write("\n=== TASTIERINO NUMERICO (Num Lock attivo) ===\n")
-        f.write("  5=look  8=north  2=south  4=west  6=east  9=up  3=down\n")
+        f.write("\n=== TASTIERINO NUMERICO (Num Lock ON o OFF) ===\n")
+        f.write("  5/Clear=look  8/Up=north  2/Down=south  4/Left=west  6/Right=east  9/PgUp=up  3/PgDn=down\n")
+        f.write("  nkeys — reinstalla binding tastierino\n")
         f.write("\n=== DOCUMENTAZIONE ALIAS / TRIGGER ===\n")
         f.write("  nebbie-alias-index.txt    — tutti gli alias e pattern regex\n")
         f.write("  nebbie-trigger-index.txt  — tutti i trigger e pattern\n")

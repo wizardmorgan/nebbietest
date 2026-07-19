@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.30"
+Nebbie.version = "2.2.31"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -26,13 +26,13 @@ Nebbie._keyIds = Nebbie._keyIds or {}
 Nebbie._keyNames = Nebbie._keyNames or {}
 
 Nebbie.keypadBindings = {
-  { num = 5, cmd = "look", label = "look" },
-  { num = 8, cmd = "north", label = "north" },
-  { num = 2, cmd = "south", label = "south" },
-  { num = 6, cmd = "east", label = "east" },
-  { num = 4, cmd = "west", label = "west" },
-  { num = 9, cmd = "up", label = "up" },
-  { num = 3, cmd = "down", label = "down" },
+  { cmd = "look", label = "look", keys = {"5", "Clear"} },
+  { cmd = "north", label = "north", keys = {"8", "Up"} },
+  { cmd = "south", label = "south", keys = {"2", "Down"} },
+  { cmd = "east", label = "east", keys = {"6", "Right"} },
+  { cmd = "west", label = "west", keys = {"4", "Left"} },
+  { cmd = "up", label = "up", keys = {"9", "PageUp"} },
+  { cmd = "down", label = "down", keys = {"3", "PageDown"} },
 }
 Nebbie._settings = Nebbie._settings or {}
 Nebbie.playerClass = Nebbie.playerClass or nil
@@ -424,26 +424,73 @@ end
 
 function Nebbie.killTempKey(full)
   if Nebbie._keyIds and Nebbie._keyIds[full] then
-    if type(killKey) == "function" then pcall(function() killKey(Nebbie._keyIds[full]) end) end
+    local id = Nebbie._keyIds[full]
+    if type(id) == "number" and type(killKey) == "function" then
+      pcall(function() killKey(id) end)
+    elseif type(id) == "string" and type(killKey) == "function" then
+      pcall(function() killKey(id) end)
+    end
     Nebbie._keyIds[full] = nil
   end
 end
 
-function Nebbie.installKeypadBindings()
-  if type(tempKey) ~= "function" or not mudlet or not mudlet.keymodifier or not mudlet.key then
-    return 0
+function Nebbie.killPermKeyByName(name)
+  if not name or name == "" or type(exists) ~= "function" then return end
+  local n = 0
+  while exists(name, "key") > 0 and n < 16 do
+    if type(killKey) == "function" then pcall(function() killKey(name) end) end
+  n = n + 1 end
+end
+
+function Nebbie.resolveMudletKey(name)
+  if not mudlet or not mudlet.key then return nil end
+  return mudlet.key[name] or mudlet.key[tostring(name)]
+end
+
+function Nebbie.killLegacyKeypadTemps()
+  for _, entry in ipairs(Nebbie.keypadBindings or {}) do
+    Nebbie.killTempKey(PKG .. "::keypad " .. entry.label)
+    for ki, _ in ipairs(entry.keys or {}) do
+      local suffix = (ki == 1) and "num" or "nav"
+      Nebbie.killTempKey(PKG .. "::keypad " .. entry.label .. " " .. suffix)
+    end
   end
+end
+
+function Nebbie.killKeypadBindings()
+  Nebbie.killLegacyKeypadTemps()
+  for _, entry in ipairs(Nebbie.keypadBindings or {}) do
+    for ki, _ in ipairs(entry.keys or {}) do
+      local suffix = (ki == 1) and "num" or "nav"
+      Nebbie.killPermKeyByName("nebbie-keypad " .. entry.label .. " " .. suffix)
+    end
+  end
+end
+
+function Nebbie.installKeypadBindings(force)
+  if not mudlet or not mudlet.keymodifier or not mudlet.key then return 0 end
+  if type(permKey) ~= "function" then return 0 end
+  local mod = mudlet.keymodifier.Keypad
   local n = 0
   for _, entry in ipairs(Nebbie.keypadBindings or {}) do
-    local full = PKG .. "::keypad " .. entry.label
-    Nebbie.killTempKey(full)
-    local keyNum = mudlet.key[tostring(entry.num)]
-    if keyNum then
-      local id = tempKey(mudlet.keymodifier.Keypad, keyNum, string.format([[send(%q)]], entry.cmd))
-      if id then
-        Nebbie._keyIds[full] = id
-        table.insert(Nebbie._keyNames, full)
-        n = n + 1
+    for ki, keyName in ipairs(entry.keys or {}) do
+      local suffix = (ki == 1) and "num" or "nav"
+      local permName = "nebbie-keypad " .. entry.label .. " " .. suffix
+      local keyCode = Nebbie.resolveMudletKey(keyName)
+      if keyCode then
+        local present = type(exists) == "function" and exists(permName, "key") > 0
+        if force or not present then
+          Nebbie.killPermKeyByName(permName)
+          local script = string.format([[send(%q)]], entry.cmd)
+          local ok, id = pcall(function() return permKey(permName, "", mod, keyCode, script) end)
+          if ok and id then
+            Nebbie._keyIds[permName] = id
+            table.insert(Nebbie._keyNames, permName)
+            n = n + 1
+          end
+        else
+          n = n + 1
+        end
       end
     end
   end
@@ -2737,6 +2784,7 @@ function Nebbie.uninstall()
   for full, _ in pairs(Nebbie._aliasIds or {}) do Nebbie.killTempAlias(full) end
   for full, _ in pairs(Nebbie._triggerIds or {}) do Nebbie.killTempTriggers(full) end
   for full, _ in pairs(Nebbie._keyIds or {}) do Nebbie.killTempKey(full) end
+  Nebbie.killKeypadBindings()
   Nebbie.purgePackageAliases()
   Nebbie.purgePackageTriggers()
   Nebbie.stopGUI()
@@ -2778,6 +2826,7 @@ function Nebbie.install()
   Nebbie._installing = true
   Nebbie.stopGUI()
   Nebbie.killAllTrackedTemps()
+  Nebbie.killLegacyKeypadTemps()
   Nebbie.disablePackagePermItems()
   Nebbie.purgeTrackedAliases()
   Nebbie.purgeTrackedTriggers()
@@ -2844,6 +2893,12 @@ function Nebbie.install()
   perm("setup hud", [[^nsetup$]], [[Nebbie.setupHUD()]])
   perm("prompt debug", [[^nprompt$]], [[Nebbie.debugPrompt()]])
   perm("install diagnose", [[^ndiagnose$]], [[Nebbie.diagnoseInstall()]])
+  perm("keypad refresh", [[^nkeys$]], [[
+    Nebbie.killKeypadBindings()
+    local n = Nebbie.installKeypadBindings(true)
+    cecho("<green>Nebbie: " .. n .. " binding tastierino reinstallati.\n")
+    cecho("<grey>Num Lock ON: cifre 5/8/2/4/6/9/3 — OFF: frecce + PgSu/PgGiu/Canc\n")
+  ]])
   perm("attrib sync", [[^nattrib$]], [[Nebbie.requestAttrib(false)]])
   perm("attrib on", [[^nattrib on$]], [[Nebbie.setAttribAuto(true)]])
   perm("attrib off", [[^nattrib off$]], [[Nebbie.setAttribAuto(false)]])
@@ -3059,11 +3114,14 @@ function Nebbie.install()
   Nebbie.installEqSendHook()
   Nebbie.testPromptParse(true)
   Nebbie.testEqParse(true)
-  local keypadN = Nebbie.installKeypadBindings()
+  local keypadN = Nebbie.installKeypadBindings(false)
 
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
   if keypadN > 0 then
-    cecho("<grey>Tastierino: <yellow>8<grey>=north <yellow>2<grey>=south <yellow>4<grey>=west <yellow>6<grey>=east <yellow>9<grey>=up <yellow>3<grey>=down <yellow>5<grey>=look\n")
+    cecho("<grey>Tastierino: <yellow>8<grey>=north <yellow>2<grey>=south <yellow>4<grey>=west <yellow>6<grey>=east <yellow>9<grey>=up <yellow>3<grey>=down <yellow>5<grey>=look")
+    cecho("<grey> (Num Lock ON o OFF) — <yellow>nkeys<grey> se non risponde\n")
+  else
+    cecho("<orange>Tastierino non attivo — reinstalla package o digita <yellow>nkeys<orange>\n")
   end
   cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey> | <yellow>nlist<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
