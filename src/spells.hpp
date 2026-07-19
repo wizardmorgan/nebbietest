@@ -415,7 +415,8 @@ namespace Alarmud {
 #define TYPE_GENERIC_COLD    348
 #define TYPE_GENERIC_ENERGY  349
 #define TYPE_GENERIC_ACID    350
-#define TYPE_GENERIC_LAST    350
+#define TYPE_GENERIC_HOLY    351
+#define TYPE_GENERIC_LAST    351
 
 /* More anything but spells and weapontypes can be insterted here! */
 #define MAX_TYPES 70

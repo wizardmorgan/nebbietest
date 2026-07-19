@@ -1371,7 +1371,8 @@ const char* ItemDamType[] = {
 	"$c0014congela$c0007",
 	"$c0012elettrifica$c0007",
 	"$c0001danneggia$c0007",
-	"$c0010corrode$c0007"
+	"$c0010corrode$c0007",
+	"$c0011consacra$c0007"
 };
 
 const char* weekdays[7] = {
@@ -1680,37 +1681,37 @@ int RacialHome[MAX_RACE+1][2] = {
 
 
 int ItemSaveThrows[E_ITEM_TYPE_MAX][E_DAMAGE_TYPE_MAX] = {
-//		fire	cold	elec	blow	acid
-	{	15,		 2,		10,		10,		10	},	//	light
-	{	19, 	 2,		16,		 2,		 7	},	//	scroll
-	{	11,		 2,		 2,		13,		 9	},	//	wand
-	{	 7,		 2,		 2,		10,		 8	},	//	staff
-	{	 6,		 2,		 2,		 7,		13	},	//	weapon
-	{	10,		10,		10,		10,		10	},	//	fireweapon
-	{	10,		10,		10,		10,		10	},	//	missile
-	{	 6,		 2,		 2,		 7,		13	},	//	treasure
-	{	 6,		 2,		 2,		 7,		13	},	//	armor
-	{	 7,		 6,		 2,		20,		 5	},	//	potion
-	{	10,		10,		10,		10,		10	},	//	worn			not defined
-	{	10,		10,		10,		10,		10	},	//	other			not defined
-	{	10,		10,		10,		10,		10	},	//	trash			not defined
-	{	10,		10,		10,		10,		10	},	//	trap			not defined
-	{	19,		 2,		 2,		16,		 7	},	//	container
-	{	10,		10,		10,		10,		10	},	//	note			not defined
-	{	 7,		 6,		 2,		20,		 5	},	//	drinkcon
-	{	 6,		 2,		 2,		 7,		13	},	//	key
-	{	 6,		 3,		 2,		 3,		10	},	//	food
-	{	10,		10,		10,		10,		10	},	//	money			not defined
-	{	11,		 2,		 2,		13,		 9	},	//	pen
-	{	 7,		 2,		 2,		10,		 8	},	//	boat
-	{	10,		10,		10,		10,		10	},	//	audio			not defined
-	{	10,		10,		10,		10,		10	},	//	bord			not defined
-	{	10,		10,		10,		10,		10	},	//	tree			not defined
-	{	10,		10,		10,		10,		10	},	//	rock			not defined
-	{	10,		10,		10,		10,		10	},	//	mined gem		not defined
-	{	10,		10,		10,		10,		10	},	//	mined mineral	not defined
-	{	10,		10,		10,		10,		10	},	//	bar				not defined
-	{	 6,		 2,		 2,		 7,		13	}	//	jewel
+//		fire	cold	elec	blow	acid	holy
+	{	15,		 2,		10,		10,		10,		10	},	//	light
+	{	19, 	 2,		16,		 2,		 7,		10	},	//	scroll
+	{	11,		 2,		 2,		13,		 9,		10	},	//	wand
+	{	 7,		 2,		 2,		10,		 8,		10	},	//	staff
+	{	 6,		 2,		 2,		 7,		13,		10	},	//	weapon
+	{	10,		10,		10,		10,		10,		10	},	//	fireweapon
+	{	10,		10,		10,		10,		10,		10	},	//	missile
+	{	 6,		 2,		 2,		 7,		13,		10	},	//	treasure
+	{	 6,		 2,		 2,		 7,		13,		10	},	//	armor
+	{	 7,		 6,		 2,		20,		 5,		10	},	//	potion
+	{	10,		10,		10,		10,		10,		10	},	//	worn			not defined
+	{	10,		10,		10,		10,		10,		10	},	//	other			not defined
+	{	10,		10,		10,		10,		10,		10	},	//	trash			not defined
+	{	10,		10,		10,		10,		10,		10	},	//	trap			not defined
+	{	19,		 2,		 2,		16,		 7,		10	},	//	container
+	{	10,		10,		10,		10,		10,		10	},	//	note			not defined
+	{	 7,		 6,		 2,		20,		 5,		10	},	//	drinkcon
+	{	 6,		 2,		 2,		 7,		13,		10	},	//	key
+	{	 6,		 3,		 2,		 3,		10,		10	},	//	food
+	{	10,		10,		10,		10,		10,		10	},	//	money			not defined
+	{	11,		 2,		 2,		13,		 9,		10	},	//	pen
+	{	 7,		 2,		 2,		10,		 8,		10	},	//	boat
+	{	10,		10,		10,		10,		10,		10	},	//	audio			not defined
+	{	10,		10,		10,		10,		10,		10	},	//	bord			not defined
+	{	10,		10,		10,		10,		10,		10	},	//	tree			not defined
+	{	10,		10,		10,		10,		10,		10	},	//	rock			not defined
+	{	10,		10,		10,		10,		10,		10	},	//	mined gem		not defined
+	{	10,		10,		10,		10,		10,		10	},	//	mined mineral	not defined
+	{	10,		10,		10,		10,		10,		10	},	//	bar				not defined
+	{	 6,		 2,		 2,		 7,		13,		10	}	//	jewel
 };
 
 
@@ -2881,6 +2882,7 @@ const char* immunity_names[] = {
 	"+2",
 	"+3",
 	"+4",
+	"HOLY",
 	"\n"
 };
 
