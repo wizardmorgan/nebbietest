@@ -40,6 +40,7 @@
 #include "regen.hpp"
 #include "spec_procs3.hpp"
 #include "spell_parser.hpp"
+#include "cacaodemon_summon.hpp"
 
 namespace Alarmud {
 
@@ -1828,6 +1829,11 @@ void obj_to_room(struct obj_data* object, long room) {
 
 	if(object == NULL) {
 		mudlog(LOG_SYSERR, "object == NULL in obj_to_room (handler.c).");
+		return;
+	}
+
+	/* Gear del summon cacaodemon: non cade a terra, torna in inventario e si ri-equipaggia. */
+	if(CacaoTryKeepPetGear(object)) {
 		return;
 	}
 

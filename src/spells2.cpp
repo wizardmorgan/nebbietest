@@ -33,6 +33,9 @@
 #include "magic3.hpp"
 #include "regen.hpp"
 #include "spell_parser.hpp"
+#include "spell_power.hpp"
+#include "cacaodemon_summon.hpp"
+#include "cacaodemon_sacrifice.inc"
 
 namespace Alarmud {
 /*AlarMUD*/
@@ -2924,117 +2927,83 @@ void cast_conjure_elemental(byte level, struct char_data* ch, const char* arg, i
 
 }
 
-#define DEMON_TYPE_I     20
-#define DEMON_TYPE_II    21
-#define DEMON_TYPE_III   22
-#define DEMON_TYPE_IV    23
-#define DEMON_TYPE_V     24
-#define DEMON_TYPE_VI    25
-
-#define TYPE_VI_ITEM     27002
-#define TYPE_V_ITEM      5107
-#define TYPE_IV_ITEM     5113
-#define TYPE_III_ITEM    1101
-#define TYPE_II_ITEM     21014
-#define TYPE_I_ITEM      5105
-
 void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	char buffer[40];
-	int mob, obj;
-	struct obj_data* sac;
-	struct char_data* el;
-	int held = FALSE, wielded = FALSE;
-	send_to_char("Provi ad evocare un demone ma fallisci... Probabilmente l'incantesimo e' impossibile da lanciare...\n\r",ch);
-	return;
-	one_argument(arg,buffer);
+	(void)arg;
+	(void)tar_ch;
+	(void)tar_obj;
+
+	if(ch == nullptr) {
+		return;
+	}
+
+	if(!SpellHasPowerCasterClass(ch)) {
+		send_to_char("Non hai la conoscenza rituale per questo evocazione.\n\r", ch);
+		return;
+	}
 
 	if(NoSummon(ch)) {
 		return;
 	}
 
-	if(!str_cmp(buffer, "uno")) {
-		mob = DEMON_TYPE_I;
-		obj = TYPE_I_ITEM;
-	}
-	else if(!str_cmp(buffer, "due")) {
-		mob = DEMON_TYPE_II;
-		obj = TYPE_II_ITEM;
-	}
-	else if(!str_cmp(buffer, "tre")) {
-		mob = DEMON_TYPE_III;
-		obj = TYPE_III_ITEM;
-	}
-	else if(!str_cmp(buffer, "quattro")) {
-		mob = DEMON_TYPE_IV;
-		obj = TYPE_IV_ITEM;
-	}
-	else if(!str_cmp(buffer, "cinque")) {
-		mob = DEMON_TYPE_V;
-		obj = TYPE_V_ITEM;
-	}
-	else if(!str_cmp(buffer, "sei")) {
-		mob = DEMON_TYPE_VI;
-		obj = TYPE_VI_ITEM;
-	}
-	else {
-		send_to_char("It seems that all demons of that type are currently in the service of others.\n\r", ch);
+	if(CacaoFindExistingPet(ch) != nullptr) {
+		send_to_char("Hai gia' un essere legato al rituale di cacaodemon.\n\r", ch);
 		return;
 	}
 
-	if(!ch->equipment[WIELD] && !ch->equipment[HOLD]) {
-		send_to_char("You must wield or hold an item to offer the demon for its services.\n\r",ch);
+	const float effective = SpellEffectivePower(ch);
+	if(effective <= 0.0f) {
+		send_to_char("Il rituale non trova abbastanza potere da canalizzare.\n\r", ch);
 		return;
 	}
 
-	if(ch->equipment[WIELD]) {
-		if(ch->equipment[WIELD]->item_number >= 0 &&
-				obj_index[ch->equipment[WIELD]->item_number].iVNum == obj) {
-			wielded = TRUE;
-		}
-	}
-	if(ch->equipment[HOLD]) {
-		if(ch->equipment[WIELD]->item_number >= 0 &&
-				obj_index[ch->equipment[HOLD]->item_number].iVNum == obj) {
-			held = TRUE;
-		}
-	}
-
-	if(!wielded && !held) {
-		send_to_char("You do the spell perfectly, but no demon comes.\n\r", ch);
-		send_to_char("You realize that the demon was dissatisfied with your offering and\n\r",ch);
-		send_to_char("wants you to offer it something else.\n\r",ch);
+	const float factor = SpellPowerFactor(effective);
+	const int tier = SpellPowerTierFromFactor(factor);
+	const int mana_extra = CacaoManaExtraForTier(tier, factor);
+	if(GET_MANA(ch) < mana_extra) {
+		send_to_char("Non hai abbastanza mana per completare il sacrificio rituale.\n\r", ch);
 		return;
 	}
 
-	sac = unequip_char(ch,(held ? HOLD : WIELD));
-	if((sac) && (GET_LEVEL(ch,CLERIC_LEVEL_IND) > 40) && IS_EVIL(ch)) {
-		if(sac->obj_flags.cost >= 200) {
-			equip_char(ch,sac,(held ? HOLD : WIELD));
-		}
-		else {
-			obj_to_char(sac, ch);
-		}
-	}
-	else {
-		obj_to_char(sac, ch);
+	int sac_pos = -1;
+	struct obj_data* sac = nullptr;
+	if(ch->equipment[HOLD] != nullptr && CacaoIsSacrificeItem(ch->equipment[HOLD], tier)) {
+		sac_pos = HOLD;
+		sac = ch->equipment[HOLD];
 	}
 
-	if(sac) {
-		if(ObjVnum(sac) != obj) {
-			send_to_char("Your offering must be an item that the demon values.\n\r", ch);
-			return;
-		}
-		el = read_mobile(mob, VIRTUAL);
-		if(!el) {
-			send_to_char("You sense that all demons of that kind are in others' services...\n\r", ch);
-			return;
-		}
-	}
-	else {
-		send_to_char("You must be holding or wielding the item you are offering to the demon.\n\r", ch);
+	if(sac == nullptr) {
+		send_to_char(
+			"Devi tenere in mano (hold) un sigillo rituale di potenza sufficiente "
+			"per questa evocazione.\n\r",
+			ch);
 		return;
 	}
+
+	const int sac_tier = sac->obj_flags.value[1];
+	struct char_data* el = CacaoCreateSummon(ch, tier, factor, sac_tier);
+	if(el == nullptr) {
+		send_to_char("Il rituale vacilla e nessuna presenza risponde.\n\r", ch);
+		return;
+	}
+
+	{
+		char buf[256];
+		snprintf(buf, sizeof(buf),
+				"Il rituale canalizza potenza %.0f (tier %d) con sigillo di grado %d.\n\r",
+				effective, tier, sac_tier);
+		send_to_char(buf, ch);
+	}
+
+	sac = unequip_char(ch, sac_pos);
+	if(sac == nullptr) {
+		send_to_char("Il sacrificio sfugge alla tua presa: il rituale fallisce.\n\r", ch);
+		extract_char(el);
+		return;
+	}
+
+	GET_MANA(ch) -= mana_extra;
+	alter_mana(ch, 0);
 
 	switch(type) {
 	case SPELL_TYPE_SPELL:
@@ -3043,11 +3012,11 @@ void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type
 		break;
 	default:
 		mudlog(LOG_SYSERR, "serious screw-up in cacaodemon.");
+		obj_to_char(sac, ch);
+		extract_char(el);
 		break;
 	}
-
 }
-
 
 void cast_mon_sum1(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {

@@ -20,6 +20,7 @@
 #include "interpreter.hpp"
 #include "procarea.hpp"
 #include "procarea_internal.hpp"
+#include "cacaodemon_summon.hpp"
 #include "procarea_exp.hpp"
 #include "procarea_fatigue.hpp"
 #include "fight.hpp"
@@ -2992,7 +2993,8 @@ int count_mobs(const ProcAreaInstance& inst) {
 			continue;
 		}
 		for(struct char_data* mob = rp->people; mob != nullptr; mob = mob->next_in_room) {
-			if(IS_NPC(mob) && !IS_SET(mob->specials.act, ACT_POLYSELF)) {
+			if(IS_NPC(mob) && !IS_SET(mob->specials.act, ACT_POLYSELF) &&
+			   !CacaoIsPet(mob)) {
 				++count;
 			}
 		}

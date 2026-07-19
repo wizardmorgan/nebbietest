@@ -19,6 +19,7 @@
 #include "comm.hpp"
 #include "interpreter.hpp"
 #include "procarea.hpp"
+#include "cacaodemon_summon.hpp"
 #include "procarea_internal.hpp"
 #include "procarea_fatigue.hpp"
 #include "procarea_records.hpp"
@@ -1675,6 +1676,12 @@ static void procarea_on_mob_death_impl(struct char_data* victim) {
 
 	ProcAreaInstance* inst = procarea_internal::find_instance_by_vnum(victim->in_room);
 	if(inst == nullptr) {
+		return;
+	}
+
+	/* Pet cacaodemon: non conta come boss/trap/mob dell'istanza. */
+	if(CacaoIsPet(victim)) {
+		inst->last_activity = time(nullptr);
 		return;
 	}
 

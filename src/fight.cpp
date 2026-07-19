@@ -25,6 +25,7 @@
 #include "utils.hpp"
 /***************************  Local    include ************************************/
 #include "fight.hpp"
+#include "cacaodemon_summon.hpp"
 #include "act.info.hpp"
 #include "act.move.hpp"
 #include "act.off.hpp"
@@ -550,6 +551,9 @@ void stop_fighting(struct char_data* ch) {
 #define MAX_PC_CORPSE_TIME 12
 #define SEVERED_HEAD       60
 void make_corpse(struct char_data* ch, int killedbytype) {
+	if(CacaoIsPet(ch)) {
+		CacaoCleanupPetGear(ch);
+	}
 	struct obj_data* corpse, *o, *cp;
 	struct obj_data* money;
 	char buf[MAX_INPUT_LENGTH],
@@ -3797,7 +3801,11 @@ DamageResult root_hit(struct char_data* ch, struct char_data* orig_victim,
 	}
 
 	int w_type = GetWeaponType(ch, &wielded);
-	if(w_type == TYPE_HIT) {
+	/* Summon cacaodemon a mani nude: danno TYPE_UNDEFINED come il monk
+	 * (non mappa a slash/blunt e bypassa PreProcDam di tipo + WeaponCheck +X). */
+	if(CacaoIsPet(ch) && wielded == nullptr) {
+		w_type = TYPE_UNDEFINED;
+	} else if(w_type == TYPE_HIT) {
 		w_type = GetFormType(ch);    /* races have different types of attack */
 	}
 
@@ -4038,6 +4046,10 @@ void PCAttacks(char_data* pChar) {
 }
 
 void NPCAttacks(char_data* pChar) {
+
+	if(CacaoIsPet(pChar)) {
+		CacaoReequipPetGear(pChar);
+	}
 
 	float fAttacks = pChar->mult_att;
 	char_data* pVictim = NULL;
@@ -4703,6 +4715,15 @@ void MakeScrap(struct char_data* ch,struct char_data* v, struct obj_data* obj) {
 	struct char_data* owner = nullptr;
 
 	if(obj == nullptr) {
+		return;
+	}
+
+	/* Equip rituale del summon: non si frantuma, torna al pet. */
+	if(CacaoIsPetGear(obj)) {
+		(void)v;
+		if(!CacaoTryKeepPetGear(obj)) {
+			/* owner morto: gia' gestito / extract */
+		}
 		return;
 	}
 

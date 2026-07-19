@@ -1,0 +1,19 @@
+#98215
+lama arma rituale evocata cacaodemon~
+una lama rituale evocata~
+Una lama rituale evocata e' qui.~
+Una lama di energia rituale legata al patto di cacaodemon. I bonus +hit/+dam vengono potenziati dal sigillo al momento dell'evocazione.~
+5 262339 8193
+0 3 6 3
+8 0 0
+E
+cacaodemon evocato rituale~
+Equipaggiamento rituale del summon 'cacaodemon'.
+Non e' lootabile in modo permanente: alla morte del pet viene rimosso.
+I bonus hit/dam vengono regolati dal codice in base al sigillo sacrificato.
+Marca runtime: char_vnum 98003.
+~
+A
+18 1
+A
+19 1

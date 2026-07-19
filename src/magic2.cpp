@@ -9,6 +9,7 @@
 #include <cstring>
 #include <ctime>
 #include <string>
+#include <algorithm>
 /***************************  General include ************************************/
 #include "config.hpp"
 #include "typedefs.hpp"
@@ -33,6 +34,8 @@
 #include "regen.hpp"
 #include "spell_parser.hpp"
 #include "maximums.hpp"
+#include "spell_power.hpp"
+#include "cacaodemon_summon.hpp"
 
 namespace Alarmud {
 
@@ -2551,71 +2554,72 @@ void spell_cacaodemon(byte level, struct char_data* ch,
 					  struct char_data* victim, struct obj_data* obj) {
 	struct affected_type af;
 
-	assert(ch && victim && obj);
-
-    act("$n esegue uno strano rituale ed una $c0015nuvola$c0007 di $c0008fumo nero$c0007 si sprigiona nella stanza.", TRUE, ch, 0, 0, TO_ROOM);
-    act("$n esegue uno strano rituale ed una $c0015nuvola$c0007 di $c0008fumo nero$c0007 si sprigiona nella stanza.", TRUE, ch, 0, 0, TO_CHAR);
-	if(GET_LEVEL(ch, CLERIC_LEVEL_IND) > 40 && IS_EVIL(ch)) {
-		act("$p emette un po' di $c0008fumo$c0007...", TRUE, ch, obj, 0, TO_ROOM);
-		act("$p emette un po' di $c0008fumo$c0007...", TRUE, ch, obj, 0, TO_CHAR);
-		obj->obj_flags.cost /= 2;
-		if(obj->obj_flags.cost < 100) {
-			act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!",
-				TRUE, ch, obj, 0, TO_ROOM);
-			act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!",
-				TRUE, ch, obj, 0, TO_CHAR);
-			obj_from_char(obj);
+	if(ch == nullptr || victim == nullptr) {
+		if(obj != nullptr) {
 			extract_obj(obj);
 		}
-	}
-	else {
-		act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!", TRUE, ch, obj, 0, TO_ROOM);
-		act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!", TRUE, ch, obj, 0, TO_CHAR);
-		obj_from_char(obj);
-		extract_obj(obj);
-		if(!IS_IMMORTAL(ch)) {
-			GET_ALIGNMENT(ch)-=5;
+		if(victim != nullptr) {
+			extract_char(victim);
 		}
+		return;
 	}
+
+	(void)level;
+
+	act("$n esegue uno strano rituale ed una $c0015nuvola$c0007 di $c0008fumo$c0007 si sprigiona nella stanza.",
+		TRUE, ch, 0, 0, TO_ROOM);
+	act("Esegui uno strano rituale ed una $c0015nuvola$c0007 di $c0008fumo$c0007 si sprigiona nella stanza.",
+		TRUE, ch, 0, 0, TO_CHAR);
+
+	if(obj != nullptr) {
+		act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!",
+			TRUE, ch, obj, 0, TO_ROOM);
+		act("$p improvvisamente prende $c0001fuoco$c0007 e si $c0001disintegra$c0007!",
+			TRUE, ch, obj, 0, TO_CHAR);
+		extract_obj(obj);
+		obj = nullptr;
+	}
+
 	char_to_room(victim, ch->in_room);
 
-	act("Con una risata $c0001malvagia$c0007 $N emerge dal $c0008fumo$c0007!", TRUE, ch, 0, victim, TO_NOTVICT);
+	if(victim->player.distant_snds != nullptr && victim->player.distant_snds[0] != '\0') {
+		act(victim->player.distant_snds, TRUE, victim, 0, 0, TO_ROOM);
+	} else {
+		act("$N emerge dalla nuvola rituale!", TRUE, ch, 0, victim, TO_NOTVICT);
+	}
+	act("$N e' legato al tuo rituale.", TRUE, ch, 0, victim, TO_CHAR);
 
 	if(too_many_followers(ch)) {
-		act("$N dice 'Non c'e' nessuna possibilita' che mi unisca con tutta questa folla!'",
-			TRUE, ch, 0, victim, TO_ROOM);
-		act("$N rifiuta di unirsi a tutta la folla che gia' ti segue!", TRUE, ch, 0,
-			victim, TO_CHAR);
+		act("$N rifiuta di unirsi a tutta la folla che gia' ti segue!", TRUE, ch, 0, victim, TO_CHAR);
+		act("$N si dissolve senza accettare il vincolo.", TRUE, ch, 0, victim, TO_ROOM);
+		CacaoCleanupPetGear(victim);
+		extract_char(victim);
+		return;
 	}
-	else {
 
-		/* charm them for a while */
-		if(victim->master) {
-			stop_follower(victim);
-		}
-
-		add_follower(victim, ch);
-
-		af.type      = SPELL_CHARM_PERSON;
-		af.duration  = follow_time(ch);
-		af.modifier  = 0;
-		af.location  = 0;
-		af.bitvector = AFF_CHARM;
-
-		affect_to_char(victim, &af);
+	if(victim->master) {
+		stop_follower(victim);
 	}
+	add_follower(victim, ch);
+
+	const float factor = SpellPowerFactor(SpellEffectivePower(ch));
+	int duration = follow_time(ch);
+	duration = std::max(1, static_cast<int>(duration * (0.75f + 0.50f * factor) + 0.5f));
+
+	af.type = SPELL_CHARM_PERSON;
+	af.duration = duration;
+	af.modifier = 0;
+	af.location = 0;
+	af.bitvector = AFF_CHARM;
+	affect_to_char(victim, &af);
+
 	if(IS_SET(victim->specials.act, ACT_AGGRESSIVE)) {
 		REMOVE_BIT(victim->specials.act, ACT_AGGRESSIVE);
 	}
-
 	if(!IS_SET(victim->specials.act, ACT_SENTINEL)) {
 		SET_BIT(victim->specials.act, ACT_SENTINEL);
 	}
 }
-
-/*
- * neither
- */
 
 void spell_improved_identify(byte level, struct char_data* ch,
 							 struct char_data* victim, struct obj_data* obj) {

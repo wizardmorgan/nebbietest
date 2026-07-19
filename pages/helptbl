@@ -2224,13 +2224,15 @@ sono immuni all'acido.
 #
 "CACAODEMON"
 
-Questo spell e' circondata di mistero. L'unica cosa sicura e' che
-puo' essere usata cosi':
+Sintassi    : cast 'cacaodemon'
+Costo       : mana base + costo extra in base alla potenza rituale
+Requisiti   : sigillo rituale (HOLD) di tier sufficiente
 
-	cast 'cacaodemon' one
-		"
-		"
-	cast 'cacaodemon' six
+Evoca un unico alleato vincolato (angelo / demone / costrutto a seconda
+del tuo allineamento). La potenza del gruppo (indice di potere) e la
+tua composizione di classi determinano il tier dell'evocazione.
+Il sigillo viene sacrificato solo se il rituale riesce.
+Non funziona in zone no-summon; un solo alleato cacaodemon per volta.
 
 #
 "CONE OF COLD"
