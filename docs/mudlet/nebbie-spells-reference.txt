@@ -294,7 +294,19 @@ Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)
   tspy: tspy   [tspy]
   warcry: warcry   [wc]
 
-=== ALIAS MUDLET ===
+=== DOCUMENTAZIONE ALIAS / TRIGGER ===
+  nebbie-alias-index.txt    — tutti gli alias e pattern regex
+  nebbie-trigger-index.txt  — tutti i trigger e pattern
+  HELP.md                   — guida utente
+  In gioco: nlist | nlist aliases | nlist triggers | nlist spells
+
+=== INCANTESIMI MULTI-PAROLA ===
+  c power word kill bersaglio
+  c 'power word kill' bersaglio
+  c magic missile bersaglio
+  c colour spray
+
+=== ALIAS MUDLET (riepilogo) ===
   c <spell> [tgt]     → cast (modalita' corrente)
   r <spell> [tgt]     → recall (stregone)
   m <spell> [tgt]     → mind (psi)

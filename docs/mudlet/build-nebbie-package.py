@@ -477,7 +477,7 @@ def build_install_lua(spells):
 
 
 INSTALLER_LUA = r'''
-Nebbie.version = "1.0.12"
+Nebbie.version = "1.0.13"
 Nebbie.buffs = Nebbie.buffs or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
@@ -1016,6 +1016,45 @@ function Nebbie.refreshGUI()
   end
 end
 
+function Nebbie.getAllSpellNames()
+  if Nebbie._spellNamesByLen then return Nebbie._spellNamesByLen end
+  local names = {}
+  for spell, _ in pairs(Nebbie.castSpells) do names[#names + 1] = spell end
+  for spell, _ in pairs(Nebbie.mindSpells) do names[#names + 1] = spell end
+  table.sort(names, function(a, b) return #a > #b end)
+  Nebbie._spellNamesByLen = names
+  return names
+end
+
+function Nebbie.parseSpellAndTarget(rest)
+  if not rest or rest == "" then return nil, nil end
+  rest = rest:match("^%s*(.-)%s*$")
+  local qspell, qtail = rest:match("^['\"]([^'\"]+)['\"]%s*(.*)$")
+  if qspell then
+    local target = (qtail and qtail ~= "") and qtail:match("^%s+(.+)$") or nil
+    return Nebbie.resolveSpell(qspell), target
+  end
+  local lower = rest:lower()
+  for _, spell in ipairs(Nebbie.getAllSpellNames()) do
+    local sl = spell:lower()
+    if lower == sl or lower:gsub(" ", "") == sl:gsub(" ", "") then
+      return spell, nil
+    end
+    if #lower >= #sl and lower:sub(1, #sl) == sl then
+      local nextc = rest:sub(#sl + 1, #sl + 1)
+      if nextc == "" or nextc:match("%s") then
+        local target = rest:sub(#sl + 1):match("^%s+(.+)$")
+        return spell, target
+      end
+    end
+  end
+  local spell, target = rest:match("^(%S+)%s+(.+)$")
+  if spell then
+    return Nebbie.resolveSpell(spell), target
+  end
+  return Nebbie.resolveSpell(rest), nil
+end
+
 function Nebbie.resolveSpell(token)
   local lower = token:lower()
   for spell, abbr in pairs(Nebbie.abbrevs) do
@@ -1033,6 +1072,45 @@ function Nebbie.resolveSpell(token)
     if name:lower() == lower then return name end
   end
   return token
+end
+
+function Nebbie.listInstalledAliases()
+  cecho("<cyan><b>Alias Nebbie</b> <grey>(" .. #Nebbie._aliasNames .. " registrati, elenco completo in nebbie-alias-index.txt):\n")
+  if type(getAliasList) ~= "function" then
+    for _, name in ipairs(Nebbie._aliasNames) do cecho("<grey>  " .. name .. "\n") end
+    return
+  end
+  local n = 0
+  for _, entry in ipairs(getAliasList()) do
+    local name = entry
+    if type(getAliasName) == "function" then
+      local ok, v = pcall(function() return getAliasName(entry) end)
+      if ok and v and v ~= "" then name = v end
+    end
+    if type(name) == "string" and name:find(PKG, 1, true) then
+      n = n + 1
+      cecho("<grey>  " .. name .. "\n")
+    end
+  end
+  if n == 0 then cecho("<orange>Nessun alias trovato — prova <yellow>nfix\n") end
+end
+
+function Nebbie.listInstalledTriggers()
+  cecho("<cyan><b>Trigger Nebbie</b> <grey>(" .. #Nebbie._triggerNames .. " registrati, elenco in nebbie-trigger-index.txt):\n")
+  for _, name in ipairs(Nebbie._triggerNames) do
+    cecho("<grey>  " .. name .. "\n")
+  end
+end
+
+function Nebbie.listPackageHelp()
+  cecho("<cyan><b>Nebbie v" .. Nebbie.version .. " — indici</b>\n")
+  cecho("<grey>Repository (cartella docs/mudlet/):\n")
+  cecho("  <yellow>nebbie-alias-index.txt<grey>    — tutti gli alias e pattern\n")
+  cecho("  <yellow>nebbie-trigger-index.txt<grey>  — tutti i trigger\n")
+  cecho("  <yellow>nebbie-spells-reference.txt<grey> — incantesimi e abbreviazioni\n")
+  cecho("  <yellow>HELP.md<grey>                    — guida completa\n")
+  cecho("<grey>In gioco: <yellow>nlist aliases<grey> | <yellow>nlist triggers<grey> | <yellow>nlist spells\n")
+  cecho("<grey>Incantesimi multi-parola: <yellow>c power word kill bersaglio<grey> oppure <yellow>c 'power word kill' bersaglio\n")
 end
 
 function Nebbie.sendCast(spell, target)
@@ -1117,30 +1195,22 @@ function Nebbie.install()
 
   -- Generic cast: c <spell> [target]  |  cast <spell> [target]
   perm("generic cast c", [[^c (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
-    Nebbie.sendCast(spell, target)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if spell then Nebbie.sendCast(spell, target) end
   ]])
   perm("generic cast word", [[^cast (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
-    Nebbie.sendCast(spell, target)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if spell then Nebbie.sendCast(spell, target) end
   ]])
 
   -- Sorcerer memorize / recall shortcuts
   perm("memorize", [[^mem (.+)$]], [[
-    local spell = Nebbie.resolveSpell(matches[2])
-    send("memorize '" .. spell .. "'")
+    local spell, _ = Nebbie.parseSpellAndTarget(matches[2])
+    if spell then send("memorize '" .. spell .. "'") end
   ]])
   perm("recall shortcut", [[^r (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if not spell then return end
     local cmd = "recall '" .. spell .. "'"
     if target then cmd = cmd .. " " .. target end
     send(cmd)
@@ -1148,10 +1218,8 @@ function Nebbie.install()
 
   -- Psi mind shortcut
   perm("mind shortcut", [[^m (.+)$]], [[
-    local rest = matches[2]
-    local spell, target = rest:match("^(%S+)%s+(.+)$")
-    if not spell then spell, target = rest, nil end
-    spell = Nebbie.resolveSpell(spell)
+    local spell, target = Nebbie.parseSpellAndTarget(matches[2])
+    if not spell then return end
     local cmd = "mind '" .. spell .. "'"
     if target then cmd = cmd .. " " .. target end
     send(cmd)
@@ -1198,6 +1266,18 @@ function Nebbie.install()
 
   -- Return from polymorph
   perm("return form", [[^return$]], [[send("return")]])
+
+  perm("list package help", [[^nlist$]], [[Nebbie.listPackageHelp()]])
+  perm("list aliases", [[^nlist aliases$]], [[Nebbie.listInstalledAliases()]])
+  perm("list triggers", [[^nlist triggers$]], [[Nebbie.listInstalledTriggers()]])
+  perm("list spells ref", [[^nlist spells$]], [[
+    cecho("<cyan><b>Incantesimi multi-parola</b> — esempi:\n")
+    cecho("<grey>  c power word kill goblin\n")
+    cecho("<grey>  c 'power word kill' goblin\n")
+    cecho("<grey>  c magic missile goblin\n")
+    cecho("<grey>  c colour spray\n")
+    cecho("<grey>Elenco completo: <yellow>nebbie-spells-reference.txt<grey> nel repository.\n")
+  ]])
 
   -- Buff tracker triggers (substring: ignora codici colore ANSI del MUD)
   trig("cast started", {"Pronunci le parole"}, [[
@@ -1258,6 +1338,84 @@ Nebbie.boot()
 '''
 
 
+def write_alias_index(path, cast_spells):
+    lines = [
+        "Nebbie Arcane — indice completo alias Mudlet (generato automaticamente)",
+        f"Package: {PACKAGE_NAME} — vedi build-nebbie-package.py",
+        "",
+        "=== COMANDI PACKAGE ===",
+        "  Pattern              | Effetto",
+        "  ncast                | modalita cast",
+        "  nrecall              | modalita recall (stregone)",
+        "  nmind                | modalita mind (psi)",
+        "  ngui                 | mostra/nasconde pannello buff",
+        "  npos                 | riposiziona pannello",
+        "  nfix                 | reinstalla alias/trigger",
+        "  nlist                | indice documentazione",
+        "  nlist aliases        | elenca alias installati in Mudlet",
+        "  nlist triggers       | elenca trigger installati",
+        "  nlist spells         | aiuto incantesimi multi-parola",
+        "  nclass               | elenca classi e slot q1-q9",
+        "  nclass <classe>      | imposta classe (m s c d p r I t w k b + u)",
+        "  nclass m c           | multiclasse (unisce slot)",
+        "  return               | torna da polymorph self",
+        "",
+        "=== CAST GENERICO (incantesimi multi-parola supportati) ===",
+        "  c <spell> [tgt]      | cast 'spell' [tgt] — es. c power word kill goblin",
+        "  c '<spell>' [tgt]    | con apici — es. c 'power word kill' goblin",
+        "  cast <spell> [tgt]   | come c",
+        "  r <spell> [tgt]      | recall 'spell' [tgt]",
+        "  m <spell> [tgt]      | mind 'spell' [tgt]",
+        "  mem <spell>          | memorize 'spell'",
+        "  q1 … q9 [tgt]        | slot rapidi classe attiva",
+        "",
+        "=== ABBREVIAZIONI INCANTESIMI (pattern ^<abbr>(?: (.+))?$) ===",
+    ]
+    for spell in sorted(cast_spells):
+        abbr = ABBREVS.get(spell)
+        if abbr:
+            lines.append(f"  ^{abbr}(?: (.+))?$  → {spell}")
+    for spell in sorted(MIND_SPELLS):
+        if spell in cast_spells:
+            continue
+        abbr = ABBREVS.get(spell)
+        if abbr:
+            lines.append(f"  ^{abbr}(?: (.+))?$  → {spell} (mind)")
+    lines.append("")
+    lines.append("=== ABBREVIAZIONI SKILL (pattern ^<abbr>(?: (.+))?$) ===")
+    for name, (cmd, hint) in sorted(DEDICATED_SKILLS.items()):
+        abbr = ABBREVS.get(name) or ABBREVS.get(cmd) or cmd.replace(" ", "")
+        lines.append(f"  ^{abbr}(?: (.+))?$  → {cmd} {hint}".rstrip())
+    lines.append("")
+    lines.append(f"Totale alias generati all'install: ~179 (nomi interni: {PACKAGE_NAME}::<nome>)")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_trigger_index(path):
+    lines = [
+        "Nebbie Arcane — indice completo trigger Mudlet (generato automaticamente)",
+        f"Package: {PACKAGE_NAME}",
+        "",
+        "=== CAST / BUFF ===",
+        "  [substring] Pronunci le parole  → registra buff da messaggio cast",
+        "",
+        "=== BUFF SCADUTI (wearOff) ===",
+    ]
+    for label, pat in WEAR_OFF_TRIGGERS:
+        lines.append(f"  [{label}] substring: {pat}")
+    lines.append("")
+    lines.append("=== PRE-SCADENZA (wearOffSoon) ===")
+    for label, pat in SOON_TRIGGERS:
+        lines.append(f"  [{label}] substring: {pat}")
+    lines.append("")
+    lines.append("=== ERRORI CAST / SKILL (failures) ===")
+    for label, pat in FAIL_TRIGGERS:
+        lines.append(f"  [{label}] substring: {pat}")
+    lines.append("")
+    lines.append(f"Totale trigger generati all'install: {len(WEAR_OFF_TRIGGERS) + len(SOON_TRIGGERS) + len(FAIL_TRIGGERS) + 1}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def build_xml():
     bootstrap = r'''-- Nebbie Arcane package bootstrap
 Nebbie = Nebbie or {}
@@ -1311,7 +1469,9 @@ def main():
         zf.write(OUT_DIR / xml_name, xml_name)
         zf.write(install_lua, "nebbie-install.lua")
 
-    # Reference list for players (not imported by Mudlet)
+    # Reference lists for players (not imported by Mudlet)
+    write_alias_index(ROOT / "nebbie-alias-index.txt", cast_spells)
+    write_trigger_index(ROOT / "nebbie-trigger-index.txt")
     ref = ROOT / "nebbie-spells-reference.txt"
     with ref.open("w", encoding="utf-8") as f:
         f.write("Nebbie Arcane — riferimento spell/skill (generato da src/spell_parser.cpp)\n\n")
@@ -1327,7 +1487,17 @@ def main():
         for name, (cmd, hint) in sorted(DEDICATED_SKILLS.items()):
             ab = ABBREVS.get(name, ABBREVS.get(cmd, ""))
             f.write(f"  {name}: {cmd} {hint}" + (f"  [{ab}]" if ab else "") + "\n")
-        f.write("\n=== ALIAS MUDLET ===\n")
+        f.write("\n=== DOCUMENTAZIONE ALIAS / TRIGGER ===\n")
+        f.write("  nebbie-alias-index.txt    — tutti gli alias e pattern regex\n")
+        f.write("  nebbie-trigger-index.txt  — tutti i trigger e pattern\n")
+        f.write("  HELP.md                   — guida utente\n")
+        f.write("  In gioco: nlist | nlist aliases | nlist triggers | nlist spells\n")
+        f.write("\n=== INCANTESIMI MULTI-PAROLA ===\n")
+        f.write("  c power word kill bersaglio\n")
+        f.write("  c 'power word kill' bersaglio\n")
+        f.write("  c magic missile bersaglio\n")
+        f.write("  c colour spray\n")
+        f.write("\n=== ALIAS MUDLET (riepilogo) ===\n")
         f.write("  c <spell> [tgt]     → cast (modalita' corrente)\n")
         f.write("  r <spell> [tgt]     → recall (stregone)\n")
         f.write("  m <spell> [tgt]     → mind (psi)\n")

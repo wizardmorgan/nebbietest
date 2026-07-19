@@ -1,0 +1,190 @@
+Nebbie Arcane — indice completo alias Mudlet (generato automaticamente)
+Package: nebbie-spells-skills — vedi build-nebbie-package.py
+
+=== COMANDI PACKAGE ===
+  Pattern              | Effetto
+  ncast                | modalita cast
+  nrecall              | modalita recall (stregone)
+  nmind                | modalita mind (psi)
+  ngui                 | mostra/nasconde pannello buff
+  npos                 | riposiziona pannello
+  nfix                 | reinstalla alias/trigger
+  nlist                | indice documentazione
+  nlist aliases        | elenca alias installati in Mudlet
+  nlist triggers       | elenca trigger installati
+  nlist spells         | aiuto incantesimi multi-parola
+  nclass               | elenca classi e slot q1-q9
+  nclass <classe>      | imposta classe (m s c d p r I t w k b + u)
+  nclass m c           | multiclasse (unisce slot)
+  return               | torna da polymorph self
+
+=== CAST GENERICO (incantesimi multi-parola supportati) ===
+  c <spell> [tgt]      | cast 'spell' [tgt] — es. c power word kill goblin
+  c '<spell>' [tgt]    | con apici — es. c 'power word kill' goblin
+  cast <spell> [tgt]   | come c
+  r <spell> [tgt]      | recall 'spell' [tgt]
+  m <spell> [tgt]      | mind 'spell' [tgt]
+  mem <spell>          | memorize 'spell'
+  q1 … q9 [tgt]        | slot rapidi classe attiva
+
+=== ABBREVIAZIONI INCANTESIMI (pattern ^<abbr>(?: (.+))?$) ===
+  ^ab(?: (.+))?$  → acid blast
+  ^aid(?: (.+))?$  → aid
+  ^ad(?: (.+))?$  → animate dead
+  ^arm(?: (.+))?$  → armor
+  ^bark(?: (.+))?$  → barkskin
+  ^ble(?: (.+))?$  → bless
+  ^blind(?: (.+))?$  → blindness
+  ^bh(?: (.+))?$  → burning hands
+  ^cl(?: (.+))?$  → call lightning
+  ^cac(?: (.+))?$  → cause critical
+  ^cal(?: (.+))?$  → cause light
+  ^cas(?: (.+))?$  → cause serious
+  ^chain(?: (.+))?$  → chain lightning
+  ^cmon(?: (.+))?$  → charm monster
+  ^charm(?: (.+))?$  → charm person
+  ^ct(?: (.+))?$  → chill touch
+  ^cs(?: (.+))?$  → colour spray
+  ^cmd(?: (.+))?$  → command
+  ^coc(?: (.+))?$  → cone of cold
+  ^cfood(?: (.+))?$  → create food
+  ^cwater(?: (.+))?$  → create water
+  ^cblind(?: (.+))?$  → cure blind
+  ^cc(?: (.+))?$  → cure critic
+  ^clight(?: (.+))?$  → cure light
+  ^cser(?: (.+))?$  → cure serious
+  ^curse(?: (.+))?$  → curse
+  ^dev(?: (.+))?$  → detect evil
+  ^dinv(?: (.+))?$  → detect invisibility
+  ^dmag(?: (.+))?$  → detect magic
+  ^dpois(?: (.+))?$  → detect poison
+  ^disint(?: (.+))?$  → disintegrate
+  ^de(?: (.+))?$  → dispel evil
+  ^dg(?: (.+))?$  → dispel good
+  ^dm(?: (.+))?$  → dispel magic
+  ^dom(?: (.+))?$  → domination
+  ^eq(?: (.+))?$  → earthquake
+  ^earmor(?: (.+))?$  → enchant armor
+  ^ewep(?: (.+))?$  → enchant weapon
+  ^edrain(?: (.+))?$  → energy drain
+  ^ent(?: (.+))?$  → entangle
+  ^ffire(?: (.+))?$  → faerie fire
+  ^fear(?: (.+))?$  → fear
+  ^feeble(?: (.+))?$  → feeblemind
+  ^fb(?: (.+))?$  → fireball
+  ^fshld(?: (.+))?$  → fireshield
+  ^fs(?: (.+))?$  → flamestrike
+  ^fly(?: (.+))?$  → fly
+  ^harm(?: (.+))?$  → harm
+  ^haste(?: (.+))?$  → haste
+  ^heal(?: (.+))?$  → heal
+  ^is(?: (.+))?$  → ice storm
+  ^id(?: (.+))?$  → identify
+  ^infra(?: (.+))?$  → infravision
+  ^inv(?: (.+))?$  → invisibility
+  ^knock(?: (.+))?$  → knock
+  ^kalign(?: (.+))?$  → know alignment
+  ^lev(?: (.+))?$  → levitation
+  ^lb(?: (.+))?$  → lightning bolt
+  ^loc(?: (.+))?$  → locate object
+  ^mm(?: (.+))?$  → magic missile
+  ^mana(?: (.+))?$  → mana
+  ^ms(?: (.+))?$  → meteor swarm
+  ^mburn(?: (.+))?$  → mind burn
+  ^mwipe(?: (.+))?$  → mind wipe
+  ^para(?: (.+))?$  → paralyze
+  ^pois(?: (.+))?$  → poison
+  ^poly(?: (.+))?$  → polymorph self
+  ^port(?: (.+))?$  → portal
+  ^prism(?: (.+))?$  → prismatic spray
+  ^pevil(?: (.+))?$  → protection from evil
+  ^ptel(?: (.+))?$  → psionic teleport
+  ^pcrush(?: (.+))?$  → psychic crush
+  ^ref(?: (.+))?$  → refresh
+  ^reinc(?: (.+))?$  → reincarnate
+  ^rcurse(?: (.+))?$  → remove curse
+  ^rpara(?: (.+))?$  → remove paralysis
+  ^rpois(?: (.+))?$  → remove poison
+  ^resu(?: (.+))?$  → resurrection
+  ^san(?: (.+))?$  → sanctuary
+  ^sw(?: (.+))?$  → second wind
+  ^slife(?: (.+))?$  → sense life
+  ^shld(?: (.+))?$  → shield
+  ^sg(?: (.+))?$  → shocking grasp
+  ^sil(?: (.+))?$  → silence
+  ^sleep(?: (.+))?$  → sleep
+  ^slow(?: (.+))?$  → slowness
+  ^snare(?: (.+))?$  → snare
+  ^sskin(?: (.+))?$  → stone skin
+  ^str(?: (.+))?$  → strength
+  ^sum(?: (.+))?$  → summon
+  ^telek(?: (.+))?$  → telekinesis
+  ^tel(?: (.+))?$  → teleport
+  ^tsight(?: (.+))?$  → true sight
+  ^wb(?: (.+))?$  → water breath
+  ^weak(?: (.+))?$  → weakness
+  ^rec(?: (.+))?$  → word of recall
+
+=== ABBREVIAZIONI SKILL (pattern ^<abbr>(?: (.+))?$) ===
+  ^adr(?: (.+))?$  → adrenalize <bersaglio>
+  ^aura(?: (.+))?$  → aura
+  ^bs(?: (.+))?$  → backstab <vittima>
+  ^b(?: (.+))?$  → bash <vittima>
+  ^bel(?: (.+))?$  → bellow
+  ^berz(?: (.+))?$  → berserk
+  ^bld(?: (.+))?$  → blessing <bersaglio>
+  ^bg(?: (.+))?$  → bodyguard <bersaglio>
+  ^brew(?: (.+))?$  → brew
+  ^camo(?: (.+))?$  → camouflage
+  ^cani(?: (.+))?$  → canibalize [numero]
+  ^carve(?: (.+))?$  → carve <cadavere>
+  ^climb(?: (.+))?$  → climb <direzione>
+  ^dai(?: (.+))?$  → daimoku
+  ^disarm(?: (.+))?$  → disarm <vittima>
+  ^dis(?: (.+))?$  → disguise
+  ^dbash(?: (.+))?$  → doorbash <porta>
+  ^dw(?: (.+))?$  → doorway <nome>
+  ^ed(?: (.+))?$  → eavesdrop
+  ^esp(?: (.+))?$  → esp
+  ^fd(?: (.+))?$  → feign death
+  ^ffood(?: (.+))?$  → find food
+  ^ftrap(?: (.+))?$  → find traps
+  ^fwater(?: (.+))?$  → find water
+  ^fin(?: (.+))?$  → finger
+  ^fa(?: (.+))?$  → first aid
+  ^flm(?: (.+))?$  → flame
+  ^forge(?: (.+))?$  → forge <arma> <materiale>
+  ^great(?: (.+))?$  → great
+  ^hero(?: (.+))?$  → heroic
+  ^hi(?: (.+))?$  → hide
+  ^hyp(?: (.+))?$  → hypnotize <bersaglio>
+  ^imm(?: (.+))?$  → immolate
+  ^k(?: (.+))?$  → kick <vittima>
+  ^loh(?: (.+))?$  → lay on hands [bersaglio]
+  ^man(?: (.+))?$  → mantra
+  ^med(?: (.+))?$  → meditate
+  ^mem(?: (.+))?$  → memorize '<incantesimo>'
+  ^parry(?: (.+))?$  → parry
+  ^pick(?: (.+))?$  → pick <porta/cassa>
+  ^pray(?: (.+))?$  → pray
+  ^port(?: (.+))?$  → portal <nome>
+  ^pshld(?: (.+))?$  → shield
+  ^sum(?: (.+))?$  → summon <nome>
+  ^blast(?: (.+))?$  → blast <bersaglio>
+  ^qp(?: (.+))?$  → quivering palm <vittima>
+  ^carve(?: (.+))?$  → carve <cadavere>
+  ^res(?: (.+))?$  → rescue <persona>
+  ^scry(?: (.+))?$  → scry <nome>
+  ^sign(?: (.+))?$  → sign
+  ^sn(?: (.+))?$  → sneak
+  ^spot(?: (.+))?$  → spot
+  ^sl(?: (.+))?$  → springleap
+  ^spy(?: (.+))?$  → spy
+  ^stl(?: (.+))?$  → steal <oggetto> <vittima>
+  ^swim(?: (.+))?$  → swim
+  ^tan(?: (.+))?$  → tan <cadavere> <tipo>
+  ^tr(?: (.+))?$  → track <nome>
+  ^tspy(?: (.+))?$  → tspy
+  ^wc(?: (.+))?$  → warcry
+
+Totale alias generati all'install: ~179 (nomi interni: nebbie-spells-skills::<nome>)

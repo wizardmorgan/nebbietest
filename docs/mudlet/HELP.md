@@ -32,11 +32,11 @@ Il package è generato automaticamente dal codice sorgente del MUD (`src/spell_p
 |------|-------------|
 | **`nebbie-spells-skills.mpackage`** | Unico file da importare in Mudlet. Contiene script, alias e trigger. |
 
-**Download (branch aggiornato):**
+**Download (branch `sviluppo`):**
 
-https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-mudlet-spells-skills-55b4/docs/mudlet/nebbie-spells-skills.mpackage
+https://raw.githubusercontent.com/wizardmorgan/nebbietest/sviluppo/docs/mudlet/nebbie-spells-skills.mpackage
 
-> **Attenzione:** il file sulla branch `sviluppo` / `main` può essere più vecchio. Usa il link sopra finché il PR non è mergiato.
+> Versione precedente su altre branch: usa sempre `sviluppo` dopo il merge.
 
 Salva il file con estensione `.mpackage` e installalo con **Alt+O** → *Install New Package*.
 
@@ -44,11 +44,19 @@ Salva il file con estensione `.mpackage` e installalo con **Alt+O** → *Install
 
 | File | Descrizione |
 |------|-------------|
-| **`nebbie-spells-reference.txt`** | Elenco completo di incantesimi, skill, abbreviazioni e slot per classe. **Non** si importa in Mudlet: è solo consultazione (blocco note, secondo monitor). |
+| **`nebbie-spells-reference.txt`** | Elenco incantesimi, skill, abbreviazioni e slot per classe |
+| **`nebbie-alias-index.txt`** | **Indice completo** di tutti gli alias e pattern regex |
+| **`nebbie-trigger-index.txt`** | **Indice completo** di tutti i trigger e pattern |
 
-Stesso branch del package:
+Non si importano in Mudlet: sono solo consultazione. Stesso percorso del package su branch `sviluppo`:
 
-https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-mudlet-spells-skills-55b4/docs/mudlet/nebbie-spells-reference.txt
+https://raw.githubusercontent.com/wizardmorgan/nebbietest/sviluppo/docs/mudlet/nebbie-alias-index.txt
+
+https://raw.githubusercontent.com/wizardmorgan/nebbietest/sviluppo/docs/mudlet/nebbie-trigger-index.txt
+
+https://raw.githubusercontent.com/wizardmorgan/nebbietest/sviluppo/docs/mudlet/nebbie-spells-reference.txt
+
+In gioco puoi usare `nlist`, `nlist aliases`, `nlist triggers`.
 
 ### Solo per sviluppatori
 
@@ -203,6 +211,17 @@ Il MUD controlla quali incantesimi puoi usare; il package configura solo scorcia
 | `mem <spell>` | `memorize '<spell>'` | Stregone |
 | `cast <spell> [tgt]` | come `c` | Alternativa esplicita |
 
+**Incantesimi con più parole** — il parser riconosce il nome completo prima del bersaglio:
+
+```
+c power word kill goblin
+c 'power word kill' goblin
+c magic missile goblin
+c colour spray
+```
+
+Funziona anche con `r`, `m` e `mem`. Con apici è utile se il nome è ambiguo.
+
 ### Modalità di cast (`c` usa la modalità attiva)
 
 | Comando | Effetto |
@@ -224,6 +243,10 @@ Il MUD controlla quali incantesimi puoi usare; il package configura solo scorcia
 |---------|---------|
 | `ngui` | Mostra o nasconde il pannello buff |
 | `npos` | Riposiziona il pannello in alto a destra |
+| `nlist` | Indice documentazione alias/trigger |
+| `nlist aliases` | Elenca alias Nebbie installati |
+| `nlist triggers` | Elenca trigger Nebbie installati |
+| `nlist spells` | Aiuto incantesimi multi-parola |
 | `nfix` | Reinstalla alias/trigger e ricarica la classe salvata |
 | `return` | Torna dalla forma `polymorph self` |
 
