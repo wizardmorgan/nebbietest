@@ -54,6 +54,7 @@
 #include "db.hpp"
 #include "events.hpp"
 #include "fight.hpp"
+#include "gmcp.hpp"
 #include "handler.hpp"
 #include "interpreter.hpp"
 #include "mobact.hpp"
@@ -471,6 +472,7 @@ void game_loop(int s) {
                                 ? "[Batti INVIO per continuare/Q per uscire] "
                                 : "[Batti INVIO] ");
       else if (point->connected == CON_PLYNG) {
+        gmcp_on_prompt(point);
         if (point->character->term == VT100) {
           struct char_data *ch;
           int update = 0;
@@ -1168,6 +1170,15 @@ int process_input(struct descriptor_data *t) {
   } while (!ISNEWL(*(t->buf + begin + sofar - 1)));
 
   *(t->buf + begin + sofar) = 0;
+
+  const int filtered = gmcp_filter_buffer(t, t->buf, begin + sofar);
+  if(filtered < begin + sofar) {
+    sofar = filtered - begin;
+    if(sofar < 0) {
+      sofar = 0;
+    }
+    *(t->buf + begin + sofar) = 0;
+  }
 
   /* if no newline is contained in input, return without proc'ing */
   for (i = begin; !ISNEWL(*(t->buf + i)); i++)

@@ -46,6 +46,7 @@
 #include "multiclass.hpp"	//aggiunto per la nuova gestiopne del salvataggio pwd toon alla creazione
 #include "breath.hpp"
 #include "comm.hpp"
+#include "gmcp.hpp"
 #include "create.hpp"
 #include "create.mob.hpp"
 #include "create.obj.hpp"
@@ -2653,6 +2654,7 @@ NANNY_FUNC(con_slct) {
 
 		act("$n e' entrat$b nel gioco.", TRUE, d->character, 0, 0, TO_ROOM);
 		STATE(d) = CON_PLYNG;
+		gmcp_send_all(d->character);
 		if(!GetMaxLevel(d->character)) {
 			do_start(d->character);
 		}
@@ -3146,6 +3148,7 @@ NANNY_FUNC(con_pwdok) {
 			}
 			d->character->persist = 0;
 			STATE(d) = CON_PLYNG;
+			gmcp_send_all(d->character);
 
 			act("$n si e' riconnesso.", TRUE, tmp_ch, 0, 0, TO_ROOM);
 			mudlog(LOG_CONNECT, "%s[HOST:%s] has reconnected.",
