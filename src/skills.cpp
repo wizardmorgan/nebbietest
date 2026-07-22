@@ -35,6 +35,7 @@
 #include "magic.hpp"
 #include "magic2.hpp"
 #include "magicutils.hpp"
+#include "mindskills1.hpp"
 #include "opinion.hpp"
 #include "regen.hpp"
 #include "spec_procs.hpp"
@@ -5961,6 +5962,74 @@ ACTION_FUNC(do_adrenalize) {
 
         CheckAchie(ch, ACHIE_PSI_3, CLASS_ACHIE);
     }
+}
+
+ACTION_FUNC(do_surge) {
+	char target_name[140];
+	struct char_data* target;
+	int psi_level;
+	const int mana_cost = 45;
+
+	if(!ch->skills) {
+		return;
+	}
+
+	if(IS_PC(ch) || IS_SET(ch->specials.act, ACT_POLYSELF)) {
+		if(!HasClass(ch, CLASS_PSI)) {
+			send_to_char("Non padroneggi discipline metapsioniche.\n\r", ch);
+			return;
+		}
+	}
+
+	if(affected_by_spell(ch, SPELL_FEEBLEMIND)) {
+		send_to_char("Prego? Cosa?\n\r", ch);
+		return;
+	}
+
+	if(!(ch->skills[SKILL_METAPSIONIC_SURGE].learned)) {
+		send_to_char("Non conosci questa tecnica metapsionica.\n\r", ch);
+		return;
+	}
+
+	only_argument(arg, target_name);
+	if(!*target_name) {
+		target = ch;
+	}
+	else if(!(target = get_char_room_vis(ch, target_name))) {
+		send_to_char("Non ti sembra di vedere nessuno con quel nome qui.\n\r", ch);
+		return;
+	}
+
+	if(GET_MANA(ch) < mana_cost && GetMaxLevel(ch) < IMMORTALE) {
+		send_to_char("Non hai abbastanza energia mentale.\n\r", ch);
+		return;
+	}
+
+	if(ch->skills[SKILL_METAPSIONIC_SURGE].learned < dice(1, 101)) {
+		send_to_char("Non riesci a canalizzare il surge metapsionico.\n\r", ch);
+		act("$n tenta di concentrarsi, ma l'ondata di potere si dissolve.", FALSE, ch,
+			0, target, TO_NOTVICT);
+		GET_MANA(ch) -= mana_cost / 2;
+		alter_mana(ch, 0);
+		LearnFromMistake(ch, SKILL_METAPSIONIC_SURGE, 0, 95);
+		WAIT_STATE(ch, PULSE_VIOLENCE * 2);
+		return;
+	}
+
+	if(affected_by_spell(target, SKILL_METAPSIONIC_SURGE)) {
+		send_to_char("E' gia' in stato di surge metapsionico!\n\r", ch);
+		GET_MANA(ch) -= mana_cost;
+		alter_mana(ch, 0);
+		return;
+	}
+
+	psi_level = HasClass(ch, CLASS_PSI) ?
+				GET_LEVEL(ch, PSI_LEVEL_IND) : GetMaxLevel(ch);
+	mind_metapsionic_surge(psi_level, ch, target, 0);
+
+	GET_MANA(ch) -= mana_cost;
+	alter_mana(ch, 0);
+	WAIT_STATE(ch, PULSE_VIOLENCE * 2);
 }
 
 ACTION_FUNC(do_meditate) {

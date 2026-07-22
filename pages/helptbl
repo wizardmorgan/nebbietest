@@ -4804,6 +4804,8 @@ Con questo skill lo psionista richiama alla superficie le riserve di
 energia trattenute nella mente della vittima rendendola piu' forte.
 Ha il potere di far abbassare pero' alcuni bonus.
 
+Vedi anche: SURGE
+
 #
 "PSIONIC BLAST"
 
@@ -4945,7 +4947,7 @@ Le discipline metapsioniche sono abilita' psioniche avanzate (livelli 39-50).
 Si apprendono esclusivamente presso un maestro metapsionico, non dai maestri
 che insegnano le discipline fondamentali (fino al livello 38).
 
-Vedi anche: EGO WHIP, PSYCHIC VAMPIRISM, METAPSIONIC SURGE, THOUGHT BARRIER
+Vedi anche: EGO WHIP, PSYCHIC VAMPIRISM, SURGE, THOUGHT BARRIER
 Vedi anche: NEURAL SPIKE, MASS CONFUSION, CATACLYSM MIND
 
 #
@@ -4969,14 +4971,18 @@ Prosciuga energia mentale da un bersaglio (non giocatori), recuperando
 parte del mana sottratto.
 
 #
-"METAPSIONIC SURGE"
+SURGE METAPSIONIC-SURGE
 
-Sintassi: mind 'metapsionic surge'
-Spell: lev 42 psi
-Costo: 45 mana | Lag: 24 beat
+Sintassi: surge [nome]
+Skill: lev 42 psi
+Costo: 45 mana
 
 Canalizza un'ondata di potere metapsionico che aumenta temporaneamente
-hitroll e damroll.
+hitroll e damroll. Senza bersaglio colpisce te stesso; con un nome, un
+alleato in stanza. Richiede un roll sulla skill appresa (come adrenalize).
+Non cumulabile con un altro surge attivo.
+
+Vedi anche: ADRENALIZE
 
 #
 "THOUGHT BARRIER"

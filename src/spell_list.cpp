@@ -4065,10 +4065,9 @@ void boot_spells() {
 		   /*align       */ -1,
 		   /*ostile      */ 25);
 
-	/* mind_use_metapsionic_surge */
 	spello(SKILL_METAPSIONIC_SURGE,
-		   /*beats       */ 24,
-		   /*min position*/ POSITION_FIGHTING,
+		   /*beats       */ 0,
+		   /*min position*/ POSITION_STANDING,
 		   /*Mage        */ IMMORTALE,
 		   /*Cleric      */ IMMORTALE,
 		   /*Druid       */ IMMORTALE,
@@ -4077,8 +4076,8 @@ void boot_spells() {
 		   /*Ranger      */ IMMORTALE,
 		   /*psIonic     */ 42,
 		   /*mana        */ 45,
-		   /*target      */ TAR_SELF_ONLY|TAR_CHAR_ROOM,
-		   /*funzione    */ mind_use_metapsionic_surge,
+		   /*target      */ 0,
+		   /*funzione    */ 0,
 		   /*spell fail  */ 0,
 		   /*align       */ 0,
 		   /*ostile      */ 0);

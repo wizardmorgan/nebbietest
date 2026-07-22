@@ -1222,6 +1222,7 @@ void assign_command_pointers() {
 	AddCommand( "hypnotize",            do_hypnosis,        CMD_HYPNOTIZE,              POSITION_STANDING,  TUTTI                   );
 	AddCommand( "scry",                 do_scry,            CMD_SCRY,                   POSITION_RESTING,   TUTTI                   );
 	AddCommand( "adrenalize",           do_adrenalize,      CMD_ADRENALIZE,             POSITION_STANDING,  TUTTI                   );  /*  350 */
+	AddCommand( "surge",                do_surge,           CMD_SURGE,                  POSITION_STANDING,  TUTTI                   );
 	AddCommand( "brew",                 do_brew,            CMD_BREW,                   POSITION_STANDING,  TUTTI                   );
 	AddCommand( "meditate",             do_meditate,        CMD_MEDITATE,               POSITION_RESTING,   TUTTI                   );
 	AddCommand( "forcerent",            do_force_rent,      CMD_FORCERENT,              POSITION_DEAD,      QUESTMASTER             );

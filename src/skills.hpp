@@ -18,6 +18,7 @@ int choose_exit_global(int in_room, int tgt_room, int depth) ;
 int choose_exit_in_zone(int in_room, int tgt_room, int depth) ;
 int dir_track(struct char_data* ch, struct char_data* vict) ;
 void do_adrenalize(struct char_data* ch,const char* argument, int cmd) ;
+void do_surge(struct char_data* ch,const char* argument, int cmd) ;
 void do_aura_sight(struct char_data* ch,const char* argument, int cmd) ;
 void do_bellow(struct char_data* ch,const char* arg, int cmd) ;
 void do_blast(struct char_data* ch,const char* argument, int cmd) ;

@@ -378,7 +378,7 @@ const char* spells[]= {
 	"find the seam",
 	"ego whip",
 	"psychic vampirism",
-	"metapsionic surge",
+	"surge",
 	"thought barrier",
 	"neural spike",
 	"mass confusion",

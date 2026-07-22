@@ -380,7 +380,6 @@ void mind_use_##name(byte level, struct char_data* ch, const char* arg, int type
 
 MIND_USE_STUB(ego_whip, mind_ego_whip)
 MIND_USE_STUB(psychic_vampirism, mind_psychic_vampirism)
-MIND_USE_STUB(metapsionic_surge, mind_metapsionic_surge)
 MIND_USE_STUB(thought_barrier, mind_thought_barrier)
 MIND_USE_STUB(neural_spike, mind_neural_spike)
 MIND_USE_STUB(mass_confusion, mind_mass_confusion)

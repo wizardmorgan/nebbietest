@@ -9420,6 +9420,7 @@ int IsMagicSpell(int spell_num) {
 	case SKILL_MEDITATE:
 	case SKILL_SCRY:
 	case SKILL_ADRENALIZE:
+	case SKILL_METAPSIONIC_SURGE:
 	case SKILL_RATION:
 	case SKILL_HOLY_WARCRY:
 	case SKILL_HEROIC_RESCUE:

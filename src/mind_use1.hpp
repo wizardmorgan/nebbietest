@@ -30,7 +30,6 @@ void mind_use_tower_iron_will(byte level, struct char_data* ch, const char* arg,
 void mind_use_ultra_blast(byte level, struct char_data* ch, const char* arg, int type,struct char_data* victim, struct obj_data* tar_obj);
 void mind_use_ego_whip(byte level, struct char_data* ch, const char* arg, int type,struct char_data* victim, struct obj_data* tar_obj);
 void mind_use_psychic_vampirism(byte level, struct char_data* ch, const char* arg, int type,struct char_data* victim, struct obj_data* tar_obj);
-void mind_use_metapsionic_surge(byte level, struct char_data* ch, const char* arg, int type,struct char_data* victim, struct obj_data* tar_obj);
 void mind_use_thought_barrier(byte level, struct char_data* ch, const char* arg, int type,struct char_data* victim, struct obj_data* tar_obj);
 void mind_use_neural_spike(byte level, struct char_data* ch, const char* arg, int type,struct char_data* victim, struct obj_data* tar_obj);
 void mind_use_mass_confusion(byte level, struct char_data* ch, const char* arg, int type,struct char_data* victim, struct obj_data* tar_obj);
