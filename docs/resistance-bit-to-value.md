@@ -51,6 +51,7 @@ Se lo stesso bit è sia in `susc` che in `immune`, vince **immune** → `+100`.
 | 32768 | IMM_PLUS2 | arma +2 | meta |
 | 65536 | IMM_PLUS3 | arma +3 | meta |
 | 131072 | IMM_PLUS4 | arma +4 | meta |
+| 262144 | IMM_HOLY | sacro | magico/fisico |
 
 Fonte: `src/autoenums.hpp` (`E_IMMUNITY_TYPE`).
 

@@ -4544,17 +4544,28 @@ su di una persona. Attenzione tale spell funzionera' esclusivamente su personagg
 PSIONIST PSIONISTI PSYONIST
 
 Gli psionisti sono personaggi che usano il potere della mente.
-Possono evocare persone da grandi distanze e sanno anche trasformare in
-gelatina la mente di potenti mostri.
+Possono evocare persone da grandi distanze e sanno anche assalire
+la mente dei nemici con discipline sempre piu' potenti.
 
-Le abilita' segli psionisti vengono dalla forza della mente, e non sono
+Le abilita' degli psionisti vengono dalla forza della mente, e non sono
 magie. Quindi possono essere usate anche dove gli incantesimi dei maghi o dei
 chierici spesso non funzionano.
-Per vedere gli skill dei psionisti usa 'pratice I'
+
+Per vedere le abilita' che PUOI imparare (tabella di progressione) usa:
+  show skill I
+
+Per vedere le abilita' che CONOSCI gia' usa:
+  practice I
+
+I maestri psionici fondamentali (es. Alrani nell'Accademia, o il
+maestro a Myst) insegnano fino al livello 39.
+Le discipline metapsioniche (dal 40 al 50) si apprendono da Kaelith,
+il maestro metapsionico nella stessa area di Myst (stanza del
+Signore del Pensiero).
 
 Vedi anche : MINDSUMMON, DOORWAY, PORTAL, AURA SIGHT, GREAT SIGHT, MEDITATE
-Vedi anche : PSIONIC INVISIBILITY, ADRENALIZE, FLAME SHROUD,PSIONIC BLAST
-Vedi anche : CANIBALIZE, PSI SHIELD, ESP, HYPNOSIS
+Vedi anche : PSIONIC INVISIBILITY, ADRENALIZE, FLAME SHROUD, PSIONIC BLAST
+Vedi anche : CANIBALIZE, PSI SHIELD, ESP, HYPNOSIS, METAPSIONIC
 
 #
 HYPNOSIS
@@ -4793,6 +4804,8 @@ Con questo skill lo psionista richiama alla superficie le riserve di
 energia trattenute nella mente della vittima rendendola piu' forte.
 Ha il potere di far abbassare pero' alcuni bonus.
 
+Vedi anche: SURGE
+
 #
 "PSIONIC BLAST"
 
@@ -4895,14 +4908,15 @@ E' in grado di vedere anche la presenza di DT.
 "MIND WIPE"
 
 Sintassi: mind 'mind wipe' <nome>
-Spell: lev 21 psi
-Costo di lancio: 100 mana
+Spell: lev 31 psi
+Costo di lancio: 60 mana
+Lag: 24 beat
 
-Spell con cui lo psionista abbassa la intelligenza dei mob.
-Non e' una spell aggressiva, ma gli altri giocatori noteranno
-i vostri tentativi.
-Attenzione: se lo usate su altri players, questi ne avranno un danno
-permanente, perdendo 1 sessione di pratica in maniera definitiva.
+Assalto psichico che confonde la mente del bersaglio.
+Su altri giocatori provoca subbuglio mentale (INT ridotta,
+maggiore spellfail, possibile degradazione skill temporanea).
+Su mostri applica penalita' di combattimento (hitroll, damroll, AC).
+Non e' una spell aggressiva di per se', ma i tentativi possono essere notati.
 Vedi anche: FEEBLEMIND
 
 #
@@ -4925,6 +4939,90 @@ Costo di lancio: 50 mana
 Con questo spell lo psionista vuota la sua mente, rendendo difficile
 l'attacco di un BLAST di un altro mob PSI.
 
+
+#
+METAPSIONIC METAPSIONICO METAPSIONICS
+
+Le discipline metapsioniche sono abilita' psioniche avanzate (livelli 39-50).
+Si apprendono esclusivamente presso un maestro metapsionico, non dai maestri
+che insegnano le discipline fondamentali (fino al livello 38).
+
+Vedi anche: EGO WHIP, PSYCHIC VAMPIRISM, SURGE, THOUGHT BARRIER
+Vedi anche: NEURAL SPIKE, MASS CONFUSION, CATACLYSM MIND
+
+#
+"EGO WHIP"
+
+Sintassi: mind 'ego whip' <nome>
+Spell: lev 39 psi
+Costo: 35 mana | Lag: 18 beat
+
+Frustata psichica che infligge danno mentale e puo' ridurre temporaneamente
+l'intelligenza del bersaglio.
+
+#
+"PSYCHIC VAMPIRISM"
+
+Sintassi: mind 'psychic vampirism' <nome>
+Spell: lev 40 psi
+Costo: 40 mana | Lag: 24 beat
+
+Prosciuga energia mentale da un bersaglio (non giocatori), recuperando
+parte del mana sottratto.
+
+#
+SURGE METAPSIONIC-SURGE
+
+Sintassi: surge [nome]
+Skill: lev 42 psi
+Costo: 45 mana
+
+Canalizza un'ondata di potere metapsionico che aumenta temporaneamente
+hitroll e damroll. Senza bersaglio colpisce te stesso; con un nome, un
+alleato in stanza. Richiede un roll sulla skill appresa (come adrenalize).
+Non cumulabile con un altro surge attivo.
+
+Vedi anche: ADRENALIZE
+
+#
+"THOUGHT BARRIER"
+
+Sintassi: mind 'thought barrier'
+Spell: lev 44 psi
+Costo: 50 mana | Lag: 24 beat
+
+Crea una barriera mentale difensiva che migliora temporaneamente la classe
+armatura.
+
+#
+"NEURAL SPIKE"
+
+Sintassi: mind 'neural spike' <nome>
+Spell: lev 46 psi
+Costo: 55 mana | Lag: 24 beat
+
+Potente colpo psichico singolo, efficace contro bersagli gia' indeboliti
+dalla torre di ferro.
+
+#
+"MASS CONFUSION"
+
+Sintassi: mind 'mass confusion'
+Spell: lev 48 psi
+Costo: 60 mana | Lag: 30 beat
+
+Scatena impulsi confusi nella stanza, penalizzando i riflessi dei mostri
+nemici (non i giocatori).
+
+#
+"CATACLYSM MIND"
+
+Sintassi: mind 'cataclysm mind'
+Spell: lev 50 psi
+Costo: 80 mana | Lag: 36 beat
+
+Capstone metapsionico: devastante ondata psichica su tutti i bersagli
+ostili nella stanza. Il massimo della disciplina psionica mortale.
 
 #
 SPECIALIZZAZIONE
@@ -5563,23 +5661,23 @@ POISONCRAFT POISON ENVENOM
 Solo ladri puri (livello ladro 15+).
 
 Prepari veleni da reagenti acquistati dai mercanti di Myst (estratto,
-resina, sale, olio, legante, fiale). Con poison crei un vial; con
-envenom lo applichi all'arma impugnata. In combattimento il veleno
-puo' proccare sui colpi finche' ha cariche.
+resina, sale, olio, legante, fiale). Con poison crei una fiala di
+veleno; con envenom la applichi all'arma impugnata. In combattimento
+il veleno puo' proccare sui colpi finche' ha cariche.
 
 Ricette poison (livello minimo ladro):
 
   weak        (15)  estratto + fiala
   numb        (18)  estratto + resina + fiala
   bleed       (20)  estratto + olio + fiala
-  paralytic   (24)  resina + legante + fiale
+  paralizzante (24) resina + legante + fiala
   nightfall   (30)  resina + estratto + olio + fiala
   blacklotus  (40)  resina + estratto + sale + legante + fiala
 
 Esempi:
 
   > poison weak
-  > envenom vial
+  > envenom fiala
 
 Vedi anche : MIX, THROWPOTION
 
@@ -5604,7 +5702,7 @@ Ricette mix:
 Esempi:
 
   > mix acid
-  > throwpotion vial <bersaglio>
+  > throwpotion fiala <bersaglio>
 
 Vedi anche : POISONCRAFT, POCKET SAND
 

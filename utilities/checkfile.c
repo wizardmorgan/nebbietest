@@ -119,6 +119,7 @@ typedef struct alias_type
 #define IMM_PLUS2   32768
 #define IMM_PLUS3   65536
 #define IMM_PLUS4  131072
+#define IMM_HOLY   262144
 
 #define AFF_NONE              0x00000000
 #define AFF_BLIND             0x00000001

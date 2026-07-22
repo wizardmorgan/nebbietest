@@ -531,7 +531,9 @@ namespace Alarmud {
 #define CMD_ENVENOM             520
 #define CMD_MIX                 521
 #define CMD_THROWPOTION         522
-#define MAX_CMD_LIST            523
+#define CMD_POWERINDEX          523
+#define CMD_SURGE               524
+#define MAX_CMD_LIST            525
 } // namespace Alarmud
 
 #endif

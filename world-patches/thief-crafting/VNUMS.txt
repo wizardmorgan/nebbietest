@@ -8,6 +8,9 @@
 # 18001, 18002, 18003: nessun overlay, OK.
 # 18072, 18073, 18074: gap senza overlay (tra 18071 e 18090 in produzione).
 #
+# myst.obj: le definizioni devono stare PRIMA della riga %% (il boot le ignora dopo).
+# apply-thief-world-patch.sh le inserisce subito prima di #99999.
+#
 # Codice: src/utils.hpp THIEF_ING_*
 # Patch:  myst.obj.fragment, myst.zon.reagent-vendors.fragment, myst.shp.products
 

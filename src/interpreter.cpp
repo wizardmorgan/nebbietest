@@ -1104,6 +1104,7 @@ void assign_command_pointers() {
   AddCommand( "associate",            do_associa,         CMD_ASSOCIA,                POSITION_STANDING,  PRINCIPE                );  /*  235 */
 	AddCommand( "attribute",            do_attribute,       CMD_ATTRIBUTE,              POSITION_DEAD,      5                       );
 	AddCommand( "world",                do_world,           CMD_WORLD,                  POSITION_DEAD,      TUTTI                   );
+	AddCommand( "powerindex",           do_powerindex,      CMD_POWERINDEX,             POSITION_RESTING,   IMMORTALE               );
 	AddCommand( "allspells",            do_spells,          CMD_ALLSPELLS,              POSITION_DEAD,      TUTTI                   );
 	AddCommand( "breath",               do_breath,          CMD_BREATH,                 POSITION_FIGHTING,  1                       );
 	AddCommand( "show",                 do_show,            CMD_SHOW,                   POSITION_DEAD,      DIO_MINORE              );  /*  240 */
@@ -1221,6 +1222,7 @@ void assign_command_pointers() {
 	AddCommand( "hypnotize",            do_hypnosis,        CMD_HYPNOTIZE,              POSITION_STANDING,  TUTTI                   );
 	AddCommand( "scry",                 do_scry,            CMD_SCRY,                   POSITION_RESTING,   TUTTI                   );
 	AddCommand( "adrenalize",           do_adrenalize,      CMD_ADRENALIZE,             POSITION_STANDING,  TUTTI                   );  /*  350 */
+	AddCommand( "surge",                do_surge,           CMD_SURGE,                  POSITION_STANDING,  TUTTI                   );
 	AddCommand( "brew",                 do_brew,            CMD_BREW,                   POSITION_STANDING,  TUTTI                   );
 	AddCommand( "meditate",             do_meditate,        CMD_MEDITATE,               POSITION_RESTING,   TUTTI                   );
 	AddCommand( "forcerent",            do_force_rent,      CMD_FORCERENT,              POSITION_DEAD,      QUESTMASTER             );
@@ -2617,6 +2619,38 @@ NANNY_FUNC(con_slct) {
   }
   return false;
 }
+static bool toon_has_playable_body(const toon& pg) {
+  if(pg.name.empty()) {
+    return false;
+  }
+  char_file_u st {};
+#if USE_MYSQL
+  if(pg.id && load_char_mysql(pg.name.c_str(), &st)) {
+    return true;
+  }
+#endif
+  return load_char(pg.name.c_str(), &st) != FALSE;
+}
+static void delete_orphan_toon_record(unsigned long long toon_id) {
+#if USE_MYSQL
+  if(!toon_id) {
+    return;
+  }
+  try {
+    DB* db = Sql::getMysql();
+    odb::transaction t(db->begin());
+    t.tracer(logTracer);
+    db->execute(("DELETE FROM toon WHERE id = " + std::to_string(toon_id)).c_str());
+    t.commit();
+    mudlog(LOG_CONNECT, "Deleted orphan toon id %llu (no character body)",
+           static_cast<unsigned long long>(toon_id));
+  } catch(const odb::exception& e) {
+    mudlog(LOG_SYSERR, "delete_orphan_toon_record: %s", e.what());
+  }
+#else
+  (void)toon_id;
+#endif
+}
 NANNY_FUNC(con_nme) {
   oldarg(true);
   char tmp_name[100];
@@ -2669,6 +2703,14 @@ NANNY_FUNC(con_nme) {
       return false;
     }
 #endif
+    if(!toon_has_playable_body(*pg)) {
+      mudlog(LOG_CONNECT,
+             "Orphan toon %s (owner_id=%d) has no loadable body — new creation",
+             pg->name.c_str(), pg->owner_id);
+      if(pg->id) {
+        delete_orphan_toon_record(pg->id);
+      }
+    } else {
     mudlog(LOG_CONNECT, "Toon found on db, registered to %d", pg->owner_id);
     found = true;
     strcpy(d->pwd, pg->password.substr(0, 11).c_str());
@@ -2684,6 +2726,7 @@ NANNY_FUNC(con_nme) {
         SEND_TO_Q("Nome: ", d);
         return false;
       }
+    }
     }
   }
   if (not found) {
@@ -2705,6 +2748,7 @@ NANNY_FUNC(con_nme) {
         d->character->desc = d;
         SET_BIT(d->character->player.user_flags, USE_PAGING);
       }
+      mudlog(LOG_CONNECT, "Starting new char creation for %s", tmp_name);
       CREATE(GET_NAME(d->character), char, strlen(tmp_name) + 1);
       CAP(tmp_name);
       strcpy(GET_NAME(d->character), tmp_name);
@@ -2751,6 +2795,17 @@ NANNY_FUNC(con_nmecnf) {
             .authorized) { // Authorized at account level no need to ask
                            // password again when creating a new toon
       echoOn(d);
+      if(!*d->pwd) {
+        if(!d->AccountData.password.empty()) {
+          strncpy(d->pwd, d->AccountData.password.c_str(), 10);
+          d->pwd[10] = '\0';
+        } else {
+          strncpy(d->pwd,
+                  crypt(d->AccountData.email.c_str(), GET_NAME(d->character)),
+                  10);
+          d->pwd[10] = '\0';
+        }
+      }
       show_race_choice(d);
       STATE(d) = CON_QRACE;
       return false;
@@ -2843,6 +2898,21 @@ NANNY_FUNC(con_register) {
 
     // 4. Ora salva il file .dat (per compatibilita' con refund/ghost)
     save_char(d->character, AUTO_RENT, 0);
+
+    toonPtr saved = Sql::getOne<toon>(toonQuery::name == std::string(GET_NAME(d->character)));
+    if(!saved || !saved->id || !toon_has_playable_body(*saved)) {
+      mudlog(LOG_SYSERR,
+             "con_register: incomplete save for %s (missing body after save_char)",
+             GET_NAME(d->character));
+      if(saved && saved->id) {
+        delete_orphan_toon_record(saved->id);
+      }
+      SEND_TO_Q("Errore nel salvataggio del personaggio (dati incompleti).\n\r",
+                d);
+      close_socket(d);
+      return false;
+    }
+
     mudlog(LOG_CONNECT, "con_register: new synced .dat for %s",
            GET_NAME(d->character));
 
