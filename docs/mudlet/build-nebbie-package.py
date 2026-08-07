@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.45"
+PKG_VER = "2.2.46"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -1636,6 +1636,21 @@ def write_trigger_index(path):
     )
     lines.append(f"Totale trigger generati all'install: ~{total}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def validate_install_lua(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    if "['']]]" in text:
+        raise SystemExit(f"{path}: broken [[ long string (['']]] pattern)")
+    if shutil.which("lua"):
+        import subprocess
+        r = subprocess.run(
+            ["lua", "-e", f"assert(loadfile('{path}'))"],
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode != 0:
+            raise SystemExit(f"{path}: Lua compile failed: {r.stderr.strip()}")
 
 
 def main():

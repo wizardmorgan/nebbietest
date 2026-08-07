@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.45"
+Nebbie.version = "2.2.46"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -3444,7 +3444,6 @@ function Nebbie.install()
   trig("char menu start", {"Scegli un personagggio", "Scegli un personaggio"}, [[if Nebbie and Nebbie.onCharMenuStart then Nebbie.onCharMenuStart() end]])
   trig("char menu line", {[[^\s*\d+\.\s+\S+]]}, [[if Nebbie and Nebbie.onCharMenuLine then Nebbie.onCharMenuLine(line) end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
-  trig("attrib spell line", {[[Spell%s*:%s*[''].+['']]]}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]], true)
 
   trig("eq parse wield", {"Stai usando", "<impugnato>", "<tenuto>", "<sulla schiena>", "<sul corpo>", "<in testa>", "<sulle mani>"}, [[
     if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end

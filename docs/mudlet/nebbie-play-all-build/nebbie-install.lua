@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.45
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.45"
+-- NEBBIE_INSTALL_VER=2.2.46
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.46"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.45"
+Nebbie.version = "2.2.46"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.45"
+Nebbie._expectedPkgVer = "2.2.46"
 Nebbie.PKG_URL = "https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-unified-dashboard-55b4/docs/mudlet/nebbie-play-all.mpackage"
 
 Nebbie.castSpells = {
@@ -1042,7 +1042,7 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.45"
+Nebbie.version = "2.2.46"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -4487,7 +4487,6 @@ function Nebbie.install()
   trig("char menu start", {"Scegli un personagggio", "Scegli un personaggio"}, [[if Nebbie and Nebbie.onCharMenuStart then Nebbie.onCharMenuStart() end]])
   trig("char menu line", {[[^\s*\d+\.\s+\S+]]}, [[if Nebbie and Nebbie.onCharMenuLine then Nebbie.onCharMenuLine(line) end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
-  trig("attrib spell line", {[[Spell%s*:%s*[''].+['']]]}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]], true)
 
   trig("eq parse wield", {"Stai usando", "<impugnato>", "<tenuto>", "<sulla schiena>", "<sul corpo>", "<in testa>", "<sulle mani>"}, [[
     if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
