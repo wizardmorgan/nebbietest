@@ -1,7 +1,7 @@
 -- Nebbie dashboard panels (equip, spells, paths, weapon config) — per-character profiles
 -- Loaded after nebbie-installer-core.lua; hooks existing GUI/buff/eq handlers.
 
-Nebbie.dashboardVer = 5
+Nebbie.dashboardVer = 6
 Nebbie.EQ_LABEL_WIDTH = 13
 Nebbie.expiredSpells = Nebbie.expiredSpells or {}
 Nebbie.eqWornByLabel = Nebbie.eqWornByLabel or {}
@@ -196,7 +196,7 @@ function Nebbie.runPath(indexOrName)
 end
 
 function Nebbie.onDashboardEqLine(line)
-  if not Nebbie._dashEqActive then return end
+  if not line or line == "" then return end
   local plain = Nebbie.stripColors(line or "")
   for _, slot in ipairs(Nebbie.EQ_SLOTS) do
     if plain:find(slot.tag, 1, true) then
@@ -218,10 +218,27 @@ function Nebbie.onDashboardEqLine(line)
           end
         end
       end
-      Nebbie.refreshEqPanel()
       break
     end
   end
+end
+
+function Nebbie.scanEqLabelsFromBuffer(lines, startRel)
+  if not lines or not startRel then return end
+  Nebbie.eqWornByLabel = {}
+  Nebbie._dashNeck = nil
+  for rel = startRel + 1, #lines do
+    local text = lines[rel]
+    if type(text) == "string" then
+      local plain = Nebbie.stripColors(text)
+      if plain ~= "" then
+        if Nebbie.isPromptLine and Nebbie.isPromptLine(plain) then break end
+        if plain:match("^Nulla%.?") then break end
+        Nebbie.onDashboardEqLine(text)
+      end
+    end
+  end
+  Nebbie.refreshEqPanel()
 end
 
 function Nebbie.requestEqPanel()
@@ -282,7 +299,11 @@ function Nebbie.buildPanel(key, layout)
     setFgColor(p.bar, 220, 190, 120)
     echo(p.bar, " " .. p.title)
     createMiniConsole(p.con, l.x, l.y + hh, l.w, l.h - hh, true)
-    setMiniConsoleFontSize(p.con, 9)
+    if Nebbie.enableConsoleWrap then
+      Nebbie.enableConsoleWrap(p.con, 9)
+    else
+      setMiniConsoleFontSize(p.con, 9)
+    end
     setBackgroundColor(p.con, 18, 18, 24, 255)
     setFgColor(p.con, 200, 200, 200)
   end
@@ -308,6 +329,7 @@ function Nebbie.movePanel(key, l)
   pcall(function() resizeWindow(p.bar, w, hh) end)
   pcall(function() moveWindow(p.con, x, y + hh) end)
   pcall(function() resizeWindow(p.con, w, math.max(24, h - hh)) end)
+  if Nebbie.enableConsoleWrap then Nebbie.enableConsoleWrap(p.con, 9) end
   Nebbie.paintPanelBar(p)
   if type(raiseWindow) == "function" then
     pcall(function() raiseWindow(p.bar) end)
@@ -540,11 +562,12 @@ end
 -- Hook play-all handlers (dashboard loads after installer core)
 do
   local _origOnEqParseLine = Nebbie.onEqParseLine
-  function Nebbie.onEqParseLine()
-    if Nebbie.onDashboardEqLine then
-      Nebbie.onDashboardEqLine(Nebbie.resolveTriggerLine())
+  function Nebbie.onEqParseLine(line)
+    local l = line or Nebbie.resolveTriggerLine()
+    if Nebbie._dashEqActive and Nebbie.onDashboardEqLine then
+      Nebbie.onDashboardEqLine(l)
     end
-    if _origOnEqParseLine then return _origOnEqParseLine() end
+    if _origOnEqParseLine then return _origOnEqParseLine(l) end
   end
 
   local _origOnBuffWearOff = Nebbie.onBuffWearOff

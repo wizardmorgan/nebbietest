@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.42"
+Nebbie.version = "2.2.43"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1717,33 +1717,42 @@ end
 
 function Nebbie.isPromptLine(plain)
   if not plain or plain == "" then return false end
-  return plain:find("H:%d+/%d+") ~= nil or plain:find("H%d+/%d+") ~= nil
+  return plain:match("[Hh]:%s*%d+/%d+") ~= nil
+end
+
+function Nebbie.enableConsoleWrap(name, fontSize)
+  fontSize = fontSize or Nebbie.guiFontSize or 9
+  if type(setMiniConsoleFontSize) == "function" then
+    pcall(function() setMiniConsoleFontSize(name, fontSize) end)
+  end
+  if type(setWindowWrap) == "function" then
+    pcall(function() setWindowWrap(name, true) end)
+  end
 end
 
 function Nebbie.scanEqBufferSnapshot()
   if type(getLastLineNumber) ~= "function" or type(getLines) ~= "function" then return false end
   local last = getLastLineNumber()
   if not last or last < 1 then return false end
-  local from = math.max(1, last - 200)
+  local from = math.max(1, last - 250)
   local lines = getLines(from, last)
   if type(lines) ~= "table" then return false end
 
-  -- Usa l'ultimo "Stai usando:" nel buffer (eq più recente)
-  local startIdx = nil
-  for i = #lines, 1, -1 do
-    local plain = Nebbie.stripColors(lines[i] or "")
+  local startRel = nil
+  for rel = #lines, 1, -1 do
+    local plain = Nebbie.stripColors(lines[rel] or "")
     if plain:find("Stai usando", 1, true) then
-      startIdx = i
+      startRel = rel
       break
     end
   end
-  if not startIdx then return false end
+  if not startRel then return false end
 
   local wield, back, hold = nil, nil, nil
   local pendingSlot, pendingText = nil, nil
 
-  for i = startIdx + 1, #lines do
-    local text = lines[i]
+  for rel = startRel + 1, #lines do
+    local text = lines[rel]
     if type(text) == "string" then
       local plain = Nebbie.stripColors(text)
       if plain ~= "" then
@@ -1787,6 +1796,10 @@ function Nebbie.scanEqBufferSnapshot()
   Nebbie.eqCache.updatedAt = Nebbie.now()
   Nebbie.eqCache.wieldScannedAt = Nebbie.now()
   Nebbie.saveEqCache()
+
+  if Nebbie.scanEqLabelsFromBuffer then
+    Nebbie.scanEqLabelsFromBuffer(lines, startRel)
+  end
 
   if Nebbie._weaponSwap and Nebbie._eqParseActive then
     Nebbie._weaponSwap.wield = wield
@@ -1875,7 +1888,10 @@ end
 function Nebbie.testEqParse(silent)
   local samples = {
     { line = "[16] <impugnato>             Elf Slayer (ha un alone di luce rossa) (emette un forte ronzio)", slot = "wield", want = "Elf Slayer" },
+    { line = "[ 16] <impugnato>             La Flamberga di Boris", slot = "wield", want = "La Flamberga di Boris" },
     { line = "[18] <sulla schiena>         Borsa Inesauribile dei Korred", slot = "back", want = "Borsa Inesauribile dei Korred" },
+    { line = "[ 18] <sulla schiena>         It's a Beautiful Day", slot = "back", want = "It's a Beautiful Day" },
+    { line = "[ 17] <tenuto>                Happy End of the World", slot = "hold", want = "Happy End of the World" },
   }
   local ok = true
   for _, s in ipairs(samples) do
@@ -1988,9 +2004,15 @@ function Nebbie.maybeRefreshEqCacheOnBoot()
   end)
 end
 
-function Nebbie.onEqParseLine()
-  local line = Nebbie.resolveTriggerLine()
+function Nebbie.onEqParseLine(line)
+  line = line or Nebbie.resolveTriggerLine()
   Nebbie.onEqLine(line)
+  if line and line ~= "" then
+    local slot, item = Nebbie.parseEqSlotLine(line)
+    if slot and item and item ~= "" then
+      Nebbie.applyEqSlot(slot, item)
+    end
+  end
 
   if not Nebbie._weaponSwap or not Nebbie._eqParseActive then return end
   local plain = Nebbie.stripColors(line or "")
@@ -2352,11 +2374,11 @@ Nebbie.layoutMargin = 8
 Nebbie.layoutGap = 6
 Nebbie.guiHeaderH = 20
 Nebbie.guiMargin = Nebbie.layoutMargin
-Nebbie.guiLayoutVer = 10
-Nebbie.guiGaugeH = 20
-Nebbie.guiGaugeGap = 4
-Nebbie.guiGaugeArea = 78
-Nebbie.guiFontSize = 11
+Nebbie.guiLayoutVer = 11
+Nebbie.guiGaugeH = 18
+Nebbie.guiGaugeGap = 3
+Nebbie.guiGaugeArea = 66
+Nebbie.guiFontSize = 9
 Nebbie.guiBar = "NebbieHUDBar"
 Nebbie.guiConsole = "NebbieHUD"
 Nebbie._bars = Nebbie._bars or {}
@@ -2676,6 +2698,7 @@ function Nebbie.applyGUIPosition(x, y, w, h)
     resizeWindow(con, w, h - hh - Nebbie.guiGaugeArea)
     if type(raiseWindow) == "function" then raiseWindow(bar) end
   end
+  Nebbie.enableConsoleWrap(con, Nebbie.guiFontSize)
   Nebbie.ensureBars(x, y, w)
   for key, _ in pairs(Nebbie._bars or {}) do Nebbie.raiseBarLayers(key) end
   Nebbie._guiX, Nebbie._guiY = x, y
@@ -2746,8 +2769,8 @@ function Nebbie.buildGUI()
   echo(Nebbie.guiBar, " Vitali + buff")
   local conY = y + hh + Nebbie.guiGaugeArea
   createMiniConsole(Nebbie.guiConsole, x, conY, w, h - hh - Nebbie.guiGaugeArea, true)
-  setMiniConsoleFontSize(Nebbie.guiConsole, Nebbie.guiFontSize or 11)
-  setBackgroundColor(Nebbie.guiConsole, 20, 20, 30, 200)
+  Nebbie.enableConsoleWrap(Nebbie.guiConsole, 9)
+  setBackgroundColor(Nebbie.guiConsole, 20, 20, 30, 255)
   setFgColor(Nebbie.guiConsole, 200, 200, 200)
   showWindow(Nebbie.guiBar)
   showWindow(Nebbie.guiConsole)
@@ -2848,7 +2871,10 @@ end
 
 function Nebbie.parseAttribSpellLine(line)
   local plain = Nebbie.stripColors(line)
-  local spell, dur = plain:match("Spell%s*:%s*'(.-)'%s*%-%s*(%d+)")
+  local spell, dur = plain:match("Spell%s*:%s*[''](.-)['']%s*-%s*(%d+)")
+  if not spell or not dur then
+    spell, dur = plain:match("Spell%s*:%s*[''](.-)['']%s*%-%s*(%d+)")
+  end
   if not spell or not dur then return end
   spell = Nebbie.normalizeBuffSpell(spell)
   if not spell or not Nebbie.shouldTrackBuff(spell) then return end
@@ -2897,13 +2923,14 @@ function Nebbie.requestAttrib(silent)
   Nebbie._attribBusy = true
   Nebbie.attribGag = true
   Nebbie.beginAttribScan()
-  send("attribute")
-  tempTimer(2, function()
+  send("attrib")
+  tempTimer(3.5, function()
     Nebbie.endAttribScan()
     Nebbie.attribGag = false
     Nebbie._attribBusy = false
     Nebbie.refreshGUI()
-    if not silent then cecho("<green>Nebbie: attribute sincronizzato.\n") end
+    if Nebbie.refreshSpellPanel then Nebbie.refreshSpellPanel() end
+    if not silent then cecho("<green>Nebbie: attrib sincronizzato (spell attivi).\n") end
   end)
 end
 
@@ -2912,8 +2939,8 @@ function Nebbie.setAttribAuto(on)
   Nebbie._settings.attribAuto = on
   Nebbie.saveSettings()
   Nebbie.syncAttribTimer()
-  if on then cecho("<green>Nebbie: sync attribute ogni 90s attivo (gagged).\n")
-  else cecho("<green>Nebbie: sync attribute automatico disattivato.\n") end
+  if on then cecho("<green>Nebbie: sync attrib ogni 90s attivo (gagged).\n")
+  else cecho("<green>Nebbie: sync attrib automatico disattivato.\n") end
 end
 
 function Nebbie.syncAttribTimer()
@@ -2948,76 +2975,61 @@ function Nebbie.refreshGUI()
     clearWindow(Nebbie.guiConsole)
     local hud = Nebbie.guiConsole
     local s = Nebbie.stats or {}
-    cecho(hud, "<cyan><b>=== Nebbie HUD v" .. Nebbie.version .. " ===</b>\n")
+    cecho(hud, "<cyan><b>Vitali</b> <grey>v" .. Nebbie.version .. "\n")
     if s.name then
-      cecho(hud, "<white>" .. s.name .. "  <grey>XP:<yellow>" .. tostring(s.xp or "?")
-        .. " <grey>Oro:<yellow>" .. tostring(s.gold or "?") .. "\n")
-    else
-      cecho(hud, "<orange>Nome non rilevato — digita un comando, poi <yellow>nprompt\n")
+      cecho(hud, "<white>" .. s.name .. "\n")
+      cecho(hud, "<grey>XP <yellow>" .. tostring(s.xp or "?")
+        .. " <grey>G <yellow>" .. tostring(s.gold or "?") .. "\n")
     end
     if s.hp then
-      cecho(hud, "<grey>HP <white>" .. s.hp .. "/" .. s.hpmax
-        .. "  <grey>MN <white>" .. s.mana .. "/" .. s.manamax
-        .. "  <grey>MV <white>" .. s.move .. "/" .. s.movemax .. "\n")
+      cecho(hud, "<grey>HP <white>" .. s.hp .. "/" .. s.hpmax .. "\n")
+      cecho(hud, "<grey>MN <white>" .. s.mana .. "/" .. s.manamax .. "\n")
+      cecho(hud, "<grey>MV <white>" .. s.move .. "/" .. s.movemax .. "\n")
     else
-      cecho(hud, "<orange>Prompt non letto — <yellow>nprompt<orange> per diagnostica\n")
+      cecho(hud, "<orange>Prompt? <yellow>nprompt\n")
     end
     if s.mobName and s.mobName ~= "*" then
-      cecho(hud, "<orange>Fight: <white>" .. (s.tankCond or "?") .. "/" .. (s.tankName or "?")
-        .. " <grey>— <red>" .. (s.mobCond or "?") .. "/" .. s.mobName .. "\n")
+      cecho(hud, "<orange>Fight <white>" .. (s.mobName or "?") .. "\n")
     end
     if Nebbie.promptBuffs and #Nebbie.promptBuffs > 0 then
-      cecho(hud, "<grey>Prompt: <green>" .. table.concat(Nebbie.promptBuffs, ", ") .. "\n")
+      cecho(hud, "<grey>P: <green>" .. table.concat(Nebbie.promptBuffs, ", ") .. "\n")
     end
     local now = Nebbie.now()
     local scount = 0
-    cecho(hud, "<cyan>Spell attivi:\n")
+    cecho(hud, "<cyan>Buff:\n")
     for spell, data in pairs(Nebbie.buffs) do
       if type(spell) == "string" and spell:sub(1, 1) ~= "_" and type(data) == "table" then
         scount = scount + 1
+        if scount > 10 then
+          cecho(hud, "<grey> …altri spell (HUD)\n")
+          break
+        end
         local status = Nebbie.isDebuffSpell(spell) and "<red>!!" or "<green>OK"
         local timeTxt = Nebbie.formatTime(now - (data.since or now))
         if data.soon then status = "<orange>!" end
         if data.duration and data.duration > 0 then
           local left = Nebbie.buffTimeLeft(data, now)
           timeTxt = Nebbie.formatTime(left or 0)
-          if data.synced and left and left <= 0 then
-            status = "<grey>--"
-          elseif not data.synced and left and left <= 0 then
-            timeTxt = timeTxt .. " ~"
-          end
+          if data.synced and left and left <= 0 then status = "<grey>--" end
         elseif data.synced then
-          timeTxt = "--:--"
+          timeTxt = data.ticks and (tostring(data.ticks) .. "h") or "--"
         else
-          timeTxt = "~attrib"
+          timeTxt = "~cast"
         end
-        local src = ""
-        if data.synced and data.ticks then
-          src = " <dark_grey>[" .. tostring(data.ticks) .. "h]"
-        elseif data.synced then src = " <dark_grey>[attrib]"
-        elseif data.source == "cast" then src = " <dark_grey>[cast]" end
-        cecho(hud, " " .. status .. " <white>" .. spell .. "  <grey>" .. timeTxt .. src .. "\n")
+        cecho(hud, " " .. status .. " <white>" .. spell .. " <grey>" .. timeTxt .. "\n")
       end
     end
-    if scount == 0 then cecho(hud, " <grey>(nessuno — <yellow>nattrib<grey> sincronizza)\n") end
+    if scount == 0 then cecho(hud, " <grey>(vuoto — <yellow>nattrib)\n") end
     local dcount = 0
-    cecho(hud, "<red>Debuff (no attrib):\n")
     for name, data in pairs(Nebbie.debuffs) do
       if type(name) == "string" and type(data) == "table" then
         dcount = dcount + 1
-        local elapsed = now - (data.since or now)
-        cecho(hud, " <red>!! <white>" .. name .. "  <grey>" .. Nebbie.formatTime(elapsed) .. "\n")
+        if dcount <= 6 then
+          cecho(hud, " <red>!! <white>" .. name .. "\n")
+        end
       end
     end
-    if dcount == 0 then cecho(hud, " <grey>(nessuno)\n") end
-    local preset = Nebbie.getActivePreset()
-    if preset and preset.quick then
-      cecho(hud, "<grey>Quick: ")
-      for i, q in ipairs(preset.quick) do
-        cecho(hud, "<dark_green>q" .. i .. "<grey>=" .. tostring(q.abbr) .. " ")
-      end
-      cecho(hud, "\n")
-    end
+    if dcount == 0 then cecho(hud, " <grey>no debuff\n") end
   end)
   if not ok then cecho("<red>[Nebbie GUI] " .. tostring(err) .. "\n") end
   Nebbie.updateGauges()
@@ -3266,11 +3278,14 @@ function Nebbie.install()
   perm("eq cache sync", [[^neq$]], [[
     if Nebbie.requestEqCache(false) then
       cecho("<grey>Nebbie: sync eq...\n")
-      tempTimer(3.2, function()
+      tempTimer(3.5, function()
         Nebbie.scanEqBufferSnapshot()
+        if Nebbie.refreshEqPanel then Nebbie.refreshEqPanel() end
         Nebbie.showEqCache()
       end)
     else
+      Nebbie.scanEqBufferSnapshot()
+      if Nebbie.refreshEqPanel then Nebbie.refreshEqPanel() end
       Nebbie.showEqCache()
     end
   ]])
