@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.51
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.51"
+-- NEBBIE_INSTALL_VER=2.2.52
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.52"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.51"
+Nebbie.version = "2.2.52"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.51"
+Nebbie._expectedPkgVer = "2.2.52"
 Nebbie.PKG_URL = "https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-unified-dashboard-55b4/docs/mudlet/nebbie-play-all.mpackage"
 
 Nebbie.castSpells = {
@@ -1046,7 +1046,7 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.51"
+Nebbie.version = "2.2.52"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1260,7 +1260,15 @@ function Nebbie.debugBuffer()
   cecho("<grey>syncEqFromGame: <yellow>" .. tostring(okEq) .. " <grey>scanAttrib: <yellow>" .. tostring(okAt) .. "\n")
   local c = Nebbie.eqCache or {}
   cecho("<grey>cache wield: <white>" .. tostring(c.wield or "(vuoto)") .. "\n")
+  cecho("<grey>cache hold: <white>" .. tostring(c.hold or "(vuoto)") .. "\n")
   cecho("<grey>cache back: <white>" .. tostring(c.back or "(vuoto)") .. "\n")
+  local spellN = 0
+  for spell, data in pairs(Nebbie.buffs or {}) do
+    if type(spell) == "string" and spell:sub(1, 1) ~= "_" and type(data) == "table" and data.active then
+      spellN = spellN + 1
+    end
+  end
+  cecho("<grey>active spells: <yellow>" .. spellN .. "\n")
 end
 
 function Nebbie.extractPromptChunk(plain)
@@ -3024,8 +3032,15 @@ function Nebbie.resyncAll(verbose)
   if Nebbie.refreshGUI then Nebbie.refreshGUI() end
   if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end
   if verbose then
+    local spellN = 0
+    for spell, data in pairs(Nebbie.buffs or {}) do
+      if type(spell) == "string" and spell:sub(1, 1) ~= "_" and type(data) == "table" and data.active then
+        spellN = spellN + 1
+      end
+    end
     cecho("<grey>Nebbie resync: eq=<yellow>" .. tostring(eqOk)
       .. "<grey> attrib=<yellow>" .. tostring(atOk)
+      .. "<grey> spells=<yellow>" .. spellN
       .. "<grey> trigger=<yellow>" .. tostring(#(Nebbie._triggerNames or {})) .. "\n")
   end
   return eqOk or atOk
@@ -3097,7 +3112,10 @@ function Nebbie.scanEqBufferSnapshot()
   Nebbie.saveEqCache()
 
   if Nebbie.scanEqLabelsFromBuffer then
-    Nebbie.scanEqLabelsFromBuffer(lines, startIdx)
+    local labelFrom = startIdx - 1
+    local plainStart = Nebbie.stripColors(lines[startIdx] or "")
+    if plainStart:find("Stai usando", 1, true) then labelFrom = startIdx end
+    Nebbie.scanEqLabelsFromBuffer(lines, labelFrom)
   end
 
   if Nebbie._weaponSwap and Nebbie._eqParseActive then
@@ -3133,6 +3151,8 @@ function Nebbie.installEqSendHook()
       if type(cmd) ~= "string" then return end
       local word = cmd:match("^%s*(%S+)")
       if word and word:lower() == "eq" then
+        -- Manual eq: show full output (auto sync gag hides lines)
+        Nebbie._eqCacheGag = false
         Nebbie.scheduleEqCacheScan(2.0)
       end
       if Nebbie.onCharMenuSend then Nebbie.onCharMenuSend(cmd) end
@@ -4230,13 +4250,20 @@ function Nebbie.requestAttrib(silent)
   Nebbie.beginAttribScan()
   send("attrib")
   tempTimer(3.5, function()
-    Nebbie.scanAttribFromBuffer()
     Nebbie.endAttribScan()
     Nebbie.attribGag = false
     Nebbie._attribBusy = false
     Nebbie.refreshGUI()
     if Nebbie.refreshSpellPanel then Nebbie.refreshSpellPanel() end
-    if not silent then cecho("<green>Nebbie: attrib sincronizzato (spell attivi).\n") end
+    if not silent then
+      local n = 0
+      for spell, data in pairs(Nebbie.buffs or {}) do
+        if type(spell) == "string" and spell:sub(1, 1) ~= "_" and type(data) == "table" and data.active then
+          n = n + 1
+        end
+      end
+      cecho("<green>Nebbie: attrib sincronizzato — <yellow>" .. n .. "<green> spell attivi.\n")
+    end
   end)
 end
 
@@ -4606,6 +4633,7 @@ function Nebbie.install()
     Nebbie.ensureDashboard()
     local fromBuf = Nebbie.syncEqFromGame(false)
     if fromBuf then
+      cecho("<green>Nebbie: eq sincronizzato dallo scrollback.\n")
       Nebbie.showEqCache()
     elseif Nebbie.requestEqCache(false) then
       cecho("<grey>Nebbie: sync eq dal MUD...\n")
