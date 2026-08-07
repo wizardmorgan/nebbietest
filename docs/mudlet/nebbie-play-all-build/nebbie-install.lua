@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.35
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.35"
+-- NEBBIE_INSTALL_VER=2.2.36
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.36"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.35"
+Nebbie.version = "2.2.36"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.35"
+Nebbie._expectedPkgVer = "2.2.36"
 
 Nebbie.castSpells = {
   ['armor'] = true,
@@ -1041,7 +1041,7 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.35"
+Nebbie.version = "2.2.36"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -4236,16 +4236,17 @@ end
 -- Nebbie dashboard panels (equip, spells, paths, weapon config) — per-character profiles
 -- Loaded after nebbie-installer-core.lua; hooks existing GUI/buff/eq handlers.
 
-Nebbie.dashboardVer = 1
+Nebbie.dashboardVer = 2
+Nebbie.EQ_LABEL_WIDTH = 13
 Nebbie.expiredSpells = Nebbie.expiredSpells or {}
 Nebbie.eqWornByLabel = Nebbie.eqWornByLabel or {}
 Nebbie._dashboardHidden = Nebbie._dashboardHidden or false
 
+-- Ordine e etichette come pannello equip italiano (screenshot Lamreloc / Nebbie)
 Nebbie.EQ_SLOTS = {
-  { tag = "<come luce>", label = "Luce" },
   { tag = "<sul dito destro>", label = "Dito Dx" },
   { tag = "<sul dito sinistro>", label = "Dito Sx" },
-  { tag = "<intorno al collo>", label = "Collo 1" },
+  { tag = "<intorno al collo>", label = "Collo", alt = 1 },
   { tag = "<intorno al collo>", label = "Collo 2", alt = 2 },
   { tag = "<sul corpo>", label = "Corpo" },
   { tag = "<in testa>", label = "Testa" },
@@ -4265,6 +4266,7 @@ Nebbie.EQ_SLOTS = {
   { tag = "<all'orecchio sinistro>", label = "Orecchio Sx" },
   { tag = "<davanti agli occhi>", label = "Occhi" },
   { tag = "<incoccata>", label = "Incoccata" },
+  { tag = "<come luce>", label = "Luce" },
 }
 
 Nebbie.WEAPON_SLOTS = {
@@ -4486,9 +4488,10 @@ function Nebbie.onDashboardEqLine(line)
         item = item:gsub("^%s+", ""):gsub("%s+$", "")
         if item ~= "" and item ~= "Qualcosa." then
           local label = slot.label
-          if slot.alt == 2 then
-            Nebbie._dashNeck = (Nebbie._dashNeck or 0) + 1
-            if Nebbie._dashNeck == 2 then label = "Collo 2" end
+          if slot.alt == 1 then
+            Nebbie._dashNeck = 1
+          elseif slot.alt == 2 then
+            Nebbie._dashNeck = 2
           end
           Nebbie.eqWornByLabel[label] = item
           if label == "Impugnato" then
@@ -4579,13 +4582,20 @@ function Nebbie.echoLinkLine(con, text, cmd, hint)
   end
 end
 
+function Nebbie.formatEqSlotLabel(label)
+  local w = Nebbie.EQ_LABEL_WIDTH or 13
+  if #label > w then return label:sub(1, w) end
+  return label .. string.rep(" ", w - #label)
+end
+
 function Nebbie.refreshEqPanel()
   local p = Nebbie.panels.eq
   if not p or not Nebbie.dashboardExists() then return end
   Nebbie.clearPanel(p.con)
   for _, slot in ipairs(Nebbie.EQ_SLOTS) do
     local item = Nebbie.eqWornByLabel[slot.label]
-    cecho(p.con, "<goldenrod>" .. slot.label .. ":<grey> ")
+    local label = Nebbie.formatEqSlotLabel(slot.label)
+    cecho(p.con, "<goldenrod>" .. label .. "<grey>: ")
     if item and item ~= "" then
       cecho(p.con, "<light_green>" .. item .. "\n")
     else

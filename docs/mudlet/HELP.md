@@ -11,7 +11,8 @@ Generato dal sorgente MUD (`src/spell_parser.cpp`, `src/interpreter.cpp`, `src/c
 
 | Funzione               | Descrizione                                                                            |
 | ---------------------- | -------------------------------------------------------------------------------------- |
-| **HUD**                | Gauge HP/Mana/Move dal prompt + pannello buff/debuff                                   |
+| **Dashboard**          | Pannelli laterali: equip, spell (clic), path, armi per tipo                            |
+| **HUD**                | Gauge HP/Mana/Move dal prompt + pannello buff/debuff                                     |
 | **Loot**               | Auto dopo kill mob: `look` + `corp` / `2.corp` / … + `pile` / `2.pile` / …             |
 | **Alias**              | Scorciatoie incantesimi/skill (~170+), senza conflitti con `inv`/`eq`/`invis`/`ea`     |
 | **Trigger**            | Cast, buff scaduti, debuff (veleno, maledizione, paralisi, …)                          |
