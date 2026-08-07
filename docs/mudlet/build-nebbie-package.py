@@ -472,13 +472,20 @@ def build_install_lua(spells):
         lines.append("  },")
     lines.append("}")
     lines.append("")
-    lines.append(INSTALLER_LUA)
+    dashboard_path = ROOT / "nebbie-dashboard.lua"
+    dashboard_lua = dashboard_path.read_text(encoding="utf-8")
+    lines.append(INSTALLER_LUA.rstrip())
+    lines.append("")
+    lines.append(dashboard_lua.rstrip())
+    lines.append("")
+    lines.append("Nebbie.boot()")
     return "\n".join(lines)
 
 
 INSTALLER_LUA = r'''
-Nebbie.version = "1.0.13"
+Nebbie.version = "1.0.14"
 Nebbie.buffs = Nebbie.buffs or {}
+Nebbie.stats = Nebbie.stats or {}
 Nebbie._aliasNames = Nebbie._aliasNames or {}
 Nebbie._triggerNames = Nebbie._triggerNames or {}
 Nebbie._settings = Nebbie._settings or {}
@@ -1279,6 +1286,14 @@ function Nebbie.install()
     cecho("<grey>Elenco completo: <yellow>nebbie-spells-reference.txt<grey> nel repository.\n")
   ]])
 
+  perm("path list", [[^npath$]], [[Nebbie.listPaths()]])
+  perm("path add", [[^npath add (.+) (.+)$]], [[Nebbie.addPath(matches[2], matches[3])]])
+  perm("path del", [[^npath del (.+)$]], [[Nebbie.delPath(matches[2])]])
+  perm("path run", [[^npath run (.+)$]], [[Nebbie.runPath(matches[2])]])
+  perm("weapon set", [[^nweapon ([%w]+) (.+)$]], [[Nebbie.setWeaponKey(matches[2], matches[3])]])
+  perm("utility set", [[^nutility ([%w]+) (.+)$]], [[Nebbie.setUtilityKey(matches[2], matches[3])]])
+  perm("eq refresh", [[^neq$]], [[Nebbie.requestEqPanel()]])
+
   -- Buff tracker triggers (substring: ignora codici colore ANSI del MUD)
   trig("cast started", {"Pronunci le parole"}, [[
     local plain = Nebbie.stripColors(line)
@@ -1307,12 +1322,21 @@ function Nebbie.install()
     ]], entry.name))
   end
 
+  trig("prompt name", {[[H:\d+/\d+]], [[PF %d+/%d+]]}, [[
+    if Nebbie and Nebbie.parsePromptName then Nebbie.parsePromptName(line) end
+  ]])
+
+  trig("eq parse", {"Stai usando", "<impugnato>", "<tenuto>", "<sulla schiena>", "<sul corpo>", "<in testa>"}, [[
+    if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
+  ]])
+
   cecho("<green>Nebbie v" .. Nebbie.version .. ": " .. #Nebbie._aliasNames .. " alias, " .. #Nebbie._triggerNames .. " trigger.\n")
   if exists(PKG .. "::set class", "alias") == 0 then
     cecho("<red>[Nebbie] alias nclass mancante — riprova <yellow>nfix<grey> o reinstalla il package.\n")
   else
     cecho("<grey>Pronto: <yellow>nclass m<grey>, <yellow>q1<grey>, <yellow>fb<grey>, <yellow>ngui<grey>\n")
   end
+  cecho("<grey>Dashboard: <yellow>neq<grey> equip | <yellow>npath<grey> paths | <yellow>nweapon slash spada<grey> | <yellow>ngui<grey>\n")
   cecho("<grey>Alias: <yellow>c/r/m <spell><grey>, <yellow>q1-q9 [tgt]<grey>, <yellow>nclass<grey>, <yellow>ngui<grey>.\n")
   Nebbie.initGUI()
 end
@@ -1334,7 +1358,7 @@ function Nebbie.boot()
   end
 end
 
-Nebbie.boot()
+-- Nebbie.boot() appended after nebbie-dashboard.lua
 '''
 
 
