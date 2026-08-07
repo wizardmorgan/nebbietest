@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.38"
+Nebbie.version = "2.2.39"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -106,8 +106,8 @@ end
 
 function Nebbie.extractPromptChunk(plain)
   if not plain or plain == "" then return plain end
-  local pos = plain:find("H:%d+/%d+")
-  if not pos then pos = plain:find("H%d+/%d+") end
+  local pos = plain:find("[Hh]:%s*%d+/%d+")
+  if not pos then pos = plain:find("[Hh]%s*%d+/%d+") end
   if not pos then return plain end
   if pos > 1 then
     local prefix = plain:sub(1, pos - 1)
@@ -122,13 +122,13 @@ end
 function Nebbie.parsePromptPair(plain, letter)
   local letters = { letter, letter:lower(), letter:upper() }
   for _, L in ipairs(letters) do
-    local cur, maxv = plain:match(L .. ":(%d+)/(%d+)")
+    local cur, maxv = plain:match(L .. ":%s*(%-?%d+)%s*/%s*(%-?%d+)")
     if cur then return tonumber(cur), tonumber(maxv) end
-    cur, maxv = plain:match(L .. "(%d+)/(%d+)")
+    cur, maxv = plain:match(L .. "%s*(%-?%d+)%s*/%s*(%-?%d+)")
     if cur then return tonumber(cur), tonumber(maxv) end
-    cur = plain:match(L .. ":(%d+)")
+    cur = plain:match(L .. ":%s*(%-?%d+)")
     if cur then local n = tonumber(cur); return n, n end
-    cur = plain:match(L .. "(%d+)")
+    cur = plain:match(L .. "%s*(%-?%d+)")
     if cur then local n = tonumber(cur); return n, n end
   end
   return nil, nil
@@ -144,23 +144,32 @@ function Nebbie.parsePromptStats(line)
   local hp, hpmax = Nebbie.parsePromptPair(plain, "H")
   local mana, manamax = Nebbie.parsePromptPair(plain, "M")
   local move, movemax = Nebbie.parsePromptPair(plain, "V")
-  local xp = tonumber(plain:match("X:(%d+)") or plain:match("X(%d+)") or plain:match("x:(%d+)") or plain:match("x(%d+)"))
+  local xp = tonumber(plain:match("[xX]:%s*(-?%d+)") or plain:match("[xX]%s*(-?%d+)"))
   if not hp or not mana or not move or not xp then
-    Nebbie._lastParseError = "mancano H/M/V/X in: " .. plain:sub(1, 80)
+    Nebbie._lastParseError = "mancano H/M/V/X in: " .. plain:sub(1, 100)
     return nil
   end
   Nebbie._lastParseError = nil
 
-  local name = plain:match("^(%S+)%s+H") or plain:match("^(%S+)")
-  local gold = tonumber(plain:match("G:(%d+)") or plain:match("g:(%d+)"))
+  local name = plain:match("^(%S+)%s+[Hh]") or plain:match("^(%S+)")
+  local gold = tonumber(plain:match("G:%s*(%d+)") or plain:match("g:%s*(%d+)") or plain:match("G(%d+)"))
   local codes = plain:match("%[%[([^%]]*)%]%]") or plain:match("%[([^%]]*)%]")
 
   local tankC, tankN, mobC, mobT = "*", "*", "*", "*"
-  local tail = plain:match("X:%d+%s*(.*)$") or plain:match("X%d+%s*(.*)$") or ""
-  local fc, ft, mc, mt = tail:match("-%s+([^/]+)/(%S+)%s+%-%s+([^%-]+)%-(%S+)")
+  local tail = plain:match("[xX]:%s*-?%d+%s*(.*)$") or plain:match("[xX]%s*-?%d+%s*(.*)$") or ""
+  tail = tail:gsub("%s+$", "")
+  local fc, ft, mc, mt = tail:match("^%s*([^/]+)/(%S+)%s+([^/]+)/(%S+)")
   if fc then
     tankC, tankN = Nebbie.stripColors(fc), ft
     mobC, mobT = Nebbie.stripColors(mc), mt
+  else
+    local t1, t2 = tail:match("^%s*(%S+)%s+(%S+)")
+    if t1 and t2 then
+      tankC, tankN = t1:match("^([^:]*):?(.*)$")
+      mobC, mobT = t2:match("^([^:]*):?(.*)$")
+      if tankN == "" then tankN = "*" end
+      if mobT == "" then mobT = "*" end
+    end
   end
 
   return {
@@ -246,16 +255,22 @@ function Nebbie.debugPrompt()
 end
 
 function Nebbie.testPromptParse(silent)
-  local sample = "Mirari H:652/652 M:532/532 V:265/265 X:280457721 - */* - *-* - [[------Tm---]] - G:49287175 >>"
-  local parsed = Nebbie.parsePromptStats(sample)
-  if parsed and parsed.hp == 652 and parsed.mana == 532 then
-    if not silent then cecho("<green>Nebbie: parser prompt OK (v" .. Nebbie.version .. ").\n") end
-    return true
+  local samples = {
+    "Mirari H:652/652 M:532/532 V:265/265 X:280457721 - */* - *-* - [[------Tm---]] - G:49287175 >>",
+    "NomiyaMaki H: 747/747 M: 532/532 V: 158/158 x:-238860738 *:* *:* [[D]] G:3449815 >>",
+  }
+  for _, sample in ipairs(samples) do
+    local parsed = Nebbie.parsePromptStats(sample)
+    if not parsed or not parsed.hp or not parsed.mana or not parsed.move then
+      if not silent then
+        cecho("<red>Nebbie: parser prompt FALLITO su: " .. sample:sub(1, 60) .. "…\n")
+        cecho("<orange>" .. tostring(Nebbie._lastParseError) .. "\n")
+      end
+      return false
+    end
   end
-  if not silent then
-    cecho("<red>Nebbie: parser prompt FALLITO — " .. tostring(Nebbie._lastParseError or "sconosciuto") .. "\n")
-  end
-  return false
+  if not silent then cecho("<green>Nebbie: parser prompt OK (v" .. Nebbie.version .. ").\n") end
+  return true
 end
 
 function Nebbie.reloadMainScript()
@@ -2729,6 +2744,11 @@ function Nebbie.initGUI()
     end)
   end
   tempTimer(0.05, function() Nebbie.applyUILayout() end)
+  tempTimer(0.3, function()
+    if Nebbie.applyUILayout then Nebbie.applyUILayout() end
+    if Nebbie.pollPromptFromBuffer then Nebbie.pollPromptFromBuffer() end
+    if Nebbie.updateGauges then Nebbie.updateGauges() end
+  end)
   Nebbie.guiTimer = tempTimer(1, function() Nebbie.refreshGUI() end, true)
   Nebbie.syncAttribTimer()
 end
@@ -3403,6 +3423,7 @@ function Nebbie.install()
   else
     cecho("<orange>Tastierino non attivo — reinstalla package o digita <yellow>nkeys<orange>\n")
   end
+  cecho("<grey>Layout: margini L/R — testo MUD al centro | <yellow>nlayout<grey> | <yellow>ngui\n")
   cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey> | <yellow>nlist<grey>\n")
   cecho("<grey>Dashboard: <yellow>neq<grey>/<yellow>neq panel<grey> equip | <yellow>npath<grey> paths | <yellow>nweapon slash spada<grey> | <yellow>usa redentore<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
@@ -3422,7 +3443,9 @@ function Nebbie.boot()
   Nebbie.purgeOrphanMainScripts(true)
   if Nebbie._expectedPkgVer and Nebbie.version ~= Nebbie._expectedPkgVer then
     cecho("<orange>Nebbie: versione caricata <yellow>" .. tostring(Nebbie.version)
-      .. "<orange> ≠ package <yellow>" .. Nebbie._expectedPkgVer .. "<orange> — esegui <yellow>nfix<orange>.\n")
+      .. "<orange> ≠ package <yellow>" .. Nebbie._expectedPkgVer .. "<orange> — reinstalla il .mpackage (non solo nfix).\n")
+  elseif Nebbie.version and Nebbie._expectedPkgVer and Nebbie.version == Nebbie._expectedPkgVer then
+    cecho("<green>Nebbie v" .. Nebbie.version .. " layout finestre attivo.\n")
   end
   Nebbie.pruneStaleDebuffs()
   Nebbie.pruneInvalidBuffs()

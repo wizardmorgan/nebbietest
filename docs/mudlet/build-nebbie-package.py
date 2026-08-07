@@ -9,15 +9,19 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.38"
+PKG_VER = "2.2.39"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
+BRANCH_RAW = "cursor/nebbie-unified-dashboard-55b4"
 INSTALL_URL = (
-    "https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/"
-    "nebbie-play-all-build/nebbie-install.lua"
+    f"https://raw.githubusercontent.com/wizardmorgan/nebbietest/{BRANCH_RAW}/"
+    "docs/mudlet/nebbie-play-all-build/nebbie-install.lua"
 )
-PKG_URL = "https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage"
+PKG_URL = (
+    f"https://raw.githubusercontent.com/wizardmorgan/nebbietest/{BRANCH_RAW}/"
+    "docs/mudlet/nebbie-play-all.mpackage"
+)
 LEGACY_MAIN_SCRIPTS = [
     "Nebbie Spells and Skills",
     "nebbie-install",
