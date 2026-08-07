@@ -1,7 +1,7 @@
 -- Nebbie dashboard panels (equip, spells, paths, weapon config) — per-character profiles
 -- Loaded after nebbie-installer-core.lua; hooks existing GUI/buff/eq handlers.
 
-Nebbie.dashboardVer = 6
+Nebbie.dashboardVer = 7
 Nebbie.EQ_LABEL_WIDTH = 13
 Nebbie.expiredSpells = Nebbie.expiredSpells or {}
 Nebbie.eqWornByLabel = Nebbie.eqWornByLabel or {}
@@ -218,17 +218,18 @@ function Nebbie.onDashboardEqLine(line)
           end
         end
       end
+      Nebbie.refreshEqPanel()
       break
     end
   end
 end
 
-function Nebbie.scanEqLabelsFromBuffer(lines, startRel)
-  if not lines or not startRel then return end
+function Nebbie.scanEqLabelsFromBuffer(lines, startIdx)
+  if not lines or not startIdx then return end
   Nebbie.eqWornByLabel = {}
   Nebbie._dashNeck = nil
-  for rel = startRel + 1, #lines do
-    local text = lines[rel]
+  for i = startIdx + 1, #lines do
+    local text = lines[i]
     if type(text) == "string" then
       local plain = Nebbie.stripColors(text)
       if plain ~= "" then
@@ -564,8 +565,11 @@ do
   local _origOnEqParseLine = Nebbie.onEqParseLine
   function Nebbie.onEqParseLine(line)
     local l = line or Nebbie.resolveTriggerLine()
-    if Nebbie._dashEqActive and Nebbie.onDashboardEqLine then
-      Nebbie.onDashboardEqLine(l)
+    if Nebbie.onDashboardEqLine then
+      local plain = Nebbie.stripColors(l or "")
+      if plain:find("Stai usando", 1, true) or plain:match("^%[%s*%d+%]") then
+        Nebbie.onDashboardEqLine(l)
+      end
     end
     if _origOnEqParseLine then return _origOnEqParseLine(l) end
   end

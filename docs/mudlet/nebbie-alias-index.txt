@@ -1,5 +1,5 @@
 Nebbie Arcane — indice completo alias Mudlet (generato automaticamente)
-Package: nebbie-play-all v2.2.43 — vedi build-nebbie-package.py
+Package: nebbie-play-all v2.2.44 — vedi build-nebbie-package.py
 
 === COMANDI PACKAGE ===
   Pattern              | Effetto

@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.43"
+Nebbie.version = "2.2.44"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -102,6 +102,51 @@ function Nebbie.normalizePromptLine(line)
   plain = plain:gsub(">>%s*$", "")
   plain = plain:gsub("^%s+", ""):gsub("%s+$", "")
   return plain
+end
+
+function Nebbie.getBufferLastLine()
+  if type(getLastLineNumber) == "function" then
+    local ok, n = pcall(getLastLineNumber)
+    if ok and n and n > 0 then return n end
+  end
+  if type(getLineCount) == "function" then
+    local ok, n = pcall(getLineCount)
+    if ok and n and n > 0 then return n end
+  end
+  return nil
+end
+
+-- Mudlet getLines() keys are absolute line numbers (not 1..n when from > 1).
+function Nebbie.getLineBufferSpan(maxBack)
+  maxBack = maxBack or 200
+  local last = Nebbie.getBufferLastLine()
+  if not last then return nil end
+  local from = math.max(1, last - maxBack)
+  if type(getLines) ~= "function" then return nil end
+  local ok, raw = pcall(getLines, from, last)
+  if not ok or type(raw) ~= "table" then return nil end
+  local lines = {}
+  for abs = from, last do
+    local text = raw[abs]
+    if text == nil then text = raw[abs - from + 1] end
+    if type(text) == "string" then table.insert(lines, text) end
+  end
+  return lines, from, last
+end
+
+function Nebbie.findLineIndex(lines, pattern, plain)
+  if not lines then return nil end
+  for i = #lines, 1, -1 do
+    local text = lines[i]
+    if type(text) == "string" then
+      if plain then
+        if text:find(pattern, 1, true) then return i end
+      elseif text:match(pattern) then
+        return i
+      end
+    end
+  end
+  return nil
 end
 
 function Nebbie.extractPromptChunk(plain)
@@ -216,17 +261,11 @@ function Nebbie.fetchPromptLine()
       if cl and Nebbie.lineLooksLikePrompt(cl) then return cl end
     end
   end
-  if type(getLastLineNumber) == "function" and type(getLines) == "function" then
-    local last = getLastLineNumber()
-    if last and last > 0 then
-      local from = math.max(1, last - 80)
-      local lines = getLines(from, last)
-      if type(lines) == "table" then
-        for abs = last, from, -1 do
-          local rel = abs - from + 1
-          local text = lines[rel]
-          if Nebbie.lineLooksLikePrompt(text) then return text end
-        end
+  if type(getLines) == "function" then
+    local lines = Nebbie.getLineBufferSpan(120)
+    if lines then
+      for i = #lines, 1, -1 do
+        if Nebbie.lineLooksLikePrompt(lines[i]) then return lines[i] end
       end
     end
   end
@@ -1731,28 +1770,17 @@ function Nebbie.enableConsoleWrap(name, fontSize)
 end
 
 function Nebbie.scanEqBufferSnapshot()
-  if type(getLastLineNumber) ~= "function" or type(getLines) ~= "function" then return false end
-  local last = getLastLineNumber()
-  if not last or last < 1 then return false end
-  local from = math.max(1, last - 250)
-  local lines = getLines(from, last)
-  if type(lines) ~= "table" then return false end
+  local lines = Nebbie.getLineBufferSpan(300)
+  if not lines then return false end
 
-  local startRel = nil
-  for rel = #lines, 1, -1 do
-    local plain = Nebbie.stripColors(lines[rel] or "")
-    if plain:find("Stai usando", 1, true) then
-      startRel = rel
-      break
-    end
-  end
-  if not startRel then return false end
+  local startIdx = Nebbie.findLineIndex(lines, "Stai usando", true)
+  if not startIdx then return false end
 
   local wield, back, hold = nil, nil, nil
   local pendingSlot, pendingText = nil, nil
 
-  for rel = startRel + 1, #lines do
-    local text = lines[rel]
+  for i = startIdx + 1, #lines do
+    local text = lines[i]
     if type(text) == "string" then
       local plain = Nebbie.stripColors(text)
       if plain ~= "" then
@@ -1798,7 +1826,7 @@ function Nebbie.scanEqBufferSnapshot()
   Nebbie.saveEqCache()
 
   if Nebbie.scanEqLabelsFromBuffer then
-    Nebbie.scanEqLabelsFromBuffer(lines, startRel)
+    Nebbie.scanEqLabelsFromBuffer(lines, startIdx)
   end
 
   if Nebbie._weaponSwap and Nebbie._eqParseActive then
@@ -2028,13 +2056,8 @@ function Nebbie.onEqParseLine(line)
 end
 
 function Nebbie.pollEqFromBuffer(maxLines)
-  if type(getLastLineNumber) ~= "function" or type(getLines) ~= "function" then return end
-  local last = getLastLineNumber()
-  if not last or last < 1 then return end
-  local span = maxLines or (Nebbie._eqParseActive and Nebbie.EQ_SWAP_POLL_LINES or 80)
-  local from = math.max(1, last - span)
-  local lines = getLines(from, last)
-  if type(lines) ~= "table" then return end
+  local lines = Nebbie.getLineBufferSpan(maxLines or (Nebbie._eqParseActive and Nebbie.EQ_SWAP_POLL_LINES or 120))
+  if not lines then return end
   for _, text in ipairs(lines) do
     if type(text) == "string" and text ~= "" then
       Nebbie.onEqParseLine(text)
@@ -2858,13 +2881,13 @@ end
 function Nebbie.parsePromptCodes(raw)
   local out = {}
   if not raw or raw == "" then return out end
-  local i = 1
-  for _, slot in ipairs(Nebbie.PROMPT_SLOTS) do
+  raw = raw:gsub("^%s+", ""):gsub("%s+$", "")
+  for i = 1, #raw do
     local ch = raw:sub(i, i)
-    if ch and ch ~= "-" and ch ~= " " then
-      table.insert(out, slot.name)
+    if ch ~= "-" and ch ~= " " and ch ~= "*" and ch ~= ":" then
+      local slot = Nebbie.PROMPT_SLOTS[i]
+      if slot then table.insert(out, slot.name) end
     end
-    i = i + 1
   end
   return out
 end
@@ -2875,9 +2898,12 @@ function Nebbie.parseAttribSpellLine(line)
   if not spell or not dur then
     spell, dur = plain:match("Spell%s*:%s*[''](.-)['']%s*%-%s*(%d+)")
   end
+  if not spell or not dur then
+    spell, dur = plain:match("Spell%s*:%s*[''](.-)['']%s*%-?%s*(%d+)")
+  end
   if not spell or not dur then return end
-  spell = Nebbie.normalizeBuffSpell(spell)
-  if not spell or not Nebbie.shouldTrackBuff(spell) then return end
+  spell = Nebbie.normalizeBuffSpell(spell) or spell
+  if not spell or spell == "" then return end
   local n = tonumber(dur) or 0
   if Nebbie._attribSeenSpells then Nebbie._attribSeenSpells[spell] = true end
   if n <= 0 then
@@ -2903,7 +2929,7 @@ function Nebbie.onAttribLine(line)
     if Nebbie.attribGag and type(deleteLine) == "function" then deleteLine() end
     return
   end
-  if plain:find("Spell%s*:%s*'") then
+  if plain:find("Spell", 1, true) and plain:find("'", 1, true) and plain:match("%d+") then
     if not Nebbie._attribScanActive then Nebbie.beginAttribScan() end
     Nebbie.parseAttribSpellLine(line)
     if Nebbie.attribGag and type(deleteLine) == "function" then deleteLine() end
@@ -2992,7 +3018,10 @@ function Nebbie.refreshGUI()
       cecho(hud, "<orange>Fight <white>" .. (s.mobName or "?") .. "\n")
     end
     if Nebbie.promptBuffs and #Nebbie.promptBuffs > 0 then
-      cecho(hud, "<grey>P: <green>" .. table.concat(Nebbie.promptBuffs, ", ") .. "\n")
+      cecho(hud, "<grey>P:\n")
+      for _, pname in ipairs(Nebbie.promptBuffs) do
+        cecho(hud, " <green>" .. pname .. "\n")
+      end
     end
     local now = Nebbie.now()
     local scount = 0
@@ -3397,14 +3426,18 @@ function Nebbie.install()
   perm("layout refresh", [[^nlayout$]], [[Nebbie.scheduleUILayout(); tempTimer(0.2, function() Nebbie.applyUILayout(true); if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end; if Nebbie.refreshGUI then Nebbie.refreshGUI() end end)]])
   perm("eq panel sync", [[^neq panel$]], [[Nebbie.requestEqPanel()]])
 
-  trig("prompt parse", {[[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
+  trig("prompt parse", {[[[Hh]:\s*\d+/\d+.*[Mm]:\s*\d+/\d+.*[Vv]:\s*\d+/\d+.*[xX]:\s*-?\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
   trig("char menu start", {"Scegli un personagggio", "Scegli un personaggio"}, [[if Nebbie and Nebbie.onCharMenuStart then Nebbie.onCharMenuStart() end]])
   trig("char menu line", {[[^\s*\d+\.\s+\S+]]}, [[if Nebbie and Nebbie.onCharMenuLine then Nebbie.onCharMenuLine(line) end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
+  trig("attrib spell line", {[[Spell%s*:%s*[''].+['']]]}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]], true)
 
   trig("eq parse wield", {"Stai usando", "<impugnato>", "<tenuto>", "<sulla schiena>", "<sul corpo>", "<in testa>", "<sulle mani>"}, [[
-    if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine() end
+    if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
   ]])
+  trig("eq parse slot line", {[[^\s*\[\s*\d+\]\s*<]]}, [[
+    if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
+  ]], true)
 
   trig("look loot parse", {"il corpo di", "corpo sfigurato", "pile of dust", "Pile of dust"}, [[
     if Nebbie and Nebbie._lookLootActive and Nebbie.onLookLootLine then Nebbie.onLookLootLine(line) end
