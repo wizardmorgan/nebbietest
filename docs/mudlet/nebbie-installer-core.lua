@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.47"
+Nebbie.version = "2.2.48"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1067,17 +1067,6 @@ function Nebbie.finishInstall()
 end
 
 function Nebbie.warnLegacyPackages()
-  if type(getPackageList) ~= "function" then return end
-  local ok, pkgs = pcall(getPackageList)
-  if not ok or type(pkgs) ~= "table" then return end
-  local legacy = false
-  for _, name in ipairs(pkgs) do
-    if name == "nebbie-spells-skills" then legacy = true break end
-  end
-  if legacy then
-    cecho("<orange>Nebbie: disinstalla il package vecchio <yellow>nebbie-spells-skills<orange> (Alt+O) per evitare cast doppi.\n")
-  end
-end
   if type(getPackageList) ~= "function" then return end
   local ok, pkgs = pcall(getPackageList)
   if not ok or type(pkgs) ~= "table" then return end
