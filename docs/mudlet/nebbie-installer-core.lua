@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.33"
+Nebbie.version = "2.2.35"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -3026,10 +3026,19 @@ function Nebbie.install()
 
   perm("return form", [[^return$]], [[send("return")]])
 
+  perm("path list", [[^npath$]], [[Nebbie.listPaths()]])
+  perm("path add", [[^npath add (.+) (.+)$]], [[Nebbie.addPath(matches[2], matches[3])]])
+  perm("path del", [[^npath del (.+)$]], [[Nebbie.delPath(matches[2])]])
+  perm("path run", [[^npath run (.+)$]], [[Nebbie.runPath(matches[2])]])
+  perm("weapon set", [[^nweapon ([%w]+) (.+)$]], [[Nebbie.setWeaponKey(matches[2], matches[3])]])
+  perm("utility set", [[^nutility ([%w]+) (.+)$]], [[Nebbie.setUtilityKey(matches[2], matches[3])]])
+  perm("dashboard toggle", [[^ndashboard$]], [[Nebbie.toggleDashboard()]])
+  perm("eq panel sync", [[^neq panel$]], [[Nebbie.requestEqPanel()]])
+
   trig("prompt parse", {[[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
 
-  trig("eq parse wield", {"Stai usando", "<impugnato>", "<tenuto>", "<sulla schiena>"}, [[
+  trig("eq parse wield", {"Stai usando", "<impugnato>", "<tenuto>", "<sulla schiena>", "<sul corpo>", "<in testa>", "<sulle mani>"}, [[
     if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine() end
   ]])
 
@@ -3126,6 +3135,7 @@ function Nebbie.install()
     cecho("<orange>Tastierino non attivo — reinstalla package o digita <yellow>nkeys<orange>\n")
   end
   cecho("<grey>Pronto: <yellow>nclass +<grey>, <yellow>q1<grey>, <yellow>ngui<grey> | <yellow>nfix<grey> <yellow>nprompt<grey> | <yellow>nlist<grey>\n")
+  cecho("<grey>Dashboard: <yellow>neq<grey>/<yellow>neq panel<grey> equip | <yellow>npath<grey> paths | <yellow>nweapon slash spada<grey> | <yellow>usa redentore<grey>\n")
   cecho("<grey>inv/eq liberi per MUD. Loot: corp/2.corp/… + pile/2.pile/…; <yellow>nloot off<grey> disattiva auto.\n")
   cecho("<grey>Armi cadute: <yellow>ndrop off<grey> | Fame/sete: <yellow>nfood off<grey> | Oggetto: <yellow>nfood item cornu\n")
   Nebbie._installing = false

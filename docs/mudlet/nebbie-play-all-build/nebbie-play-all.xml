@@ -5,7 +5,7 @@
   <Script isActive="yes" isFolder="no">
    <name>Nebbie_sysLoadEvent</name>
    <script><![CDATA[function Nebbie_sysLoadEvent()
-  local ver = "2.2.33"
+  local ver = "2.2.35"
   if type(enableScript) == "function" then
     pcall(function() enableScript("Nebbie Loader", 1) end)
   end
@@ -30,10 +30,10 @@ end]]></script>
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>Nebbie Loader</name>
-   <script><![CDATA[-- NEBBIE_LOADER_VER=2.2.33
+   <script><![CDATA[-- NEBBIE_LOADER_VER=2.2.35
 Nebbie = Nebbie or {}
 Nebbie.package = "nebbie-play-all"
-local NEBBIE_EXPECT = "2.2.33"
+local NEBBIE_EXPECT = "2.2.35"
 local MAIN_SCRIPT = "Nebbie Play All"
 local INSTALL_FILE = "nebbie-install.lua"
 local INSTALL_URL = "https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all-build/nebbie-install.lua"
@@ -449,7 +449,7 @@ Nebbie_loaderBoot()
  <AliasPackage>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-fix</name>
-   <script><![CDATA[local NEBBIE_EXPECT = "2.2.33"
+   <script><![CDATA[local NEBBIE_EXPECT = "2.2.35"
 local MAIN_SCRIPT = "Nebbie Play All"
 local LEGACY_NAMES = {"Nebbie Spells and Skills", "nebbie-install", "Nebbie Bootloader", "!Nebbie Boot", "Nebbie Play All", "Nebbie Play All v2.2.12", "Nebbie Play All v2.2.13", "Nebbie Play All v2.2.14", "Nebbie Play All v2.2.15", "Nebbie Play All v2.2.16", "Nebbie Play All v2.2.17", "Nebbie Play All v2.2.18", "Nebbie Play All v2.2.19", "Nebbie Play All v2.2.20"}
 
@@ -593,7 +593,7 @@ end]]></script>
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-nprompt</name>
-   <script><![CDATA[if Nebbie and Nebbie.debugPrompt then Nebbie.debugPrompt() else cecho("<orange>Nebbie v2.2.33: esegui <yellow>nfix<orange> dopo install package.\n") end]]></script>
+   <script><![CDATA[if Nebbie and Nebbie.debugPrompt then Nebbie.debugPrompt() else cecho("<orange>Nebbie v2.2.35: esegui <yellow>nfix<orange> dopo install package.\n") end]]></script>
    <command></command>
    <packageName>nebbie-play-all</packageName>
    <regex>^nprompt$</regex>
@@ -619,7 +619,7 @@ cecho("<grey>Se Nebbie.version è ancora nil: <yellow>nfix<grey>.\n")]]></script
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-diagnose</name>
-   <script><![CDATA[cecho("<cyan><b>Nebbie diagnose v2.2.33</b>\n")
+   <script><![CDATA[cecho("<cyan><b>Nebbie diagnose v2.2.35</b>\n")
 cecho("<grey>memoria Nebbie.version: <yellow>" .. tostring(Nebbie and Nebbie.version) .. "\n")
 cecho("<grey>runFix: <yellow>" .. tostring(Nebbie and type(Nebbie.runFix)) .. "\n")
 cecho("<grey>mainLoaded: <yellow>" .. tostring(Nebbie and Nebbie._mainLoaded) .. "\n")
@@ -649,7 +649,7 @@ if type(getScript) == "function" then
     end
   end
 end
-cecho("<grey>Atteso: <yellow>2.2.33<grey> via Loader + dofile\n")
+cecho("<grey>Atteso: <yellow>2.2.35<grey> via Loader + dofile\n")
 if type(exists) == "function" then
   cecho("<grey>exists(Loader): <yellow>" .. tostring(exists("Nebbie Loader", "script")) .. "\n")
 end]]></script>

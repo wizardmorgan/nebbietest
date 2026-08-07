@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.33"
+PKG_VER = "2.2.35"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -35,6 +35,7 @@ LEGACY_MAIN_SCRIPTS = [
     "Nebbie Play All v2.2.20",
 ]
 INSTALLER_CORE = ROOT / "nebbie-installer-core.lua"
+DASHBOARD_LUA = ROOT / "nebbie-dashboard.lua"
 
 # mudlet.keymodifier.Keypad = 0x20000000 = 536870912
 KEYPAD_MODIFIER = 536870912
@@ -768,7 +769,10 @@ def build_install_lua(spells):
     lines.append("Nebbie.legacyPermTriggers = " + lua_string_list(legacy_triggers))
     lines.append("")
     core = INSTALLER_CORE.read_text(encoding="utf-8")
+    dashboard = DASHBOARD_LUA.read_text(encoding="utf-8")
     lines.append(core)
+    lines.append("")
+    lines.append(dashboard)
     return "\n".join(lines)
 
 
