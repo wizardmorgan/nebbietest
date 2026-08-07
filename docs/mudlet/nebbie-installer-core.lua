@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.44"
+Nebbie.version = "2.2.45"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -3188,6 +3188,19 @@ end
 
 function Nebbie.runFix()
   if Nebbie._fixRunning then return end
+  if Nebbie._expectedPkgVer and Nebbie.version and Nebbie.version ~= Nebbie._expectedPkgVer then
+    if type(Nebbie_forceUpgrade) == "function" then
+      Nebbie._fixRunning = true
+      Nebbie_forceUpgrade(false)
+      return
+    end
+    cecho("<orange>Nebbie: memoria v" .. tostring(Nebbie.version)
+      .. " ≠ package v" .. tostring(Nebbie._expectedPkgVer) .. " — reinstalla il .mpackage.\\n")
+    if Nebbie.PKG_URL then
+      cecho("<grey>" .. Nebbie.PKG_URL .. "\\n")
+    end
+    return
+  end
   Nebbie._fixRunning = true
   Nebbie.purgeOrphanMainScripts(true)
   Nebbie.killAllTrackedTemps()
@@ -3288,6 +3301,7 @@ function Nebbie.install()
     cecho("<grey>Num Lock ON: cifre 5/8/2/4/6/9/3 — OFF: frecce + PgSu/PgGiu/Canc\n")
   ]])
   perm("attrib sync", [[^nattrib$]], [[Nebbie.requestAttrib(false)]])
+  perm("force upgrade", [[^nupgrade$]], [[if type(Nebbie_forceUpgrade) == "function" then Nebbie_forceUpgrade(false) else cecho("<orange>Nebbie: reinstalla il package .mpackage e riavvia Mudlet.\n") end]])
   perm("attrib on", [[^nattrib on$]], [[Nebbie.setAttribAuto(true)]])
   perm("attrib off", [[^nattrib off$]], [[Nebbie.setAttribAuto(false)]])
   perm("loot manual", [[^nloot$]], [[Nebbie.lootMobRemains(true)]])
@@ -3551,7 +3565,16 @@ function Nebbie.boot()
   Nebbie.purgeOrphanMainScripts(true)
   if Nebbie._expectedPkgVer and Nebbie.version ~= Nebbie._expectedPkgVer then
     cecho("<orange>Nebbie: versione caricata <yellow>" .. tostring(Nebbie.version)
-      .. "<orange> ≠ package <yellow>" .. Nebbie._expectedPkgVer .. "<orange> — reinstalla il .mpackage (non solo nfix).\n")
+      .. "<orange> ≠ package <yellow>" .. Nebbie._expectedPkgVer .. "<orange>.\n")
+    if type(Nebbie_forceUpgrade) == "function" then
+      cecho("<grey>Scarico aggiornamento...\n")
+      tempTimer(0.3, function() Nebbie_forceUpgrade(false) end)
+      Nebbie._bootInProgress = false
+      return
+    end
+    if Nebbie.PKG_URL then
+      cecho("<grey>Reinstalla: <yellow>" .. Nebbie.PKG_URL .. "\n")
+    end
   elseif Nebbie.version and Nebbie._expectedPkgVer and Nebbie.version == Nebbie._expectedPkgVer then
     cecho("<green>Nebbie v" .. Nebbie.version .. " layout finestre attivo.\n")
   end
