@@ -37,7 +37,7 @@ Generato dal sorgente MUD (`src/spell_parser.cpp`, `src/interpreter.cpp`, `src/c
 |------|-------------|
 | **`nebbie-play-all.mpackage`** | Unico file da importare in Mudlet (script, alias, trigger, HUD). |
 
-**Download (branch `mudlet`, v2.2.37+ con dashboard e profili per PG):**
+**Download (branch `mudlet`, v2.2.38+ layout finestre + profili per PG):**
 
 https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-play-all.mpackage
 
@@ -90,7 +90,7 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/neb
 3. Seleziona `nebbie-play-all.mpackage`.
 4. In console dovresti vedere (dopo 1–3 secondi) un messaggio simile a:
   ```
-   Nebbie v2.2.37: ...
+   Nebbie v2.2.38: ...
    Dashboard: neq equip | npath paths | nweapon slash spada | usa redentore
    Pronto: nclass +, q1, ngui | nfix nprompt | nlist
   ```
@@ -147,7 +147,27 @@ Nella riga di comando Mudlet:
 lua cecho("<yellow>"..Nebbie.version)
 ```
 
-Deve mostrare la versione corrente (es. `2.2.37`).
+Deve mostrare la versione corrente (es. `2.2.38`).
+
+### Layout finestre (v2.2.38+)
+
+Le finestre laterali **non coprono** il testo del MUD: Mudlet riserva margini con `setBorderLeft` / `setBorderRight`.
+
+| Zona | Contenuto |
+|------|-----------|
+| **Sinistra** | Equip (`neq` per popolare) |
+| **Centro** | Testo gioco |
+| **Diritta (top)** | HUD gauge HP/MN/MV + buff/debuff |
+| **Diritta (sotto)** | Spell, Path, Config |
+
+| Comando | Funzione |
+|---------|----------|
+| `ngui` / `nhud` | Mostra/nasconde HUD + pannelli laterali |
+| `ndashboard` | Solo pannelli laterali (senza HUD) |
+| `nlayout` | Riposiziona finestre dopo resize Mudlet |
+| `nprompt` | Diagnostica lettura prompt |
+| `nattrib` | Popola spell attive (gagged) |
+| `neq` | Popola equip |
 
 ---
 
