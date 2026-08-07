@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.48"
+Nebbie.version = "2.2.50"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -109,6 +109,10 @@ function Nebbie.getBufferLastLine()
     local ok, n = pcall(getLastLineNumber)
     if ok and n and n > 0 then return n end
   end
+  if type(getNumLines) == "function" then
+    local ok, n = pcall(getNumLines)
+    if ok and n and n > 0 then return n end
+  end
   if type(getLineCount) == "function" then
     local ok, n = pcall(getLineCount)
     if ok and n and n > 0 then return n end
@@ -116,40 +120,75 @@ function Nebbie.getBufferLastLine()
   return nil
 end
 
+function Nebbie.bufferLinesToArray(raw, from)
+  local out = {}
+  if type(raw) ~= "table" then return out end
+  from = from or 1
+  local keys = {}
+  for k in pairs(raw) do
+    if type(k) == "number" then keys[#keys + 1] = k end
+  end
+  table.sort(keys)
+  if #keys > 0 then
+    for _, k in ipairs(keys) do
+      if k >= from and type(raw[k]) == "string" then
+        table.insert(out, raw[k])
+      end
+    end
+  end
+  if #out == 0 then
+    for _, v in ipairs(raw) do
+      if type(v) == "string" then table.insert(out, v) end
+    end
+    if #out == 0 then
+      for _, v in pairs(raw) do
+        if type(v) == "string" then table.insert(out, v) end
+      end
+    end
+  end
+  return out
+end
+
 -- Mudlet getLines() keys are absolute line numbers (not 1..n when from > 1).
+function Nebbie.collectBufferLines(from, last)
+  local out = {}
+  if type(getLines) ~= "function" then return out end
+  from = from or 1
+  last = last or from
+  local raw = nil
+  local window = math.max(1, last - from + 1)
+  local attempts = {
+    function() return getLines(-window, -1) end,
+    function() return getLines("main", -window, -1) end,
+    function() return getLines(from, last) end,
+    function() return getLines("main", from, last) end,
+    function() return getLines(1, last) end,
+    function() return getLines("main", 1, last) end,
+  }
+  for _, fn in ipairs(attempts) do
+    local ok, r = pcall(fn)
+    if ok and type(r) == "table" and next(r) ~= nil then
+      raw = r
+      break
+    end
+  end
+  if not raw then return out end
+  return Nebbie.bufferLinesToArray(raw, from)
+end
+
 function Nebbie.getLineBufferSpan(maxBack)
   maxBack = maxBack or 200
   local last = Nebbie.getBufferLastLine()
   if not last then return nil end
   local from = math.max(1, last - maxBack)
-  local raw = nil
-  if type(getLines) == "function" then
-    local attempts = {
-      function() return getLines(from, last) end,
-      function() return getLines("main", from, last) end,
-    }
-    for _, fn in ipairs(attempts) do
-      local ok, r = pcall(fn)
-      if ok and type(r) == "table" then
-        raw = r
-        break
-      end
-    end
-  end
-  local lines = {}
-  if raw then
-    for abs = from, last do
-      local text = raw[abs]
-      if text == nil then text = raw[abs - from + 1] end
-      if type(text) == "string" then table.insert(lines, text) end
-    end
-  end
-  if #lines == 0 and type(getLine) == "function" then
-    for abs = from, last do
-      local ok, text = pcall(getLine, abs)
-      if ok and type(text) == "string" and text ~= "" then
-        table.insert(lines, text)
-      end
+  local lines = Nebbie.collectBufferLines(from, last)
+  if #lines == 0 and last > 1 then
+    lines = Nebbie.collectBufferLines(1, last)
+    if #lines > maxBack then
+      local trimmed = {}
+      local start = #lines - maxBack + 1
+      for i = start, #lines do trimmed[#trimmed + 1] = lines[i] end
+      lines = trimmed
     end
   end
   if #lines == 0 then return nil end
@@ -1053,16 +1092,11 @@ function Nebbie.finishInstall()
   Nebbie.maybeRefreshEqCacheOnBoot()
   Nebbie._installedVer = Nebbie.version
   Nebbie._mainLoaded = true
-  if Nebbie.initDashboard then
-    if not Nebbie.dashboardExists or not Nebbie.dashboardExists() then
-      Nebbie.initDashboard()
-    else
-      if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
-      if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end
-    end
-  end
+  Nebbie.ensureDashboard()
+  if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
+  if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end
   if Nebbie.populatePanels and type(tempTimer) == "function" then
-    tempTimer(0.7, function() Nebbie.populatePanels() end)
+    tempTimer(1.0, function() Nebbie.populatePanels() end)
   end
 end
 
@@ -1860,11 +1894,104 @@ function Nebbie.enableConsoleWrap(name, fontSize)
   end
 end
 
+function Nebbie.replayEqFromBuffer()
+  local lines = Nebbie.getLineBufferSpan(400)
+  if not lines then return false end
+  local found = false
+  local startIdx = Nebbie.findLineIndex(lines, "Stai usando", true)
+  if not startIdx then
+    for i, text in ipairs(lines) do
+      local plain = Nebbie.stripColors(text or "")
+      if plain:match("^%[%s*%d+%]") then
+        startIdx = i
+        break
+      end
+    end
+  end
+  for _, text in ipairs(lines) do
+    if type(text) == "string" and text ~= "" then
+      if Nebbie.onEqParseLine then Nebbie.onEqParseLine(text) end
+      local plain = Nebbie.stripColors(text)
+      if plain:find("Stai usando", 1, true) or plain:match("^%[%s*%d+%]") then
+        found = true
+      end
+    end
+  end
+  if found and startIdx and Nebbie.scanEqLabelsFromBuffer then
+    Nebbie.scanEqLabelsFromBuffer(lines, startIdx)
+  end
+  return found
+end
+
+function Nebbie.scanAttribFromBuffer()
+  local lines = Nebbie.getLineBufferSpan(200)
+  if not lines then return false end
+  local count = 0
+  for _, text in ipairs(lines) do
+    if type(text) == "string" and text ~= "" then
+      local plain = Nebbie.stripColors(text)
+      if plain:find("Spell", 1, true) and plain:match("%d+") then
+        if Nebbie.parseAttribSpellLine(text) then
+          count = count + 1
+        end
+      end
+    end
+  end
+  if count > 0 and Nebbie.refreshSpellPanel then Nebbie.refreshSpellPanel() end
+  return count > 0
+end
+
+function Nebbie.syncEqFromGame(verbose)
+  Nebbie.ensureDashboard()
+  local ok = Nebbie.scanEqBufferSnapshot()
+  if not ok then ok = Nebbie.replayEqFromBuffer() end
+  if Nebbie.refreshEqPanel then Nebbie.refreshEqPanel() end
+  if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end
+  if verbose and not ok then
+    cecho("<orange>Nebbie: eq non trovato nello scrollback — uso <yellow>eq<orange> dal MUD.\n")
+  end
+  return ok
+end
+
+function Nebbie.ensureDashboard()
+  if not Nebbie.buildDashboard then return end
+  if not Nebbie.dashboardExists or not Nebbie.dashboardExists() then
+    Nebbie.buildDashboard()
+  end
+  if Nebbie.showDashboard then Nebbie.showDashboard() end
+end
+
+function Nebbie.resyncAll(verbose)
+  verbose = verbose ~= false
+  Nebbie.ensureDashboard()
+  Nebbie.pollPromptFromBuffer()
+  Nebbie.updateGauges()
+  local eqOk = Nebbie.syncEqFromGame(false)
+  local atOk = Nebbie.scanAttribFromBuffer()
+  if Nebbie.refreshGUI then Nebbie.refreshGUI() end
+  if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end
+  if verbose then
+    cecho("<grey>Nebbie resync: eq=<yellow>" .. tostring(eqOk)
+      .. "<grey> attrib=<yellow>" .. tostring(atOk)
+      .. "<grey> trigger=<yellow>" .. tostring(#(Nebbie._triggerNames or {})) .. "\n")
+  end
+  return eqOk or atOk
+end
+
 function Nebbie.scanEqBufferSnapshot()
   local lines = Nebbie.getLineBufferSpan(300)
   if not lines then return false end
 
   local startIdx = Nebbie.findLineIndex(lines, "Stai usando", true)
+  if not startIdx then
+    for i, text in ipairs(lines) do
+      local plain = Nebbie.stripColors(text or "")
+      if plain:match("^%[%s*%d+%]") then
+        startIdx = i
+        break
+      end
+    end
+  end
   if not startIdx then return false end
 
   local wield, back, hold = nil, nil, nil
@@ -2959,13 +3086,20 @@ function Nebbie.toggleGUI()
 end
 
 function Nebbie.populatePanels()
+  Nebbie.ensureDashboard()
   Nebbie.pollPromptFromBuffer()
   Nebbie.updateGauges()
   if Nebbie.refreshGUI then Nebbie.refreshGUI() end
   if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end
-  if Nebbie.stats and Nebbie.stats.name then
-    if Nebbie.requestAttrib then tempTimer(0.3, function() Nebbie.requestAttrib(true) end) end
-    if Nebbie.requestEqPanel then tempTimer(0.6, function() Nebbie.requestEqPanel() end) end
+  local name = (Nebbie.stats and Nebbie.stats.name) or Nebbie.getCharName()
+  if name and type(tempTimer) == "function" then
+    tempTimer(0.2, function()
+      Nebbie.syncEqFromGame(false)
+      if Nebbie.requestAttrib then Nebbie.requestAttrib(true) end
+    end)
+  else
+    Nebbie.syncEqFromGame(false)
+    Nebbie.scanAttribFromBuffer()
   end
 end
 
@@ -2992,14 +3126,14 @@ function Nebbie.parseAttribSpellLine(line)
   if not spell or not dur then
     spell, dur = plain:match("Spell%s*:%s*[''](.-)['']%s*%-?%s*(%d+)")
   end
-  if not spell or not dur then return end
+  if not spell or not dur then return false end
   spell = Nebbie.normalizeBuffSpell(spell) or spell
-  if not spell or spell == "" then return end
+  if not spell or spell == "" then return false end
   local n = tonumber(dur) or 0
   if Nebbie._attribSeenSpells then Nebbie._attribSeenSpells[spell] = true end
   if n <= 0 then
     Nebbie.buffs[spell] = nil
-    return
+    return true
   end
   local prev = Nebbie.buffs[spell]
   Nebbie.buffs[spell] = {
@@ -3011,6 +3145,7 @@ function Nebbie.parseAttribSpellLine(line)
     source = "attribute",
     synced = true,
   }
+  return true
 end
 
 function Nebbie.onAttribLine(line)
@@ -3042,6 +3177,7 @@ function Nebbie.requestAttrib(silent)
   Nebbie.beginAttribScan()
   send("attrib")
   tempTimer(3.5, function()
+    Nebbie.scanAttribFromBuffer()
     Nebbie.endAttribScan()
     Nebbie.attribGag = false
     Nebbie._attribBusy = false
@@ -3395,7 +3531,7 @@ function Nebbie.install()
   ]])
   perm("attrib sync", [[^nattrib$]], [[Nebbie.requestAttrib(false)]])
   perm("force upgrade", [[^nupgrade$]], [[if type(Nebbie_forceUpgrade) == "function" then Nebbie_forceUpgrade(false) else cecho("<orange>Nebbie: reinstalla il package .mpackage e riavvia Mudlet.\n") end]])
-  perm("panel resync", [[^nresync$]], [[if Nebbie.populatePanels then Nebbie.populatePanels() else cecho("<orange>Nebbie: populatePanels assente — nfix.\n") end]])
+  perm("panel resync", [[^nresync$]], [[Nebbie.resyncAll(true); if Nebbie.requestAttrib then tempTimer(0.4, function() Nebbie.requestAttrib(true) end) end]])
   perm("attrib on", [[^nattrib on$]], [[Nebbie.setAttribAuto(true)]])
   perm("attrib off", [[^nattrib off$]], [[Nebbie.setAttribAuto(false)]])
   perm("loot manual", [[^nloot$]], [[Nebbie.lootMobRemains(true)]])
@@ -3413,15 +3549,19 @@ function Nebbie.install()
   perm("food item set", [[^nfood item (.+)$]], [[Nebbie.setFoodItemKey(matches[2])]])
   perm("food manual", [[^nfood$]], [[Nebbie.autoFoodDrink()]])
   perm("eq cache sync", [[^neq$]], [[
-    if Nebbie.requestEqCache(false) then
-      cecho("<grey>Nebbie: sync eq...\n")
+    Nebbie.ensureDashboard()
+    local fromBuf = Nebbie.syncEqFromGame(false)
+    if fromBuf then
+      Nebbie.showEqCache()
+    elseif Nebbie.requestEqCache(false) then
+      cecho("<grey>Nebbie: sync eq dal MUD...\n")
       tempTimer(3.5, function()
-        Nebbie.scanEqBufferSnapshot()
+        Nebbie.syncEqFromGame(true)
         if Nebbie.refreshEqPanel then Nebbie.refreshEqPanel() end
         Nebbie.showEqCache()
       end)
     else
-      Nebbie.scanEqBufferSnapshot()
+      Nebbie.syncEqFromGame(true)
       if Nebbie.refreshEqPanel then Nebbie.refreshEqPanel() end
       Nebbie.showEqCache()
     end

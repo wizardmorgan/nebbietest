@@ -197,6 +197,24 @@ end
 
 function Nebbie.onDashboardEqLine(line)
   if not line or line == "" then return end
+  local slot, item = Nebbie.parseEqSlotLine(line)
+  if slot and item and item ~= "" then
+    local labelMap = { wield = "Impugnato", hold = "Tenuto", back = "Schiena" }
+    local label = labelMap[slot]
+    if label then
+      Nebbie.eqWornByLabel[label] = item
+      if label == "Impugnato" then
+        local profile = Nebbie.ensureCharProfile()
+        if profile then
+          profile.weapons = profile.weapons or {}
+          profile.weapons.current = Nebbie.eqShortName(item)
+          Nebbie.saveSettings()
+        end
+      end
+      Nebbie.refreshEqPanel()
+      return
+    end
+  end
   local plain = Nebbie.stripColors(line or "")
   for _, slot in ipairs(Nebbie.EQ_SLOTS) do
     if plain:find(slot.tag, 1, true) then
@@ -278,13 +296,13 @@ end
 function Nebbie.panelExists(key)
   local p = Nebbie.panels[key]
   if not p then return false end
+  if type(isHidden) == "function" then
+    local ok = pcall(function() return isHidden(p.con) end)
+    if ok then return true end
+  end
   if type(getMiniConsoleLines) == "function" then
     local ok = pcall(function() return getMiniConsoleLines(p.con) end)
     if ok then return true end
-  end
-  if type(isHidden) == "function" then
-    local ok = pcall(function() return isHidden(p.con) end)
-    return ok
   end
   return false
 end
