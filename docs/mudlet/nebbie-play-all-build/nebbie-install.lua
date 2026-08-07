@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.41
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.41"
+-- NEBBIE_INSTALL_VER=2.2.42
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.42"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.41"
+Nebbie.version = "2.2.42"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.41"
+Nebbie._expectedPkgVer = "2.2.42"
 
 Nebbie.castSpells = {
   ['armor'] = true,
@@ -1041,7 +1041,7 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.41"
+Nebbie.version = "2.2.42"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1178,8 +1178,9 @@ end
 
 function Nebbie.parsePromptStats(line)
   local plain = Nebbie.extractPromptChunk(Nebbie.normalizePromptLine(line))
+  local looks = Nebbie.lineLooksLikePrompt(line)
   if plain == "" then
-    Nebbie._lastParseError = "riga vuota"
+    if looks then Nebbie._lastParseError = "riga vuota" end
     return nil
   end
 
@@ -1188,7 +1189,9 @@ function Nebbie.parsePromptStats(line)
   local move, movemax = Nebbie.parsePromptPair(plain, "V")
   local xp = tonumber(plain:match("[xX]:%s*(-?%d+)") or plain:match("[xX]%s*(-?%d+)"))
   if not hp or not mana or not move or not xp then
-    Nebbie._lastParseError = "mancano H/M/V/X in: " .. plain:sub(1, 100)
+    if looks then
+      Nebbie._lastParseError = "mancano H/M/V/X in: " .. plain:sub(1, 100)
+    end
     return nil
   end
   Nebbie._lastParseError = nil
@@ -1236,27 +1239,54 @@ function Nebbie.resolveTriggerLine()
   return text or ""
 end
 
-function Nebbie.pollPromptFromBuffer()
-  if type(getLastLineNumber) ~= "function" or type(getLines) ~= "function" then return false end
-  local last = getLastLineNumber()
-  if not last or last < 1 then return false end
-  local from = math.max(1, last - 30)
-  local lines = getLines(from, last)
-  if type(lines) ~= "table" then return false end
-  for abs = last, from, -1 do
-    local rel = abs - from + 1
-    local text = lines[rel]
-    if type(text) == "string" and text ~= "" then
-      local parsed = Nebbie.parsePromptStats(text)
-      if parsed then
-        Nebbie.stats = parsed
-        Nebbie.promptBuffs = Nebbie.parsePromptCodes(parsed.codes or "")
-        Nebbie._lastPromptRaw = text
-        return true
+function Nebbie.lineLooksLikePrompt(line)
+  if not line or line == "" then return false end
+  local plain = Nebbie.normalizePromptLine(line)
+  if plain:find("Nebbie v", 1, true) or plain:find("inv/eq liberi", 1, true) then return false end
+  if not plain:match("[Hh]:%s*%d+/%d+") then return false end
+  if not plain:match("[Mm]:%s*%d+/%d+") then return false end
+  if not plain:match("[Vv]:%s*%d+/%d+") then return false end
+  if not plain:match("[xX]:%s*-?%d+") then return false end
+  return true
+end
+
+function Nebbie.fetchPromptLine()
+  if type(isPrompt) == "function" and type(getCurrentLine) == "function" then
+    local ok, isPr = pcall(isPrompt)
+    if ok and isPr then
+      local cl = getCurrentLine()
+      if cl and Nebbie.lineLooksLikePrompt(cl) then return cl end
+    end
+  end
+  if type(getLastLineNumber) == "function" and type(getLines) == "function" then
+    local last = getLastLineNumber()
+    if last and last > 0 then
+      local from = math.max(1, last - 80)
+      local lines = getLines(from, last)
+      if type(lines) == "table" then
+        for abs = last, from, -1 do
+          local rel = abs - from + 1
+          local text = lines[rel]
+          if Nebbie.lineLooksLikePrompt(text) then return text end
+        end
       end
     end
   end
-  return false
+  if Nebbie._lastPromptRaw and Nebbie.lineLooksLikePrompt(Nebbie._lastPromptRaw) then
+    return Nebbie._lastPromptRaw
+  end
+  return nil
+end
+
+function Nebbie.pollPromptFromBuffer()
+  local text = Nebbie.fetchPromptLine()
+  if not text then return false end
+  local parsed = Nebbie.parsePromptStats(text)
+  if not parsed then return false end
+  Nebbie.stats = parsed
+  Nebbie.promptBuffs = Nebbie.parsePromptCodes(parsed.codes or "")
+  Nebbie._lastPromptRaw = text
+  return true
 end
 
 function Nebbie.onPrompt(line)
@@ -1277,10 +1307,15 @@ function Nebbie.onPromptLine()
 end
 
 function Nebbie.debugPrompt()
-  local polled = false
-  if not Nebbie.stats then polled = Nebbie.pollPromptFromBuffer() end
+  local fetched = Nebbie.fetchPromptLine()
+  local polled = Nebbie.pollPromptFromBuffer()
   cecho("<cyan>Nebbie v" .. tostring(Nebbie.version) .. " — debug prompt\n")
-  cecho("<grey>ultima riga vista: <white>" .. tostring(Nebbie._lastPromptRaw or "(nessuna)") .. "\n")
+  cecho("<grey>prompt trovato: <white>" .. tostring(fetched and fetched:sub(1, 90) or "(no)") .. "\n")
+  cecho("<grey>ultima riga vista: <white>" .. tostring(Nebbie._lastPromptRaw and Nebbie._lastPromptRaw:sub(1, 90) or "(nessuna)") .. "\n")
+  if type(isPrompt) == "function" then
+    local ok, pr = pcall(isPrompt)
+    cecho("<grey>isPrompt: <yellow>" .. tostring(ok and pr) .. "\n")
+  end
   cecho("<grey>poll buffer: <yellow>" .. tostring(polled) .. "\n")
   if Nebbie._lastParseError then
     cecho("<orange>parse error: <white>" .. Nebbie._lastParseError .. "\n")
@@ -1339,7 +1374,7 @@ function Nebbie.installPromptHooks()
     for _, pat in ipairs({
       [[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]],
       [[H\d+/\d+.*M\d+/\d+.*V\d+/\d+.*X\d+]],
-      [[%s+H:\d+/\d+%s+M:\d+/\d+]],
+      [[[Hh]:%s*%d+/%d+.*[Mm]:%s*%d+/%d+.*[Vv]:%s*%d+/%d+.*[xX]:%s*-?%d+]],
     }) do
       local ok, id = pcall(function() return tempRegexTrigger(pat, hook) end)
       if ok and id then table.insert(Nebbie._promptTrigIds, id) end
@@ -3353,16 +3388,16 @@ function Nebbie.execQuick(entry, target)
 end
 
 Nebbie.layoutLeftW = 220
-Nebbie.layoutRightW = 280
-Nebbie.layoutHudH = 260
+Nebbie.layoutRightW = 300
+Nebbie.layoutHudH = 280
 Nebbie.layoutMargin = 8
 Nebbie.layoutGap = 6
-Nebbie.guiHeaderH = 22
+Nebbie.guiHeaderH = 20
 Nebbie.guiMargin = Nebbie.layoutMargin
-Nebbie.guiLayoutVer = 9
-Nebbie.guiGaugeH = 22
-Nebbie.guiGaugeGap = 6
-Nebbie.guiGaugeArea = 96
+Nebbie.guiLayoutVer = 10
+Nebbie.guiGaugeH = 20
+Nebbie.guiGaugeGap = 4
+Nebbie.guiGaugeArea = 78
 Nebbie.guiFontSize = 11
 Nebbie.guiBar = "NebbieHUDBar"
 Nebbie.guiConsole = "NebbieHUD"
@@ -3380,10 +3415,7 @@ function Nebbie.computeUILayout()
   end
   local m = Nebbie.layoutMargin or 8
   local leftW = Nebbie.layoutLeftW or 220
-  local rightW = Nebbie.layoutRightW or 280
-  local hudH = Nebbie.layoutHudH or 260
-  local spellH = Nebbie.dashSpellH or 130
-  local pathsH = Nebbie.dashPathsH or 110
+  local rightW = Nebbie.layoutRightW or 300
   local gap = Nebbie.layoutGap or 6
   local showHud = Nebbie.guiExists() and not Nebbie.guiHidden()
   local showDash = Nebbie.dashboardPanelsVisible()
@@ -3391,18 +3423,28 @@ function Nebbie.computeUILayout()
   local borderRight = (showHud or showDash) and rightW or 0
   local rightX = mw - rightW
   local topY = m
+  local rightColH = mh - 2 * m
   local rightY = topY
+  local hudH, spellH, pathsH, configH = 0, 0, 0, 0
   local hud, eq, spells, paths, config = nil, nil, nil, nil, nil
   if showHud then
+    hudH = math.floor(rightColH * 0.42)
+    hudH = math.max(200, math.min(hudH, math.floor(rightColH * 0.55)))
     hud = { x = rightX, y = rightY, w = rightW, h = hudH }
     rightY = rightY + hudH + gap
   end
   if showDash then
+    local below = rightColH - (showHud and (hudH + gap) or 0)
+    spellH = math.max(80, math.floor(below * 0.30))
+    pathsH = math.max(70, math.floor(below * 0.22))
+    configH = below - spellH - pathsH - 2 * gap
+    if configH < 70 then configH = 70 end
+    Nebbie.dashSpellH = spellH
+    Nebbie.dashPathsH = pathsH
     eq = { x = m, y = topY, w = leftW - m, h = mh - 2 * m }
     spells = { x = rightX, y = rightY, w = rightW, h = spellH }
     paths = { x = rightX, y = rightY + spellH + gap, w = rightW, h = pathsH }
-    local configY = rightY + spellH + gap + pathsH + gap
-    config = { x = rightX, y = configY, w = rightW, h = math.max(72, mh - configY - m) }
+    config = { x = rightX, y = rightY + spellH + gap + pathsH + gap, w = rightW, h = configH }
   end
   return {
     mw = mw, mh = mh,
@@ -3416,6 +3458,18 @@ function Nebbie.computeUILayout()
   }
 end
 
+function Nebbie.scheduleUILayout()
+  if type(tempTimer) ~= "function" then
+    Nebbie.applyUILayout()
+    return
+  end
+  if Nebbie._layoutTimer then killTimer(Nebbie._layoutTimer) end
+  Nebbie._layoutTimer = tempTimer(0.12, function()
+    Nebbie._layoutTimer = nil
+    Nebbie.applyUILayout()
+  end)
+end
+
 function Nebbie.applyMainBorders(u)
   u = u or Nebbie.computeUILayout()
   if type(setBorderLeft) == "function" then
@@ -3426,7 +3480,7 @@ function Nebbie.applyMainBorders(u)
   end
 end
 
-function Nebbie.applyUILayout()
+function Nebbie.applyUILayout(verbose)
   local u = Nebbie.computeUILayout()
   Nebbie.applyMainBorders(u)
   if u.hud and Nebbie.guiExists() then
@@ -3434,6 +3488,12 @@ function Nebbie.applyUILayout()
   end
   if Nebbie.repositionDashboard then
     Nebbie.repositionDashboard(u)
+  end
+  if verbose then
+    cecho("<green>Nebbie layout: L=" .. tostring(u.borderLeft)
+      .. " R=" .. tostring(u.borderRight)
+      .. " HUD=" .. tostring(u.hud and u.hud.h or 0)
+      .. " spell=" .. tostring(u.spells and u.spells.h or 0) .. "\n")
   end
 end
 
@@ -3453,7 +3513,7 @@ function Nebbie.showGUI()
     Nebbie.showBar(key)
   end
   Nebbie._guiHidden = false
-  Nebbie.applyUILayout()
+  Nebbie.scheduleUILayout()
 end
 
 function Nebbie.hideGUI()
@@ -3464,7 +3524,7 @@ function Nebbie.hideGUI()
     Nebbie.hideBar(key)
   end
   Nebbie._guiHidden = true
-  Nebbie.applyUILayout()
+  Nebbie.scheduleUILayout()
 end
 
 function Nebbie.calcGUIPos()
@@ -3725,7 +3785,7 @@ function Nebbie.buildGUI()
   createLabel(Nebbie.guiBar, x, y, w, hh, 1)
   setBackgroundColor(Nebbie.guiBar, 45, 45, 60, 255)
   setFgColor(Nebbie.guiBar, 200, 200, 220)
-  echo(Nebbie.guiBar, " Nebbie HUD — colonna laterale")
+  echo(Nebbie.guiBar, " Vitali + buff")
   local conY = y + hh + Nebbie.guiGaugeArea
   createMiniConsole(Nebbie.guiConsole, x, conY, w, h - hh - Nebbie.guiGaugeArea, true)
   setMiniConsoleFontSize(Nebbie.guiConsole, Nebbie.guiFontSize or 11)
@@ -3782,12 +3842,12 @@ function Nebbie.initGUI()
   end
   if not Nebbie.resizeHandler and type(registerAnonymousEventHandler) == "function" then
     Nebbie.resizeHandler = registerAnonymousEventHandler("sysWindowResizeEvent", function()
-      if Nebbie.applyUILayout then Nebbie.applyUILayout() end
+      if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
     end)
   end
-  tempTimer(0.05, function() Nebbie.applyUILayout() end)
-  tempTimer(0.3, function()
-    if Nebbie.applyUILayout then Nebbie.applyUILayout() end
+  Nebbie.scheduleUILayout()
+  tempTimer(0.35, function()
+    if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
     if Nebbie.pollPromptFromBuffer then Nebbie.pollPromptFromBuffer() end
     if Nebbie.updateGauges then Nebbie.updateGauges() end
   end)
@@ -4361,7 +4421,7 @@ function Nebbie.install()
   perm("weapon set", [[^nweapon ([%w]+) (.+)$]], [[Nebbie.setWeaponKey(matches[2], matches[3])]])
   perm("utility set", [[^nutility ([%w]+) (.+)$]], [[Nebbie.setUtilityKey(matches[2], matches[3])]])
   perm("dashboard toggle", [[^ndashboard$]], [[Nebbie.toggleDashboard()]])
-  perm("layout refresh", [[^nlayout$]], [[Nebbie.applyUILayout(); cecho("<green>Nebbie: layout finestre aggiornato.\n")]])
+  perm("layout refresh", [[^nlayout$]], [[Nebbie.scheduleUILayout(); tempTimer(0.2, function() Nebbie.applyUILayout(true); if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end; if Nebbie.refreshGUI then Nebbie.refreshGUI() end end)]])
   perm("eq panel sync", [[^neq panel$]], [[Nebbie.requestEqPanel()]])
 
   trig("prompt parse", {[[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
@@ -4528,7 +4588,7 @@ end
 -- Nebbie dashboard panels (equip, spells, paths, weapon config) — per-character profiles
 -- Loaded after nebbie-installer-core.lua; hooks existing GUI/buff/eq handlers.
 
-Nebbie.dashboardVer = 4
+Nebbie.dashboardVer = 5
 Nebbie.EQ_LABEL_WIDTH = 13
 Nebbie.expiredSpells = Nebbie.expiredSpells or {}
 Nebbie.eqWornByLabel = Nebbie.eqWornByLabel or {}
@@ -4579,10 +4639,10 @@ Nebbie.UTILITY_SLOTS = {
 }
 
 Nebbie.panels = {
-  eq = { bar = "NebbieEqBar", con = "NebbieEq", title = "Equip" },
-  spells = { bar = "NebbieSpellsBar", con = "NebbieSpells", title = "SpellWindow" },
-  paths = { bar = "NebbiePathsBar", con = "NebbiePaths", title = "UpWindow" },
-  config = { bar = "NebbieConfigBar", con = "NebbieConfig", title = "ConfigWindow" },
+  eq = { bar = "NebbieEqBar", con = "NebbieEq", title = "Equip (neq)" },
+  spells = { bar = "NebbieSpellsBar", con = "NebbieSpells", title = "Spell attive" },
+  paths = { bar = "NebbiePathsBar", con = "NebbiePaths", title = "Percorsi" },
+  config = { bar = "NebbieConfigBar", con = "NebbieConfig", title = "Armi / config" },
 }
 
 function Nebbie.getCharName()
@@ -4816,6 +4876,16 @@ function Nebbie.buildPanel(key, layout)
   Nebbie.movePanel(key, l)
 end
 
+function Nebbie.paintPanelBar(p)
+  if not p or type(clearWindow) ~= "function" then return end
+  pcall(function() clearWindow(p.bar) end)
+  if type(setBackgroundColor) == "function" then
+    setBackgroundColor(p.bar, 50, 42, 30, 255)
+    setFgColor(p.bar, 220, 190, 120)
+  end
+  if type(echo) == "function" then echo(p.bar, " " .. p.title) end
+end
+
 function Nebbie.movePanel(key, l)
   local p = Nebbie.panels[key]
   if not p or not l or type(moveWindow) ~= "function" then return end
@@ -4825,6 +4895,7 @@ function Nebbie.movePanel(key, l)
   pcall(function() resizeWindow(p.bar, w, hh) end)
   pcall(function() moveWindow(p.con, x, y + hh) end)
   pcall(function() resizeWindow(p.con, w, math.max(24, h - hh)) end)
+  Nebbie.paintPanelBar(p)
   if type(raiseWindow) == "function" then
     pcall(function() raiseWindow(p.bar) end)
     pcall(function() raiseWindow(p.con) end)
@@ -4837,8 +4908,12 @@ function Nebbie.repositionDashboard(u)
   if not u then u = Nebbie.computeUILayout() end
   local map = { eq = u.eq, spells = u.spells, paths = u.paths, config = u.config }
   for key, l in pairs(map) do
-    if l and Nebbie.panelExists(key) then
-      Nebbie.movePanel(key, l)
+    if l then
+      if not Nebbie.panelExists(key) then
+        Nebbie.buildPanel(key, u)
+      else
+        Nebbie.movePanel(key, l)
+      end
     end
   end
 end
@@ -4906,7 +4981,8 @@ function Nebbie.refreshSpellPanel()
     end
   end
   if activeCount == 0 and expiredCount == 0 then
-    cecho(p.con, "<grey>(nessuna spell — <yellow>nattrib<grey> o lancia)\n")
+    cecho(p.con, "<grey>Spell con buff attivo — <yellow>nattrib<grey> o lancia\n")
+    cecho(p.con, "<grey>Clic su spell verde = lancia\n")
   end
 end
 
@@ -4922,7 +4998,9 @@ function Nebbie.refreshPathsPanel()
       cecho(p.con, "<sky_blue>" .. path.route:sub(1, 70) .. "\n")
     end
   else
-    cecho(p.con, "<grey>npath add <nome> <percorso>\n")
+    cecho(p.con, "<grey>Percorsi speedwalk — esempio:\n")
+    cecho(p.con, "<yellow>npath add nt s, 2e, 4s\n")
+    cecho(p.con, "<grey>Clic sul nome = esegui percorso\n")
   end
 end
 
@@ -4988,7 +5066,7 @@ function Nebbie.showDashboard()
     end
   end
   Nebbie._dashboardHidden = false
-  if Nebbie.applyUILayout then Nebbie.applyUILayout() end
+  if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
   Nebbie.refreshDashboard()
 end
 
@@ -4998,7 +5076,7 @@ function Nebbie.hideDashboard()
     hideWindow(p.con)
   end
   Nebbie._dashboardHidden = true
-  if Nebbie.applyUILayout then Nebbie.applyUILayout() end
+  if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
 end
 
 function Nebbie.toggleDashboard()
@@ -5036,7 +5114,7 @@ function Nebbie.initDashboard()
   if not Nebbie.dashboardExists() then
     Nebbie.buildDashboard()
   else
-    if Nebbie.applyUILayout then Nebbie.applyUILayout() end
+    if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
     Nebbie.refreshDashboard()
   end
   if type(tempTimer) == "function" then

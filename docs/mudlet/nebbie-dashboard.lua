@@ -1,7 +1,7 @@
 -- Nebbie dashboard panels (equip, spells, paths, weapon config) — per-character profiles
 -- Loaded after nebbie-installer-core.lua; hooks existing GUI/buff/eq handlers.
 
-Nebbie.dashboardVer = 4
+Nebbie.dashboardVer = 5
 Nebbie.EQ_LABEL_WIDTH = 13
 Nebbie.expiredSpells = Nebbie.expiredSpells or {}
 Nebbie.eqWornByLabel = Nebbie.eqWornByLabel or {}
@@ -52,10 +52,10 @@ Nebbie.UTILITY_SLOTS = {
 }
 
 Nebbie.panels = {
-  eq = { bar = "NebbieEqBar", con = "NebbieEq", title = "Equip" },
-  spells = { bar = "NebbieSpellsBar", con = "NebbieSpells", title = "SpellWindow" },
-  paths = { bar = "NebbiePathsBar", con = "NebbiePaths", title = "UpWindow" },
-  config = { bar = "NebbieConfigBar", con = "NebbieConfig", title = "ConfigWindow" },
+  eq = { bar = "NebbieEqBar", con = "NebbieEq", title = "Equip (neq)" },
+  spells = { bar = "NebbieSpellsBar", con = "NebbieSpells", title = "Spell attive" },
+  paths = { bar = "NebbiePathsBar", con = "NebbiePaths", title = "Percorsi" },
+  config = { bar = "NebbieConfigBar", con = "NebbieConfig", title = "Armi / config" },
 }
 
 function Nebbie.getCharName()
@@ -289,6 +289,16 @@ function Nebbie.buildPanel(key, layout)
   Nebbie.movePanel(key, l)
 end
 
+function Nebbie.paintPanelBar(p)
+  if not p or type(clearWindow) ~= "function" then return end
+  pcall(function() clearWindow(p.bar) end)
+  if type(setBackgroundColor) == "function" then
+    setBackgroundColor(p.bar, 50, 42, 30, 255)
+    setFgColor(p.bar, 220, 190, 120)
+  end
+  if type(echo) == "function" then echo(p.bar, " " .. p.title) end
+end
+
 function Nebbie.movePanel(key, l)
   local p = Nebbie.panels[key]
   if not p or not l or type(moveWindow) ~= "function" then return end
@@ -298,6 +308,7 @@ function Nebbie.movePanel(key, l)
   pcall(function() resizeWindow(p.bar, w, hh) end)
   pcall(function() moveWindow(p.con, x, y + hh) end)
   pcall(function() resizeWindow(p.con, w, math.max(24, h - hh)) end)
+  Nebbie.paintPanelBar(p)
   if type(raiseWindow) == "function" then
     pcall(function() raiseWindow(p.bar) end)
     pcall(function() raiseWindow(p.con) end)
@@ -310,8 +321,12 @@ function Nebbie.repositionDashboard(u)
   if not u then u = Nebbie.computeUILayout() end
   local map = { eq = u.eq, spells = u.spells, paths = u.paths, config = u.config }
   for key, l in pairs(map) do
-    if l and Nebbie.panelExists(key) then
-      Nebbie.movePanel(key, l)
+    if l then
+      if not Nebbie.panelExists(key) then
+        Nebbie.buildPanel(key, u)
+      else
+        Nebbie.movePanel(key, l)
+      end
     end
   end
 end
@@ -379,7 +394,8 @@ function Nebbie.refreshSpellPanel()
     end
   end
   if activeCount == 0 and expiredCount == 0 then
-    cecho(p.con, "<grey>(nessuna spell — <yellow>nattrib<grey> o lancia)\n")
+    cecho(p.con, "<grey>Spell con buff attivo — <yellow>nattrib<grey> o lancia\n")
+    cecho(p.con, "<grey>Clic su spell verde = lancia\n")
   end
 end
 
@@ -395,7 +411,9 @@ function Nebbie.refreshPathsPanel()
       cecho(p.con, "<sky_blue>" .. path.route:sub(1, 70) .. "\n")
     end
   else
-    cecho(p.con, "<grey>npath add <nome> <percorso>\n")
+    cecho(p.con, "<grey>Percorsi speedwalk — esempio:\n")
+    cecho(p.con, "<yellow>npath add nt s, 2e, 4s\n")
+    cecho(p.con, "<grey>Clic sul nome = esegui percorso\n")
   end
 end
 
@@ -461,7 +479,7 @@ function Nebbie.showDashboard()
     end
   end
   Nebbie._dashboardHidden = false
-  if Nebbie.applyUILayout then Nebbie.applyUILayout() end
+  if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
   Nebbie.refreshDashboard()
 end
 
@@ -471,7 +489,7 @@ function Nebbie.hideDashboard()
     hideWindow(p.con)
   end
   Nebbie._dashboardHidden = true
-  if Nebbie.applyUILayout then Nebbie.applyUILayout() end
+  if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
 end
 
 function Nebbie.toggleDashboard()
@@ -509,7 +527,7 @@ function Nebbie.initDashboard()
   if not Nebbie.dashboardExists() then
     Nebbie.buildDashboard()
   else
-    if Nebbie.applyUILayout then Nebbie.applyUILayout() end
+    if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
     Nebbie.refreshDashboard()
   end
   if type(tempTimer) == "function" then
