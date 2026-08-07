@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.38
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.38"
+-- NEBBIE_INSTALL_VER=2.2.41
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.41"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.38"
+Nebbie.version = "2.2.41"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.38"
+Nebbie._expectedPkgVer = "2.2.41"
 
 Nebbie.castSpells = {
   ['armor'] = true,
@@ -1041,7 +1041,7 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.39"
+Nebbie.version = "2.2.41"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },

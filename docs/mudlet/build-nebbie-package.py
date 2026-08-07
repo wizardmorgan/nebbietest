@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.39"
+PKG_VER = "2.2.41"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -804,7 +804,10 @@ end
 
 local function nebbie_ver_from_code(code)
   if not code then return nil end
-  return code:match("NEBBIE_PKG_VER=([%d%.]+)") or code:match('Nebbie%.version = "([%d%.]+)"')
+  return code:match("NEBBIE_INSTALL_VER=([%d%.]+)")
+    or code:match("NEBBIE_LOADER_VER=([%d%.]+)")
+    or code:match("NEBBIE_PKG_VER=([%d%.]+)")
+    or code:match('Nebbie%.version = "([%d%.]+)"')
 end
 
 local function nebbie_neutralize(name, occ)
@@ -864,8 +867,28 @@ end
 Nebbie = Nebbie or {{}}"""
 
 
+def build_version_helper_lua():
+    return """
+local function nebbie_parse_ver_num(v)
+  if not v or type(v) ~= "string" then return 0 end
+  local a, b, c = v:match("^(%d+)%.(%d+)%.(%d+)")
+  if not a then return 0 end
+  return tonumber(a) * 1000000 + tonumber(b) * 1000 + tonumber(c)
+end
+
+function nebbie_ver_acceptable(ver)
+  if not ver or type(ver) ~= "string" then return false end
+  if ver == NEBBIE_EXPECT then return true end
+  -- Qualsiasi 2.2.x del package (loader e install possono differire di patch)
+  if ver:match("^2%.2%.") and NEBBIE_EXPECT:match("^2%.2%.") then return true end
+  return false
+end
+"""
+
+
 def build_loader_runtime_lua(legacy_aliases, legacy_triggers):
     purge_lua = build_bootstrap_purge_lua(legacy_aliases, legacy_triggers)
+    ver_helper = build_version_helper_lua()
     head = f"""-- NEBBIE_LOADER_VER={PKG_VER}
 Nebbie = Nebbie or {{}}
 Nebbie.package = "{PACKAGE_NAME}"
@@ -874,7 +897,7 @@ local MAIN_SCRIPT = "{lua_escape(MAIN_SCRIPT_NAME)}"
 local INSTALL_FILE = "{INSTALL_FILE}"
 local INSTALL_URL = "{INSTALL_URL}"
 local LOADER_NAME = "{LOADER_SCRIPT_NAME}"
-
+{ver_helper}
 local function nebbie_find_ids(substr)
   if type(findItems) ~= "function" then return {{}} end
   local ok, ids = pcall(function() return findItems(substr, "script", false) end)
@@ -923,7 +946,7 @@ function Nebbie_writeInstallFile(code, silent)
     return false, "codice install non valido"
   end
   local ver = nebbie_ver_from_code(code)
-  if ver ~= NEBBIE_EXPECT then
+  if not nebbie_ver_acceptable(ver) then
     return false, "versione " .. tostring(ver) .. " (attesa " .. NEBBIE_EXPECT .. ")"
   end
   local path = Nebbie_installPath()
@@ -947,7 +970,7 @@ function Nebbie_cacheInstallFromProfile(silent)
   end
   if not code then return false, "nessuno script «" .. MAIN_SCRIPT .. "» nel profilo" end
   local ver = nebbie_ver_from_code(code)
-  if ver ~= NEBBIE_EXPECT then
+  if not nebbie_ver_acceptable(ver) then
     return false, "profilo v" .. tostring(ver) .. " (serve v" .. NEBBIE_EXPECT .. ")"
   end
   return Nebbie_writeInstallFile(code, silent)
@@ -978,9 +1001,9 @@ function Nebbie_execInstallFile(path, silent)
   local ok, err = pcall(chunk)
   Nebbie._deferBoot = prevDefer
   if not ok then return false, "run: " .. tostring(err) end
-  if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
+  if Nebbie and type(Nebbie.runFix) == "function" and nebbie_ver_acceptable(Nebbie.version) then
     if not silent then
-      cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " caricato.\\n")
+      cecho("<green>Nebbie v" .. tostring(Nebbie.version) .. " caricato.\\n")
     end
     return true
   end
@@ -1011,7 +1034,7 @@ function Nebbie_findPackageInstallFile()
     if f then
       local head = f:read(4096) or ""
       f:close()
-      if nebbie_ver_from_code(head) == NEBBIE_EXPECT then
+      if nebbie_ver_acceptable(nebbie_ver_from_code(head)) then
         return p
       end
     end
@@ -1138,10 +1161,15 @@ function Nebbie_neutralizeLegacyScripts(silent)
 end
 
 function Nebbie_loadInstall(silent)
-  if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" and Nebbie._mainLoaded then
+  if Nebbie and type(Nebbie.runFix) == "function" and nebbie_ver_acceptable(Nebbie.version) and Nebbie._mainLoaded then
     return true
   end
-  if Nebbie_fileVer() == NEBBIE_EXPECT then
+  local pkg = Nebbie_findPackageInstallFile()
+  if pkg then
+    local ok = Nebbie_execInstallFile(pkg, silent)
+    if ok then return true end
+  end
+  if nebbie_ver_acceptable(Nebbie_fileVer()) then
     local ok = Nebbie_dofileInstall(silent)
     if ok then return true end
   end
@@ -1159,7 +1187,7 @@ function Nebbie_loadInstall(silent)
 end
 
 function Nebbie_loaderBoot()
-  if Nebbie and Nebbie._loaderBootDone and Nebbie.version == NEBBIE_EXPECT and Nebbie._mainLoaded then
+  if Nebbie and Nebbie._loaderBootDone and nebbie_ver_acceptable(Nebbie.version) and Nebbie._mainLoaded then
     return
   end
   Nebbie._loaderBootDone = true
@@ -1175,7 +1203,7 @@ function Nebbie_loaderBoot()
     end
     return
   end
-  if Nebbie_fileVer() ~= NEBBIE_EXPECT then
+  if not nebbie_ver_acceptable(Nebbie_fileVer()) then
     Nebbie_downloadInstall(function(ok, err)
       if ok and Nebbie_dofileInstall(false) then
         Nebbie_neutralizeLegacyScripts(true)
@@ -1197,9 +1225,9 @@ Nebbie_loaderBoot()
 
 def build_nfix_lua():
     body = f"""
-if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
+if Nebbie and type(Nebbie.runFix) == "function" and nebbie_ver_acceptable(Nebbie.version) then
   Nebbie.runFix()
-  cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " ok.\\n")
+  cecho("<green>Nebbie v" .. tostring(Nebbie.version) .. " ok.\\n")
 else
   local cached = false
   if type(Nebbie_cacheInstallFromProfile) == "function" then
@@ -1219,7 +1247,7 @@ else
   end
   if loaded and Nebbie and type(Nebbie.runFix) == "function" then
     Nebbie.runFix()
-    cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " caricato e reinstallato.\\n")
+    cecho("<green>Nebbie v" .. tostring(Nebbie.version) .. " caricato e reinstallato.\\n")
   elseif type(Nebbie_downloadInstall) == "function" then
     Nebbie_downloadInstall(function(ok, derr)
       if not ok then
@@ -1234,7 +1262,7 @@ else
       end
       if ok2 and Nebbie and type(Nebbie.runFix) == "function" then
         Nebbie.runFix()
-        cecho("<green>Nebbie v" .. NEBBIE_EXPECT .. " pronto.\\n")
+        cecho("<green>Nebbie v" .. tostring(Nebbie.version) .. " pronto.\\n")
       else
         cecho("<red>Nebbie: fix fallito — " .. tostring(lerr2) .. "\\n")
         cecho("<yellow>Reinstalla package:\\n<grey>   {PKG_URL}\\n")
