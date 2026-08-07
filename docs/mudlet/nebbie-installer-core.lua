@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.36"
+Nebbie.version = "2.2.37"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -209,6 +209,9 @@ function Nebbie.onPrompt(line)
   local parsed = Nebbie.parsePromptStats(line)
   if not parsed then return end
   Nebbie.stats = parsed
+  if parsed.name and parsed.name ~= "" and parsed.name ~= Nebbie._charName then
+    Nebbie.switchCharProfile(parsed.name, true)
+  end
   Nebbie.promptBuffs = Nebbie.parsePromptCodes(parsed.codes or "")
   Nebbie.updateGauges()
   Nebbie.refreshGUI()
@@ -320,6 +323,158 @@ function Nebbie.saveSettings()
   if type(table.save) == "function" then
     pcall(function() table.save(Nebbie.getSettingsFile(), Nebbie._settings) end)
   end
+end
+
+Nebbie._charName = Nebbie._charName or nil
+Nebbie._charMenu = Nebbie._charMenu or {}
+Nebbie._charMenuActive = false
+
+function Nebbie.defaultCharProfile()
+  return { weapons = {}, utility = {}, paths = {} }
+end
+
+function Nebbie.copyEqCacheTable(sc)
+  if type(sc) ~= "table" then return nil end
+  return {
+    wield = sc.wield,
+    back = sc.back,
+    hold = sc.hold,
+    wieldKey = sc.wieldKey,
+    backKey = sc.backKey,
+    holdKey = sc.holdKey,
+    updatedAt = sc.updatedAt or 0,
+    wieldScannedAt = sc.wieldScannedAt or 0,
+  }
+end
+
+function Nebbie.copyEqKeywordsTable(src)
+  local out = {}
+  if type(src) ~= "table" then return out end
+  for _, r in ipairs(src) do
+    if r.match and r.key then
+      table.insert(out, { match = r.match, key = r.key })
+    end
+  end
+  return out
+end
+
+function Nebbie.getCharProfileRecord(name, create)
+  if not name or name == "" then return nil end
+  Nebbie.loadSettings()
+  Nebbie._settings.charProfiles = Nebbie._settings.charProfiles or {}
+  local profile = Nebbie._settings.charProfiles[name]
+  if not profile and create then
+    profile = Nebbie.defaultCharProfile()
+    if Nebbie._settings.class and Nebbie._settings.class ~= "" then
+      profile.class = Nebbie._settings.class
+    end
+    if type(Nebbie._settings.eqKeywords) == "table" and #Nebbie._settings.eqKeywords > 0 then
+      profile.eqKeywords = Nebbie.copyEqKeywordsTable(Nebbie._settings.eqKeywords)
+    end
+    if type(Nebbie._settings.eqCache) == "table" and Nebbie._settings.eqCache.back then
+      profile.eqCache = Nebbie.copyEqCacheTable(Nebbie._settings.eqCache)
+    end
+    Nebbie._settings.charProfiles[name] = profile
+    Nebbie.saveSettings()
+  end
+  return profile
+end
+
+function Nebbie.persistCharState()
+  local name = Nebbie._charName
+  if not name or name == "" then return end
+  local profile = Nebbie.getCharProfileRecord(name, true)
+  if not profile then return end
+  if Nebbie.playerClass and Nebbie.playerClass ~= "" then
+    profile.class = Nebbie.playerClass
+  end
+  if Nebbie.eqCache then
+    profile.eqCache = Nebbie.copyEqCacheTable(Nebbie.eqCache)
+  end
+  profile.eqKeywords = Nebbie.copyEqKeywordsTable(Nebbie._settings.eqKeywords or {})
+  Nebbie.saveSettings()
+end
+
+function Nebbie.applyCharState(profile)
+  if not profile then return end
+  local cls = profile.class or Nebbie._settings.class or "+"
+  if Nebbie.classes[cls] or #Nebbie.parseClassArg(cls) > 1 then
+    Nebbie.setClass(cls, true)
+  else
+    Nebbie.setClass("+", true)
+  end
+  if profile.eqCache then
+    Nebbie.eqCache = Nebbie.copyEqCacheTable(profile.eqCache)
+  else
+    Nebbie.eqCache = {
+      wield = nil, back = nil, hold = nil,
+      wieldKey = nil, backKey = nil, holdKey = nil,
+      updatedAt = 0, wieldScannedAt = 0,
+    }
+  end
+  if profile.eqKeywords then
+    Nebbie._settings.eqKeywords = Nebbie.copyEqKeywordsTable(profile.eqKeywords)
+  else
+    Nebbie._settings.eqKeywords = Nebbie._settings.eqKeywords or {}
+  end
+end
+
+function Nebbie.switchCharProfile(name, silent)
+  if not name or name == "" then return false end
+  name = name:match("^%s*(.-)%s*$")
+  if name == "" then return false end
+  if Nebbie._charName and Nebbie._charName ~= name then
+    Nebbie.persistCharState()
+  end
+  Nebbie._charName = name
+  Nebbie._settings = Nebbie._settings or {}
+  Nebbie._settings.lastChar = name
+  local profile = Nebbie.getCharProfileRecord(name, true)
+  Nebbie.applyCharState(profile)
+  Nebbie.saveSettings()
+  Nebbie._charMenuActive = false
+  if Nebbie.stats then Nebbie.stats.name = name end
+  if not silent then
+    local cls = profile.class or "+"
+    cecho("<green>Nebbie: profilo <yellow>" .. name .. "<green> — classe <yellow>" .. cls .. "\n")
+  end
+  if Nebbie.refreshGUI then Nebbie.refreshGUI() end
+  return true
+end
+
+function Nebbie.onCharMenuStart()
+  Nebbie._charMenuActive = true
+  Nebbie._charMenu = {}
+end
+
+function Nebbie.onCharMenuLine(line)
+  if not Nebbie._charMenuActive then return end
+  local plain = Nebbie.stripColors(line or "")
+  local idx, firstWord = plain:match("^%s*(%d+)%.%s+(%S+)")
+  if not idx or not firstWord then return end
+  idx = tonumber(idx)
+  if not idx or idx <= 0 then return end
+  local low = firstWord:lower()
+  if low == "crea" or low == "quit" then return end
+  Nebbie._charMenu[idx] = firstWord
+end
+
+function Nebbie.onCharMenuSend(cmd)
+  if not Nebbie._charMenuActive or type(cmd) ~= "string" then return end
+  local idx = tonumber(cmd:match("^%s*(%d+)%s*$"))
+  if not idx or idx <= 0 then return end
+  local name = Nebbie._charMenu and Nebbie._charMenu[idx]
+  if name then Nebbie.switchCharProfile(name, false) end
+end
+
+function Nebbie.bootCharProfile()
+  Nebbie.loadSettings()
+  local last = Nebbie._settings.lastChar
+  if last and last ~= "" then
+    Nebbie.switchCharProfile(last, true)
+    return true
+  end
+  return false
 end
 
 function Nebbie.stripQuotes(token)
@@ -839,6 +994,10 @@ end
 function Nebbie.saveClass(cls)
   Nebbie._settings = Nebbie._settings or {}
   Nebbie._settings.class = cls
+  if Nebbie._charName and Nebbie._charName ~= "" then
+    local profile = Nebbie.getCharProfileRecord(Nebbie._charName, true)
+    if profile then profile.class = cls end
+  end
   if type(setVariable) == "function" then pcall(function() setVariable(CLASS_VAR, cls) end) end
   Nebbie.saveSettings()
 end
@@ -1306,12 +1465,14 @@ function Nebbie.addEqKey(key, pattern)
   for i, r in ipairs(Nebbie._settings.eqKeywords) do
     if r.match == pattern then
       Nebbie._settings.eqKeywords[i] = { match = pattern, key = key }
+      if Nebbie._charName then Nebbie.persistCharState() end
       Nebbie.saveSettings()
       cecho("<green>Nebbie: aggiornato <yellow>" .. pattern .. " <green>→ <yellow>" .. key .. "\n")
       return
     end
   end
   table.insert(Nebbie._settings.eqKeywords, { match = pattern, key = key })
+  if Nebbie._charName then Nebbie.persistCharState() end
   Nebbie.saveSettings()
   cecho("<green>Nebbie: chiave <yellow>" .. key .. " <green>per nome che contiene <yellow>" .. pattern .. "\n")
 end
@@ -1333,6 +1494,7 @@ function Nebbie.delEqKey(pattern)
     end
   end
   Nebbie._settings.eqKeywords = kept
+  if Nebbie._charName then Nebbie.persistCharState() end
   Nebbie.saveSettings()
   if removed then
     cecho("<green>Nebbie: rimossa regola custom <yellow>" .. pattern .. "\n")
@@ -1426,6 +1588,10 @@ Nebbie.EQ_SWAP_POLL_LINES = 200
 function Nebbie.saveEqCache()
   Nebbie._settings = Nebbie._settings or {}
   Nebbie._settings.eqCache = Nebbie.eqCache
+  if Nebbie._charName and Nebbie._charName ~= "" then
+    local profile = Nebbie.getCharProfileRecord(Nebbie._charName, true)
+    if profile then profile.eqCache = Nebbie.copyEqCacheTable(Nebbie.eqCache) end
+  end
   Nebbie.saveSettings()
 end
 
@@ -1577,6 +1743,7 @@ function Nebbie.installEqSendHook()
       if word and word:lower() == "eq" then
         Nebbie.scheduleEqCacheScan(2.0)
       end
+      if Nebbie.onCharMenuSend then Nebbie.onCharMenuSend(cmd) end
     end)
   end)
   if ok and id then Nebbie._eqSendHookId = id end
@@ -3000,6 +3167,7 @@ function Nebbie.install()
 
   perm("list classes", [[^nclass$]], [[Nebbie.listClasses()]])
   perm("set class", [[^nclass (.+)$]], [[Nebbie.setClass(matches[2])]])
+  perm("set char profile", [[^nchar (.+)$]], [[Nebbie.switchCharProfile(matches[2], false)]])
 
   perm("list package help", [[^nlist$]], [[Nebbie.listPackageHelp()]])
   perm("list aliases", [[^nlist aliases$]], [[Nebbie.listInstalledAliases()]])
@@ -3036,6 +3204,8 @@ function Nebbie.install()
   perm("eq panel sync", [[^neq panel$]], [[Nebbie.requestEqPanel()]])
 
   trig("prompt parse", {[[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
+  trig("char menu start", {"Scegli un personagggio", "Scegli un personaggio"}, [[if Nebbie and Nebbie.onCharMenuStart then Nebbie.onCharMenuStart() end]])
+  trig("char menu line", {[[^\s*\d+\.\s+\S+]]}, [[if Nebbie and Nebbie.onCharMenuLine then Nebbie.onCharMenuLine(line) end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
 
   trig("eq parse wield", {"Stai usando", "<impugnato>", "<tenuto>", "<sulla schiena>", "<sul corpo>", "<in testa>", "<sulle mani>"}, [[
@@ -3161,7 +3331,7 @@ function Nebbie.boot()
   Nebbie.purgeLegacyPermItems(true)
   if Nebbie._installedVer == Nebbie.version and Nebbie._aliasIds and next(Nebbie._aliasIds) ~= nil then
     if not Nebbie.guiExists() then Nebbie.initGUI() end
-    if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
+    if not Nebbie.bootCharProfile() and not Nebbie.loadClass() then Nebbie.setClass("+", true) end
     Nebbie.syncAttribTimer()
     Nebbie.syncEqCacheTimer()
     Nebbie.installEqSendHook()
@@ -3173,7 +3343,7 @@ function Nebbie.boot()
   Nebbie._installedVer = Nebbie.version
   Nebbie.install()
   Nebbie.testPromptParse(false)
-  if not Nebbie.loadClass() then Nebbie.setClass("+", true) end
+  if not Nebbie.bootCharProfile() and not Nebbie.loadClass() then Nebbie.setClass("+", true) end
   Nebbie.syncAttribTimer()
   Nebbie.syncEqCacheTimer()
   Nebbie.maybeRefreshEqCacheOnBoot()

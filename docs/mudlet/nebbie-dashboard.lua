@@ -1,7 +1,7 @@
 -- Nebbie dashboard panels (equip, spells, paths, weapon config) — per-character profiles
 -- Loaded after nebbie-installer-core.lua; hooks existing GUI/buff/eq handlers.
 
-Nebbie.dashboardVer = 2
+Nebbie.dashboardVer = 3
 Nebbie.EQ_LABEL_WIDTH = 13
 Nebbie.expiredSpells = Nebbie.expiredSpells or {}
 Nebbie.eqWornByLabel = Nebbie.eqWornByLabel or {}
@@ -71,13 +71,8 @@ end
 function Nebbie.ensureCharProfile()
   local name = Nebbie.getCharName()
   if not name then return nil end
-  Nebbie.loadSettings()
-  Nebbie._settings.charProfiles = Nebbie._settings.charProfiles or {}
-  if not Nebbie._settings.charProfiles[name] then
-    Nebbie._settings.charProfiles[name] = { weapons = {}, utility = {}, paths = {} }
-    Nebbie.saveSettings()
-  end
-  return Nebbie._settings.charProfiles[name], name
+  local profile = Nebbie.getCharProfileRecord(name, true)
+  return profile, name
 end
 
 function Nebbie.setWeaponKey(slot, value)

@@ -37,11 +37,15 @@ Generato dal sorgente MUD (`src/spell_parser.cpp`, `src/interpreter.cpp`, `src/c
 |------|-------------|
 | **`nebbie-play-all.mpackage`** | Unico file da importare in Mudlet (script, alias, trigger, HUD). |
 
-**Download (branch `mudlet`) — usa uno di questi link:**
-
-https://github.com/wizardmorgan/nebbietest/raw/mudlet/docs/mudlet/nebbie-play-all.mpackage
+**Download (branch `mudlet`, v2.2.37+ con dashboard e profili per PG):**
 
 https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-play-all.mpackage
+
+**Se il link `mudlet` non è ancora aggiornato**, usa la branch del PR unificato:
+
+https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-unified-dashboard-55b4/docs/mudlet/nebbie-play-all.mpackage
+
+**Non scaricare** `nebbie-spells-skills.mpackage` — installa **solo** `nebbie-play-all`.
 
 Salva il file con estensione `.mpackage` e installalo con **Alt+O** → *Install New Package*.
 
@@ -86,20 +90,29 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/neb
 3. Seleziona `nebbie-play-all.mpackage`.
 4. In console dovresti vedere (dopo 1–3 secondi) un messaggio simile a:
   ```
-   Nebbie v2.2.31: ...
-   Tastierino: 8=north 2=south 4=west 6=east 9=up 3=down 5=look (Num Lock ON o OFF)
+   Nebbie v2.2.37: ...
+   Dashboard: neq equip | npath paths | nweapon slash spada | usa redentore
    Pronto: nclass +, q1, ngui | nfix nprompt | nlist
   ```
 5. Setup iniziale:
   ```
    nsetup
    nclass +
+   neq
   ```
    (`nclass +` = tutte le classi; oppure `nclass m` per una sola, vedi tabella sotto).
 
+6. **Dashboard laterale** (equip a sinistra, spell/path/config a destra):
+   - `ngui` o `nhud` — mostra/nasconde HUD + pannelli
+   - `ndashboard` — solo pannelli laterali
+   - `neq` — aggiorna equip e cache armi
+   - `npath add nome s, 2e, 4s` — aggiungi percorso (per personaggio)
+   - `nweapon slash frusta` — parola MUD per tipo arma (per personaggio)
+   - Clic su spell verde/rossa = rilancia; clic su path = speedwalk; clic su arma in config = `usa`
+
 ### Reinstallazione pulita (se qualcosa non funziona)
 
-1. **Alt+O** → disinstalla `nebbie-play-all` (e `nebbie-spells-skills` se presente).
+1. **Alt+O** → disinstalla `nebbie-play-all` e **`nebbie-spells-skills`** se presente (non usarli insieme).
 2. **Scripts → Triggers** → cerca `nebbie-play-all` → elimina tutto il gruppo (trigger `perm` orfani).
 3. **Scripts → Aliases** → elimina `reinstall fix` e altri duplicati `nebbie-play-all`.
 4. Riavvia Mudlet.
@@ -134,7 +147,7 @@ Nella riga di comando Mudlet:
 lua cecho("<yellow>"..Nebbie.version)
 ```
 
-Deve mostrare la versione corrente (es. `2.2.31`).
+Deve mostrare la versione corrente (es. `2.2.37`).
 
 ---
 
@@ -154,21 +167,34 @@ Se non vedi la riga in basso: menu **View** → **Command Line**.
 
 ## Setup multi-personaggio
 
-Usa **un profilo Mudlet per personaggio**. La classe impostata con `nclass` viene salvata in:
+**Un solo profilo Mudlet** è sufficiente: le configurazioni (classe `nclass`, armi `nweapon`, path `npath`, chiavi `nkey`, cache equip) sono salvate **per personaggio** in:
 
-`getMudletHomeDir()/nebbie-play-all-settings.lua`
+`getMudletHomeDir()/nebbie-play-all-settings.lua` → `charProfiles["NomePG"]`
 
-Esempio:
+### Cambio automatico al login
 
+Quando il MUD mostra il menu *Scegli un personagggio* e digiti il numero (es. `16` per Hayato), Nebbie:
 
-| Profilo Mudlet | Comando una tantum | Classe    |
-| -------------- | ------------------ | --------- |
-| `Hayato_Ladro` | `nclass t`         | Ladro     |
-| `Hayato_Mago`  | `nclass m`         | Mago      |
-| `Hayato_Psi`   | `nclass I`         | Psionista |
+1. Legge la riga `16. Hayato …` e memorizza il nome (**prima parola dopo il punto**)
+2. Al momento della scelta attiva il profilo `Hayato` (classe, dashboard, armi, path, nkey)
+3. Al primo prompt in gioco conferma il nome dal prompt MUD
 
+In console vedrai: `Nebbie: profilo Hayato — classe m` (o la classe salvata per quel PG).
 
-Ai login successivi sullo stesso profilo la classe si ricarica automaticamente.
+### Setup manuale (opzionale)
+
+```
+nchar Hayato
+nclass m
+nweapon slash frusta
+npath add nt s, 2e, 4s
+```
+
+`nchar <nome>` forza il profilo senza passare dal menu (utile se il menu non è visibile).
+
+### Migrazione da profili Mudlet multipli
+
+Se avevi più profili Mudlet con classi diverse, apri **un** profilo, fai login con ogni PG una volta (o `nchar NomePG` + `nclass …`), poi puoi usare solo quel profilo.
 
 ---
 
