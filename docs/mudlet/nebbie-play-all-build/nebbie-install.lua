@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.50
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.50"
+-- NEBBIE_INSTALL_VER=2.2.51
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.51"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.50"
+Nebbie.version = "2.2.51"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.50"
+Nebbie._expectedPkgVer = "2.2.51"
 Nebbie.PKG_URL = "https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-unified-dashboard-55b4/docs/mudlet/nebbie-play-all.mpackage"
 
 Nebbie.castSpells = {
@@ -1046,7 +1046,7 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.50"
+Nebbie.version = "2.2.51"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1152,6 +1152,10 @@ function Nebbie.normalizePromptLine(line)
 end
 
 function Nebbie.getBufferLastLine()
+  if type(getLineCount) == "function" then
+    local ok, n = pcall(getLineCount)
+    if ok and n and n > 0 then return n end
+  end
   if type(getLastLineNumber) == "function" then
     local ok, n = pcall(getLastLineNumber)
     if ok and n and n > 0 then return n end
@@ -1160,57 +1164,42 @@ function Nebbie.getBufferLastLine()
     local ok, n = pcall(getNumLines)
     if ok and n and n > 0 then return n end
   end
-  if type(getLineCount) == "function" then
-    local ok, n = pcall(getLineCount)
-    if ok and n and n > 0 then return n end
-  end
   return nil
 end
 
-function Nebbie.bufferLinesToArray(raw, from)
+function Nebbie.bufferLinesToArray(raw)
   local out = {}
   if type(raw) ~= "table" then return out end
-  from = from or 1
-  local keys = {}
-  for k in pairs(raw) do
-    if type(k) == "number" then keys[#keys + 1] = k end
-  end
-  table.sort(keys)
-  if #keys > 0 then
-    for _, k in ipairs(keys) do
-      if k >= from and type(raw[k]) == "string" then
-        table.insert(out, raw[k])
-      end
-    end
+  -- getLines(from,to) returns keys 1..n relative to the requested range, not absolute buffer ids.
+  for i = 1, #raw do
+    local v = raw[i]
+    if type(v) == "string" then out[#out + 1] = v end
   end
   if #out == 0 then
-    for _, v in ipairs(raw) do
-      if type(v) == "string" then table.insert(out, v) end
+    local keys = {}
+    for k in pairs(raw) do
+      if type(k) == "number" then keys[#keys + 1] = k end
     end
-    if #out == 0 then
-      for _, v in pairs(raw) do
-        if type(v) == "string" then table.insert(out, v) end
-      end
+    table.sort(keys)
+    for _, k in ipairs(keys) do
+      if type(raw[k]) == "string" then out[#out + 1] = raw[k] end
     end
   end
   return out
 end
 
--- Mudlet getLines() keys are absolute line numbers (not 1..n when from > 1).
+-- Mudlet getLines(from,to) uses absolute line numbers; returned table keys are 1..n.
 function Nebbie.collectBufferLines(from, last)
   local out = {}
   if type(getLines) ~= "function" then return out end
-  from = from or 1
-  last = last or from
+  last = last or Nebbie.getBufferLastLine()
+  if not last or last < 1 then return out end
+  from = from or math.max(1, last - 399)
+  if from > last then from = last end
   local raw = nil
-  local window = math.max(1, last - from + 1)
   local attempts = {
-    function() return getLines(-window, -1) end,
-    function() return getLines("main", -window, -1) end,
     function() return getLines(from, last) end,
     function() return getLines("main", from, last) end,
-    function() return getLines(1, last) end,
-    function() return getLines("main", 1, last) end,
   }
   for _, fn in ipairs(attempts) do
     local ok, r = pcall(fn)
@@ -1220,7 +1209,7 @@ function Nebbie.collectBufferLines(from, last)
     end
   end
   if not raw then return out end
-  return Nebbie.bufferLinesToArray(raw, from)
+  return Nebbie.bufferLinesToArray(raw)
 end
 
 function Nebbie.getLineBufferSpan(maxBack)
@@ -1229,15 +1218,6 @@ function Nebbie.getLineBufferSpan(maxBack)
   if not last then return nil end
   local from = math.max(1, last - maxBack)
   local lines = Nebbie.collectBufferLines(from, last)
-  if #lines == 0 and last > 1 then
-    lines = Nebbie.collectBufferLines(1, last)
-    if #lines > maxBack then
-      local trimmed = {}
-      local start = #lines - maxBack + 1
-      for i = start, #lines do trimmed[#trimmed + 1] = lines[i] end
-      lines = trimmed
-    end
-  end
   if #lines == 0 then return nil end
   return lines, from, last
 end
@@ -1247,14 +1227,40 @@ function Nebbie.findLineIndex(lines, pattern, plain)
   for i = #lines, 1, -1 do
     local text = lines[i]
     if type(text) == "string" then
+      local check = Nebbie.stripColors(text)
       if plain then
-        if text:find(pattern, 1, true) then return i end
-      elseif text:match(pattern) then
+        if check:find(pattern, 1, true) then return i end
+      elseif check:match(pattern) then
         return i
       end
     end
   end
   return nil
+end
+
+function Nebbie.debugBuffer()
+  local last = Nebbie.getBufferLastLine()
+  local lines = Nebbie.getLineBufferSpan(400)
+  cecho("<cyan><b>Nebbie buffer debug</b> <grey>(v" .. tostring(Nebbie.version) .. ")\n")
+  cecho("<grey>last line: <yellow>" .. tostring(last) .. "\n")
+  cecho("<grey>span lines: <yellow>" .. tostring(lines and #lines or 0) .. "\n")
+  if not lines then
+    cecho("<orange>buffer vuoto — getLineCount/getLines non disponibili?\n")
+    return
+  end
+  local eqHits, spellHits = 0, 0
+  for _, text in ipairs(lines) do
+    local plain = Nebbie.stripColors(text or "")
+    if plain:find("Stai usando", 1, true) or plain:match("^%[%s*%d+%]") then eqHits = eqHits + 1 end
+    if plain:find("Spell", 1, true) and plain:match("%d+") then spellHits = spellHits + 1 end
+  end
+  cecho("<grey>eq-like lines: <yellow>" .. eqHits .. " <grey>spell-like: <yellow>" .. spellHits .. "\n")
+  local okEq = Nebbie.syncEqFromGame(false)
+  local okAt = Nebbie.scanAttribFromBuffer()
+  cecho("<grey>syncEqFromGame: <yellow>" .. tostring(okEq) .. " <grey>scanAttrib: <yellow>" .. tostring(okAt) .. "\n")
+  local c = Nebbie.eqCache or {}
+  cecho("<grey>cache wield: <white>" .. tostring(c.wield or "(vuoto)") .. "\n")
+  cecho("<grey>cache back: <white>" .. tostring(c.back or "(vuoto)") .. "\n")
 end
 
 function Nebbie.extractPromptChunk(plain)
@@ -4569,6 +4575,7 @@ function Nebbie.install()
   perm("reposition gui", [[^npos$]], [[Nebbie.resetGUIPosition()]])
   perm("setup hud", [[^nsetup$]], [[Nebbie.setupHUD()]])
   perm("prompt debug", [[^nprompt$]], [[Nebbie.debugPrompt()]])
+  perm("buffer debug", [[^nbuffer$]], [[Nebbie.debugBuffer()]])
   perm("install diagnose", [[^ndiagnose$]], [[Nebbie.diagnoseInstall()]])
   perm("keypad refresh", [[^nkeys$]], [[
     Nebbie.killKeypadBindings()
@@ -4578,7 +4585,7 @@ function Nebbie.install()
   ]])
   perm("attrib sync", [[^nattrib$]], [[Nebbie.requestAttrib(false)]])
   perm("force upgrade", [[^nupgrade$]], [[if type(Nebbie_forceUpgrade) == "function" then Nebbie_forceUpgrade(false) else cecho("<orange>Nebbie: reinstalla il package .mpackage e riavvia Mudlet.\n") end]])
-  perm("panel resync", [[^nresync$]], [[Nebbie.resyncAll(true); if Nebbie.requestAttrib then tempTimer(0.4, function() Nebbie.requestAttrib(true) end) end]])
+  perm("panel resync", [[^nresync$]], [[Nebbie.resyncAll(true)]])
   perm("attrib on", [[^nattrib on$]], [[Nebbie.setAttribAuto(true)]])
   perm("attrib off", [[^nattrib off$]], [[Nebbie.setAttribAuto(false)]])
   perm("loot manual", [[^nloot$]], [[Nebbie.lootMobRemains(true)]])
@@ -4729,7 +4736,7 @@ function Nebbie.install()
   trig("eq parse wield", {"Stai usando", "<impugnato>", "<tenuto>", "<sulla schiena>", "<sul corpo>", "<in testa>", "<sulle mani>"}, [[
     if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
   ]])
-  trig("eq parse slot line", {[[^\s*\[\s*\d+\]\s*<]]}, [[
+  trig("eq parse slot line", {[[\[\s*\d+\]\s*<]]}, [[
     if Nebbie and Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
   ]], true)
 
