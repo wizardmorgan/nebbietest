@@ -211,7 +211,7 @@ function Nebbie.onDashboardEqLine(line)
           Nebbie.saveSettings()
         end
       end
-      Nebbie.refreshEqPanel()
+      if not Nebbie._batchPanelRefresh then Nebbie.refreshEqPanel() end
       return
     end
   end
@@ -236,7 +236,7 @@ function Nebbie.onDashboardEqLine(line)
           end
         end
       end
-      Nebbie.refreshEqPanel()
+      if not Nebbie._batchPanelRefresh then Nebbie.refreshEqPanel() end
       break
     end
   end
@@ -296,15 +296,43 @@ end
 function Nebbie.panelExists(key)
   local p = Nebbie.panels[key]
   if not p then return false end
-  if type(isHidden) == "function" then
-    local ok = pcall(function() return isHidden(p.con) end)
-    if ok then return true end
-  end
   if type(getMiniConsoleLines) == "function" then
-    local ok = pcall(function() return getMiniConsoleLines(p.con) end)
+    local ok, n = pcall(function() return getMiniConsoleLines(p.con) end)
+    if ok and type(n) == "number" then return true end
+  end
+  if type(isHidden) == "function" then
+    local ok, _ = pcall(function() return isHidden(p.con) end)
     if ok then return true end
   end
   return false
+end
+
+function Nebbie.panelWrite(con, text)
+  if not con or not text then return end
+  if type(cecho) == "function" then
+    local ok = pcall(function() cecho(con, text) end)
+    if ok then return end
+  end
+  if type(echo) == "function" then
+    pcall(function() echo(con, text:gsub("<[^>]->", "")) end)
+  end
+end
+
+function Nebbie.ensurePanelsBuilt()
+  if not Nebbie.computeUILayout then return false end
+  local layout = Nebbie.computeUILayout()
+  for key, _ in pairs(Nebbie.panels) do
+    if not Nebbie.panelExists(key) then
+      Nebbie.buildPanel(key, layout)
+    end
+  end
+  if not Nebbie.dashboardExists() then
+    Nebbie.buildDashboard()
+  end
+  Nebbie._dashboardHidden = false
+  if Nebbie.showDashboard then Nebbie.showDashboard() end
+  if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
+  return Nebbie.panelExists("eq")
 end
 
 function Nebbie.buildPanel(key, layout)
@@ -391,25 +419,27 @@ function Nebbie.formatEqSlotLabel(label)
 end
 
 function Nebbie.refreshEqPanel()
+  if not Nebbie.ensurePanelsBuilt() then return end
   local p = Nebbie.panels.eq
-  if not p or not Nebbie.panelExists("eq") then return end
+  if not p then return end
   Nebbie.clearPanel(p.con)
-  cecho(p.con, "<grey>digita <yellow>neq<grey> per aggiornare\n")
+  Nebbie.panelWrite(p.con, "<grey>digita <yellow>neq<grey> per aggiornare\n")
   for _, slot in ipairs(Nebbie.EQ_SLOTS) do
     local item = Nebbie.eqWornByLabel[slot.label]
     local label = Nebbie.formatEqSlotLabel(slot.label)
-    cecho(p.con, "<goldenrod>" .. label .. "<grey>: ")
+    Nebbie.panelWrite(p.con, "<goldenrod>" .. label .. "<grey>: ")
     if item and item ~= "" then
-      cecho(p.con, "<light_green>" .. item .. "\n")
+      Nebbie.panelWrite(p.con, "<light_green>" .. item .. "\n")
     else
-      cecho(p.con, "<dark_grey>(vuoto)\n")
+      Nebbie.panelWrite(p.con, "<dark_grey>(vuoto)\n")
     end
   end
 end
 
 function Nebbie.refreshSpellPanel()
+  if not Nebbie.ensurePanelsBuilt() then return end
   local p = Nebbie.panels.spells
-  if not p or not Nebbie.panelExists("spells") then return end
+  if not p then return end
   Nebbie.clearPanel(p.con)
   local activeLower = {}
   local activeCount = 0
@@ -435,14 +465,15 @@ function Nebbie.refreshSpellPanel()
     end
   end
   if activeCount == 0 and expiredCount == 0 then
-    cecho(p.con, "<grey>Spell con buff attivo — <yellow>nattrib<grey> o lancia\n")
-    cecho(p.con, "<grey>Clic su spell verde = lancia\n")
+    Nebbie.panelWrite(p.con, "<grey>Spell con buff attivo — <yellow>nattrib<grey> o lancia\n")
+    Nebbie.panelWrite(p.con, "<grey>Clic su spell verde = lancia\n")
   end
 end
 
 function Nebbie.refreshPathsPanel()
+  if not Nebbie.ensurePanelsBuilt() then return end
   local p = Nebbie.panels.paths
-  if not p or not Nebbie.panelExists("paths") then return end
+  if not p then return end
   Nebbie.clearPanel(p.con)
   local profile = Nebbie.ensureCharProfile()
   if profile and profile.paths and #profile.paths > 0 then
@@ -452,52 +483,53 @@ function Nebbie.refreshPathsPanel()
       cecho(p.con, "<sky_blue>" .. path.route:sub(1, 70) .. "\n")
     end
   else
-    cecho(p.con, "<grey>Percorsi speedwalk — esempio:\n")
-    cecho(p.con, "<yellow>npath add nt s, 2e, 4s\n")
-    cecho(p.con, "<grey>Clic sul nome = esegui percorso\n")
+    Nebbie.panelWrite(p.con, "<grey>Percorsi speedwalk — esempio:\n")
+    Nebbie.panelWrite(p.con, "<yellow>npath add nt s, 2e, 4s\n")
+    Nebbie.panelWrite(p.con, "<grey>Clic sul nome = esegui percorso\n")
   end
 end
 
 function Nebbie.refreshConfigPanel()
+  if not Nebbie.ensurePanelsBuilt() then return end
   local p = Nebbie.panels.config
-  if not p or not Nebbie.panelExists("config") then return end
+  if not p then return end
   Nebbie.clearPanel(p.con)
   local profile, name = Nebbie.ensureCharProfile()
   if name then
-    cecho(p.con, "<goldenrod>Personaggio: <white>" .. name .. "\n")
+    Nebbie.panelWrite(p.con, "<goldenrod>Personaggio: <white>" .. name .. "\n")
   else
-    cecho(p.con, "<grey>PG: scegli dal menu login o <yellow>nchar Nome\n")
+    Nebbie.panelWrite(p.con, "<grey>PG: scegli dal menu login o <yellow>nchar Nome\n")
   end
   if not profile then
-    cecho(p.con, "<grey>Config con <yellow>nweapon slash spada\n")
+    Nebbie.panelWrite(p.con, "<grey>Config con <yellow>nweapon slash spada\n")
     return
   end
   profile.weapons = profile.weapons or {}
   profile.utility = profile.utility or {}
   for _, slot in ipairs(Nebbie.WEAPON_SLOTS) do
     local val = profile.weapons[slot.key] or "-"
-    cecho(p.con, "<yellow>" .. slot.label .. ":<grey> ")
+    Nebbie.panelWrite(p.con, "<yellow>" .. slot.label .. ":<grey> ")
     if val ~= "-" then
       local esc = val:gsub("'", "\\'")
       Nebbie.echoLinkLine(p.con, "<light_green>" .. val .. "\n",
         "Nebbie.useWeaponKeyword('" .. esc .. "')", "usa " .. val)
     else
-      cecho(p.con, "<dark_grey>-\n")
+      Nebbie.panelWrite(p.con, "<dark_grey>-\n")
     end
   end
   for _, slot in ipairs(Nebbie.UTILITY_SLOTS) do
     local val = profile.utility[slot.key] or "-"
-    cecho(p.con, "<yellow>" .. slot.label .. ":<grey> ")
+    Nebbie.panelWrite(p.con, "<yellow>" .. slot.label .. ":<grey> ")
     if val ~= "-" then
       local esc = val:gsub("'", "\\'")
       local cmd = slot.key == "hold" and ("hold " .. esc) or ("get " .. esc)
       Nebbie.echoLinkLine(p.con, "<light_green>" .. val .. "\n",
         "send('" .. cmd .. "')", cmd)
     else
-      cecho(p.con, "<dark_grey>-\n")
+      Nebbie.panelWrite(p.con, "<dark_grey>-\n")
     end
   end
-  cecho(p.con, "<grey>nweapon slash spada | nkey add korred ...\n")
+  Nebbie.panelWrite(p.con, "<grey>nweapon slash spada | nkey add korred ...\n")
 end
 
 function Nebbie.refreshDashboard()
