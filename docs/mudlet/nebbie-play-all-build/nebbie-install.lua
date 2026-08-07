@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.47
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.47"
+-- NEBBIE_INSTALL_VER=2.2.48
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.48"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.47"
+Nebbie.version = "2.2.48"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.47"
+Nebbie._expectedPkgVer = "2.2.48"
 Nebbie.PKG_URL = "https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-unified-dashboard-55b4/docs/mudlet/nebbie-play-all.mpackage"
 
 Nebbie.castSpells = {
@@ -1046,7 +1046,7 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.47"
+Nebbie.version = "2.2.48"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -2114,17 +2114,6 @@ function Nebbie.finishInstall()
 end
 
 function Nebbie.warnLegacyPackages()
-  if type(getPackageList) ~= "function" then return end
-  local ok, pkgs = pcall(getPackageList)
-  if not ok or type(pkgs) ~= "table" then return end
-  local legacy = false
-  for _, name in ipairs(pkgs) do
-    if name == "nebbie-spells-skills" then legacy = true break end
-  end
-  if legacy then
-    cecho("<orange>Nebbie: disinstalla il package vecchio <yellow>nebbie-spells-skills<orange> (Alt+O) per evitare cast doppi.\n")
-  end
-end
   if type(getPackageList) ~= "function" then return end
   local ok, pkgs = pcall(getPackageList)
   if not ok or type(pkgs) ~= "table" then return end
