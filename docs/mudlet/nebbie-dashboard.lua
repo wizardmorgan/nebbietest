@@ -1,7 +1,7 @@
 -- Nebbie dashboard panels (equip, spells, paths, weapon config) — per-character profiles
 -- Loaded after nebbie-installer-core.lua; hooks existing GUI/buff/eq handlers.
 
-Nebbie.dashboardVer = 7
+Nebbie.dashboardVer = 8
 Nebbie.EQ_LABEL_WIDTH = 13
 Nebbie.expiredSpells = Nebbie.expiredSpells or {}
 Nebbie.eqWornByLabel = Nebbie.eqWornByLabel or {}

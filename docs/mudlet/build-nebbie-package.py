@@ -2,6 +2,7 @@
 """Generate Nebbie Arcane Mudlet package from spell_parser.cpp spells[] table."""
 
 import re
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -9,7 +10,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.46"
+PKG_VER = "2.2.47"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -572,9 +573,12 @@ def build_legacy_perm_names(spells):
         "return form", "reinstall fix", "prompt debug", "install diagnose",
         "eq cache clear", "drop recover on", "drop recover off",
         "food auto on", "food auto off", "food item set", "food manual",
+        "force upgrade", "panel resync", "dashboard toggle", "layout refresh",
+        "eq panel sync", "path list", "path add", "path del", "path run",
+        "weapon set", "utility set", "set char profile",
     ]
     static_triggers = [
-        "prompt parse", "attrib gag", "look loot parse", "eq parse wield", "mob kill exp loot",
+        "prompt parse", "attrib gag", "look loot parse", "eq parse wield", "eq parse slot line", "mob kill exp loot",
         "cast started", "weapon drop hold", "weapon drop wield", "hunger thirst",
     ]
 
@@ -1200,11 +1204,18 @@ function Nebbie_forceUpgrade(silent)
   if not silent and Nebbie and Nebbie.version and Nebbie.version ~= NEBBIE_EXPECT then
     cecho("<yellow>Nebbie: aggiornamento v" .. tostring(Nebbie.version) .. " → v" .. NEBBIE_EXPECT .. "...\\n")
   end
+  if Nebbie and type(Nebbie.killAllTrackedTemps) == "function" then Nebbie.killAllTrackedTemps() end
+  if Nebbie and type(Nebbie.purgePackageAliases) == "function" then Nebbie.purgePackageAliases() end
+  if Nebbie and type(Nebbie.purgeOrphanCastAliases) == "function" then Nebbie.purgeOrphanCastAliases() end
   Nebbie_cleanupScripts(false)
   Nebbie_wipeMemory()
   local function finish(ok, err)
-    if ok and Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
-      Nebbie.runFix()
+    if ok and Nebbie and Nebbie.version == NEBBIE_EXPECT then
+      if type(Nebbie.boot) == "function" then
+        Nebbie.boot()
+      elseif type(Nebbie.runFix) == "function" then
+        Nebbie.runFix()
+      end
       if not silent then
         cecho("<green>Nebbie v" .. tostring(Nebbie.version) .. " pronto.\\n")
       end
@@ -1665,6 +1676,7 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     install_lua = OUT_DIR / "nebbie-install.lua"
     install_lua.write_text(lua, encoding="utf-8")
+    validate_install_lua(install_lua)
     (OUT_DIR / "config.lua").write_text(f'mpackage = "{PACKAGE_NAME}"\n', encoding="utf-8")
     xml_name = f"{PACKAGE_NAME}.xml"
     (OUT_DIR / xml_name).write_text(build_xml(legacy_aliases, legacy_triggers), encoding="utf-8")

@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.46"
+Nebbie.version = "2.2.47"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -122,15 +122,37 @@ function Nebbie.getLineBufferSpan(maxBack)
   local last = Nebbie.getBufferLastLine()
   if not last then return nil end
   local from = math.max(1, last - maxBack)
-  if type(getLines) ~= "function" then return nil end
-  local ok, raw = pcall(getLines, from, last)
-  if not ok or type(raw) ~= "table" then return nil end
-  local lines = {}
-  for abs = from, last do
-    local text = raw[abs]
-    if text == nil then text = raw[abs - from + 1] end
-    if type(text) == "string" then table.insert(lines, text) end
+  local raw = nil
+  if type(getLines) == "function" then
+    local attempts = {
+      function() return getLines(from, last) end,
+      function() return getLines("main", from, last) end,
+    }
+    for _, fn in ipairs(attempts) do
+      local ok, r = pcall(fn)
+      if ok and type(r) == "table" then
+        raw = r
+        break
+      end
+    end
   end
+  local lines = {}
+  if raw then
+    for abs = from, last do
+      local text = raw[abs]
+      if text == nil then text = raw[abs - from + 1] end
+      if type(text) == "string" then table.insert(lines, text) end
+    end
+  end
+  if #lines == 0 and type(getLine) == "function" then
+    for abs = from, last do
+      local ok, text = pcall(getLine, abs)
+      if ok and type(text) == "string" and text ~= "" then
+        table.insert(lines, text)
+      end
+    end
+  end
+  if #lines == 0 then return nil end
   return lines, from, last
 end
 
@@ -975,7 +997,87 @@ function Nebbie.purgeOrphanNebbieAliases()
   end
 end
 
+function Nebbie.purgeSpellsSkillsAliases()
+  if type(getAliasList) ~= "function" then return 0 end
+  local n = 0
+  for _, entry in ipairs(getAliasList()) do
+    local name = entry
+    if type(getAliasName) == "function" then
+      local ok, nm = pcall(getAliasName, entry)
+      if ok and nm and nm ~= "" then name = nm end
+    end
+    if type(name) == "string" and name:find("nebbie-spells-skills", 1, true) then
+      Nebbie.killAllByName(name, "alias")
+      n = n + 1
+    end
+  end
+  if n > 0 then
+    cecho("<orange>Nebbie: rimossi " .. n .. " alias da <yellow>nebbie-spells-skills<orange> (disinstalla il package).\n")
+  end
+  return n
+end
+
+function Nebbie.purgeOrphanCastAliases()
+  if type(getAliasList) ~= "function" then return 0 end
+  local n = 0
+  local castStarts = { "^c$", "^c ", "^c%s", "^cast$", "^cast ", "^cast%s" }
+  for _, entry in ipairs(getAliasList()) do
+    local pattern = nil
+    if type(getAliasString) == "function" then
+      local ok, p = pcall(getAliasString, entry)
+      if ok and p and p ~= "" then pattern = p end
+    end
+    if not pattern and type(getAliasName) == "function" then
+      local ok, nm = pcall(getAliasName, entry)
+      if ok and nm then pattern = nm end
+    end
+    if pattern then
+      for _, start in ipairs(castStarts) do
+        if pattern == start or pattern:sub(1, #start) == start then
+          if type(killAlias) == "function" then
+            pcall(function() killAlias(entry) end)
+            n = n + 1
+          end
+          break
+        end
+      end
+    end
+  end
+  return n
+end
+
+function Nebbie.finishInstall()
+  Nebbie.installEqSendHook()
+  Nebbie.syncAttribTimer()
+  Nebbie.syncEqCacheTimer()
+  Nebbie.maybeRefreshEqCacheOnBoot()
+  Nebbie._installedVer = Nebbie.version
+  Nebbie._mainLoaded = true
+  if Nebbie.initDashboard then
+    if not Nebbie.dashboardExists or not Nebbie.dashboardExists() then
+      Nebbie.initDashboard()
+    else
+      if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
+      if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end
+    end
+  end
+  if Nebbie.populatePanels and type(tempTimer) == "function" then
+    tempTimer(0.7, function() Nebbie.populatePanels() end)
+  end
+end
+
 function Nebbie.warnLegacyPackages()
+  if type(getPackageList) ~= "function" then return end
+  local ok, pkgs = pcall(getPackageList)
+  if not ok or type(pkgs) ~= "table" then return end
+  local legacy = false
+  for _, name in ipairs(pkgs) do
+    if name == "nebbie-spells-skills" then legacy = true break end
+  end
+  if legacy then
+    cecho("<orange>Nebbie: disinstalla il package vecchio <yellow>nebbie-spells-skills<orange> (Alt+O) per evitare cast doppi.\n")
+  end
+end
   if type(getPackageList) ~= "function" then return end
   local ok, pkgs = pcall(getPackageList)
   if not ok or type(pkgs) ~= "table" then return end
@@ -2397,7 +2499,7 @@ Nebbie.layoutMargin = 8
 Nebbie.layoutGap = 6
 Nebbie.guiHeaderH = 20
 Nebbie.guiMargin = Nebbie.layoutMargin
-Nebbie.guiLayoutVer = 11
+Nebbie.guiLayoutVer = 12
 Nebbie.guiGaugeH = 18
 Nebbie.guiGaugeGap = 3
 Nebbie.guiGaugeArea = 66
@@ -3235,6 +3337,8 @@ function Nebbie.install()
   Nebbie.purgePackageTriggers()
   Nebbie.purgeOrphanNebbieAliases()
   Nebbie.purgeOrphanNebbieTriggers()
+  Nebbie.purgeSpellsSkillsAliases()
+  Nebbie.purgeOrphanCastAliases()
   Nebbie._aliasNames = {}
   Nebbie._triggerNames = {}
   Nebbie._aliasIds = {}
@@ -3302,6 +3406,7 @@ function Nebbie.install()
   ]])
   perm("attrib sync", [[^nattrib$]], [[Nebbie.requestAttrib(false)]])
   perm("force upgrade", [[^nupgrade$]], [[if type(Nebbie_forceUpgrade) == "function" then Nebbie_forceUpgrade(false) else cecho("<orange>Nebbie: reinstalla il package .mpackage e riavvia Mudlet.\n") end]])
+  perm("panel resync", [[^nresync$]], [[if Nebbie.populatePanels then Nebbie.populatePanels() else cecho("<orange>Nebbie: populatePanels assente — nfix.\n") end]])
   perm("attrib on", [[^nattrib on$]], [[Nebbie.setAttribAuto(true)]])
   perm("attrib off", [[^nattrib off$]], [[Nebbie.setAttribAuto(false)]])
   perm("loot manual", [[^nloot$]], [[Nebbie.lootMobRemains(true)]])
@@ -3551,6 +3656,7 @@ function Nebbie.install()
   cecho("<grey>Armi cadute: <yellow>ndrop off<grey> | Fame/sete: <yellow>nfood off<grey> | Oggetto: <yellow>nfood item cornu\n")
   Nebbie._installing = false
   Nebbie.initGUI()
+  Nebbie.finishInstall()
 end
 
 function Nebbie.boot()
@@ -3583,11 +3689,17 @@ function Nebbie.boot()
   Nebbie.purgeLegacyPermItems(true)
   if Nebbie._installedVer == Nebbie.version and Nebbie._aliasIds and next(Nebbie._aliasIds) ~= nil then
     if not Nebbie.guiExists() then Nebbie.initGUI() end
-    if not Nebbie.bootCharProfile() and not Nebbie.loadClass() then Nebbie.setClass("+", true) end
+    if Nebbie.initDashboard and (not Nebbie.dashboardExists or not Nebbie.dashboardExists()) then
+      Nebbie.initDashboard()
+    end
+    Nebbie.installEqSendHook()
     Nebbie.syncAttribTimer()
     Nebbie.syncEqCacheTimer()
-    Nebbie.installEqSendHook()
     Nebbie.maybeRefreshEqCacheOnBoot()
+    if Nebbie.populatePanels and type(tempTimer) == "function" then
+      tempTimer(0.8, function() Nebbie.populatePanels() end)
+    end
+    if not Nebbie.bootCharProfile() and not Nebbie.loadClass() then Nebbie.setClass("+", true) end
     Nebbie._mainLoaded = true
     Nebbie._bootInProgress = false
     return
@@ -3596,9 +3708,6 @@ function Nebbie.boot()
   Nebbie.install()
   Nebbie.testPromptParse(false)
   if not Nebbie.bootCharProfile() and not Nebbie.loadClass() then Nebbie.setClass("+", true) end
-  Nebbie.syncAttribTimer()
-  Nebbie.syncEqCacheTimer()
-  Nebbie.maybeRefreshEqCacheOnBoot()
   Nebbie._mainLoaded = true
   Nebbie._bootInProgress = false
 end
