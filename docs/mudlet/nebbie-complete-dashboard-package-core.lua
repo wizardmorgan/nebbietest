@@ -1,0 +1,461 @@
+-- Nebbie Complete Dashboard Package — core installer logic
+--
+-- Package Mudlet nuovo e minimo per Nebbie Arcane, nato da un'analisi da zero
+-- (vedi docs/mudlet/analysis/). NON e' un patch di nebbie-play-all: e' un package
+-- indipendente, pensato per un solo profilo Mudlet condiviso da piu' personaggi con
+-- switch sequenziale (un PG alla volta, rilevato dal nome nel prompt).
+--
+-- Fonti/decisioni documentate in docs/mudlet/analysis/DESIGN-OPTIONS.md (D1..D4) e
+-- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
+-- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
+
+local PKG_VER = "1.0.0"
+
+if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
+  return
+end
+
+NebbieDash = NebbieDash or {}
+NebbieDash.version = PKG_VER
+NebbieDash._loadedVer = PKG_VER
+NebbieDash.package = "nebbie-complete-dashboard-package"
+
+-- ---------------------------------------------------------------------------
+-- Tabella slot equip (21 slot) — da REQUIREMENTS.md §5 (M4), output reale `eq`
+-- ---------------------------------------------------------------------------
+NebbieDash.EQ_SLOTS = {
+  [1] = "sul dito destro",
+  [2] = "sul dito sinistro",
+  [3] = "intorno al collo",
+  [4] = "intorno al collo",
+  [5] = "sul corpo",
+  [6] = "in testa",
+  [7] = "sulle gambe",
+  [8] = "ai piedi",
+  [9] = "sulle mani",
+  [10] = "sulle braccia",
+  [11] = "come scudo",
+  [12] = "intorno al corpo",
+  [13] = "intorno alla vita",
+  [14] = "al polso destro",
+  [15] = "al polso sinistro",
+  [16] = "impugnato",
+  [17] = "tenuto",
+  [18] = "sulla schiena",
+  [19] = "all'orecchio destro",
+  [20] = "all'orecchio sinistro",
+  [21] = "davanti agli occhi",
+}
+
+-- ---------------------------------------------------------------------------
+-- Persistenza per personaggio (D3-B, confermata dall'utente)
+-- ---------------------------------------------------------------------------
+NebbieDash.persistEnabled = true
+
+function NebbieDash.storePath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-complete-dashboard-package-chars.lua"
+end
+
+function NebbieDash.loadStore()
+  NebbieDash.chars = NebbieDash.chars or {}
+  local path = NebbieDash.storePath()
+  if type(io.exists) == "function" and io.exists(path) then
+    pcall(function() table.load(path, NebbieDash.chars) end)
+  end
+end
+
+function NebbieDash.saveStore()
+  if not NebbieDash.persistEnabled then return end
+  pcall(function() table.save(NebbieDash.storePath(), NebbieDash.chars) end)
+end
+
+function NebbieDash.getCharData(name)
+  NebbieDash.chars = NebbieDash.chars or {}
+  if not NebbieDash.chars[name] then
+    NebbieDash.chars[name] = { eq = {}, spells = {}, weaponConfig = {}, lastSeen = nil }
+  end
+  return NebbieDash.chars[name]
+end
+
+-- ---------------------------------------------------------------------------
+-- Rilevamento personaggio attivo (D1-A + D1-C + D1-B override manuale)
+-- ---------------------------------------------------------------------------
+function NebbieDash.setCurrentCharacter(name, manual)
+  if not name or name == "" then return end
+  if NebbieDash.currentChar == name then
+    NebbieDash.getCharData(name).lastSeen = os.time()
+    return
+  end
+  NebbieDash.currentChar = name
+  local data = NebbieDash.getCharData(name)
+  data.lastSeen = os.time()
+  NebbieDash.saveStore()
+  NebbieDash.refreshDashboard()
+  if type(raiseEvent) == "function" then
+    pcall(raiseEvent, "nebbieDashCharacterChanged", name, manual and true or false)
+  end
+  cecho("<cyan>[NebbieDash] Personaggio attivo: <yellow>" .. name .. "\n")
+end
+
+function NebbieDash.onConnectionEvent()
+  -- Reset difensivo: alla (ri)connessione non sappiamo ancora con certezza chi sia
+  -- collegato finche' non arriva un prompt valido (D1-C, MUDLET-WIKI-NOTES.md §5-6).
+  NebbieDash._awaitingPromptAfterConnect = true
+end
+
+-- ---------------------------------------------------------------------------
+-- Parsing prompt (D2-0) — pattern Lua, NON quelli del codice legacy (bug noto:
+-- il codice legacy richiede "H:%d+" senza spazio e "X:" maiuscolo; il prompt
+-- reale ha "H: %d+" con spazio e "x:" minuscolo — vedi Q&A.md Round 3).
+-- ---------------------------------------------------------------------------
+function NebbieDash.parsePromptLine(text)
+  if not text or text == "" then return nil end
+  local name, hp, hpmax, mana, manamax, move, movemax, xfield =
+    text:match("^(%S+)%s+H:%s*(%d+)/(%d+)%s+M:%s*(%d+)/(%d+)%s+V:%s*(%d+)/(%d+)%s+[Xx]:%s*(%-?%d+)")
+  if not name then return nil end
+  local gold = text:match("[Gg]:(%d+)")
+  local codes = text:match("%[%[([^%]]*)%]%]")
+  return {
+    name = name,
+    hp = tonumber(hp), hpmax = tonumber(hpmax),
+    mana = tonumber(mana), manamax = tonumber(manamax),
+    move = tonumber(move), movemax = tonumber(movemax),
+    xfield = tonumber(xfield),
+    gold = gold and tonumber(gold) or nil,
+    codes = codes,
+  }
+end
+
+function NebbieDash.onPromptLine()
+  local text = line
+  if (not text or text == "") and type(getCurrentLine) == "function" then
+    text = getCurrentLine()
+  end
+  local parsed = NebbieDash.parsePromptLine(text or "")
+  if not parsed then return end
+  NebbieDash.stats = parsed
+  NebbieDash.setCurrentCharacter(parsed.name, false)
+  NebbieDash._awaitingPromptAfterConnect = false
+  NebbieDash.updateVitalsDisplay()
+end
+
+-- ---------------------------------------------------------------------------
+-- Capture "eq" (D2-C / D2-0) — state machine attivata/disattivata con
+-- enableTrigger()/disableTrigger() invece di un trigger multiline con margine
+-- fisso, per gestire un numero variabile di righe (incluso il word-wrap, M6).
+-- ---------------------------------------------------------------------------
+function NebbieDash.startEqCapture()
+  NebbieDash._eqCapture = { slots = {}, lastSlot = nil }
+  if NebbieDash._eqLineTrig then
+    pcall(enableTrigger, NebbieDash._eqLineTrig)
+  end
+end
+
+function NebbieDash.finishEqCapture()
+  local cap = NebbieDash._eqCapture
+  NebbieDash._eqCapture = nil
+  if NebbieDash._eqLineTrig then
+    pcall(disableTrigger, NebbieDash._eqLineTrig)
+  end
+  if not cap then return end
+  local name = NebbieDash.currentChar
+  if not name then return end
+  local data = NebbieDash.getCharData(name)
+  data.eq = cap.slots
+  data.eqUpdated = os.time()
+  NebbieDash.saveStore()
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Equip aggiornato (" .. tostring(NebbieDash.countSlots(cap.slots)) .. "/21 slot).\n")
+end
+
+function NebbieDash.countSlots(slots)
+  local n = 0
+  for _ in pairs(slots or {}) do n = n + 1 end
+  return n
+end
+
+-- Trigger "sempre presente" ma disabilitato salvo durante la cattura: costo
+-- nullo sulle righe normali di gioco (i trigger disabilitati non vengono
+-- valutati — vedi MUDLET-WIKI-NOTES.md §1, principio di shielding/locking).
+function NebbieDash.onEqCaptureLine()
+  local cap = NebbieDash._eqCapture
+  if not cap then return end
+  local text = line
+  if (not text or text == "") and type(getCurrentLine) == "function" then
+    text = getCurrentLine()
+  end
+  text = text or ""
+
+  if NebbieDash.parsePromptLine(text) or text:match("^>>%s*$") then
+    NebbieDash.finishEqCapture()
+    return
+  end
+
+  local slot, item = text:match("^%[%s*(%d+)%]%s+<[^>]+>%s+(.+)$")
+  if slot then
+    slot = tonumber(slot)
+    cap.slots[slot] = item
+    cap.lastSlot = slot
+    return
+  end
+
+  if text:match("^%s*$") then
+    NebbieDash.finishEqCapture()
+    return
+  end
+
+  -- Riga di continuazione (word-wrap, M6): concatenata all'ultimo slot letto.
+  if cap.lastSlot and cap.slots[cap.lastSlot] then
+    cap.slots[cap.lastSlot] = cap.slots[cap.lastSlot] .. " " .. text:match("^%s*(.-)%s*$")
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- Capture "attrib" (Spell attivi) — stessa tecnica enable/disable di sopra.
+-- Formato base confermato da esempio utente: "Spell : 'nome' - N"
+-- (AGENT-PROMPT-ANALISI-ZERO.txt righe 77-82). Formato completo del blocco
+-- (es. eventuali sezioni debuff) NON ancora confermato — vedi REQUIREMENTS.md
+-- M5, aperto/non bloccante per la release 1.
+-- ---------------------------------------------------------------------------
+function NebbieDash.startAttribCapture()
+  NebbieDash._attribCapture = { spells = {} }
+  if NebbieDash._attribLineTrig then
+    pcall(enableTrigger, NebbieDash._attribLineTrig)
+  end
+end
+
+function NebbieDash.finishAttribCapture()
+  local cap = NebbieDash._attribCapture
+  NebbieDash._attribCapture = nil
+  if NebbieDash._attribLineTrig then
+    pcall(disableTrigger, NebbieDash._attribLineTrig)
+  end
+  if not cap then return end
+  local name = NebbieDash.currentChar
+  if not name then return end
+  local data = NebbieDash.getCharData(name)
+  data.spells = cap.spells
+  data.spellsUpdated = os.time()
+  NebbieDash.saveStore()
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Spell attivi aggiornati (" .. tostring(#cap.spells) .. ").\n")
+end
+
+function NebbieDash.onAttribCaptureLine()
+  local cap = NebbieDash._attribCapture
+  if not cap then return end
+  local text = line
+  if (not text or text == "") and type(getCurrentLine) == "function" then
+    text = getCurrentLine()
+  end
+  text = text or ""
+
+  if NebbieDash.parsePromptLine(text) or text:match("^>>%s*$") then
+    NebbieDash.finishAttribCapture()
+    return
+  end
+
+  local spellName, ticks = text:match("Spell%s*:%s*'([^']+)'%s*%-%s*(%d+)")
+  if spellName then
+    table.insert(cap.spells, { name = spellName, ticks = tonumber(ticks) })
+    return
+  end
+
+  if cap._started and text:match("^%s*$") then
+    NebbieDash.finishAttribCapture()
+    return
+  end
+  if text:match("Spells attivi") then
+    cap._started = true
+  end
+end
+
+-- ---------------------------------------------------------------------------
+-- Comandi manuali (nessun invio automatico eq/attrib al boot — vedi
+-- MUDLET-WIKI-NOTES.md §5-6 e RECOMMENDATION.md §3)
+-- ---------------------------------------------------------------------------
+function NebbieDash.cmdResyncEq()
+  NebbieDash.startEqCapture()
+  send("eq", false)
+end
+
+function NebbieDash.cmdResyncAttrib()
+  NebbieDash.startAttribCapture()
+  send("attrib", false)
+end
+
+function NebbieDash.cmdResyncAll()
+  NebbieDash.cmdResyncEq()
+  tempTimer(1.5, function() NebbieDash.cmdResyncAttrib() end)
+end
+
+function NebbieDash.cmdShowEq()
+  local name = NebbieDash.currentChar
+  if not name then
+    cecho("<orange>[NebbieDash] Nessun personaggio rilevato ancora. Digita un comando in gioco, poi riprova.\n")
+    return
+  end
+  local data = NebbieDash.getCharData(name)
+  if not data.eqUpdated then
+    cecho("<orange>[NebbieDash] Nessuna cache equip per " .. name .. " — esegui <yellow>nresync<orange> o <yellow>neq<orange>.\n")
+  end
+  NebbieDash.cmdResyncEq()
+end
+
+function NebbieDash.cmdShowAttrib()
+  local name = NebbieDash.currentChar
+  if not name then
+    cecho("<orange>[NebbieDash] Nessun personaggio rilevato ancora. Digita un comando in gioco, poi riprova.\n")
+    return
+  end
+  NebbieDash.cmdResyncAttrib()
+end
+
+function NebbieDash.cmdSetCharacter(name)
+  if not name or name == "" then
+    cecho("<orange>[NebbieDash] Uso: nchar NomePersonaggio\n")
+    return
+  end
+  NebbieDash.setCurrentCharacter(name, true)
+end
+
+-- ---------------------------------------------------------------------------
+-- Dashboard (miniconsole su bordo destro — MUDLET-WIKI-NOTES.md §6)
+-- ---------------------------------------------------------------------------
+NebbieDash.guiWidth = 260
+
+function NebbieDash.guiVisible()
+  return NebbieDash._guiCreated == true and NebbieDash._guiHidden ~= true
+end
+
+function NebbieDash.initGUI()
+  if NebbieDash._guiCreated then return end
+  setBorderRight(NebbieDash.guiWidth)
+  createMiniConsole("NebbieDashEquip", 0, 0, NebbieDash.guiWidth, 0)
+  createMiniConsole("NebbieDashSpells", 0, 0, NebbieDash.guiWidth, 0)
+  setMiniConsoleFontSize("NebbieDashEquip", 9)
+  setMiniConsoleFontSize("NebbieDashSpells", 9)
+  NebbieDash._guiCreated = true
+  NebbieDash.positionGUI()
+end
+
+function NebbieDash.positionGUI()
+  if not NebbieDash._guiCreated then return end
+  local w, h = getMainWindowSize()
+  w = w or 800
+  h = h or 600
+  local x = math.max(0, w - NebbieDash.guiWidth)
+  local equipH = math.floor(h * 0.6)
+  local spellsH = h - equipH
+  moveWindow("NebbieDashEquip", x, 0)
+  resizeWindow("NebbieDashEquip", NebbieDash.guiWidth, equipH)
+  moveWindow("NebbieDashSpells", x, equipH)
+  resizeWindow("NebbieDashSpells", NebbieDash.guiWidth, spellsH)
+end
+
+function NebbieDash.toggleGUI()
+  if not NebbieDash._guiCreated then
+    NebbieDash.initGUI()
+    NebbieDash._guiHidden = false
+  else
+    NebbieDash._guiHidden = not NebbieDash._guiHidden
+    if NebbieDash._guiHidden then
+      hideWindow("NebbieDashEquip")
+      hideWindow("NebbieDashSpells")
+      setBorderRight(0)
+    else
+      showWindow("NebbieDashEquip")
+      showWindow("NebbieDashSpells")
+      setBorderRight(NebbieDash.guiWidth)
+      NebbieDash.positionGUI()
+    end
+  end
+  NebbieDash.refreshDashboard()
+end
+
+function NebbieDash.resetLayout()
+  NebbieDash.guiWidth = 260
+  if NebbieDash._guiCreated then
+    setBorderRight(NebbieDash.guiWidth)
+    NebbieDash.positionGUI()
+  end
+end
+
+function NebbieDash.refreshDashboard()
+  if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
+  local name = NebbieDash.currentChar
+  clearWindow("NebbieDashEquip")
+  clearWindow("NebbieDashSpells")
+  if not name then
+    cecho("NebbieDashEquip", "<grey>Nessun personaggio rilevato.\n")
+    cecho("NebbieDashSpells", "<grey>Nessun personaggio rilevato.\n")
+    return
+  end
+  local data = NebbieDash.getCharData(name)
+
+  cecho("NebbieDashEquip", "<cyan><b>Equip — " .. name .. "</b>\n")
+  local any = false
+  for i = 1, 21 do
+    local label = NebbieDash.EQ_SLOTS[i] or ("slot " .. i)
+    local item = data.eq and data.eq[i]
+    if item then
+      any = true
+      cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", i, label, item))
+    end
+  end
+  if not any then
+    cecho("NebbieDashEquip", "<grey>(vuoto — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
+  end
+
+  cecho("NebbieDashSpells", "<cyan><b>Spell attivi — " .. name .. "</b>\n")
+  if data.spells and #data.spells > 0 then
+    for _, s in ipairs(data.spells) do
+      cecho("NebbieDashSpells", string.format("<white>%-20s<green>%s tick\n", s.name, tostring(s.ticks)))
+    end
+  else
+    cecho("NebbieDashSpells", "<grey>(nessuno — esegui <yellow>nattrib<grey> o <yellow>nresync<grey>)\n")
+  end
+end
+
+function NebbieDash.updateVitalsDisplay()
+  -- Placeholder minimo: la release 1 si concentra su equip/spell (R5/R11-R12);
+  -- una vera barra HP/Mana/Move e' rimandata a una fase successiva (fuori dal
+  -- gap risolto ora) e va progettata separatamente se richiesta.
+end
+
+-- ---------------------------------------------------------------------------
+-- Installazione trigger (una volta sola per boot)
+-- ---------------------------------------------------------------------------
+function NebbieDash.installTriggers()
+  if NebbieDash._triggersInstalled then return end
+  NebbieDash._promptTrig = tempTrigger(" M: ", [[NebbieDash.onPromptLine()]])
+  NebbieDash._eqOpenTrig = tempTrigger("Stai usando:", [[NebbieDash.startEqCapture()]])
+  NebbieDash._attribOpenTrig = tempTrigger("Spells attivi", [[NebbieDash.startAttribCapture()]])
+  NebbieDash._eqLineTrig = tempRegexTrigger("^", [[NebbieDash.onEqCaptureLine()]])
+  NebbieDash._attribLineTrig = tempRegexTrigger("^", [[NebbieDash.onAttribCaptureLine()]])
+  if NebbieDash._eqLineTrig then pcall(disableTrigger, NebbieDash._eqLineTrig) end
+  if NebbieDash._attribLineTrig then pcall(disableTrigger, NebbieDash._attribLineTrig) end
+  if type(registerAnonymousEventHandler) == "function" then
+    registerAnonymousEventHandler("sysConnectionEvent", "NebbieDash.onConnectionEvent")
+  end
+  NebbieDash._triggersInstalled = true
+end
+
+-- ---------------------------------------------------------------------------
+-- Boot (agganciato a sysLoadEvent — NON eseguito incondizionatamente al parse
+-- dello script, a differenza del codice legacy — vedi LOG.md/RECOMMENDATION.md)
+-- ---------------------------------------------------------------------------
+function NebbieDash.boot()
+  NebbieDash.loadStore()
+  NebbieDash.installTriggers()
+  NebbieDash.initGUI()
+  NebbieDash._mainLoaded = true
+  cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto. Usa <yellow>nresync<green> dopo il login.\n")
+end
+
+function NebbieDash.runFix()
+  NebbieDash._triggersInstalled = false
+  NebbieDash.boot()
+  cecho("<green>[NebbieDash] nfix completato.\n")
+end

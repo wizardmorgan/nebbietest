@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""Build script for the "nebbie-complete-dashboard-package" Mudlet package.
+
+Genera un .mpackage minimo (config.lua + XML root, formato documentato in
+docs/mudlet/analysis/MUDLET-WIKI-NOTES.md §7) a partire da:
+  - docs/mudlet/nebbie-complete-dashboard-package-core.lua (logica principale)
+
+A differenza di build-nebbie-package.py (legacy, ~2000 righe, generazione da
+sorgente C++), questo script e' intenzionalmente piccolo: il package nuovo non
+genera centinaia di alias/trigger dal sorgente MUD, solo un piccolo set di
+comandi statici (vedi ALIASES sotto).
+
+Uso:
+    python3 docs/mudlet/build-nebbie-complete-dashboard-package.py
+"""
+import os
+import zipfile
+import xml.sax.saxutils as sax
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PKG_NAME = "nebbie-complete-dashboard-package"
+PKG_VER = "1.0.0"
+CORE_LUA = os.path.join(HERE, "nebbie-complete-dashboard-package-core.lua")
+BUILD_DIR = os.path.join(HERE, "nebbie-complete-dashboard-package-build")
+XML_PATH = os.path.join(BUILD_DIR, f"{PKG_NAME}.xml")
+CONFIG_PATH = os.path.join(BUILD_DIR, "config.lua")
+MPACKAGE_PATH = os.path.join(HERE, f"{PKG_NAME}.mpackage")
+
+# Comandi manuali (Q&A.md Round 2/finale: nomi proposti, nessuna preferenza
+# diversa espressa dall'utente). Nessuno di questi invia comandi al MUD in
+# automatico al boot (vedi RECOMMENDATION.md / divieti confermati nel LOG.md).
+ALIASES = [
+    ("nebbie-dash-fix", "^nfix$", "NebbieDash.runFix()"),
+    ("nebbie-dash-eq", "^neq$", "NebbieDash.cmdShowEq()"),
+    ("nebbie-dash-attrib", "^nattrib$", "NebbieDash.cmdShowAttrib()"),
+    ("nebbie-dash-resync", "^nresync$", "NebbieDash.cmdResyncAll()"),
+    ("nebbie-dash-gui", "^ngui$", "NebbieDash.toggleGUI()"),
+    ("nebbie-dash-layout", "^nlayout$", "NebbieDash.resetLayout()"),
+    ("nebbie-dash-char", "^nchar (.+)$", "NebbieDash.cmdSetCharacter(matches[2])"),
+]
+
+
+def cdata(text):
+    # CDATA non puo' contenere la sequenza "]]>" letteralmente.
+    return "<![CDATA[" + text.replace("]]>", "]]]]><![CDATA[>") + "]]>"
+
+
+def build_xml(core_code):
+    boot_wrapper = f'''local ver = "{PKG_VER}"
+if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
+local ok, err = pcall(function() NebbieDash.boot() end)
+if not ok then
+  cecho("<red>[NebbieDash] errore boot: " .. tostring(err) .. "\\n")
+end'''
+
+    parts = []
+    parts.append('<?xml version="1.0" encoding="UTF-8"?>')
+    parts.append('<!DOCTYPE MudletPackage>')
+    parts.append('<MudletPackage version="1.001">')
+    parts.append(' <ScriptPackage>')
+
+    parts.append('  <Script isActive="yes" isFolder="no">')
+    parts.append(f'   <name>{PKG_NAME} - core</name>')
+    parts.append(f'   <script>{cdata(core_code)}</script>')
+    parts.append(f'   <packageName>{PKG_NAME}</packageName>')
+    parts.append('  </Script>')
+
+    parts.append('  <Script isActive="yes" isFolder="no">')
+    parts.append(f'   <name>{PKG_NAME} - boot</name>')
+    parts.append(f'   <script>{cdata(boot_wrapper)}</script>')
+    parts.append('   <eventHandlerList>')
+    parts.append('    <string>sysLoadEvent</string>')
+    parts.append('   </eventHandlerList>')
+    parts.append(f'   <packageName>{PKG_NAME}</packageName>')
+    parts.append('  </Script>')
+
+    parts.append(' </ScriptPackage>')
+    parts.append(' <AliasPackage>')
+    for name, regex, call in ALIASES:
+        parts.append('  <Alias isActive="yes" isFolder="no">')
+        parts.append(f'   <name>{sax.escape(name)}</name>')
+        parts.append(f'   <script>{cdata(call)}</script>')
+        parts.append('   <command></command>')
+        parts.append(f'   <packageName>{PKG_NAME}</packageName>')
+        parts.append(f'   <regex>{sax.escape(regex)}</regex>')
+        parts.append('  </Alias>')
+    parts.append(' </AliasPackage>')
+    parts.append('</MudletPackage>')
+    return "\n".join(parts) + "\n"
+
+
+def main():
+    with open(CORE_LUA, "r", encoding="utf-8") as f:
+        core_code = f.read()
+
+    os.makedirs(BUILD_DIR, exist_ok=True)
+
+    xml_content = build_xml(core_code)
+    with open(XML_PATH, "w", encoding="utf-8") as f:
+        f.write(xml_content)
+
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        f.write(f'mpackage = "{PKG_NAME}"\n')
+
+    if os.path.exists(MPACKAGE_PATH):
+        os.remove(MPACKAGE_PATH)
+    with zipfile.ZipFile(MPACKAGE_PATH, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(CONFIG_PATH, "config.lua")
+        z.write(XML_PATH, f"{PKG_NAME}.xml")
+
+    size = os.path.getsize(MPACKAGE_PATH)
+    print(f"Scritto {MPACKAGE_PATH} ({size} bytes)")
+    print(f"Scritto {XML_PATH}")
+    print(f"Scritto {CONFIG_PATH}")
+
+
+if __name__ == "__main__":
+    main()
