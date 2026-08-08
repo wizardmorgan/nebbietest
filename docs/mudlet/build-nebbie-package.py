@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent
 SPELL_PARSER = ROOT.parent.parent / "src" / "spell_parser.cpp"
 OUT_DIR = ROOT / "nebbie-play-all-build"
 PACKAGE_NAME = "nebbie-play-all"
-PKG_VER = "2.2.54"
+PKG_VER = "2.2.55"
 MAIN_SCRIPT_NAME = "Nebbie Play All"  # legacy profile script (cache source only)
 LOADER_SCRIPT_NAME = "Nebbie Loader"
 INSTALL_FILE = "nebbie-install.lua"
@@ -1283,12 +1283,7 @@ function Nebbie_loaderBoot()
       cecho("<yellow>Nebbie loader: memoria v" .. tostring(Nebbie.version) .. " → v" .. NEBBIE_EXPECT .. "\\n")
       Nebbie_wipeMemory()
     else
-      cecho("<yellow>Nebbie: package loader v" .. NEBBIE_EXPECT .. " < memoria v" .. tostring(Nebbie.version) .. " — scarico dal branch...\\n")
-      Nebbie._loaderBootDone = true
-      if type(Nebbie_forceUpgrade) == "function" then
-        Nebbie_forceUpgrade(false)
-        return
-      end
+      cecho("<yellow>Nebbie: package loader v" .. NEBBIE_EXPECT .. " < memoria v" .. tostring(Nebbie.version) .. " — digita <yellow>nfix<grey> o reinstalla mpackage.\\n")
     end
   end
   Nebbie._loaderBootDone = true

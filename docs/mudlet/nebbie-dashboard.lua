@@ -321,17 +321,20 @@ end
 function Nebbie.ensurePanelsBuilt()
   if not Nebbie.computeUILayout then return false end
   local layout = Nebbie.computeUILayout()
+  local built = false
   for key, _ in pairs(Nebbie.panels) do
     if not Nebbie.panelExists(key) then
       Nebbie.buildPanel(key, layout)
+      built = true
     end
   end
   if not Nebbie.dashboardExists() then
     Nebbie.buildDashboard()
+    built = true
   end
   Nebbie._dashboardHidden = false
   if Nebbie.showDashboard then Nebbie.showDashboard() end
-  if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
+  if built and Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
   return Nebbie.panelExists("eq")
 end
 
@@ -419,7 +422,9 @@ function Nebbie.formatEqSlotLabel(label)
 end
 
 function Nebbie.refreshEqPanel()
-  if not Nebbie.ensurePanelsBuilt() then return end
+  if not Nebbie.panelExists("eq") then
+    if not Nebbie.ensurePanelsBuilt() then return end
+  end
   local p = Nebbie.panels.eq
   if not p then return end
   Nebbie.clearPanel(p.con)
@@ -437,7 +442,9 @@ function Nebbie.refreshEqPanel()
 end
 
 function Nebbie.refreshSpellPanel()
-  if not Nebbie.ensurePanelsBuilt() then return end
+  if not Nebbie.panelExists("spells") then
+    if not Nebbie.ensurePanelsBuilt() then return end
+  end
   local p = Nebbie.panels.spells
   if not p then return end
   Nebbie.clearPanel(p.con)
@@ -471,7 +478,9 @@ function Nebbie.refreshSpellPanel()
 end
 
 function Nebbie.refreshPathsPanel()
-  if not Nebbie.ensurePanelsBuilt() then return end
+  if not Nebbie.panelExists("paths") then
+    if not Nebbie.ensurePanelsBuilt() then return end
+  end
   local p = Nebbie.panels.paths
   if not p then return end
   Nebbie.clearPanel(p.con)
@@ -490,7 +499,9 @@ function Nebbie.refreshPathsPanel()
 end
 
 function Nebbie.refreshConfigPanel()
-  if not Nebbie.ensurePanelsBuilt() then return end
+  if not Nebbie.panelExists("config") then
+    if not Nebbie.ensurePanelsBuilt() then return end
+  end
   local p = Nebbie.panels.config
   if not p then return end
   Nebbie.clearPanel(p.con)
@@ -534,10 +545,15 @@ end
 
 function Nebbie.refreshDashboard()
   if not Nebbie.dashboardPanelsVisible() then return end
+  local now = Nebbie.now()
+  if Nebbie._dashRefreshBusy then return end
+  Nebbie._dashRefreshBusy = true
   Nebbie.refreshEqPanel()
   Nebbie.refreshSpellPanel()
   Nebbie.refreshPathsPanel()
   Nebbie.refreshConfigPanel()
+  Nebbie._dashRefreshBusy = false
+  Nebbie._lastDashRefresh = now
 end
 
 function Nebbie.dashboardExists()
@@ -645,7 +661,10 @@ do
   local _origRefreshGUI = Nebbie.refreshGUI
   function Nebbie.refreshGUI()
     if _origRefreshGUI then _origRefreshGUI() end
-    Nebbie.refreshDashboard()
+    local now = Nebbie.now()
+    if not Nebbie._lastDashRefresh or (now - Nebbie._lastDashRefresh) >= 2 then
+      Nebbie.refreshDashboard()
+    end
   end
 
   local _origInitGUI = Nebbie.initGUI

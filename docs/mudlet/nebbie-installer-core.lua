@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.54"
+Nebbie.version = "2.2.55"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -387,7 +387,9 @@ function Nebbie.onPrompt(line)
 end
 
 function Nebbie.onPromptLine()
-  Nebbie.onPrompt(Nebbie.resolveTriggerLine())
+  local line = Nebbie.resolveTriggerLine()
+  if not Nebbie.lineLooksLikePrompt(line) then return end
+  Nebbie.onPrompt(line)
 end
 
 function Nebbie.debugPrompt()
@@ -448,22 +450,7 @@ function Nebbie.installPromptHooks()
   end
   Nebbie._promptTrigIds = {}
   local hook = [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]]
-  if type(tempSubstringTrigger) == "function" then
-    for _, sub in ipairs({ " H:", " M:", " V:", " X:" }) do
-      local id = tempSubstringTrigger(sub, hook)
-      if id then table.insert(Nebbie._promptTrigIds, id) end
-    end
-  end
-  if type(tempRegexTrigger) == "function" then
-    for _, pat in ipairs({
-      [[H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+]],
-      [[H\d+/\d+.*M\d+/\d+.*V\d+/\d+.*X\d+]],
-      [[[Hh]:%s*%d+/%d+.*[Mm]:%s*%d+/%d+.*[Vv]:%s*%d+/%d+.*[xX]:%s*-?%d+]],
-    }) do
-      local ok, id = pcall(function() return tempRegexTrigger(pat, hook) end)
-      if ok and id then table.insert(Nebbie._promptTrigIds, id) end
-    end
-  end
+  -- Solo evento prompt Mudlet (no substring H:/M:/V: — matchano troppe righe e freezano il client).
   if type(tempPromptTrigger) == "function" then
     pcall(function()
       local id = tempPromptTrigger(hook)
@@ -988,7 +975,7 @@ end
 function Nebbie.purgeOrphanNebbieTriggers()
   local patterns = {
     "debuff on", "debuff off", "wear off", "soon ", "fail ", "cast started",
-    "prompt parse", "attrib gag", "look loot", "eq parse", "mob kill", "coin loot",
+    "prompt parse", "attrib gag", "look loot", "eq parse", "mob kill", "coin loot", "live capture",
   }
   if type(getTriggerList) == "function" then
     for _, entry in ipairs(getTriggerList()) do
@@ -1121,9 +1108,6 @@ function Nebbie.finishInstall()
   Nebbie.ensureDashboard()
   if Nebbie.scheduleUILayout then Nebbie.scheduleUILayout() end
   if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end
-  if Nebbie.populatePanels and type(tempTimer) == "function" then
-    tempTimer(1.0, function() Nebbie.populatePanels() end)
-  end
 end
 
 function Nebbie.warnLegacyPackages()
@@ -2409,6 +2393,9 @@ end
 
 function Nebbie.onEqParseLine(line)
   line = line or Nebbie.resolveTriggerLine()
+  if Nebbie._liveCapture and Nebbie._liveCapture.active and Nebbie.ingestLiveCaptureLine then
+    Nebbie.ingestLiveCaptureLine(line)
+  end
   Nebbie.onEqLine(line)
   if line and line ~= "" then
     local slot, item = Nebbie.parseEqSlotLine(line)
@@ -3230,7 +3217,7 @@ function Nebbie.initGUI()
     if Nebbie.pollPromptFromBuffer then Nebbie.pollPromptFromBuffer() end
     if Nebbie.updateGauges then Nebbie.updateGauges() end
   end)
-  Nebbie.guiTimer = tempTimer(1, function() Nebbie.refreshGUI() end, true)
+  Nebbie.guiTimer = tempTimer(2, function() Nebbie.refreshGUI() end, true)
   Nebbie.syncAttribTimer()
 end
 
@@ -3246,11 +3233,7 @@ function Nebbie.populatePanels()
   if Nebbie.ensurePanelsBuilt then Nebbie.ensurePanelsBuilt() end
   Nebbie.pollPromptFromBuffer()
   Nebbie.updateGauges()
-  if Nebbie.refreshGUI then Nebbie.refreshGUI() end
-  Nebbie.fetchEqLive()
-  tempTimer(8, function()
-    if Nebbie.fetchAttribLive then Nebbie.fetchAttribLive(true) end
-  end)
+  if Nebbie.refreshDashboard then Nebbie.refreshDashboard() end
 end
 
 function Nebbie.parsePromptCodes(raw)
@@ -3299,6 +3282,9 @@ function Nebbie.parseAttribSpellLine(line)
 end
 
 function Nebbie.onAttribLine(line)
+  if Nebbie._liveCapture and Nebbie._liveCapture.active and Nebbie.ingestLiveCaptureLine then
+    Nebbie.ingestLiveCaptureLine(line)
+  end
   local plain = Nebbie.stripColors(line)
   if plain:find("Spells attivi", 1, true) then
     Nebbie.beginAttribScan()
@@ -3800,11 +3786,6 @@ function Nebbie.install()
   perm("eq panel sync", [[^neq panel$]], [[Nebbie.requestEqPanel()]])
 
   trig("prompt parse", {[[[Hh]:\s*\d+/\d+.*[Mm]:\s*\d+/\d+.*[Vv]:\s*\d+/\d+.*[xX]:\s*-?\d+]]}, [[if Nebbie and Nebbie.onPromptLine then Nebbie.onPromptLine() end]], true)
-  trig("live capture mux", {[[.+]]}, [[
-    if Nebbie and Nebbie._liveCapture and Nebbie._liveCapture.active and Nebbie.ingestLiveCaptureLine then
-      Nebbie.ingestLiveCaptureLine(line)
-    end
-  ]], true)
   trig("char menu start", {"Scegli un personagggio", "Scegli un personaggio"}, [[if Nebbie and Nebbie.onCharMenuStart then Nebbie.onCharMenuStart() end]])
   trig("char menu line", {[[^\s*\d+\.\s+\S+]]}, [[if Nebbie and Nebbie.onCharMenuLine then Nebbie.onCharMenuLine(line) end]], true)
   trig("attrib gag", {"Tu hai", "Spells attivi", "Spell :"}, [[if Nebbie and Nebbie.onAttribLine then Nebbie.onAttribLine(line) end]])
@@ -3930,12 +3911,7 @@ function Nebbie.boot()
   if Nebbie._expectedPkgVer and Nebbie.version ~= Nebbie._expectedPkgVer then
     cecho("<orange>Nebbie: versione caricata <yellow>" .. tostring(Nebbie.version)
       .. "<orange> ≠ package <yellow>" .. Nebbie._expectedPkgVer .. "<orange>.\n")
-    if type(Nebbie_forceUpgrade) == "function" then
-      cecho("<grey>Scarico aggiornamento...\n")
-      tempTimer(0.3, function() Nebbie_forceUpgrade(false) end)
-      Nebbie._bootInProgress = false
-      return
-    end
+    cecho("<grey>Usa <yellow>nfix<grey> dopo il login (non automatico al boot).\n")
     if Nebbie.PKG_URL then
       cecho("<grey>Reinstalla: <yellow>" .. Nebbie.PKG_URL .. "\n")
     end
