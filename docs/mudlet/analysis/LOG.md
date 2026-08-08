@@ -242,6 +242,31 @@ Regole di riferimento: `docs/mudlet/AGENT-RULES.txt`, `docs/mudlet/AGENT-PROMPT-
   reinstallazione del `.mpackage` aggiornato) — resta comunque aperto il test manuale T1/T7 in
   `TEST-PLAN.md`.
 
+## 2026-08-08 23:xx — Secondo giro di feedback reale: layout non responsive, font, slot vuoti
+
+- **Segnalazione utente**: dopo aver reinstallato il `.mpackage` col fix precedente, si vede una
+  sola barra a destra (non due), ridimensionare la finestra di Mudlet non ha alcun effetto sul
+  pannello, il font è troppo piccolo, e gli slot equip vuoti non compaiono (solo quelli occupati).
+- **Analisi codice**: confermato che `positionGUI()` non era mai agganciata a nessun evento di
+  resize — mancava un handler per `sysWindowResizeEvent` (verificato su
+  https://wiki.mudlet.org/w/Manual:Event_Engine: firma `function(event, x, y)`, x/y = nuove
+  dimensioni finestra principale/bordi). Inoltre `getMainWindowSize()` letta nello stesso istante
+  della creazione della GUI può restituire una dimensione non ancora corretta (nota già presente
+  in MUDLET-WIKI-NOTES.md sulla geometria Qt/autowrap), spiegando l'altezza errata (vicina a 0)
+  della miniconsole equip vista come "una sola barra". `refreshDashboard()` inoltre ometteva del
+  tutto gli slot equip vuoti (`if item then ... end`, nessun ramo else).
+- **Fix applicati**: handler `sysWindowResizeEvent` → `NebbieDash.onWindowResize` che richiama
+  `positionGUI()` via `tempTimer(0, ...)`; secondo richiamo a `positionGUI()` via `tempTimer(0,
+  ...)` subito dopo la creazione iniziale della GUI per correggere l'altezza calcolata male
+  all'avvio; font di default alzato 9→11pt e larghezza pannello 260→320px, con due nuovi comandi
+  manuali `nfont <n>` e `nwidth <n>` per regolarli; il pannello equip ora mostra sempre tutti i 21
+  slot, marcando esplicitamente `(vuoto)` quelli liberi.
+- **Verifica**: `luac -p` OK, rieseguito `tests/smoke_test_parsing.lua` — 19/19 OK (fix riguarda
+  solo GUI/layout, non il parsing). Rigenerato `.mpackage`.
+- **Azione**: aggiornati `USAGE.md` (nuova sezione + tabella comandi) e `CHANGELOG.md`.
+- **Nota**: nessuno di questi fix (resize/font/slot vuoti) è ancora stato validato in Mudlet reale
+  — richiede nuova reinstallazione del `.mpackage` da parte dell'utente.
+
 ---
 
 (continua...)

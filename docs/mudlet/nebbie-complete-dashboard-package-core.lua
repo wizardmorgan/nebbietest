@@ -323,7 +323,8 @@ end
 -- ---------------------------------------------------------------------------
 -- Dashboard (miniconsole su bordo destro — MUDLET-WIKI-NOTES.md §6)
 -- ---------------------------------------------------------------------------
-NebbieDash.guiWidth = 260
+NebbieDash.guiWidth = 320
+NebbieDash.fontSize = 11
 
 function NebbieDash.guiVisible()
   return NebbieDash._guiCreated == true and NebbieDash._guiHidden ~= true
@@ -334,8 +335,8 @@ function NebbieDash.initGUI()
   setBorderRight(NebbieDash.guiWidth)
   createMiniConsole("NebbieDashEquip", 0, 0, NebbieDash.guiWidth, 0)
   createMiniConsole("NebbieDashSpells", 0, 0, NebbieDash.guiWidth, 0)
-  setMiniConsoleFontSize("NebbieDashEquip", 9)
-  setMiniConsoleFontSize("NebbieDashSpells", 9)
+  setMiniConsoleFontSize("NebbieDashEquip", NebbieDash.fontSize)
+  setMiniConsoleFontSize("NebbieDashSpells", NebbieDash.fontSize)
   -- Una miniconsole appena creata ha uno sfondo di default (grigio, widget Qt
   -- non ancora disegnato) finche' non le si assegna esplicitamente un colore e
   -- non ci si scrive dentro almeno una volta: senza queste due righe il
@@ -346,6 +347,11 @@ function NebbieDash.initGUI()
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
   NebbieDash.refreshDashboard()
+  -- getMainWindowSize() puo' non essere ancora affidabile nello stesso istante
+  -- in cui la GUI viene creata (geometria Qt non ancora assestata all'avvio
+  -- del profilo): riesegui il posizionamento un istante dopo per evitare che
+  -- un pannello resti a altezza 0 (visto come "una sola barra" a schermo).
+  tempTimer(0, [[NebbieDash.positionGUI()]])
 end
 
 function NebbieDash.positionGUI()
@@ -383,11 +389,42 @@ function NebbieDash.toggleGUI()
 end
 
 function NebbieDash.resetLayout()
-  NebbieDash.guiWidth = 260
+  NebbieDash.guiWidth = 320
+  NebbieDash.fontSize = 11
   if NebbieDash._guiCreated then
     setBorderRight(NebbieDash.guiWidth)
+    setMiniConsoleFontSize("NebbieDashEquip", NebbieDash.fontSize)
+    setMiniConsoleFontSize("NebbieDashSpells", NebbieDash.fontSize)
     NebbieDash.positionGUI()
   end
+end
+
+function NebbieDash.cmdSetFont(sizeStr)
+  local size = tonumber(sizeStr)
+  if not size or size < 6 or size > 24 then
+    cecho("<orange>[NebbieDash] Uso: nfont <numero tra 6 e 24> (attuale: " .. NebbieDash.fontSize .. ")\n")
+    return
+  end
+  NebbieDash.fontSize = size
+  if NebbieDash._guiCreated then
+    setMiniConsoleFontSize("NebbieDashEquip", size)
+    setMiniConsoleFontSize("NebbieDashSpells", size)
+  end
+  cecho("<green>[NebbieDash] Font pannello impostato a " .. size .. ".\n")
+end
+
+function NebbieDash.cmdSetWidth(widthStr)
+  local width = tonumber(widthStr)
+  if not width or width < 150 or width > 900 then
+    cecho("<orange>[NebbieDash] Uso: nwidth <numero tra 150 e 900> (attuale: " .. NebbieDash.guiWidth .. ")\n")
+    return
+  end
+  NebbieDash.guiWidth = width
+  if NebbieDash._guiCreated then
+    setBorderRight(width)
+    NebbieDash.positionGUI()
+  end
+  cecho("<green>[NebbieDash] Larghezza pannello impostata a " .. width .. ".\n")
 end
 
 function NebbieDash.refreshDashboard()
@@ -403,17 +440,20 @@ function NebbieDash.refreshDashboard()
   local data = NebbieDash.getCharData(name)
 
   cecho("NebbieDashEquip", "<cyan><b>Equip — " .. name .. "</b>\n")
-  local any = false
+  if not (data.eqUpdated) then
+    cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
+  end
+  -- Mostra sempre tutti i 21 slot, anche quelli vuoti (richiesta utente:
+  -- serve vedere a colpo d'occhio cosa manca da equipaggiare), non solo
+  -- quelli occupati come nella prima versione.
   for i = 1, 21 do
     local label = NebbieDash.EQ_SLOTS[i] or ("slot " .. i)
     local item = data.eq and data.eq[i]
     if item then
-      any = true
       cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", i, label, item))
+    else
+      cecho("NebbieDashEquip", string.format("<grey>[%2d] %s\n     <grey>(vuoto)\n", i, label))
     end
-  end
-  if not any then
-    cecho("NebbieDashEquip", "<grey>(vuoto — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
   end
 
   cecho("NebbieDashSpells", "<cyan><b>Spell attivi — " .. name .. "</b>\n")
@@ -446,8 +486,20 @@ function NebbieDash.installTriggers()
   if NebbieDash._attribLineTrig then pcall(disableTrigger, NebbieDash._attribLineTrig) end
   if type(registerAnonymousEventHandler) == "function" then
     registerAnonymousEventHandler("sysConnectionEvent", "NebbieDash.onConnectionEvent")
+    registerAnonymousEventHandler("sysWindowResizeEvent", "NebbieDash.onWindowResize")
   end
   NebbieDash._triggersInstalled = true
+end
+
+-- Ridisegna il pannello quando la finestra principale (o i bordi) cambiano
+-- dimensione — senza questo handler positionGUI() viene chiamata solo alla
+-- creazione iniziale e il layout resta "congelato" a qualunque dimensione
+-- avesse la finestra in quel momento (bug osservato: ridimensionare Mudlet
+-- non aggiornava i pannelli). tempTimer(0, ...) perche' la geometria di Qt
+-- non e' ancora aggiornata nello stesso istante dell'evento (vedi
+-- MUDLET-WIKI-NOTES.md, nota su autowrap/resize).
+function NebbieDash.onWindowResize(_, _, _)
+  tempTimer(0, [[NebbieDash.positionGUI()]])
 end
 
 -- ---------------------------------------------------------------------------

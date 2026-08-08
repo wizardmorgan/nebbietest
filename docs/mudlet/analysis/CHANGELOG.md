@@ -1,5 +1,15 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.0.0 (fix 2) — 2026-08-08
+
+- **Fix**: il pannello non si ridimensionava mai dopo la creazione iniziale (mancava un handler
+  per `sysWindowResizeEvent`), causando anche una miniconsole a altezza ~0 all'avvio ("una sola
+  barra" a schermo). Vedi `LOG.md`.
+- **Aggiunto**: comandi `nfont <n>` e `nwidth <n>` per regolare font (default alzato 9→11pt) e
+  larghezza (default alzata 260→320px) del pannello.
+- **Cambiato**: il pannello equip mostra ora sempre tutti i 21 slot, marcando `(vuoto)` quelli
+  liberi, invece di ometterli.
+
 ## 1.0.0 (fix) — 2026-08-08
 
 - **Fix**: pannelli equip/spell grigi/vuoti subito dopo l'installazione (prima di qualunque

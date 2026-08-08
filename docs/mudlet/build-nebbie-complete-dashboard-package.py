@@ -37,6 +37,8 @@ ALIASES = [
     ("nebbie-dash-gui", "^ngui$", "NebbieDash.toggleGUI()"),
     ("nebbie-dash-layout", "^nlayout$", "NebbieDash.resetLayout()"),
     ("nebbie-dash-char", "^nchar (.+)$", "NebbieDash.cmdSetCharacter(matches[2])"),
+    ("nebbie-dash-font", "^nfont (.+)$", "NebbieDash.cmdSetFont(matches[2])"),
+    ("nebbie-dash-width", "^nwidth (.+)$", "NebbieDash.cmdSetWidth(matches[2])"),
 ]
 
 

@@ -26,7 +26,9 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nattrib` | Invia solo `attrib` e aggiorna il pannello spell. |
 | `nchar <nome>` | Forza manualmente il personaggio attivo (es. `nchar NomiyaMaki`), utile se il rilevamento automatico dal prompt non è ancora scattato (nessun comando ancora digitato in gioco). |
 | `ngui` | Mostra/nasconde il pannello laterale (bordo destro). |
-| `nlayout` | Ripristina larghezza/posizione di default del pannello (260px, lato destro). |
+| `nlayout` | Ripristina larghezza (320px) e font (11pt) di default del pannello. |
+| `nfont <numero>` | Cambia la dimensione del testo nel pannello (6–24, default 11). |
+| `nwidth <numero>` | Cambia la larghezza del pannello in pixel (150–900, default 320). |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
 
 Il rilevamento del personaggio è **automatico**: appena il prompt del gioco viene ricevuto (dopo
@@ -65,3 +67,36 @@ del vecchio package. Verifica (in ordine):
    (`createMiniConsole`, `createLabel`) non sono "salvati" nel profilo, vengono ricreati a ogni
    boot dello script che li possiede — se il vecchio script non gira più, i suoi widget non
    dovrebbero ricomparire dopo un riavvio completo.
+
+## Bug corretto: "una sola barra", pannello non si ridimensiona, font piccolo, slot vuoti nascosti
+
+**Sintomi segnalati** (dopo il fix del bug precedente): a schermo si vedeva una sola barra a
+destra invece di due (equip sopra, spell sotto); ridimensionando la finestra di Mudlet il pannello
+non si aggiornava; il testo era troppo piccolo; gli slot equip vuoti non comparivano affatto (si
+vedevano solo quelli occupati, senza modo di capire cosa mancava da equipaggiare).
+
+**Cause reali, tutte nello stesso file**:
+- `positionGUI()` veniva chiamata solo alla creazione iniziale della GUI: non esisteva nessun
+  handler per l'evento `sysWindowResizeEvent`, quindi ridimensionare la finestra di Mudlet non
+  aveva alcun effetto sul layout del pannello.
+- Allo stesso avvio, `getMainWindowSize()` può restituire una dimensione non ancora corretta
+  (geometria Qt non assestata nell'istante esatto in cui la GUI viene creata): se questo capitava,
+  il calcolo `equipH = h * 0.6` produceva un'altezza sbagliata (es. vicina a 0) per la miniconsole
+  equip, che risultava quindi invisibile — dando l'impressione di "una sola barra".
+- Il font era fissato a 9pt via codice, senza modo di cambiarlo.
+- `refreshDashboard()` stampava solo gli slot equip occupati (`if item then ... end`), saltando
+  del tutto quelli vuoti.
+
+**Fix applicati** (`nebbie-complete-dashboard-package-core.lua`):
+- aggiunto handler `sysWindowResizeEvent` → `NebbieDash.onWindowResize` → richiama
+  `positionGUI()` (con `tempTimer(0, ...)` per dare tempo a Qt di aggiornare la geometria) a ogni
+  ridimensionamento della finestra o dei bordi;
+- aggiunto un secondo richiamo a `positionGUI()` via `tempTimer(0, ...)` subito dopo la creazione
+  iniziale della GUI, per correggere l'eventuale altezza sbagliata calcolata all'avvio;
+- font di default alzato da 9 a 11pt, e larghezza pannello di default da 260 a 320px, con due nuovi
+  comandi (`nfont`, `nwidth`) per regolarli a piacere;
+- il pannello equip ora elenca sempre tutti i 21 slot, marcando `(vuoto)` quelli non occupati,
+  invece di ometterli.
+
+`.mpackage` rigenerato con questi fix. Va reinstallato allo stesso modo descritto sopra (rimuovi
+la versione precedente, riavvia Mudlet, installa il nuovo file, riconnetti).
