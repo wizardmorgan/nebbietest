@@ -152,6 +152,26 @@ NomiyaMaki H: 747/747 M: 532/532 V: 158/158 x:-238860738 *:* *:* [[D]] G:3449502
 
 ---
 
+## Round 4 — Feedback post-installazione: speedwalk / spell cliccabili / slot vuoti
+
+Poste dopo la terza reinstallazione reale del pacchetto (bug slot mislabeled + word-wrap).
+
+- **Q1 (finestra speedwalk)**: riusare la fonte dati del vecchio package o progettare da zero?
+  **R**: "progettiamo da zero" — dettagli forniti in un messaggio successivo (non ancora arrivati
+  al momento di scrivere questa voce).
+- **Q2 (spell cliccabili)**: che comando usare per rilanciare una spell dal pannello?
+  **R**: dipende dalla classe — sorcerer usa `recall '<nome>'`, psionico usa `mind '<nome>'`
+  (o la skill psionica), mago/chierico usano `cast '<nome>'`. Richiesta di estrarre la lista
+  completa di spell/skill dal codice del server (repo separato, "nebbietest ha upstream
+  NebbieArcane/Server"), NON di decidere io quali assegnare come alias — quello lo decide
+  l'utente in un secondo momento, eventualmente da un file di configurazione. Richiesto anche un
+  "motore generico" con prefissi a una lettera `c`/`r`/`m` che prendano tutto il resto della riga
+  come un'unica stringa argomento, es. `c word of r` → `cast 'word of recall'` (nota: verificato
+  nel codice server che il motore di gioco fa già da solo il match per abbreviazione, quindi in
+  realtà l'output esatto inviato è `cast 'word of r'`, non serve espanderlo a mano lato Mudlet).
+- **Q3 (slot equip non occupati)**: c'è un comando per elencare tutte le posizioni indossabili
+  anche vuote? **R**: "no/non lo so, lascia il pannello così com'è" — chiuso, nessuna azione.
+
 ## Regola di avanzamento
 
 - Le domande **bloccanti** (1, 2, 3, 4 del Round 2) devono avere risposta prima di scrivere

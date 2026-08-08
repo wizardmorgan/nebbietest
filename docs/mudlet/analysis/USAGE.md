@@ -31,6 +31,9 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nwidth <numero>` | Cambia la larghezza del pannello in pixel (150–900, default 320). |
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
+| `c <nome>` | Invia `cast '<nome>'` (mago/chierico). Es. `c word of r` → `cast 'word of r'` (il gioco stesso fa il match abbreviato su "word of recall", vedi sotto). |
+| `r <nome>` | Invia `recall '<nome>'` (sorcerer). |
+| `m <nome>` | Invia `mind '<nome>'` (psionico). |
 
 Il rilevamento del personaggio è **automatico**: appena il prompt del gioco viene ricevuto (dopo
 che scrivi un qualsiasi comando), il nome del personaggio attivo viene letto dal prompt stesso
@@ -139,3 +142,25 @@ lista (es. un comando che elenchi *tutte* le posizioni indossabili, occupate o n
 testo completo resta comunque disponibile digitando `eq` normalmente. Regolabile con `nitemlen`
 (vedi tabella comandi sopra); allargare il pannello con `nwidth` riduce ulteriormente il word-wrap
 residuo.
+
+## Motore generico di lancio spell/skill (`c`/`r`/`m`)
+
+Aggiunto su richiesta esplicita (comando esatto specificato dall'utente): tre alias a una lettera,
+`c <nome>`, `r <nome>`, `m <nome>`, che inviano rispettivamente `cast '<nome>'`, `recall '<nome>'`,
+`mind '<nome>'`. Non facciamo nessun fuzzy-matching lato Mudlet: il motore di gioco stesso
+(`ACTION_FUNC(do_cast)` in `src/spell_parser.cpp` sul repo server) fa già il match per
+abbreviazione contro l'elenco completo dei nomi (`old_search_block`), quindi `c word of r` diventa
+`cast 'word of r'` e il gioco lo risolve da solo in "word of recall".
+
+L'elenco completo di tutti i nomi conosciuti dal motore di gioco (spell, skill, poteri psionici —
+non filtrato per classe) è in `MUD-SPELL-SKILL-LIST.md`, estratto direttamente dal codice sorgente
+del server (non inventato). Serve come riferimento per scegliere quali nomi assegnare a eventuali
+alias dedicati più corti (feature non ancora implementata, in attesa che l'utente indichi quali
+voci gli servono e con quale sintassi — vedi `Q&A.md`).
+
+**Attenzione — possibile collisione**: `c`, `r`, `m` seguiti da uno spazio e altro testo ora
+vengono intercettati SEMPRE da questo alias, anche se nel gioco esistessero altri comandi che
+iniziano per caso con la stessa lettera (es. abbreviazioni di comandi diversi da "cast"/"recall"/
+"mind" che prendono un argomento). Se noti che un comando che usavi prima con quella lettera ha
+smesso di funzionare come previsto, segnalalo: è il compromesso esplicitamente scelto con la
+sintassi richiesta.

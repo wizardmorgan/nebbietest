@@ -40,6 +40,7 @@ ALIASES = [
     ("nebbie-dash-font", "^nfont (.+)$", "NebbieDash.cmdSetFont(matches[2])"),
     ("nebbie-dash-width", "^nwidth (.+)$", "NebbieDash.cmdSetWidth(matches[2])"),
     ("nebbie-dash-itemlen", "^nitemlen (.+)$", "NebbieDash.cmdSetItemLen(matches[2])"),
+    ("nebbie-dash-quickcast", "^([crm]) (.+)$", "NebbieDash.cmdQuickCast(matches[2], matches[3])"),
 ]
 
 

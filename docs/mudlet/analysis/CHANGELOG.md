@@ -1,5 +1,17 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.0.0 (fix 4) — 2026-08-08
+
+- **Aggiunto**: motore generico di lancio spell/skill/potere psionico — alias `c <nome>`
+  (`cast '<nome>'`, mago/chierico), `r <nome>` (`recall '<nome>'`, sorcerer), `m <nome>`
+  (`mind '<nome>'`, psionico). Nessun fuzzy-matching lato Mudlet: il motore di gioco fa già il
+  match per abbreviazione (verificato in `src/spell_parser.cpp`, `do_cast`/`old_search_block`).
+- **Aggiunto**: `docs/mudlet/analysis/MUD-SPELL-SKILL-LIST.md`, elenco completo (300 voci) di
+  spell/skill/poteri estratto dal codice sorgente del server (`spells[]` in
+  `src/spell_parser.cpp`), come riferimento per scegliere eventuali alias dedicati più corti.
+- **Non incluso** (in attesa di requisiti dall'utente): finestra speedwalk, alias dedicati per
+  spell specifiche, click-to-recast vero e proprio nel pannello.
+
 ## 1.0.0 (fix 3) — 2026-08-08
 
 - **Fix importante**: etichette slot equip sbagliate (es. oggetto mostrato come "ai piedi" quando

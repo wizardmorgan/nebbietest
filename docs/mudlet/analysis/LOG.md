@@ -302,6 +302,46 @@ Regole di riferimento: `docs/mudlet/AGENT-RULES.txt`, `docs/mudlet/AGENT-PROMPT-
 - **Verifica**: `luac -p` OK, `tests/smoke_test_parsing.lua` aggiornato con struttura
   `{location, item}` e nuovo test "eq anomalo" — tutti OK. Rigenerato `.mpackage`.
 
+## 2026-08-08 23:xx — Decisioni su speedwalk/spell cliccabili/slot vuoti + motore quick-cast
+
+- **Domande poste all'utente** (via AskQuestion) sulle 3 feature non implementate nel giro
+  precedente: finestra speedwalk, spell cliccabili, elenco slot equip non occupati.
+- **Risposta speedwalk**: "progettiamo da zero, dettagli in un prossimo messaggio" — nessuna
+  azione ora, in attesa di requisiti.
+- **Risposta slot equip non occupati**: "no/non lo so, lascia il pannello com'è" — chiuso, nessuna
+  azione richiesta, il pannello resta con i soli slot occupati (comportamento già in essere dal
+  fix precedente).
+- **Risposta spell cliccabili**: risposta articolata, non un semplice "sì/no". L'utente vuole:
+  1. un motore generico di lancio con prefissi a una lettera `c`/`r`/`m` (cast/recall/mind a
+     seconda della classe: mago/chierico=cast, sorcerer=recall, psionico=mind), che prenda tutto
+     il resto della riga come un unico argomento — es. `c word of r` → `cast 'word of r'`;
+  2. l'elenco COMPLETO di spell/skill dal codice del server (repo separato, path locale
+     `/Users/wizmorgan/Documents/GitHub/Server`, remote `NebbieArcane/Server` — già visto come
+     `upstream` nei remote di `nebbietest`), da cui l'utente sceglierà poi quali alias dedicati
+     vuole (non a me deciderlo).
+  3. click-to-recast vero e proprio (link cliccabile nel pannello) rimandato: prima serve la
+     lista/motore generico, l'utente "darà l'alias" per le spell che gli servono.
+- **Verifica codice server**: in `src/spell_parser.cpp`, `ACTION_FUNC(do_cast)` usa
+  `old_search_block(argument, 1, qend-1, spells, 0)` per matchare il testo tra apici contro
+  l'array `const char* spells[]` — il motore di gioco fa GIÀ da solo il match per abbreviazione
+  (conferma diretta nel codice del perché `cast 'word of r'` funziona nel gioco). Questo significa
+  che l'engine lato Mudlet non deve fare alcun fuzzy-matching: si limita a incapsulare l'argomento
+  tra apici e a inviare il comando giusto.
+- **Azione**: estratto l'intero array `spells[]` (300 voci, righe 57-362 di
+  `src/spell_parser.cpp`) con uno script Python (nessuna trascrizione manuale, per evitare errori
+  di battitura su una lista così lunga) e scritto in
+  `docs/mudlet/analysis/MUD-SPELL-SKILL-LIST.md`, con le sezioni già presenti nei commenti del
+  codice sorgente (spell base / skill non-magiche / spell da pergamena-pozione-bacchetta) e le
+  voci marcate `!...!` (nomi interni, non selezionabili da un giocatore) evidenziate.
+- **Azione**: implementato `NebbieDash.cmdQuickCast(prefix, argument)` +
+  `NebbieDash.CAST_PREFIX = {c="cast", r="recall", m="mind"}`, alias `^([crm]) (.+)$`.
+- **Nota rischio segnalata in USAGE.md**: gli alias a una lettera `c`/`r`/`m` intercettano SEMPRE
+  quel prefisso seguito da spazio+testo, anche se nel gioco esistesse un altro comando abbreviato
+  con la stessa lettera iniziale — compromesso esplicitamente scelto dall'utente con la sintassi
+  richiesta, non una svista.
+- **Verifica**: `luac -p` OK, smoke test invariato (non tocca il parsing) — OK. Rigenerato
+  `.mpackage`.
+
 ---
 
 (continua...)

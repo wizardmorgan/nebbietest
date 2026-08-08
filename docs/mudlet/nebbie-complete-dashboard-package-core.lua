@@ -315,6 +315,29 @@ function NebbieDash.cmdResyncAll()
   tempTimer(1.5, function() NebbieDash.cmdResyncAttrib() end)
 end
 
+-- ---------------------------------------------------------------------------
+-- Motore generico di lancio spell/skill/potere psionico (c/r/m + argomento)
+-- Fonte: src/spell_parser.cpp del server (ACTION_FUNC(do_cast)) usa
+-- old_search_block(argument, 1, qend-1, spells, 0) per matchare il nome tra
+-- apici anche abbreviato (es. 'word of r' -> "word of recall"): il motore di
+-- gioco fa gia' da solo il fuzzy-match, qui ci limitiamo a incapsulare
+-- l'argomento tra apici singoli e a inviare il comando giusto per prefisso.
+-- Confermato dall'utente: mago/chierico usano "cast", sorcerer "recall",
+-- psionico "mind". Vedi docs/mudlet/analysis/MUD-SPELL-SKILL-LIST.md.
+-- ---------------------------------------------------------------------------
+NebbieDash.CAST_PREFIX = { c = "cast", r = "recall", m = "mind" }
+
+function NebbieDash.cmdQuickCast(prefix, argument)
+  local cmdWord = NebbieDash.CAST_PREFIX[(prefix or ""):lower()]
+  if not cmdWord then return end
+  argument = (argument or ""):match("^%s*(.-)%s*$")
+  if argument == "" then
+    cecho("<orange>[NebbieDash] Uso: " .. prefix .. " <nome spell/skill, anche abbreviato>\n")
+    return
+  end
+  send(cmdWord .. " '" .. argument .. "'", false)
+end
+
 function NebbieDash.cmdShowEq()
   local name = NebbieDash.currentChar
   if not name then
