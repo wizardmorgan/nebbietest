@@ -34,6 +34,10 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `c <nome>` | Invia `cast '<nome>'` (mago/chierico). Es. `c word of r` → `cast 'word of r'` (il gioco stesso fa il match abbreviato su "word of recall", vedi sotto). |
 | `r <nome>` | Invia `recall '<nome>'` (sorcerer). |
 | `m <nome>` | Invia `mind '<nome>'` (psionico). |
+| `nclass <c\|r\|m>` | Imposta, per il personaggio attivo, quale dei tre comandi viene usato quando clicchi una spell nel pannello per rilanciarla (default `c`/cast). Impostalo una volta per personaggio in base alla sua classe. |
+| `nspellwarn <n>` | Sotto quanti tick residui una spell attiva nel pannello viene mostrata in rosso invece che verde (default 5). |
+| `nspeedwalks` | Ricarica gli speedwalk dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
+| `nspeeddelay <secondi>` | Pausa tra un movimento e il successivo quando esegui uno speedwalk (default 0.35s). |
 
 Il rilevamento del personaggio è **automatico**: appena il prompt del gioco viene ricevuto (dopo
 che scrivi un qualsiasi comando), il nome del personaggio attivo viene letto dal prompt stesso
@@ -164,3 +168,57 @@ iniziano per caso con la stessa lettera (es. abbreviazioni di comandi diversi da
 "mind" che prendono un argomento). Se noti che un comando che usavi prima con quella lettera ha
 smesso di funzionare come previsto, segnalalo: è il compromesso esplicitamente scelto con la
 sintassi richiesta.
+
+## Spell attivi cliccabili (rilancio con un click)
+
+Ogni spell nel pannello "Spell attivi" è ora un link cliccabile: cliccandoci sopra la rilancia
+usando il comando impostato con `nclass` per quel personaggio (default `cast`, cioè come se
+avessi digitato `c <nome spell>`). Imposta la classe giusta una volta per personaggio:
+
+```
+nclass c   -- mago/chierico (cast)
+nclass r   -- sorcerer (recall)
+nclass m   -- psionico (mind)
+```
+
+**Colore verde/rosso**: sotto `nspellwarn` tick (default 5) il nome della spell diventa rosso,
+altrimenti resta verde. Nota importante: questo riflette il numero di tick letto **all'ultima
+sincronizzazione** (`nattrib`/`nresync`), non è un conto alla rovescia in tempo reale — il pannello
+non sa quanti secondi dura un tick sul server, quindi non può stimare da solo quanto manca alla
+scadenza tra un `nattrib` e l'altro. Se vuoi un conto alla rovescia live, serve sapere quanti
+secondi reali dura un tick lato server.
+
+## Speedwalk (terzo pannello, in basso a destra)
+
+Il pannello aggiunge un terzo riquadro con gli speedwalk, letti da un file di testo che scrivi tu
+a mano:
+
+```
+getMudletHomeDir()/nebbie-speedwalks.txt
+```
+
+(su macOS tipicamente qualcosa come `~/.config/mudlet/profiles/<NomeProfilo>/nebbie-speedwalks.txt`
+— alla prima installazione il file viene creato automaticamente con istruzioni ed un esempio
+commentato, se non esiste già).
+
+**Formato di ogni riga** (deciso insieme, vedi `Q&A.md` Round 5):
+
+```
+(descrizione cliccabile) direzioni separate da virgola
+```
+
+- La parte tra parentesi diventa il testo cliccabile nel pannello.
+- Le direzioni si scrivono come le invieresti tu in gioco (es. `n`, `s`, `e`, `w`, `u`, `d`, `ne`,
+  `nw`...) — non vengono tradotte, vengono inviate esattamente come scritte.
+- Un numero subito prima di una direzione (senza spazi) la ripete quel numero di volte.
+- Esempio: `(dalla fontana) u,3w,n,s,2d` — cliccando "dalla fontana" nel pannello vengono inviati,
+  in sequenza con una piccola pausa tra l'uno e l'altro: `u`, `w`, `w`, `w`, `n`, `s`, `d`, `d`
+  (cioè: su, ovest, ovest, ovest, nord, sud, giù, giù).
+- Righe vuote e righe che iniziano con `#` vengono ignorate (puoi usarle come commenti).
+
+Dopo aver modificato il file, digita `nspeedwalks` in gioco per ricaricarlo senza riavviare
+Mudlet. La pausa tra un movimento e il successivo (default 0.35s, per evitare di perdere passi se
+il gioco impone un lag minimo tra movimenti) si regola con `nspeeddelay <secondi>`.
+
+**Nota**: gli speedwalk sono globali (non per personaggio) — se ti serve una lista diversa per
+personaggio, fammelo sapere.

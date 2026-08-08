@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.0.0"
+local PKG_VER = "1.1.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -344,6 +344,128 @@ function NebbieDash.cmdQuickCast(prefix, argument)
   send(cmdWord .. " '" .. argument .. "'", false)
 end
 
+-- ---------------------------------------------------------------------------
+-- Speedwalk (file di configurazione scritto a mano dall'utente — vedi
+-- Q&A.md Round 5). Formato per riga, deciso in accordo con l'utente:
+--   (descrizione cliccabile) direzioni separate da virgola
+-- Una direzione puo' avere un numero davanti per ripeterla N volte, es.
+-- "u,3w,n,s,2d" = up, west, west, west, north, south, down, down. Righe
+-- vuote o che iniziano con # sono ignorate. Le direzioni vengono inviate
+-- cosi' come scritte (es. "u", "w", "n"...): NON le traduciamo in parole
+-- intere, perche' il gioco stesso accetta le forme brevi come comandi di
+-- movimento.
+-- ---------------------------------------------------------------------------
+NebbieDash.speedwalks = {}
+-- Pausa (in secondi) tra un movimento e il successivo quando si esegue uno
+-- speedwalk: un invio istantaneo di tutte le direzioni una via l'altra
+-- rischia di perdere passi se il gioco impone un tempo minimo (\"lag\") tra
+-- un movimento e l'altro. Regolabile con nspeeddelay se serve un valore
+-- diverso.
+NebbieDash.speedwalkDelay = 0.35
+
+function NebbieDash.speedwalkPath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-speedwalks.txt"
+end
+
+function NebbieDash.ensureSpeedwalkFile()
+  local path = NebbieDash.speedwalkPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# File di configurazione speedwalk — nebbie-complete-dashboard-package\n" ..
+    "#\n" ..
+    "# Una riga per speedwalk, formato:\n" ..
+    "#   (descrizione cliccabile) direzioni separate da virgola\n" ..
+    "#\n" ..
+    "# Le direzioni si scrivono come le invieresti tu in gioco (es. n, s, e, w,\n" ..
+    "# u, d, ne, nw, se, sw...). Se vuoi ripetere la stessa direzione piu' volte\n" ..
+    "# di fila, metti il numero di ripetizioni subito prima, senza spazi.\n" ..
+    "#\n" ..
+    "# Esempio (spiegato): \"u,3w,n,s,2d\" significa: up, west, west, west,\n" ..
+    "# north, south, down, down.\n" ..
+    "#\n" ..
+    "# Le righe che iniziano con # e le righe vuote vengono ignorate.\n" ..
+    "# Dopo aver modificato questo file, digita 'nspeedwalks' in gioco per\n" ..
+    "# ricaricarlo senza dover riavviare Mudlet.\n" ..
+    "#\n" ..
+    "# Esempio (rimuovi il # iniziale per attivarlo):\n" ..
+    "# (dalla fontana) u,3w,n,s,2d\n"
+  )
+  f:close()
+end
+
+function NebbieDash.parseSpeedwalkDirs(dirString)
+  local steps = {}
+  for rawToken in (dirString or ""):gmatch("[^,]+") do
+    local token = rawToken:match("^%s*(.-)%s*$")
+    if token ~= "" then
+      local count, dir = token:match("^(%d+)(%a+)$")
+      if not dir then
+        dir = token
+        count = 1
+      end
+      count = tonumber(count) or 1
+      for _ = 1, count do
+        table.insert(steps, dir)
+      end
+    end
+  end
+  return steps
+end
+
+function NebbieDash.parseSpeedwalkLine(rawLine)
+  local line2 = rawLine:match("^%s*(.-)%s*$")
+  if line2 == "" or line2:sub(1, 1) == "#" then return nil end
+  local desc, dirString = line2:match("^%((.-)%)%s*(.+)$")
+  if not desc then return nil end
+  local steps = NebbieDash.parseSpeedwalkDirs(dirString)
+  if #steps == 0 then return nil end
+  return { desc = desc, dirString = dirString:match("^%s*(.-)%s*$"), steps = steps }
+end
+
+function NebbieDash.loadSpeedwalks()
+  NebbieDash.ensureSpeedwalkFile()
+  NebbieDash.speedwalks = {}
+  local path = NebbieDash.speedwalkPath()
+  local f = io.open(path, "r")
+  if not f then return end
+  for rawLine in f:lines() do
+    local entry = NebbieDash.parseSpeedwalkLine(rawLine)
+    if entry then table.insert(NebbieDash.speedwalks, entry) end
+  end
+  f:close()
+end
+
+function NebbieDash.cmdReloadSpeedwalks()
+  NebbieDash.loadSpeedwalks()
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Speedwalk ricaricati (" .. #NebbieDash.speedwalks .. ") da " .. NebbieDash.speedwalkPath() .. "\n")
+end
+
+function NebbieDash.cmdSetSpeedDelay(str)
+  local delay = tonumber(str)
+  if not delay or delay < 0 or delay > 10 then
+    cecho("<orange>[NebbieDash] Uso: nspeeddelay <secondi tra 0 e 10> (attuale: " .. NebbieDash.speedwalkDelay .. ")\n")
+    return
+  end
+  NebbieDash.speedwalkDelay = delay
+  cecho("<green>[NebbieDash] Pausa tra i movimenti impostata a " .. delay .. "s.\n")
+end
+
+-- Invia le direzioni di uno speedwalk una alla volta, con una pausa tra
+-- l'una e l'altra (vedi NebbieDash.speedwalkDelay) invece di un unico invio
+-- concatenato, per non rischiare di perdere passi per via del lag di
+-- movimento del gioco.
+function NebbieDash.runSpeedwalk(index)
+  local entry = NebbieDash.speedwalks[index]
+  if not entry then return end
+  for i, dir in ipairs(entry.steps) do
+    tempTimer(NebbieDash.speedwalkDelay * (i - 1), function() send(dir, false) end)
+  end
+end
+
 function NebbieDash.cmdShowEq()
   local name = NebbieDash.currentChar
   if not name then
@@ -374,6 +496,28 @@ function NebbieDash.cmdSetCharacter(name)
   NebbieDash.setCurrentCharacter(name, true)
 end
 
+-- Comando di lancio da usare quando si clicca una spell attiva nel pannello
+-- (vedi refreshDashboard): dipende dalla classe del personaggio corrente
+-- (mago/chierico -> cast, sorcerer -> recall, psionico -> mind), non e'
+-- deducibile dal nome della spell stesso, quindi va impostato una volta per
+-- personaggio. Default "c" (cast) finche' non specificato.
+function NebbieDash.cmdSetClass(prefix)
+  prefix = (prefix or ""):lower():match("^%s*(.-)%s*$")
+  if not NebbieDash.CAST_PREFIX[prefix] then
+    cecho("<orange>[NebbieDash] Uso: nclass <c|r|m> (cast/recall/mind)\n")
+    return
+  end
+  local name = NebbieDash.currentChar
+  if not name then
+    cecho("<orange>[NebbieDash] Nessun personaggio rilevato ancora.\n")
+    return
+  end
+  NebbieDash.getCharData(name).castPrefix = prefix
+  NebbieDash.saveStore()
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Comando di rilancio per " .. name .. " impostato su '" .. prefix .. "' (" .. NebbieDash.CAST_PREFIX[prefix] .. ").\n")
+end
+
 -- ---------------------------------------------------------------------------
 -- Dashboard (miniconsole su bordo destro — MUDLET-WIKI-NOTES.md §6)
 -- ---------------------------------------------------------------------------
@@ -384,6 +528,12 @@ NebbieDash.fontSize = 11
 -- capo in un pannello laterale stretto; le tronchiamo per un colpo d'occhio
 -- piu' pulito (il testo completo resta comunque visibile con `eq` normale).
 NebbieDash.itemMaxLen = 42
+-- Soglia (in tick) sotto la quale una spell attiva viene mostrata in rosso
+-- invece che verde, per segnalare che sta per scadere. NOTA: riflette solo
+-- il valore letto all'ultimo `nattrib`/`nresync`, NON un conto alla rovescia
+-- in tempo reale — non conosciamo quanti secondi dura un tick sul server, e
+-- senza quell'informazione non possiamo stimare il tempo residuo reale.
+NebbieDash.spellWarnTicks = 5
 
 function NebbieDash.truncate(s, maxLen)
   if not s or #s <= maxLen then return s end
@@ -394,20 +544,23 @@ function NebbieDash.guiVisible()
   return NebbieDash._guiCreated == true and NebbieDash._guiHidden ~= true
 end
 
+-- Proporzioni verticali dei 3 pannelli (devono sommare a 1.0).
+NebbieDash.guiRatios = { equip = 0.45, spells = 0.25, speedwalk = 0.30 }
+NebbieDash.GUI_WINDOWS = { "NebbieDashEquip", "NebbieDashSpells", "NebbieDashSpeedwalks" }
+
 function NebbieDash.initGUI()
   if NebbieDash._guiCreated then return end
   setBorderRight(NebbieDash.guiWidth)
-  createMiniConsole("NebbieDashEquip", 0, 0, NebbieDash.guiWidth, 0)
-  createMiniConsole("NebbieDashSpells", 0, 0, NebbieDash.guiWidth, 0)
-  setMiniConsoleFontSize("NebbieDashEquip", NebbieDash.fontSize)
-  setMiniConsoleFontSize("NebbieDashSpells", NebbieDash.fontSize)
-  -- Una miniconsole appena creata ha uno sfondo di default (grigio, widget Qt
-  -- non ancora disegnato) finche' non le si assegna esplicitamente un colore e
-  -- non ci si scrive dentro almeno una volta: senza queste due righe il
-  -- pannello resta grigio anche a install riuscita (bug osservato, vedi
-  -- docs/mudlet/analysis/LOG.md).
-  setBackgroundColor("NebbieDashEquip", 15, 15, 15, 255)
-  setBackgroundColor("NebbieDashSpells", 15, 15, 15, 255)
+  for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
+    createMiniConsole(win, 0, 0, NebbieDash.guiWidth, 0)
+    setMiniConsoleFontSize(win, NebbieDash.fontSize)
+    -- Una miniconsole appena creata ha uno sfondo di default (grigio, widget
+    -- Qt non ancora disegnato) finche' non le si assegna esplicitamente un
+    -- colore e non ci si scrive dentro almeno una volta: senza questo il
+    -- pannello resta grigio anche a install riuscita (bug osservato, vedi
+    -- docs/mudlet/analysis/LOG.md).
+    setBackgroundColor(win, 15, 15, 15, 255)
+  end
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
   NebbieDash.refreshDashboard()
@@ -424,12 +577,15 @@ function NebbieDash.positionGUI()
   w = w or 800
   h = h or 600
   local x = math.max(0, w - NebbieDash.guiWidth)
-  local equipH = math.floor(h * 0.6)
-  local spellsH = h - equipH
+  local equipH = math.floor(h * NebbieDash.guiRatios.equip)
+  local spellsH = math.floor(h * NebbieDash.guiRatios.spells)
+  local speedwalkH = h - equipH - spellsH
   moveWindow("NebbieDashEquip", x, 0)
   resizeWindow("NebbieDashEquip", NebbieDash.guiWidth, equipH)
   moveWindow("NebbieDashSpells", x, equipH)
   resizeWindow("NebbieDashSpells", NebbieDash.guiWidth, spellsH)
+  moveWindow("NebbieDashSpeedwalks", x, equipH + spellsH)
+  resizeWindow("NebbieDashSpeedwalks", NebbieDash.guiWidth, speedwalkH)
 end
 
 function NebbieDash.toggleGUI()
@@ -439,12 +595,10 @@ function NebbieDash.toggleGUI()
   else
     NebbieDash._guiHidden = not NebbieDash._guiHidden
     if NebbieDash._guiHidden then
-      hideWindow("NebbieDashEquip")
-      hideWindow("NebbieDashSpells")
+      for _, win in ipairs(NebbieDash.GUI_WINDOWS) do hideWindow(win) end
       setBorderRight(0)
     else
-      showWindow("NebbieDashEquip")
-      showWindow("NebbieDashSpells")
+      for _, win in ipairs(NebbieDash.GUI_WINDOWS) do showWindow(win) end
       setBorderRight(NebbieDash.guiWidth)
       NebbieDash.positionGUI()
     end
@@ -455,10 +609,12 @@ end
 function NebbieDash.resetLayout()
   NebbieDash.guiWidth = 320
   NebbieDash.fontSize = 11
+  NebbieDash.guiRatios = { equip = 0.45, spells = 0.25, speedwalk = 0.30 }
   if NebbieDash._guiCreated then
     setBorderRight(NebbieDash.guiWidth)
-    setMiniConsoleFontSize("NebbieDashEquip", NebbieDash.fontSize)
-    setMiniConsoleFontSize("NebbieDashSpells", NebbieDash.fontSize)
+    for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
+      setMiniConsoleFontSize(win, NebbieDash.fontSize)
+    end
     NebbieDash.positionGUI()
   end
 end
@@ -471,8 +627,9 @@ function NebbieDash.cmdSetFont(sizeStr)
   end
   NebbieDash.fontSize = size
   if NebbieDash._guiCreated then
-    setMiniConsoleFontSize("NebbieDashEquip", size)
-    setMiniConsoleFontSize("NebbieDashSpells", size)
+    for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
+      setMiniConsoleFontSize(win, size)
+    end
   end
   cecho("<green>[NebbieDash] Font pannello impostato a " .. size .. ".\n")
 end
@@ -502,8 +659,20 @@ function NebbieDash.cmdSetItemLen(lenStr)
   cecho("<green>[NebbieDash] Lunghezza max descrizione oggetto impostata a " .. len .. ".\n")
 end
 
+function NebbieDash.cmdSetSpellWarn(ticksStr)
+  local ticks = tonumber(ticksStr)
+  if not ticks or ticks < 0 or ticks > 999 then
+    cecho("<orange>[NebbieDash] Uso: nspellwarn <numero tra 0 e 999> (attuale: " .. NebbieDash.spellWarnTicks .. ")\n")
+    return
+  end
+  NebbieDash.spellWarnTicks = ticks
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Soglia colore rosso spell impostata a " .. ticks .. " tick.\n")
+end
+
 function NebbieDash.refreshDashboard()
   if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
+  NebbieDash.refreshSpeedwalkPanel()
   local name = NebbieDash.currentChar
   clearWindow("NebbieDashEquip")
   clearWindow("NebbieDashSpells")
@@ -541,11 +710,38 @@ function NebbieDash.refreshDashboard()
 
   cecho("NebbieDashSpells", "<cyan><b>Spell attivi — " .. name .. "</b>\n")
   if data.spells and #data.spells > 0 then
+    local prefix = data.castPrefix or "c"
     for _, s in ipairs(data.spells) do
-      cecho("NebbieDashSpells", string.format("<white>%-20s<green>%s tick\n", s.name, tostring(s.ticks)))
+      -- Cliccabile per rilanciare: usa il comando (cast/recall/mind) impostato
+      -- per questo personaggio con `nclass` (default "cast"). Colore
+      -- verde/rosso in base ai tick residui ALL'ULTIMA SINCRONIZZAZIONE (non
+      -- e' un conto alla rovescia in tempo reale, vedi nota su spellWarnTicks).
+      local ticks = tonumber(s.ticks) or 0
+      local color = ticks <= NebbieDash.spellWarnTicks and "<red>" or "<green>"
+      cechoLink("NebbieDashSpells", color .. s.name,
+        string.format("NebbieDash.cmdQuickCast(%q, %q)", prefix, s.name),
+        "Clicca per rilanciare: " .. s.name, true)
+      cecho("NebbieDashSpells", string.format(" %s%s tick\n", color, tostring(s.ticks)))
     end
   else
     cecho("NebbieDashSpells", "<grey>(nessuno — esegui <yellow>nattrib<grey> o <yellow>nresync<grey>)\n")
+  end
+end
+
+function NebbieDash.refreshSpeedwalkPanel()
+  if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
+  clearWindow("NebbieDashSpeedwalks")
+  cecho("NebbieDashSpeedwalks", "<cyan><b>Speedwalk</b>\n")
+  if #NebbieDash.speedwalks == 0 then
+    cecho("NebbieDashSpeedwalks",
+      "<grey>(nessuno — scrivili in " .. NebbieDash.speedwalkPath() .. " poi digita <yellow>nspeedwalks<grey>)\n")
+    return
+  end
+  for i, entry in ipairs(NebbieDash.speedwalks) do
+    cechoLink("NebbieDashSpeedwalks", "<cyan>" .. entry.desc,
+      string.format("NebbieDash.runSpeedwalk(%d)", i),
+      "Clicca per andare: " .. entry.desc .. " (" .. entry.dirString .. ")", true)
+    cecho("NebbieDashSpeedwalks", string.format(" <grey>%s\n", entry.dirString))
   end
 end
 
@@ -591,6 +787,7 @@ end
 -- ---------------------------------------------------------------------------
 function NebbieDash.boot()
   NebbieDash.loadStore()
+  NebbieDash.loadSpeedwalks()
   NebbieDash.installTriggers()
   NebbieDash.initGUI()
   NebbieDash._mainLoaded = true
@@ -607,7 +804,7 @@ end
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>nebbie-complete-dashboard-package - boot</name>
-   <script><![CDATA[local ver = "1.0.0"
+   <script><![CDATA[local ver = "1.1.0"
 if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
 local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
@@ -696,6 +893,34 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^([crm]) (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-class</name>
+   <script><![CDATA[NebbieDash.cmdSetClass(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nclass (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-spellwarn</name>
+   <script><![CDATA[NebbieDash.cmdSetSpellWarn(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nspellwarn (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-speedwalks</name>
+   <script><![CDATA[NebbieDash.cmdReloadSpeedwalks()]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nspeedwalks$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-speeddelay</name>
+   <script><![CDATA[NebbieDash.cmdSetSpeedDelay(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nspeeddelay (.+)$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>

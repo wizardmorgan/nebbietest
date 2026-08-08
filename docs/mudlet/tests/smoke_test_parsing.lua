@@ -157,6 +157,24 @@ check("attrib: 2 spell catturati", #data2.spells == 2)
 check("attrib: primo spell true sight/74", data2.spells[1].name == "true sight" and data2.spells[1].ticks == 74)
 check("attrib: secondo spell darkness/9", data2.spells[2].name == "darkness" and data2.spells[2].ticks == 9)
 
+-- Test 5: parsing speedwalk (Q&A.md Round 5) — esempio esatto fornito
+-- dall'utente: "u,3w,n,s,2d" = up, west, west, west, north, south, down, down.
+local steps = NebbieDash.parseSpeedwalkDirs("u,3w,n,s,2d")
+check("speedwalk: 8 passi totali", #steps == 8)
+check("speedwalk: sequenza esatta",
+  table.concat(steps, ",") == "u,w,w,w,n,s,d,d")
+
+local swEntry = NebbieDash.parseSpeedwalkLine("(dalla fontana) u,3w,n,s,2d")
+check("speedwalk: riga valida non nil", swEntry ~= nil)
+if swEntry then
+  check("speedwalk: descrizione estratta", swEntry.desc == "dalla fontana")
+  check("speedwalk: 8 passi dalla riga completa", #swEntry.steps == 8)
+end
+
+check("speedwalk: riga commento ignorata", NebbieDash.parseSpeedwalkLine("# commento") == nil)
+check("speedwalk: riga vuota ignorata", NebbieDash.parseSpeedwalkLine("") == nil)
+check("speedwalk: riga senza parentesi ignorata", NebbieDash.parseSpeedwalkLine("u,3w,n,s,2d") == nil)
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

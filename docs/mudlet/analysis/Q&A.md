@@ -172,6 +172,25 @@ Poste dopo la terza reinstallazione reale del pacchetto (bug slot mislabeled + w
 - **Q3 (slot equip non occupati)**: c'è un comando per elencare tutte le posizioni indossabili
   anche vuote? **R**: "no/non lo so, lascia il pannello così com'è" — chiuso, nessuna azione.
 
+## Round 5 — Speedwalk (formato) + perché le spell non erano cliccabili
+
+- **Conferma positiva**: "ho una barra nera a destra" — il fix del pannello grigio ha funzionato.
+- **Speedwalk**: l'utente scriverà lui stesso il file di configurazione. Formato dato
+  dall'utente: `(descrizione)` tra parentesi diventa una label cliccabile, seguita da direzioni
+  separate da virgola; un numero prima di una direzione la ripete N volte. Esempio esatto
+  dell'utente: `u,3w,n,s,2d` = up, west, west, west, north, south, down, down. Implementato
+  esattamente così (vedi `USAGE.md`), con file `nebbie-speedwalks.txt` in `getMudletHomeDir()`.
+- **Domanda posta dall'agente**: le spell non erano cliccabili semplicemente perché non ancora
+  implementato (deferred nel round precedente in attesa del motore c/r/m, ora pronto) — non per un
+  meccanismo di scadenza/colore mancante. L'utente ha comunque chiesto se convenga far scadere e
+  cambiare colore (verde→rosso) le spell in prossimità della scadenza: implementato come soglia
+  configurabile sui tick noti all'ultima sincronizzazione (non un countdown live, vedi `USAGE.md`
+  per il perché — servirebbe sapere quanti secondi reali dura un tick sul server, informazione non
+  ancora fornita).
+
+**Domanda aperta, non bloccante**: se in futuro si vuole un countdown in tempo reale (che scende
+da solo senza dover rifare `nattrib`), serve sapere quanti secondi reali dura un tick sul server.
+
 ## Regola di avanzamento
 
 - Le domande **bloccanti** (1, 2, 3, 4 del Round 2) devono avere risposta prima di scrivere

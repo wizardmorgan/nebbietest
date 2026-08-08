@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.0.0"
+PKG_VER = "1.1.0"
 CORE_LUA = os.path.join(HERE, "nebbie-complete-dashboard-package-core.lua")
 BUILD_DIR = os.path.join(HERE, "nebbie-complete-dashboard-package-build")
 XML_PATH = os.path.join(BUILD_DIR, f"{PKG_NAME}.xml")
@@ -41,6 +41,10 @@ ALIASES = [
     ("nebbie-dash-width", "^nwidth (.+)$", "NebbieDash.cmdSetWidth(matches[2])"),
     ("nebbie-dash-itemlen", "^nitemlen (.+)$", "NebbieDash.cmdSetItemLen(matches[2])"),
     ("nebbie-dash-quickcast", "^([crm]) (.+)$", "NebbieDash.cmdQuickCast(matches[2], matches[3])"),
+    ("nebbie-dash-class", "^nclass (.+)$", "NebbieDash.cmdSetClass(matches[2])"),
+    ("nebbie-dash-spellwarn", "^nspellwarn (.+)$", "NebbieDash.cmdSetSpellWarn(matches[2])"),
+    ("nebbie-dash-speedwalks", "^nspeedwalks$", "NebbieDash.cmdReloadSpeedwalks()"),
+    ("nebbie-dash-speeddelay", "^nspeeddelay (.+)$", "NebbieDash.cmdSetSpeedDelay(matches[2])"),
 ]
 
 

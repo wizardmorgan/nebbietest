@@ -1,5 +1,21 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.1.0 — 2026-08-09
+
+- **Aggiunto**: terzo pannello "Speedwalk" (bordo destro, sotto equip/spell). Legge
+  `getMudletHomeDir()/nebbie-speedwalks.txt` (creato automaticamente con istruzioni se mancante),
+  un file di testo che l'utente compila a mano nel formato `(descrizione) direzioni,separate,da
+  virgola` (con supporto a ripetizioni tipo `3w`). Click sulla descrizione = invio automatico
+  della sequenza, con una pausa configurabile (`nspeeddelay`) tra un movimento e l'altro. Comando
+  `nspeedwalks` per ricaricare il file senza riavviare Mudlet.
+- **Aggiunto**: le spell nel pannello "Spell attivi" sono ora cliccabili per rilanciarle (usano il
+  motore `c`/`r`/`m` già presente). Comando `nclass <c|r|m>` per impostare, per personaggio, quale
+  dei tre comandi usare (default `cast`). Nome della spell mostrato in rosso sotto una soglia di
+  tick configurabile (`nspellwarn`, default 5) invece che verde — riflette il valore all'ultima
+  sincronizzazione, non un conto alla rovescia in tempo reale (non conosciamo la durata di un tick
+  sul server).
+- **Versione interna** alzata a 1.1.0.
+
 ## 1.0.0 (fix 4) — 2026-08-08
 
 - **Aggiunto**: motore generico di lancio spell/skill/potere psionico — alias `c <nome>`

@@ -342,6 +342,48 @@ Regole di riferimento: `docs/mudlet/AGENT-RULES.txt`, `docs/mudlet/AGENT-PROMPT-
 - **Verifica**: `luac -p` OK, smoke test invariato (non tocca il parsing) — OK. Rigenerato
   `.mpackage`.
 
+## 2026-08-08/09 00:xx — Implementazione speedwalk + spell cliccabili con colore
+
+- **Contesto**: pannello confermato funzionante ("ho una barra nera a destra"). Richiesta di
+  implementare gli speedwalk nel pannello, con formato dettato dall'utente (vedi Q&A.md Round 5),
+  e chiarito perché le spell non erano cliccabili (semplicemente non ancora implementato — non
+  c'entrava nulla un presunto meccanismo di scadenza/colore, quello era un secondo suggerimento
+  dell'utente su come mostrarle, non un requisito già previsto).
+- **Terzo pannello**: aggiunta una terza miniconsole `NebbieDashSpeedwalks`, sotto le altre due sul
+  bordo destro. `positionGUI()` ora divide l'altezza in tre proporzioni configurabili
+  (`NebbieDash.guiRatios`, default 45/25/30%) invece di due fisse.
+- **Speedwalk — file di configurazione**: `getMudletHomeDir()/nebbie-speedwalks.txt`, testo
+  semplice scritto a mano dall'utente. Formato concordato: `(descrizione) direzioni,separate,da
+  virgola`, con supporto a un numero di ripetizione davanti a una direzione (es. `3w` = ovest tre
+  volte). Verificato con l'esempio ESATTO fornito dall'utente ("u,3w,n,s,2d" → 8 passi:
+  u,w,w,w,n,s,d,d) in un test automatico dedicato. Se il file non esiste viene creato con
+  istruzioni ed un esempio commentato, cosi' l'utente sa subito come compilarlo. Le direzioni
+  vengono inviate esattamente come scritte (nessuna traduzione a parola intera: il gioco accetta
+  gia' le forme brevi).
+- **Speedwalk — esecuzione**: click sulla descrizione (via `cechoLink`) → `runSpeedwalk(index)` →
+  invia ogni direzione con una pausa (`NebbieDash.speedwalkDelay`, default 0.35s, regolabile con
+  `nspeeddelay`) invece di un unico invio concatenato, per non perdere passi per via del lag di
+  movimento del gioco (non confermato quanto lag ci sia realmente — valore di default prudente).
+  Comando `nspeedwalks` per ricaricare il file senza riavviare Mudlet.
+- **Spell cliccabili**: implementato con `cechoLink()` (verificato su
+  https://wiki.mudlet.org/w/Manual:UI_Functions#cechoLink — firma
+  `cechoLink([windowName], text, command, hint, true)`), che richiama
+  `NebbieDash.cmdQuickCast(prefix, nomeSpell)` al click. Il prefisso (c/r/m) dipende dalla classe
+  del personaggio, non deducibile dal nome della spell: aggiunto comando `nclass <c|r|m>` per
+  impostarlo una volta per personaggio (persistito), default `c` (cast).
+- **Colore verde/rosso**: sotto `NebbieDash.spellWarnTicks` (default 5, regolabile con
+  `nspellwarn`) il nome della spell è rosso, altrimenti verde. **Limite dichiarato esplicitamente
+  in USAGE.md**: riflette solo il valore letto all'ultimo `nattrib`/`nresync`, NON un conto alla
+  rovescia in tempo reale — non conosciamo la durata reale di un tick sul server, quindi non
+  inventiamo una stima che potrebbe essere sbagliata.
+- **Versione package**: alzata da 1.0.0 a 1.1.0 (sia nel core Lua che nel build script, dove
+  servono per il controllo "già caricato in questa sessione" nel wrapper di boot).
+- **Verifica**: `luac -p` OK. Aggiunti 8 test automatici dedicati al parsing speedwalk
+  (`parseSpeedwalkDirs`, `parseSpeedwalkLine`, righe commento/vuote/malformate ignorate) —
+  30/30 test totali OK. Rigenerato `.mpackage`.
+- **Non ancora verificato in Mudlet reale**: rendering dei link cliccabili nella miniconsole,
+  comportamento reale dello speedwalk in movimento (lag effettivo tra comandi).
+
 ---
 
 (continua...)
