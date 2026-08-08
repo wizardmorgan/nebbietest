@@ -1,5 +1,5 @@
 
-Nebbie.version = "2.2.53"
+Nebbie.version = "2.2.54"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -2032,9 +2032,7 @@ function Nebbie.applyCapturedEq(lines, reason)
   local count = 0
   for _, line in ipairs(lines or {}) do
     local plain = Nebbie.stripColors(line)
-    if plain:find("Stai usando", 1, true) or plain:match("^%[%s*%d+%]")
-        or plain:find("<impugnato>", 1, true) or plain:find("<tenuto>", 1, true)
-        or plain:find("<sulla schiena>", 1, true) then
+    if plain:find("Stai usando", 1, true) or plain:match("^%[%s*%d+%]") then
       if Nebbie.onDashboardEqLine then Nebbie.onDashboardEqLine(line) end
       if Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
       count = count + 1
@@ -3943,6 +3941,8 @@ function Nebbie.boot()
     end
   elseif Nebbie.version and Nebbie._expectedPkgVer and Nebbie.version == Nebbie._expectedPkgVer then
     cecho("<green>Nebbie v" .. Nebbie.version .. " layout finestre attivo.\n")
+  elseif Nebbie.version and Nebbie._expectedPkgVer then
+    cecho("<green>Nebbie v" .. Nebbie.version .. " (package xml v" .. Nebbie._expectedPkgVer .. ").\n")
   end
   Nebbie.pruneStaleDebuffs()
   Nebbie.pruneInvalidBuffs()

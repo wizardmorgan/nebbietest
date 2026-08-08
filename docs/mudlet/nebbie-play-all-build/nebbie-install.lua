@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.52
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.52"
+-- NEBBIE_INSTALL_VER=2.2.54
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.54"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.52"
+Nebbie.version = "2.2.54"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.52"
+Nebbie._expectedPkgVer = "2.2.54"
 Nebbie.PKG_URL = "https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-unified-dashboard-55b4/docs/mudlet/nebbie-play-all.mpackage"
 
 Nebbie.castSpells = {
@@ -1046,7 +1046,6 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.53"
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -3079,9 +3078,7 @@ function Nebbie.applyCapturedEq(lines, reason)
   local count = 0
   for _, line in ipairs(lines or {}) do
     local plain = Nebbie.stripColors(line)
-    if plain:find("Stai usando", 1, true) or plain:match("^%[%s*%d+%]")
-        or plain:find("<impugnato>", 1, true) or plain:find("<tenuto>", 1, true)
-        or plain:find("<sulla schiena>", 1, true) then
+    if plain:find("Stai usando", 1, true) or plain:match("^%[%s*%d+%]") then
       if Nebbie.onDashboardEqLine then Nebbie.onDashboardEqLine(line) end
       if Nebbie.onEqParseLine then Nebbie.onEqParseLine(line) end
       count = count + 1
@@ -4990,6 +4987,8 @@ function Nebbie.boot()
     end
   elseif Nebbie.version and Nebbie._expectedPkgVer and Nebbie.version == Nebbie._expectedPkgVer then
     cecho("<green>Nebbie v" .. Nebbie.version .. " layout finestre attivo.\n")
+  elseif Nebbie.version and Nebbie._expectedPkgVer then
+    cecho("<green>Nebbie v" .. Nebbie.version .. " (package xml v" .. Nebbie._expectedPkgVer .. ").\n")
   end
   Nebbie.pruneStaleDebuffs()
   Nebbie.pruneInvalidBuffs()
@@ -5028,7 +5027,6 @@ if not (Nebbie and Nebbie._deferBoot) then
     cecho("<green>[Nebbie] v" .. Nebbie.version .. " pronto.\n")
   end
 end
-
 
 -- Nebbie dashboard panels (equip, spells, paths, weapon config) — per-character profiles
 -- Loaded after nebbie-installer-core.lua; hooks existing GUI/buff/eq handlers.

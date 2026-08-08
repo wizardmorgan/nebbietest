@@ -5,7 +5,7 @@
   <Script isActive="yes" isFolder="no">
    <name>Nebbie_sysLoadEvent</name>
    <script><![CDATA[function Nebbie_sysLoadEvent()
-  local ver = "2.2.52"
+  local ver = "2.2.54"
   if type(enableScript) == "function" then
     pcall(function() enableScript("Nebbie Loader", 1) end)
   end
@@ -30,10 +30,10 @@ end]]></script>
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>Nebbie Loader</name>
-   <script><![CDATA[-- NEBBIE_LOADER_VER=2.2.52
+   <script><![CDATA[-- NEBBIE_LOADER_VER=2.2.54
 Nebbie = Nebbie or {}
 Nebbie.package = "nebbie-play-all"
-local NEBBIE_EXPECT = "2.2.52"
+local NEBBIE_EXPECT = "2.2.54"
 local MAIN_SCRIPT = "Nebbie Play All"
 local INSTALL_FILE = "nebbie-install.lua"
 local INSTALL_URL = "https://raw.githubusercontent.com/wizardmorgan/nebbietest/cursor/nebbie-unified-dashboard-55b4/docs/mudlet/nebbie-play-all-build/nebbie-install.lua"
@@ -49,7 +49,8 @@ end
 
 function nebbie_ver_acceptable(ver)
   if not ver or type(ver) ~= "string" then return false end
-  return ver == NEBBIE_EXPECT
+  if ver == NEBBIE_EXPECT then return true end
+  return nebbie_parse_ver_num(ver) >= nebbie_parse_ver_num(NEBBIE_EXPECT)
 end
 
 function nebbie_ver_outdated(ver)
@@ -105,8 +106,8 @@ function Nebbie_writeInstallFile(code, silent)
     return false, "codice install non valido"
   end
   local ver = nebbie_ver_from_code(code)
-  if not nebbie_ver_acceptable(ver) then
-    return false, "versione " .. tostring(ver) .. " (attesa v" .. NEBBIE_EXPECT .. ")"
+  if not ver or not nebbie_ver_acceptable(ver) then
+    return false, "versione " .. tostring(ver) .. " (minimo v" .. NEBBIE_EXPECT .. ")"
   end
   local path = Nebbie_installPath()
   local f = io.open(path, "w")
@@ -160,7 +161,7 @@ function Nebbie_execInstallFile(path, silent)
   local ok, err = pcall(chunk)
   Nebbie._deferBoot = prevDefer
   if not ok then return false, "run: " .. tostring(err) end
-  if Nebbie and type(Nebbie.runFix) == "function" and Nebbie.version == NEBBIE_EXPECT then
+  if Nebbie and type(Nebbie.runFix) == "function" and nebbie_ver_acceptable(Nebbie.version) then
     if not silent then
       cecho("<green>Nebbie v" .. tostring(Nebbie.version) .. " caricato.\n")
     end
@@ -194,7 +195,7 @@ function Nebbie_findPackageInstallFile()
     if f then
       local head = f:read(4096) or ""
       f:close()
-      if nebbie_ver_from_code(head) == NEBBIE_EXPECT then
+      if nebbie_ver_acceptable(nebbie_ver_from_code(head)) then
         return p
       end
     end
@@ -321,7 +322,7 @@ function Nebbie_neutralizeLegacyScripts(silent)
 end
 
 function Nebbie_loadInstall(silent)
-  if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" and Nebbie._mainLoaded then
+  if Nebbie and nebbie_ver_acceptable(Nebbie.version) and type(Nebbie.runFix) == "function" and Nebbie._mainLoaded then
     return true
   end
   local pkg = Nebbie_findPackageInstallFile()
@@ -329,7 +330,8 @@ function Nebbie_loadInstall(silent)
     local ok = Nebbie_execInstallFile(pkg, silent)
     if ok then return true end
   end
-  if Nebbie_fileVer() == NEBBIE_EXPECT then
+  local fileVer = Nebbie_fileVer()
+  if fileVer and nebbie_ver_acceptable(fileVer) then
     local ok = Nebbie_dofileInstall(silent)
     if ok then return true end
   end
@@ -340,7 +342,7 @@ function Nebbie_loadInstall(silent)
   end
   local profileCode = nebbie_code(MAIN_SCRIPT, 1)
   local profileVer = nebbie_ver_from_code(profileCode)
-  if profileVer == NEBBIE_EXPECT then
+  if profileVer and nebbie_ver_acceptable(profileVer) then
     local cached = Nebbie_cacheInstallFromProfile(true)
     if cached then
       local ok = Nebbie_dofileInstall(silent)
@@ -353,7 +355,8 @@ end
 function Nebbie_forceUpgrade(silent)
   silent = silent == true
   if not silent and Nebbie and Nebbie.version and Nebbie.version ~= NEBBIE_EXPECT then
-    cecho("<yellow>Nebbie: aggiornamento v" .. tostring(Nebbie.version) .. " → v" .. NEBBIE_EXPECT .. "...\n")
+    local dir = nebbie_ver_outdated(Nebbie.version) and "aggiornamento" or "allineamento"
+    cecho("<yellow>Nebbie: " .. dir .. " v" .. tostring(Nebbie.version) .. " → v" .. NEBBIE_EXPECT .. "+...\n")
   end
   if Nebbie and type(Nebbie.killAllTrackedTemps) == "function" then Nebbie.killAllTrackedTemps() end
   if Nebbie and type(Nebbie.purgePackageAliases) == "function" then Nebbie.purgePackageAliases() end
@@ -361,7 +364,7 @@ function Nebbie_forceUpgrade(silent)
   Nebbie_cleanupScripts(false)
   Nebbie_wipeMemory()
   local function finish(ok, err)
-    if ok and Nebbie and Nebbie.version == NEBBIE_EXPECT then
+    if ok and Nebbie and nebbie_ver_acceptable(Nebbie.version) then
       if type(Nebbie.boot) == "function" then
         Nebbie.boot()
       elseif type(Nebbie.runFix) == "function" then
@@ -394,12 +397,21 @@ function Nebbie_forceUpgrade(silent)
 end
 
 function Nebbie_loaderBoot()
-  if Nebbie and Nebbie._loaderBootDone and Nebbie.version == NEBBIE_EXPECT and Nebbie._mainLoaded then
+  if Nebbie and Nebbie._loaderBootDone and nebbie_ver_acceptable(Nebbie.version) and Nebbie._mainLoaded then
     return
   end
   if Nebbie and Nebbie.version and Nebbie.version ~= NEBBIE_EXPECT then
-    cecho("<yellow>Nebbie loader: memoria v" .. tostring(Nebbie.version) .. " → v" .. NEBBIE_EXPECT .. "\n")
-    Nebbie_wipeMemory()
+    if nebbie_ver_outdated(Nebbie.version) then
+      cecho("<yellow>Nebbie loader: memoria v" .. tostring(Nebbie.version) .. " → v" .. NEBBIE_EXPECT .. "\n")
+      Nebbie_wipeMemory()
+    else
+      cecho("<yellow>Nebbie: package loader v" .. NEBBIE_EXPECT .. " < memoria v" .. tostring(Nebbie.version) .. " — scarico dal branch...\n")
+      Nebbie._loaderBootDone = true
+      if type(Nebbie_forceUpgrade) == "function" then
+        Nebbie_forceUpgrade(false)
+        return
+      end
+    end
   end
   Nebbie._loaderBootDone = true
 
@@ -530,9 +542,27 @@ Nebbie_loaderBoot()
  <AliasPackage>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-fix</name>
-   <script><![CDATA[local NEBBIE_EXPECT = "2.2.52"
+   <script><![CDATA[local NEBBIE_EXPECT = "2.2.54"
 local MAIN_SCRIPT = "Nebbie Play All"
 local LEGACY_NAMES = {"Nebbie Spells and Skills", "nebbie-install", "Nebbie Bootloader", "!Nebbie Boot", "Nebbie Play All", "Nebbie Play All v2.2.12", "Nebbie Play All v2.2.13", "Nebbie Play All v2.2.14", "Nebbie Play All v2.2.15", "Nebbie Play All v2.2.16", "Nebbie Play All v2.2.17", "Nebbie Play All v2.2.18", "Nebbie Play All v2.2.19", "Nebbie Play All v2.2.20"}
+
+local function nebbie_parse_ver_num(v)
+  if not v or type(v) ~= "string" then return 0 end
+  local a, b, c = v:match("^(%d+)%.(%d+)%.(%d+)")
+  if not a then return 0 end
+  return tonumber(a) * 1000000 + tonumber(b) * 1000 + tonumber(c)
+end
+
+function nebbie_ver_acceptable(ver)
+  if not ver or type(ver) ~= "string" then return false end
+  if ver == NEBBIE_EXPECT then return true end
+  return nebbie_parse_ver_num(ver) >= nebbie_parse_ver_num(NEBBIE_EXPECT)
+end
+
+function nebbie_ver_outdated(ver)
+  if not ver or type(ver) ~= "string" then return true end
+  return nebbie_parse_ver_num(ver) < nebbie_parse_ver_num(NEBBIE_EXPECT)
+end
 
 local function nebbie_find_ids(substr)
   if type(findItems) ~= "function" then return {} end
@@ -611,7 +641,7 @@ function Nebbie_wipeMemory()
   Nebbie._installedVer = nil
 end
 Nebbie = Nebbie or {}
-if Nebbie and Nebbie.version == NEBBIE_EXPECT and type(Nebbie.runFix) == "function" then
+if Nebbie and nebbie_ver_acceptable(Nebbie.version) and type(Nebbie.runFix) == "function" then
   Nebbie.runFix()
   cecho("<green>Nebbie v" .. tostring(Nebbie.version) .. " ok.\n")
 elseif type(Nebbie_forceUpgrade) == "function" then
@@ -634,7 +664,7 @@ end]]></script>
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-nprompt</name>
-   <script><![CDATA[if Nebbie and Nebbie.debugPrompt then Nebbie.debugPrompt() else cecho("<orange>Nebbie v2.2.52: esegui <yellow>nfix<orange> dopo install package.\n") end]]></script>
+   <script><![CDATA[if Nebbie and Nebbie.debugPrompt then Nebbie.debugPrompt() else cecho("<orange>Nebbie v2.2.54: esegui <yellow>nfix<orange> dopo install package.\n") end]]></script>
    <command></command>
    <packageName>nebbie-play-all</packageName>
    <regex>^nprompt$</regex>
@@ -660,7 +690,7 @@ cecho("<grey>Se Nebbie.version è ancora nil: <yellow>nfix<grey>.\n")]]></script
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-diagnose</name>
-   <script><![CDATA[cecho("<cyan><b>Nebbie diagnose v2.2.52</b>\n")
+   <script><![CDATA[cecho("<cyan><b>Nebbie diagnose v2.2.54</b>\n")
 cecho("<grey>memoria Nebbie.version: <yellow>" .. tostring(Nebbie and Nebbie.version) .. "\n")
 cecho("<grey>runFix: <yellow>" .. tostring(Nebbie and type(Nebbie.runFix)) .. "\n")
 cecho("<grey>mainLoaded: <yellow>" .. tostring(Nebbie and Nebbie._mainLoaded) .. "\n")
@@ -690,7 +720,7 @@ if type(getScript) == "function" then
     end
   end
 end
-cecho("<grey>Atteso: <yellow>2.2.52<grey> via Loader + dofile\n")
+cecho("<grey>Atteso: <yellow>2.2.54<grey> via Loader + dofile\n")
 if type(exists) == "function" then
   cecho("<grey>exists(Loader): <yellow>" .. tostring(exists("Nebbie Loader", "script")) .. "\n")
 end]]></script>

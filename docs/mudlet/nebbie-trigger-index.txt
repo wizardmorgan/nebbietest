@@ -1,5 +1,5 @@
 Nebbie Arcane — indice completo trigger Mudlet (generato automaticamente)
-Package: nebbie-play-all v2.2.52
+Package: nebbie-play-all v2.2.54
 
 === HUD / PROMPT ===
   [regex] H:\d+/\d+.*M:\d+/\d+.*V:\d+/\d+.*X:\d+  → parser prompt HP/Mana/Move
