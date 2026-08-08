@@ -107,11 +107,37 @@ end
 
 local data = NebbieDash.getCharData("NomiyaMaki")
 check("eq: 21 slot popolati", NebbieDash.countSlots(data.eq) == 21)
-check("eq: slot 16 impugnato", data.eq[16] == "La Flamberga di Boris")
-check("eq: slot 5 con word-wrap concatenato", data.eq[5] == "Un tubino rinforzato con una grossa Union Jack (in condizioni eccellenti)")
-check("eq: slot 9 con word-wrap concatenato", data.eq[9] == "Il Guanto dell'Infinito (hanno un alone luminoso) (in condizioni eccellenti)")
-check("eq: slot 21 ultimo", data.eq[21] == "Glass no Kamen")
+check("eq: slot 16 impugnato (item)", data.eq[16].item == "La Flamberga di Boris")
+check("eq: slot 16 impugnato (location)", data.eq[16].location == "impugnato")
+check("eq: slot 5 con word-wrap concatenato", data.eq[5].item == "Un tubino rinforzato con una grossa Union Jack (in condizioni eccellenti)")
+check("eq: slot 5 location", data.eq[5].location == "sul corpo")
+check("eq: slot 9 con word-wrap concatenato", data.eq[9].item == "Il Guanto dell'Infinito (hanno un alone luminoso) (in condizioni eccellenti)")
+check("eq: slot 21 ultimo (item)", data.eq[21].item == "Glass no Kamen")
+check("eq: slot 21 ultimo (location)", data.eq[21].location == "davanti agli occhi")
 check("eq: capture chiusa (nessuna capture attiva)", NebbieDash._eqCapture == nil)
+
+-- Test 3b: la posizione viene sempre letta dalla riga stessa, non da una
+-- tabella statica per indice — verifica esplicita che un ordine "anomalo"
+-- (slot non contiguo, posizione diversa da quella che una tabella statica
+-- indicizzata per numero avrebbe assunto) venga comunque letto correttamente.
+NebbieDash.setCurrentCharacter("TestAnomalo", true)
+NebbieDash.startEqCapture()
+local anomalLines = {
+  "Stai usando:",
+  "[ 1] <ai piedi>              Un paio di guanti (anomalia apposta per il test)",
+  "[ 8] <davanti agli occhi>    Degli occhiali",
+  "",
+}
+for _, l in ipairs(anomalLines) do
+  line = l
+  NebbieDash.onEqCaptureLine()
+end
+local dataAnomalo = NebbieDash.getCharData("TestAnomalo")
+check("eq anomalo: slot 1 usa la location dalla riga (non la tabella statica 'sul dito destro')",
+  dataAnomalo.eq[1].location == "ai piedi")
+check("eq anomalo: slot 8 usa la location dalla riga (non la tabella statica 'ai piedi')",
+  dataAnomalo.eq[8].location == "davanti agli occhi")
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
 
 -- Test 4: capture attrib con esempio da AGENT-PROMPT-ANALISI-ZERO.txt
 local attribLines = {

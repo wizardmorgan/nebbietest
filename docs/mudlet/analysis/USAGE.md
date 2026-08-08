@@ -29,6 +29,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nlayout` | Ripristina larghezza (320px) e font (11pt) di default del pannello. |
 | `nfont <numero>` | Cambia la dimensione del testo nel pannello (6–24, default 11). |
 | `nwidth <numero>` | Cambia la larghezza del pannello in pixel (150–900, default 320). |
+| `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
 
 Il rilevamento del personaggio è **automatico**: appena il prompt del gioco viene ricevuto (dopo
@@ -100,3 +101,41 @@ vedevano solo quelli occupati, senza modo di capire cosa mancava da equipaggiare
 
 `.mpackage` rigenerato con questi fix. Va reinstallato allo stesso modo descritto sopra (rimuovi
 la versione precedente, riavvia Mudlet, installa il nuovo file, riconnetti).
+
+## Bug corretto: slot equip nell'ordine sbagliato / etichetta sbagliata (es. "guanti ai piedi")
+
+**Sintomo segnalato**: dopo il fix precedente, lo slot "ai piedi" risultava mancante e lo slot
+"davanti agli occhi" risultava vuoto, con un oggetto (i guanti) mostrato sotto l'etichetta "ai
+piedi" invece che sotto la sua etichetta reale.
+
+**Causa reale**: la primissima versione del package leggeva SOLO il numero di slot e la
+descrizione dell'oggetto da ogni riga di `eq` (es. `[ 8] <ai piedi> Gli stivali...`), scartando il
+testo tra `< >` (la posizione reale) e sostituendolo con un'etichetta presa da una tabella statica
+indicizzata per numero (`EQ_SLOTS[8] = "ai piedi"`), costruita sull'unico esempio di `eq` visto
+finora (dove per coincidenza l'ordine corrispondeva). Il numero di slot da solo **non è un
+identificatore affidabile della posizione sul corpo** — può variare, quindi affidarsi a una
+tabella statica per numero produce etichette sbagliate non appena l'ordine reale differisce anche
+di poco da quell'unico esempio.
+
+**Fix applicato**: la posizione ora viene letta sempre dal testo tra `< >` della riga stessa (mai
+da una tabella statica), quindi l'etichetta mostrata è sempre quella reale riportata dal gioco per
+quello specifico slot, indipendentemente dal numero. Aggiunto anche un test automatico
+("eq anomalo") che verifica esplicitamente questo comportamento con un ordine di slot volutamente
+diverso da quello del primo esempio.
+
+**Nota sugli "slot vuoti"**: la versione precedente elencava sempre tutti gli slot da 1 a 21,
+marcando "(vuoto)" quelli non occupati — è proprio questo che ha reso visibile il bug (l'etichetta
+sbagliata veniva assegnata a uno slot vuoto "inventato"). Ora il pannello mostra **esattamente e
+solo** gli slot che il gioco riporta in `eq`, nel loro ordine reale — non inventiamo più un elenco
+fisso di "tutti gli slot possibili", perché non è ancora chiaro se/come il gioco riporti gli slot
+liberi. Se vuoi comunque vedere anche gli slot non occupati, serve sapere da dove prendere quella
+lista (es. un comando che elenchi *tutte* le posizioni indossabili, occupate o no) — vedi
+`Q&A.md` per la domanda aperta su questo punto.
+
+## Bug corretto: descrizioni oggetto troppo lunghe vanno sempre a capo
+
+**Fix applicato**: le descrizioni oggetto nel pannello equip vengono ora troncate a 42 caratteri
+(con "…" finale) prima di essere mostrate, per ridurre il word-wrap su un pannello stretto. Il
+testo completo resta comunque disponibile digitando `eq` normalmente. Regolabile con `nitemlen`
+(vedi tabella comandi sopra); allargare il pannello con `nwidth` riduce ulteriormente il word-wrap
+residuo.

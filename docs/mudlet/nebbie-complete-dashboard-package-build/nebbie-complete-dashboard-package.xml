@@ -69,6 +69,23 @@ function NebbieDash.loadStore()
   if type(io.exists) == "function" and io.exists(path) then
     pcall(function() table.load(path, NebbieDash.chars) end)
   end
+  NebbieDash.migrateStore()
+end
+
+-- Versioni precedenti salvavano data.eq[slot] come stringa (solo item, niente
+-- posizione). Converte al volo il formato vecchio { [slot] = "testo" } nel
+-- nuovo { [slot] = { location = ..., item = ... } } senza perdere dati salvati
+-- su disco da installazioni precedenti del package.
+function NebbieDash.migrateStore()
+  for _, data in pairs(NebbieDash.chars or {}) do
+    if type(data.eq) == "table" then
+      for slot, entry in pairs(data.eq) do
+        if type(entry) == "string" then
+          data.eq[slot] = { location = NebbieDash.EQ_SLOTS[slot] or "?", item = entry }
+        end
+      end
+    end
+  end
 end
 
 function NebbieDash.saveStore()
@@ -198,10 +215,17 @@ function NebbieDash.onEqCaptureLine()
     return
   end
 
-  local slot, item = text:match("^%[%s*(%d+)%]%s+<[^>]+>%s+(.+)$")
+  -- La posizione (es. "ai piedi") viene letta dalla riga stessa, MAI da una
+  -- tabella statica: il numero di slot da solo non e' un identificatore
+  -- affidabile della posizione sul corpo (varia in base a cosa il PG ha
+  -- effettivamente indosso in quel momento) — bug osservato: con la vecchia
+  -- tabella statica EQ_SLOTS uno slot "spostato" faceva comparire l'oggetto
+  -- sotto l'etichetta sbagliata (es. stivali mostrati come "ai piedi" quando
+  -- invece occupavano un altro indice, lasciando "davanti agli occhi" vuoto).
+  local slot, location, item = text:match("^%[%s*(%d+)%]%s+<([^>]+)>%s*(.+)$")
   if slot then
     slot = tonumber(slot)
-    cap.slots[slot] = item
+    cap.slots[slot] = { location = location:match("^%s*(.-)%s*$"), item = item:match("^%s*(.-)%s*$") }
     cap.lastSlot = slot
     return
   end
@@ -213,7 +237,8 @@ function NebbieDash.onEqCaptureLine()
 
   -- Riga di continuazione (word-wrap, M6): concatenata all'ultimo slot letto.
   if cap.lastSlot and cap.slots[cap.lastSlot] then
-    cap.slots[cap.lastSlot] = cap.slots[cap.lastSlot] .. " " .. text:match("^%s*(.-)%s*$")
+    local entry = cap.slots[cap.lastSlot]
+    entry.item = entry.item .. " " .. text:match("^%s*(.-)%s*$")
   end
 end
 
@@ -331,6 +356,16 @@ end
 -- ---------------------------------------------------------------------------
 NebbieDash.guiWidth = 320
 NebbieDash.fontSize = 11
+-- Le descrizioni oggetto sono spesso lunghe (es. "Un tubino rinforzato con
+-- una grossa Union Jack (in condizioni eccellenti)") e vanno quasi sempre a
+-- capo in un pannello laterale stretto; le tronchiamo per un colpo d'occhio
+-- piu' pulito (il testo completo resta comunque visibile con `eq` normale).
+NebbieDash.itemMaxLen = 42
+
+function NebbieDash.truncate(s, maxLen)
+  if not s or #s <= maxLen then return s end
+  return s:sub(1, math.max(1, maxLen - 1)) .. "…"
+end
 
 function NebbieDash.guiVisible()
   return NebbieDash._guiCreated == true and NebbieDash._guiHidden ~= true
@@ -433,6 +468,17 @@ function NebbieDash.cmdSetWidth(widthStr)
   cecho("<green>[NebbieDash] Larghezza pannello impostata a " .. width .. ".\n")
 end
 
+function NebbieDash.cmdSetItemLen(lenStr)
+  local len = tonumber(lenStr)
+  if not len or len < 10 or len > 300 then
+    cecho("<orange>[NebbieDash] Uso: nitemlen <numero tra 10 e 300> (attuale: " .. NebbieDash.itemMaxLen .. ")\n")
+    return
+  end
+  NebbieDash.itemMaxLen = len
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Lunghezza max descrizione oggetto impostata a " .. len .. ".\n")
+end
+
 function NebbieDash.refreshDashboard()
   if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
   local name = NebbieDash.currentChar
@@ -449,17 +495,25 @@ function NebbieDash.refreshDashboard()
   if not (data.eqUpdated) then
     cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
   end
-  -- Mostra sempre tutti i 21 slot, anche quelli vuoti (richiesta utente:
-  -- serve vedere a colpo d'occhio cosa manca da equipaggiare), non solo
-  -- quelli occupati come nella prima versione.
-  for i = 1, 21 do
-    local label = NebbieDash.EQ_SLOTS[i] or ("slot " .. i)
-    local item = data.eq and data.eq[i]
-    if item then
-      cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", i, label, item))
-    else
-      cecho("NebbieDashEquip", string.format("<grey>[%2d] %s\n     <grey>(vuoto)\n", i, label))
-    end
+  -- NOTA: mostriamo esattamente gli slot riportati dal gioco (numero +
+  -- posizione letti dalla riga stessa), nell'ordine in cui il gioco li
+  -- numera. NON inventiamo una lista fissa di "tutti gli slot possibili":
+  -- il numero da solo non e' un identificatore affidabile della posizione
+  -- (bug osservato — vedi LOG.md, "conteggio slot sbagliato"). Se serve
+  -- anche l'elenco degli slot NON occupati, va chiesto all'utente da dove
+  -- prenderlo (il gioco potrebbe non riportarli affatto in `eq`).
+  local slots = data.eq or {}
+  local indices = {}
+  for i in pairs(slots) do table.insert(indices, i) end
+  table.sort(indices)
+  if #indices == 0 then
+    cecho("NebbieDashEquip", "<grey>(nessun oggetto — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
+  end
+  for _, i in ipairs(indices) do
+    local entry = slots[i]
+    local location = (entry and entry.location) or "?"
+    local item = NebbieDash.truncate((entry and entry.item) or "?", NebbieDash.itemMaxLen)
+    cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", i, location, item))
   end
 
   cecho("NebbieDashSpells", "<cyan><b>Spell attivi — " .. name .. "</b>\n")
@@ -605,6 +659,13 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nwidth (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-itemlen</name>
+   <script><![CDATA[NebbieDash.cmdSetItemLen(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nitemlen (.+)$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>

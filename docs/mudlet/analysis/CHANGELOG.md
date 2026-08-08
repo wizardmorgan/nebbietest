@@ -1,5 +1,18 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.0.0 (fix 3) — 2026-08-08
+
+- **Fix importante**: etichette slot equip sbagliate (es. oggetto mostrato come "ai piedi" quando
+  in realtà occupava un'altra posizione). Causa: la posizione veniva presa da una tabella statica
+  indicizzata per numero di slot invece che dal testo reale della riga `eq`. Ora la posizione è
+  sempre letta dalla riga stessa. Vedi `LOG.md`/`USAGE.md`.
+- **Cambiato**: il pannello equip mostra ora esattamente gli slot riportati dal gioco (niente più
+  enumerazione fissa 1–21 con "(vuoto)" inventati — era proprio questo a rendere visibile il bug).
+- **Aggiunto**: comando `nitemlen <n>` per troncare le descrizioni oggetto (default 42 caratteri)
+  e ridurre il word-wrap nel pannello stretto.
+- **Non incluso** (richiede conferma utente, mai discusso prima/esplicitamente fuori scope):
+  finestra speedwalk, spell/skill cliccabili per rilancio, elenco slot equip non occupati.
+
 ## 1.0.0 (fix 2) — 2026-08-08
 
 - **Fix**: il pannello non si ridimensionava mai dopo la creazione iniziale (mancava un handler

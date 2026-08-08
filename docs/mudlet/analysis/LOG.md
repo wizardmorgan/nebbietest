@@ -267,6 +267,41 @@ Regole di riferimento: `docs/mudlet/AGENT-RULES.txt`, `docs/mudlet/AGENT-PROMPT-
 - **Nota**: nessuno di questi fix (resize/font/slot vuoti) è ancora stato validato in Mudlet reale
   — richiede nuova reinstallazione del `.mpackage` da parte dell'utente.
 
+## 2026-08-08 23:xx — Terzo giro di feedback reale: slot equip mislabeled, font ancora a capo
+
+- **Segnalazione utente**: dopo il secondo fix, il font è più grande ma il testo va comunque a
+  capo (non gradito); manca "la finestra con gli speedwalk" (feature del vecchio package, mai
+  portata in questo package nuovo, esplicitamente fuori scope in `CHANGELOG.md`); le spell/skill
+  non sono cliccabili per rilanciarle (feature mai richiesta/discussa prima d'ora); il conteggio
+  slot equip è sbagliato — manca lo slot "ai piedi" e gli oggetti risultano nell'ordine sbagliato,
+  con lo slot "davanti agli occhi" vuoto e dei guanti mostrati come "ai piedi".
+- **Analisi codice — root cause reale del mislabeling**: `onEqCaptureLine()` leggeva numero di
+  slot e descrizione oggetto da ogni riga `eq` (es. `[ 8] <ai piedi> ...`) ma **scartava** il testo
+  tra `< >` (la posizione reale), sostituendolo a display-time con un'etichetta presa dalla
+  tabella statica `EQ_SLOTS[numero]`, costruita sull'unico esempio di `eq` fornito dall'utente
+  (dove l'ordine combaciava per coincidenza). Il numero di slot da solo non è un identificatore
+  affidabile della posizione sul corpo — è emerso chiaramente al primo caso reale con ordine
+  diverso.
+- **Fix applicato**: la posizione ora viene sempre letta dal testo tra `< >` della riga stessa
+  (mai da `EQ_SLOTS`), salvata come `{ location = ..., item = ... }` per slot. Aggiunta
+  `migrateStore()` per convertire al volo eventuali dati salvati su disco nel vecchio formato
+  (stringa semplice). Il pannello ora mostra esattamente e solo gli slot riportati dal gioco, nel
+  loro ordine reale — niente più enumerazione fissa "1..21" con placeholder "(vuoto)" inventati
+  (che erano proprio ciò che aveva reso visibile il bug). Aggiunto test automatico dedicato
+  ("eq anomalo") con un ordine di slot volutamente diverso dal primo esempio, per prevenire
+  regressioni future su questo punto.
+- **Fix applicato (word-wrap)**: descrizioni oggetto troncate a 42 caratteri (nuovo comando
+  `nitemlen` per regolare), per ridurre — non eliminare del tutto, perché alcune descrizioni sono
+  comunque più larghe del pannello anche troncate a seconda del font — il numero di righe che
+  vanno a capo.
+- **NON implementato in questo giro** (richiede conferma esplicita dell'utente, sono feature mai
+  discusse prima e/o esplicitamente dichiarate fuori scope): finestra speedwalk, spell/skill
+  cliccabili per rilancio, elenco degli slot equip NON occupati (richiede sapere da quale comando
+  del gioco recuperare la lista completa delle posizioni indossabili). Vedi domande poste
+  all'utente nella stessa risposta di questo turno.
+- **Verifica**: `luac -p` OK, `tests/smoke_test_parsing.lua` aggiornato con struttura
+  `{location, item}` e nuovo test "eq anomalo" — tutti OK. Rigenerato `.mpackage`.
+
 ---
 
 (continua...)
