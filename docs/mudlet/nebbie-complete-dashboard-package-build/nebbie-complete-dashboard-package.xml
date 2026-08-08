@@ -342,8 +342,16 @@ function NebbieDash.initGUI()
   createMiniConsole("NebbieDashSpells", 0, 0, NebbieDash.guiWidth, 0)
   setMiniConsoleFontSize("NebbieDashEquip", 9)
   setMiniConsoleFontSize("NebbieDashSpells", 9)
+  -- Una miniconsole appena creata ha uno sfondo di default (grigio, widget Qt
+  -- non ancora disegnato) finche' non le si assegna esplicitamente un colore e
+  -- non ci si scrive dentro almeno una volta: senza queste due righe il
+  -- pannello resta grigio anche a install riuscita (bug osservato, vedi
+  -- docs/mudlet/analysis/LOG.md).
+  setBackgroundColor("NebbieDashEquip", 15, 15, 15, 255)
+  setBackgroundColor("NebbieDashSpells", 15, 15, 15, 255)
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
+  NebbieDash.refreshDashboard()
 end
 
 function NebbieDash.positionGUI()

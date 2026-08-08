@@ -215,6 +215,33 @@ Regole di riferimento: `docs/mudlet/AGENT-RULES.txt`, `docs/mudlet/AGENT-PROMPT-
   "funzionante" senza quell'evidenza**, per rispetto di AGENT-RULES.txt §1.
 - **Azione**: scritti `TEST-PLAN.md` (9 test manuali + 1 automatico) e `CHANGELOG.md` (v1.0.0).
 
+## 2026-08-08 23:xx — Feedback post-installazione reale (T1 fallito parzialmente) + fix
+
+- **Segnalazione utente**: dopo aver installato `nebbie-complete-dashboard-package.mpackage` in
+  Mudlet reale, le due miniconsole sul bordo destro (equip/spell) apparivano completamente grigie
+  e senza testo. L'utente ha anche chiesto istruzioni sull'uso degli alias, mai documentate finora.
+- **Ipotesi iniziale dell'utente**: residuo del vecchio package `nebbie-play-all`.
+- **Analisi codice**: rivista `initGUI()` in `nebbie-complete-dashboard-package-core.lua`. Trovato
+  bug reale, indipendente dal vecchio package: `createMiniConsole(...)` viene chiamata ma non
+  segue mai una `setBackgroundColor(...)` né una scrittura (`cecho`); una miniconsole Mudlet
+  appena creata resta con lo sfondo di default del widget Qt (grigio) finché non viene disegnata.
+  Inoltre `boot()` chiamava `initGUI()` ma mai `refreshDashboard()`, quindi il pannello restava
+  vuoto/grigio fino al primo comando digitato in gioco (che innesca il rilevamento del prompt) o al
+  primo `nresync` manuale — nell'intervallo tra installazione e quel momento, grigio è esattamente
+  il comportamento atteso col bug presente.
+- **Fix applicato**: aggiunto `setBackgroundColor` per entrambe le miniconsole subito dopo la
+  creazione, e chiamata a `NebbieDash.refreshDashboard()` alla fine di `initGUI()` (quindi anche
+  dentro `boot()`), così il pannello mostra da subito un testo placeholder invece di restare vuoto.
+- **Verifica**: rieseguito `tests/smoke_test_parsing.lua` dopo la modifica — tutti i 19 assert
+  ancora OK (la modifica non tocca la logica di parsing). Rigenerato
+  `nebbie-complete-dashboard-package.mpackage` con `build-nebbie-complete-dashboard-package.py`.
+- **Azione**: scritto `USAGE.md` con tabella completa degli alias (nessuno documentato prima
+  d'ora) e istruzioni di verifica per escludere residui del vecchio package (Package Manager,
+  Editor, riavvio completo di Mudlet).
+- **Nota**: il fix GUI non è ancora stato validato in Mudlet reale dall'utente (richiede
+  reinstallazione del `.mpackage` aggiornato) — resta comunque aperto il test manuale T1/T7 in
+  `TEST-PLAN.md`.
+
 ---
 
 (continua...)

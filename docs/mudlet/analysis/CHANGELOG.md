@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.0.0 (fix) — 2026-08-08
+
+- **Fix**: pannelli equip/spell grigi/vuoti subito dopo l'installazione (prima di qualunque
+  `nresync`/rilevamento prompt). Causa: miniconsole create senza sfondo esplicito né refresh
+  iniziale. Vedi `LOG.md` (voce "Feedback post-installazione reale") e `USAGE.md`.
+- **Aggiunto**: `USAGE.md` con la tabella completa degli alias e istruzioni di verifica per
+  escludere residui del vecchio package.
+
 ## 1.0.0 — 2026-08-08
 
 Prima release. Package **nuovo**, indipendente da `nebbie-play-all` (non un patch/fork).
