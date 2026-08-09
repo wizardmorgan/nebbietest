@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.1.0"
+local PKG_VER = "1.2.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -333,7 +333,13 @@ end
 -- ---------------------------------------------------------------------------
 NebbieDash.CAST_PREFIX = { c = "cast", r = "recall", m = "mind" }
 
-function NebbieDash.cmdQuickCast(prefix, argument)
+-- target opzionale: il gioco legge tutto cio' che segue l'apice di chiusura
+-- come nome del bersaglio (vedi ACTION_FUNC(do_cast) in src/spell_parser.cpp,
+-- riga ~1822, "argument = one_argument(argument, name)"). Usato dal click
+-- sul pannello spell per forzare sempre il personaggio attivo come bersaglio
+-- (richiesta esplicita: "devono avere tutti come target il personaggio con
+-- cui sto giocando").
+function NebbieDash.cmdQuickCast(prefix, argument, target)
   local cmdWord = NebbieDash.CAST_PREFIX[(prefix or ""):lower()]
   if not cmdWord then return end
   argument = (argument or ""):match("^%s*(.-)%s*$")
@@ -341,7 +347,11 @@ function NebbieDash.cmdQuickCast(prefix, argument)
     cecho("<orange>[NebbieDash] Uso: " .. prefix .. " <nome spell/skill, anche abbreviato>\n")
     return
   end
-  send(cmdWord .. " '" .. argument .. "'", false)
+  local cmd = cmdWord .. " '" .. argument .. "'"
+  if target and target ~= "" then
+    cmd = cmd .. " " .. target
+  end
+  send(cmd, false)
 end
 
 -- ---------------------------------------------------------------------------
@@ -534,6 +544,16 @@ NebbieDash.itemMaxLen = 42
 -- in tempo reale — non conosciamo quanti secondi dura un tick sul server, e
 -- senza quell'informazione non possiamo stimare il tempo residuo reale.
 NebbieDash.spellWarnTicks = 5
+-- Analogo a itemMaxLen ma per l'anteprima delle direzioni nel pannello
+-- speedwalk (il comando eseguito al click usa comunque la lista completa,
+-- solo l'anteprima a schermo viene troncata).
+NebbieDash.speedwalkPreviewMaxLen = 60
+-- Larghezza automatica (default): il pannello si allarga/restringe da solo
+-- in base al contenuto piu' lungo attualmente visibile, cosi' non "sparisce"
+-- niente oltre il bordo dello schermo. `nwidth <numero>` disattiva questa
+-- modalita' e fissa una larghezza manuale; `nwidth auto` la riattiva.
+NebbieDash.autoWidth = true
+NebbieDash.autoWidthMin = 180
 
 function NebbieDash.truncate(s, maxLen)
   if not s or #s <= maxLen then return s end
@@ -550,6 +570,12 @@ NebbieDash.GUI_WINDOWS = { "NebbieDashEquip", "NebbieDashSpells", "NebbieDashSpe
 
 function NebbieDash.initGUI()
   if NebbieDash._guiCreated then return end
+  -- Il pannello usa solo il bordo destro. Azzeriamo esplicitamente il bordo
+  -- sinistro perche' un package precedente (o una sessione Mudlet precedente)
+  -- potrebbe averlo impostato: i bordi sono un'impostazione del profilo, non
+  -- di uno script specifico, quindi disinstallare un vecchio package non lo
+  -- resetta da solo (bug segnalato: "colonna nera a sinistra" senza motivo).
+  setBorderLeft(0)
   setBorderRight(NebbieDash.guiWidth)
   for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
     createMiniConsole(win, 0, 0, NebbieDash.guiWidth, 0)
@@ -569,6 +595,49 @@ function NebbieDash.initGUI()
   -- del profilo): riesegui il posizionamento un istante dopo per evitare che
   -- un pannello resti a altezza 0 (visto come "una sola barra" a schermo).
   tempTimer(0, [[NebbieDash.positionGUI()]])
+end
+
+-- Calcola quanti caratteri (colonna piu' larga) servono per mostrare tutto
+-- il contenuto attuale senza andare a capo — titoli, equip (posizione +
+-- descrizione troncata), spell attive (nome + tick) e speedwalk (descrizione
+-- + anteprima direzioni troncata).
+function NebbieDash.computeContentMaxChars()
+  local maxChars = 20
+  local name = NebbieDash.currentChar
+  if name then
+    maxChars = math.max(maxChars, #("Equip — " .. name), #("Spell attivi — " .. name))
+    local data = NebbieDash.getCharData(name)
+    for _, entry in pairs(data.eq or {}) do
+      local location = (entry and entry.location) or "?"
+      local item = NebbieDash.truncate((entry and entry.item) or "?", NebbieDash.itemMaxLen)
+      maxChars = math.max(maxChars, #location + 6, #item + 6)
+    end
+    for _, s in ipairs(data.spells or {}) do
+      maxChars = math.max(maxChars, #(s.name or "") + #(" " .. tostring(s.ticks) .. " tick"))
+    end
+  end
+  for _, entry in ipairs(NebbieDash.speedwalks) do
+    local preview = NebbieDash.truncate(entry.dirString, NebbieDash.speedwalkPreviewMaxLen)
+    maxChars = math.max(maxChars, #entry.desc + 1 + #preview)
+  end
+  return maxChars
+end
+
+-- Applica la larghezza automatica (se attiva) in base al contenuto corrente,
+-- senza mai superare il 60% della larghezza reale della finestra di Mudlet —
+-- cosi' il pannello non puo' mai "uscire" dallo schermo.
+function NebbieDash.applyAutoWidth()
+  if not NebbieDash.autoWidth or not NebbieDash._guiCreated then return end
+  local maxChars = NebbieDash.computeContentMaxChars()
+  local charW = calcFontSize(NebbieDash.fontSize)
+  charW = charW or 8
+  local w = math.floor(charW * (maxChars + 3))
+  local mainW = select(1, getMainWindowSize()) or 1024
+  w = math.max(NebbieDash.autoWidthMin, math.min(w, math.floor(mainW * 0.6)))
+  if w ~= NebbieDash.guiWidth then
+    NebbieDash.guiWidth = w
+    setBorderRight(w)
+  end
 end
 
 function NebbieDash.positionGUI()
@@ -609,13 +678,13 @@ end
 function NebbieDash.resetLayout()
   NebbieDash.guiWidth = 320
   NebbieDash.fontSize = 11
+  NebbieDash.autoWidth = true
   NebbieDash.guiRatios = { equip = 0.45, spells = 0.25, speedwalk = 0.30 }
   if NebbieDash._guiCreated then
-    setBorderRight(NebbieDash.guiWidth)
     for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
       setMiniConsoleFontSize(win, NebbieDash.fontSize)
     end
-    NebbieDash.positionGUI()
+    NebbieDash.refreshDashboard()
   end
 end
 
@@ -635,17 +704,25 @@ function NebbieDash.cmdSetFont(sizeStr)
 end
 
 function NebbieDash.cmdSetWidth(widthStr)
-  local width = tonumber(widthStr)
-  if not width or width < 150 or width > 900 then
-    cecho("<orange>[NebbieDash] Uso: nwidth <numero tra 150 e 900> (attuale: " .. NebbieDash.guiWidth .. ")\n")
+  if (widthStr or ""):lower():match("^%s*auto%s*$") then
+    NebbieDash.autoWidth = true
+    NebbieDash.refreshDashboard()
+    cecho("<green>[NebbieDash] Larghezza pannello: automatica (si adatta al contenuto, entro il 60% dello schermo).\n")
     return
   end
+  local width = tonumber(widthStr)
+  if not width or width < 150 or width > 900 then
+    cecho("<orange>[NebbieDash] Uso: nwidth <numero tra 150 e 900> oppure <yellow>nwidth auto<orange> (attuale: "
+      .. NebbieDash.guiWidth .. (NebbieDash.autoWidth and ", automatica" or ", manuale") .. ")\n")
+    return
+  end
+  NebbieDash.autoWidth = false
   NebbieDash.guiWidth = width
   if NebbieDash._guiCreated then
     setBorderRight(width)
     NebbieDash.positionGUI()
   end
-  cecho("<green>[NebbieDash] Larghezza pannello impostata a " .. width .. ".\n")
+  cecho("<green>[NebbieDash] Larghezza pannello impostata a " .. width .. " (manuale — <yellow>nwidth auto<green> per tornare automatica).\n")
 end
 
 function NebbieDash.cmdSetItemLen(lenStr)
@@ -672,6 +749,8 @@ end
 
 function NebbieDash.refreshDashboard()
   if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
+  NebbieDash.applyAutoWidth()
+  NebbieDash.positionGUI()
   NebbieDash.refreshSpeedwalkPanel()
   local name = NebbieDash.currentChar
   clearWindow("NebbieDashEquip")
@@ -719,8 +798,8 @@ function NebbieDash.refreshDashboard()
       local ticks = tonumber(s.ticks) or 0
       local color = ticks <= NebbieDash.spellWarnTicks and "<red>" or "<green>"
       cechoLink("NebbieDashSpells", color .. s.name,
-        string.format("NebbieDash.cmdQuickCast(%q, %q)", prefix, s.name),
-        "Clicca per rilanciare: " .. s.name, true)
+        string.format("NebbieDash.cmdQuickCast(%q, %q, %q)", prefix, s.name, name),
+        "Clicca per rilanciare su " .. name .. ": " .. s.name, true)
       cecho("NebbieDashSpells", string.format(" %s%s tick\n", color, tostring(s.ticks)))
     end
   else
@@ -738,10 +817,11 @@ function NebbieDash.refreshSpeedwalkPanel()
     return
   end
   for i, entry in ipairs(NebbieDash.speedwalks) do
+    local preview = NebbieDash.truncate(entry.dirString, NebbieDash.speedwalkPreviewMaxLen)
     cechoLink("NebbieDashSpeedwalks", "<cyan>" .. entry.desc,
       string.format("NebbieDash.runSpeedwalk(%d)", i),
       "Clicca per andare: " .. entry.desc .. " (" .. entry.dirString .. ")", true)
-    cecho("NebbieDashSpeedwalks", string.format(" <grey>%s\n", entry.dirString))
+    cecho("NebbieDashSpeedwalks", string.format(" <grey>%s\n", preview))
   end
 end
 
@@ -804,7 +884,7 @@ end
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>nebbie-complete-dashboard-package - boot</name>
-   <script><![CDATA[local ver = "1.1.0"
+   <script><![CDATA[local ver = "1.2.0"
 if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
 local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then

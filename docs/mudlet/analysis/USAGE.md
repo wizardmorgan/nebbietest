@@ -28,7 +28,8 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `ngui` | Mostra/nasconde il pannello laterale (bordo destro). |
 | `nlayout` | Ripristina larghezza (320px) e font (11pt) di default del pannello. |
 | `nfont <numero>` | Cambia la dimensione del testo nel pannello (6–24, default 11). |
-| `nwidth <numero>` | Cambia la larghezza del pannello in pixel (150–900, default 320). |
+| `nwidth <numero>` | Fissa una larghezza manuale del pannello in pixel (150–900) e **disattiva** l'adattamento automatico. |
+| `nwidth auto` | Riattiva la larghezza automatica (default): il pannello si allarga/restringe da solo in base al contenuto più lungo visibile, senza mai superare il 60% della finestra di Mudlet. |
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
 | `c <nome>` | Invia `cast '<nome>'` (mago/chierico). Es. `c word of r` → `cast 'word of r'` (il gioco stesso fa il match abbreviato su "word of recall", vedi sotto). |
@@ -173,7 +174,13 @@ sintassi richiesta.
 
 Ogni spell nel pannello "Spell attivi" è ora un link cliccabile: cliccandoci sopra la rilancia
 usando il comando impostato con `nclass` per quel personaggio (default `cast`, cioè come se
-avessi digitato `c <nome spell>`). Imposta la classe giusta una volta per personaggio:
+avessi digitato `c <nome spell>`), **puntata sempre sul personaggio attivo** (quello mostrato nel
+titolo del pannello, es. "Spell attivi — NomiyaMaki"): il click su "true sight" invia
+`cast 'true sight' NomiyaMaki`, non solo `cast 'true sight'`. Il gioco interpreta tutto ciò che
+segue l'apice di chiusura come nome del bersaglio (`ACTION_FUNC(do_cast)`,
+`src/spell_parser.cpp`); per le spell "solo su se stessi" indicare comunque il proprio nome non ha
+alcun effetto negativo, il server lo ignora semplicemente. Imposta la classe giusta una volta per
+personaggio:
 
 ```
 nclass c   -- mago/chierico (cast)
@@ -222,3 +229,32 @@ il gioco impone un lag minimo tra movimenti) si regola con `nspeeddelay <secondi
 
 **Nota**: gli speedwalk sono globali (non per personaggio) — se ti serve una lista diversa per
 personaggio, fammelo sapere.
+
+**Istruzioni con virgole/parole multiple**: un token tra virgole che NON inizia con un numero
+viene sempre inviato per intero, così com'è, anche se contiene più parole o spazi. Esempio
+confermato e testato: `(paul, da astral) u,n,2w,n,u,enter pool,4n,3w,6s` invia in sequenza `u`,
+`n`, `w`, `w`, `n`, `u`, `enter pool` (come comando unico), `n`, `n`, `n`, `n`, `w`, `w`, `w`, `s`,
+`s`, `s`, `s`, `s`, `s`. Nota anche che una virgola **dentro le parentesi** della descrizione (es.
+"paul, da astral") non crea ambiguità: tutto ciò che sta tra la prima `(` e la prima `)` diventa la
+descrizione, indipendentemente da quante virgole contiene.
+
+## Larghezza automatica del pannello destro
+
+Di default (`nwidth auto`) il pannello si allarga o restringe da solo in base al contenuto più
+lungo attualmente visibile (posizione/oggetto equip, nome spell, descrizione+direzioni speedwalk),
+così non c'è più testo che va a capo inutilmente quando ci starebbe su una riga sola, e niente può
+mai "uscire" dal bordo dello schermo (la larghezza calcolata non supera mai il 60% della larghezza
+della finestra di Mudlet). Se preferisci una larghezza fissa scelta da te, usa `nwidth <numero>`
+(150–900): disattiva l'automatismo finché non digiti di nuovo `nwidth auto`. `nlayout` (reset) torna
+sempre alla modalità automatica.
+
+## Bordo nero a sinistra
+
+Questo package non ha mai usato il bordo sinistro (solo quello destro). Se lo vedevi comunque
+comparire, era quasi certamente un residuo lasciato da un package precedente (es.
+`nebbie-play-all`): i bordi sono un'impostazione del profilo Mudlet, non di uno script, quindi
+disinstallare un package non li azzera da solo. Da questa versione il pannello azzera esplicitamente
+il bordo sinistro (`setBorderLeft(0)`) ad ogni avvio, indipendentemente da chi l'avesse impostato in
+precedenza. Se dovesse persistere anche dopo l'aggiornamento, prova un riavvio completo di Mudlet
+(non solo un reload del profilo): potrebbe trattarsi di un widget creato in una sessione precedente
+ancora aperta, che non persiste comunque tra riavvii.

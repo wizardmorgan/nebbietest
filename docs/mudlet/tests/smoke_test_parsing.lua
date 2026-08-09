@@ -175,6 +175,23 @@ check("speedwalk: riga commento ignorata", NebbieDash.parseSpeedwalkLine("# comm
 check("speedwalk: riga vuota ignorata", NebbieDash.parseSpeedwalkLine("") == nil)
 check("speedwalk: riga senza parentesi ignorata", NebbieDash.parseSpeedwalkLine("u,3w,n,s,2d") == nil)
 
+-- Test 6: speedwalk con descrizione contenente una virgola e un'istruzione a
+-- piu' parole tra le direzioni (es. "enter pool") — esempio esatto fornito
+-- dall'utente. La descrizione tra parentesi puo' contenere virgole (il match
+-- e' su "fino alla prima parentesi chiusa", non sulla virgola), e ogni token
+-- senza un numero davanti viene inviato cosi' com'e', anche se contiene piu'
+-- parole.
+local swEntry2 = NebbieDash.parseSpeedwalkLine("(paul, da astral) u,n,2w,n,u,enter pool,4n,3w,6s")
+check("speedwalk complesso: riga valida non nil", swEntry2 ~= nil)
+if swEntry2 then
+  check("speedwalk complesso: descrizione con virgola interna", swEntry2.desc == "paul, da astral")
+  check("speedwalk complesso: 20 passi totali",
+    #swEntry2.steps == 20)
+  check("speedwalk complesso: sequenza esatta",
+    table.concat(swEntry2.steps, "|") ==
+    table.concat({ "u", "n", "w", "w", "n", "u", "enter pool", "n", "n", "n", "n", "w", "w", "w", "s", "s", "s", "s", "s", "s" }, "|"))
+end
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

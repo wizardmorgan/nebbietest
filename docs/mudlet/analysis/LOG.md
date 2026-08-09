@@ -386,4 +386,72 @@ Regole di riferimento: `docs/mudlet/AGENT-RULES.txt`, `docs/mudlet/AGENT-PROMPT-
 
 ---
 
+## 2026-08-09 — Feedback round 6 (post-1.1.0): target spell, larghezza colonna, virgole speedwalk, bordo sinistro
+
+Feedback utente testuale (traduzione dei 4 punti):
+
+1. Le spell cliccabili devono lanciarsi sempre puntate sul personaggio con cui si sta giocando
+   (es. da "Spell attivi — NomiyaMaki", il click deve equivalere a bersagliare NomiyaMaki).
+2. La larghezza della colonna destra è illeggibile: deve adattarsi alla lunghezza del contenuto
+   senza mai far sparire nulla oltre lo schermo, e dovrebbe essere ridimensionabile in autonomia.
+3. Dubbio se gli speedwalk gestiscano correttamente istruzioni con virgole/parole multiple tra le
+   direzioni, es. `(paul, da astral) u,n,2w,n,u,enter pool,4n,3w,6s`.
+4. C'è ancora una "colonna nera" a sinistra: chiesto se serve a qualcosa o va rimossa.
+
+Azioni:
+
+- **Target spell (punto 1)**: verificato in `src/spell_parser.cpp` (repo `Server`,
+  `ACTION_FUNC(do_cast)`, riga ~1797-1824) che dopo l'apice di chiusura del nome spell il gioco
+  legge il resto della riga come nome del bersaglio (`argument = one_argument(argument, name)`,
+  poi cerca `name` tra i personaggi visibili nella stanza). `NebbieDash.cmdQuickCast` ora accetta
+  un terzo parametro opzionale `target`; il click da pannello spell lo passa sempre uguale a
+  `NebbieDash.currentChar` (il nome mostrato nel titolo "Spell attivi — NomeChar"). Per le spell
+  "solo se stessi" il bersaglio esplicito è ridondante ma innocuo (il server lo ignora). Il lancio
+  manuale via alias `c`/`r`/`m <nome>` NON viene toccato (nessun target automatico aggiunto lì: se
+  l'utente vuole bersagliare qualcun altro digitando a mano, resta libero di scrivere il nome dopo
+  la spell come già faceva prima, il motore alias tratta comunque tutto il testo dopo il prefisso
+  come un'unica stringa/nome spell — comportamento preesistente e già approvato, non cambiato qui).
+- **Larghezza automatica (punto 2)**: aggiunta `NebbieDash.computeContentMaxChars()` che calcola,
+  scorrendo i dati correnti (non il testo già scritto nella console, per evitare un doppio giro di
+  cecho), quanti caratteri servono per la riga più lunga tra: titoli pannello, posizione/oggetto
+  equip (già troncato a `itemMaxLen`), nome spell + tick, descrizione+anteprima direzioni speedwalk
+  (nuovo `NebbieDash.speedwalkPreviewMaxLen = 60`, solo per la visualizzazione: l'esecuzione al
+  click usa sempre la lista passi completa). `NebbieDash.applyAutoWidth()` converte i caratteri in
+  pixel con `calcFontSize(fontSize)` (https://wiki.mudlet.org/w/Manual:UI_Functions#calcFontSize,
+  restituisce larghezza/altezza media di un carattere per una dimensione di font data) e clampa il
+  risultato tra `autoWidthMin=180` e il 60% di `getMainWindowSize()`, cosi facendo la colonna non
+  può mai "sforare" lo schermo. Chiamata a inizio `refreshDashboard()`, prima di riposizionare le 3
+  miniconsole. **Ridimensionamento manuale**: il comando `nwidth <numero>` esisteva già (round 5)
+  ma restava sovrascritto ad ogni refresh perché l'auto-resize non era ancora implementato; ora
+  impostare `nwidth <n>` disattiva esplicitamente la modalità automatica (`NebbieDash.autoWidth =
+  false`) cosi la scelta dell'utente non viene più annullata al refresh successivo; `nwidth auto`
+  riattiva l'adattamento automatico. `nlayout` (reset totale) torna sempre alla modalità automatica.
+- **Virgole/istruzioni multi-parola negli speedwalk (punto 3)**: **nessun bug trovato**. La
+  descrizione tra parentesi è già estratta con un pattern non-greedy fino alla prima `)` chiusa
+  (`^%((.-)%)%s*(.+)$`), quindi una virgola dentro le parentesi (es. "paul, da astral") non confonde
+  il parser. Ogni token separato da virgola che non inizia con un numero (es. "enter pool", che
+  contiene uno spazio) non soddisfa il pattern conta+direzione `^(%d+)(%a+)$` e viene quindi inviato
+  così com'è, per intero, come singolo passo — esattamente il comportamento desiderato. Aggiunto un
+  test dedicato in `smoke_test_parsing.lua` con l'esempio esatto dell'utente
+  (`(paul, da astral) u,n,2w,n,u,enter pool,4n,3w,6s` → 20 passi,
+  `u,n,w,w,n,u,"enter pool",n,n,n,n,w,w,w,s,s,s,s,s,s`): PASS.
+- **Colonna nera a sinistra (punto 4)**: questo package non ha mai chiamato `setBorderLeft` (usa
+  solo `setBorderRight`). I bordi in Mudlet sono un'impostazione di profilo persistente, non legata
+  a un singolo script: se un package precedente (verosimilmente `nebbie-play-all`, disinstallato
+  dall'utente in Fase 0) aveva impostato un bordo sinistro, disinstallare quel package NON lo
+  ripristina a 0 automaticamente. Aggiunto `setBorderLeft(0)` esplicito in `initGUI()` per azzerarlo
+  in modo difensivo, indipendentemente da chi l'avesse impostato. Se il problema persistesse anche
+  dopo l'aggiornamento, è probabile un widget residuo creato in una sessione Mudlet precedente (non
+  persistente tra riavvii): richiede un riavvio completo di Mudlet, non solo un `nresync`/reload
+  profilo, per essere verificato/escluso.
+- **Verifica**: `luac -p` OK. Aggiunto 4° test automatico dedicato (speedwalk con virgola nella
+  descrizione + istruzione multi-parola) — 33/33 test totali OK. Versione alzata a 1.2.0.
+  Rigenerato `.mpackage`.
+- **Non ancora verificato in Mudlet reale**: comportamento effettivo dell'auto-resize a runtime
+  (in particolare dopo un ridimensionamento della finestra di Mudlet, dove `getMainWindowSize()`
+  potrebbe essere temporaneamente non aggiornato — mitigato dallo stesso pattern `tempTimer(0,...)`
+  già usato per `sysWindowResizeEvent`), ed effettiva scomparsa della colonna nera a sinistra.
+
+---
+
 (continua...)

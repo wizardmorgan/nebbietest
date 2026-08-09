@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.1.0"
+PKG_VER = "1.2.0"
 CORE_LUA = os.path.join(HERE, "nebbie-complete-dashboard-package-core.lua")
 BUILD_DIR = os.path.join(HERE, "nebbie-complete-dashboard-package-build")
 XML_PATH = os.path.join(BUILD_DIR, f"{PKG_NAME}.xml")

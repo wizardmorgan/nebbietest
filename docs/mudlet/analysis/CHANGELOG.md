@@ -1,5 +1,35 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.2.0 — 2026-08-09
+
+- **Aggiunto**: le spell cliccabili nel pannello "Spell attivi" ora includono sempre il personaggio
+  attivo come bersaglio esplicito (es. click su "true sight" con `NomiyaMaki` attivo invia
+  `cast 'true sight' NomiyaMaki`, non solo `cast 'true sight'`). Il gioco interpreta tutto ciò che
+  segue l'apice di chiusura come nome bersaglio (`ACTION_FUNC(do_cast)`, `src/spell_parser.cpp`
+  riga ~1822): per le spell "solo su se stessi" il bersaglio esplicito viene semplicemente ignorato
+  dal server, quindi non ha effetti collaterali. Il lancio manuale (`c`/`r`/`m <nome>` digitato)
+  resta invariato.
+- **Aggiunto**: larghezza automatica del pannello destro (default). Si allarga/restringe da solo in
+  base alla riga più lunga attualmente mostrata (posizione/oggetto equip, nome spell, descrizione+
+  direzioni speedwalk), senza mai superare il 60% della larghezza della finestra di Mudlet — niente
+  più testo tagliato "a schermo pieno" né testo che va a capo inutilmente quando il contenuto
+  entrerebbe su una riga sola. Comando `nwidth <numero>` continua a permettere una larghezza fissa
+  manuale come prima; `nwidth auto` torna alla modalità automatica.
+- **Fix**: azzerato esplicitamente il bordo sinistro (`setBorderLeft(0)`) alla creazione della GUI.
+  I bordi sono un'impostazione di profilo, non di uno script: un vecchio package (es.
+  `nebbie-play-all`) può averlo impostato in passato e disinstallarlo non lo resetta da solo —
+  causa più probabile della "colonna nera a sinistra" segnalata senza che questo package l'abbia
+  mai richiesta. Se dovesse persistere dopo l'aggiornamento, riavviare del tutto Mudlet (non solo
+  ricaricare il profilo) per eliminare eventuali widget residui creati in sessione da script ormai
+  rimossi.
+- **Verificato** (nessun fix necessario): il parsing degli speedwalk già gestiva correttamente sia
+  descrizioni con virgole interne (es. `(paul, da astral)`, il testo tra parentesi viene preso per
+  intero fino alla prima `)` chiusa, la virgola interna non confonde il parser) sia istruzioni
+  multi-parola tra le direzioni (es. `enter pool`, inviata così com'è perché non inizia con un
+  numero). Aggiunto test automatico dedicato con l'esempio esatto fornito
+  (`docs/mudlet/tests/smoke_test_parsing.lua`).
+- **Versione interna** alzata a 1.2.0.
+
 ## 1.1.0 — 2026-08-09
 
 - **Aggiunto**: terzo pannello "Speedwalk" (bordo destro, sotto equip/spell). Legge
