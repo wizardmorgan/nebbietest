@@ -13,7 +13,8 @@ function tempTrigger() return nil end
 function tempRegexTrigger() return nil end
 function disableTrigger() end
 function enableTrigger() end
-function send() end
+local lastSent = nil
+function send(cmd) lastSent = cmd end
 function tempTimer() end
 function setBorderRight() end
 function setBorderLeft() end
@@ -226,6 +227,31 @@ if swEntry2 then
     table.concat(swEntry2.steps, "|") ==
     table.concat({ "u", "n", "w", "w", "n", "u", "enter pool", "n", "n", "n", "n", "w", "w", "w", "s", "s", "s", "s", "s", "s" }, "|"))
 end
+
+-- Test 7: cmdQuickCast — bersaglio automatico su se stessi quando l'ultima
+-- parola digitata abbrevia il personaggio attivo (NomiyaMaki), riportato
+-- dall'utente come non funzionante ("c heal nom", "c darkne nom", "c dar
+-- nom" -> il gioco riceveva 'heal nom' come nome spell unico, invece di
+-- 'heal' + bersaglio nom).
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+NebbieDash.cmdQuickCast("c", "heal nom")
+check("quickcast: 'c heal nom' -> cast 'heal' NomiyaMaki", lastSent == "cast 'heal' NomiyaMaki")
+
+NebbieDash.cmdQuickCast("c", "darkne nom")
+check("quickcast: 'c darkne nom' -> cast 'darkne' NomiyaMaki", lastSent == "cast 'darkne' NomiyaMaki")
+
+NebbieDash.cmdQuickCast("c", "dar nom")
+check("quickcast: 'c dar nom' -> cast 'dar' NomiyaMaki", lastSent == "cast 'dar' NomiyaMaki")
+
+-- Non deve rompere il caso storico senza bersaglio (ultima parola di 1 sola
+-- lettera, ignorata apposta per questo motivo).
+NebbieDash.cmdQuickCast("c", "word of r")
+check("quickcast: 'c word of r' resta senza bersaglio", lastSent == "cast 'word of r'")
+
+-- Click dal pannello spell attivi: bersaglio esplicito passato come terzo
+-- argomento, non deve attivare l'euristica (gia' corretto di suo).
+NebbieDash.cmdQuickCast("c", "true sight", "NomiyaMaki")
+check("quickcast: bersaglio esplicito dal pannello invariato", lastSent == "cast 'true sight' NomiyaMaki")
 
 print("")
 if failures == 0 then

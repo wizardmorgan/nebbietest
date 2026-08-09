@@ -42,9 +42,9 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nclanslot <on\|off>` | Mostra/nasconde il 22° slot equip placeholder "simbolo del clan" (nascosto di default, non ancora confermato in un `eq` reale). |
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
-| `c <nome>` | Invia `cast '<nome>'` (mago/chierico). Es. `c word of r` → `cast 'word of r'` (il gioco stesso fa il match abbreviato su "word of recall", vedi sotto). |
-| `r <nome>` | Invia `recall '<nome>'` (sorcerer). |
-| `m <nome>` | Invia `mind '<nome>'` (psionico). |
+| `c <nome> [bersaglio]` | Invia `cast '<nome>'` (mago/chierico), o `cast '<nome>' <bersaglio>` se l'ultima parola digitata abbrevia il personaggio attivo (vedi sotto). Es. `c word of r` → `cast 'word of r'`. |
+| `r <nome> [bersaglio]` | Come sopra ma `recall` (sorcerer). |
+| `m <nome> [bersaglio]` | Come sopra ma `mind` (psionico). |
 | `nclass <c\|r\|m>` | Imposta, per il personaggio attivo, quale dei tre comandi viene usato quando clicchi una spell nel pannello per rilanciarla (default `c`/cast). Impostalo una volta per personaggio in base alla sua classe. |
 | `nspellwarn <n>` | Sotto quanti tick residui una spell attiva nel pannello viene mostrata in rosso invece che verde (default 5). |
 | `nspeedwalks` | Ricarica gli speedwalk dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
@@ -174,6 +174,15 @@ non filtrato per classe) è in `MUD-SPELL-SKILL-LIST.md`, estratto direttamente 
 del server (non inventato). Serve come riferimento per scegliere quali nomi assegnare a eventuali
 alias dedicati più corti (feature non ancora implementata, in attesa che l'utente indichi quali
 voci gli servono e con quale sintassi — vedi `Q&A.md`).
+
+**Bersaglio manuale (1.3.1)**: se l'ultima parola digitata è un'abbreviazione plausibile (almeno 2
+lettere, prefisso case-insensitive) del personaggio attivo, viene staccata automaticamente e usata
+come bersaglio esplicito. Esempio con `NomiyaMaki` attivo: `c heal nom` → `cast 'heal' NomiyaMaki`
+(non `cast 'heal nom'`, che il gioco non riconosce). Senza questa parola finale il comportamento
+resta quello di sempre: tutto il testo è il nome spell (es. `c word of r` → `cast 'word of r'`,
+nessun bersaglio). **Limite noto**: se il nome del personaggio inizia con le stesse lettere
+dell'ultima parola di uno spell multi-parola che NON deve avere bersaglio, questa viene comunque
+staccata (falso positivo raro, accettato consapevolmente — segnalalo se capita davvero).
 
 **Attenzione — possibile collisione**: `c`, `r`, `m` seguiti da uno spazio e altro testo ora
 vengono intercettati SEMPRE da questo alias, anche se nel gioco esistessero altri comandi che

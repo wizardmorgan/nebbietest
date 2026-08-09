@@ -525,4 +525,50 @@ Azioni:
 
 ---
 
+## 2026-08-09 — Feedback round 8 (post-1.3.0): bersaglio nel lancio manuale c/r/m
+
+Feedback utente: alcuni casi di `c <spell> <bersaglio>` non funzionavano, riportati con log reali:
+
+```
+c darkne nom -> Gryffe Olle Gnyffe Snop??? (errore del gioco: sillabe sbagliate)
+c dar nom    -> Gryffe Olle Gnyffe Snop???
+c heal nom   -> Gryffe Olle Gnyffe Snop???
+```
+
+Diagnosi: l'alias `c`/`r`/`m` (design originale, Round 2 fix 4) mette SEMPRE tutto il testo dopo il
+prefisso dentro gli apici come un unico nome spell — `c heal nom` diventava `cast 'heal nom'`, non
+`cast 'heal' nom`. Il server (`ACTION_FUNC(do_cast)`, `src/spell_parser.cpp`) legge il bersaglio
+SOLO come testo dopo l'apice di chiusura (`argument = one_argument(argument, name)`), quindi
+`'heal nom'` non e' mai stato un nome spell valido ne' una sintassi con bersaglio. Verificato anche
+come il gioco fa il match per abbreviazione (`old_search_block`/`search_block` in
+`interpreter.cpp`): e' un semplice confronto per PREFISSO sull'intera stringa (spazi inclusi), non
+per parola — motivo per cui non e' possibile determinare in modo affidabile e generale dove finisce
+il nome spell e comincia il bersaglio quando entrambi sono scritti senza apici (es. "word of r" e'
+un prefisso valido di "word of recall" ESATTAMENTE come "heal" lo sarebbe di un eventuale bersaglio
+"heal" — nessuna euristica sulle sole parole può distinguerli con certezza in generale).
+
+Presentate 4 opzioni di sintassi all'utente (automatico su abbreviazione del proprio nome, virgola
+esplicita, apici espliciti come fa il gioco, oppure bersaglio solo dal pannello): scelta
+**"automatico"**.
+
+Implementato in `NebbieDash.cmdQuickCast()`: se il terzo argomento (`target`, usato dal click sul
+pannello Spell attivi) non è passato, l'ultima parola dell'argomento digitato viene confrontata
+(prefisso case-insensitive, minimo 2 lettere per evitare falsi positivi su abbreviazioni di 1
+lettera come "r" in "word of r") contro il nome del personaggio attivo (`NebbieDash.currentChar`);
+se coincide, viene staccata e usata come bersaglio esplicito (il nome COMPLETO del personaggio, non
+l'abbreviazione digitata, per evitare ambiguita' con altri personaggi nella stanza con nome simile).
+Nessun impatto sul click da pannello (bersaglio gia' esplicito, l'euristica si applica solo quando
+`target` è nil) né sul caso storico senza bersaglio.
+
+Limite noto e documentato in USAGE.md: falso positivo raro possibile se un nome personaggio inizia
+con le stesse lettere dell'ultima parola di uno spell multi-parola senza bersaglio — accettato
+consapevolmente dall'utente scegliendo questa opzione.
+
+**Verifica**: `luac -p` OK. Aggiunti 5 test automatici dedicati con i 3 casi esatti segnalati
+dall'utente (`c heal nom`, `c darkne nom`, `c dar nom`) più 2 di non-regressione (`c word of r`
+senza bersaglio, click da pannello con bersaglio esplicito invariato) — 44/44 test totali OK.
+Versione alzata a 1.3.1. Rigenerato `.mpackage`.
+
+---
+
 (continua...)

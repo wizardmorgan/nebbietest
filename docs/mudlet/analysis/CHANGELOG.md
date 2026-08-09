@@ -1,5 +1,18 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.3.1 — 2026-08-09
+
+- **Fix**: il lancio manuale `c`/`r`/`m <nome> <bersaglio>` non funzionava quando il bersaglio era
+  scritto come ultima parola (es. `c heal nom`, `c darkne nom`): l'intero testo veniva inviato come
+  UN SOLO nome spell (`cast 'heal nom'`), che il gioco non riconosce, invece di separare nome e
+  bersaglio (`cast 'heal' nom`, sintassi richiesta dal server — vedi `do_cast` in
+  `src/spell_parser.cpp`). Ora, se l'ultima parola digitata è un'abbreviazione plausibile (prefisso,
+  almeno 2 lettere) del personaggio attivo, viene staccata e usata come bersaglio esplicito
+  automaticamente; il click dal pannello "Spell attivi" (che passa già un bersaglio esplicito) non
+  è interessato dal cambiamento. Il caso storico senza bersaglio (es. `c word of r`) continua a
+  funzionare invariato.
+- **Versione interna** alzata a 1.3.1.
+
 ## 1.3.0 — 2026-08-09
 
 - **Aggiunto**: icona e descrizione interna del package, visibili in Mudlet nella schermata

@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.3.0"
+local PKG_VER = "1.3.1"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -357,6 +357,30 @@ function NebbieDash.cmdQuickCast(prefix, argument, target)
     cecho("<orange>[NebbieDash] Uso: " .. prefix .. " <nome spell/skill, anche abbreviato>\n")
     return
   end
+
+  -- Lancio manuale (nessun target esplicito passato dal click sul pannello):
+  -- se l'ultima parola digitata e' un'abbreviazione plausibile (prefisso
+  -- case-insensitive, come abbrevia i nomi il gioco stesso) del personaggio
+  -- attivo, la trattiamo come bersaglio esplicito su se stessi e la
+  -- stacchiamo dal nome spell. Esempio: con NomiyaMaki attivo,
+  -- "c heal nom" -> cast 'heal' NomiyaMaki (non cast 'heal nom', che il gioco
+  -- non riconosce). Richiesto esplicitamente dall'utente dopo aver notato che
+  -- "c heal nom"/"c darkne nom" fallivano. Limite noto: se il nome del
+  -- personaggio inizia per le stesse lettere dell'ultima parola di uno spell
+  -- multi-parola che NON deve avere bersaglio, questo taglia comunque
+  -- l'ultima parola (falso positivo raro, accettato consapevolmente).
+  -- Richiede almeno 2 lettere per evitare falsi positivi su abbreviazioni di
+  -- una sola lettera (es. "word of r" continua a funzionare senza target).
+  if not target then
+    local name = NebbieDash.currentChar
+    local rest, lastWord = argument:match("^(.-)%s+(%S+)$")
+    if name and rest and rest ~= "" and lastWord and #lastWord >= 2
+        and name:lower():sub(1, #lastWord) == lastWord:lower() then
+      argument = rest
+      target = name
+    end
+  end
+
   local cmd = cmdWord .. " '" .. argument .. "'"
   if target and target ~= "" then
     cmd = cmd .. " " .. target
