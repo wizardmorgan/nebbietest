@@ -253,6 +253,20 @@ check("quickcast: 'c word of r' resta senza bersaglio", lastSent == "cast 'word 
 NebbieDash.cmdQuickCast("c", "true sight", "NomiyaMaki")
 check("quickcast: bersaglio esplicito dal pannello invariato", lastSent == "cast 'true sight' NomiyaMaki")
 
+-- Bersaglio esplicito su un ALTRO personaggio (non il proprio), richiesto
+-- dall'utente dopo il fix precedente: sintassi con virgola, funziona anche se
+-- il bersaglio non abbrevia in alcun modo il nome del personaggio attivo.
+NebbieDash.cmdQuickCast("c", "heal, bob")
+check("quickcast: 'c heal, bob' -> cast 'heal' bob", lastSent == "cast 'heal' bob")
+
+NebbieDash.cmdQuickCast("r", "word of recall, bob")
+check("quickcast: virgola con spell multi-parola", lastSent == "recall 'word of recall' bob")
+
+-- La virgola ha precedenza sull'euristica automatica anche quando il
+-- bersaglio scritto dopo la virgola e' proprio il personaggio attivo.
+NebbieDash.cmdQuickCast("c", "heal, NomiyaMaki")
+check("quickcast: virgola vince anche col proprio nome", lastSent == "cast 'heal' NomiyaMaki")
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

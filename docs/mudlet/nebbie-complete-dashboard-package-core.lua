@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.3.1"
+local PKG_VER = "1.3.2"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -369,8 +369,32 @@ function NebbieDash.cmdQuickCast(prefix, argument, target)
   -- personaggio inizia per le stesse lettere dell'ultima parola di uno spell
   -- multi-parola che NON deve avere bersaglio, questo taglia comunque
   -- l'ultima parola (falso positivo raro, accettato consapevolmente).
-  -- Richiede almeno 2 lettere per evitare falsi positivi su abbreviazioni di
-  -- una sola lettera (es. "word of r" continua a funzionare senza target).
+  if not target then
+    -- Bersaglio esplicito su QUALSIASI personaggio (non solo se stessi): una
+    -- virgola separa nome spell e bersaglio in modo inequivocabile, senza le
+    -- ambiguita' del taglio automatico sull'ultima parola (che sotto
+    -- funziona solo per il proprio personaggio). Richiesto esplicitamente
+    -- dall'utente ("se devo lanciare lo spell su un altro personaggio?").
+    -- Esempio: "c heal, bob" -> cast 'heal' bob. Controllata PRIMA
+    -- dell'euristica sul proprio nome cosi' una virgola scritta esplicitamente
+    -- vince sempre, anche se il bersaglio indicato e' il proprio personaggio.
+    local beforeComma, afterComma = argument:match("^(.-)%s*,%s*(.+)$")
+    if beforeComma and beforeComma ~= "" and afterComma and afterComma ~= "" then
+      argument = beforeComma
+      target = afterComma
+    end
+  end
+
+  -- Lancio manuale senza virgola: se l'ultima parola digitata e'
+  -- un'abbreviazione plausibile (prefisso case-insensitive, come abbrevia i
+  -- nomi il gioco stesso, almeno 2 lettere per evitare falsi positivi su
+  -- abbreviazioni di una sola lettera come "word of r") del personaggio
+  -- attivo, la trattiamo come bersaglio esplicito su se stessi e la
+  -- stacchiamo dal nome spell. Esempio: con NomiyaMaki attivo,
+  -- "c heal nom" -> cast 'heal' NomiyaMaki. Limite noto: se il nome del
+  -- personaggio inizia per le stesse lettere dell'ultima parola di uno spell
+  -- multi-parola che NON deve avere bersaglio, questo taglia comunque
+  -- l'ultima parola (falso positivo raro, accettato consapevolmente).
   if not target then
     local name = NebbieDash.currentChar
     local rest, lastWord = argument:match("^(.-)%s+(%S+)$")

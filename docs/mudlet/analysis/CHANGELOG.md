@@ -1,5 +1,16 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.3.2 — 2026-08-09
+
+- **Aggiunto**: sintassi esplicita con virgola per lanciare uno spell su un bersaglio QUALSIASI (non
+  solo il proprio personaggio, come nel fix 1.3.1) da riga di comando: `c heal, bob` → `cast 'heal'
+  bob`. Funziona anche con nomi spell multi-parola (`r word of recall, bob` → `recall 'word of
+  recall' bob`) e ha precedenza sull'euristica automatica sul proprio nome introdotta in 1.3.1 (se
+  scrivi la virgola, il bersaglio è sempre quello dopo la virgola). Senza virgola il comportamento
+  resta quello di 1.3.1 (bersaglio automatico solo se l'ultima parola abbrevia il proprio nome,
+  altrimenti tutto il testo è il nome spell).
+- **Versione interna** alzata a 1.3.2.
+
 ## 1.3.1 — 2026-08-09
 
 - **Fix**: il lancio manuale `c`/`r`/`m <nome> <bersaglio>` non funzionava quando il bersaglio era

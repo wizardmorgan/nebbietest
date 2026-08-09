@@ -571,4 +571,29 @@ Versione alzata a 1.3.1. Rigenerato `.mpackage`.
 
 ---
 
+## 2026-08-09 — Feedback round 9 (post-1.3.1): bersaglio su un altro personaggio
+
+Feedback utente: l'euristica automatica (round 8) funziona per il proprio personaggio, ma come si fa
+a lanciare uno spell su un personaggio DIVERSO da se stessi?
+
+Causa: quel fix era intenzionalmente ristretto al proprio nome per evitare falsi positivi (un
+bersaglio arbitrario non verificabile contro nessuna lista nota avrebbe reintrodotto l'ambiguita'
+originale con gli spell multi-parola, es. "word of r" avrebbe rischiato di essere letto come spell
+"word of" + bersaglio "r").
+
+Soluzione implementata: sintassi esplicita con virgola, che funziona per QUALSIASI bersaglio senza
+alcuna ambiguita' (il separatore è inequivocabile, a differenza di un taglio sull'ultima parola):
+`c heal, bob` → `cast 'heal' bob`; `r word of recall, bob` → `recall 'word of recall' bob`. La
+virgola viene controllata PRIMA dell'euristica sul proprio nome (round 8) e ha sempre precedenza,
+anche nel caso limite in cui il bersaglio dopo la virgola sia proprio il personaggio attivo (evita
+un bug di interazione tra le due euristiche: se l'euristica sul proprio nome avesse gia' "mangiato"
+la parola finale prima del controllo virgola, sarebbe rimasta una virgola residua nel nome spell —
+per questo l'ordine dei controlli e' stato invertito rispetto alla prima stesura).
+
+**Verifica**: `luac -p` OK. Aggiunti 3 test automatici dedicati (bersaglio su "bob", spell
+multi-parola con virgola, precedenza virgola sul proprio nome) — 47/47 test totali OK. Versione
+alzata a 1.3.2. Rigenerato `.mpackage`.
+
+---
+
 (continua...)
