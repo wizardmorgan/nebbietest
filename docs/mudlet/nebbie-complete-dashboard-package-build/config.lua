@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.3.2)
+description = [[# Nebbie Dashboard (1.3.3)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -16,6 +16,11 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   un file di testo, cliccabili per eseguirli in sequenza.
 - Layout ridimensionabile (larghezza automatica o manuale, altezza
   spell/speedwalk regolabile) e persistente tra sessioni.
+- Tasto **"? Comandi"** in cima allo schermo: apre/chiude un elenco di tutti
+  i comandi disponibili (anche `nhelp`).
+- Numero di riga tra parentesi quadre nel pannello equip, come nel testo di
+  `eq` sul gioco (non e' pero' il numero di slot del gioco, solo la
+  posizione nella nostra lista — vedi `nhelp`/`neq`).
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -25,4 +30,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.3.2]]
+version = [[1.3.3]]

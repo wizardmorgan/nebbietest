@@ -193,6 +193,31 @@ check("attrib: 2 spell catturati", #data2.spells == 2)
 check("attrib: primo spell true sight/74", data2.spells[1].name == "true sight" and data2.spells[1].ticks == 74)
 check("attrib: secondo spell darkness/9", data2.spells[2].name == "darkness" and data2.spells[2].ticks == 9)
 
+-- Test 4b: un secondo `attrib` (es. dopo aver rilanciato "darkness") deve
+-- SOSTITUIRE per intero data.spells con i nuovi tick, non accumularli — cosi'
+-- il colore (verde/rosso), che viene ricalcolato ad ogni refreshDashboard()
+-- leggendo data.spells, torna verde appena i tick residui salgono sopra la
+-- soglia nspellwarn. Riproduce il bug segnalato ("rimangono rossi anche dopo
+-- attrib") per verificare che la logica di cattura/sostituzione sia corretta.
+local attribLines2 = {
+  "Spells attivi:",
+  "--------------",
+  "Spell : 'true sight' - 70",
+  "Spell : 'darkness' - 80",
+  "",
+}
+NebbieDash.startAttribCapture()
+for _, l in ipairs(attribLines2) do
+  line = l
+  NebbieDash.onAttribCaptureLine()
+end
+local data2b = NebbieDash.getCharData("NomiyaMaki")
+check("attrib: risync sostituisce (non accumula) gli spell", #data2b.spells == 2)
+check("attrib: darkness aggiornato a 80 tick dopo il rilancio",
+  data2b.spells[2].name == "darkness" and data2b.spells[2].ticks == 80)
+check("attrib: colore darkness verde dopo il rilancio (80 > soglia 5)",
+  (tonumber(data2b.spells[2].ticks) or 0) > NebbieDash.spellWarnTicks)
+
 -- Test 5: parsing speedwalk (Q&A.md Round 5) — esempio esatto fornito
 -- dall'utente: "u,3w,n,s,2d" = up, west, west, west, north, south, down, down.
 local steps = NebbieDash.parseSpeedwalkDirs("u,3w,n,s,2d")

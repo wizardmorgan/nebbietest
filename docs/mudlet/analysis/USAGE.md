@@ -49,6 +49,17 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nspellwarn <n>` | Sotto quanti tick residui una spell attiva nel pannello viene mostrata in rosso invece che verde (default 5). |
 | `nspeedwalks` | Ricarica gli speedwalk dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nspeeddelay <secondi>` | Pausa tra un movimento e il successivo quando esegui uno speedwalk (default 0.35s). |
+| `nhelp` | Mostra/nasconde la finestra con l'elenco di tutti questi comandi (stessa finestra del tasto "? Comandi", vedi sotto). |
+
+## Tasto "? Comandi"
+
+In cima allo schermo, centrato tra i due pannelli laterali, compare sempre un piccolo tasto **"?
+Comandi"** (indipendente da `ngui`: resta visibile anche a pannelli nascosti). Cliccandolo si apre
+una finestra con l'elenco di tutti i comandi disponibili e una breve descrizione; ricliccando il
+tasto (o il link "[chiudi]" dentro la finestra) la si richiude. È l'equivalente pratico di un tasto
+personalizzato nell'interfaccia di Mudlet: non è tecnicamente una voce di toolbar nativa (Mudlet non
+permette di crearne una in modo affidabile da script, solo dall'editor pacchetti), ma si comporta
+allo stesso modo — sempre presente, cliccabile, non serve ricordare un comando.
 
 Il rilevamento del personaggio è **automatico**: appena il prompt del gioco viene ricevuto (dopo
 che scrivi un qualsiasi comando), il nome del personaggio attivo viene letto dal prompt stesso
@@ -151,6 +162,13 @@ sbagliate (fix 1.0.0/fix 3) non può ripresentarsi. Se il gioco riporta un giorn
 presente in questo elenco, viene comunque mostrata (non scompare mai un oggetto reale). Un 22° slot
 "simbolo del clan" è predisposto ma nascosto di default (`nclanslot on` per attivarlo) perché non
 ancora confermato in un `eq` reale.
+
+**Aggiornamento 1.3.3 — numero di riga tra parentesi quadre**: ogni riga del pannello equip mostra
+di nuovo un numero tra parentesi quadre (es. `[ 1] <sul dito destro> ...`), per somigliare
+visivamente al testo di `eq` sul gioco. Da non confondere con il numero di slot del gioco: è solo la
+posizione della riga nel nostro elenco (`EQ_SLOT_ORDER`), sempre nello stesso ordine ad ogni
+aggiornamento — non viene mai usato per abbinare un oggetto a una posizione (quello resta il testo
+tra `< >`, vedi fix sopra), quindi il bug delle etichette scambiate non può ripresentarsi.
 
 ## Bug corretto: descrizioni oggetto troppo lunghe vanno sempre a capo
 

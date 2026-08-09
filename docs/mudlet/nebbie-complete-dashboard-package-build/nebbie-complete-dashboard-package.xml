@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.3.2"
+local PKG_VER = "1.3.3"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -184,11 +184,42 @@ end
 -- enableTrigger()/disableTrigger() invece di un trigger multiline con margine
 -- fisso, per gestire un numero variabile di righe (incluso il word-wrap, M6).
 -- ---------------------------------------------------------------------------
+-- Timeout di sicurezza (secondi) per chiudere una cattura eq/attrib rimasta
+-- "aperta" (nessuna riga vuota/prompt riconosciuta dopo l'ultima riga utile:
+-- puo' succedere se il formato reale del blocco di gioco ha una variante non
+-- prevista). Senza questo timeout una cattura bloccata resterebbe attiva per
+-- sempre e i dati non verrebbero MAI aggiornati anche rilanciando eq/attrib
+-- (bug segnalato: "gli spell rimangono rossi anche dopo attrib").
+NebbieDash.captureTimeoutSec = 4
+
+-- Watchdog "a inattivita'": ad ogni riga rilevante (vedi onEqCaptureLine)
+-- cap.activity viene incrementato; se allo scadere del timeout non e'
+-- cambiato da quando e' stato programmato, la cattura viene chiusa. Se
+-- invece sono arrivate altre righe nel frattempo, si riprogramma un altro
+-- giro: cosi' una risposta lenta del gioco non taglia la cattura a meta',
+-- ma una cattura davvero bloccata si chiude comunque entro pochi secondi
+-- dall'ultima riga ricevuta.
+function NebbieDash.armEqWatchdog(gen)
+  tempTimer(NebbieDash.captureTimeoutSec, function()
+    local cap = NebbieDash._eqCapture
+    if not cap or NebbieDash._eqCaptureGen ~= gen then return end
+    if cap.activity ~= cap.watchedActivity then
+      cap.watchedActivity = cap.activity
+      NebbieDash.armEqWatchdog(gen)
+    else
+      NebbieDash.finishEqCapture()
+    end
+  end)
+end
+
 function NebbieDash.startEqCapture()
-  NebbieDash._eqCapture = { slots = {}, lastSlot = nil }
+  NebbieDash._eqCaptureGen = (NebbieDash._eqCaptureGen or 0) + 1
+  local gen = NebbieDash._eqCaptureGen
+  NebbieDash._eqCapture = { slots = {}, lastSlot = nil, activity = 0, watchedActivity = 0 }
   if NebbieDash._eqLineTrig then
     pcall(enableTrigger, NebbieDash._eqLineTrig)
   end
+  NebbieDash.armEqWatchdog(gen)
 end
 
 function NebbieDash.finishEqCapture()
@@ -220,6 +251,7 @@ end
 function NebbieDash.onEqCaptureLine()
   local cap = NebbieDash._eqCapture
   if not cap then return end
+  cap.activity = cap.activity + 1
   local text = line
   if (not text or text == "") and type(getCurrentLine) == "function" then
     text = getCurrentLine()
@@ -265,11 +297,34 @@ end
 -- (es. eventuali sezioni debuff) NON ancora confermato — vedi REQUIREMENTS.md
 -- M5, aperto/non bloccante per la release 1.
 -- ---------------------------------------------------------------------------
+-- Stesso watchdog "a inattivita'" usato per la cattura eq — vedi
+-- armEqWatchdog() per la spiegazione. Necessario anche qui: e' la causa piu'
+-- probabile del bug "gli spell rimangono rossi anche dopo attrib" se il
+-- formato reale del blocco finale (riga vuota/prompt) ha una variante non
+-- prevista dal parser (formato non ancora confermato al 100%, vedi
+-- REQUIREMENTS.md M5): senza watchdog la cattura resterebbe aperta per
+-- sempre e data.spells non verrebbe mai sostituito.
+function NebbieDash.armAttribWatchdog(gen)
+  tempTimer(NebbieDash.captureTimeoutSec, function()
+    local cap = NebbieDash._attribCapture
+    if not cap or NebbieDash._attribCaptureGen ~= gen then return end
+    if cap.activity ~= cap.watchedActivity then
+      cap.watchedActivity = cap.activity
+      NebbieDash.armAttribWatchdog(gen)
+    else
+      NebbieDash.finishAttribCapture()
+    end
+  end)
+end
+
 function NebbieDash.startAttribCapture()
-  NebbieDash._attribCapture = { spells = {} }
+  NebbieDash._attribCaptureGen = (NebbieDash._attribCaptureGen or 0) + 1
+  local gen = NebbieDash._attribCaptureGen
+  NebbieDash._attribCapture = { spells = {}, activity = 0, watchedActivity = 0 }
   if NebbieDash._attribLineTrig then
     pcall(enableTrigger, NebbieDash._attribLineTrig)
   end
+  NebbieDash.armAttribWatchdog(gen)
 end
 
 function NebbieDash.finishAttribCapture()
@@ -292,6 +347,7 @@ end
 function NebbieDash.onAttribCaptureLine()
   local cap = NebbieDash._attribCapture
   if not cap then return end
+  cap.activity = cap.activity + 1
   local text = line
   if (not text or text == "") and type(getCurrentLine) == "function" then
     text = getCurrentLine()
@@ -726,10 +782,10 @@ function NebbieDash.computeEquipMaxChars(data)
   if data and data.eqUpdated then
     for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
       if row.empty then
-        maxChars = math.max(maxChars, #row.location + 9) -- " (vuoto)"
+        maxChars = math.max(maxChars, #row.location + 14) -- "[NN] " + " (vuoto)"
       else
         local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
-        maxChars = math.max(maxChars, #row.location, #item + 5)
+        maxChars = math.max(maxChars, #row.location + 5, #item + 5)
       end
     end
   end
@@ -804,6 +860,118 @@ function NebbieDash.positionGUI()
   resizeWindow("NebbieDashDivider", NebbieDash.guiWidthRight, NebbieDash.dividerPx)
   moveWindow("NebbieDashSpeedwalks", x, spellsH + NebbieDash.dividerPx)
   resizeWindow("NebbieDashSpeedwalks", NebbieDash.guiWidthRight, speedwalkH)
+  NebbieDash.positionHelpButton()
+end
+
+-- ---------------------------------------------------------------------------
+-- Tasto "Comandi" — richiesto esplicitamente ("tasto custom nell'interfaccia
+-- di mudlet che mostri una finestra di testo con tutti i comandi"). Mudlet
+-- non offre un modo affidabile per creare/verificare da script una vera voce
+-- di toolbar nativa (quella si configura solo via editor pacchetti/XML
+-- "Action", non testabile qui senza un'istanza Mudlet reale): usiamo invece
+-- una label fluttuante ancorata in cima allo schermo, cliccabile come un
+-- pulsante, sempre visibile (anche con `ngui` disattivato) — vedi
+-- MUDLET-WIKI-NOTES.md per i dettagli.
+-- ---------------------------------------------------------------------------
+NebbieDash.helpButtonW = 90
+NebbieDash.helpButtonH = 22
+
+function NebbieDash.initHelpButton()
+  if NebbieDash._helpButtonCreated then return end
+  createLabel("NebbieDashHelpBtn", 0, 0, NebbieDash.helpButtonW, NebbieDash.helpButtonH, 1)
+  setBackgroundColor("NebbieDashHelpBtn", 60, 60, 90, 255)
+  cecho("NebbieDashHelpBtn", "<center><white><b>? Comandi</b>")
+  setLabelClickCallback("NebbieDashHelpBtn", "NebbieDash.toggleHelp")
+  setLabelToolTip("NebbieDashHelpBtn", "Mostra/nascondi l'elenco dei comandi NebbieDash")
+  NebbieDash._helpButtonCreated = true
+  NebbieDash.positionHelpButton()
+end
+
+function NebbieDash.positionHelpButton()
+  if not NebbieDash._helpButtonCreated then return end
+  local w = select(1, getMainWindowSize()) or 800
+  -- Centrato in orizzontale sull'area di testo centrale (tra bordo sinistro
+  -- equip e bordo destro spell/speedwalk), cosi' non si sovrappone mai ai
+  -- nostri pannelli anche quando sono ridimensionati.
+  local leftW = NebbieDash._guiCreated and NebbieDash.guiWidthEquip or 0
+  local rightW = NebbieDash._guiCreated and NebbieDash.guiWidthRight or 0
+  local centerAreaW = math.max(0, w - leftW - rightW)
+  local x = leftW + math.max(0, math.floor((centerAreaW - NebbieDash.helpButtonW) / 2))
+  moveWindow("NebbieDashHelpBtn", x, 2)
+  if NebbieDash._helpWinCreated then
+    NebbieDash.positionHelpWindow()
+  end
+end
+
+function NebbieDash.positionHelpWindow()
+  local w, h = getMainWindowSize()
+  w, h = w or 800, h or 600
+  local winW = math.min(600, math.max(300, math.floor(w * 0.6)))
+  local winH = math.min(500, math.max(200, math.floor(h * 0.6)))
+  moveWindow("NebbieDashHelpWin", math.floor((w - winW) / 2), NebbieDash.helpButtonH + 6)
+  resizeWindow("NebbieDashHelpWin", winW, winH)
+end
+
+-- Testo statico dei comandi disponibili. Va aggiornato ogni volta che si
+-- aggiunge/rinomina un alias in build-nebbie-complete-dashboard-package.py
+-- (stessa regola gia' seguita per USAGE.md/CHANGELOG.md).
+NebbieDash.HELP_TEXT = {
+  { "c / r / m <spell>", "Lancia una spell/skill su te stesso (cast/recall/mind, vedi nclass)." },
+  { "c/r/m <spell>, <bersaglio>", "Lancia una spell/skill su un altro personaggio." },
+  { "neq", "Mostra l'equip corrente (dati salvati)." },
+  { "nattrib", "Mostra le spell attive correnti (dati salvati)." },
+  { "nresync", "Invia eq + attrib al gioco per risincronizzare i pannelli." },
+  { "nfix", "Ricrea la GUI da zero in caso di problemi visivi." },
+  { "ngui", "Mostra/nascondi tutti i pannelli." },
+  { "nlayout", "Ripristina larghezze/font/proporzioni di default." },
+  { "nchar <nome>", "Forza manualmente il personaggio attivo." },
+  { "nclass <cast|recall|mind>", "Imposta il comando di lancio per il personaggio attivo." },
+  { "nfont <6-24>", "Imposta la dimensione del font dei pannelli." },
+  { "nwidth [equip|right] <n|auto>", "Imposta/auto la larghezza di una colonna." },
+  { "nheights <percentuale spell>", "Imposta la proporzione verticale spell/speedwalk (destra)." },
+  { "nitemlen <n>", "Lunghezza massima delle descrizioni oggetti in equip." },
+  { "nspellwarn <tick>", "Sotto questa soglia di tick una spell appare rossa." },
+  { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk." },
+  { "nspeeddelay <secondi>", "Ritardo tra un comando e l'altro in uno speedwalk." },
+  { "nclanslot <on|off>", "Mostra/nascondi lo slot 22 (simbolo del clan)." },
+  { "nhelp", "Mostra/nascondi questa finestra." },
+}
+
+function NebbieDash.buildHelpText()
+  local lines = { "<cyan><b>NebbieDash — comandi disponibili</b>", "" }
+  for _, entry in ipairs(NebbieDash.HELP_TEXT) do
+    table.insert(lines, string.format("<yellow>%-32s<white> %s", entry[1], entry[2]))
+  end
+  table.insert(lines, "")
+  table.insert(lines, "<grey>Documentazione completa: docs/mudlet/analysis/USAGE.md")
+  return lines
+end
+
+function NebbieDash.toggleHelp()
+  if not NebbieDash._helpWinCreated then
+    createMiniConsole("NebbieDashHelpWin", 0, 0, 10, 10)
+    setBackgroundColor("NebbieDashHelpWin", 10, 10, 20, 255)
+    setMiniConsoleFontSize("NebbieDashHelpWin", NebbieDash.fontSize)
+    NebbieDash._helpWinCreated = true
+    NebbieDash.positionHelpWindow()
+    clearWindow("NebbieDashHelpWin")
+    for _, l in ipairs(NebbieDash.buildHelpText()) do
+      cecho("NebbieDashHelpWin", l .. "\n")
+    end
+    cechoLink("NebbieDashHelpWin", "<orange>[chiudi]", "NebbieDash.toggleHelp()", "Chiudi questa finestra", true)
+    cecho("NebbieDashHelpWin", "\n")
+    showWindow("NebbieDashHelpWin")
+    NebbieDash._helpWinVisible = true
+    return
+  end
+  if NebbieDash._helpWinVisible then
+    hideWindow("NebbieDashHelpWin")
+    NebbieDash._helpWinVisible = false
+  else
+    NebbieDash.positionHelpWindow()
+    showWindow("NebbieDashHelpWin")
+    NebbieDash._helpWinVisible = true
+  end
 end
 
 function NebbieDash.toggleGUI()
@@ -973,14 +1141,19 @@ function NebbieDash.refreshDashboard()
     cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
   else
     -- Una riga per ogni posizione nota (occupata o "(vuoto)") — vedi
-    -- buildEquipRows(). Il numero di slot del gioco non viene piu' mostrato:
-    -- e' solo un contatore progressivo, non un identificatore di posizione.
-    for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+    -- buildEquipRows(). Il numero mostrato tra parentesi quadre e' solo la
+    -- posizione della riga nel NOSTRO elenco (per somigliare visivamente al
+    -- testo di `eq` sul gioco, come richiesto), NON il numero di slot che
+    -- riporta il gioco: quel numero e' solo un contatore progressivo sugli
+    -- oggetti indossati, non un identificatore di posizione affidabile (vedi
+    -- bug corretto in LOG.md, "conteggio slot sbagliato") e non viene mai
+    -- usato per decidere quale oggetto va in quale riga.
+    for idx, row in ipairs(NebbieDash.buildEquipRows(data)) do
       if row.empty then
-        cecho("NebbieDashEquip", string.format("<grey>%s (vuoto)\n", row.location))
+        cecho("NebbieDashEquip", string.format("<grey>[%2d] %s (vuoto)\n", idx, row.location))
       else
         local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
-        cecho("NebbieDashEquip", string.format("<white>%s\n     <green>%s\n", row.location, item))
+        cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", idx, row.location, item))
       end
     end
   end
@@ -1068,6 +1241,7 @@ function NebbieDash.boot()
   NebbieDash.loadSpeedwalks()
   NebbieDash.installTriggers()
   NebbieDash.initGUI()
+  NebbieDash.initHelpButton()
   NebbieDash._mainLoaded = true
   cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto. Usa <yellow>nresync<green> dopo il login.\n")
 end
@@ -1082,7 +1256,7 @@ end
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>nebbie-complete-dashboard-package - boot</name>
-   <script><![CDATA[local ver = "1.3.2"
+   <script><![CDATA[local ver = "1.3.3"
 if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
 local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
@@ -1213,6 +1387,13 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nclanslot (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-help</name>
+   <script><![CDATA[NebbieDash.toggleHelp()]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nhelp$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>

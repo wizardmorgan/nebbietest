@@ -1,5 +1,33 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.3.3 — 2026-08-09
+
+- **Aggiunto**: numero di riga tra parentesi quadre nel pannello equip (es. `[ 1] <sul dito
+  destro> ...`), per somigliare visivamente al testo di `eq` sul gioco (richiesta esplicita: "mi
+  piaceva come avevi messo prima il numero dello slot"). **Attenzione**: è solo la posizione della
+  riga nella nostra lista, NON il numero di slot che riporta il gioco — quel numero resta
+  inaffidabile come identificatore di posizione (vedi bug corretto in 1.3.0/1.2.0) e non è mai usato
+  per decidere quale oggetto va in quale riga.
+- **Aggiunto**: tasto **"? Comandi"** fluttuante in cima allo schermo (sempre visibile, anche con
+  `ngui` disattivato). Cliccandolo si apre/chiude una finestra con l'elenco di tutti i comandi
+  disponibili e una breve descrizione di ciascuno. Nuovo alias `nhelp` per aprirla/chiuderla anche
+  da riga di comando. Nota tecnica: Mudlet non permette di creare/verificare da script una vera voce
+  di toolbar nativa in modo affidabile (si configura solo via editor pacchetti), quindi si usa una
+  label cliccabile ancorata allo schermo, che si comporta come un pulsante a tutti gli effetti.
+- **Corretto (difensivo)**: aggiunto un "watchdog" di inattività (4s) alle catture di `eq`/`attrib`.
+  Se il gioco manda un blocco che il parser non riconosce come "finito" (riga vuota o nuovo prompt
+  non rilevati, es. per una variante di formato non ancora vista), la cattura ora si chiude comunque
+  da sola dopo qualche secondo di silenzio, invece di restare bloccata per sempre. Questo è il
+  sospetto principale per il bug segnalato "gli spell attivi rimangono rossi anche dopo `attrib`":
+  se la cattura precedente non si era mai chiusa, i nuovi tick (e quindi il colore, che viene
+  ricalcolato ad ogni aggiornamento del pannello) non venivano mai salvati. La logica di
+  sostituzione dei dati è stata verificata via test automatico (vedi
+  `docs/mudlet/tests/smoke_test_parsing.lua`, test "attrib: risync sostituisce") ed è corretta di
+  per sé: se il problema persiste dopo questo fix, serve un esempio reale copiato dal gioco del
+  blocco `attrib` completo (header, righe spell, riga finale) per capire quale variante di formato
+  non viene ancora riconosciuta.
+- **Versione interna** alzata a 1.3.3.
+
 ## 1.3.2 — 2026-08-09
 
 - **Aggiunto**: sintassi esplicita con virgola per lanciare uno spell su un bersaglio QUALSIASI (non

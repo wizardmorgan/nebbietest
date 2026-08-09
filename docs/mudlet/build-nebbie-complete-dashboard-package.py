@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.3.2"
+PKG_VER = "1.3.3"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -43,6 +43,11 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   un file di testo, cliccabili per eseguirli in sequenza.
 - Layout ridimensionabile (larghezza automatica o manuale, altezza
   spell/speedwalk regolabile) e persistente tra sessioni.
+- Tasto **"? Comandi"** in cima allo schermo: apre/chiude un elenco di tutti
+  i comandi disponibili (anche `nhelp`).
+- Numero di riga tra parentesi quadre nel pannello equip, come nel testo di
+  `eq` sul gioco (non e' pero' il numero di slot del gioco, solo la
+  posizione nella nostra lista — vedi `nhelp`/`neq`).
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -79,6 +84,7 @@ ALIASES = [
     ("nebbie-dash-speeddelay", "^nspeeddelay (.+)$", "NebbieDash.cmdSetSpeedDelay(matches[2])"),
     ("nebbie-dash-heights", "^nheights (.+)$", "NebbieDash.cmdSetHeights(matches[2])"),
     ("nebbie-dash-clanslot", "^nclanslot (.+)$", "NebbieDash.cmdSetClanSlot(matches[2])"),
+    ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
 ]
 
 

@@ -596,4 +596,58 @@ alzata a 1.3.2. Rigenerato `.mpackage`.
 
 ---
 
+## Round 10 — spell che restano rosse, tasto comandi, numero slot equip (2026-08-09)
+
+Feedback utente (3 richieste in un unico messaggio):
+1. Dopo aver cliccato uno spell per rilanciarlo (e anche dopo aver eseguito `attrib` manualmente), lo
+   spell resta rosso nel pannello invece di tornare verde.
+2. Richiesta di un tasto custom nell'interfaccia di Mudlet che mostri una finestra di testo con
+   tutti i comandi creati.
+3. Richiesta di reintrodurre il numero di riga tra parentesi quadre nel pannello equip, come nel
+   testo reale del gioco (fornito nuovo esempio `eq` a conferma, che tra l'altro conferma ancora una
+   volta che manca "sulle braccia" tra le posizioni viste finora).
+
+**Punto 1 — analisi**: la logica di sostituzione dati (`finishAttribCapture` sostituisce per intero
+`data.spells` con la cattura appena chiusa) e il calcolo del colore (ricalcolato ad ogni
+`refreshDashboard()` leggendo `data.spells[].ticks`, non un conto alla rovescia salvato) sono stati
+verificati con un nuovo test automatico dedicato (simula un secondo `attrib` con tick piu' alti dopo
+un rilancio) e risultano corretti in isolamento. Non essendoci accesso a un'istanza Mudlet reale
+collegata al gioco, non è stato possibile riprodurre il sintomo end-to-end. L'ipotesi più probabile,
+non confermata (formato completo del blocco `attrib` non ancora verificato al 100%, vedi
+REQUIREMENTS.md M5): se una cattura `attrib` non incontra mai una riga vuota o un nuovo prompt
+riconosciuti come "fine blocco" (es. per una variante di formato reale diversa da quella vista negli
+esempi), resta aperta per sempre e i nuovi tick non vengono mai salvati — coerente col sintomo
+("nemmeno dopo attrib").
+
+**Fix difensivo applicato** (non essendo confermata la causa esatta, non si è alterato il parsing
+del formato, solo aggiunta una rete di sicurezza): watchdog di inattività (4s, non un timeout fisso
+da inizio cattura, per non tagliare a metà una risposta lenta del gioco) su entrambe le catture
+eq/attrib. Se non arrivano più righe rilevanti per 4s consecutivi, la cattura si chiude comunque con
+quanto raccolto finora, invece di restare bloccata indefinitamente.
+
+**Punto 2 — implementato**: Mudlet non permette di creare/verificare in modo affidabile una vera
+voce di toolbar nativa da script (si configura solo dall'editor pacchetti con XML "Action", non
+testabile qui senza un'istanza reale) — usata invece una label fluttuante cliccabile ("? Comandi"),
+ancorata in cima allo schermo, sempre visibile anche con `ngui` disattivato. Al click apre/chiude una
+finestra con l'elenco di tutti i comandi e una breve descrizione (anche da riga di comando con il
+nuovo alias `nhelp`).
+
+**Punto 3 — implementato**: ogni riga del pannello equip mostra di nuovo `[NN]` davanti alla
+posizione, come richiesto. Per non reintrodurre il bug delle etichette scambiate (fix round
+precedente), questo numero è **sempre e solo** la posizione della riga nel nostro elenco fisso
+(`EQ_SLOT_ORDER`, stesso ordine ad ogni render), mai il numero di slot riportato dal gioco — quel
+numero non è mai stato usato per abbinare oggetti a posizioni e continua a non esserlo.
+
+**Verifica**: `luac -p` OK su tutte le modifiche. Aggiunto test automatico dedicato al punto 1
+(risincronizzazione sostituisce, non accumula) — 53/53 test totali OK (verificato con `lua`
+standalone, offline). XML del package validato con `xml.dom.minidom`. Versione alzata a 1.3.3.
+Rigenerato `.mpackage`. Aggiornati USAGE.md e CHANGELOG.md.
+
+**Nota aperta per l'utente**: se dopo questo fix gli spell continuano a restare rossi, serve un
+copia-incolla ESATTO (senza modifiche) dell'output completo di `attrib` dal gioco (dall'intestazione
+fino alla riga subito prima del prompt successivo) per capire quale variante di formato il parser
+non riconosce ancora — vedi promemoria anche in CHANGELOG.md 1.3.3.
+
+---
+
 (continua...)
