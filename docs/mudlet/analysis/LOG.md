@@ -454,4 +454,75 @@ Azioni:
 
 ---
 
+## 2026-08-09 — Feedback round 7 (post-1.2.0): icona/descrizione package, layout equip a sinistra, slot vuoti, slot 22
+
+Feedback utente testuale (traduzione dei punti):
+
+1. L'mpackage installato non ha un'icona nella schermata "Gestione pacchetti" di Mudlet, ne' una
+   descrizione interna: va aggiunta, e aggiornata ad ogni release.
+2. Manca una barra tra "Spell attivi" e "Speedwalk"; non si riesce a ridimensionare manualmente
+   l'altezza delle sotto-colonne.
+3. Ora si leggono tutti gli slot ma non segna cosa e' vuoto: va corretto.
+4. Per evitare l'affollamento, spostare la colonna equip a sinistra.
+5. Preparare uno slot 22 chiamato "simbolo del clan", per ora non visibile.
+6. A destra: spell in alto, speedwalk in basso.
+
+Azioni:
+
+- **Icona/descrizione (punto 1)**: verificato nel codice sorgente di Mudlet stesso (workspace
+  `mudlet`, non `nebbietest`) come Mudlet legge questi metadati:
+  `src/Host.cpp::getPackageConfig()` esegue `config.lua` in una sandbox Lua e registra come
+  "packageInfo" ogni variabile globale stringa che definisce; `src/dlgPackageManager.cpp` (righe
+  ~513-527) legge da li' `description` (renderizzata come Markdown) e `icon` (cercata nel percorso
+  `<nomePackage>/.mudlet/Icon/<icon>` dentro la cartella di destinazione del pacchetto, cioe' la
+  radice dello zip). Confermato lo schema concreto confrontando con il pacchetto ufficiale
+  `src/packages/echo/` (config.lua con `mpackage/author/icon/title/description/version` + icona
+  dentro `.mudlet/Icon/` nello zip). `build-nebbie-complete-dashboard-package.py` ora scrive tutti
+  questi campi (nuova funzione `lua_long_string()` per gestire livelli di parentesi lunghe Lua senza
+  collisioni) e include l'icona (`docs/mudlet/assets/nebbie-dash-icon.png`, generata) nello zip.
+  Verificato che `config.lua` generato e' Lua valido e i campi sono letti correttamente
+  (`loadfile` + esecuzione locale). **Promemoria per il futuro**: `PKG_DESCRIPTION` nello script di
+  build ha un commento esplicito che ricorda di aggiornarla ad ogni release, dato che l'utente ha
+  chiesto proprio questo.
+- **Layout equip a sinistra + barra Spell/Speedwalk (punti 2, 4, 6)**: ristrutturato
+  `initGUI`/`positionGUI`/`toggleGUI`/`resetLayout`. Equip ora usa `setBorderLeft` da solo, a tutta
+  altezza (`NebbieDash.guiWidthEquip`, `NebbieDash.autoWidthEquip`). Spell attivi e Speedwalk
+  restano sul bordo destro (`NebbieDash.guiWidthRight`, `NebbieDash.autoWidthRight`), impilati con
+  Spell in alto e Speedwalk in basso (come richiesto al punto 6), separati da una `createLabel` di
+  4px colorata (`NebbieDashDivider`) usata solo come divisore visivo, non contiene testo. La API Lua
+  di Mudlet non espone un modo affidabile per intercettare il trascinamento del mouse su un confine
+  tra due miniconsole/bordi (nessuna funzione tipo "onDrag" per bordi/widget nella documentazione
+  consultata), quindi il "ridimensionamento manuale" richiesto e' realizzato con un comando invece
+  che con il mouse: `nheights <percentuale 10-90>` regola la quota di altezza data a "Spell attivi"
+  (il resto va a "Speedwalk"), analogo a come `nwidth` gia' regola le larghezze. Le larghezze
+  auto/manuali (round 6) ora sono indipendenti per le due colonne: `computeContentMaxChars()` e'
+  stato diviso in `computeEquipMaxChars()`/`computeRightMaxChars()`, `applyAutoWidth()` applica
+  entrambe separatamente. `cmdSetWidth` accetta ora un primo argomento opzionale `equip|right`
+  (retrocompatibile: senza indicarlo agisce sulla destra, come prima del round 7).
+- **Slot vuoti (punto 3)**: aggiunta `NebbieDash.buildEquipRows(data)`, che confronta il **testo**
+  della posizione (letto dalla riga `eq`, mai il numero di slot del gioco — la causa del bug fix
+  1.0.0/fix 3 era proprio l'uso del numero come chiave) contro l'elenco canonico
+  `NebbieDash.EQ_SLOT_ORDER` (le 21 posizioni gia' note, rinominate da `EQ_SLOTS`, che resta come
+  alias per compatibilita' con `migrateStore()`). Ogni posizione nota senza un oggetto corrispondente
+  viene mostrata come "(vuoto)"; eventuali posizioni riportate dal gioco ma non presenti
+  nell'elenco vengono comunque mostrate (mai perse). Gestito anche il caso di etichette duplicate
+  (es. le due collane "intorno al collo"): gli oggetti vengono assegnati in ordine di apparizione,
+  nessun oggetto perso o duplicato, ma non c'e' modo di sapere con certezza quale dei due slot
+  "identici" corrisponda a quale nello specifico. Aggiunti test automatici dedicati
+  (`equip rows: ...`) con un personaggio parzialmente equipaggiato (2 slot su 21) per verificare sia
+  il conteggio "occupati/vuoti" sia che un eq completo non produca falsi "(vuoto)".
+- **Slot 22 "simbolo del clan" (punto 5)**: aggiunto `NebbieDash.EQ_SLOT_CLAN = "simbolo del clan"`,
+  escluso di default da `buildEquipRows()` (`NebbieDash.showClanSlot = false`, come richiesto "per
+  ora non renderlo visibile"). Nuovo comando `nclanslot <on|off>` per attivarlo quando/se l'utente lo
+  vorra' confermare con un `eq` reale.
+- **Verifica**: `luac -p` OK. Aggiunti 6 test automatici dedicati (`buildEquipRows`, slot
+  parzialmente occupati ed eq completo) — 39/39 test totali OK. Versione alzata a 1.3.0. Rigenerato
+  `.mpackage` (ora include anche l'icona, 89.8KB totali contro gli ~11KB delle versioni precedenti).
+- **Non ancora verificato in Mudlet reale**: aspetto della barra divisoria e rendering dell'icona
+  nella schermata "Gestione pacchetti" (dipende dalla UI reale di Mudlet, non replicabile nel test
+  offline), comportamento dell'auto-width indipendente sulle due colonne dopo un ridimensionamento
+  della finestra.
+
+---
+
 (continua...)

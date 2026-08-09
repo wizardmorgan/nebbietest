@@ -12,7 +12,15 @@ Guida rapida ai comandi (alias) del package, scritta dopo il primo test reale de
 3. Installa (bottone `+`) il file `docs/mudlet/nebbie-complete-dashboard-package.mpackage`
    aggiornato.
 4. Riconnetti/ricarica il profilo. Deve comparire in output:
-   `[NebbieDash] v1.0.0 pronto. Usa nresync dopo il login.`
+   `[NebbieDash] v1.3.0 pronto. Usa nresync dopo il login.`
+
+## Icona e descrizione nella "Gestione pacchetti"
+
+Dalla 1.3.0 il pacchetto include un'icona e una descrizione interna, visibili aprendo
+`Giocatore → Gestione pacchetti` in Mudlet e selezionando `nebbie-complete-dashboard-package`
+nell'elenco degli installati (prima mancavano entrambe). La descrizione riassume la versione
+corrente e va aggiornata ad ogni release (promemoria lasciato direttamente nel codice sorgente,
+`build-nebbie-complete-dashboard-package.py`).
 
 ## Alias disponibili
 
@@ -28,8 +36,10 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `ngui` | Mostra/nasconde il pannello laterale (bordo destro). |
 | `nlayout` | Ripristina larghezza (320px) e font (11pt) di default del pannello. |
 | `nfont <numero>` | Cambia la dimensione del testo nel pannello (6–24, default 11). |
-| `nwidth <numero>` | Fissa una larghezza manuale del pannello in pixel (150–900) e **disattiva** l'adattamento automatico. |
-| `nwidth auto` | Riattiva la larghezza automatica (default): il pannello si allarga/restringe da solo in base al contenuto più lungo visibile, senza mai superare il 60% della finestra di Mudlet. |
+| `nwidth <equip\|right> <numero>` | Fissa una larghezza manuale (150–900px) per la colonna equip (sinistra) o spell/speedwalk (destra), **disattivando** l'adattamento automatico per quella colonna. Senza indicare `equip`/`right` agisce sulla destra (retrocompatibilità). |
+| `nwidth <equip\|right> auto` | Riattiva la larghezza automatica per quella colonna (default per entrambe): si allarga/restringe da sola in base al contenuto più lungo visibile, senza mai superare il 60% della finestra di Mudlet. |
+| `nheights <percentuale>` | Regola quanta altezza della colonna destra va a "Spell attivi" (10–90, il resto va a "Speedwalk"; default 40). |
+| `nclanslot <on\|off>` | Mostra/nasconde il 22° slot equip placeholder "simbolo del clan" (nascosto di default, non ancora confermato in un `eq` reale). |
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
 | `c <nome>` | Invia `cast '<nome>'` (mago/chierico). Es. `c word of r` → `cast 'word of r'` (il gioco stesso fa il match abbreviato su "word of recall", vedi sotto). |
@@ -131,14 +141,16 @@ quello specifico slot, indipendentemente dal numero. Aggiunto anche un test auto
 ("eq anomalo") che verifica esplicitamente questo comportamento con un ordine di slot volutamente
 diverso da quello del primo esempio.
 
-**Nota sugli "slot vuoti"**: la versione precedente elencava sempre tutti gli slot da 1 a 21,
-marcando "(vuoto)" quelli non occupati — è proprio questo che ha reso visibile il bug (l'etichetta
-sbagliata veniva assegnata a uno slot vuoto "inventato"). Ora il pannello mostra **esattamente e
-solo** gli slot che il gioco riporta in `eq`, nel loro ordine reale — non inventiamo più un elenco
-fisso di "tutti gli slot possibili", perché non è ancora chiaro se/come il gioco riporti gli slot
-liberi. Se vuoi comunque vedere anche gli slot non occupati, serve sapere da dove prendere quella
-lista (es. un comando che elenchi *tutte* le posizioni indossabili, occupate o no) — vedi
-`Q&A.md` per la domanda aperta su questo punto.
+**Aggiornamento 1.3.0 — slot vuoti di nuovo visibili, ma senza reintrodurre il bug**: su richiesta
+esplicita, il pannello equip mostra di nuovo tutte le 21 posizioni note, marcando "(vuoto)" quelle
+non occupate. Questa volta però il confronto è sul **testo della posizione** letto dalla riga `eq`
+(es. "ai piedi"), non sul numero di slot del gioco: l'elenco delle 21 posizioni note
+(`NebbieDash.EQ_SLOT_ORDER` nel codice) serve solo a sapere QUALI posizioni esistono e in che ordine
+mostrarle, mai a decidere quale oggetto va in quale slot per numero — quindi il bug delle etichette
+sbagliate (fix 1.0.0/fix 3) non può ripresentarsi. Se il gioco riporta un giorno una posizione non
+presente in questo elenco, viene comunque mostrata (non scompare mai un oggetto reale). Un 22° slot
+"simbolo del clan" è predisposto ma nascosto di default (`nclanslot on` per attivarlo) perché non
+ancora confermato in un `eq` reale.
 
 ## Bug corretto: descrizioni oggetto troppo lunghe vanno sempre a capo
 
@@ -238,15 +250,32 @@ confermato e testato: `(paul, da astral) u,n,2w,n,u,enter pool,4n,3w,6s` invia i
 "paul, da astral") non crea ambiguità: tutto ciò che sta tra la prima `(` e la prima `)` diventa la
 descrizione, indipendentemente da quante virgole contiene.
 
-## Larghezza automatica del pannello destro
+## Layout: equip a sinistra, spell/speedwalk a destra
 
-Di default (`nwidth auto`) il pannello si allarga o restringe da solo in base al contenuto più
-lungo attualmente visibile (posizione/oggetto equip, nome spell, descrizione+direzioni speedwalk),
-così non c'è più testo che va a capo inutilmente quando ci starebbe su una riga sola, e niente può
-mai "uscire" dal bordo dello schermo (la larghezza calcolata non supera mai il 60% della larghezza
-della finestra di Mudlet). Se preferisci una larghezza fissa scelta da te, usa `nwidth <numero>`
-(150–900): disattiva l'automatismo finché non digiti di nuovo `nwidth auto`. `nlayout` (reset) torna
-sempre alla modalità automatica.
+Dalla 1.3.0 l'equip occupa da solo il **bordo sinistro**, a tutta altezza. Il bordo destro ospita
+"Spell attivi" in alto e "Speedwalk" in basso, separati da una sottile barra grigio-blu (per
+regolare quanto spazio va all'uno o all'altro, vedi `nheights` sotto).
+
+## Larghezza automatica dei pannelli
+
+Di default (`nwidth equip auto` / `nwidth right auto`, entrambe attive fin dall'installazione) ogni
+colonna si allarga o restringe da sola in base al contenuto più lungo attualmente visibile
+(posizione/oggetto per l'equip; nome spell e descrizione+direzioni speedwalk per la destra), così
+non c'è più testo che va a capo inutilmente quando ci starebbe su una riga sola, e niente può mai
+"uscire" dal bordo dello schermo (la larghezza calcolata non supera mai il 60% della larghezza della
+finestra di Mudlet). Se preferisci una larghezza fissa scelta da te, usa `nwidth equip <numero>` o
+`nwidth right <numero>` (150–900): disattiva l'automatismo per quella colonna finché non digiti di
+nuovo `nwidth <equip|right> auto`. Senza indicare `equip`/`right` il comando agisce sulla colonna
+destra (compatibilità con la sintassi precedente). `nlayout` (reset) torna sempre alla modalità
+automatica per entrambe.
+
+## Altezza Spell attivi / Speedwalk
+
+La colonna destra è divisa verticalmente tra "Spell attivi" (in alto) e "Speedwalk" (in basso), con
+una barra divisoria visibile tra i due. Non essendoci un modo affidabile, nella API Lua di Mudlet,
+per intercettare il trascinamento del mouse su quella barra, la regolazione si fa con un comando:
+`nheights <percentuale>` imposta quanto della colonna va a "Spell attivi" (10–90, default 40; il
+resto va a "Speedwalk"). Esempio: `nheights 60` dà il 60% a "Spell attivi" e il 40% a "Speedwalk".
 
 ## Bordo nero a sinistra
 

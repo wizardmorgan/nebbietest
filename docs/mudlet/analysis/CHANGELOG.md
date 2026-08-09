@@ -1,5 +1,34 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.3.0 — 2026-08-09
+
+- **Aggiunto**: icona e descrizione interna del package, visibili in Mudlet nella schermata
+  "Gestione pacchetti" (prima mancavano entrambe). Struttura verificata direttamente nel codice
+  sorgente di Mudlet (`src/dlgPackageManager.cpp`, `src/packages/echo/config.lua` come esempio
+  ufficiale): `config.lua` include ora anche `author`, `icon`, `title`, `description` (markdown),
+  oltre a `mpackage`/`version` gia' presenti; l'icona (`assets/nebbie-dash-icon.png`) viene inclusa
+  nello zip del pacchetto in `.mudlet/Icon/<nome>`, il percorso che Mudlet si aspetta. **La
+  descrizione va aggiornata ad ogni release** (promemoria lasciato nel commento sopra
+  `PKG_DESCRIPTION` in `build-nebbie-complete-dashboard-package.py`).
+- **Cambiato — layout**: il pannello equip si è spostato sul **bordo sinistro** (a tutta altezza),
+  per "sfollare" la colonna destra come richiesto. Sulla destra restano **Spell attivi in alto** e
+  **Speedwalk in basso**, ora separati da una barra divisoria visibile (colore grigio-blu, 4px). La
+  suddivisione verticale tra Spell attivi e Speedwalk è regolabile con il nuovo comando
+  `nheights <percentuale 10-90>` (percentuale riservata a "Spell attivi"). La larghezza automatica
+  (introdotta in 1.2.0) ora si applica **separatamente** alle due colonne: `nwidth equip <n>|auto` e
+  `nwidth right <n>|auto` (retrocompatibile: `nwidth <n>|auto` senza indicare il lato agisce sulla
+  colonna destra, come prima).
+- **Fix**: il pannello equip ora marca esplicitamente "(vuoto)" ogni posizione nota (21 slot, elenco
+  in `EQ_SLOT_ORDER`) per cui `eq` non riporta alcun oggetto — prima venivano mostrati solo gli slot
+  effettivamente occupati. Il confronto è sul **testo della posizione** (es. "ai piedi"), non sul
+  numero di slot del gioco (che resta solo un contatore progressivo sugli oggetti indossati, non un
+  identificatore di posizione — vedi fix 1.0.0/fix 3), quindi funziona indipendentemente da quanti e
+  quali oggetti sono effettivamente indossati.
+- **Aggiunto**: predisposto (ma **non visibile di default**, come richiesto) un 22° slot placeholder
+  "simbolo del clan", non ancora confermato in un output reale di `eq`. Comando `nclanslot <on|off>`
+  per attivarlo quando/se necessario.
+- **Versione interna** alzata a 1.3.0.
+
 ## 1.2.0 — 2026-08-09
 
 - **Aggiunto**: le spell cliccabili nel pannello "Spell attivi" ora includono sempre il personaggio

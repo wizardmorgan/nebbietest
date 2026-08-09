@@ -19,7 +19,39 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.2.0"
+PKG_VER = "1.3.0"
+PKG_AUTHOR = "Nebbie Arcane"
+PKG_ICON_FILE = "nebbie-dash-icon.png"
+PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
+PKG_TITLE = "Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane"
+# IMPORTANTE: aggiornare questa descrizione ad ogni release (vedi CHANGELOG.md
+# per il changelog completo) — e' quello che l'utente legge nella schermata
+# "Gestione pacchetti" di Mudlet PRIMA di installare/aggiornare, quindi deve
+# riassumere cosa fa il package alla versione corrente, non solo all'ultima
+# feature aggiunta.
+PKG_DESCRIPTION = f"""# Nebbie Dashboard ({PKG_VER})
+
+Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
+profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
+
+- **Equip** (bordo sinistro): tutti gli slot indossati, con posizione ed
+  oggetto letti da `eq`; segna anche gli slot liberi noti.
+- **Spell attivi** (bordo destro, in alto): spell/buff letti da `attrib`,
+  cliccabili per rilanciarli sul personaggio corrente (`cast`/`recall`/`mind`
+  a seconda della classe, vedi `nclass`).
+- **Speedwalk** (bordo destro, in basso): percorsi rapidi definiti a mano in
+  un file di testo, cliccabili per eseguirli in sequenza.
+- Layout ridimensionabile (larghezza automatica o manuale, altezza
+  spell/speedwalk regolabile) e persistente tra sessioni.
+
+Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
+login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
+bloccato dopo un aggiornamento.
+
+Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
+`docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
+repository del progetto.
+"""
 CORE_LUA = os.path.join(HERE, "nebbie-complete-dashboard-package-core.lua")
 BUILD_DIR = os.path.join(HERE, "nebbie-complete-dashboard-package-build")
 XML_PATH = os.path.join(BUILD_DIR, f"{PKG_NAME}.xml")
@@ -45,7 +77,22 @@ ALIASES = [
     ("nebbie-dash-spellwarn", "^nspellwarn (.+)$", "NebbieDash.cmdSetSpellWarn(matches[2])"),
     ("nebbie-dash-speedwalks", "^nspeedwalks$", "NebbieDash.cmdReloadSpeedwalks()"),
     ("nebbie-dash-speeddelay", "^nspeeddelay (.+)$", "NebbieDash.cmdSetSpeedDelay(matches[2])"),
+    ("nebbie-dash-heights", "^nheights (.+)$", "NebbieDash.cmdSetHeights(matches[2])"),
+    ("nebbie-dash-clanslot", "^nclanslot (.+)$", "NebbieDash.cmdSetClanSlot(matches[2])"),
 ]
+
+
+def lua_long_string(text):
+    """Racchiude 'text' in una stringa Lua a parentesi lunghe ([[...]]),
+    scegliendo un livello di '=' abbastanza alto da non collidere mai con
+    eventuali sequenze di chiusura gia' presenti nel testo."""
+    level = 0
+    marker = "]]"
+    while marker in text:
+        level += 1
+        marker = "]" + ("=" * level) + "]"
+    eq = "=" * level
+    return f"[{eq}[{text}]{eq}]"
 
 
 def cdata(text):
@@ -107,19 +154,36 @@ def main():
     with open(XML_PATH, "w", encoding="utf-8") as f:
         f.write(xml_content)
 
+    if not os.path.exists(PKG_ICON_SRC):
+        raise SystemExit(f"Icona mancante: {PKG_ICON_SRC}")
+
+    config_lines = [
+        f"mpackage = {lua_long_string(PKG_NAME)}",
+        f"author = {lua_long_string(PKG_AUTHOR)}",
+        f"icon = {lua_long_string(PKG_ICON_FILE)}",
+        f"title = {lua_long_string(PKG_TITLE)}",
+        f"description = {lua_long_string(PKG_DESCRIPTION)}",
+        f"version = {lua_long_string(PKG_VER)}",
+    ]
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        f.write(f'mpackage = "{PKG_NAME}"\n')
+        f.write("\n".join(config_lines) + "\n")
 
     if os.path.exists(MPACKAGE_PATH):
         os.remove(MPACKAGE_PATH)
     with zipfile.ZipFile(MPACKAGE_PATH, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(CONFIG_PATH, "config.lua")
         z.write(XML_PATH, f"{PKG_NAME}.xml")
+        # Percorso richiesto da Mudlet per l'icona nella schermata "Gestione
+        # pacchetti" (verificato in src/dlgPackageManager.cpp del repo Mudlet:
+        # cerca <nomePackage>/.mudlet/Icon/<icon> dentro la cartella in cui il
+        # pacchetto viene scompattato, cioe' la radice dello zip stesso).
+        z.write(PKG_ICON_SRC, f".mudlet/Icon/{PKG_ICON_FILE}")
 
     size = os.path.getsize(MPACKAGE_PATH)
     print(f"Scritto {MPACKAGE_PATH} ({size} bytes)")
     print(f"Scritto {XML_PATH}")
     print(f"Scritto {CONFIG_PATH}")
+    print(f"Icona inclusa: {PKG_ICON_SRC} -> .mudlet/Icon/{PKG_ICON_FILE}")
 
 
 if __name__ == "__main__":

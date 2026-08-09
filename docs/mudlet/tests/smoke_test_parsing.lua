@@ -16,8 +16,12 @@ function enableTrigger() end
 function send() end
 function tempTimer() end
 function setBorderRight() end
+function setBorderLeft() end
 function createMiniConsole() end
+function createLabel() end
+function setBackgroundColor() end
 function setMiniConsoleFontSize() end
+function calcFontSize() return 8, 14 end
 function getMainWindowSize() return 1024, 768 end
 function moveWindow() end
 function resizeWindow() end
@@ -137,6 +141,37 @@ check("eq anomalo: slot 1 usa la location dalla riga (non la tabella statica 'su
   dataAnomalo.eq[1].location == "ai piedi")
 check("eq anomalo: slot 8 usa la location dalla riga (non la tabella statica 'ai piedi')",
   dataAnomalo.eq[8].location == "davanti agli occhi")
+
+-- Test 3c: buildEquipRows segna correttamente gli slot vuoti (richiesta:
+-- "adesso si leggono tutti gli slot ma non mi segna cosa è vuoto"). Su
+-- TestAnomalo sono occupati solo 2 dei 21 slot canonici.
+local rowsAnomalo = NebbieDash.buildEquipRows(dataAnomalo)
+check("equip rows: 21 righe (nessuno slot clan, disattivato di default)", #rowsAnomalo == 21)
+local occupied, empty = 0, 0
+for _, row in ipairs(rowsAnomalo) do
+  if row.empty then empty = empty + 1 else occupied = occupied + 1 end
+end
+check("equip rows: 2 occupati", occupied == 2)
+check("equip rows: 19 vuoti", empty == 19)
+for _, row in ipairs(rowsAnomalo) do
+  if row.location == "ai piedi" then
+    check("equip rows: 'ai piedi' occupato con l'oggetto giusto",
+      not row.empty and row.item == "Un paio di guanti (anomalia apposta per il test)")
+  end
+  if row.location == "sul dito destro" then
+    check("equip rows: 'sul dito destro' marcato vuoto", row.empty == true)
+  end
+end
+
+-- Test 3d: con tutti i 21 slot occupati (NomiyaMaki), nessuna riga deve
+-- risultare vuota.
+local rowsFull = NebbieDash.buildEquipRows(data)
+local emptyFull = 0
+for _, row in ipairs(rowsFull) do
+  if row.empty then emptyFull = emptyFull + 1 end
+end
+check("equip rows: eq completo -> zero slot vuoti", emptyFull == 0)
+
 NebbieDash.setCurrentCharacter("NomiyaMaki", true)
 
 -- Test 4: capture attrib con esempio da AGENT-PROMPT-ANALISI-ZERO.txt

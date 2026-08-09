@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.2.0"
+local PKG_VER = "1.3.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -27,31 +27,47 @@ NebbieDash._loadedVer = PKG_VER
 NebbieDash.package = "nebbie-complete-dashboard-package"
 
 -- ---------------------------------------------------------------------------
--- Tabella slot equip (21 slot) — da REQUIREMENTS.md §5 (M4), output reale `eq`
+-- Elenco canonico delle posizioni indossabili note (21, da REQUIREMENTS.md
+-- §5/M4, output reale `eq`), in un ordine di visualizzazione fisso. Usato per
+-- mostrare anche gli slot NON occupati ("(vuoto)") — l'occupazione si decide
+-- confrontando il TESTO della posizione con quello letto dalla riga `eq`
+-- reale (mai il numero di slot del gioco, che e' solo un contatore
+-- progressivo sugli oggetti indossati, non un identificatore di posizione:
+-- vedi bug corretto in LOG.md, "conteggio slot sbagliato").
+-- NebbieDash.EQ_SLOTS e' un alias mantenuto per compatibilita' con
+-- migrateStore() (dati salvati da versioni precedenti, indicizzati per
+-- numero, mai per etichetta).
 -- ---------------------------------------------------------------------------
-NebbieDash.EQ_SLOTS = {
-  [1] = "sul dito destro",
-  [2] = "sul dito sinistro",
-  [3] = "intorno al collo",
-  [4] = "intorno al collo",
-  [5] = "sul corpo",
-  [6] = "in testa",
-  [7] = "sulle gambe",
-  [8] = "ai piedi",
-  [9] = "sulle mani",
-  [10] = "sulle braccia",
-  [11] = "come scudo",
-  [12] = "intorno al corpo",
-  [13] = "intorno alla vita",
-  [14] = "al polso destro",
-  [15] = "al polso sinistro",
-  [16] = "impugnato",
-  [17] = "tenuto",
-  [18] = "sulla schiena",
-  [19] = "all'orecchio destro",
-  [20] = "all'orecchio sinistro",
-  [21] = "davanti agli occhi",
+NebbieDash.EQ_SLOT_ORDER = {
+  "sul dito destro",
+  "sul dito sinistro",
+  "intorno al collo",
+  "intorno al collo",
+  "sul corpo",
+  "in testa",
+  "sulle gambe",
+  "ai piedi",
+  "sulle mani",
+  "sulle braccia",
+  "come scudo",
+  "intorno al corpo",
+  "intorno alla vita",
+  "al polso destro",
+  "al polso sinistro",
+  "impugnato",
+  "tenuto",
+  "sulla schiena",
+  "all'orecchio destro",
+  "all'orecchio sinistro",
+  "davanti agli occhi",
 }
+NebbieDash.EQ_SLOTS = NebbieDash.EQ_SLOT_ORDER
+-- Slot aggiuntivo indicato dall'utente ma non ancora osservato/confermato in
+-- un output reale di `eq`: tenuto nascosto di default (nclanslot per
+-- attivarlo) per non mostrare "(vuoto)" su una posizione che potrebbe non
+-- esistere per tutti i personaggi/classi.
+NebbieDash.EQ_SLOT_CLAN = "simbolo del clan"
+NebbieDash.showClanSlot = false
 
 -- ---------------------------------------------------------------------------
 -- Persistenza per personaggio (D3-B, confermata dall'utente)
@@ -531,7 +547,11 @@ end
 -- ---------------------------------------------------------------------------
 -- Dashboard (miniconsole su bordo destro — MUDLET-WIKI-NOTES.md §6)
 -- ---------------------------------------------------------------------------
-NebbieDash.guiWidth = 320
+-- Larghezza dei due bordi (equip a sinistra, spell+speedwalk a destra),
+-- ciascuna con la propria modalita' auto/manuale — vedi autoWidthEquip /
+-- autoWidthRight piu' sotto.
+NebbieDash.guiWidthEquip = 260
+NebbieDash.guiWidthRight = 320
 NebbieDash.fontSize = 11
 -- Le descrizioni oggetto sono spesso lunghe (es. "Un tubino rinforzato con
 -- una grossa Union Jack (in condizioni eccellenti)") e vanno quasi sempre a
@@ -548,11 +568,13 @@ NebbieDash.spellWarnTicks = 5
 -- speedwalk (il comando eseguito al click usa comunque la lista completa,
 -- solo l'anteprima a schermo viene troncata).
 NebbieDash.speedwalkPreviewMaxLen = 60
--- Larghezza automatica (default): il pannello si allarga/restringe da solo
--- in base al contenuto piu' lungo attualmente visibile, cosi' non "sparisce"
--- niente oltre il bordo dello schermo. `nwidth <numero>` disattiva questa
--- modalita' e fissa una larghezza manuale; `nwidth auto` la riattiva.
-NebbieDash.autoWidth = true
+-- Larghezza automatica (default per entrambe le colonne): ogni pannello si
+-- allarga/restringe da solo in base al contenuto piu' lungo attualmente
+-- visibile, cosi' non "sparisce" niente oltre il bordo dello schermo.
+-- `nwidth equip|right <numero>` disattiva l'automatismo per quella colonna
+-- e fissa una larghezza manuale; `nwidth equip|right auto` lo riattiva.
+NebbieDash.autoWidthEquip = true
+NebbieDash.autoWidthRight = true
 NebbieDash.autoWidthMin = 180
 
 function NebbieDash.truncate(s, maxLen)
@@ -560,25 +582,71 @@ function NebbieDash.truncate(s, maxLen)
   return s:sub(1, math.max(1, maxLen - 1)) .. "…"
 end
 
+-- Costruisce l'elenco di righe da mostrare nel pannello equip: una riga per
+-- ogni posizione nota in EQ_SLOT_ORDER (piu' EQ_SLOT_CLAN se showClanSlot),
+-- marcata come vuota se nessun oggetto catturato da `eq` ha una posizione
+-- corrispondente. Il confronto e' sul TESTO della posizione, case-insensitive
+-- (mai sul numero di slot del gioco — vedi nota su EQ_SLOT_ORDER). Se due
+-- posizioni condividono la stessa etichetta (es. le due collane), gli
+-- oggetti catturati vengono assegnati in ordine di apparizione: non c'e' modo
+-- di sapere quale dei due slot "identici" corrisponda a quale, ma nessun
+-- oggetto viene perso o duplicato.
+function NebbieDash.buildEquipRows(data)
+  local pool = {}
+  for _, entry in pairs(data.eq or {}) do
+    local key = ((entry and entry.location) or "?"):lower():match("^%s*(.-)%s*$")
+    pool[key] = pool[key] or {}
+    table.insert(pool[key], entry)
+  end
+  local positions = {}
+  for _, label in ipairs(NebbieDash.EQ_SLOT_ORDER) do table.insert(positions, label) end
+  if NebbieDash.showClanSlot then table.insert(positions, NebbieDash.EQ_SLOT_CLAN) end
+
+  local rows = {}
+  for _, label in ipairs(positions) do
+    local bucket = pool[label:lower()]
+    local matched = bucket and table.remove(bucket, 1)
+    table.insert(rows, { location = label, item = matched and matched.item or nil, empty = not matched })
+  end
+  -- Posizioni riportate dal gioco ma non presenti nell'elenco canonico sopra
+  -- (mai osservate finora): mostrate comunque, per non nascondere dati reali.
+  for _, bucket in pairs(pool) do
+    for _, entry in ipairs(bucket) do
+      table.insert(rows, { location = entry.location, item = entry.item, empty = false, unknown = true })
+    end
+  end
+  return rows
+end
+
 function NebbieDash.guiVisible()
   return NebbieDash._guiCreated == true and NebbieDash._guiHidden ~= true
 end
 
--- Proporzioni verticali dei 3 pannelli (devono sommare a 1.0).
-NebbieDash.guiRatios = { equip = 0.45, spells = 0.25, speedwalk = 0.30 }
+-- Proporzione verticale della colonna destra tra Spell attivi (in alto) e
+-- Speedwalk (in basso, il resto). L'equip occupa sempre tutta l'altezza
+-- della colonna sinistra (un solo pannello, niente da dividere li').
+NebbieDash.guiRatios = { spells = 0.4 }
+-- Altezza (px) della barra divisoria visibile tra Spell attivi e Speedwalk.
+NebbieDash.dividerPx = 4
+-- Le 3 miniconsole con testo (font/ricaricamento contenuto). La barra
+-- divisoria e' un elemento separato (nessun testo, solo colore) — vedi
+-- ALL_GUI_ELEMENTS per mostra/nascondi che deve includerla.
 NebbieDash.GUI_WINDOWS = { "NebbieDashEquip", "NebbieDashSpells", "NebbieDashSpeedwalks" }
+NebbieDash.ALL_GUI_ELEMENTS = { "NebbieDashEquip", "NebbieDashSpells", "NebbieDashSpeedwalks", "NebbieDashDivider" }
 
 function NebbieDash.initGUI()
   if NebbieDash._guiCreated then return end
-  -- Il pannello usa solo il bordo destro. Azzeriamo esplicitamente il bordo
-  -- sinistro perche' un package precedente (o una sessione Mudlet precedente)
-  -- potrebbe averlo impostato: i bordi sono un'impostazione del profilo, non
-  -- di uno script specifico, quindi disinstallare un vecchio package non lo
-  -- resetta da solo (bug segnalato: "colonna nera a sinistra" senza motivo).
-  setBorderLeft(0)
-  setBorderRight(NebbieDash.guiWidth)
+  setBorderLeft(NebbieDash.guiWidthEquip)
+  setBorderRight(NebbieDash.guiWidthRight)
+  createMiniConsole("NebbieDashEquip", 0, 0, NebbieDash.guiWidthEquip, 0)
+  createMiniConsole("NebbieDashSpells", 0, 0, NebbieDash.guiWidthRight, 0)
+  createMiniConsole("NebbieDashSpeedwalks", 0, 0, NebbieDash.guiWidthRight, 0)
+  -- Barra divisoria tra Spell attivi e Speedwalk (richiesta esplicita: "manca
+  -- una barra tra gli spell attivi e gli speedwalk"). E' una label, non una
+  -- miniconsole: serve solo a marcare visivamente il confine tra i due
+  -- pannelli, non contiene testo.
+  createLabel("NebbieDashDivider", 0, 0, NebbieDash.guiWidthRight, NebbieDash.dividerPx, 1)
   for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
-    createMiniConsole(win, 0, 0, NebbieDash.guiWidth, 0)
     setMiniConsoleFontSize(win, NebbieDash.fontSize)
     -- Una miniconsole appena creata ha uno sfondo di default (grigio, widget
     -- Qt non ancora disegnato) finche' non le si assegna esplicitamente un
@@ -587,6 +655,7 @@ function NebbieDash.initGUI()
     -- docs/mudlet/analysis/LOG.md).
     setBackgroundColor(win, 15, 15, 15, 255)
   end
+  setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
   NebbieDash.refreshDashboard()
@@ -597,21 +666,37 @@ function NebbieDash.initGUI()
   tempTimer(0, [[NebbieDash.positionGUI()]])
 end
 
--- Calcola quanti caratteri (colonna piu' larga) servono per mostrare tutto
--- il contenuto attuale senza andare a capo — titoli, equip (posizione +
--- descrizione troncata), spell attive (nome + tick) e speedwalk (descrizione
--- + anteprima direzioni troncata).
-function NebbieDash.computeContentMaxChars()
+-- Calcola quanti caratteri servono per mostrare senza andare a capo tutto il
+-- contenuto del pannello equip (colonna sinistra): titolo + una riga per ogni
+-- posizione nota (occupata o "(vuoto)").
+function NebbieDash.computeEquipMaxChars(data)
   local maxChars = 20
   local name = NebbieDash.currentChar
   if name then
-    maxChars = math.max(maxChars, #("Equip — " .. name), #("Spell attivi — " .. name))
-    local data = NebbieDash.getCharData(name)
-    for _, entry in pairs(data.eq or {}) do
-      local location = (entry and entry.location) or "?"
-      local item = NebbieDash.truncate((entry and entry.item) or "?", NebbieDash.itemMaxLen)
-      maxChars = math.max(maxChars, #location + 6, #item + 6)
+    maxChars = math.max(maxChars, #("Equip — " .. name))
+  end
+  if data and data.eqUpdated then
+    for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+      if row.empty then
+        maxChars = math.max(maxChars, #row.location + 9) -- " (vuoto)"
+      else
+        local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
+        maxChars = math.max(maxChars, #row.location, #item + 5)
+      end
     end
+  end
+  return maxChars
+end
+
+-- Come sopra ma per la colonna destra (Spell attivi + Speedwalk insieme,
+-- condividono la stessa larghezza di bordo).
+function NebbieDash.computeRightMaxChars(data)
+  local maxChars = 20
+  local name = NebbieDash.currentChar
+  if name then
+    maxChars = math.max(maxChars, #("Spell attivi — " .. name))
+  end
+  if data then
     for _, s in ipairs(data.spells or {}) do
       maxChars = math.max(maxChars, #(s.name or "") + #(" " .. tostring(s.ticks) .. " tick"))
     end
@@ -623,20 +708,32 @@ function NebbieDash.computeContentMaxChars()
   return maxChars
 end
 
--- Applica la larghezza automatica (se attiva) in base al contenuto corrente,
--- senza mai superare il 60% della larghezza reale della finestra di Mudlet —
--- cosi' il pannello non puo' mai "uscire" dallo schermo.
+-- Applica la larghezza automatica (se attiva) ad ognuna delle due colonne
+-- indipendentemente, senza mai superare il 60% della larghezza reale della
+-- finestra di Mudlet — cosi' nessun pannello puo' mai "uscire" dallo schermo.
 function NebbieDash.applyAutoWidth()
-  if not NebbieDash.autoWidth or not NebbieDash._guiCreated then return end
-  local maxChars = NebbieDash.computeContentMaxChars()
-  local charW = calcFontSize(NebbieDash.fontSize)
-  charW = charW or 8
-  local w = math.floor(charW * (maxChars + 3))
+  if not NebbieDash._guiCreated then return end
+  local name = NebbieDash.currentChar
+  local data = name and NebbieDash.getCharData(name) or nil
+  local charW = calcFontSize(NebbieDash.fontSize) or 8
   local mainW = select(1, getMainWindowSize()) or 1024
-  w = math.max(NebbieDash.autoWidthMin, math.min(w, math.floor(mainW * 0.6)))
-  if w ~= NebbieDash.guiWidth then
-    NebbieDash.guiWidth = w
-    setBorderRight(w)
+  local maxTotal = math.floor(mainW * 0.6)
+
+  if NebbieDash.autoWidthEquip then
+    local w = math.floor(charW * (NebbieDash.computeEquipMaxChars(data) + 3))
+    w = math.max(NebbieDash.autoWidthMin, math.min(w, maxTotal))
+    if w ~= NebbieDash.guiWidthEquip then
+      NebbieDash.guiWidthEquip = w
+      setBorderLeft(w)
+    end
+  end
+  if NebbieDash.autoWidthRight then
+    local w = math.floor(charW * (NebbieDash.computeRightMaxChars(data) + 3))
+    w = math.max(NebbieDash.autoWidthMin, math.min(w, maxTotal))
+    if w ~= NebbieDash.guiWidthRight then
+      NebbieDash.guiWidthRight = w
+      setBorderRight(w)
+    end
   end
 end
 
@@ -645,16 +742,20 @@ function NebbieDash.positionGUI()
   local w, h = getMainWindowSize()
   w = w or 800
   h = h or 600
-  local x = math.max(0, w - NebbieDash.guiWidth)
-  local equipH = math.floor(h * NebbieDash.guiRatios.equip)
-  local spellsH = math.floor(h * NebbieDash.guiRatios.spells)
-  local speedwalkH = h - equipH - spellsH
-  moveWindow("NebbieDashEquip", x, 0)
-  resizeWindow("NebbieDashEquip", NebbieDash.guiWidth, equipH)
-  moveWindow("NebbieDashSpells", x, equipH)
-  resizeWindow("NebbieDashSpells", NebbieDash.guiWidth, spellsH)
-  moveWindow("NebbieDashSpeedwalks", x, equipH + spellsH)
-  resizeWindow("NebbieDashSpeedwalks", NebbieDash.guiWidth, speedwalkH)
+  -- Colonna sinistra: equip, tutta l'altezza disponibile.
+  moveWindow("NebbieDashEquip", 0, 0)
+  resizeWindow("NebbieDashEquip", NebbieDash.guiWidthEquip, h)
+  -- Colonna destra: spell attivi in alto, barra divisoria, speedwalk in basso.
+  local x = math.max(0, w - NebbieDash.guiWidthRight)
+  local usableH = math.max(0, h - NebbieDash.dividerPx)
+  local spellsH = math.floor(usableH * NebbieDash.guiRatios.spells)
+  local speedwalkH = usableH - spellsH
+  moveWindow("NebbieDashSpells", x, 0)
+  resizeWindow("NebbieDashSpells", NebbieDash.guiWidthRight, spellsH)
+  moveWindow("NebbieDashDivider", x, spellsH)
+  resizeWindow("NebbieDashDivider", NebbieDash.guiWidthRight, NebbieDash.dividerPx)
+  moveWindow("NebbieDashSpeedwalks", x, spellsH + NebbieDash.dividerPx)
+  resizeWindow("NebbieDashSpeedwalks", NebbieDash.guiWidthRight, speedwalkH)
 end
 
 function NebbieDash.toggleGUI()
@@ -664,11 +765,13 @@ function NebbieDash.toggleGUI()
   else
     NebbieDash._guiHidden = not NebbieDash._guiHidden
     if NebbieDash._guiHidden then
-      for _, win in ipairs(NebbieDash.GUI_WINDOWS) do hideWindow(win) end
+      for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do hideWindow(win) end
+      setBorderLeft(0)
       setBorderRight(0)
     else
-      for _, win in ipairs(NebbieDash.GUI_WINDOWS) do showWindow(win) end
-      setBorderRight(NebbieDash.guiWidth)
+      for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do showWindow(win) end
+      setBorderLeft(NebbieDash.guiWidthEquip)
+      setBorderRight(NebbieDash.guiWidthRight)
       NebbieDash.positionGUI()
     end
   end
@@ -676,10 +779,12 @@ function NebbieDash.toggleGUI()
 end
 
 function NebbieDash.resetLayout()
-  NebbieDash.guiWidth = 320
+  NebbieDash.guiWidthEquip = 260
+  NebbieDash.guiWidthRight = 320
   NebbieDash.fontSize = 11
-  NebbieDash.autoWidth = true
-  NebbieDash.guiRatios = { equip = 0.45, spells = 0.25, speedwalk = 0.30 }
+  NebbieDash.autoWidthEquip = true
+  NebbieDash.autoWidthRight = true
+  NebbieDash.guiRatios = { spells = 0.4 }
   if NebbieDash._guiCreated then
     for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
       setMiniConsoleFontSize(win, NebbieDash.fontSize)
@@ -703,26 +808,63 @@ function NebbieDash.cmdSetFont(sizeStr)
   cecho("<green>[NebbieDash] Font pannello impostato a " .. size .. ".\n")
 end
 
-function NebbieDash.cmdSetWidth(widthStr)
-  if (widthStr or ""):lower():match("^%s*auto%s*$") then
-    NebbieDash.autoWidth = true
+-- "nwidth equip 300", "nwidth right auto", ecc. Senza indicare la colonna
+-- (es. "nwidth 300" o "nwidth auto") agisce sulla colonna destra, per
+-- compatibilita' con la sintassi usata prima di avere due colonne separate.
+function NebbieDash.cmdSetWidth(argStr)
+  argStr = argStr or ""
+  local side, rest = argStr:match("^%s*(%S+)%s+(.-)%s*$")
+  if not side then
+    side, rest = "right", argStr:match("^%s*(.-)%s*$")
+  end
+  side = side:lower()
+  local isEquip = (side == "equip" or side == "left" or side == "sinistra")
+  local isRight = (side == "right" or side == "spell" or side == "spells" or side == "destra")
+  if not isEquip and not isRight then
+    cecho("<orange>[NebbieDash] Uso: nwidth <equip|right> <numero tra 150 e 900> oppure <yellow>nwidth <equip|right> auto\n")
+    return
+  end
+  local label = isEquip and "equip (sinistra)" or "spell/speedwalk (destra)"
+
+  if (rest or ""):lower():match("^auto$") then
+    if isEquip then NebbieDash.autoWidthEquip = true else NebbieDash.autoWidthRight = true end
     NebbieDash.refreshDashboard()
-    cecho("<green>[NebbieDash] Larghezza pannello: automatica (si adatta al contenuto, entro il 60% dello schermo).\n")
+    cecho("<green>[NebbieDash] Larghezza pannello " .. label .. ": automatica.\n")
     return
   end
-  local width = tonumber(widthStr)
+  local width = tonumber(rest)
   if not width or width < 150 or width > 900 then
-    cecho("<orange>[NebbieDash] Uso: nwidth <numero tra 150 e 900> oppure <yellow>nwidth auto<orange> (attuale: "
-      .. NebbieDash.guiWidth .. (NebbieDash.autoWidth and ", automatica" or ", manuale") .. ")\n")
+    cecho("<orange>[NebbieDash] Uso: nwidth <equip|right> <numero tra 150 e 900> oppure <yellow>nwidth <equip|right> auto\n")
     return
   end
-  NebbieDash.autoWidth = false
-  NebbieDash.guiWidth = width
-  if NebbieDash._guiCreated then
-    setBorderRight(width)
-    NebbieDash.positionGUI()
+  if isEquip then
+    NebbieDash.autoWidthEquip = false
+    NebbieDash.guiWidthEquip = width
+    if NebbieDash._guiCreated then setBorderLeft(width) end
+  else
+    NebbieDash.autoWidthRight = false
+    NebbieDash.guiWidthRight = width
+    if NebbieDash._guiCreated then setBorderRight(width) end
   end
-  cecho("<green>[NebbieDash] Larghezza pannello impostata a " .. width .. " (manuale — <yellow>nwidth auto<green> per tornare automatica).\n")
+  if NebbieDash._guiCreated then NebbieDash.positionGUI() end
+  cecho("<green>[NebbieDash] Larghezza pannello " .. label .. " impostata a " .. width .. " (manuale).\n")
+end
+
+-- Regola la ripartizione verticale della colonna destra tra Spell attivi e
+-- Speedwalk (richiesta esplicita: "non riesco a ridimensionare manualmente
+-- l'altezza delle sotto-colonne"). Non e' un trascinamento col mouse (la API
+-- Lua di Mudlet non espone un modo affidabile per intercettare il drag su un
+-- bordo tra due miniconsole), ma un comando che ottiene lo stesso risultato.
+function NebbieDash.cmdSetHeights(pctStr)
+  local pct = tonumber(pctStr)
+  if not pct or pct < 10 or pct > 90 then
+    cecho("<orange>[NebbieDash] Uso: nheights <percentuale tra 10 e 90> — quota per 'Spell attivi', il resto va a 'Speedwalk' (attuale: "
+      .. math.floor(NebbieDash.guiRatios.spells * 100) .. "%)\n")
+    return
+  end
+  NebbieDash.guiRatios.spells = pct / 100
+  if NebbieDash._guiCreated then NebbieDash.positionGUI() end
+  cecho("<green>[NebbieDash] Altezza 'Spell attivi' impostata al " .. pct .. "% (Speedwalk: " .. (100 - pct) .. "%).\n")
 end
 
 function NebbieDash.cmdSetItemLen(lenStr)
@@ -747,6 +889,22 @@ function NebbieDash.cmdSetSpellWarn(ticksStr)
   cecho("<green>[NebbieDash] Soglia colore rosso spell impostata a " .. ticks .. " tick.\n")
 end
 
+-- Mostra/nasconde lo slot 22 "simbolo del clan" (non ancora confermato in un
+-- output reale di `eq` — vedi nota su EQ_SLOT_CLAN).
+function NebbieDash.cmdSetClanSlot(argStr)
+  local v = (argStr or ""):lower():match("^%s*(.-)%s*$")
+  if v == "on" or v == "1" or v == "true" then
+    NebbieDash.showClanSlot = true
+  elseif v == "off" or v == "0" or v == "false" then
+    NebbieDash.showClanSlot = false
+  else
+    cecho("<orange>[NebbieDash] Uso: nclanslot <on|off> (attuale: " .. (NebbieDash.showClanSlot and "on" or "off") .. ")\n")
+    return
+  end
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Slot 'simbolo del clan': " .. (NebbieDash.showClanSlot and "attivato" or "disattivato") .. ".\n")
+end
+
 function NebbieDash.refreshDashboard()
   if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
   NebbieDash.applyAutoWidth()
@@ -765,26 +923,18 @@ function NebbieDash.refreshDashboard()
   cecho("NebbieDashEquip", "<cyan><b>Equip — " .. name .. "</b>\n")
   if not (data.eqUpdated) then
     cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
-  end
-  -- NOTA: mostriamo esattamente gli slot riportati dal gioco (numero +
-  -- posizione letti dalla riga stessa), nell'ordine in cui il gioco li
-  -- numera. NON inventiamo una lista fissa di "tutti gli slot possibili":
-  -- il numero da solo non e' un identificatore affidabile della posizione
-  -- (bug osservato — vedi LOG.md, "conteggio slot sbagliato"). Se serve
-  -- anche l'elenco degli slot NON occupati, va chiesto all'utente da dove
-  -- prenderlo (il gioco potrebbe non riportarli affatto in `eq`).
-  local slots = data.eq or {}
-  local indices = {}
-  for i in pairs(slots) do table.insert(indices, i) end
-  table.sort(indices)
-  if #indices == 0 then
-    cecho("NebbieDashEquip", "<grey>(nessun oggetto — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
-  end
-  for _, i in ipairs(indices) do
-    local entry = slots[i]
-    local location = (entry and entry.location) or "?"
-    local item = NebbieDash.truncate((entry and entry.item) or "?", NebbieDash.itemMaxLen)
-    cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", i, location, item))
+  else
+    -- Una riga per ogni posizione nota (occupata o "(vuoto)") — vedi
+    -- buildEquipRows(). Il numero di slot del gioco non viene piu' mostrato:
+    -- e' solo un contatore progressivo, non un identificatore di posizione.
+    for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+      if row.empty then
+        cecho("NebbieDashEquip", string.format("<grey>%s (vuoto)\n", row.location))
+      else
+        local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
+        cecho("NebbieDashEquip", string.format("<white>%s\n     <green>%s\n", row.location, item))
+      end
+    end
   end
 
   cecho("NebbieDashSpells", "<cyan><b>Spell attivi — " .. name .. "</b>\n")
@@ -884,7 +1034,7 @@ end
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>nebbie-complete-dashboard-package - boot</name>
-   <script><![CDATA[local ver = "1.2.0"
+   <script><![CDATA[local ver = "1.3.0"
 if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
 local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
@@ -1001,6 +1151,20 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nspeeddelay (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-heights</name>
+   <script><![CDATA[NebbieDash.cmdSetHeights(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nheights (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-clanslot</name>
+   <script><![CDATA[NebbieDash.cmdSetClanSlot(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nclanslot (.+)$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>
