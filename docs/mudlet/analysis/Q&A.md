@@ -264,3 +264,38 @@ R.I.P." che potrebbe comparire anche per uccisioni altrui non tue. Usata quindi 
 `nloot` automatico invece della riga "is dead!".
 
 **Implementazione**: vedi LOG.md Round 12 e CHANGELOG.md 1.4.1 (nuovo comando `nautoloot`).
+
+## Round 13 — due bug segnalati + nuove richieste (2026-08-10)
+
+**Bug 1 — cambio personaggio non aggiornava la dashboard**: l'utente segnala che dopo aver cambiato
+personaggio, lanciare uno spell su se stesso falliva perché la dashboard aveva ancora memorizzato il
+vecchio personaggio. Causa: `currentChar` veniva aggiornato solo alla ricezione di un nuovo prompt,
+che arriva solo DOPO aver inviato un comando — quindi un self-cast fatto subito dopo il cambio
+personaggio (prima di qualunque altro comando) usava ancora il nome del personaggio precedente,
+senza alcun avviso. Fix: alla (ri)connessione il personaggio attivo viene azzerato subito (pannello
+mostra "nessun personaggio rilevato" finché non arriva un prompt fresco), vedi LOG.md Round 13.
+
+**Bug 2 — split scattato senza essere in gruppo**: l'utente segnala che durante un combattimento in
+solitaria lo split è comunque scattato. Causa non confermata con certezza (serve un log reale per
+esserne sicuri — richiesto ma non ancora fornito); come misura difensiva i due trigger di verifica
+gruppo sono stati resi più specifici (ancorati a inizio riga con la virgoletta di apertura per "Your
+group \"", invece di un semplice "contiene la sottostringa Your group ") per ridurre il rischio che
+del testo di gioco non correlato faccia scattare un falso positivo.
+
+**Richiesta**: interpretare `.4s` (o `.N<comando>`) come l'invio ripetuto N volte dello stesso
+comando, utilizzabile per qualsiasi comando non solo i movimenti. Implementato come nuovo alias
+generico (vedi LOG.md Round 13).
+
+**Richiesta — trigger di combattimento "minimi"**: l'utente chiarisce che per ora gli servono solo
+due trigger, non un sistema di combattimento completo:
+1. Rialzarsi da terra dopo una caduta. Testo reale fornito: `"Illyari schiva il tuo urto. Inciampi e
+   cadi per terra."` (parte fissa: `"Inciampi e cadi per terra."`; l'utente precisa che questo è SOLO
+   UNO dei possibili messaggi di caduta — altri andranno aggiunti quando forniti).
+2. Recuperare l'arma dopo un disarmo. Testo reale fornito: `"Ti disarmano e la Flamberga di Boris
+   vola dalla tua presa."`, dove "la Flamberga di Boris" è l'oggetto nello slot `[16] <impugnato>` e
+   risponde alle parole chiave `"flamberga boris"` in gioco (confermato dall'utente) — l'utente
+   chiede esplicitamente un modo per derivare le parole chiave automaticamente, perché cambiano da
+   arma ad arma.
+
+**Implementazione di entrambi**: vedi LOG.md Round 13 e CHANGELOG.md 1.5.0 (nuovi comandi
+`nautostand`, `nautodisarm`, alias generico `.N<comando>`).

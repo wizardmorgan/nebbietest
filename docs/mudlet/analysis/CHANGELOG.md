@@ -1,5 +1,26 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.5.0 — 2026-08-10
+
+- **Corretto**: il personaggio attivo si azzera subito alla (ri)connessione, invece di restare
+  agganciato al personaggio precedente finché non arriva un nuovo prompt. Prima di questo fix, uno
+  spell lanciato su se stessi (o un click nel pannello) subito dopo un cambio personaggio poteva
+  colpire ancora il personaggio precedente, senza alcun avviso.
+- **Corretto (difensivo)**: i due trigger di verifica gruppo (usati dallo split automatico) sono ora
+  ancorati a inizio riga invece di semplici sottostringhe libere, per ridurre il rischio che del
+  testo di gioco non correlato faccia scattare uno split senza essere davvero in gruppo (bug
+  segnalato; causa esatta non ancora confermata con un log reale — se si ripresenta, serve quel log).
+- **Aggiunto**: rialzarsi automatico (`stand`) dopo una caduta, riconosciuta dal testo `Inciampi e
+  cadi per terra.`. Disattivabile con `nautostand off` (default **on**). Nota: copre solo questo
+  specifico messaggio di caduta — se ce ne sono altri andranno aggiunti quando forniti.
+- **Aggiunto**: recupero automatico dell'arma dopo un disarmo (`Ti disarmano e ... vola dalla tua
+  presa.`): le parole chiave dell'arma vengono derivate automaticamente dal nome catturato nel
+  messaggio stesso (ripulito da articoli/preposizioni italiane), poi `get`/`wield` automatici.
+  Disattivabile con `nautodisarm off` (default **on**).
+- **Aggiunto**: ripetizione generica di un comando col prefisso `.N`, es. `.4s` invia `s` quattro
+  volte (funziona con qualsiasi comando, non solo i movimenti).
+- **Versione interna** alzata a 1.5.0.
+
 ## 1.4.1 — 2026-08-10
 
 - **Aggiunto**: loot **completamente automatico** alla fine di ogni combattimento a cui hai

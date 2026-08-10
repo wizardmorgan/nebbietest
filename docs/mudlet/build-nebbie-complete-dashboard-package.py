@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.4.1"
+PKG_VER = "1.5.0"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -52,6 +52,15 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   partecipato, prende da solo le monete dal cadavere (normale o "pile of
   bones", `nloot` anche a mano) e, se sei in gruppo, divide l'importo con
   `split` (disattivabili singolarmente con `nautoloot off`/`nautosplit off`).
+- **Rialzarsi e recupero arma automatici**: `stand` da solo dopo una caduta;
+  `get`/`wield` da soli dell'arma persa dopo un disarmo (disattivabili con
+  `nautostand off`/`nautodisarm off`).
+- **Ripetizione comandi**: digita `.4s` per inviare `s` quattro volte (vale
+  per qualunque comando, non solo i movimenti).
+- **Corretto**: il personaggio attivo si azzera subito alla (ri)connessione,
+  invece di restare agganciato al personaggio precedente finché non arriva
+  un nuovo prompt — evita di lanciare comandi/spell sul personaggio sbagliato
+  appena dopo un cambio personaggio.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -93,6 +102,9 @@ ALIASES = [
     ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),
     ("nebbie-dash-split", "^nsplit (.+)$", "NebbieDash.cmdSplit(matches[2])"),
     ("nebbie-dash-autoloot", "^nautoloot (.+)$", "NebbieDash.cmdSetAutoLoot(matches[2])"),
+    ("nebbie-dash-autostand", "^nautostand (.+)$", "NebbieDash.cmdSetAutoStand(matches[2])"),
+    ("nebbie-dash-autodisarm", "^nautodisarm (.+)$", "NebbieDash.cmdSetAutoDisarmRecover(matches[2])"),
+    ("nebbie-dash-repeat", r"^\.(\d+)\s*(.+)$", "NebbieDash.cmdRepeat(matches[2], matches[3])"),
 ]
 
 

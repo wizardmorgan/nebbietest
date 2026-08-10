@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.4.1)
+description = [[# Nebbie Dashboard (1.5.0)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -25,6 +25,15 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   partecipato, prende da solo le monete dal cadavere (normale o "pile of
   bones", `nloot` anche a mano) e, se sei in gruppo, divide l'importo con
   `split` (disattivabili singolarmente con `nautoloot off`/`nautosplit off`).
+- **Rialzarsi e recupero arma automatici**: `stand` da solo dopo una caduta;
+  `get`/`wield` da soli dell'arma persa dopo un disarmo (disattivabili con
+  `nautostand off`/`nautodisarm off`).
+- **Ripetizione comandi**: digita `.4s` per inviare `s` quattro volte (vale
+  per qualunque comando, non solo i movimenti).
+- **Corretto**: il personaggio attivo si azzera subito alla (ri)connessione,
+  invece di restare agganciato al personaggio precedente finché non arriva
+  un nuovo prompt — evita di lanciare comandi/spell sul personaggio sbagliato
+  appena dopo un cambio personaggio.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -34,4 +43,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.4.1]]
+version = [[1.5.0]]

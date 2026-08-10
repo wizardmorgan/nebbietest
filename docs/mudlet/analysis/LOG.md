@@ -752,4 +752,69 @@ disattivazione esplicita con `nautoloot off`/`nautosplit off`.
 
 ---
 
+## Round 13 — due bug + rialzarsi/recupero arma/ripetizione comandi (2026-08-10)
+
+**Bug 1 (character switch stale)**: l'utente segnala che cambiando personaggio, lanciare uno spell
+su se stesso finiva sul personaggio PRECEDENTE. Analisi del codice (`setCurrentCharacter`/
+`onPromptLine`): `NebbieDash.currentChar` viene aggiornato solo quando arriva un prompt valido, e un
+prompt arriva solo DOPO che il gioco risponde a un comando — quindi tra una riconnessione con un
+nuovo personaggio e il primo comando digitato (incluso un click su uno spell nel pannello, che
+potrebbe ancora mostrare i dati del vecchio personaggio se il pannello non si e' ancora aggiornato),
+`currentChar` restava silenziosamente quello vecchio.
+
+**Fix applicato**: `onConnectionEvent()` ora azzera subito `NebbieDash.currentChar` (e ridisegna il
+pannello, che mostrera' "nessun personaggio rilevato" finche' non arriva un prompt fresco) invece di
+limitarsi a impostare un flag interno. Cosi' un'azione fatta nella finestra "morta" tra riconnessione
+e primo prompt fallisce in modo sicuro e visibile (nessun bersaglio aggiunto dall'euristica sul nome,
+vedi test dedicato) invece di colpire silenziosamente il personaggio sbagliato.
+
+**Bug 2 (split senza gruppo)**: l'utente segnala uno split scattato durante un combattimento in
+solitaria. Causa non confermata con certezza (richiesto un log reale della sequenza, non ancora
+fornito dall'utente) — l'ipotesi piu' probabile e' che qualche testo di gioco non correlato
+contenesse per caso la sottostringa "Your group " usata come trigger, dato che i due controlli
+gruppo (`_groupSoloTrig`/`_groupHeaderTrig`) usavano `tempTrigger` a substring libera (non ancorata a
+inizio riga). **Fix difensivo applicato** (in attesa di conferma della causa esatta): entrambi i
+trigger sono ora `tempRegexTrigger` ancorati a inizio riga (`^But you are a member of no group` e
+`^Your group "` — con la virgoletta di apertura inclusa per essere ancora piu' specifici), costo
+trascurabile perche' restano disabilitati tranne il breve intervallo del controllo dopo un loot.
+
+**Nuova funzionalita' — ripetizione comandi generica**: richiesto un modo per Mudlet di interpretare
+`.4s` come l'invio di "s" quattro volte, utilizzabile per QUALSIASI comando (non solo movimenti).
+Implementato come nuovo alias con regex `^\.(\d+)\s*(.+)$` (accetta sia `.4s` che `.4 s`) che chiama
+`NebbieDash.cmdRepeat(count, cmd)`, riusando la stessa pausa configurabile gia' usata per gli
+speedwalk (`NebbieDash.speedwalkDelay`) per non intasare la coda comandi del gioco. Limite di
+sicurezza a 99 ripetizioni per un refuso tipo `.400s`.
+
+**Nuovi trigger di combattimento "minimi"** (l'utente chiarisce di volere solo questi due, non un
+sistema di combattimento completo):
+1. **Rialzarsi da terra**: testo reale `"Illyari schiva il tuo urto. Inciampi e cadi per terra."` —
+   shield su substring fissa `"Inciampi e cadi per terra."`, invia `stand`. L'utente precisa che
+   questo e' solo UNO dei possibili messaggi di caduta: eventuali altri testi andranno aggiunti solo
+   quando forniti (non inventati per analogia).
+2. **Recupero arma dopo disarmo**: testo reale `"Ti disarmano e la Flamberga di Boris vola dalla tua
+   presa."` — il nome dell'arma viene catturato DIRETTAMENTE da questa riga (non dal pannello equip,
+   che potrebbe essere disallineato), poi ripulito dagli articoli/preposizioni italiane con una
+   nuova funzione `NebbieDash.extractItemKeywords()` per ottenere le parole chiave con cui il gioco
+   identifica l'oggetto — confermato dall'utente che "la Flamberga di Boris" → "flamberga boris"
+   sono le parole che funzionano davvero in gioco per quest'arma. Segue `get <parole chiave>` e,
+   mezzo secondo dopo, `wield <parole chiave>` (comando confermato nel codice del server,
+   `interpreter.cpp`, per lo slot "impugnato").
+
+Entrambi i nuovi trigger sono disattivabili singolarmente (`nautostand off`/`nautodisarm off`,
+default **on** per entrambi).
+
+**Verifica**: `luac -p` OK su core.lua e sul test. Aggiunti 15 test automatici dedicati (reset
+personaggio alla riconnessione, quickcast sicuro senza personaggio attivo, rialzarsi automatico,
+estrazione parole chiave da un nome oggetto incluso il caso con apostrofo, recupero arma dopo
+disarmo, validazione della ripetizione comandi) — 79/79 test totali OK (verificato con `lua`
+standalone, offline). XML del package validato con `xml.dom.minidom` (regex dell'alias di
+ripetizione verificata testualmente nell'XML generato). Versione alzata a 1.5.0. Rigenerato
+`.mpackage`. Aggiornati USAGE.md, CHANGELOG.md, Q&A.md.
+
+**Nota aperta per l'utente**: per confermare (o escludere) la causa esatta del Bug 2, se lo split
+indesiderato si ripresenta anche dopo questo fix difensivo, serve il log reale della sequenza
+(cosa hai digitato, cosa ha risposto il gioco a `group`, e il messaggio di split che hai visto).
+
+---
+
 (continua...)

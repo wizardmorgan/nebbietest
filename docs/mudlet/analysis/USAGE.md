@@ -54,6 +54,9 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nautoloot <on\|off>` | Attiva/disattiva il loot automatico alla fine di ogni combattimento a cui partecipi (default **on**). |
 | `nautosplit <on\|off>` | Attiva/disattiva lo split automatico col gruppo dopo ogni loot riuscito (default **on**). |
 | `nsplit <numero>` | Divide manualmente un importo col gruppo (equivalente a digitare `split <numero>`), utile per casi non coperti da `nloot`. |
+| `nautostand <on\|off>` | Attiva/disattiva il rialzarsi automatico (`stand`) dopo una caduta (default **on**). |
+| `nautodisarm <on\|off>` | Attiva/disattiva il recupero automatico dell'arma dopo un disarmo (default **on**). |
+| `.<numero><comando>` | Ripete il comando N volte, es. `.4s` invia `s` quattro volte (funziona con qualsiasi comando: `.3 kill goblin` invia `kill goblin` tre volte). |
 
 ## Loot e split automatico
 
@@ -68,6 +71,24 @@ l'importo appena raccolto — verificando prima che tu sia in gruppo leggendo l'
 I due automatismi sono indipendenti: puoi disattivare solo il loot (`nautoloot off`, es. se preferisci
 farlo tu a mano con `nloot` quando vuoi) o solo lo split (`nautosplit off`, usando poi `nsplit
 <numero>` quando ti serve), oppure entrambi.
+
+## Rialzarsi e recupero arma automatici
+
+Se cadi a terra (riconosciuto dal messaggio del gioco `Inciampi e cadi per terra.`), il pacchetto
+invia da solo `stand` — disattivabile con `nautostand off`. **Nota**: questo è solo uno dei possibili
+messaggi di caduta; se ne trovi altri, segnalali così vengono aggiunti.
+
+Se vieni disarmato (`Ti disarmano e ... vola dalla tua presa.`), il pacchetto legge il nome dell'arma
+direttamente da quel messaggio, lo ripulisce da articoli/preposizioni italiane per ottenere le parole
+chiave con cui il gioco identifica l'oggetto (es. "la Flamberga di Boris" → "flamberga boris") e invia
+da solo `get <parole chiave>` seguito da `wield <parole chiave>` — disattivabile con `nautodisarm
+off`.
+
+## Ripetizione comandi
+
+Scrivi `.` seguito da un numero e un comando per ripeterlo quella quantità di volte, con la stessa
+pausa tra un invio e l'altro già usata per gli speedwalk (`nspeeddelay`). Esempi: `.4s` invia `s`
+quattro volte; `.3 kill goblin` invia `kill goblin` tre volte. Limite di sicurezza: 99 ripetizioni.
 
 ## Tasto "? Comandi"
 

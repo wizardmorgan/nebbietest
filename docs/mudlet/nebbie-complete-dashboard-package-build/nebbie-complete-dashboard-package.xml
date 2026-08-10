@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.4.1"
+local PKG_VER = "1.5.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -140,7 +140,19 @@ end
 function NebbieDash.onConnectionEvent()
   -- Reset difensivo: alla (ri)connessione non sappiamo ancora con certezza chi sia
   -- collegato finche' non arriva un prompt valido (D1-C, MUDLET-WIKI-NOTES.md §5-6).
+  -- IMPORTANTE (bug segnalato dall'utente): prima di questo fix, `currentChar`
+  -- restava impostato al PERSONAGGIO PRECEDENTE finche' non arrivava un nuovo
+  -- prompt — e un prompt arriva solo DOPO che invii un comando al gioco. Se
+  -- lanciavi uno spell su te stesso (o cliccavi qualcosa nel pannello) subito
+  -- dopo esserti riconnesso con un personaggio diverso, ma PRIMA di inviare
+  -- un qualsiasi altro comando, il bersaglio/i dati usati erano ancora quelli
+  -- del vecchio personaggio, senza alcun avviso. Ora invece il pannello
+  -- mostra chiaramente "nessun personaggio rilevato" finche' non arriva un
+  -- prompt fresco, cosi' non si rischia piu' di agire sul personaggio
+  -- sbagliato senza accorgersene.
+  NebbieDash.currentChar = nil
   NebbieDash._awaitingPromptAfterConnect = true
+  NebbieDash.refreshDashboard()
 end
 
 -- ---------------------------------------------------------------------------
@@ -574,6 +586,26 @@ function NebbieDash.cmdReloadSpeedwalks()
   cecho("<green>[NebbieDash] Speedwalk ricaricati (" .. #NebbieDash.speedwalks .. ") da " .. NebbieDash.speedwalkPath() .. "\n")
 end
 
+-- Ripetizione generica di un comando digitato direttamente al prompt, es.
+-- ".4s" invia "s" quattro volte (equivalente a scrivere "s" e premere invio
+-- 4 volte), con la stessa pausa tra un invio e l'altro gia' usata per gli
+-- speedwalk (NebbieDash.speedwalkDelay) — stesso motivo: non perdere passi
+-- per lag di movimento. Funziona con qualunque comando, non solo direzioni
+-- (es. ".3 kill goblin"). Limite massimo di sicurezza a 99 ripetizioni per
+-- evitare di intasare la coda comandi per un refuso (es. ".400s").
+function NebbieDash.cmdRepeat(countStr, cmdStr)
+  local count = tonumber(countStr)
+  cmdStr = (cmdStr or ""):match("^%s*(.-)%s*$")
+  if not count or count < 1 or cmdStr == "" then return end
+  if count > 99 then
+    cecho("<orange>[NebbieDash] Troppe ripetizioni richieste (" .. count .. "), limitate a 99.\n")
+    count = 99
+  end
+  for i = 1, count do
+    tempTimer(NebbieDash.speedwalkDelay * (i - 1), function() send(cmdStr, false) end)
+  end
+end
+
 function NebbieDash.cmdSetSpeedDelay(str)
   local delay = tonumber(str)
   if not delay or delay < 0 or delay > 10 then
@@ -938,6 +970,9 @@ NebbieDash.HELP_TEXT = {
   { "nautoloot <on|off>", "Attiva/disattiva il loot automatico alla fine di ogni combattimento." },
   { "nautosplit <on|off>", "Attiva/disattiva lo split automatico col gruppo dopo ogni loot riuscito." },
   { "nsplit <numero>", "Divide manualmente un importo col gruppo (equivalente a 'split')." },
+  { "nautostand <on|off>", "Attiva/disattiva il rialzarsi automatico ('stand') dopo una caduta." },
+  { "nautodisarm <on|off>", "Attiva/disattiva il recupero automatico dell'arma dopo un disarmo." },
+  { ".<numero><comando>", "Ripete il comando N volte, es. '.4s' invia 's' quattro volte." },
   { "nhelp", "Mostra/nascondi questa finestra." },
 }
 
@@ -1241,6 +1276,107 @@ function NebbieDash.onCombatEndLine()
   end
 end
 
+-- ---------------------------------------------------------------------------
+-- Rialzarsi da terra e recupero arma dopo un disarmo — richiesti esplicita-
+-- mente come "unico trigger di combattimento" che serve ora (2026-08-10),
+-- basati su testi REALI forniti dall'utente:
+--   - Caduta: "Illyari schiva il tuo urto. Inciampi e cadi per terra." → la
+--     parte fissa e' "Inciampi e cadi per terra." (il resto della frase
+--     varia in base a chi/cosa causa la caduta — l'utente segnala che
+--     questo e' SOLO UNO dei possibili messaggi di caduta: se ce ne sono
+--     altri andranno aggiunti quando forniti, non li invento).
+--   - Disarmo: "Ti disarmano e la Flamberga di Boris vola dalla tua presa."
+--     — il nome dell'arma e' catturato DIRETTAMENTE da questa riga (non
+--     dal pannello equip, che potrebbe non essere aggiornato), poi ripulito
+--     dagli articoli/preposizioni italiane per ottenere le parole chiave
+--     con cui il gioco identifica l'oggetto (confermato dall'utente per
+--     "la Flamberga di Boris" → "flamberga boris").
+-- ---------------------------------------------------------------------------
+NebbieDash.autoStand = true
+NebbieDash.autoDisarmRecover = true
+
+-- Parole italiane da scartare per ottenere le parole chiave dell'oggetto dal
+-- suo nome descrittivo (articoli, preposizioni semplici/articolate,
+-- congiunzioni). Elenco deliberatamente conservativo: in caso di dubbio è
+-- meglio lasciare una parola di troppo (il gioco la ignorerebbe comunque se
+-- non è un suo keyword) che scartarne una che serve.
+NebbieDash.ITEM_STOPWORDS = {
+  ["il"] = true, ["lo"] = true, ["la"] = true, ["i"] = true, ["gli"] = true, ["le"] = true,
+  ["un"] = true, ["uno"] = true, ["una"] = true,
+  ["di"] = true, ["da"] = true, ["in"] = true, ["con"] = true, ["su"] = true, ["per"] = true,
+  ["tra"] = true, ["fra"] = true, ["e"] = true, ["ed"] = true, ["a"] = true, ["ad"] = true,
+  ["del"] = true, ["dello"] = true, ["della"] = true, ["dei"] = true, ["degli"] = true, ["delle"] = true,
+  ["al"] = true, ["allo"] = true, ["alla"] = true, ["ai"] = true, ["agli"] = true, ["alle"] = true,
+  ["dal"] = true, ["dallo"] = true, ["dalla"] = true, ["dai"] = true, ["dagli"] = true, ["dalle"] = true,
+  ["nel"] = true, ["nello"] = true, ["nella"] = true, ["nei"] = true, ["negli"] = true, ["nelle"] = true,
+  ["sul"] = true, ["sullo"] = true, ["sulla"] = true, ["sui"] = true, ["sugli"] = true, ["sulle"] = true,
+  -- Forme troncate davanti apostrofo (l'apostrofo viene sostituito da uno
+  -- spazio prima del filtro, quindi "dell'Infinito" arriva come due parole
+  -- separate "dell" e "infinito").
+  ["l"] = true, ["d"] = true, ["dell"] = true, ["nell"] = true, ["sull"] = true, ["dall"] = true, ["all"] = true,
+}
+
+-- Estrae le parole chiave "significative" da un nome oggetto descrittivo,
+-- scartando gli articoli/preposizioni sopra (anche nella forma con
+-- apostrofo, es. "l'Infinito" → "infinito"). Restituisce una stringa
+-- minuscola pronta per essere usata come argomento di `get`/`wield`.
+function NebbieDash.extractItemKeywords(name)
+  name = (name or ""):lower():gsub("'", " "):gsub("[%.,!]", "")
+  local words = {}
+  for word in name:gmatch("%S+") do
+    if not NebbieDash.ITEM_STOPWORDS[word] then
+      table.insert(words, word)
+    end
+  end
+  return table.concat(words, " ")
+end
+
+-- Shield su substring fissa (sempre attivo, riga singola, stesso principio
+-- degli altri trigger a riga singola di questo file).
+function NebbieDash.onFallLine()
+  if not NebbieDash.autoStand then return end
+  send("stand", false)
+end
+
+function NebbieDash.onDisarmLine()
+  if not NebbieDash.autoDisarmRecover then return end
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local weaponName = text:match("^Ti disarmano e (.+) vola dalla tua presa%.%s*$")
+  if not weaponName then return end
+  local keywords = NebbieDash.extractItemKeywords(weaponName)
+  if keywords == "" then return end
+  send("get " .. keywords, false)
+  tempTimer(0.5, function() send("wield " .. keywords, false) end)
+end
+
+function NebbieDash.cmdSetAutoStand(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$"):lower()
+  if argStr == "on" then
+    NebbieDash.autoStand = true
+  elseif argStr == "off" then
+    NebbieDash.autoStand = false
+  else
+    cecho("<orange>[NebbieDash] Uso: nautostand <on|off> (attuale: " ..
+      (NebbieDash.autoStand and "on" or "off") .. ")\n")
+    return
+  end
+  cecho("<green>[NebbieDash] Rialzarsi automaticamente da terra: " .. (NebbieDash.autoStand and "on" or "off") .. ".\n")
+end
+
+function NebbieDash.cmdSetAutoDisarmRecover(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$"):lower()
+  if argStr == "on" then
+    NebbieDash.autoDisarmRecover = true
+  elseif argStr == "off" then
+    NebbieDash.autoDisarmRecover = false
+  else
+    cecho("<orange>[NebbieDash] Uso: nautodisarm <on|off> (attuale: " ..
+      (NebbieDash.autoDisarmRecover and "on" or "off") .. ")\n")
+    return
+  end
+  cecho("<green>[NebbieDash] Recupero automatico arma dopo disarmo: " .. (NebbieDash.autoDisarmRecover and "on" or "off") .. ".\n")
+end
+
 function NebbieDash.cmdSetAutoLoot(argStr)
   argStr = (argStr or ""):match("^%s*(.-)%s*$"):lower()
   if argStr == "on" then
@@ -1364,9 +1500,18 @@ function NebbieDash.installTriggers()
   -- del prompt); i due trigger di verifica gruppo restano disabilitati
   -- finche' non serve un controllo (dopo un loot riuscito).
   NebbieDash._lootLineTrig = tempTrigger("C'erano", [[NebbieDash.onLootLine()]])
-  NebbieDash._groupSoloTrig = tempTrigger("But you are a member of no group", [[NebbieDash.onGroupSoloLine()]])
-  NebbieDash._groupHeaderTrig = tempTrigger("Your group ", [[NebbieDash.onGroupHeaderLine()]])
+  -- Regex ancorate a inizio riga (non semplici substring) per i due trigger
+  -- di verifica gruppo: costo trascurabile perche' restano disabilitati
+  -- tranne il breve intervallo del controllo dopo un loot (vedi
+  -- startSplitFlow/finishSplitFlow), e riduce il rischio che una frase
+  -- qualunque nel testo di gioco contenga per caso "Your group " a meta'
+  -- riga (sospetta causa dello split scattato senza essere in gruppo,
+  -- segnalato dall'utente — vedi LOG.md Round 13).
+  NebbieDash._groupSoloTrig = tempRegexTrigger("^But you are a member of no group", [[NebbieDash.onGroupSoloLine()]])
+  NebbieDash._groupHeaderTrig = tempRegexTrigger("^Your group \"", [[NebbieDash.onGroupHeaderLine()]])
   NebbieDash._combatEndTrig = tempTrigger("La tua parte di esperienza", [[NebbieDash.onCombatEndLine()]])
+  NebbieDash._fallTrig = tempTrigger("Inciampi e cadi per terra.", [[NebbieDash.onFallLine()]])
+  NebbieDash._disarmTrig = tempTrigger("vola dalla tua presa", [[NebbieDash.onDisarmLine()]])
   if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
   if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
   if type(registerAnonymousEventHandler) == "function" then
@@ -1411,7 +1556,7 @@ end
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>nebbie-complete-dashboard-package - boot</name>
-   <script><![CDATA[local ver = "1.4.1"
+   <script><![CDATA[local ver = "1.5.0"
 if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
 local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
@@ -1577,6 +1722,27 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nautoloot (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-autostand</name>
+   <script><![CDATA[NebbieDash.cmdSetAutoStand(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nautostand (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-autodisarm</name>
+   <script><![CDATA[NebbieDash.cmdSetAutoDisarmRecover(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nautodisarm (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-repeat</name>
+   <script><![CDATA[NebbieDash.cmdRepeat(matches[2], matches[3])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^\.(\d+)\s*(.+)$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>

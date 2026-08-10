@@ -363,6 +363,80 @@ NebbieDash.onCombatEndLine()
 check("combattimento: con nautoloot off non invia nulla", #sentLog == 0)
 NebbieDash.autoLoot = true
 
+-- Test 10: bug segnalato (2026-08-10) — cambio personaggio non aggiornava
+-- la dashboard (self-cast finiva sul personaggio precedente). Fix: alla
+-- (ri)connessione il personaggio attivo viene azzerato subito, invece di
+-- restare quello vecchio finche' non arriva un nuovo prompt.
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+check("connessione: personaggio attivo prima del reset", NebbieDash.currentChar == "NomiyaMaki")
+NebbieDash.onConnectionEvent()
+check("connessione: personaggio azzerato subito alla riconnessione", NebbieDash.currentChar == nil)
+check("connessione: in attesa di un nuovo prompt", NebbieDash._awaitingPromptAfterConnect == true)
+-- Un self-cast prima che arrivi un nuovo prompt non deve piu' finire sul
+-- vecchio personaggio: senza nome attivo, l'euristica sul proprio nome non
+-- puo' scattare (nessun bersaglio aggiunto, comportamento sicuro).
+sentLog = {}
+NebbieDash.cmdQuickCast("c", "heal nom")
+check("connessione: quickcast senza personaggio attivo non aggiunge un bersaglio sbagliato",
+  lastSent == "cast 'heal nom'")
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+
+-- Test 11: rialzarsi automatico dopo una caduta — testo REALE fornito
+-- dall'utente (2026-08-10): "Illyari schiva il tuo urto. Inciampi e cadi
+-- per terra." (la parte fissa e' "Inciampi e cadi per terra.").
+NebbieDash.autoStand = true
+sentLog = {}
+NebbieDash.onFallLine()
+check("caduta: 'stand' inviato automaticamente", lastSent == "stand")
+
+NebbieDash.autoStand = false
+sentLog = {}
+NebbieDash.onFallLine()
+check("caduta: con nautostand off non invia nulla", #sentLog == 0)
+NebbieDash.autoStand = true
+
+-- Test 12: recupero automatico dell'arma dopo un disarmo — testo REALE
+-- fornito dall'utente: "Ti disarmano e la Flamberga di Boris vola dalla tua
+-- presa." Le parole chiave attese ("flamberga boris") sono confermate
+-- dall'utente come quelle che funzionano davvero in gioco per quest'arma.
+check("parole chiave: 'la Flamberga di Boris' -> 'flamberga boris'",
+  NebbieDash.extractItemKeywords("la Flamberga di Boris") == "flamberga boris")
+check("parole chiave: apostrofo gestito (\"dell'Infinito\" -> \"infinito\")",
+  NebbieDash.extractItemKeywords("Il Guanto dell'Infinito") == "guanto infinito")
+
+NebbieDash.autoDisarmRecover = true
+sentLog = {}
+line = "Ti disarmano e la Flamberga di Boris vola dalla tua presa."
+NebbieDash.onDisarmLine()
+check("disarmo: 'get flamberga boris' inviato automaticamente", sentLog[1] == "get flamberga boris")
+
+NebbieDash.autoDisarmRecover = false
+sentLog = {}
+NebbieDash.onDisarmLine()
+check("disarmo: con nautodisarm off non invia nulla", #sentLog == 0)
+NebbieDash.autoDisarmRecover = true
+
+-- Test 13: ripetizione comandi generica (".4s" -> s,s,s,s), richiesta
+-- esplicitamente dall'utente. tempTimer e' un mock no-op in questo test
+-- (non esegue MAI i callback, nemmeno con delay 0 — stesso limite gia'
+-- presente per gli altri invii differiti di questo file, es. il secondo
+-- comando di nloot), quindi qui verifichiamo solo la validazione dei
+-- parametri: nessun errore e nessun invio "a sorpresa" per input non validi.
+local repeatOk = pcall(NebbieDash.cmdRepeat, "4", "s")
+check("ripetizione: 'cmdRepeat(4, s)' non genera errori", repeatOk)
+
+sentLog = {}
+NebbieDash.cmdRepeat("0", "s")
+check("ripetizione: conteggio zero non invia nulla", #sentLog == 0)
+
+sentLog = {}
+NebbieDash.cmdRepeat("abc", "s")
+check("ripetizione: conteggio non numerico non invia nulla", #sentLog == 0)
+
+sentLog = {}
+NebbieDash.cmdRepeat("4", "")
+check("ripetizione: comando vuoto non invia nulla", #sentLog == 0)
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")
