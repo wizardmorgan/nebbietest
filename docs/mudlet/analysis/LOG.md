@@ -650,4 +650,67 @@ non riconosce ancora — vedi promemoria anche in CHANGELOG.md 1.3.3.
 
 ---
 
+## Round 11 — Alias e trigger: proposte di gestione + primo modulo loot/split (2026-08-10)
+
+L'utente conferma che il dashboard è ora soddisfacente e chiede di iniziare a lavorare su alias e
+trigger di gioco (esplicitamente lasciati fuori scope nella release 1, vedi REQUIREMENTS.md R15).
+
+**Proposte presentate** (nessuna implementazione prima della scelta dell'utente, per non ripetere
+l'errore del vecchio pacchetto — centinaia di alias generati automaticamente, fragile e complesso):
+A) file di configurazione per alias semplici (come gli speedwalk); B) stesso principio per trigger
+semplici; C) alias/trigger nativi Mudlet creati dall'utente, noi forniamo solo funzioni di supporto;
+D) tutto impacchettato nel codice del pacchetto, come i comandi attuali. Raccomandato un ibrido A+D.
+
+**Risposta utente**: approccio ibrido confermato; categoria da affrontare per prima: "combattimento"
+(poi chiarito, vedi sotto, essere in realtà loot + split, non attacco/difesa); nessun riutilizzo del
+vecchio pacchetto, si riparte da zero come per il resto.
+
+**Chiarimento sulla richiesta reale**: non è "combattimento" in senso stretto (attacco/fuga), ma
+raccogliere le monete dal cadavere dopo ogni combattimento e, se in gruppo, dividerle con `split`.
+
+**Ricerca nel codice del server** (`fight.cpp`, `act.comm.cpp`, `interpreter.cpp`) per non inventare
+nulla:
+- Comandi esistenti confermati: `kill`, `hit`, `flee`, `consider` (combattimento in senso stretto,
+  non ancora usati — restano per una fase futura se richiesta), `get`/`take`, `group`, `split`.
+- `do_split`: sintassi `split <quantità>`, richiede >=2 membri del gruppo nella stessa stanza,
+  altrimenti "Ma cosa vuoi dividere che sei solo." — quindi anche un nostro errore di rilevamento
+  gruppo verrebbe comunque rifiutato in modo innocuo dal server, non rischia di regalare oro a
+  qualcuno per sbaglio.
+- Cadavere di un mostro non-morto (`IsUndead`): nome oggetto `"dust pile bones"`, descrizione "A
+  pile of dust and bones is here." — conferma che il "pile of bones" citato dall'utente è reale nel
+  codice. Cadavere normale: nome oggetto `"corpo <nome mostro>"` (italiano).
+
+**Testi reali forniti dall'utente** (base esatta delle regex, vedi Q&A.md Round 11 per il dettaglio
+completo): sintassi di loot `get all.coin corp`/`get all.coin pile`; riga di successo `C'erano N
+monete.`; righe di fallimento `Non vedi nessun corp.`/`Non vedi nessun pile.`; risposta di `group` da
+soli (`But you are a member of no group?!`) e in gruppo (`Your group "..." consists of:`).
+
+**Design scelto**: riprendere lo stesso pattern "cattura a trigger temporanei con watchdog di
+inattività" già usato per eq/attrib (vedi Round precedente), applicato a un flusso più corto:
+1. Nuovo alias `nloot` invia `get all.coin corp` e, mezzo secondo dopo, `get all.coin pile` (uno
+   dei due fallirà sempre in modo innocuo con "Non vedi nessun ...", non richiede gestione).
+2. Un trigger permanente e leggero (shield su substring fissa `"C'erano"`, stesso principio del
+   trigger prompt `" M: "` già presente) intercetta l'importo raccolto, funziona sia che il loot
+   parta da `nloot` sia che l'utente digiti i comandi a mano.
+3. Se `nautosplit` è attivo (default on, come richiesto — "sempre, subito dopo ogni loot riuscito"),
+   invia `group` e arma due trigger temporanei (normalmente disabilitati, stesso principio delle
+   catture eq/attrib) che ascoltano rispettivamente la risposta "da soli" e quella "in gruppo";
+   quest'ultima fa scattare `split <importo appena raccolto>`. Watchdog di 4s in caso di risposta
+   inattesa (stesso meccanismo già introdotto per eq/attrib in questo stesso round).
+4. Nuovi comandi manuali: `nautosplit <on|off>` (toggle) e `nsplit <numero>` (split manuale, utile
+   anche per test/casi limite).
+
+**Aperto/rimandato**: rilevare automaticamente la FINE del combattimento (per lanciare `nloot` da
+solo, così l'utente non deve digitarlo) richiede il testo reale del messaggio di vittoria/morte del
+mostro — non ancora fornito, richiesto ma rimandato dall'utente ("later"/deferred nella conversazione
+precedente).
+
+**Verifica**: `luac -p` OK su core.lua e sul test. Aggiunti 8 test automatici dedicati (loot
+riconosciuto, comando "group" inviato solo con importo valido, comportamento "da soli" vs "in
+gruppo", rispetto del flag `nautosplit`, `nsplit` manuale) — 61/61 test totali OK (verificato con
+`lua` standalone, offline). XML del package validato con `xml.dom.minidom`. Versione alzata a 1.4.0.
+Rigenerato `.mpackage`. Aggiornati USAGE.md, CHANGELOG.md, Q&A.md.
+
+---
+
 (continua...)

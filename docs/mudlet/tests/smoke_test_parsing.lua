@@ -14,7 +14,8 @@ function tempRegexTrigger() return nil end
 function disableTrigger() end
 function enableTrigger() end
 local lastSent = nil
-function send(cmd) lastSent = cmd end
+local sentLog = {}
+function send(cmd) lastSent = cmd; table.insert(sentLog, cmd) end
 function tempTimer() end
 function setBorderRight() end
 function setBorderLeft() end
@@ -291,6 +292,49 @@ check("quickcast: virgola con spell multi-parola", lastSent == "recall 'word of 
 -- bersaglio scritto dopo la virgola e' proprio il personaggio attivo.
 NebbieDash.cmdQuickCast("c", "heal, NomiyaMaki")
 check("quickcast: virgola vince anche col proprio nome", lastSent == "cast 'heal' NomiyaMaki")
+
+-- Test 8: loot + split automatico — testi REALI incollati dall'utente
+-- (2026-08-10): "Prendi gold coins da il corpo di ...", "C'erano N monete.",
+-- "But you are a member of no group?!", 'Your group "..." consists of:'.
+NebbieDash.autoSplit = true
+
+-- 8a: la riga "Prendi gold coins da ..." da sola non fa scattare nulla (non
+-- contiene l'importo, solo il nome del cadavere, che varia per ogni mostro).
+local sentBefore8a = #sentLog
+line = "Prendi gold coins da il corpo di Il grande drago verde delle foreste."
+NebbieDash.onLootLine()
+check("loot: riga 'Prendi...' da sola non genera comandi",
+  #sentLog == sentBefore8a)
+
+-- 8b: la riga con l'importo avvia il controllo gruppo (invio di "group").
+line = "C'erano 100000 monete."
+NebbieDash.onLootLine()
+check("loot: importo riconosciuto correttamente", NebbieDash._pendingSplitAmount == 100000)
+check("loot: dopo il loot invia 'group' per il controllo", lastSent == "group")
+
+-- 8c: risposta "da soli" -> nessuno split inviato, stato ripulito.
+NebbieDash.onGroupSoloLine()
+check("loot: da soli non invia alcuno split", lastSent == "group")
+check("loot: stato controllo gruppo ripulito (da soli)", NebbieDash._groupCheckActive == false)
+
+-- 8d: risposta "in gruppo" -> invia split con l'importo corretto.
+line = "C'erano 250 monete."
+NebbieDash.onLootLine()
+line = 'Your group "I cacciatori di Draghi" consists of:'
+NebbieDash.onGroupHeaderLine()
+check("loot: in gruppo invia split con l'importo corretto", lastSent == "split 250")
+
+-- 8e: con nautosplit off, il loot non deve avviare alcun controllo gruppo.
+NebbieDash.autoSplit = false
+sentLog = {}
+line = "C'erano 42 monete."
+NebbieDash.onLootLine()
+check("loot: con autosplit off non invia 'group'", #sentLog == 0)
+NebbieDash.autoSplit = true
+
+-- 8f: nsplit manuale invia l'importo indicato senza passare dal loot.
+NebbieDash.cmdSplit("777")
+check("split manuale: 'nsplit 777' -> invia split 777", lastSent == "split 777")
 
 print("")
 if failures == 0 then

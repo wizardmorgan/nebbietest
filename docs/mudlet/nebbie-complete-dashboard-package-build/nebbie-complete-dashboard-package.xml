@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.3.3"
+local PKG_VER = "1.4.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -934,6 +934,9 @@ NebbieDash.HELP_TEXT = {
   { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk." },
   { "nspeeddelay <secondi>", "Ritardo tra un comando e l'altro in uno speedwalk." },
   { "nclanslot <on|off>", "Mostra/nascondi lo slot 22 (simbolo del clan)." },
+  { "nloot", "Prende le monete dal cadavere presente (normale o pile of bones)." },
+  { "nautosplit <on|off>", "Attiva/disattiva lo split automatico col gruppo dopo ogni loot riuscito." },
+  { "nsplit <numero>", "Divide manualmente un importo col gruppo (equivalente a 'split')." },
   { "nhelp", "Mostra/nascondi questa finestra." },
 }
 
@@ -1203,6 +1206,116 @@ function NebbieDash.updateVitalsDisplay()
 end
 
 -- ---------------------------------------------------------------------------
+-- Loot (soldi dal cadavere) + split automatico col gruppo.
+-- Prima automazione di gioco (oltre a equip/spell/speedwalk), richiesta
+-- esplicitamente dall'utente con testi REALI copiati dal gioco (nessuna
+-- regex qui e' inventata):
+--   - `get all.coin corp` su un cadavere normale risponde con due righe, es.
+--     "Prendi gold coins da il corpo di Il grande drago verde delle
+--     foreste." poi "C'erano 100000 monete."; su un bersaglio senza
+--     cadavere di quel tipo risponde "Non vedi nessun corp."
+--   - `get all.coin pile` e' l'equivalente per i cadaveri di non-morti
+--     ("pile of bones"/"dust pile bones", vedi fight.cpp), stessa dinamica
+--     ("Non vedi nessun pile." se non c'e' nulla da quel nome).
+--   - `group` risponde "But you are a member of no group?!" da soli, oppure
+--     un blocco che inizia con `Your group "<nome>" consists of:` se in
+--     gruppo.
+-- ---------------------------------------------------------------------------
+NebbieDash.autoSplit = true
+
+-- Riga di conferma loot riuscito ("C'erano N monete."): shield su substring
+-- fissa "C'erano" (vedi MUDLET-WIKI-NOTES.md §1 su shielding/costo dei
+-- trigger), poi verifica precisa col pattern completo dentro l'handler.
+-- Sempre attivo (costo trascurabile, stesso principio del trigger prompt
+-- " M: " gia' presente): non richiede uno stato di "cattura" perche' e' una
+-- riga singola e autosufficiente, a differenza dei blocchi eq/attrib.
+function NebbieDash.onLootLine()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local amount = text:match("^C'erano%s+(%d+)%s+monete%.%s*$")
+  if not amount then return end
+  amount = tonumber(amount)
+  cecho("<green>[NebbieDash] Bottino: " .. amount .. " monete.\n")
+  if NebbieDash.autoSplit then
+    NebbieDash.startSplitFlow(amount)
+  end
+end
+
+-- Invia i due comandi di loot noti (cadavere normale + pile of bones): solo
+-- uno dei due potra' avere successo per singolo cadavere, l'altro risponde
+-- con un semplice "Non vedi nessun ..." innocuo che non fa scattare nulla.
+function NebbieDash.cmdLoot()
+  send("get all.coin corp", false)
+  tempTimer(0.5, [[send("get all.coin pile", false)]])
+end
+
+-- Stesso watchdog "a inattivita'" gia' usato per le catture eq/attrib (vedi
+-- armEqWatchdog): se ne' "But you are a member of no group" ne' "Your
+-- group " arrivano entro pochi secondi (formato imprevisto, lag, ecc.), il
+-- controllo si annulla da solo invece di lasciare i trigger di verifica
+-- attivi per sempre.
+function NebbieDash.armSplitWatchdog(gen)
+  tempTimer(NebbieDash.captureTimeoutSec, function()
+    if NebbieDash._groupCheckGen == gen and NebbieDash._groupCheckActive then
+      NebbieDash.finishSplitFlow(false)
+    end
+  end)
+end
+
+function NebbieDash.startSplitFlow(amount)
+  NebbieDash._pendingSplitAmount = amount
+  NebbieDash._groupCheckGen = (NebbieDash._groupCheckGen or 0) + 1
+  NebbieDash._groupCheckActive = true
+  if NebbieDash._groupSoloTrig then pcall(enableTrigger, NebbieDash._groupSoloTrig) end
+  if NebbieDash._groupHeaderTrig then pcall(enableTrigger, NebbieDash._groupHeaderTrig) end
+  NebbieDash.armSplitWatchdog(NebbieDash._groupCheckGen)
+  send("group", false)
+end
+
+function NebbieDash.finishSplitFlow(grouped)
+  NebbieDash._groupCheckActive = false
+  if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
+  if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
+  local amount = NebbieDash._pendingSplitAmount
+  NebbieDash._pendingSplitAmount = nil
+  if grouped and amount then
+    send("split " .. tostring(amount), false)
+  end
+end
+
+function NebbieDash.onGroupSoloLine()
+  if not NebbieDash._groupCheckActive then return end
+  NebbieDash.finishSplitFlow(false)
+end
+
+function NebbieDash.onGroupHeaderLine()
+  if not NebbieDash._groupCheckActive then return end
+  NebbieDash.finishSplitFlow(true)
+end
+
+function NebbieDash.cmdSetAutoSplit(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$"):lower()
+  if argStr == "on" then
+    NebbieDash.autoSplit = true
+  elseif argStr == "off" then
+    NebbieDash.autoSplit = false
+  else
+    cecho("<orange>[NebbieDash] Uso: nautosplit <on|off> (attuale: " ..
+      (NebbieDash.autoSplit and "on" or "off") .. ")\n")
+    return
+  end
+  cecho("<green>[NebbieDash] Split automatico dopo loot: " .. (NebbieDash.autoSplit and "on" or "off") .. ".\n")
+end
+
+function NebbieDash.cmdSplit(argStr)
+  local amount = tonumber((argStr or ""):match("^%s*(%d+)%s*$"))
+  if not amount then
+    cecho("<orange>[NebbieDash] Uso: nsplit <numero>\n")
+    return
+  end
+  send("split " .. tostring(amount), false)
+end
+
+-- ---------------------------------------------------------------------------
 -- Installazione trigger (una volta sola per boot)
 -- ---------------------------------------------------------------------------
 function NebbieDash.installTriggers()
@@ -1214,6 +1327,15 @@ function NebbieDash.installTriggers()
   NebbieDash._attribLineTrig = tempRegexTrigger("^", [[NebbieDash.onAttribCaptureLine()]])
   if NebbieDash._eqLineTrig then pcall(disableTrigger, NebbieDash._eqLineTrig) end
   if NebbieDash._attribLineTrig then pcall(disableTrigger, NebbieDash._attribLineTrig) end
+  -- Loot/split (vedi sezione dedicata sopra): il trigger sulla riga di
+  -- bottino e' sempre attivo (riga singola, costo trascurabile, come quello
+  -- del prompt); i due trigger di verifica gruppo restano disabilitati
+  -- finche' non serve un controllo (dopo un loot riuscito).
+  NebbieDash._lootLineTrig = tempTrigger("C'erano", [[NebbieDash.onLootLine()]])
+  NebbieDash._groupSoloTrig = tempTrigger("But you are a member of no group", [[NebbieDash.onGroupSoloLine()]])
+  NebbieDash._groupHeaderTrig = tempTrigger("Your group ", [[NebbieDash.onGroupHeaderLine()]])
+  if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
+  if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
   if type(registerAnonymousEventHandler) == "function" then
     registerAnonymousEventHandler("sysConnectionEvent", "NebbieDash.onConnectionEvent")
     registerAnonymousEventHandler("sysWindowResizeEvent", "NebbieDash.onWindowResize")
@@ -1256,7 +1378,7 @@ end
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>nebbie-complete-dashboard-package - boot</name>
-   <script><![CDATA[local ver = "1.3.3"
+   <script><![CDATA[local ver = "1.4.0"
 if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
 local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
@@ -1394,6 +1516,27 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nhelp$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-loot</name>
+   <script><![CDATA[NebbieDash.cmdLoot()]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nloot$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-autosplit</name>
+   <script><![CDATA[NebbieDash.cmdSetAutoSplit(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nautosplit (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-split</name>
+   <script><![CDATA[NebbieDash.cmdSplit(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nsplit (.+)$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>

@@ -50,6 +50,22 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nspeedwalks` | Ricarica gli speedwalk dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nspeeddelay <secondi>` | Pausa tra un movimento e il successivo quando esegui uno speedwalk (default 0.35s). |
 | `nhelp` | Mostra/nasconde la finestra con l'elenco di tutti questi comandi (stessa finestra del tasto "? Comandi", vedi sotto). |
+| `nloot` | Prende le monete dal cadavere presente (prova sia `get all.coin corp` che `get all.coin pile`, per cadaveri normali e "pile of bones"). |
+| `nautosplit <on\|off>` | Attiva/disattiva lo split automatico col gruppo dopo ogni loot riuscito (default **on**). |
+| `nsplit <numero>` | Divide manualmente un importo col gruppo (equivalente a digitare `split <numero>`), utile per casi non coperti da `nloot`. |
+
+## Loot e split automatico
+
+Dopo aver ottenuto le monete da un cadavere (con `nloot` o anche digitando tu stesso `get all.coin
+corp`/`get all.coin pile`), il pacchetto riconosce la riga di conferma del gioco (`C'erano N
+monete.`) e, se `nautosplit` è attivo (default sì) e sei in gruppo, invia da solo `split N` con
+l'importo appena raccolto — verificando prima che tu sia in gruppo leggendo l'output del comando
+`group`. Se non sei in gruppo, il bottino resta semplicemente tuo, senza inviare nulla. Se preferisci
+gestire lo split a mano, disattiva con `nautosplit off` e usa `nsplit <numero>` quando ti serve.
+
+**Nota**: al momento devi ancora digitare `nloot` (o `get`) tu stesso dopo ogni combattimento — il
+riconoscimento automatico della fine del combattimento non è ancora implementato (serve il testo
+esatto del messaggio di vittoria del gioco, non ancora fornito).
 
 ## Tasto "? Comandi"
 

@@ -199,3 +199,46 @@ da solo senza dover rifare `nattrib`), serve sapere quanti secondi reali dura un
   gestione di più `Host`/connessioni Mudlet in parallelo).
 - Nel frattempo si procede con la Fase 1 (ricerca wiki Mudlet, read-only, indipendente dalle
   risposte) e con la lettura del codice legacy per contesto.
+
+## Round 11 — Alias e trigger: gestione generale + primo modulo (loot/split) (2026-08-10)
+
+**Contesto**: dopo che il dashboard (equip/spell/speedwalk) è stato dichiarato soddisfacente
+dall'utente, si apre una nuova fase: alias e trigger di gioco (esplicitamente fuori scope nella
+release 1, vedi REQUIREMENTS.md R15).
+
+**Domande su come gestire alias/trigger in generale**:
+- Q: quale approccio? → A: **ibrido** — file di configurazione per alias/trigger semplici (come gli
+  speedwalk) + codice del pacchetto per logica complessa.
+- Q: quali categorie per prime? → A: **combattimento** (poi chiarito essere loot/split, non
+  attacco/fuga).
+- Q: riusare gli alias del vecchio pacchetto (`nebbie-play-all`)? → A: **no, da zero**, solo ciò che
+  serve davvero, coerente con l'approccio già seguito per il resto del pacchetto.
+
+**Domande sul modulo loot/split (prima richiesta concreta)**: l'utente vuole raccogliere le monete
+dal cadavere dopo ogni combattimento e, se in gruppo, dividerle automaticamente con `split`.
+
+Testi REALI forniti dall'utente (copiati dal gioco, base per i trigger — nessuna regex inventata):
+1. Comando di loot: sintassi Diku `get all.coin corp` (cadavere normale) o `get all.coin pile`
+   ("pile of bones" di un non-morto, vedi `fight.cpp`/`IsUndead`).
+2. Risposta di successo (due righe): `Prendi gold coins da il corpo di Il grande drago verde delle
+   foreste.` seguita da `C'erano 100000 monete.`
+3. Risposta di fallimento: `Non vedi nessun corp.` / `Non vedi nessun pile.`
+4. `group` da soli: `But you are a member of no group?!`
+5. `group` in gruppo:
+   ```
+   Your group "I cacciatori di Draghi" consists of:
+       NomiyaMaki      (Head of group) HP:100% MANA:100% MV:100%
+       Grendel                         HP:100% MANA:98% MV:100%
+   ```
+- Q: il loot deve funzionare solo su "pile of bones" o su qualsiasi cadavere? → A: **qualsiasi
+  cadavere**.
+- Q: quando scatta lo split? → A: **sempre**, subito dopo ogni loot riuscito, se in gruppo
+  (automatico, disattivabile).
+- Q: come si rileva il gruppo? → A: leggendo l'output del comando **`group`**.
+
+**Aperto/rimandato**: rilevamento automatico della fine del combattimento (per lanciare `nloot` da
+solo senza che l'utente lo digiti) — servirà il testo reale del messaggio di vittoria/morte del
+mostro, non ancora fornito.
+
+**Implementazione**: vedi LOG.md Round 11 e CHANGELOG.md 1.4.0 per i dettagli tecnici (nuovi comandi
+`nloot`/`nautosplit`/`nsplit`).

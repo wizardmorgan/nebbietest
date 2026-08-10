@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.3.3)
+description = [[# Nebbie Dashboard (1.4.0)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -21,6 +21,9 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 - Numero di riga tra parentesi quadre nel pannello equip, come nel testo di
   `eq` sul gioco (non e' pero' il numero di slot del gioco, solo la
   posizione nella nostra lista — vedi `nhelp`/`neq`).
+- **Loot + split automatico** (`nloot`): prende le monete dal cadavere
+  (normale o "pile of bones") e, se sei in gruppo, divide automaticamente
+  l'importo appena raccolto con `split` (disattivabile con `nautosplit off`).
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -30,4 +33,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.3.3]]
+version = [[1.4.0]]

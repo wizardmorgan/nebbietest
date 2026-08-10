@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.3.3"
+PKG_VER = "1.4.0"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -48,6 +48,9 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 - Numero di riga tra parentesi quadre nel pannello equip, come nel testo di
   `eq` sul gioco (non e' pero' il numero di slot del gioco, solo la
   posizione nella nostra lista — vedi `nhelp`/`neq`).
+- **Loot + split automatico** (`nloot`): prende le monete dal cadavere
+  (normale o "pile of bones") e, se sei in gruppo, divide automaticamente
+  l'importo appena raccolto con `split` (disattivabile con `nautosplit off`).
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -85,6 +88,9 @@ ALIASES = [
     ("nebbie-dash-heights", "^nheights (.+)$", "NebbieDash.cmdSetHeights(matches[2])"),
     ("nebbie-dash-clanslot", "^nclanslot (.+)$", "NebbieDash.cmdSetClanSlot(matches[2])"),
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
+    ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
+    ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),
+    ("nebbie-dash-split", "^nsplit (.+)$", "NebbieDash.cmdSplit(matches[2])"),
 ]
 
 

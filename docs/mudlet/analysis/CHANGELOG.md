@@ -1,5 +1,25 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.4.0 — 2026-08-10
+
+- **Aggiunto**: primo modulo di automazione di gioco (oltre a equip/spell/speedwalk): **loot +
+  split automatico**.
+  - `nloot`: prende le monete dal cadavere presente, sia normale (`get all.coin corp`) sia "pile of
+    bones" di un non-morto (`get all.coin pile`) — prova entrambe le sintassi, una delle due fallirà
+    sempre in modo innocuo se non applicabile.
+  - Dopo un loot riuscito (riconosciuto dalla riga `C'erano N monete.`, sia se avviato con `nloot`
+    sia digitato a mano), se sei in gruppo (verificato leggendo l'output di `group`) invia
+    automaticamente `split N` con l'importo appena raccolto. Disattivabile con `nautosplit off`
+    (default: **on**).
+  - Nuovo comando `nsplit <numero>` per uno split manuale (senza passare dal loot).
+- **Aggiunto (difensivo)**: stesso watchdog di inattività già introdotto in 1.3.3 per eq/attrib,
+  applicato anche al controllo del gruppo dopo un loot: se `group` non risponde in modo riconosciuto
+  entro pochi secondi, il controllo si annulla da solo (nessuno split "in sospeso" per sempre).
+- **Nota**: rilevare automaticamente la fine di un combattimento (per lanciare `nloot` da solo senza
+  doverlo digitare) resta aperto — serve il testo reale del messaggio di vittoria/morte del mostro,
+  non ancora fornito (vedi Q&A.md Round 11).
+- **Versione interna** alzata a 1.4.0.
+
 ## 1.3.3 — 2026-08-09
 
 - **Aggiunto**: numero di riga tra parentesi quadre nel pannello equip (es. `[ 1] <sul dito
