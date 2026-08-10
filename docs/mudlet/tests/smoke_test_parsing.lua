@@ -487,14 +487,23 @@ check("fame/sete: passi 'drink cornu' espansi correttamente (5 volte)",
   expanded[3] == "drink cornu" and expanded[4] == "drink cornu" and expanded[7] == "drink cornu")
 check("fame/sete: ultimo passo invariato", expanded[9] == "wear {zaino}")
 
--- Sostituzione del segnaposto {zaino} con la parola chiave derivata.
+-- lastKeyword(): usata per il segnaposto {zaino}, prende SOLO l'ultima
+-- parola (non tutta la frase) — bug reale osservato in gioco (2026-08-10):
+-- passare la frase intera ("borsa inesauribile korred") a `wear` confondeva
+-- il parser del gioco, che trattava "inesauribile" come una posizione del
+-- corpo ("Non puoi indossare nulla su un inesauribile.").
+check("fame/sete: lastKeyword estrae solo l'ultima parola",
+  NebbieDash.lastKeyword(NebbieDash.findBackpackKeywords(hungerData)) == "korred")
+
+-- Sostituzione del segnaposto {zaino} con la sola ultima parola chiave.
 NebbieDash.hungerMacros["NomiyaMaki"] = "rem {zaino}, get cornucopia {zaino}, .5 drink cornu, put cornu {zaino}, wear {zaino}"
 NebbieDash.setCurrentCharacter("NomiyaMaki", true)
-local substitutedTest = NebbieDash.hungerMacros["NomiyaMaki"]:gsub("{zaino}", NebbieDash.findBackpackKeywords(hungerData))
-check("fame/sete: segnaposto {zaino} sostituito correttamente",
-  substitutedTest == "rem borsa inesauribile korred, get cornucopia borsa inesauribile korred, .5 drink cornu, put cornu borsa inesauribile korred, wear borsa inesauribile korred")
+local substitutedTest = NebbieDash.hungerMacros["NomiyaMaki"]:gsub("{zaino}", NebbieDash.lastKeyword(NebbieDash.findBackpackKeywords(hungerData)))
+check("fame/sete: segnaposto {zaino} sostituito con una sola parola chiave",
+  substitutedTest == "rem korred, get cornucopia korred, .5 drink cornu, put cornu korred, wear korred")
 
 -- Senza macro configurata per il personaggio, non deve generare errori (solo un avviso).
+NebbieDash._lastHungerMacroRun = 0
 local noMacroOk = pcall(NebbieDash.runHungerMacro)
 check("fame/sete: nessuna macro configurata non genera errori", noMacroOk)
 
@@ -504,6 +513,23 @@ NebbieDash.autoFeed = false
 local offOk = pcall(NebbieDash.onHungerThirstLine)
 check("fame/sete: con nautofeed off non genera errori", offOk)
 NebbieDash.autoFeed = true
+
+-- Test 16: bug segnalato in gioco (2026-08-10) — "Hai Fame." e "Hai sete."
+-- arrivano spesso INSIEME, facendo scattare entrambi i trigger e avviando
+-- la macro DUE VOLTE in parallelo (le due sequenze si accavallano: il
+-- secondo "rem" fallisce perche' il primo ha gia' tolto lo zaino un
+-- istante prima — confermato dai messaggi doppi osservati in gioco). Fix:
+-- cooldown tra un'esecuzione e la successiva.
+NebbieDash._lastHungerMacroRun = 0
+check("fame/sete: prima chiamata entro il cooldown NON e' bloccata",
+  os.time() - NebbieDash._lastHungerMacroRun >= NebbieDash.hungerMacroCooldownSec)
+NebbieDash._lastHungerMacroRun = os.time()
+check("fame/sete: una seconda chiamata immediata sarebbe bloccata dal cooldown",
+  os.time() - NebbieDash._lastHungerMacroRun < NebbieDash.hungerMacroCooldownSec)
+-- onHungerThirstLine non deve generare errori indipendentemente dal cooldown.
+local secondCallOk = pcall(NebbieDash.onHungerThirstLine)
+check("fame/sete: chiamata bloccata dal cooldown non genera errori", secondCallOk)
+NebbieDash._lastHungerMacroRun = 0
 
 print("")
 if failures == 0 then

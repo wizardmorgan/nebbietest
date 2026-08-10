@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.6.0"
+PKG_VER = "1.6.1"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -67,7 +67,9 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 - **Macro fame/sete configurabile** (`nautofeed`, file `nebbie-hunger-
   macros.txt`): alla fame/sete, esegue la sequenza di comandi configurata
   per il personaggio attivo, con la parola chiave dello zaino ("sulla
-  schiena") derivata automaticamente.
+  schiena") derivata automaticamente (una sola parola, per non confondere
+  comandi come `wear`) e un cooldown di 3s per evitare doppie esecuzioni
+  quando fame e sete arrivano insieme.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra

@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.6.0"
+local PKG_VER = "1.6.1"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1494,6 +1494,21 @@ function NebbieDash.findBackpackKeywords(data)
   return ""
 end
 
+-- Il "{zaino}" sostituito e' l'ULTIMA parola chiave estratta (tipicamente il
+-- nome proprio dell'oggetto, es. "Korred"), non tutta la frase multi-parola:
+-- test in gioco (2026-08-10) hanno mostrato che passare la frase intera
+-- ("borsa inesauribile korred") a `wear` confonde il parser del MUD, che
+-- interpreta l'ultima parola aggiuntiva come una posizione del corpo
+-- invece che come parte della descrizione dell'oggetto (risposta osservata:
+-- "Non puoi indossare nulla su un inesauribile."). L'esempio originale
+-- fornito dall'utente usava comunque una singola parola ("korred"), non la
+-- frase completa.
+function NebbieDash.lastKeyword(phrase)
+  local last = nil
+  for word in (phrase or ""):gmatch("%S+") do last = word end
+  return last or ""
+end
+
 function NebbieDash.runHungerMacro()
   local name = NebbieDash.currentChar
   if not name then return end
@@ -1504,8 +1519,8 @@ function NebbieDash.runHungerMacro()
     return
   end
   local data = NebbieDash.getCharData(name)
-  local backpackKeywords = NebbieDash.findBackpackKeywords(data)
-  local substituted = macro:gsub("{zaino}", backpackKeywords)
+  local backpackKeyword = NebbieDash.lastKeyword(NebbieDash.findBackpackKeywords(data))
+  local substituted = macro:gsub("{zaino}", backpackKeyword)
   local steps = NebbieDash.expandMacroSteps(substituted)
   for i, cmd in ipairs(steps) do
     tempTimer(NebbieDash.speedwalkDelay * (i - 1), function() send(cmd, false) end)
@@ -1514,11 +1529,21 @@ end
 
 -- Shield su substring fisse (sempre attivo, riga singola). Due trigger
 -- distinti perche' le due frasi non condividono un prefisso comune utile
--- come shield unico ("Hai Fame." / "Hai sete.").
+-- come shield unico ("Hai Fame." / "Hai sete."). Il gioco spesso manda
+-- ENTRAMBE le righe insieme (fame E sete allo stesso momento): senza un
+-- "cooldown" i due trigger fanno partire la macro DUE VOLTE in parallelo,
+-- con le due sequenze di comandi che si accavallano e si intralciano a
+-- vicenda (bug osservato in gioco: il secondo "rem" fallisce con "Non lo
+-- stai usando." perche' il primo ha gia' tolto lo zaino un istante prima).
+NebbieDash.hungerMacroCooldownSec = 3
+NebbieDash._lastHungerMacroRun = 0
+
 function NebbieDash.onHungerThirstLine()
-  if NebbieDash.autoFeed then
-    NebbieDash.runHungerMacro()
-  end
+  if not NebbieDash.autoFeed then return end
+  local now = os.time()
+  if now - NebbieDash._lastHungerMacroRun < NebbieDash.hungerMacroCooldownSec then return end
+  NebbieDash._lastHungerMacroRun = now
+  NebbieDash.runHungerMacro()
 end
 
 function NebbieDash.cmdSetAutoFeed(argStr)

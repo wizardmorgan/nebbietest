@@ -871,4 +871,51 @@ CHANGELOG.md.
 
 ---
 
+## Round 16 (2026-08-10): "il trigger non funziona" — analisi log reali dalla macro fame/sete
+
+**Segnalazione utente**: incollato il log completo del gioco dopo l'attivazione della macro
+fame/sete (v1.6.0). Sintomi nel log: `"Smetti di usare Borsa Inesauribile dei Korred."` (il primo
+`rem` riesce), seguito da `"Non lo stai usando."` (un SECONDO `rem` che fallisce perché il primo ha
+già tolto lo zaino), poi `"Borsa Inesauribile dei Korred non contiene nessun cornucopia."` **due
+volte identiche**, poi una serie di `"Non hai nulla del genere con te!"`/`"Non hai nessun cornu."`,
+poi `"Non puoi indossare nulla su un inesauribile."` **due volte identiche**.
+
+**Causa 1 (confermata dal pattern duplicato)**: nel log, `Hai Fame.` e `Hai sete.` arrivano come due
+righe separate nello stesso blocco di output (il gioco controlla fame e sete insieme). Essendo due
+trigger DISTINTI (nessun prefisso comune utile come shield unico), entrambi scattavano e chiamavano
+`onHungerThirstLine()` → `runHungerMacro()` **indipendentemente**, avviando la stessa sequenza di 9
+comandi (via `tempTimer`) **due volte in parallelo**, con gli stessi ritardi (0, 0.35s, 0.7s, ...).
+Le due sequenze si accavallavano: il secondo `rem` arrivava dopo che il primo aveva già tolto lo
+zaino (→ "Non lo stai usando."), e così via per `get`/`wear`, spiegando esattamente ogni messaggio
+duplicato visto nel log.
+
+**Fix**: aggiunto un cooldown (`NebbieDash.hungerMacroCooldownSec = 3`) tra un'esecuzione della
+macro e la successiva — la seconda chiamata (stesso secondo, `os.time()`) viene silenziosamente
+ignorata.
+
+**Causa 2 (bug distinto, non duplicazione)**: l'ultimo comando (`wear {zaino}`) falliva con `"Non
+puoi indossare nulla su un inesauribile."` — un messaggio che tratta "inesauribile" (una delle parole
+non-stopword estratte dal nome completo "Borsa Inesauribile dei Korred") come se fosse una posizione
+del corpo, non parte del nome dell'oggetto. La causa e' che `{zaino}` veniva sostituito con TUTTE le
+parole chiave estratte ("borsa inesauribile korred"), non con una sola: passare più parole a `wear`
+confonde il parser del gioco. Da notare che l'esempio ORIGINALE fornito dall'utente usava sempre una
+singola parola ("korred"), non la frase estratta completa — coerente col fix.
+
+**Fix**: nuova funzione `NebbieDash.lastKeyword()` che prende solo l'ultima parola della frase
+estratta; usata per la sostituzione di `{zaino}` (non tocca `extractItemKeywords()` usata per il
+recupero arma dopo disarmo, dove 2 parole sono già confermate funzionanti dall'utente).
+
+**Nota per l'utente (non un bug del pacchetto)**: nel log, `"Borsa Inesauribile dei Korred non
+contiene nessun cornucopia."` indica che l'oggetto dentro lo zaino non si chiama davvero
+"cornucopia" per questo personaggio — l'esempio originale (`cornucopia`/`cornu`) era solo
+illustrativo. Serve controllare il nome REALE dell'oggetto dentro lo zaino (es. guardando dentro con
+un comando apposito) e aggiornare `nebbie-hunger-macros.txt` di conseguenza, poi `nhungermacros` per
+ricaricare.
+
+**Verifica**: `luac -p` OK. Aggiunti 4 test dedicati (estrazione a singola parola, sostituzione
+corretta, cooldown). 101/101 test totali OK (offline, `lua` standalone). Versione alzata a 1.6.1.
+Rigenerato `.mpackage`. Aggiornati USAGE.md, CHANGELOG.md.
+
+---
+
 (continua...)

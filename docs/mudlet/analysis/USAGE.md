@@ -112,11 +112,19 @@ commentato.
 NomePersonaggio: comando1, comando2, ...
 ```
 
-**Segnaposto `{zaino}`**: viene sostituito automaticamente con la parola chiave dell'oggetto che il
-personaggio ha equipaggiato nello slot `<sulla schiena>` (letta dal pannello equip già sincronizzato
-— non serve conoscerla in anticipo né aggiornarla se cambi zaino, basta che l'equip sia aggiornato
-con `neq`/`nresync`). Se non hai nulla in quello slot, `{zaino}` viene sostituito con una stringa
-vuota.
+**Segnaposto `{zaino}`**: viene sostituito automaticamente con **una singola parola chiave**
+(l'ultima parola significativa del nome dell'oggetto, tipicamente il nome proprio, es. "Korred" da
+"Borsa Inesauribile dei Korred") dell'oggetto che il personaggio ha equipaggiato nello slot `<sulla
+schiena>` (letta dal pannello equip già sincronizzato — non serve conoscerla in anticipo né
+aggiornarla se cambi zaino, basta che l'equip sia aggiornato con `neq`/`nresync`). Se non hai nulla
+in quello slot, `{zaino}` viene sostituito con una stringa vuota. **Nota**: si usa solo l'ultima
+parola (non tutta la descrizione) perché passare più parole a comandi come `wear` può confondere il
+parser del gioco, che rischia di interpretare parole aggiuntive come una posizione del corpo invece
+che come parte del nome dell'oggetto.
+
+**Protezione da doppio scatto**: il gioco spesso manda insieme sia `Hai Fame.` che `Hai sete.`; per
+evitare che la macro parta due volte in parallelo (con le due sequenze di comandi che si
+accavallano), c'è un "cooldown" di 3 secondi tra un'esecuzione e la successiva.
 
 **Ripetizione**: dentro la macro puoi usare la stessa sintassi `.N comando` della ripetizione
 generica per un singolo passo, es. `.5 drink cornu` invia `drink cornu` cinque volte in quel punto

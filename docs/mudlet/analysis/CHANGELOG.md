@@ -1,5 +1,21 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.6.1 — 2026-08-10
+
+- **Corretto (bug in gioco confermato dai log)**: la macro fame/sete poteva partire **due volte in
+  parallelo**, perché il gioco spesso manda insieme sia `Hai Fame.` che `Hai sete.` (una riga
+  ciascuna), e ognuna delle due faceva scattare il proprio trigger indipendentemente. Le due
+  sequenze accavallate causavano fallimenti a catena (es. il secondo `rem` falliva con "Non lo stai
+  usando." perché il primo aveva già tolto lo zaino un istante prima). Corretto con un cooldown di 3
+  secondi tra un'esecuzione della macro e la successiva.
+- **Corretto (bug in gioco confermato dai log)**: il segnaposto `{zaino}` veniva sostituito con
+  **tutte** le parole chiave estratte dal nome dell'oggetto (es. "borsa inesauribile korred"), ma
+  passare più parole a `wear` confondeva il parser del gioco, che interpretava la parola aggiuntiva
+  come una posizione del corpo invece che come parte del nome dell'oggetto (risposta osservata: "Non
+  puoi indossare nulla su un inesauribile."). Corretto usando solo **l'ultima** parola chiave (es.
+  "korred"), come nell'esempio originale fornito dall'utente.
+- **Versione interna** alzata a 1.6.1.
+
 ## 1.6.0 — 2026-08-10
 
 - **Corretto (bug importante)**: "la dashboard non sta rilevando alcun personaggio". Causa: esiste
