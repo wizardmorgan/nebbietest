@@ -1029,4 +1029,45 @@ USAGE.md, CHANGELOG.md.
 
 ---
 
+## 2026-08-10 — Bug al primo avvio dopo installazione pulita (v1.8.1)
+
+**Segnalazione utente**: al primo avvio dopo un'installazione pulita del pacchetto (disinstalla +
+riavvia Mudlet + installa, esattamente il flusso di test suggerito per il pannello Armi), compare
+l'errore:
+
+```
+[NebbieDash] errore boot: [string "Script: nebbie-complete-dashboard-package -..."]:1: attempt to index global 'NebbieDash' (a nil value)
+```
+
+**Analisi**: il messaggio riporta `:1:` (errore alla riga 1 del chunk) — la riga 1 del chunk "core"
+(molto più lungo) non potrebbe mai generare questo errore così presto; il chunk che INIZIA con
+`local ok, err = pcall(function() NebbieDash.boot() end)` alla riga 1 è invece lo script "boot",
+agganciato a `sysLoadEvent` e composto SOLO da `boot_call` (vedi `build-nebbie-complete-dashboard-
+package.py`). Questo conferma che lo script "boot" si è eseguito PRIMA che lo script "core" avesse
+anche solo definito la tabella globale `NebbieDash` (`NebbieDash = NebbieDash or {}`, riga 18 di
+`nebbie-complete-dashboard-package-core.lua`) — Mudlet non garantisce l'ordine di esecuzione tra due
+`<Script>` distinti nello stesso file XML del pacchetto all'installazione/caricamento iniziale (il
+nome "boot" precede alfabeticamente "core", ordinamento sospetto ma non confermato con certezza
+assoluta — la causa esatta dell'ordine non è documentata pubblicamente da Mudlet, il fix però non
+dipende dal conoscerla). Il bug esisteva già dalla 1.7.0 (che ha introdotto lo script "boot"
+separato) ma non era mai stato notato perché i test precedenti reinstallavano il pacchetto SENZA
+riavviare Mudlet, mantenendo `NebbieDash` già definita in memoria da un caricamento precedente della
+sessione.
+
+**Fix applicato**: aggiunta una guardia `if type(NebbieDash) ~= "table" then return end` in testa a
+`boot_call` (usato identico in entrambi gli script). All'avvio iniziale, se lo script "boot" si
+esegue per primo, si limita a non fare nulla (nessun errore) — il vero `boot()` arriva comunque
+dalla chiamata identica appesa in fondo allo script "core", che nello stesso chunk ha già definito
+`NebbieDash` prima di quel punto. Per i successivi eventi `sysLoadEvent` reali durante la sessione
+(riconnessioni), `NebbieDash` esiste sempre già a quel punto, quindi la ridondanza difensiva
+originale resta intatta.
+
+**Verifica**: estratto lo script "boot" isolato dall'XML generato ed eseguito con `NebbieDash` non
+definito (`lua /tmp/boot_only.lua`) — nessun errore, confermando il fix. `luac -p` OK, XML validato
+con `xml.dom.minidom`, 131/131 test offline OK (nessun test nuovo necessario: il bug era
+nell'orchestrazione tra i due `<Script>` del pacchetto, non nella logica Lua testata offline).
+Versione alzata a 1.8.1. Aggiornato CHANGELOG.md.
+
+---
+
 (continua...)

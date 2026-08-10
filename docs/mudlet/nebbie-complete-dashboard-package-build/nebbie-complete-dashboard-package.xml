@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.8.0"
+local PKG_VER = "1.8.1"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -2164,7 +2164,10 @@ function NebbieDash.runFix()
   NebbieDash.boot()
   cecho("<green>[NebbieDash] nfix completato.\n")
 end
-\n\nlocal ok, err = pcall(function() NebbieDash.boot() end)
+\n\nif type(NebbieDash) ~= "table" then
+  return
+end
+local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
   cecho("<red>[NebbieDash] errore boot: " .. tostring(err) .. "\n")
 end]]></script>
@@ -2172,7 +2175,10 @@ end]]></script>
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>nebbie-complete-dashboard-package - boot</name>
-   <script><![CDATA[local ok, err = pcall(function() NebbieDash.boot() end)
+   <script><![CDATA[if type(NebbieDash) ~= "table" then
+  return
+end
+local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
   cecho("<red>[NebbieDash] errore boot: " .. tostring(err) .. "\n")
 end]]></script>

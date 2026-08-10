@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.8.0"
+PKG_VER = "1.8.1"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -90,6 +90,11 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   Clicca un'arma in elenco per cambiare arma con un solo click (`rem`+`put`
   di quella attuale, poi `get`+`wield` di quella scelta, usando lo zaino
   già rilevato). Altezza Equip/Armi regolabile con `nleftheights`.
+- **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
+  comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
+  perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
+  script principale (ordine non garantito da Mudlet tra i due), chiamando
+  `NebbieDash.boot()` quando `NebbieDash` non esisteva ancora.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -166,7 +171,27 @@ def build_xml(core_code):
     # a sysLoadEvent (ridondanza difensiva per il normale avvio di Mudlet).
     # Nessun controllo di versione qui: boot() e' idempotente e si occupa da
     # solo di evitare doppie esecuzioni troppo vicine nel tempo.
-    boot_call = '''local ok, err = pcall(function() NebbieDash.boot() end)
+    #
+    # Guardia "if type(NebbieDash) ~= 'table' then return end": Mudlet NON
+    # garantisce che i due <Script> (questo, "boot", e "core") vengano
+    # eseguiti nell'ordine in cui appaiono in questo file XML — in pratica si
+    # e' osservato che "boot" (nome che viene prima alfabeticamente di
+    # "core") puo' essere eseguito PRIMA che il chunk di "core" abbia anche
+    # solo definito la tabella globale NebbieDash, con errore risultante
+    # "attempt to index global 'NebbieDash' (a nil value)" (segnalato
+    # dall'utente al primo avvio dopo un'installazione pulita, 2026-08-10).
+    # Senza questa guardia lo script "boot" andava in errore silenziosamente
+    # ignorato dall'utente ma visibile in output; CON la guardia si limita a
+    # non fare nulla in quel caso (va bene: il boot() vero e proprio arriva
+    # comunque dalla chiamata identica appesa in fondo allo script "core",
+    # che a quel punto ha gia' definito NebbieDash nello stesso chunk). Per i
+    # successivi VERI eventi sysLoadEvent (riconnessioni durante la sessione,
+    # non il caricamento iniziale), NebbieDash esiste sempre gia' a quel
+    # punto, quindi la ridondanza difensiva resta intatta.
+    boot_call = '''if type(NebbieDash) ~= "table" then
+  return
+end
+local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
   cecho("<red>[NebbieDash] errore boot: " .. tostring(err) .. "\\n")
 end'''

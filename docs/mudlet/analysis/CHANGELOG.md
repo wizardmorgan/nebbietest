@@ -1,5 +1,21 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.8.1 — 2026-08-10
+
+- **Corretto (bug segnalato dall'utente al primo avvio dopo installazione pulita)**: errore
+  `[NebbieDash] errore boot: ...attempt to index global 'NebbieDash' (a nil value)`. Causa: il
+  pacchetto registra due `<Script>` distinti — uno principale ("core") e uno agganciato a
+  `sysLoadEvent` ("boot", per la ridondanza sui riavvii) — ma Mudlet non garantisce che vengano
+  eseguiti nell'ordine in cui appaiono nel file XML del pacchetto; lo script "boot" poteva quindi
+  eseguirsi PRIMA che lo script "core" avesse definito la tabella globale `NebbieDash`, chiamando
+  `NebbieDash.boot()` su un valore ancora `nil`. Corretto aggiungendo una guardia
+  (`if type(NebbieDash) ~= "table" then return end`) prima della chiamata a `boot()` in entrambi gli
+  script: sull'avvio iniziale lo script "boot" si limita a non fare nulla (va bene, il vero `boot()`
+  arriva comunque dallo script "core", che a quel punto ha già definito `NebbieDash` nello stesso
+  chunk); per i successivi eventi `sysLoadEvent` reali durante la sessione, `NebbieDash` esiste
+  sempre già, quindi la ridondanza difensiva resta intatta.
+- **Versione interna** alzata a 1.8.1.
+
 ## 1.8.0 — 2026-08-10
 
 - **Aggiunto**: nuovo pannello "Armi" (colonna sinistra, sotto l'Equip). Elenco persistente per

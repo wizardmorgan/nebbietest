@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.8.0)
+description = [[# Nebbie Dashboard (1.8.1)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -63,6 +63,11 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   Clicca un'arma in elenco per cambiare arma con un solo click (`rem`+`put`
   di quella attuale, poi `get`+`wield` di quella scelta, usando lo zaino
   già rilevato). Altezza Equip/Armi regolabile con `nleftheights`.
+- **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
+  comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
+  perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
+  script principale (ordine non garantito da Mudlet tra i due), chiamando
+  `NebbieDash.boot()` quando `NebbieDash` non esisteva ancora.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -72,4 +77,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.8.0]]
+version = [[1.8.1]]
