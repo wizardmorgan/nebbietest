@@ -57,6 +57,8 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nautostand <on\|off>` | Attiva/disattiva il rialzarsi automatico (`stand`) dopo una caduta (default **on**). |
 | `nautodisarm <on\|off>` | Attiva/disattiva il recupero automatico dell'arma dopo un disarmo (default **on**). |
 | `.<numero><comando>` | Ripete il comando N volte, es. `.4s` invia `s` quattro volte (funziona con qualsiasi comando: `.3 kill goblin` invia `kill goblin` tre volte). |
+| `nautofeed <on\|off>` | Attiva/disattiva la macro automatica fame/sete (default **on**), vedi sotto. |
+| `nhungermacros` | Ricarica le macro fame/sete dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 
 ## Loot e split automatico
 
@@ -89,6 +91,53 @@ off`.
 Scrivi `.` seguito da un numero e un comando per ripeterlo quella quantità di volte, con la stessa
 pausa tra un invio e l'altro già usata per gli speedwalk (`nspeeddelay`). Esempi: `.4s` invia `s`
 quattro volte; `.3 kill goblin` invia `kill goblin` tre volte. Limite di sicurezza: 99 ripetizioni.
+
+## Fame/sete: macro configurabile per personaggio
+
+Quando il gioco mostra `Hai Fame.` o `Hai sete.`, se `nautofeed` è attivo (default sì) il pacchetto
+esegue la sequenza di comandi che **tu** scrivi in un file di testo, una riga per personaggio:
+
+```
+getMudletHomeDir()/nebbie-hunger-macros.txt
+```
+
+(stessa cartella del profilo usata per `nebbie-speedwalks.txt`, tipicamente qualcosa come
+`~/.config/mudlet/profiles/<NomeProfilo>/nebbie-hunger-macros.txt` su macOS/Linux). Se il file non
+esiste, viene creato automaticamente al primo avvio con la spiegazione del formato e un esempio
+commentato.
+
+**Formato di ogni riga**:
+
+```
+NomePersonaggio: comando1, comando2, ...
+```
+
+**Segnaposto `{zaino}`**: viene sostituito automaticamente con la parola chiave dell'oggetto che il
+personaggio ha equipaggiato nello slot `<sulla schiena>` (letta dal pannello equip già sincronizzato
+— non serve conoscerla in anticipo né aggiornarla se cambi zaino, basta che l'equip sia aggiornato
+con `neq`/`nresync`). Se non hai nulla in quello slot, `{zaino}` viene sostituito con una stringa
+vuota.
+
+**Ripetizione**: dentro la macro puoi usare la stessa sintassi `.N comando` della ripetizione
+generica per un singolo passo, es. `.5 drink cornu` invia `drink cornu` cinque volte in quel punto
+della sequenza.
+
+Esempio reale (fornito dall'utente, per un personaggio con `[18] <sulla schiena> Borsa
+Inesauribile dei Korred`):
+
+```
+Mirari: rem {zaino}, get cornucopia {zaino}, .5 drink cornu, put cornu {zaino}, wear {zaino}
+```
+
+che equivale a: togliersi lo zaino, tirarne fuori la cornucopia, berne cinque volte, rimetterla
+dentro e rimettersi lo zaino. **Nota**: solo la parola chiave dello zaino (`{zaino}`) viene derivata
+automaticamente — il resto della sequenza (es. il nome dell'oggetto da bere dentro lo zaino, che
+varia da personaggio a personaggio) va scritto a mano, perché non è ricavabile da nessun dato che il
+pacchetto legge automaticamente dal gioco.
+
+Se non c'è nessuna riga per il personaggio attivo, il pacchetto mostra solo un avviso (nessun errore,
+nessun comando inviato) che ti ricorda di configurarla. Dopo aver modificato il file, digita
+`nhungermacros` in gioco per ricaricarlo senza riavviare Mudlet.
 
 ## Tasto "? Comandi"
 

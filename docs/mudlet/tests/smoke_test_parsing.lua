@@ -437,6 +437,74 @@ sentLog = {}
 NebbieDash.cmdRepeat("4", "")
 check("ripetizione: comando vuoto non invia nulla", #sentLog == 0)
 
+-- Test 14: bug segnalato (2026-08-10) — "la dashboard non sta rilevando
+-- alcun personaggio". Testo REALE del prompt incollato dall'utente, formato
+-- MAI visto prima (nessuno spazio dopo i due punti, "X:" maiuscolo, "- */*
+-- - *-* -" tra i campi): personaggio "Mirari". Il parsing (parsePromptLine)
+-- gestiva gia' questo formato, ma lo SHIELD del trigger (" M: ", con lo
+-- spazio finale) non matchava mai "M:533/533" (nessuno spazio dopo i due
+-- punti) -> onPromptLine() non veniva mai chiamata -> nessun personaggio
+-- rilevato per l'intera sessione con questo formato di prompt.
+local mirariPrompt = "Mirari H:655/655 M:533/533 V:271/271 X:284016936 - */* - *-* - [[------T----]] - G:38267520 >>"
+local parsedMirari = NebbieDash.parsePromptLine(mirariPrompt)
+check("prompt (formato 2): parsed non-nil", parsedMirari ~= nil)
+if parsedMirari then
+  check("prompt (formato 2): name == Mirari", parsedMirari.name == "Mirari")
+  check("prompt (formato 2): hp == 655", parsedMirari.hp == 655)
+  check("prompt (formato 2): mana == 533", parsedMirari.mana == 533)
+  check("prompt (formato 2): move == 271", parsedMirari.move == 271)
+  check("prompt (formato 2): xfield == 284016936", parsedMirari.xfield == 284016936)
+  check("prompt (formato 2): gold == 38267520", parsedMirari.gold == 38267520)
+  check("prompt (formato 2): codes == ------T----", parsedMirari.codes == "------T----")
+end
+NebbieDash.currentChar = nil
+NebbieDash.onPromptLine_test(mirariPrompt)
+check("prompt (formato 2): personaggio rilevato correttamente (Mirari)", NebbieDash.currentChar == "Mirari")
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+
+-- Test 15: macro fame/sete configurabile per personaggio — richiesta
+-- esplicita dell'utente (2026-08-10), con esempio REALE fornito:
+-- "rem korred, get cornucopia korred, .5 drink cornu, put cornu korred,
+-- wear korred", derivando "korred" dallo zaino nello slot "sulla schiena"
+-- ("[18] <sulla schiena> Borsa Inesauribile dei Korred").
+check("fame/sete: parole chiave zaino ('Borsa Inesauribile dei Korred' -> 'borsa inesauribile korred')",
+  NebbieDash.extractItemKeywords("Borsa Inesauribile dei Korred") == "borsa inesauribile korred")
+
+local hungerData = NebbieDash.getCharData("NomiyaMaki")
+hungerData.eq = { { location = "sulla schiena", item = "Borsa Inesauribile dei Korred" } }
+hungerData.eqUpdated = os.time()
+check("fame/sete: parola chiave zaino derivata dal pannello equip",
+  NebbieDash.findBackpackKeywords(hungerData) == "borsa inesauribile korred")
+
+-- expandMacroSteps deve espandere ".5 drink cornu" in 5 passi identici,
+-- lasciando invariati i passi normali (stessa sintassi ".Ncomando"
+-- dell'alias di ripetizione generica, ma interpretata qui via script,
+-- senza passare dall'input dell'utente).
+local expanded = NebbieDash.expandMacroSteps("rem {zaino}, get cornucopia {zaino}, .5 drink cornu, put cornu {zaino}, wear {zaino}")
+check("fame/sete: la macro si espande in 9 passi (4 fissi + 5 drink)", #expanded == 9)
+check("fame/sete: primo passo invariato", expanded[1] == "rem {zaino}")
+check("fame/sete: passi 'drink cornu' espansi correttamente (5 volte)",
+  expanded[3] == "drink cornu" and expanded[4] == "drink cornu" and expanded[7] == "drink cornu")
+check("fame/sete: ultimo passo invariato", expanded[9] == "wear {zaino}")
+
+-- Sostituzione del segnaposto {zaino} con la parola chiave derivata.
+NebbieDash.hungerMacros["NomiyaMaki"] = "rem {zaino}, get cornucopia {zaino}, .5 drink cornu, put cornu {zaino}, wear {zaino}"
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+local substitutedTest = NebbieDash.hungerMacros["NomiyaMaki"]:gsub("{zaino}", NebbieDash.findBackpackKeywords(hungerData))
+check("fame/sete: segnaposto {zaino} sostituito correttamente",
+  substitutedTest == "rem borsa inesauribile korred, get cornucopia borsa inesauribile korred, .5 drink cornu, put cornu borsa inesauribile korred, wear borsa inesauribile korred")
+
+-- Senza macro configurata per il personaggio, non deve generare errori (solo un avviso).
+local noMacroOk = pcall(NebbieDash.runHungerMacro)
+check("fame/sete: nessuna macro configurata non genera errori", noMacroOk)
+
+-- Con nautofeed off, il trigger non deve fare nulla (verificato tramite pcall,
+-- dato che tempTimer e' un mock no-op e non possiamo osservare i send differiti).
+NebbieDash.autoFeed = false
+local offOk = pcall(NebbieDash.onHungerThirstLine)
+check("fame/sete: con nautofeed off non genera errori", offOk)
+NebbieDash.autoFeed = true
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

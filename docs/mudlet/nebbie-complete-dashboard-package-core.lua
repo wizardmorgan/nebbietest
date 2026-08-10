@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.5.0"
+local PKG_VER = "1.6.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -967,6 +967,8 @@ NebbieDash.HELP_TEXT = {
   { "nautostand <on|off>", "Attiva/disattiva il rialzarsi automatico ('stand') dopo una caduta." },
   { "nautodisarm <on|off>", "Attiva/disattiva il recupero automatico dell'arma dopo un disarmo." },
   { ".<numero><comando>", "Ripete il comando N volte, es. '.4s' invia 's' quattro volte." },
+  { "nautofeed <on|off>", "Attiva/disattiva la macro automatica fame/sete (per personaggio, vedi file macro)." },
+  { "nhungermacros", "Ricarica le macro fame/sete dal file di configurazione." },
   { "nhelp", "Mostra/nascondi questa finestra." },
 }
 
@@ -1371,6 +1373,168 @@ function NebbieDash.cmdSetAutoDisarmRecover(argStr)
   cecho("<green>[NebbieDash] Recupero automatico arma dopo disarmo: " .. (NebbieDash.autoDisarmRecover and "on" or "off") .. ".\n")
 end
 
+-- ---------------------------------------------------------------------------
+-- Fame/sete: macro configurabile per personaggio (2026-08-10).
+-- Testi REALI forniti dall'utente per il trigger: "Hai Fame." / "Hai sete."
+-- (nota le maiuscole diverse: "Fame" con la F maiuscola, "sete" tutto
+-- minuscolo — copiate esattamente cosi' dall'utente, non uniformate).
+--
+-- A differenza di loot/disarmo, qui la sequenza di comandi VARIA per
+-- personaggio in un modo che non si puo' derivare automaticamente (l'utente
+-- lo dice esplicitamente: "o variazioni a seconda del personaggio") — solo
+-- la parola chiave dello ZAINO (slot "sulla schiena") si puo' derivare
+-- automaticamente dal pannello equip, col resto della sequenza (es. il nome
+-- dell'oggetto da bere dentro lo zaino) che resta specifico del personaggio
+-- e va scritto a mano. Per questo si usa un file di configurazione (stesso
+-- principio degli speedwalk) con un segnaposto "{zaino}" che viene
+-- sostituito con la parola chiave derivata al momento dell'esecuzione.
+-- ---------------------------------------------------------------------------
+NebbieDash.autoFeed = true
+NebbieDash.hungerMacros = {}
+
+function NebbieDash.hungerMacrosPath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-hunger-macros.txt"
+end
+
+function NebbieDash.ensureHungerMacrosFile()
+  local path = NebbieDash.hungerMacrosPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# File di configurazione fame/sete — nebbie-complete-dashboard-package\n" ..
+    "#\n" ..
+    "# Una riga per personaggio, formato:\n" ..
+    "#   NomePersonaggio: comando1, comando2, ...\n" ..
+    "#\n" ..
+    "# Scatta quando il gioco mostra \"Hai Fame.\" o \"Hai sete.\" (se\n" ..
+    "# nautofeed e' attivo, default si).\n" ..
+    "#\n" ..
+    "# Il segnaposto {zaino} viene sostituito automaticamente con la parola\n" ..
+    "# chiave dell'oggetto nello slot \"sulla schiena\" del personaggio (letta\n" ..
+    "# dal pannello equip, non serve scriverla a mano e non serve conoscerla\n" ..
+    "# in anticipo).\n" ..
+    "#\n" ..
+    "# Per ripetere un comando N volte, come nell'alias \".Ncomando\" digitato\n" ..
+    "# in gioco, scrivi \".N comando\" come singolo passo (es. \".5 drink cornu\").\n" ..
+    "#\n" ..
+    "# Le righe che iniziano con # e le righe vuote vengono ignorate.\n" ..
+    "# Dopo aver modificato questo file, digita 'nhungermacros' in gioco per\n" ..
+    "# ricaricarlo senza dover riavviare Mudlet.\n" ..
+    "#\n" ..
+    "# Esempio (rimuovi il # iniziale e adatta al tuo personaggio/oggetto):\n" ..
+    "# Mirari: rem {zaino}, get cornucopia {zaino}, .5 drink cornu, put cornu {zaino}, wear {zaino}\n"
+  )
+  f:close()
+end
+
+function NebbieDash.parseHungerMacroLine(rawLine)
+  local line2 = rawLine:match("^%s*(.-)%s*$")
+  if line2 == "" or line2:sub(1, 1) == "#" then return nil end
+  local name, macro = line2:match("^([^:]+):%s*(.+)$")
+  if not name then return nil end
+  return name:match("^%s*(.-)%s*$"), macro:match("^%s*(.-)%s*$")
+end
+
+function NebbieDash.loadHungerMacros()
+  NebbieDash.ensureHungerMacrosFile()
+  NebbieDash.hungerMacros = {}
+  local path = NebbieDash.hungerMacrosPath()
+  local f = io.open(path, "r")
+  if not f then return end
+  for rawLine in f:lines() do
+    local name, macro = NebbieDash.parseHungerMacroLine(rawLine)
+    if name then NebbieDash.hungerMacros[name] = macro end
+  end
+  f:close()
+end
+
+function NebbieDash.cmdReloadHungerMacros()
+  NebbieDash.loadHungerMacros()
+  local count = 0
+  for _ in pairs(NebbieDash.hungerMacros) do count = count + 1 end
+  cecho("<green>[NebbieDash] Macro fame/sete ricaricate (" .. count .. ") da " .. NebbieDash.hungerMacrosPath() .. "\n")
+end
+
+-- Come cmdRepeat, ma per un singolo "passo" dentro una macro piu' ampia:
+-- se il passo inizia con ".N " lo espande in N copie del comando che segue,
+-- altrimenti lo lascia come singolo passo. Usata per interpretare la stessa
+-- sintassi ".Ncomando"/".N comando" anche dentro le macro fame/sete, senza
+-- passare dall'alias di Mudlet (che intercetta solo l'input digitato
+-- dall'utente, non i comandi inviati via script).
+function NebbieDash.expandMacroSteps(macroStr)
+  local steps = {}
+  for rawStep in (macroStr or ""):gmatch("[^,]+") do
+    local step = rawStep:match("^%s*(.-)%s*$")
+    if step ~= "" then
+      local count, cmd = step:match("^%.(%d+)%s*(.+)$")
+      if count then
+        count = tonumber(count)
+        for _ = 1, count do table.insert(steps, cmd) end
+      else
+        table.insert(steps, step)
+      end
+    end
+  end
+  return steps
+end
+
+-- Trova la parola chiave dell'oggetto nello slot "sulla schiena" (lo zaino)
+-- per il personaggio attivo, usando lo stesso pannello equip gia'
+-- sincronizzato (nessuna chiamata aggiuntiva al gioco). Vuota se non c'e'
+-- nulla in quello slot o l'equip non e' mai stato sincronizzato.
+function NebbieDash.findBackpackKeywords(data)
+  if not data or not data.eqUpdated then return "" end
+  for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+    if not row.empty and row.location == "sulla schiena" then
+      return NebbieDash.extractItemKeywords(row.item)
+    end
+  end
+  return ""
+end
+
+function NebbieDash.runHungerMacro()
+  local name = NebbieDash.currentChar
+  if not name then return end
+  local macro = NebbieDash.hungerMacros[name]
+  if not macro then
+    cecho("<orange>[NebbieDash] Nessuna macro fame/sete configurata per " .. name ..
+      " — scrivila in " .. NebbieDash.hungerMacrosPath() .. " poi digita <yellow>nhungermacros<orange>.\n")
+    return
+  end
+  local data = NebbieDash.getCharData(name)
+  local backpackKeywords = NebbieDash.findBackpackKeywords(data)
+  local substituted = macro:gsub("{zaino}", backpackKeywords)
+  local steps = NebbieDash.expandMacroSteps(substituted)
+  for i, cmd in ipairs(steps) do
+    tempTimer(NebbieDash.speedwalkDelay * (i - 1), function() send(cmd, false) end)
+  end
+end
+
+-- Shield su substring fisse (sempre attivo, riga singola). Due trigger
+-- distinti perche' le due frasi non condividono un prefisso comune utile
+-- come shield unico ("Hai Fame." / "Hai sete.").
+function NebbieDash.onHungerThirstLine()
+  if NebbieDash.autoFeed then
+    NebbieDash.runHungerMacro()
+  end
+end
+
+function NebbieDash.cmdSetAutoFeed(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$"):lower()
+  if argStr == "on" then
+    NebbieDash.autoFeed = true
+  elseif argStr == "off" then
+    NebbieDash.autoFeed = false
+  else
+    cecho("<orange>[NebbieDash] Uso: nautofeed <on|off> (attuale: " ..
+      (NebbieDash.autoFeed and "on" or "off") .. ")\n")
+    return
+  end
+  cecho("<green>[NebbieDash] Macro automatica fame/sete: " .. (NebbieDash.autoFeed and "on" or "off") .. ".\n")
+end
+
 function NebbieDash.cmdSetAutoLoot(argStr)
   argStr = (argStr or ""):match("^%s*(.-)%s*$"):lower()
   if argStr == "on" then
@@ -1482,7 +1646,18 @@ end
 -- ---------------------------------------------------------------------------
 function NebbieDash.installTriggers()
   if NebbieDash._triggersInstalled then return end
-  NebbieDash._promptTrig = tempTrigger(" M: ", [[NebbieDash.onPromptLine()]])
+  -- Shield " M:" (SENZA spazio dopo i due punti): esistono almeno due
+  -- formati di prompt reali (vedi Q&A.md Round 14) — uno con spazio dopo i
+  -- due punti ("M: 532/532", personaggio NomiyaMaki) e uno senza
+  -- ("M:533/533", personaggio Mirari, con anche "X:" maiuscolo e separatori
+  -- " - "). Lo shield precedente (" M: ", con lo spazio finale) non
+  -- matchava mai il secondo formato -> onPromptLine() non veniva MAI
+  -- chiamata per quel personaggio -> "nessun personaggio rilevato" per
+  -- l'intera sessione, bug segnalato dall'utente. parsePromptLine() gestiva
+  -- gia' correttamente entrambi i formati (spazio opzionale, X/x
+  -- case-insensitive): il problema era solo nello shield del trigger, non
+  -- nel parsing.
+  NebbieDash._promptTrig = tempTrigger(" M:", [[NebbieDash.onPromptLine()]])
   NebbieDash._eqOpenTrig = tempTrigger("Stai usando:", [[NebbieDash.startEqCapture()]])
   NebbieDash._attribOpenTrig = tempTrigger("Spells attivi", [[NebbieDash.startAttribCapture()]])
   NebbieDash._eqLineTrig = tempRegexTrigger("^", [[NebbieDash.onEqCaptureLine()]])
@@ -1506,6 +1681,8 @@ function NebbieDash.installTriggers()
   NebbieDash._combatEndTrig = tempTrigger("La tua parte di esperienza", [[NebbieDash.onCombatEndLine()]])
   NebbieDash._fallTrig = tempTrigger("Inciampi e cadi per terra.", [[NebbieDash.onFallLine()]])
   NebbieDash._disarmTrig = tempTrigger("vola dalla tua presa", [[NebbieDash.onDisarmLine()]])
+  NebbieDash._hungerTrig = tempTrigger("Hai Fame.", [[NebbieDash.onHungerThirstLine()]])
+  NebbieDash._thirstTrig = tempTrigger("Hai sete.", [[NebbieDash.onHungerThirstLine()]])
   if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
   if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
   if type(registerAnonymousEventHandler) == "function" then
@@ -1533,6 +1710,7 @@ end
 function NebbieDash.boot()
   NebbieDash.loadStore()
   NebbieDash.loadSpeedwalks()
+  NebbieDash.loadHungerMacros()
   NebbieDash.installTriggers()
   NebbieDash.initGUI()
   NebbieDash.initHelpButton()

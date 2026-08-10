@@ -1,5 +1,29 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.6.0 — 2026-08-10
+
+- **Corretto (bug importante)**: "la dashboard non sta rilevando alcun personaggio". Causa: esiste
+  almeno un secondo formato di prompt reale (personaggio `Mirari`, es. `Mirari H:655/655 M:533/533
+  V:271/271 X:284016936 - */* - *-* - [[------T----]] - G:38267520 >>`), **senza spazio dopo i due
+  punti** e con `X:` maiuscolo — diverso dal primo formato confermato (`NomiyaMaki H: 747/747 M:
+  532/532 ... x:-238860738 *:* *:* [[D]] G:3449502 >>`, con lo spazio). Il parsing del prompt
+  gestiva già entrambi i formati, ma lo "shield" del trigger che lo attiva cercava la sottostringa
+  fissa `" M: "` (con lo spazio finale), che non compare mai nel secondo formato: il trigger non
+  scattava **mai** per quel formato, quindi nessun personaggio veniva mai rilevato per l'intera
+  sessione. Corretto restringendo lo shield a `" M:"` (senza lo spazio finale), che matcha entrambi i
+  formati; il parsing preciso resta comunque affidato alla regex completa, quindi non si rischiano
+  falsi positivi.
+- **Aggiunto**: macro configurabile per fame/sete (`nautofeed <on|off>`, default **on**). Scatta sui
+  testi reali `Hai Fame.` / `Hai sete.` ed esegue la sequenza di comandi scritta dall'utente nel file
+  `nebbie-hunger-macros.txt` (una riga per personaggio, formato `NomePersonaggio: comando1, comando2,
+  ...`), con il segnaposto `{zaino}` sostituito automaticamente dalla parola chiave dell'oggetto nello
+  slot equip "sulla schiena" (letta dal pannello equip già sincronizzato, senza bisogno di conoscerla
+  in anticipo). Dentro la macro si può usare la stessa sintassi `.N comando` della ripetizione
+  generica (es. `.5 drink cornu`). Comando `nhungermacros` per ricaricare il file senza riavviare
+  Mudlet. Il resto della sequenza (es. il nome dell'oggetto da bere dentro lo zaino) resta specifico
+  del personaggio e va scritto a mano nel file, come richiesto esplicitamente dall'utente.
+- **Versione interna** alzata a 1.6.0.
+
 ## 1.5.0 — 2026-08-10
 
 - **Corretto**: il personaggio attivo si azzera subito alla (ri)connessione, invece di restare

@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.5.0)
+description = [[# Nebbie Dashboard (1.6.0)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -34,6 +34,13 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   invece di restare agganciato al personaggio precedente finché non arriva
   un nuovo prompt — evita di lanciare comandi/spell sul personaggio sbagliato
   appena dopo un cambio personaggio.
+- **Corretto**: rilevato un secondo formato di prompt reale (senza spazio
+  dopo i due punti, "X:" maiuscolo) che il pacchetto non riconosceva affatto
+  — con quel formato la dashboard non rilevava nessun personaggio.
+- **Macro fame/sete configurabile** (`nautofeed`, file `nebbie-hunger-
+  macros.txt`): alla fame/sete, esegue la sequenza di comandi configurata
+  per il personaggio attivo, con la parola chiave dello zaino ("sulla
+  schiena") derivata automaticamente.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -43,4 +50,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.5.0]]
+version = [[1.6.0]]

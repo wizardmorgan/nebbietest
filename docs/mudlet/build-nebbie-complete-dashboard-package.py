@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.5.0"
+PKG_VER = "1.6.0"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -61,6 +61,13 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   invece di restare agganciato al personaggio precedente finché non arriva
   un nuovo prompt — evita di lanciare comandi/spell sul personaggio sbagliato
   appena dopo un cambio personaggio.
+- **Corretto**: rilevato un secondo formato di prompt reale (senza spazio
+  dopo i due punti, "X:" maiuscolo) che il pacchetto non riconosceva affatto
+  — con quel formato la dashboard non rilevava nessun personaggio.
+- **Macro fame/sete configurabile** (`nautofeed`, file `nebbie-hunger-
+  macros.txt`): alla fame/sete, esegue la sequenza di comandi configurata
+  per il personaggio attivo, con la parola chiave dello zaino ("sulla
+  schiena") derivata automaticamente.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -105,6 +112,8 @@ ALIASES = [
     ("nebbie-dash-autostand", "^nautostand (.+)$", "NebbieDash.cmdSetAutoStand(matches[2])"),
     ("nebbie-dash-autodisarm", "^nautodisarm (.+)$", "NebbieDash.cmdSetAutoDisarmRecover(matches[2])"),
     ("nebbie-dash-repeat", r"^\.(\d+)\s*(.+)$", "NebbieDash.cmdRepeat(matches[2], matches[3])"),
+    ("nebbie-dash-autofeed", "^nautofeed (.+)$", "NebbieDash.cmdSetAutoFeed(matches[2])"),
+    ("nebbie-dash-hungermacros", "^nhungermacros$", "NebbieDash.cmdReloadHungerMacros()"),
 ]
 
 

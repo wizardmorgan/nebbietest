@@ -817,4 +817,58 @@ indesiderato si ripresenta anche dopo questo fix difensivo, serve il log reale d
 
 ---
 
+## Round 15 (2026-08-10): bug "nessun personaggio rilevato" + macro fame/sete
+
+**Segnalazione utente**: "la dashboard non sta rilevando alcun personaggio", con il prompt reale
+incollato:
+
+```
+Mirari H:655/655 M:533/533 V:271/271 X:284016936 - */* - *-* - [[------T----]] - G:38267520 >>
+```
+
+**Causa individuata**: questo e' un SECONDO formato di prompt reale, diverso da quello confermato in
+Round 3 (`NomiyaMaki H: 747/747 M: 532/532 ... x:-238860738 *:* *:* [[D]] G:3449502 >>`). Le
+differenze: nessuno spazio dopo i due punti (`M:533/533` invece di `M: 532/532`), `X:` maiuscolo, e
+separatori aggiuntivi `" - "` tra i campi (invece di `*:* *:*`). Verificando `parsePromptLine()` con
+questo testo, la regex di parsing gestiva GIA' correttamente entrambi i formati (spazio opzionale
+`%s*`, `[Xx]` case-insensitive) — il problema era altrove: lo "shield" del trigger che chiama
+`onPromptLine()` era la sottostringa fissa `" M: "` (con lo spazio finale), che non compare MAI nel
+secondo formato (`"M:533/533"`, senza spazio dopo i due punti). Risultato: per un personaggio con
+questo formato di prompt, `onPromptLine()` non veniva MAI chiamata, quindi nessun personaggio veniva
+mai rilevato per l'intera sessione — esattamente il sintomo segnalato.
+
+**Fix applicato**: shield ristretto a `" M:"` (senza lo spazio finale), che matcha entrambi i
+formati. Nessun rischio di falsi positivi aggiuntivi: lo shield serve solo a decidere QUANDO provare
+il parsing preciso (che resta la regex completa in `parsePromptLine()`, che ritorna `nil` se la riga
+non e' davvero un prompt).
+
+**Seconda richiesta (nuova funzionalita')**: macro configurabile per fame/sete, con testi reali
+forniti dall'utente per il trigger (`"Hai Fame."` / `"Hai sete."`) e per l'oggetto coinvolto (`"[18]
+<sulla schiena> Borsa Inesauribile dei Korred"`). L'utente chiede esplicitamente che la parola chiave
+dello zaino venga derivata automaticamente (come già fatto per il recupero arma dopo disarmo), ma
+che il resto della sequenza (es. `"rem korred, get cornucopia korred, .5 drink cornu, put cornu
+korred, wear korred"`) possa variare "a seconda del personaggio" — quindi non e' derivabile
+automaticamente nella sua interezza (il nome dell'oggetto da bere dentro lo zaino non ha nessuna
+relazione meccanica col nome dello zaino).
+
+**Decisione di design** (nessuna domanda necessaria, coerente con le decisioni precedenti su
+speedwalk/file di configurazione): stesso principio degli speedwalk — un file di testo scritto
+dall'utente (`nebbie-hunger-macros.txt`, stessa cartella profilo), una riga per personaggio
+(`NomePersonaggio: comando1, comando2, ...`), con un segnaposto `{zaino}` sostituito automaticamente
+dalla parola chiave dell'oggetto nello slot equip `"sulla schiena"` (stessa funzione
+`extractItemKeywords()` già usata per il recupero arma). Dentro la macro si può usare la stessa
+sintassi `.N comando` della ripetizione generica per un singolo passo (nuova funzione
+`NebbieDash.expandMacroSteps()`, che interpreta questa sintassi via script senza passare dall'alias
+di Mudlet, che intercetta solo l'input digitato dall'utente). Comando `nautofeed <on|off>` (default
+**on**) e `nhungermacros` per ricaricare il file.
+
+**Verifica**: `luac -p` OK su core.lua. Aggiunti 22 test automatici dedicati (parsing del secondo
+formato di prompt, rilevamento del personaggio "Mirari" tramite il trigger corretto, estrazione
+parole chiave dello zaino, espansione dei passi `.N`, sostituzione del segnaposto `{zaino}`, casi
+senza macro configurata e con `nautofeed off`) — 97/97 test totali OK (verificato con `lua`
+standalone, offline). Versione alzata a 1.6.0. Rigenerato `.mpackage`. Aggiornati USAGE.md,
+CHANGELOG.md.
+
+---
+
 (continua...)
