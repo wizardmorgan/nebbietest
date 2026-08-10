@@ -337,3 +337,32 @@ ascoltare le due righe `Oggetto: '...', Tipo di Oggetto WEAPON` e `Tipo di danno
 
 **Implementazione**: vedi LOG.md "Gestione armi (v1.8.0)" e CHANGELOG.md 1.8.0 (nuovo pannello
 "Armi", nuovo comando `nleftheights`).
+
+## Round 15 — Spell residue, split in solitaria, scadenza in tempo reale (2026-08-10)
+
+**Segnalazioni**:
+1. "ho switchato da mirari a nomiyamaki ma la dashboard mi ha mantenuto le spell che non posso
+   lanciare (mirror images, shield)".
+2. "lo split è di nuovo partito mentre ero solo" (fornito un log reale della sessione, incluso un
+   testo di fine combattimento MAI visto prima: "La tua esperienza e' aumentata di N punti.", diverso
+   da "La tua parte di esperienza e' di N punti." già gestito).
+3. Testi reali per far scadere le spell subito (invece di aspettare `attrib`):
+   - "Non ti senti piu' cosi' invulnerabile." (sanc)
+   - "Perdi la tua armatura Divina." (armor)
+   - "Perdi l'aiuto Divino." (aid)
+   - "L'alone d'argento nei tuoi occhi scompare." (true sight)
+   - "Il globo di oscurita' che ti avvolgeva scompare." (darkness)
+   - esplicitamente ESCLUSO: "Senti i tuoi movimenti accellerare rapidamente." (scadenza di
+     "slowness", un debuff subito dal personaggio, non un buff lanciato da lui — l'utente lo precisa
+     esplicitamente).
+
+**Decisioni prese**: per il punto 1, non esistendo un elenco spell-per-classe confermato (non
+inventabile senza violare AGENT-RULES), la soluzione è un comando manuale di pulizia
+(`nforgetspell`) invece di un filtro automatico per classe. Per il punto 2, il log fornito non
+mostra uno split effettivamente inviato in quella sequenza specifica, ma ha permesso di individuare
+una vera race condition nel codice (vedi LOG.md) risolta accumulando gli importi di loot quasi
+simultanei in un solo controllo gruppo. Per il punto 3, implementati solo i 5 testi forniti,
+nessuno inventato.
+
+**Implementazione**: vedi LOG.md "Spell residue, split in solitaria, scadenza in tempo reale
+(v1.9.0)" e CHANGELOG.md 1.9.0.

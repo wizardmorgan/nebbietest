@@ -48,6 +48,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `m <nome>[, bersaglio]` | Come sopra ma `mind` (psionico). |
 | `nclass <c\|r\|m>` | Imposta, per il personaggio attivo, quale dei tre comandi viene usato quando clicchi una spell nel pannello per rilanciarla (default `c`/cast). Impostalo una volta per personaggio in base alla sua classe. |
 | `nspellwarn <n>` | Sotto quanti tick residui una spell attiva nel pannello viene mostrata in rosso invece che verde (default 5). |
+| `nforgetspell <nome>` | Rimuove una spell memorizzata per errore dall'elenco "conosciuto" del personaggio attivo (es. `nforgetspell mirror images`), utile se restano visibili spell che quel personaggio non può lanciare. |
 | `nspeedwalks` | Ricarica gli speedwalk dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nspeeddelay <secondi>` | Pausa tra un movimento e il successivo quando esegui uno speedwalk (default 0.35s). |
 | `nhelp` | Mostra/nasconde la finestra con l'elenco di tutti questi comandi (stessa finestra del tasto "? Comandi", vedi sotto). |
@@ -85,13 +86,16 @@ L'altezza di questo pannello rispetto all'Equip si regola con `nleftheights` (ve
 
 ## Loot e split automatico
 
-Alla fine di ogni combattimento a cui partecipi (riconosciuto dal messaggio del gioco "La tua parte
-di esperienza è di N punti.", anche con N=0), se `nautoloot` è attivo (default sì) il pacchetto
-prende da solo le monete dal cadavere presente — che tu abbia contribuito con l'ultimo colpo o meno,
-qualsiasi cosa ti dia una quota di esperienza. Appena il gioco conferma il bottino (`C'erano N
-monete.`), se `nautosplit` è attivo (default sì) e sei in gruppo, invia da solo `split N` con
-l'importo appena raccolto — verificando prima che tu sia in gruppo leggendo l'output del comando
-`group`. Se non sei in gruppo, il bottino resta semplicemente tuo, senza inviare nulla.
+Alla fine di ogni combattimento a cui partecipi (riconosciuto da due messaggi reali del gioco: "La
+tua parte di esperienza è di N punti." per la quota di gruppo, oppure "La tua esperienza è aumentata
+di N punti." per un'uccisione in solitaria — anche con N=0), se `nautoloot` è attivo (default sì) il
+pacchetto prende da solo le monete dal cadavere presente. Appena il gioco conferma il bottino
+(`C'erano N monete.`), se `nautosplit` è attivo (default sì) e sei in gruppo, invia da solo `split N`
+con l'importo appena raccolto — verificando prima che tu sia in gruppo leggendo l'output del comando
+`group`. Se non sei in gruppo, il bottino resta semplicemente tuo, senza inviare nulla. Se più loot
+scattano quasi contemporaneamente (es. un incantesimo ad area che uccide più mostri in un colpo), gli
+importi si accumulano in un unico controllo gruppo/split invece di avviarne più di uno in
+sovrapposizione (evita split inviati/non inviati in base al controllo sbagliato).
 
 I due automatismi sono indipendenti: puoi disattivare solo il loot (`nautoloot off`, es. se preferisci
 farlo tu a mano con `nloot` quando vuoi) o solo lo split (`nautosplit off`, usando poi `nsplit
@@ -410,6 +414,18 @@ sincronizzazione** (`nattrib`/`nresync`), non è un conto alla rovescia in tempo
 non sa quanti secondi dura un tick sul server, quindi non può stimare da solo quanto manca alla
 scadenza tra un `nattrib` e l'altro. Se vuoi un conto alla rovescia live, serve sapere quanti
 secondi reali dura un tick lato server.
+
+**Scadenza in tempo reale (senza aspettare `attrib`)**: per alcune spell il pacchetto riconosce il
+messaggio REALE di scadenza e la fa diventare rossa immediatamente, senza aspettare il prossimo
+`nattrib`/`nresync`: sanctuary ("Non ti senti più così invulnerabile."), armor ("Perdi la tua
+armatura Divina."), aid ("Perdi l'aiuto Divino."), true sight ("L'alone d'argento nei tuoi occhi
+scompare."), darkness ("Il globo di oscurità che ti avvolgeva scompare."). Altre spell restano
+soggette solo alla sincronizzazione manuale finché non vengono forniti i rispettivi testi di
+scadenza reali.
+
+**Spell che non ti appartengono rimaste nel pannello**: se dopo un cambio di personaggio vedi ancora
+spell che quel personaggio non può lanciare (es. residuo di un vecchio bug ormai corretto, dati
+salvati da tempo fa), rimuovile con `nforgetspell <nome>` (es. `nforgetspell mirror images`).
 
 **Elenco "conosciuto", persistente per personaggio**: una volta che una spell è comparsa almeno una
 volta nell'output di `attrib` per un personaggio, resta **per sempre** visibile/cliccabile nel

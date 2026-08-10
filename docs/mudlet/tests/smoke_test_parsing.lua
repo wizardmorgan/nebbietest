@@ -672,6 +672,81 @@ wdata.eqUpdated = false
 NebbieDash.cmdSwapWeapon(1)
 check("armi: cmdSwapWeapon senza equip sincronizzato non invia nulla (nessuno zaino noto)", #sentLog == 0)
 
+-- Test 20: bug segnalato (2026-08-10) — "lo split è di nuovo partito mentre
+-- ero solo". Analisi: loot quasi simultanei (es. piu' uccisioni ravvicinate
+-- da un incantesimo ad area) potevano avviare DUE controlli gruppo in
+-- parallelo, e la risposta "group" del primo (magari da solo) poteva
+-- chiudere anche il controllo del secondo (magari in gruppo) senza
+-- verificare a quale generazione appartenesse davvero. Fix: se un
+-- controllo e' gia' attivo, il nuovo importo si accumula in quello in
+-- corso invece di avviarne un secondo.
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+NebbieDash.autoSplit = true
+NebbieDash._groupCheckActive = false
+NebbieDash._pendingSplitAmount = nil
+sentLog = {}
+NebbieDash.startSplitFlow(100)
+check("split: primo loot avvia il controllo gruppo ('group' inviato)", sentLog[#sentLog] == "group")
+check("split: importo in sospeso registrato", NebbieDash._pendingSplitAmount == 100)
+sentLog = {}
+NebbieDash.startSplitFlow(50)
+check("split: secondo loot mentre il controllo e' attivo NON invia un secondo 'group'", #sentLog == 0)
+check("split: l'importo del secondo loot si accumula nel controllo in corso", NebbieDash._pendingSplitAmount == 150)
+sentLog = {}
+NebbieDash.onGroupSoloLine()
+check("split: risposta 'da solo' non invia alcuno split (importo combinato scartato)", #sentLog == 0)
+check("split: controllo gruppo chiuso dopo la risposta", NebbieDash._groupCheckActive == false)
+
+-- Test 21: secondo formato REALE di fine combattimento (uccisione in
+-- solitaria): "La tua esperienza e' aumentata di N punti." — testo fornito
+-- dall'utente il 2026-08-10 insieme a "Gwynyar is dead!"/"A mindflayer is
+-- dead!" ecc. Prima di questo fix l'autoloot non scattava affatto con
+-- questa frase (solo con "La tua parte di esperienza e' di N punti.").
+NebbieDash.autoLoot = true
+sentLog = {}
+line = "La tua esperienza e' aumentata di 225000 punti."
+NebbieDash.onCombatEndLine()
+check("combattimento (solitaria): 'La tua esperienza e' aumentata di' avvia il loot automatico",
+  sentLog[1] == "get all.coin corp")
+
+-- Test 22: nforgetspell — richiesto esplicitamente dopo che l'utente ha
+-- segnalato spell non appartenenti al personaggio attivo rimaste visibili
+-- (probabile dato residuo da prima del fix del cambio-personaggio).
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+local fdata = NebbieDash.getCharData("NomiyaMaki")
+fdata.knownSpellOrder = { "mirror images", "shield", "darkness" }
+fdata.activeSpells = { ["mirror images"] = 5 }
+NebbieDash.cmdForgetSpell("Mirror Images")
+check("nforgetspell: rimossa dall'elenco conosciuto (case-insensitive)", #fdata.knownSpellOrder == 2)
+check("nforgetspell: rimossa anche da activeSpells", fdata.activeSpells["mirror images"] == nil)
+check("nforgetspell: le altre spell restano intatte", fdata.knownSpellOrder[1] == "shield" and fdata.knownSpellOrder[2] == "darkness")
+local forgetOkMissing = pcall(NebbieDash.cmdForgetSpell, "spell inesistente")
+check("nforgetspell: nome non presente non genera errori", forgetOkMissing)
+local forgetOkEmpty = pcall(NebbieDash.cmdForgetSpell, "")
+check("nforgetspell: argomento vuoto non genera errori", forgetOkEmpty)
+
+-- Test 23: scadenza spell in tempo reale — richiesto esplicitamente
+-- (2026-08-10), testi REALI forniti dall'utente. Diventano rosse SUBITO al
+-- messaggio di scadenza, senza aspettare il prossimo 'attrib'.
+fdata.knownSpellOrder = { "sanctuary", "armor", "aid", "true sight", "darkness" }
+fdata.activeSpells = { sanctuary = 10, armor = 20, aid = 30, ["true sight"] = 40, darkness = 50 }
+line = "Non ti senti piu' cosi' invulnerabile."
+NebbieDash.onSpellExpiredLine("sanctuary")
+check("scadenza spell: 'sanctuary' disattivata (rossa) dopo il messaggio di scadenza reale",
+  fdata.activeSpells["sanctuary"] == nil)
+NebbieDash.onSpellExpiredLine("armor")
+check("scadenza spell: 'armor' disattivata", fdata.activeSpells["armor"] == nil)
+NebbieDash.onSpellExpiredLine("aid")
+check("scadenza spell: 'aid' disattivata", fdata.activeSpells["aid"] == nil)
+NebbieDash.onSpellExpiredLine("true sight")
+check("scadenza spell: 'true sight' disattivata", fdata.activeSpells["true sight"] == nil)
+NebbieDash.onSpellExpiredLine("darkness")
+check("scadenza spell: 'darkness' disattivata", fdata.activeSpells["darkness"] == nil)
+check("scadenza spell: 5 pattern reali configurati (nessuno inventato oltre a quelli forniti)",
+  #NebbieDash.SPELL_EXPIRY_PATTERNS == 5)
+local expiredOkUnknown = pcall(NebbieDash.onSpellExpiredLine, "spell mai vista")
+check("scadenza spell: nome non conosciuto non genera errori", expiredOkUnknown)
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

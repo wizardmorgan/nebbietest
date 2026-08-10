@@ -1,5 +1,26 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.9.0 — 2026-08-10
+
+- **Aggiunto**: `nforgetspell <nome>` per rimuovere manualmente una spell erroneamente memorizzata
+  dall'elenco "conosciuto" del personaggio attivo (es. spell rimaste visibili da prima del fix del
+  cambio-personaggio, mai più rimosse dall'elenco cumulativo persistente).
+- **Aggiunto**: le spell diventano rosse (inattive) **immediatamente** al messaggio reale di
+  scadenza (es. "Perdi la tua armatura Divina.", "L'alone d'argento nei tuoi occhi scompare.") invece
+  di aspettare il prossimo `attrib` manuale. Copre sanctuary/armor/aid/true sight/darkness (5 testi
+  reali forniti dall'utente; esclusa esplicitamente la scadenza di "slowness", un debuff non un
+  buff lanciato da noi).
+- **Corretto**: l'autoloot non scattava affatto per le uccisioni in solitaria con la frase "La tua
+  esperienza e' aumentata di N punti." (funzionava solo con "La tua parte di esperienza e' di N
+  punti.", la variante di quota-gruppo) — aggiunto il secondo formato reale come shield aggiuntivo.
+- **Corretto (bug di concorrenza, possibile causa di split inviato/non inviato in modo scorretto)**:
+  loot quasi simultanei (es. più uccisioni ravvicinate da un incantesimo ad area) potevano avviare
+  due controlli gruppo (`group`) in parallelo; la risposta del primo poteva chiudere anche il
+  controllo del secondo senza verificare a quale generazione appartenesse davvero. Corretto
+  accumulando l'importo nel controllo già in corso invece di avviarne uno nuovo in sovrapposizione:
+  un solo controllo gruppo, un solo split con la somma totale.
+- **Versione interna** alzata a 1.9.0.
+
 ## 1.8.2 — 2026-08-10
 
 - **Corretto (bug grave, causa reale del pannello completamente vuoto/nessun comando funzionante

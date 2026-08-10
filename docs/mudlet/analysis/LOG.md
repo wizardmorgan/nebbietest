@@ -1124,4 +1124,57 @@ messaggio "pronto" mostrato correttamente. Versione alzata a 1.8.2. Aggiornato C
 
 ---
 
+## 2026-08-10 — Spell residue, split in solitaria, scadenza in tempo reale (v1.9.0)
+
+**Segnalazioni utente**:
+1. Passando da Mirari a NomiyaMaki, restano visibili spell (mirror images, shield) che NomiyaMaki
+   non può lanciare.
+2. Lo split è ripartito mentre l'utente era da solo (fornito un log reale della sessione).
+3. Richiesta: far diventare rosse le spell SUBITO al messaggio di scadenza reale (non solo al
+   prossimo `attrib`), con 5 testi reali forniti; esplicitamente ESCLUSA la scadenza di "slowness"
+   (debuff, non un buff nostro).
+
+**Analisi bug 1 (spell residue)**: `data.knownSpellOrder` è per-personaggio (chiave = nome), non
+c'è contaminazione tra personaggi nel codice attuale — la causa più probabile è dato RESIDUO salvato
+su disco da PRIMA del fix del cambio-personaggio (Round 13), quando un self-cast poteva essere
+attribuito al personaggio sbagliato per un istante. Con l'elenco "conosciuto" ora persistente
+(v1.7.0), quel dato errato non viene mai più rimosso automaticamente. Non esistendo un elenco
+spell-per-classe confermato (inventarlo violerebbe AGENT-RULES), la soluzione è un comando manuale
+di pulizia: `nforgetspell <nome>`, che rimuove una voce specifica dall'elenco conosciuto E da quello
+attivo del personaggio corrente.
+
+**Analisi bug 2 (split in solitaria)**: il log fornito dall'utente non mostra uno split
+effettivamente inviato in quella sequenza specifica (il "group" automatico dopo `get all gwy`
+riceve correttamente "But you are a member of no group?!" e non invia nulla) — MA rivela una vera
+race condition nel codice: `startSplitFlow()` sovrascriveva incondizionatamente
+`_pendingSplitAmount`/incrementava `_groupCheckGen` ad ogni loot, mentre `onGroupSoloLine()`/
+`onGroupHeaderLine()` non verificavano MAI a quale generazione appartenesse la risposta "group"
+arrivata — solo il watchdog controllava la generazione. Con più uccisioni ravvicinate (es. da un
+incantesimo ad area, come "chain lightning" nel log fornito, che colpisce 3 mostri in un colpo) che
+innescano ciascuna il proprio loot automatico, due controlli gruppo sovrapposti potevano
+"incrociarsi": la risposta del PRIMO controllo (magari da solo) chiudeva anche il SECONDO controllo
+(magari in gruppo, con un importo diverso), inviando o non inviando uno split in base al controllo
+sbagliato. **Fix**: se un controllo gruppo è già attivo, un nuovo loot si limita ad ACCUMULARE il
+proprio importo in quello in corso, senza avviare un secondo controllo — un solo `group`, un solo
+split (con la somma totale) quando arriva la risposta.
+
+**Bug collaterale trovato durante l'analisi**: il log fornito dall'utente mostra il testo REALE di
+fine combattimento per un'uccisione in solitaria — "La tua esperienza e' aumentata di N punti." —
+diverso dal formato già gestito ("La tua parte di esperienza e' di N punti.", quota di gruppo).
+L'autoloot NON scattava affatto con questa frase. Aggiunto un secondo trigger con questo shield.
+
+**Implementazione bug 3 (scadenza in tempo reale)**: nuova tabella `SPELL_EXPIRY_PATTERNS` con i 5
+testi REALI forniti dall'utente (sanctuary/armor/aid/true sight/darkness) e un trigger dedicato per
+ciascuno; alla ricezione disattivano immediatamente la spell corrispondente in `activeSpells` (quindi
+il pannello la mostra rossa da subito), senza aspettare `attrib`. "Senti i tuoi movimenti
+accellerare rapidamente." (scadenza di "slowness") esclusa come richiesto: è un debuff subito dal
+personaggio, non un buff lanciato da lui, semanticamente diverso dagli altri 5.
+
+**Verifica**: `luac -p` OK, XML validato, `validate_lua_syntax()` del build script passata senza
+errori, 150/150 test offline OK (19 nuovi: race condition split, secondo formato fine combattimento,
+`nforgetspell`, 5 pattern di scadenza spell), simulazione end-to-end (script "boot" prima di "core")
+OK. Versione alzata a 1.9.0. Aggiornati USAGE.md, CHANGELOG.md.
+
+---
+
 (continua...)

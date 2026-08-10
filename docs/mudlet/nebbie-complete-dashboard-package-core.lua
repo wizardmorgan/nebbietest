@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.8.2"
+local PKG_VER = "1.9.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1041,6 +1041,7 @@ NebbieDash.HELP_TEXT = {
   { "nautofeed <on|off>", "Attiva/disattiva la macro automatica fame/sete (per personaggio, vedi file macro)." },
   { "nhungermacros", "Ricarica le macro fame/sete dal file di configurazione." },
   { "nitemkeywords", "Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione." },
+  { "nforgetspell <nome>", "Rimuove una spell memorizzata per errore dall'elenco del personaggio attivo." },
   { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
   { "nhelp", "Mostra/nascondi questa finestra." },
@@ -1228,6 +1229,76 @@ function NebbieDash.cmdSetSpellWarn(ticksStr)
   cecho("<green>[NebbieDash] Soglia colore rosso spell impostata a " .. ticks .. " tick.\n")
 end
 
+-- Rimuove manualmente una spell dall'elenco "conosciuto" del personaggio
+-- attivo (richiesto esplicitamente, 2026-08-10: l'utente ha segnalato che,
+-- passando da un personaggio all'altro, restavano visibili spell che quel
+-- personaggio non puo' lanciare — es. "mirror images"/"shield" mai
+-- realmente appartenenti a lui, probabilmente salvate per errore in una
+-- sessione precedente al fix del cambio-personaggio del Round 13, e MAI
+-- rimosse dall'elenco cumulativo perche' l'elenco "conosciuto" persistente
+-- non si ripulisce mai da solo). Nessuna euristica per classe qui: e'
+-- l'utente a sapere quali spell non gli appartengono, l'elenco delle spell
+-- per classe non e' un dato che abbiamo/possiamo inventare.
+function NebbieDash.cmdForgetSpell(argStr)
+  local query = (argStr or ""):match("^%s*(.-)%s*$")
+  local name = NebbieDash.currentChar
+  if not name then
+    cecho("<orange>[NebbieDash] Nessun personaggio attivo.\n")
+    return
+  end
+  if query == "" then
+    cecho("<orange>[NebbieDash] Uso: nforgetspell <nome spell> — rimuove una spell "
+      .. "memorizzata per errore dall'elenco del personaggio attivo (es. nforgetspell mirror images).\n")
+    return
+  end
+  local data = NebbieDash.getCharData(name)
+  local matched = nil
+  for i, s in ipairs(data.knownSpellOrder or {}) do
+    if s:lower() == query:lower() then
+      matched = s
+      table.remove(data.knownSpellOrder, i)
+      break
+    end
+  end
+  if not matched then
+    cecho("<orange>[NebbieDash] '" .. query .. "' non e' nell'elenco di " .. name .. ".\n")
+    return
+  end
+  if data.activeSpells then data.activeSpells[matched] = nil end
+  NebbieDash.saveStore()
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Rimossa '" .. matched .. "' dall'elenco di " .. name .. ".\n")
+end
+
+-- ---------------------------------------------------------------------------
+-- Scadenza spell in tempo reale (richiesto esplicitamente, 2026-08-10): fino
+-- ad ora una spell diventava rossa solo al successivo `attrib` manuale. Con
+-- questi trigger diventa rossa SUBITO al messaggio di scadenza reale, senza
+-- aspettare che l'utente rilanci `attrib`. Testi REALI forniti dall'utente
+-- (uno per spell, nessuno inventato). Esplicitamente ESCLUSO dall'utente:
+-- "Senti i tuoi movimenti accellerare rapidamente." — e' la scadenza di
+-- "slowness", un DEBUFF (rallentamento subito, non un buff lanciato da noi),
+-- quindi non va trattato come le altre.
+-- ---------------------------------------------------------------------------
+NebbieDash.SPELL_EXPIRY_PATTERNS = {
+  { text = "Non ti senti piu' cosi' invulnerabile.", spell = "sanctuary" },
+  { text = "Perdi la tua armatura Divina.", spell = "armor" },
+  { text = "Perdi l'aiuto Divino.", spell = "aid" },
+  { text = "L'alone d'argento nei tuoi occhi scompare.", spell = "true sight" },
+  { text = "Il globo di oscurita' che ti avvolgeva scompare.", spell = "darkness" },
+}
+
+function NebbieDash.onSpellExpiredLine(spellName)
+  local name = NebbieDash.currentChar
+  if not name then return end
+  local data = NebbieDash.getCharData(name)
+  if data.activeSpells and data.activeSpells[spellName] ~= nil then
+    data.activeSpells[spellName] = nil
+    NebbieDash.saveStore()
+    NebbieDash.refreshDashboard()
+  end
+end
+
 -- Mostra/nasconde lo slot 22 "simbolo del clan" (non ancora confermato in un
 -- output reale di `eq` — vedi nota su EQ_SLOT_CLAN).
 function NebbieDash.cmdSetClanSlot(argStr)
@@ -1380,10 +1451,15 @@ end
 NebbieDash.autoSplit = true
 NebbieDash.autoLoot = true
 
--- Segnale di fine combattimento: shield su substring fissa "La tua parte di
--- esperienza" (sempre attivo, stesso principio degli altri trigger a riga
--- singola). Fa scattare `nloot` da solo se `nautoloot` e' attivo, cosi' non
--- serve piu' digitarlo manualmente dopo ogni uccisione.
+-- Segnale di fine combattimento: due formati REALI confermati dall'utente —
+-- "La tua parte di esperienza e' di N punti." (quota di gruppo) e "La tua
+-- esperienza e' aumentata di N punti." (uccisione in solitaria, testo
+-- fornito il 2026-08-10 con "Gwynyar is dead!"/"A mindflayer is dead!" ecc.
+-- — senza questo secondo shield l'autoloot non scattava affatto per le
+-- uccisioni in solitaria con questa frase). Entrambi sempre attivi (stesso
+-- principio degli altri trigger a riga singola). Fanno scattare `nloot` da
+-- solo se `nautoloot` e' attivo, cosi' non serve piu' digitarlo manualmente
+-- dopo ogni uccisione.
 function NebbieDash.onCombatEndLine()
   if NebbieDash.autoLoot then
     NebbieDash.cmdLoot()
@@ -1972,7 +2048,23 @@ function NebbieDash.armSplitWatchdog(gen)
   end)
 end
 
+-- Se un controllo gruppo e' GIA' in corso (loot quasi simultanei, es. piu'
+-- uccisioni ravvicinate da un incantesimo ad area come "chain lightning" che
+-- colpisce piu' mostri in un colpo), NON avviarne un secondo in parallelo:
+-- prima si sovrascriveva _pendingSplitAmount/si incrementava la generazione
+-- SENZA che onGroupSoloLine()/onGroupHeaderLine() verificassero a quale
+-- generazione appartenesse davvero la risposta "group" arrivata, cosi' una
+-- risposta "But you are a member of no group?!" relativa al PRIMO loot
+-- (da solo) poteva chiudere anche il controllo del SECONDO loot (magari in
+-- gruppo, o viceversa) — rischio concreto di split inviato/non inviato in
+-- base a un controllo in realta' scaduto. Si accumula semplicemente
+-- l'importo nel controllo gia' in corso: un solo controllo gruppo, un solo
+-- split (con la somma totale) quando arriva la risposta.
 function NebbieDash.startSplitFlow(amount)
+  if NebbieDash._groupCheckActive then
+    NebbieDash._pendingSplitAmount = (NebbieDash._pendingSplitAmount or 0) + amount
+    return
+  end
   NebbieDash._pendingSplitAmount = amount
   NebbieDash._groupCheckGen = (NebbieDash._groupCheckGen or 0) + 1
   NebbieDash._groupCheckActive = true
@@ -2045,12 +2137,17 @@ function NebbieDash.teardownTriggers()
     NebbieDash._promptTrig, NebbieDash._eqOpenTrig, NebbieDash._attribOpenTrig,
     NebbieDash._eqLineTrig, NebbieDash._attribLineTrig, NebbieDash._lootLineTrig,
     NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
+    NebbieDash._combatEndTrig2,
     NebbieDash._fallTrig, NebbieDash._disarmTrig, NebbieDash._hungerTrig, NebbieDash._thirstTrig,
     NebbieDash._wieldTrig, NebbieDash._identifyObjTrig, NebbieDash._identifyDmgTrig,
   }
   for _, id in ipairs(ids) do
     if id then pcall(function() killTrigger(id) end) end
   end
+  for _, id in ipairs(NebbieDash._spellExpiryTrigs or {}) do
+    if id then pcall(function() killTrigger(id) end) end
+  end
+  NebbieDash._spellExpiryTrigs = {}
 end
 
 function NebbieDash.installTriggers()
@@ -2088,6 +2185,7 @@ function NebbieDash.installTriggers()
   NebbieDash._groupSoloTrig = tempRegexTrigger("^But you are a member of no group", [[NebbieDash.onGroupSoloLine()]])
   NebbieDash._groupHeaderTrig = tempRegexTrigger("^Your group \"", [[NebbieDash.onGroupHeaderLine()]])
   NebbieDash._combatEndTrig = tempTrigger("La tua parte di esperienza", [[NebbieDash.onCombatEndLine()]])
+  NebbieDash._combatEndTrig2 = tempTrigger("La tua esperienza e' aumentata di", [[NebbieDash.onCombatEndLine()]])
   NebbieDash._fallTrig = tempTrigger("Inciampi e cadi per terra.", [[NebbieDash.onFallLine()]])
   NebbieDash._disarmTrig = tempTrigger("vola dalla tua presa", [[NebbieDash.onDisarmLine()]])
   NebbieDash._hungerTrig = tempTrigger("Hai Fame.", [[NebbieDash.onHungerThirstLine()]])
@@ -2098,6 +2196,13 @@ function NebbieDash.installTriggers()
   NebbieDash._wieldTrig = tempTrigger("Impugni ", [[NebbieDash.onWieldLine()]])
   NebbieDash._identifyObjTrig = tempTrigger("Tipo di Oggetto", [[NebbieDash.onIdentifyObjectLine()]])
   NebbieDash._identifyDmgTrig = tempTrigger("Tipo di danno:", [[NebbieDash.onIdentifyDamageLine()]])
+  -- Scadenza spell (vedi SPELL_EXPIRY_PATTERNS sopra): un trigger per riga,
+  -- shield su substring esatta fornita dall'utente per ognuna.
+  NebbieDash._spellExpiryTrigs = {}
+  for _, entry in ipairs(NebbieDash.SPELL_EXPIRY_PATTERNS) do
+    local id = tempTrigger(entry.text, string.format("NebbieDash.onSpellExpiredLine(%q)", entry.spell))
+    table.insert(NebbieDash._spellExpiryTrigs, id)
+  end
   if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
   if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
   -- Gli anonymous event handler restano registrati una volta sola (a
