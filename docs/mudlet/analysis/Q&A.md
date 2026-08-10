@@ -242,3 +242,25 @@ mostro, non ancora fornito.
 
 **Implementazione**: vedi LOG.md Round 11 e CHANGELOG.md 1.4.0 per i dettagli tecnici (nuovi comandi
 `nloot`/`nautosplit`/`nsplit`).
+
+## Round 12 — testo reale di fine combattimento → loot automatico (2026-08-10)
+
+L'utente fornisce il testo reale mancante dal Round 11 (rilevamento automatico fine combattimento):
+
+```
+Uno Spazzino is dead! R.I.P.
+La tua parte di esperienza e' di 1 punti.
+
+Una sentinella is dead! R.I.P.
+La tua parte di esperienza e' di 1047 punti.
+
+Un Ubriacone is dead! R.I.P.
+La tua parte di esperienza e' di 0 punti.
+```
+
+**Osservazione**: la riga "La tua parte di esperienza e' di N punti." (anche con N=0) compare solo
+quando hai effettivamente partecipato/contribuito a quel combattimento — a differenza di "X is dead!
+R.I.P." che potrebbe comparire anche per uccisioni altrui non tue. Usata quindi come segnale per
+`nloot` automatico invece della riga "is dead!".
+
+**Implementazione**: vedi LOG.md Round 12 e CHANGELOG.md 1.4.1 (nuovo comando `nautoloot`).

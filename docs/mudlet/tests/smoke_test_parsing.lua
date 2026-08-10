@@ -336,6 +336,33 @@ NebbieDash.autoSplit = true
 NebbieDash.cmdSplit("777")
 check("split manuale: 'nsplit 777' -> invia split 777", lastSent == "split 777")
 
+-- Test 9: loot automatico alla fine del combattimento — testi REALI
+-- incollati dall'utente (2026-08-10): "Uno Spazzino is dead! R.I.P." seguito
+-- da "La tua parte di esperienza e' di N punti." (anche con N=0/1).
+NebbieDash.autoLoot = true
+sentLog = {}
+line = "Uno Spazzino is dead! R.I.P."
+-- La riga "is dead!" da sola NON deve avviare il loot (potrebbe non essere
+-- una uccisione a cui hai partecipato tu): serve la riga "La tua parte...".
+check("combattimento: riga 'is dead!' da sola non genera comandi", #sentLog == 0)
+
+line = "La tua parte di esperienza e' di 1047 punti."
+NebbieDash.onCombatEndLine()
+check("combattimento: fine combattimento avvia il loot automatico", sentLog[1] == "get all.coin corp")
+
+-- Anche con 0 punti di esperienza (uccisione minima) deve comunque scattare.
+sentLog = {}
+line = "La tua parte di esperienza e' di 0 punti."
+NebbieDash.onCombatEndLine()
+check("combattimento: scatta anche con 0 punti esperienza", sentLog[1] == "get all.coin corp")
+
+-- Con nautoloot off non deve inviare nulla.
+NebbieDash.autoLoot = false
+sentLog = {}
+NebbieDash.onCombatEndLine()
+check("combattimento: con nautoloot off non invia nulla", #sentLog == 0)
+NebbieDash.autoLoot = true
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

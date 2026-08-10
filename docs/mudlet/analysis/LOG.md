@@ -713,4 +713,43 @@ Rigenerato `.mpackage`. Aggiornati USAGE.md, CHANGELOG.md, Q&A.md.
 
 ---
 
+## Round 12 — loot automatico alla fine del combattimento (2026-08-10)
+
+L'utente fornisce il testo reale che era rimasto aperto nel Round 11 ("Aperto/rimandato"):
+
+```
+Uno Spazzino is dead! R.I.P.
+La tua parte di esperienza e' di 1 punti.
+
+Una sentinella is dead! R.I.P.
+La tua parte di esperienza e' di 1047 punti.
+
+Un Ubriacone is dead! R.I.P.
+La tua parte di esperienza e' di 0 punti.
+```
+
+**Decisione di design**: usare come segnale la riga `"La tua parte di esperienza e' di N punti."`
+(shield su substring fissa "La tua parte di esperienza", stesso principio degli altri trigger a riga
+singola) invece di `"X is dead! R.I.P."`, perche' quest'ultima si vedrebbe anche per uccisioni a cui
+non hai contribuito (es. un altro giocatore/gruppo che uccide qualcosa nella tua stessa stanza),
+mentre la riga sull'esperienza compare solo quando hai effettivamente partecipato — anche con 0
+punti, quindi il pattern non richiede N>0.
+
+**Implementazione**: nuovo trigger permanente `onCombatEndLine()` che, se `nautoloot` e' attivo
+(default **on**), chiama la stessa `cmdLoot()` gia' usata dall'alias manuale `nloot` (nessuna
+duplicazione di logica). Nuovo comando `nautoloot <on|off>` per disattivarlo separatamente da
+`nautosplit` (i due restano indipendenti: puoi per esempio voler raccogliere da solo ma non
+dividere, o viceversa).
+
+**Verifica**: `luac -p` OK. Aggiunti 4 test automatici dedicati (loot scattato dalla riga esperienza,
+anche con 0 punti, nessuna azione dalla sola riga "is dead!", rispetto del flag `nautoloot`) —
+65/65 test totali OK. XML validato. Versione alzata a 1.4.1. Rigenerato `.mpackage`. Aggiornati
+USAGE.md, CHANGELOG.md, Q&A.md.
+
+**Stato attuale del modulo loot/split**: con questo fix il flusso e' ora **interamente automatico**
+dal punto di vista dell'utente (nessun comando manuale richiesto dopo un combattimento), salvo
+disattivazione esplicita con `nautoloot off`/`nautosplit off`.
+
+---
+
 (continua...)

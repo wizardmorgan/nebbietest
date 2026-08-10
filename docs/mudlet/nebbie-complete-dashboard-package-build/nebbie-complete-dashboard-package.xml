@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.4.0"
+local PKG_VER = "1.4.1"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -935,6 +935,7 @@ NebbieDash.HELP_TEXT = {
   { "nspeeddelay <secondi>", "Ritardo tra un comando e l'altro in uno speedwalk." },
   { "nclanslot <on|off>", "Mostra/nascondi lo slot 22 (simbolo del clan)." },
   { "nloot", "Prende le monete dal cadavere presente (normale o pile of bones)." },
+  { "nautoloot <on|off>", "Attiva/disattiva il loot automatico alla fine di ogni combattimento." },
   { "nautosplit <on|off>", "Attiva/disattiva lo split automatico col gruppo dopo ogni loot riuscito." },
   { "nsplit <numero>", "Divide manualmente un importo col gruppo (equivalente a 'split')." },
   { "nhelp", "Mostra/nascondi questa finestra." },
@@ -1220,8 +1221,39 @@ end
 --   - `group` risponde "But you are a member of no group?!" da soli, oppure
 --     un blocco che inizia con `Your group "<nome>" consists of:` se in
 --     gruppo.
+--   - Fine combattimento (testo REALE fornito dall'utente il 2026-08-10):
+--     "Uno Spazzino is dead! R.I.P." seguito da "La tua parte di esperienza
+--     e' di N punti." (anche con N=0/1, sempre presente se hai contribuito
+--     al combattimento — usato come segnale per il loot automatico invece
+--     della riga "is dead!" perche' quest'ultima si vede anche per uccisioni
+--     altrui a cui non hai partecipato).
 -- ---------------------------------------------------------------------------
 NebbieDash.autoSplit = true
+NebbieDash.autoLoot = true
+
+-- Segnale di fine combattimento: shield su substring fissa "La tua parte di
+-- esperienza" (sempre attivo, stesso principio degli altri trigger a riga
+-- singola). Fa scattare `nloot` da solo se `nautoloot` e' attivo, cosi' non
+-- serve piu' digitarlo manualmente dopo ogni uccisione.
+function NebbieDash.onCombatEndLine()
+  if NebbieDash.autoLoot then
+    NebbieDash.cmdLoot()
+  end
+end
+
+function NebbieDash.cmdSetAutoLoot(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$"):lower()
+  if argStr == "on" then
+    NebbieDash.autoLoot = true
+  elseif argStr == "off" then
+    NebbieDash.autoLoot = false
+  else
+    cecho("<orange>[NebbieDash] Uso: nautoloot <on|off> (attuale: " ..
+      (NebbieDash.autoLoot and "on" or "off") .. ")\n")
+    return
+  end
+  cecho("<green>[NebbieDash] Loot automatico dopo ogni combattimento: " .. (NebbieDash.autoLoot and "on" or "off") .. ".\n")
+end
 
 -- Riga di conferma loot riuscito ("C'erano N monete."): shield su substring
 -- fissa "C'erano" (vedi MUDLET-WIKI-NOTES.md §1 su shielding/costo dei
@@ -1334,6 +1366,7 @@ function NebbieDash.installTriggers()
   NebbieDash._lootLineTrig = tempTrigger("C'erano", [[NebbieDash.onLootLine()]])
   NebbieDash._groupSoloTrig = tempTrigger("But you are a member of no group", [[NebbieDash.onGroupSoloLine()]])
   NebbieDash._groupHeaderTrig = tempTrigger("Your group ", [[NebbieDash.onGroupHeaderLine()]])
+  NebbieDash._combatEndTrig = tempTrigger("La tua parte di esperienza", [[NebbieDash.onCombatEndLine()]])
   if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
   if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
   if type(registerAnonymousEventHandler) == "function" then
@@ -1378,7 +1411,7 @@ end
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>nebbie-complete-dashboard-package - boot</name>
-   <script><![CDATA[local ver = "1.4.0"
+   <script><![CDATA[local ver = "1.4.1"
 if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
 local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
@@ -1537,6 +1570,13 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nsplit (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-autoloot</name>
+   <script><![CDATA[NebbieDash.cmdSetAutoLoot(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nautoloot (.+)$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>

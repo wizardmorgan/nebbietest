@@ -1,5 +1,16 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.4.1 — 2026-08-10
+
+- **Aggiunto**: loot **completamente automatico** alla fine di ogni combattimento a cui hai
+  partecipato (non serve più digitare `nloot` a mano). Riconosciuto dal testo reale del gioco `La
+  tua parte di esperienza e' di N punti.` (anche con N=0), che compare solo quando hai
+  effettivamente contribuito al combattimento — a differenza di `X is dead! R.I.P.`, che potrebbe
+  comparire anche per uccisioni non tue nella stessa stanza.
+- **Aggiunto**: nuovo comando `nautoloot <on|off>` (default **on**), indipendente da `nautosplit`:
+  puoi disattivare separatamente il loot automatico e/o lo split automatico.
+- **Versione interna** alzata a 1.4.1.
+
 ## 1.4.0 — 2026-08-10
 
 - **Aggiunto**: primo modulo di automazione di gioco (oltre a equip/spell/speedwalk): **loot +
