@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.7.0"
+local PKG_VER = "1.8.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -110,6 +110,9 @@ function NebbieDash.migrateStore()
         end
       end
     end
+    if type(data.weapons) ~= "table" then
+      data.weapons = {}
+    end
   end
 end
 
@@ -121,7 +124,7 @@ end
 function NebbieDash.getCharData(name)
   NebbieDash.chars = NebbieDash.chars or {}
   if not NebbieDash.chars[name] then
-    NebbieDash.chars[name] = { eq = {}, knownSpellOrder = {}, activeSpells = {}, weaponConfig = {}, lastSeen = nil }
+    NebbieDash.chars[name] = { eq = {}, knownSpellOrder = {}, activeSpells = {}, weapons = {}, lastSeen = nil }
   end
   return NebbieDash.chars[name]
 end
@@ -797,29 +800,37 @@ function NebbieDash.guiVisible()
 end
 
 -- Proporzione verticale della colonna destra tra Spell attivi (in alto) e
--- Speedwalk (in basso, il resto). L'equip occupa sempre tutta l'altezza
--- della colonna sinistra (un solo pannello, niente da dividere li').
-NebbieDash.guiRatios = { spells = 0.4 }
--- Altezza (px) della barra divisoria visibile tra Spell attivi e Speedwalk.
+-- Speedwalk (in basso, il resto). Analogamente, "equip" e' la proporzione
+-- della colonna sinistra tra Equip (in alto) e Armi (in basso, il resto) —
+-- richiesta esplicita dell'utente (2026-08-10): "devo avere sotto l'equip
+-- una lista di armi".
+NebbieDash.guiRatios = { spells = 0.4, equip = 0.6 }
+-- Altezza (px) delle barre divisorie visibili tra Spell attivi/Speedwalk e
+-- tra Equip/Armi.
 NebbieDash.dividerPx = 4
--- Le 3 miniconsole con testo (font/ricaricamento contenuto). La barra
--- divisoria e' un elemento separato (nessun testo, solo colore) — vedi
--- ALL_GUI_ELEMENTS per mostra/nascondi che deve includerla.
-NebbieDash.GUI_WINDOWS = { "NebbieDashEquip", "NebbieDashSpells", "NebbieDashSpeedwalks" }
-NebbieDash.ALL_GUI_ELEMENTS = { "NebbieDashEquip", "NebbieDashSpells", "NebbieDashSpeedwalks", "NebbieDashDivider" }
+-- Le 4 miniconsole con testo (font/ricaricamento contenuto). Le barre
+-- divisorie sono elementi separati (nessun testo, solo colore) — vedi
+-- ALL_GUI_ELEMENTS per mostra/nascondi che deve includerle.
+NebbieDash.GUI_WINDOWS = { "NebbieDashEquip", "NebbieDashWeapons", "NebbieDashSpells", "NebbieDashSpeedwalks" }
+NebbieDash.ALL_GUI_ELEMENTS = {
+  "NebbieDashEquip", "NebbieDashWeapons", "NebbieDashSpells", "NebbieDashSpeedwalks",
+  "NebbieDashDivider", "NebbieDashDividerLeft",
+}
 
 function NebbieDash.initGUI()
   if NebbieDash._guiCreated then return end
   setBorderLeft(NebbieDash.guiWidthEquip)
   setBorderRight(NebbieDash.guiWidthRight)
   createMiniConsole("NebbieDashEquip", 0, 0, NebbieDash.guiWidthEquip, 0)
+  createMiniConsole("NebbieDashWeapons", 0, 0, NebbieDash.guiWidthEquip, 0)
   createMiniConsole("NebbieDashSpells", 0, 0, NebbieDash.guiWidthRight, 0)
   createMiniConsole("NebbieDashSpeedwalks", 0, 0, NebbieDash.guiWidthRight, 0)
-  -- Barra divisoria tra Spell attivi e Speedwalk (richiesta esplicita: "manca
-  -- una barra tra gli spell attivi e gli speedwalk"). E' una label, non una
-  -- miniconsole: serve solo a marcare visivamente il confine tra i due
-  -- pannelli, non contiene testo.
+  -- Barre divisorie (richiesta esplicita: "manca una barra tra gli spell
+  -- attivi e gli speedwalk", stesso principio applicato ora anche tra Equip
+  -- e Armi). Sono label, non miniconsole: servono solo a marcare
+  -- visivamente il confine tra due pannelli, non contengono testo.
   createLabel("NebbieDashDivider", 0, 0, NebbieDash.guiWidthRight, NebbieDash.dividerPx, 1)
+  createLabel("NebbieDashDividerLeft", 0, 0, NebbieDash.guiWidthEquip, NebbieDash.dividerPx, 1)
   for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
     setMiniConsoleFontSize(win, NebbieDash.fontSize)
     -- Una miniconsole appena creata ha uno sfondo di default (grigio, widget
@@ -830,6 +841,7 @@ function NebbieDash.initGUI()
     setBackgroundColor(win, 15, 15, 15, 255)
   end
   setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
+  setBackgroundColor("NebbieDashDividerLeft", 90, 90, 100, 255)
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
   NebbieDash.refreshDashboard()
@@ -848,6 +860,7 @@ function NebbieDash.computeEquipMaxChars(data)
   local name = NebbieDash.currentChar
   if name then
     maxChars = math.max(maxChars, #("Equip — " .. name))
+    maxChars = math.max(maxChars, #("Armi — " .. name))
   end
   if data and data.eqUpdated then
     for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
@@ -857,6 +870,12 @@ function NebbieDash.computeEquipMaxChars(data)
         local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
         maxChars = math.max(maxChars, #row.location + 5, #item + 5)
       end
+    end
+  end
+  if data then
+    for _, w in ipairs(data.weapons or {}) do
+      local label = NebbieDash.truncate(w.displayName or w.keyword or "?", NebbieDash.itemMaxLen)
+      maxChars = math.max(maxChars, #label + #(" -- " .. (w.type or "?")))
     end
   end
   return maxChars
@@ -916,9 +935,16 @@ function NebbieDash.positionGUI()
   local w, h = getMainWindowSize()
   w = w or 800
   h = h or 600
-  -- Colonna sinistra: equip, tutta l'altezza disponibile.
+  -- Colonna sinistra: equip in alto, barra divisoria, armi in basso.
+  local usableHLeft = math.max(0, h - NebbieDash.dividerPx)
+  local equipH = math.floor(usableHLeft * NebbieDash.guiRatios.equip)
+  local weaponsH = usableHLeft - equipH
   moveWindow("NebbieDashEquip", 0, 0)
-  resizeWindow("NebbieDashEquip", NebbieDash.guiWidthEquip, h)
+  resizeWindow("NebbieDashEquip", NebbieDash.guiWidthEquip, equipH)
+  moveWindow("NebbieDashDividerLeft", 0, equipH)
+  resizeWindow("NebbieDashDividerLeft", NebbieDash.guiWidthEquip, NebbieDash.dividerPx)
+  moveWindow("NebbieDashWeapons", 0, equipH + NebbieDash.dividerPx)
+  resizeWindow("NebbieDashWeapons", NebbieDash.guiWidthEquip, weaponsH)
   -- Colonna destra: spell attivi in alto, barra divisoria, speedwalk in basso.
   local x = math.max(0, w - NebbieDash.guiWidthRight)
   local usableH = math.max(0, h - NebbieDash.dividerPx)
@@ -999,6 +1025,7 @@ NebbieDash.HELP_TEXT = {
   { "nfont <6-24>", "Imposta la dimensione del font dei pannelli." },
   { "nwidth [equip|right] <n|auto>", "Imposta/auto la larghezza di una colonna." },
   { "nheights <percentuale spell>", "Imposta la proporzione verticale spell/speedwalk (destra)." },
+  { "nleftheights <percentuale equip>", "Imposta la proporzione verticale equip/armi (sinistra)." },
   { "nitemlen <n>", "Lunghezza massima delle descrizioni oggetti in equip." },
   { "nspellwarn <tick>", "Sotto questa soglia di tick una spell appare rossa." },
   { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk." },
@@ -1014,6 +1041,8 @@ NebbieDash.HELP_TEXT = {
   { "nautofeed <on|off>", "Attiva/disattiva la macro automatica fame/sete (per personaggio, vedi file macro)." },
   { "nhungermacros", "Ricarica le macro fame/sete dal file di configurazione." },
   { "nitemkeywords", "Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione." },
+  { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
+  { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
   { "nhelp", "Mostra/nascondi questa finestra." },
 }
 
@@ -1080,7 +1109,7 @@ function NebbieDash.resetLayout()
   NebbieDash.fontSize = 11
   NebbieDash.autoWidthEquip = true
   NebbieDash.autoWidthRight = true
-  NebbieDash.guiRatios = { spells = 0.4 }
+  NebbieDash.guiRatios = { spells = 0.4, equip = 0.6 }
   if NebbieDash._guiCreated then
     for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
       setMiniConsoleFontSize(win, NebbieDash.fontSize)
@@ -1163,6 +1192,20 @@ function NebbieDash.cmdSetHeights(pctStr)
   cecho("<green>[NebbieDash] Altezza 'Spell attivi' impostata al " .. pct .. "% (Speedwalk: " .. (100 - pct) .. "%).\n")
 end
 
+-- Come cmdSetHeights, ma per la colonna sinistra: quota per "Equip", il resto
+-- va a "Armi".
+function NebbieDash.cmdSetLeftHeights(pctStr)
+  local pct = tonumber(pctStr)
+  if not pct or pct < 10 or pct > 90 then
+    cecho("<orange>[NebbieDash] Uso: nleftheights <percentuale tra 10 e 90> — quota per 'Equip', il resto va a 'Armi' (attuale: "
+      .. math.floor(NebbieDash.guiRatios.equip * 100) .. "%)\n")
+    return
+  end
+  NebbieDash.guiRatios.equip = pct / 100
+  if NebbieDash._guiCreated then NebbieDash.positionGUI() end
+  cecho("<green>[NebbieDash] Altezza 'Equip' impostata al " .. pct .. "% (Armi: " .. (100 - pct) .. "%).\n")
+end
+
 function NebbieDash.cmdSetItemLen(lenStr)
   local len = tonumber(lenStr)
   if not len or len < 10 or len > 300 then
@@ -1208,9 +1251,11 @@ function NebbieDash.refreshDashboard()
   NebbieDash.refreshSpeedwalkPanel()
   local name = NebbieDash.currentChar
   clearWindow("NebbieDashEquip")
+  clearWindow("NebbieDashWeapons")
   clearWindow("NebbieDashSpells")
   if not name then
     cecho("NebbieDashEquip", "<grey>Nessun personaggio rilevato.\n")
+    cecho("NebbieDashWeapons", "<grey>Nessun personaggio rilevato.\n")
     cecho("NebbieDashSpells", "<grey>Nessun personaggio rilevato.\n")
     return
   end
@@ -1236,6 +1281,28 @@ function NebbieDash.refreshDashboard()
         cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", idx, row.location, item))
       end
     end
+  end
+
+  cecho("NebbieDashWeapons", "<cyan><b>Armi — " .. name .. "</b>\n")
+  if data.weapons and #data.weapons > 0 then
+    -- Trova la keyword dell'arma attualmente impugnata (se nota) solo per
+    -- evidenziarla in elenco — il cambio arma vero e proprio (nremWeapon)
+    -- legge comunque lo slot "impugnato" al momento del click, non questo
+    -- valore cacheato.
+    local currentKeyword = NebbieDash.currentWieldedKeyword(data)
+    for i, w in ipairs(data.weapons) do
+      local label = NebbieDash.truncate(w.displayName or w.keyword or "?", NebbieDash.itemMaxLen)
+      local typeLabel = w.type or "?"
+      local isCurrent = currentKeyword ~= "" and NebbieDash.keywordsOverlap(currentKeyword, w.keyword or "")
+      local nameColor = isCurrent and "<yellow>" or "<white>"
+      cechoLink("NebbieDashWeapons", nameColor .. label,
+        string.format("NebbieDash.cmdSwapWeapon(%d)", i),
+        "Clicca per impugnare: " .. label, true)
+      cecho("NebbieDashWeapons", string.format(" <grey>-- %s\n", typeLabel))
+    end
+  else
+    cecho("NebbieDashWeapons", "<grey>(nessuna — si popola da sola quando impugni un'arma;\n"
+      .. " esegui anche <yellow>identify<grey> sull'arma per rilevarne il tipo di danno)\n")
   end
 
   cecho("NebbieDashSpells", "<cyan><b>Spell attivi — " .. name .. "</b>\n")
@@ -1422,6 +1489,150 @@ function NebbieDash.cmdSetAutoDisarmRecover(argStr)
     return
   end
   cecho("<green>[NebbieDash] Recupero automatico arma dopo disarmo: " .. (NebbieDash.autoDisarmRecover and "on" or "off") .. ".\n")
+end
+
+-- ---------------------------------------------------------------------------
+-- Gestione armi: elenco persistente per personaggio, con tipo di danno
+-- (slash/blunt/pierce) e cambio con un click (2026-08-10).
+-- Testi REALI forniti dall'utente:
+--   - Impugnare: si presume "Impugni <nome arma>." (confermato dall'utente
+--     via risposta a scelta multipla "generic_wield", non con un copia-incolla
+--     letterale — se in gioco il testo risultasse diverso, va corretto qui).
+--   - `identify` (spell/comando che l'utente esegue lui stesso quando vuole,
+--     NON automatizzato: costa una "ondata di stanchezza", quindi non va
+--     scatenato in automatico ad ogni wield) risponde su piu' righe, dove le
+--     due che servono sono:
+--       Oggetto: 'spada elf slayer', Tipo di Oggetto WEAPON
+--       Tipo di danno: 'SLASH'
+--     (viste separatamente, senza bisogno di una capture multi-riga con
+--     inizio/fine: bastano due trigger a riga singola che si "passano" il
+--     dato tra una riga e l'altra).
+-- ---------------------------------------------------------------------------
+
+-- Vero se due parole chiave condividono almeno una parola (case-insensitive):
+-- usato per collegare la keyword vista al wield (euristica/override da
+-- nebbie-item-keywords.txt) con quella "canonica" riportata da `identify`,
+-- che nella pratica raramente coincidono parola per parola.
+function NebbieDash.keywordsOverlap(a, b)
+  local wordsB = {}
+  for w in (b or ""):lower():gmatch("%S+") do wordsB[w] = true end
+  for w in (a or ""):lower():gmatch("%S+") do
+    if wordsB[w] then return true end
+  end
+  return false
+end
+
+function NebbieDash.findWeaponByKeyword(data, keyword)
+  keyword = (keyword or ""):lower()
+  if keyword == "" then return nil end
+  for _, w in ipairs(data.weapons or {}) do
+    if (w.keyword or ""):lower() == keyword then return w end
+  end
+  for _, w in ipairs(data.weapons or {}) do
+    if NebbieDash.keywordsOverlap(w.keyword or "", keyword) then return w end
+  end
+  return nil
+end
+
+-- Legge lo slot "impugnato" dal pannello equip gia' sincronizzato (nessuna
+-- chiamata aggiuntiva al gioco) e ne restituisce la parola chiave risolta,
+-- oppure stringa vuota se non impugni nulla o l'equip non e' sincronizzato.
+function NebbieDash.currentWieldedKeyword(data)
+  if not data or not data.eqUpdated then return "" end
+  for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+    if not row.empty and row.location == "impugnato" then
+      return NebbieDash.resolveItemKeywords(row.item)
+    end
+  end
+  return ""
+end
+
+function NebbieDash.onWieldLine()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local weaponName = text:match("^Impugni (.+)%.%s*$")
+  if not weaponName then return end
+  local name = NebbieDash.currentChar
+  if not name then return end
+  local data = NebbieDash.getCharData(name)
+  data.weapons = data.weapons or {}
+  local keyword = NebbieDash.resolveItemKeywords(weaponName)
+  local existing = NebbieDash.findWeaponByKeyword(data, keyword)
+  if not existing then
+    table.insert(data.weapons, { displayName = weaponName, keyword = keyword, type = nil })
+    NebbieDash.saveStore()
+    NebbieDash.refreshDashboard()
+  elseif existing.displayName ~= weaponName then
+    existing.displayName = weaponName
+    existing.keyword = keyword
+    NebbieDash.saveStore()
+    NebbieDash.refreshDashboard()
+  end
+end
+
+-- Vedi nota sopra: aggiornata/creata solo quando l'utente esegue `identify`
+-- di sua iniziativa, mai in automatico.
+function NebbieDash.onIdentifyObjectLine()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local keyword, objType = text:match("^Oggetto: '([^']+)', Tipo di Oggetto (%S+)$")
+  if not keyword then return end
+  NebbieDash._pendingIdentify = { keyword = keyword:lower(), isWeapon = (objType == "WEAPON") }
+end
+
+function NebbieDash.onIdentifyDamageLine()
+  local pending = NebbieDash._pendingIdentify
+  NebbieDash._pendingIdentify = nil
+  if not pending or not pending.isWeapon then return end
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local dmgType = text:match("^Tipo di danno: '([^']+)'")
+  if not dmgType then return end
+  local name = NebbieDash.currentChar
+  if not name then return end
+  local data = NebbieDash.getCharData(name)
+  data.weapons = data.weapons or {}
+  local entry = NebbieDash.findWeaponByKeyword(data, pending.keyword)
+  if entry then
+    entry.type = dmgType:lower()
+    entry.keyword = pending.keyword -- la keyword di `identify` e' quella "canonica" riportata dal gioco: la preferiamo.
+  else
+    table.insert(data.weapons, { displayName = pending.keyword, keyword = pending.keyword, type = dmgType:lower() })
+  end
+  NebbieDash.saveStore()
+  NebbieDash.refreshDashboard()
+end
+
+-- Click su un'arma in elenco: rem/put l'arma impugnata (se c'e'), get/wield
+-- quella selezionata. Usa lo stesso zaino (slot "sulla schiena") delle macro
+-- fame/sete, con lo stesso criterio override/euristica (vedi findBackpackKeywords).
+function NebbieDash.cmdSwapWeapon(idx)
+  local name = NebbieDash.currentChar
+  if not name then return end
+  local data = NebbieDash.getCharData(name)
+  local target = data.weapons and data.weapons[idx]
+  if not target or not target.keyword then return end
+
+  local currentKeyword = NebbieDash.currentWieldedKeyword(data)
+  if currentKeyword ~= "" and NebbieDash.keywordsOverlap(currentKeyword, target.keyword) then
+    cecho("<orange>[NebbieDash] Stai gia' impugnando " .. (target.displayName or target.keyword) .. ".\n")
+    return
+  end
+
+  local backpackKeywords, isOverride = NebbieDash.findBackpackKeywords(data)
+  local backpackKeyword = isOverride and backpackKeywords or NebbieDash.lastKeyword(backpackKeywords)
+  if backpackKeyword == "" then
+    cecho("<orange>[NebbieDash] Nessuno zaino rilevato (slot 'sulla schiena') — esegui <yellow>neq<orange> prima.\n")
+    return
+  end
+
+  local steps = {}
+  if currentKeyword ~= "" then
+    table.insert(steps, "rem " .. currentKeyword)
+    table.insert(steps, "put " .. currentKeyword .. " " .. backpackKeyword)
+  end
+  table.insert(steps, "get " .. target.keyword .. " " .. backpackKeyword)
+  table.insert(steps, "wield " .. target.keyword)
+  for i, cmd in ipairs(steps) do
+    tempTimer(NebbieDash.speedwalkDelay * (i - 1), function() send(cmd, false) end)
+  end
 end
 
 -- ---------------------------------------------------------------------------
@@ -1835,6 +2046,7 @@ function NebbieDash.teardownTriggers()
     NebbieDash._eqLineTrig, NebbieDash._attribLineTrig, NebbieDash._lootLineTrig,
     NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
     NebbieDash._fallTrig, NebbieDash._disarmTrig, NebbieDash._hungerTrig, NebbieDash._thirstTrig,
+    NebbieDash._wieldTrig, NebbieDash._identifyObjTrig, NebbieDash._identifyDmgTrig,
   }
   for _, id in ipairs(ids) do
     if id then pcall(function() killTrigger(id) end) end
@@ -1880,6 +2092,12 @@ function NebbieDash.installTriggers()
   NebbieDash._disarmTrig = tempTrigger("vola dalla tua presa", [[NebbieDash.onDisarmLine()]])
   NebbieDash._hungerTrig = tempTrigger("Hai Fame.", [[NebbieDash.onHungerThirstLine()]])
   NebbieDash._thirstTrig = tempTrigger("Hai sete.", [[NebbieDash.onHungerThirstLine()]])
+  -- Elenco armi (vedi sezione dedicata sopra): "Impugni " per popolare la
+  -- lista da solo ad ogni wield; le due righe di `identify` per rilevarne il
+  -- tipo di danno SOLO quando l'utente esegue quel comando di sua iniziativa.
+  NebbieDash._wieldTrig = tempTrigger("Impugni ", [[NebbieDash.onWieldLine()]])
+  NebbieDash._identifyObjTrig = tempTrigger("Tipo di Oggetto", [[NebbieDash.onIdentifyObjectLine()]])
+  NebbieDash._identifyDmgTrig = tempTrigger("Tipo di danno:", [[NebbieDash.onIdentifyDamageLine()]])
   if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
   if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
   -- Gli anonymous event handler restano registrati una volta sola (a

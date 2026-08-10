@@ -299,3 +299,41 @@ due trigger, non un sistema di combattimento completo:
 
 **Implementazione di entrambi**: vedi LOG.md Round 13 e CHANGELOG.md 1.5.0 (nuovi comandi
 `nautostand`, `nautodisarm`, alias generico `.N<comando>`).
+
+## Round 14 — Gestione armi: pannello + tipo di danno (2026-08-10)
+
+**Richiesta**: un sotto-pannello sotto l'Equip con l'elenco delle armi possedute, il tipo di danno
+(slash/blunt/pierce) e la possibilità di cambiare arma con un click (`rem`/`put`/`get`/`wield`).
+
+**Dettagli confermati dall'utente** (scelta multipla + testo libero):
+- La lista si popola da sola quando si impugna un'arma.
+- Il tipo di danno va rilevato con un comando separato (l'utente ha scelto `identify`, non
+  inventato dall'agente).
+- `rem <keyword>` è adatto a rimuovere un'arma (già confermato nel Round 13 per il disarmo).
+- La lista delle armi deve essere persistente per personaggio (come equip/spell).
+- Il messaggio di wield si presume `"Impugni <nome arma>."` (risposta a scelta multipla
+  "generic_wield", **non un copia-incolla letterale** — da correggere se il testo reale in gioco
+  fosse diverso).
+
+**Dato bloccante fornito** (output REALE di `identify`, richiesto esplicitamente perché mancante):
+
+```
+Pronunci le parole, 'identify'.
+La conoscenza ti pervade:
+Oggetto: 'spada elf slayer', Tipo di Oggetto WEAPON
+L'oggetto e': HUM METAL MAGIC ANTI-GOOD ANTI-MAGE ARTIFACT EDIT
+Peso: 12, Valore: 5000, Costo di rent: 7500
+Dado di danno: '3d5'
+Tipo di danno: 'SLASH'
+Caratteristiche:
+    Ti puo' dare : HIT-N-DAM by 4
+    ...
+Vieni sopraffatto da un'ondata di stanchezza.
+```
+
+Da questo testo: `identify` non viene mai inviato in automatico dal pacchetto (costa una "ondata di
+stanchezza"), resta un comando eseguito dall'utente di propria iniziativa; il pacchetto si limita ad
+ascoltare le due righe `Oggetto: '...', Tipo di Oggetto WEAPON` e `Tipo di danno: '...'`.
+
+**Implementazione**: vedi LOG.md "Gestione armi (v1.8.0)" e CHANGELOG.md 1.8.0 (nuovo pannello
+"Armi", nuovo comando `nleftheights`).

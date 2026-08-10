@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.7.0)
+description = [[# Nebbie Dashboard (1.8.0)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -56,6 +56,13 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   restano visibili/cliccabili anche da spente (in rosso) invece di sparire
   dal pannello; cambiando personaggio tornano tutte rosse finché non
   rilanci `attrib` per confermare quali sono davvero attive.
+- **Gestione armi** (nuovo pannello "Armi", sotto l'Equip a sinistra):
+  elenco persistente per personaggio delle armi impugnate almeno una volta,
+  con tipo di danno (slash/blunt/pierce) letto dall'output di `identify`
+  quando lo esegui tu (non è automatico, costa una "ondata di stanchezza").
+  Clicca un'arma in elenco per cambiare arma con un solo click (`rem`+`put`
+  di quella attuale, poi `get`+`wield` di quella scelta, usando lo zaino
+  già rilevato). Altezza Equip/Armi regolabile con `nleftheights`.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -65,4 +72,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.7.0]]
+version = [[1.8.0]]

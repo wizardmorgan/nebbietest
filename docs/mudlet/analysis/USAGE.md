@@ -39,6 +39,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nwidth <equip\|right> <numero>` | Fissa una larghezza manuale (150–900px) per la colonna equip (sinistra) o spell/speedwalk (destra), **disattivando** l'adattamento automatico per quella colonna. Senza indicare `equip`/`right` agisce sulla destra (retrocompatibilità). |
 | `nwidth <equip\|right> auto` | Riattiva la larghezza automatica per quella colonna (default per entrambe): si allarga/restringe da sola in base al contenuto più lungo visibile, senza mai superare il 60% della finestra di Mudlet. |
 | `nheights <percentuale>` | Regola quanta altezza della colonna destra va a "Spell attivi" (10–90, il resto va a "Speedwalk"; default 40). |
+| `nleftheights <percentuale>` | Regola quanta altezza della colonna sinistra va a "Equip" (10–90, il resto va a "Armi"; default 60). |
 | `nclanslot <on\|off>` | Mostra/nasconde il 22° slot equip placeholder "simbolo del clan" (nascosto di default, non ancora confermato in un `eq` reale). |
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
@@ -60,6 +61,27 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nautofeed <on\|off>` | Attiva/disattiva la macro automatica fame/sete (default **on**), vedi sotto. |
 | `nhungermacros` | Ricarica le macro fame/sete dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nitemkeywords` | Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
+
+## Pannello Armi (sotto l'Equip, colonna sinistra)
+
+Elenco persistente per personaggio di tutte le armi che hai impugnato almeno una volta, con il tipo
+di danno (slash/blunt/pierce) quando noto. Si popola da solo:
+
+1. Impugni un'arma (`wield <qualcosa>`) → l'arma compare nell'elenco con tipo "?" (ancora sconosciuto).
+2. Esegui tu, quando vuoi, `identify` su quell'arma → il pacchetto legge l'output e aggiorna il tipo
+   di danno mostrato (slash/blunt/pierce). **`identify` non viene mai inviato in automatico** dal
+   pacchetto: è un comando/spell che costa una "ondata di stanchezza", quindi resta sempre una tua
+   scelta quando eseguirlo.
+
+Clicca il nome di un'arma in elenco per **cambiare arma con un solo click**: il pacchetto invia da
+solo, in sequenza, `rem`+`put` dell'arma che stai impugnando adesso (letta dal pannello Equip, slot
+"impugnato") nello zaino, poi `get`+`wield` dell'arma che hai scelto — usando lo stesso zaino (slot
+"sulla schiena") e lo stesso criterio di parole chiave (override da `nebbie-item-keywords.txt` se
+presente, altrimenti euristica automatica) già usato per il recupero arma dopo un disarmo e per le
+macro fame/sete. Se non stai impugnando nulla, salta direttamente a `get`+`wield`. Se clicchi l'arma
+che hai già impugnata, non invia nulla.
+
+L'altezza di questo pannello rispetto all'Equip si regola con `nleftheights` (vedi tabella sopra).
 
 ## Loot e split automatico
 

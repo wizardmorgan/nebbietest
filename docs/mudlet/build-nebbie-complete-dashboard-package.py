@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.7.0"
+PKG_VER = "1.8.0"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -83,6 +83,13 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   restano visibili/cliccabili anche da spente (in rosso) invece di sparire
   dal pannello; cambiando personaggio tornano tutte rosse finché non
   rilanci `attrib` per confermare quali sono davvero attive.
+- **Gestione armi** (nuovo pannello "Armi", sotto l'Equip a sinistra):
+  elenco persistente per personaggio delle armi impugnate almeno una volta,
+  con tipo di danno (slash/blunt/pierce) letto dall'output di `identify`
+  quando lo esegui tu (non è automatico, costa una "ondata di stanchezza").
+  Clicca un'arma in elenco per cambiare arma con un solo click (`rem`+`put`
+  di quella attuale, poi `get`+`wield` di quella scelta, usando lo zaino
+  già rilevato). Altezza Equip/Armi regolabile con `nleftheights`.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -118,6 +125,7 @@ ALIASES = [
     ("nebbie-dash-speedwalks", "^nspeedwalks$", "NebbieDash.cmdReloadSpeedwalks()"),
     ("nebbie-dash-speeddelay", "^nspeeddelay (.+)$", "NebbieDash.cmdSetSpeedDelay(matches[2])"),
     ("nebbie-dash-heights", "^nheights (.+)$", "NebbieDash.cmdSetHeights(matches[2])"),
+    ("nebbie-dash-leftheights", "^nleftheights (.+)$", "NebbieDash.cmdSetLeftHeights(matches[2])"),
     ("nebbie-dash-clanslot", "^nclanslot (.+)$", "NebbieDash.cmdSetClanSlot(matches[2])"),
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
     ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),

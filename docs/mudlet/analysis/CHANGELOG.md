@@ -1,5 +1,22 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.8.0 — 2026-08-10
+
+- **Aggiunto**: nuovo pannello "Armi" (colonna sinistra, sotto l'Equip). Elenco persistente per
+  personaggio di tutte le armi impugnate almeno una volta, con il tipo di danno (slash/blunt/pierce)
+  quando noto. Si popola da solo alla riga `Impugni <arma>.`; il tipo di danno viene rilevato
+  leggendo l'output di `identify` (comando che l'utente esegue lui stesso quando vuole — NON
+  automatizzato, dato che costa una "ondata di stanchezza"), riconoscendo le due righe reali
+  `Oggetto: '<keyword>', Tipo di Oggetto WEAPON` e `Tipo di danno: '<TIPO>'`.
+- **Aggiunto**: cambio arma con un click sul pannello Armi. Sequenza automatica: `rem`+`put` dell'arma
+  attualmente impugnata (letta dallo slot "impugnato" del pannello Equip già sincronizzato, se
+  presente) nello zaino ("sulla schiena"), poi `get`+`wield` dell'arma scelta — stesso zaino e stesso
+  criterio override/euristica già usato per il recupero arma dopo un disarmo e per le macro fame/sete
+  (`nitemkeywords`).
+- **Aggiunto**: `nleftheights <percentuale>` per regolare manualmente la proporzione verticale tra
+  Equip e Armi (analogo a `nheights` già esistente per Spell attivi/Speedwalk a destra).
+- **Versione interna** alzata a 1.8.0.
+
 ## 1.7.0 — 2026-08-10
 
 - **Aggiunto**: parole chiave per oggetto condivise tra tutti i personaggi (`nitemkeywords`, file

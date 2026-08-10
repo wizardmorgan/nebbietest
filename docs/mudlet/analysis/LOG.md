@@ -981,4 +981,52 @@ test totali OK (offline, `lua` standalone). Versione alzata a 1.7.0. Rigenerato 
 
 ---
 
+## 2026-08-10 — Gestione armi (v1.8.0)
+
+**Richiesta utente**: pannello con elenco delle armi possedute (impugnate almeno una volta), col
+tipo di danno (slash/blunt/pierce), cliccabile per cambiare arma con la sequenza
+`rem`/`put`/`get`/`wield`. Dato bloccante richiesto e fornito dall'utente: output REALE di
+`identify` su un'arma —
+
+```
+Pronunci le parole, 'identify'.
+La conoscenza ti pervade:
+Oggetto: 'spada elf slayer', Tipo di Oggetto WEAPON
+...
+Dado di danno: '3d5'
+Tipo di danno: 'SLASH'
+Caratteristiche: ...
+```
+
+**Decisioni prese** (nessuna inventata senza base):
+- L'individuazione dell'arma impugnata (per il wield) usa il messaggio "Impugni <nome arma>."
+  confermato dall'utente tramite risposta a scelta multipla (non un copia-incolla letterale — se in
+  gioco il testo risultasse diverso andrà corretto).
+- `identify` NON viene mai inviato in automatico dal pacchetto: costa una "ondata di stanchezza" (si
+  presume mana/energia), quindi resta un comando che l'utente esegue di propria iniziativa quando
+  vuole conoscere il tipo di danno di un'arma. Il pacchetto si limita ad "ascoltare" le due righe di
+  risposta (`Oggetto: '...', Tipo di Oggetto WEAPON` e `Tipo di danno: '...'`) con due trigger a
+  riga singola che si passano il dato tra una riga e l'altra (stesso principio degli altri trigger a
+  riga singola del pacchetto, niente capture multi-riga con inizio/fine essendo bastano due righe
+  fisse).
+- La keyword "euristica" derivata dal nome mostrato al wield e quella "canonica" riportata da
+  `identify` raramente coincidono parola per parola (es. "Spada degli Elfi Assassina" al wield vs
+  "spada elf slayer" da identify): il matching tra le due usa una euristica per PAROLA IN COMUNE
+  (`keywordsOverlap`), non l'uguaglianza esatta — se `identify` la aggiorna, la keyword "canonica" da
+  identify sostituisce quella euristica (piu' affidabile, viene dal gioco stesso).
+- Il cambio arma con un click riusa lo stesso zaino ("sulla schiena") e lo stesso criterio
+  override/euristica delle altre automazioni (`nitemkeywords`, vedi sopra): nessuna nuova sorgente di
+  keyword introdotta, un solo file di override condiviso per tutto il pacchetto.
+- Layout: nuovo pannello "Armi" nella colonna sinistra, SOTTO l'Equip (richiesto esplicitamente),
+  con divisore e proporzione regolabile (`nleftheights`), stesso pattern gia' usato per
+  Spell/Speedwalk a destra (`nheights`).
+
+**Verifica**: `luac -p` OK. Aggiunti test dedicati (wield popola la lista, identify aggiorna/crea
+un'entry, identify su oggetto non-WEAPON ignorato, `keywordsOverlap`, `cmdSwapWeapon` sui casi
+limite) — 131/131 test totali OK (offline, `lua` standalone). Versione alzata a 1.8.0. Rigenerato
+`.mpackage` (XML validato con `xml.dom.minidom`, `config.lua` validato con `luac -p`). Aggiornati
+USAGE.md, CHANGELOG.md.
+
+---
+
 (continua...)

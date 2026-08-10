@@ -614,6 +614,64 @@ local secondCallOk = pcall(NebbieDash.onHungerThirstLine)
 check("fame/sete: chiamata bloccata dal cooldown non genera errori", secondCallOk)
 NebbieDash._lastHungerMacroRun = 0
 
+-- Test 19: gestione armi — testi REALI fornito dall'utente (2026-08-10):
+-- l'output di `identify` su "spada elf slayer" (WEAPON, Tipo di danno
+-- 'SLASH'). Il wield ("Impugni <arma>.") popola la lista con tipo
+-- sconosciuto; il successivo identify aggiorna il tipo sull'entry esistente
+-- (matching per parola in comune tra la keyword euristica del wield e
+-- quella "canonica" riportata da identify).
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+local wdata = NebbieDash.getCharData("NomiyaMaki")
+wdata.weapons = {}
+
+line = "Impugni la Spada degli Elfi Assassina."
+NebbieDash.onWieldLine()
+check("armi: wield popola la lista (1 arma)", #wdata.weapons == 1)
+check("armi: tipo iniziale sconosciuto (nil)", wdata.weapons[1] and wdata.weapons[1].type == nil)
+
+line = "Oggetto: 'spada elf slayer', Tipo di Oggetto WEAPON"
+NebbieDash.onIdentifyObjectLine()
+line = "Tipo di danno: 'SLASH'"
+NebbieDash.onIdentifyDamageLine()
+check("armi: identify aggiorna il tipo sull'arma esistente (non ne crea una seconda)", #wdata.weapons == 1)
+check("armi: tipo aggiornato a 'slash' (minuscolo)", wdata.weapons[1].type == "slash")
+
+-- Un identify su un oggetto non-WEAPON non deve toccare la lista armi.
+local weaponsCountBefore = #wdata.weapons
+line = "Oggetto: 'anello dei venti', Tipo di Oggetto ARMOR"
+NebbieDash.onIdentifyObjectLine()
+line = "Tipo di danno: 'BLUNT'"
+NebbieDash.onIdentifyDamageLine()
+check("armi: identify su oggetto non-WEAPON viene ignorato", #wdata.weapons == weaponsCountBefore)
+
+-- Un identify il cui esito arriva senza un'arma corrispondente in elenco
+-- crea comunque una nuova entry (per non perdere l'informazione).
+line = "Oggetto: 'ascia mannaia', Tipo di Oggetto WEAPON"
+NebbieDash.onIdentifyObjectLine()
+line = "Tipo di danno: 'BLUNT'"
+NebbieDash.onIdentifyDamageLine()
+check("armi: identify su arma non ancora in lista ne crea una nuova", #wdata.weapons == 2)
+
+check("armi: keywordsOverlap riconosce parole condivise",
+  NebbieDash.keywordsOverlap("spada elfi assassina", "spada elf slayer"))
+check("armi: keywordsOverlap nega quando non ci sono parole condivise",
+  not NebbieDash.keywordsOverlap("ascia mannaia", "spada elf slayer"))
+
+-- cmdSwapWeapon non deve generare errori sui casi limite (nessun personaggio
+-- attivo, indice inesistente, nessuno zaino rilevato).
+NebbieDash.currentChar = nil
+local swapOkNoChar = pcall(NebbieDash.cmdSwapWeapon, 1)
+check("armi: cmdSwapWeapon senza personaggio attivo non genera errori", swapOkNoChar)
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+
+local swapOkBadIdx = pcall(NebbieDash.cmdSwapWeapon, 99)
+check("armi: cmdSwapWeapon con indice inesistente non genera errori", swapOkBadIdx)
+
+sentLog = {}
+wdata.eqUpdated = false
+NebbieDash.cmdSwapWeapon(1)
+check("armi: cmdSwapWeapon senza equip sincronizzato non invia nulla (nessuno zaino noto)", #sentLog == 0)
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")
