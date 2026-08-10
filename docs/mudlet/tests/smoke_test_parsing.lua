@@ -13,6 +13,7 @@ function tempTrigger() return nil end
 function tempRegexTrigger() return nil end
 function disableTrigger() end
 function enableTrigger() end
+function killTrigger() end
 local lastSent = nil
 local sentLog = {}
 function send(cmd) lastSent = cmd; table.insert(sentLog, cmd) end
@@ -30,6 +31,13 @@ function resizeWindow() end
 function clearWindow() end
 function hideWindow() end
 function showWindow() end
+function setLabelClickCallback() end
+function setLabelToolTip() end
+function moveLabel() end
+function resizeLabel() end
+function setLabelStyleSheet() end
+function echo() end
+function cechoLink() end
 registerAnonymousEventHandler = function() end
 
 local scriptDir = arg and arg[0] and arg[0]:match("^(.*)[/\\][^/\\]+$") or "."
@@ -190,20 +198,20 @@ for _, l in ipairs(attribLines) do
   NebbieDash.onAttribCaptureLine()
 end
 local data2 = NebbieDash.getCharData("NomiyaMaki")
-check("attrib: 2 spell catturati", #data2.spells == 2)
-check("attrib: primo spell true sight/74", data2.spells[1].name == "true sight" and data2.spells[1].ticks == 74)
-check("attrib: secondo spell darkness/9", data2.spells[2].name == "darkness" and data2.spells[2].ticks == 9)
+check("attrib: 2 spell conosciute dopo il primo attrib", #data2.knownSpellOrder == 2)
+check("attrib: 'true sight' attiva a 74 tick",
+  data2.knownSpellOrder[1] == "true sight" and data2.activeSpells["true sight"] == 74)
+check("attrib: 'darkness' attiva a 9 tick",
+  data2.knownSpellOrder[2] == "darkness" and data2.activeSpells["darkness"] == 9)
 
--- Test 4b: un secondo `attrib` (es. dopo aver rilanciato "darkness") deve
--- SOSTITUIRE per intero data.spells con i nuovi tick, non accumularli — cosi'
--- il colore (verde/rosso), che viene ricalcolato ad ogni refreshDashboard()
--- leggendo data.spells, torna verde appena i tick residui salgono sopra la
--- soglia nspellwarn. Riproduce il bug segnalato ("rimangono rossi anche dopo
--- attrib") per verificare che la logica di cattura/sostituzione sia corretta.
+-- Test 4b: un secondo `attrib` con solo "darkness" (es. "true sight" e'
+-- scaduta) NON deve far sparire "true sight" dal pannello — deve restare
+-- visibile/cliccabile ma diventare rossa (inattiva), richiesta esplicita
+-- dell'utente (2026-08-10): le spell "rimangono in rosso" invece di
+-- sparire, cosi' resta comodo rilanciarle con un click.
 local attribLines2 = {
   "Spells attivi:",
   "--------------",
-  "Spell : 'true sight' - 70",
   "Spell : 'darkness' - 80",
   "",
 }
@@ -213,11 +221,23 @@ for _, l in ipairs(attribLines2) do
   NebbieDash.onAttribCaptureLine()
 end
 local data2b = NebbieDash.getCharData("NomiyaMaki")
-check("attrib: risync sostituisce (non accumula) gli spell", #data2b.spells == 2)
-check("attrib: darkness aggiornato a 80 tick dopo il rilancio",
-  data2b.spells[2].name == "darkness" and data2b.spells[2].ticks == 80)
+check("attrib: l'elenco conosciuto resta cumulativo (2, non sostituito)", #data2b.knownSpellOrder == 2)
+check("attrib: 'darkness' aggiornata a 80 tick dopo il rilancio", data2b.activeSpells["darkness"] == 80)
 check("attrib: colore darkness verde dopo il rilancio (80 > soglia 5)",
-  (tonumber(data2b.spells[2].ticks) or 0) > NebbieDash.spellWarnTicks)
+  (tonumber(data2b.activeSpells["darkness"]) or 0) > NebbieDash.spellWarnTicks)
+check("attrib: 'true sight' non più nell'output diventa inattiva (nil in activeSpells)",
+  data2b.activeSpells["true sight"] == nil)
+
+-- Test 4c: bug segnalato (2026-08-10) — cambiando personaggio e tornando su
+-- NomiyaMaki, le spell conosciute devono restare (non vanno perse) ma lo
+-- stato "attivo" deve azzerarsi (tutte rosse finche' non si rilancia
+-- attrib), per non fidarsi di una durata residua ormai vecchia.
+NebbieDash.setCurrentCharacter("Mirari", true)
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+local data2c = NebbieDash.getCharData("NomiyaMaki")
+check("cambio personaggio: le spell conosciute restano (non sparite)", #data2c.knownSpellOrder == 2)
+check("cambio personaggio: lo stato attivo si azzera (tutte rosse finche' non riattribuisci)",
+  next(data2c.activeSpells) == nil)
 
 -- Test 5: parsing speedwalk (Q&A.md Round 5) — esempio esatto fornito
 -- dall'utente: "u,3w,n,s,2d" = up, west, west, west, north, south, down, down.
@@ -513,6 +533,69 @@ NebbieDash.autoFeed = false
 local offOk = pcall(NebbieDash.onHungerThirstLine)
 check("fame/sete: con nautofeed off non genera errori", offOk)
 NebbieDash.autoFeed = true
+
+-- Test 17: parole chiave per oggetto condivise tra personaggi — richiesta
+-- esplicita dell'utente (2026-08-10): "l'oggetto da cui prendere la
+-- cornucopia potrà cambiare... e se assegnassimo delle key predefinite per
+-- oggetto in modo da condividerle con tutti i personaggi?". Un override nel
+-- file nebbie-item-keywords.txt ha SEMPRE la precedenza sull'euristica
+-- automatica, e viene usato per intero (senza il taglio a singola parola)
+-- perche' l'utente lo ha scritto sapendo che funziona davvero in gioco.
+check("keyword oggetto: senza override si usa l'euristica automatica",
+  select(1, NebbieDash.resolveItemKeywords("Borsa Inesauribile dei Korred")) == "borsa inesauribile korred")
+check("keyword oggetto: senza override, isOverride == false",
+  select(2, NebbieDash.resolveItemKeywords("Borsa Inesauribile dei Korred")) == false)
+
+NebbieDash.itemKeywordOverrides["borsa inesauribile dei korred"] = "korred"
+check("keyword oggetto: con override (case-insensitive) si usa la parola scritta dall'utente",
+  select(1, NebbieDash.resolveItemKeywords("Borsa Inesauribile dei Korred")) == "korred")
+check("keyword oggetto: con override, isOverride == true",
+  select(2, NebbieDash.resolveItemKeywords("Borsa Inesauribile dei Korred")) == true)
+
+-- Con l'override attivo, la macro fame/sete deve usare la parola intera
+-- scritta dall'utente (non tagliata a una sola parola dall'euristica).
+NebbieDash._lastHungerMacroRun = 0
+local resolvedWithOverride, isOverrideWithOverride = NebbieDash.findBackpackKeywords(hungerData)
+check("fame/sete: con override lo zaino usa esattamente la parola configurata",
+  resolvedWithOverride == "korred" and isOverrideWithOverride == true)
+NebbieDash.itemKeywordOverrides = {}
+
+-- Il file di override e' usato anche dal recupero arma dopo un disarmo.
+NebbieDash.itemKeywordOverrides["la flamberga di boris"] = "flamberga boris"
+check("keyword oggetto: usata anche per il recupero arma dopo disarmo",
+  select(1, NebbieDash.resolveItemKeywords("la Flamberga di Boris")) == "flamberga boris")
+NebbieDash.itemKeywordOverrides = {}
+
+-- Parsing di una riga del file (formato "Nome oggetto: parole chiave").
+local parsedName, parsedKeywords = NebbieDash.parseItemKeywordLine("Borsa Inesauribile dei Korred: korred")
+check("keyword oggetto: parsing riga file (nome)", parsedName == "borsa inesauribile dei korred")
+check("keyword oggetto: parsing riga file (parole chiave)", parsedKeywords == "korred")
+check("keyword oggetto: riga commento ignorata", NebbieDash.parseItemKeywordLine("# commento") == nil)
+check("keyword oggetto: riga vuota ignorata", NebbieDash.parseItemKeywordLine("   ") == nil)
+check("keyword oggetto: riga senza ':' ignorata", NebbieDash.parseItemKeywordLine("qualcosa senza due punti") == nil)
+
+-- Test 18: bug segnalato (2026-08-10) — "serve rilanciare Mudlet ogni volta
+-- che carico un nuovo package". Causa reale: installTriggers() aveva un
+-- guard "una volta sola per sempre" che impediva la ri-registrazione dei
+-- trigger dopo il primo avvio della sessione Lua — qualunque trigger NUOVO
+-- introdotto da una versione aggiornata non veniva mai creato senza un
+-- riavvio completo di Mudlet. Fix: installTriggers()/teardownTriggers() ora
+-- sono idempotenti (si possono richiamare quante volte serve, es. ad ogni
+-- reinstallazione a caldo del package).
+local install1Ok = pcall(NebbieDash.installTriggers)
+check("trigger: prima installazione non genera errori", install1Ok)
+local install2Ok = pcall(NebbieDash.installTriggers)
+check("trigger: una seconda installazione (simula un reinstall a caldo) non genera errori", install2Ok)
+local teardownOk = pcall(NebbieDash.teardownTriggers)
+check("trigger: teardown chiamabile piu' volte senza errori", teardownOk)
+
+-- boot() deve essere richiamabile piu' volte senza errori (idempotente),
+-- simulando esattamente cio' che succede reinstallando il package a caldo.
+local boot1Ok = pcall(NebbieDash.boot)
+check("boot: prima chiamata non genera errori", boot1Ok)
+NebbieDash._lastBootTime = nil -- forza una vera riesecuzione (non solo il dedupe temporale)
+local boot2Ok = pcall(NebbieDash.boot)
+check("boot: una seconda chiamata (simula reinstall) non genera errori", boot2Ok)
 
 -- Test 16: bug segnalato in gioco (2026-08-10) — "Hai Fame." e "Hai sete."
 -- arrivano spesso INSIEME, facendo scattare entrambi i trigger e avviando

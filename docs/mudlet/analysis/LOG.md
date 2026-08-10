@@ -918,4 +918,67 @@ Rigenerato `.mpackage`. Aggiornati USAGE.md, CHANGELOG.md.
 
 ---
 
+## Round 17 (2026-08-10): keyword condivise, fix reinstall, spell conosciute persistenti
+
+**Tre richieste dell'utente** in risposta al fix precedente:
+
+1. "l'oggetto da cui prendere la cornucopia potrà cambiare, non sono sicuro sia una buona idea
+   prendere solo l'ultima parola. e se assegnassimo delle key predefinite per oggetto in modo da
+   condividerle con tutti i personaggi?"
+2. "è possibile fare in modo che non vada rilanciato tutte le volte mudlet ogni volta che carico un
+   nuovo package?"
+3. "possiamo anche fare in modo che le spell che mi lancio rimangano inattive in rosso quando entro
+   con il personaggio relativo e che si sincronizzino quando esguo attrib?" (con esempio dettagliato
+   del comportamento desiderato per due personaggi diversi).
+
+**Fix 1 — parole chiave per oggetto condivise**: nuovo file `nebbie-item-keywords.txt` (una riga
+per oggetto per NOME, non per personaggio — un dato oggetto ha sempre le stesse parole chiave in
+game). Nuova funzione `NebbieDash.resolveItemKeywords()`, punto unico usato sia dal recupero arma
+dopo disarmo sia dallo zaino delle macro fame/sete: se l'oggetto ha una riga nel file, si usa quella
+per intero (l'utente sa che funziona); altrimenti si ricade sull'euristica automatica (con
+`lastKeyword()` applicato solo in questo secondo caso, per il motivo gia' spiegato nel Round 16).
+Comando `nitemkeywords` per ricaricare.
+
+**Fix 2 — causa reale del "serve riavviare Mudlet"**: analizzando l'architettura di boot del
+pacchetto (due Script XML: uno "core" senza event handler che si esegue AD OGNI caricamento/
+installazione, e uno "boot" agganciato a `sysLoadEvent` che chiama `NebbieDash.boot()`), si e'
+scoperto che `NebbieDash.boot()` veniva chiamato SOLO dallo script legato a `sysLoadEvent` — che
+non rifira affatto durante una semplice reinstallazione del pacchetto a meta' sessione (scatta solo
+al vero avvio/caricamento del profilo). Il codice (definizioni di funzione) si aggiornava comunque
+ad ogni reinstallazione (perche' lo script "core" lo esegue sempre), ma `boot()` — che chiama
+`installTriggers()` per creare/aggiornare i trigger dinamici — non veniva mai richiamato senza un
+riavvio completo. In piu', anche quando richiamato manualmente (es. con `nfix`), `installTriggers()`
+aveva un secondo guard "una volta per sempre a sessione" (`_triggersInstalled`) che bloccava
+comunque qualunque nuova registrazione dopo il primissimo avvio.
+
+**Fix applicato**: (a) `NebbieDash.boot()` viene ora chiamato ANCHE alla fine dello script "core"
+(quindi ad ogni [re]installazione del pacchetto, non solo al vero avvio del profilo); (b)
+`installTriggers()`/nuova `teardownTriggers()` sono ora idempotenti — ad ogni chiamata smontano
+(`killTrigger`) gli eventuali trigger dinamici di un boot precedente e li ricreano da zero; (c)
+`boot()` stesso ha un piccolo dedupe temporale (2s) solo per evitare un doppio messaggio "pronto" se
+per caso venisse chiamato due volte nello stesso istante (es. al vero avvio di Mudlet, se sia lo
+script "core" sia l'evento `sysLoadEvent` scattano nello stesso momento).
+
+**Fix 3 — spell "conosciute" persistenti**: nuovo campo persistente `data.knownSpellOrder` (elenco
+CUMULATIVO, mai sostituito, di tutti i nomi di spell mai visti attivi per un personaggio) separato
+da `data.activeSpells` (mappa nome -> tick, SOLO le spell confermate attive dall'ultimo `attrib`).
+`finishAttribCapture()` ora aggiunge eventuali nomi nuovi a `knownSpellOrder` e sostituisce per
+intero `activeSpells`; il pannello itera su `knownSpellOrder` (sempre visibile/cliccabile) e colora
+in verde solo le voci presenti in `activeSpells` (sopra la soglia `nspellwarn`), rosso tutte le
+altre (comprese quelle mai confermate o scadute). `setCurrentCharacter()` azzera `activeSpells` ad
+ogni cambio di personaggio EFFETTIVO (non su refresh ripetuti dello stesso personaggio), cosi' al
+rientro su un personaggio le sue spell conosciute appaiono tutte rosse finche' non si rilancia
+`attrib` — esattamente il comportamento descritto dall'utente per Mirari e NomiyaMaki. Aggiunta
+`migrateStore()` per costruire `knownSpellOrder`/`activeSpells` dai vecchi `data.spells` salvati da
+installazioni precedenti, senza perdere dati.
+
+**Verifica**: `luac -p` OK. Aggiunti/aggiornati test dedicati (override di parole chiave con
+precedenza sull'euristica, idempotenza di `installTriggers()`/`teardownTriggers()`/`boot()`, elenco
+spell cumulativo che non sparisce, azzeramento dello stato attivo al cambio personaggio) — 120/120
+test totali OK (offline, `lua` standalone). Versione alzata a 1.7.0. Rigenerato `.mpackage`
+(validato anche l'XML generato con `xml.dom.minidom`, confermando 2 Script e la chiamata a
+`NebbieDash.boot()` presente in entrambi). Aggiornati USAGE.md, CHANGELOG.md.
+
+---
+
 (continua...)

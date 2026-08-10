@@ -1,5 +1,26 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.7.0 — 2026-08-10
+
+- **Aggiunto**: parole chiave per oggetto condivise tra tutti i personaggi (`nitemkeywords`, file
+  `nebbie-item-keywords.txt`). Permette di fissare una volta per tutte la parola chiave esatta di un
+  oggetto (per nome), usata al posto dell'euristica automatica per il recupero arma dopo un disarmo e
+  per il segnaposto `{zaino}` delle macro fame/sete — utile quando l'euristica non produce la parola
+  giusta (es. `wear` confuso da parole extra) o quando l'oggetto in questione può cambiare nel tempo.
+- **Corretto (bug importante)**: non serviva più semplicemente reinstallare il pacchetto per
+  attivare funzionalità nuove o modificate — era necessario riavviare completamente Mudlet. Causa:
+  `installTriggers()` aveva un guard "una volta per sessione" che, dopo il primo avvio, bloccava
+  qualunque nuova registrazione di trigger anche dopo una reinstallazione con codice aggiornato.
+  Corretto rendendo `installTriggers()` idempotente (smonta e rimonta ad ogni chiamata) e invocando
+  `boot()` immediatamente ad ogni (re)installazione del pacchetto, non solo al normale avvio di
+  Mudlet.
+- **Aggiunto**: elenco "conosciuto" persistente delle spell per personaggio. Una spell vista almeno
+  una volta attiva in `attrib` per un personaggio resta per sempre visibile/cliccabile nel pannello
+  (anche da scaduta, in rosso), invece di sparire quando `attrib` non la elenca più. Cambiando
+  personaggio (o tornandoci), tutte le spell conosciute di quel personaggio tornano rosse finché non
+  si rilancia `attrib`, per non fidarsi di uno stato attivo potenzialmente vecchio.
+- **Versione interna** alzata a 1.7.0.
+
 ## 1.6.1 — 2026-08-10
 
 - **Corretto (bug in gioco confermato dai log)**: la macro fame/sete poteva partire **due volte in

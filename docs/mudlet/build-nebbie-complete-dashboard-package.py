@@ -19,7 +19,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.6.1"
+PKG_VER = "1.7.0"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -70,6 +70,19 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   schiena") derivata automaticamente (una sola parola, per non confondere
   comandi come `wear`) e un cooldown di 3s per evitare doppie esecuzioni
   quando fame e sete arrivano insieme.
+- **Parole chiave per oggetto condivise tra personaggi** (`nitemkeywords`,
+  file `nebbie-item-keywords.txt`): puoi fissare tu la parola chiave esatta
+  per un dato oggetto (per nome), usata al posto dell'euristica automatica
+  per il recupero arma dopo un disarmo e per lo zaino delle macro fame/sete
+  — vale per tutti i personaggi, non serve ripeterla.
+- **Corretto (importante)**: non serve più riavviare Mudlet dopo aver
+  (re)installato una nuova versione del pacchetto — prima, i trigger e le
+  funzionalità nuove non venivano attivati finché non si riavviava
+  completamente Mudlet.
+- **Spell "conosciute" persistenti per personaggio**: le spell che lanci
+  restano visibili/cliccabili anche da spente (in rosso) invece di sparire
+  dal pannello; cambiando personaggio tornano tutte rosse finché non
+  rilanci `attrib` per confermare quali sono davvero attive.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -116,6 +129,7 @@ ALIASES = [
     ("nebbie-dash-repeat", r"^\.(\d+)\s*(.+)$", "NebbieDash.cmdRepeat(matches[2], matches[3])"),
     ("nebbie-dash-autofeed", "^nautofeed (.+)$", "NebbieDash.cmdSetAutoFeed(matches[2])"),
     ("nebbie-dash-hungermacros", "^nhungermacros$", "NebbieDash.cmdReloadHungerMacros()"),
+    ("nebbie-dash-itemkeywords", "^nitemkeywords$", "NebbieDash.cmdReloadItemKeywords()"),
 ]
 
 
@@ -138,9 +152,13 @@ def cdata(text):
 
 
 def build_xml(core_code):
-    boot_wrapper = f'''local ver = "{PKG_VER}"
-if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
-local ok, err = pcall(function() NebbieDash.boot() end)
+    # Chiamata a boot() sia nello script "core" (che si esegue SUBITO ad ogni
+    # (re)installazione a caldo del package — vedi nota in installTriggers()/
+    # boot() nel core.lua per il perche') sia nello script "boot" agganciato
+    # a sysLoadEvent (ridondanza difensiva per il normale avvio di Mudlet).
+    # Nessun controllo di versione qui: boot() e' idempotente e si occupa da
+    # solo di evitare doppie esecuzioni troppo vicine nel tempo.
+    boot_call = '''local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
   cecho("<red>[NebbieDash] errore boot: " .. tostring(err) .. "\\n")
 end'''
@@ -153,13 +171,13 @@ end'''
 
     parts.append('  <Script isActive="yes" isFolder="no">')
     parts.append(f'   <name>{PKG_NAME} - core</name>')
-    parts.append(f'   <script>{cdata(core_code)}</script>')
+    parts.append(f'   <script>{cdata(core_code + "\\n\\n" + boot_call)}</script>')
     parts.append(f'   <packageName>{PKG_NAME}</packageName>')
     parts.append('  </Script>')
 
     parts.append('  <Script isActive="yes" isFolder="no">')
     parts.append(f'   <name>{PKG_NAME} - boot</name>')
-    parts.append(f'   <script>{cdata(boot_wrapper)}</script>')
+    parts.append(f'   <script>{cdata(boot_call)}</script>')
     parts.append('   <eventHandlerList>')
     parts.append('    <string>sysLoadEvent</string>')
     parts.append('   </eventHandlerList>')

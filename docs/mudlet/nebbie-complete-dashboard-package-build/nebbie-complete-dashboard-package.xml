@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.6.1"
+local PKG_VER = "1.7.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -101,6 +101,21 @@ function NebbieDash.migrateStore()
         end
       end
     end
+    -- Versioni precedenti (< 1.7.0) salvavano solo data.spells (lista delle
+    -- spell attive all'ultima sincronizzazione, sostituita ad ogni attrib).
+    -- Costruisce da questa il nuovo elenco cumulativo/persistente
+    -- (knownSpellOrder) e lo stato attivo separato (activeSpells), senza
+    -- perdere le spell gia' note da installazioni precedenti.
+    if type(data.spells) == "table" and not data.knownSpellOrder then
+      data.knownSpellOrder = {}
+      data.activeSpells = {}
+      for _, s in ipairs(data.spells) do
+        if s.name then
+          table.insert(data.knownSpellOrder, s.name)
+          data.activeSpells[s.name] = s.ticks
+        end
+      end
+    end
   end
 end
 
@@ -112,7 +127,7 @@ end
 function NebbieDash.getCharData(name)
   NebbieDash.chars = NebbieDash.chars or {}
   if not NebbieDash.chars[name] then
-    NebbieDash.chars[name] = { eq = {}, spells = {}, weaponConfig = {}, lastSeen = nil }
+    NebbieDash.chars[name] = { eq = {}, knownSpellOrder = {}, activeSpells = {}, weaponConfig = {}, lastSeen = nil }
   end
   return NebbieDash.chars[name]
 end
@@ -129,6 +144,13 @@ function NebbieDash.setCurrentCharacter(name, manual)
   NebbieDash.currentChar = name
   local data = NebbieDash.getCharData(name)
   data.lastSeen = os.time()
+  -- Ogni volta che si (ri)diventa questo personaggio, le spell "conosciute"
+  -- tornano tutte rosse (non confermate) finche' non si rilancia `attrib`:
+  -- richiesto esplicitamente dall'utente, per non fidarsi di uno stato
+  -- attivo potenzialmente vecchio dopo un cambio di personaggio (le durate
+  -- residue mostrate prima non erano un conto alla rovescia in tempo
+  -- reale, quindi diventerebbero presto inattendibili).
+  data.activeSpells = {}
   NebbieDash.saveStore()
   NebbieDash.refreshDashboard()
   if type(raiseEvent) == "function" then
@@ -339,6 +361,16 @@ function NebbieDash.startAttribCapture()
   NebbieDash.armAttribWatchdog(gen)
 end
 
+-- Elenco spell "conosciute" per un personaggio (2026-08-10): a differenza
+-- di prima (dove attrib SOSTITUIVA data.spells, facendo sparire dal
+-- pannello qualunque spell non piu' attiva), ora si mantiene un elenco
+-- CUMULATIVO e persistente di tutti i nomi di spell mai visti attivi per
+-- quel personaggio (data.knownSpellOrder), cosi' restano sempre visibili e
+-- cliccabili per rilanciarle, anche da spente. Lo stato "attivo ora" resta
+-- separato (data.activeSpells, nome -> tick) e viene AZZERATO ogni volta
+-- che si cambia personaggio (vedi setCurrentCharacter), cosi' al rientro su
+-- un personaggio tutte le sue spell conosciute appaiono rosse finche' non
+-- si rilancia `attrib` per confermare quali sono davvero ancora attive.
 function NebbieDash.finishAttribCapture()
   local cap = NebbieDash._attribCapture
   NebbieDash._attribCapture = nil
@@ -349,11 +381,23 @@ function NebbieDash.finishAttribCapture()
   local name = NebbieDash.currentChar
   if not name then return end
   local data = NebbieDash.getCharData(name)
-  data.spells = cap.spells
+  data.knownSpellOrder = data.knownSpellOrder or {}
+  local known = {}
+  for _, n in ipairs(data.knownSpellOrder) do known[n] = true end
+  local activeMap = {}
+  for _, s in ipairs(cap.spells) do
+    activeMap[s.name] = s.ticks
+    if not known[s.name] then
+      table.insert(data.knownSpellOrder, s.name)
+      known[s.name] = true
+    end
+  end
+  data.activeSpells = activeMap
   data.spellsUpdated = os.time()
   NebbieDash.saveStore()
   NebbieDash.refreshDashboard()
-  cecho("<green>[NebbieDash] Spell attivi aggiornati (" .. tostring(#cap.spells) .. ").\n")
+  cecho("<green>[NebbieDash] Spell attivi aggiornati (" .. tostring(#cap.spells) .. " attive, " ..
+    tostring(#data.knownSpellOrder) .. " conosciute in totale).\n")
 end
 
 function NebbieDash.onAttribCaptureLine()
@@ -833,8 +877,8 @@ function NebbieDash.computeRightMaxChars(data)
     maxChars = math.max(maxChars, #("Spell attivi — " .. name))
   end
   if data then
-    for _, s in ipairs(data.spells or {}) do
-      maxChars = math.max(maxChars, #(s.name or "") + #(" " .. tostring(s.ticks) .. " tick"))
+    for _, spellName in ipairs(data.knownSpellOrder or {}) do
+      maxChars = math.max(maxChars, #(spellName or "") + #(" -- tick"))
     end
   end
   for _, entry in ipairs(NebbieDash.speedwalks) do
@@ -975,6 +1019,7 @@ NebbieDash.HELP_TEXT = {
   { ".<numero><comando>", "Ripete il comando N volte, es. '.4s' invia 's' quattro volte." },
   { "nautofeed <on|off>", "Attiva/disattiva la macro automatica fame/sete (per personaggio, vedi file macro)." },
   { "nhungermacros", "Ricarica le macro fame/sete dal file di configurazione." },
+  { "nitemkeywords", "Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione." },
   { "nhelp", "Mostra/nascondi questa finestra." },
 }
 
@@ -1200,19 +1245,25 @@ function NebbieDash.refreshDashboard()
   end
 
   cecho("NebbieDashSpells", "<cyan><b>Spell attivi — " .. name .. "</b>\n")
-  if data.spells and #data.spells > 0 then
+  if data.knownSpellOrder and #data.knownSpellOrder > 0 then
     local prefix = data.castPrefix or "c"
-    for _, s in ipairs(data.spells) do
+    local activeSpells = data.activeSpells or {}
+    for _, spellName in ipairs(data.knownSpellOrder) do
       -- Cliccabile per rilanciare: usa il comando (cast/recall/mind) impostato
-      -- per questo personaggio con `nclass` (default "cast"). Colore
-      -- verde/rosso in base ai tick residui ALL'ULTIMA SINCRONIZZAZIONE (non
-      -- e' un conto alla rovescia in tempo reale, vedi nota su spellWarnTicks).
-      local ticks = tonumber(s.ticks) or 0
-      local color = ticks <= NebbieDash.spellWarnTicks and "<red>" or "<green>"
-      cechoLink("NebbieDashSpells", color .. s.name,
-        string.format("NebbieDash.cmdQuickCast(%q, %q, %q)", prefix, s.name, name),
-        "Clicca per rilanciare su " .. name .. ": " .. s.name, true)
-      cecho("NebbieDashSpells", string.format(" %s%s tick\n", color, tostring(s.ticks)))
+      -- per questo personaggio con `nclass` (default "cast"). Rosso finche'
+      -- `attrib` non la confermi attiva IN QUESTA sessione col personaggio
+      -- corrente (vedi setCurrentCharacter — activeSpells si azzera ad ogni
+      -- cambio personaggio); verde con i tick residui se attiva e non vicina
+      -- alla scadenza (spellWarnTicks).
+      local activeTicks = activeSpells[spellName]
+      local active = activeTicks ~= nil
+      local ticks = active and (tonumber(activeTicks) or 0) or 0
+      local color = (active and ticks > NebbieDash.spellWarnTicks) and "<green>" or "<red>"
+      cechoLink("NebbieDashSpells", color .. spellName,
+        string.format("NebbieDash.cmdQuickCast(%q, %q, %q)", prefix, spellName, name),
+        "Clicca per rilanciare su " .. name .. ": " .. spellName, true)
+      local ticksLabel = active and tostring(ticks) or "-"
+      cecho("NebbieDashSpells", string.format(" %s%s tick\n", color, ticksLabel))
     end
   else
     cecho("NebbieDashSpells", "<grey>(nessuno — esegui <yellow>nattrib<grey> o <yellow>nresync<grey>)\n")
@@ -1345,7 +1396,7 @@ function NebbieDash.onDisarmLine()
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
   local weaponName = text:match("^Ti disarmano e (.+) vola dalla tua presa%.%s*$")
   if not weaponName then return end
-  local keywords = NebbieDash.extractItemKeywords(weaponName)
+  local keywords = NebbieDash.resolveItemKeywords(weaponName)
   if keywords == "" then return end
   send("get " .. keywords, false)
   tempTimer(0.5, function() send("wield " .. keywords, false) end)
@@ -1491,13 +1542,13 @@ end
 -- sincronizzato (nessuna chiamata aggiuntiva al gioco). Vuota se non c'e'
 -- nulla in quello slot o l'equip non e' mai stato sincronizzato.
 function NebbieDash.findBackpackKeywords(data)
-  if not data or not data.eqUpdated then return "" end
+  if not data or not data.eqUpdated then return "", false end
   for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
     if not row.empty and row.location == "sulla schiena" then
-      return NebbieDash.extractItemKeywords(row.item)
+      return NebbieDash.resolveItemKeywords(row.item)
     end
   end
-  return ""
+  return "", false
 end
 
 -- Il "{zaino}" sostituito e' l'ULTIMA parola chiave estratta (tipicamente il
@@ -1508,11 +1559,104 @@ end
 -- invece che come parte della descrizione dell'oggetto (risposta osservata:
 -- "Non puoi indossare nulla su un inesauribile."). L'esempio originale
 -- fornito dall'utente usava comunque una singola parola ("korred"), non la
--- frase completa.
+-- frase completa. Usata solo come ULTIMA risorsa se non c'e' un override
+-- nel file nebbie-item-keywords.txt (vedi sotto).
 function NebbieDash.lastKeyword(phrase)
   local last = nil
   for word in (phrase or ""):gmatch("%S+") do last = word end
   return last or ""
+end
+
+-- ---------------------------------------------------------------------------
+-- Parole chiave per oggetto, condivise tra TUTTI i personaggi (2026-08-10).
+-- L'euristica automatica (extractItemKeywords, sopra) funziona per alcuni
+-- oggetti ma non per altri (es. l'utente ha confermato che passare tutte le
+-- parole non-stopword di "Borsa Inesauribile dei Korred" a `wear` confonde
+-- il gioco), e l'utente segnala che l'oggetto da cui prendere la cornucopia
+-- "potrà cambiare" nel tempo. Invece di indovinare, l'utente puo' scrivere
+-- QUI la parola chiave esatta e verificata per ogni oggetto per nome
+-- (indipendente dal personaggio, quindi condivisa tra tutti — un dato oggetto
+-- ha sempre le stesse parole chiave in game, non cambia da personaggio a
+-- personaggio). Se un oggetto non ha una riga qui, si ricade sull'euristica
+-- automatica (extractItemKeywords).
+-- ---------------------------------------------------------------------------
+NebbieDash.itemKeywordOverrides = {}
+
+function NebbieDash.itemKeywordsPath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-item-keywords.txt"
+end
+
+function NebbieDash.ensureItemKeywordsFile()
+  local path = NebbieDash.itemKeywordsPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# File di parole chiave per oggetto — nebbie-complete-dashboard-package\n" ..
+    "#\n" ..
+    "# Una riga per oggetto, formato:\n" ..
+    "#   Nome esatto dell'oggetto (come mostrato in eq): parola chiave da usare\n" ..
+    "#\n" ..
+    "# Vale per TUTTI i personaggi (un dato oggetto ha sempre le stesse parole\n" ..
+    "# chiave in game). Usata al posto dell'estrazione automatica per: il\n" ..
+    "# recupero arma dopo un disarmo, e il segnaposto {zaino} delle macro\n" ..
+    "# fame/sete. Se un oggetto non ha una riga qui, si usa comunque\n" ..
+    "# l'estrazione automatica (rimozione di articoli/preposizioni italiane)\n" ..
+    "# come prima — questo file serve solo per i casi in cui NON funziona.\n" ..
+    "#\n" ..
+    "# Le righe che iniziano con # e le righe vuote vengono ignorate.\n" ..
+    "# Dopo aver modificato questo file, digita 'nitemkeywords' in gioco per\n" ..
+    "# ricaricarlo senza dover riavviare Mudlet.\n" ..
+    "#\n" ..
+    "# Esempi (rimuovi il # iniziale e adatta ai tuoi oggetti):\n" ..
+    "# Borsa Inesauribile dei Korred: korred\n" ..
+    "# la Flamberga di Boris: flamberga boris\n"
+  )
+  f:close()
+end
+
+function NebbieDash.parseItemKeywordLine(rawLine)
+  local line2 = rawLine:match("^%s*(.-)%s*$")
+  if line2 == "" or line2:sub(1, 1) == "#" then return nil end
+  local itemName, keywords = line2:match("^([^:]+):%s*(.+)$")
+  if not itemName then return nil end
+  itemName = itemName:match("^%s*(.-)%s*$"):lower()
+  keywords = keywords:match("^%s*(.-)%s*$"):lower()
+  if itemName == "" or keywords == "" then return nil end
+  return itemName, keywords
+end
+
+function NebbieDash.loadItemKeywords()
+  NebbieDash.ensureItemKeywordsFile()
+  NebbieDash.itemKeywordOverrides = {}
+  local path = NebbieDash.itemKeywordsPath()
+  local f = io.open(path, "r")
+  if not f then return end
+  for rawLine in f:lines() do
+    local itemName, keywords = NebbieDash.parseItemKeywordLine(rawLine)
+    if itemName then NebbieDash.itemKeywordOverrides[itemName] = keywords end
+  end
+  f:close()
+end
+
+function NebbieDash.cmdReloadItemKeywords()
+  NebbieDash.loadItemKeywords()
+  local count = 0
+  for _ in pairs(NebbieDash.itemKeywordOverrides) do count = count + 1 end
+  cecho("<green>[NebbieDash] Parole chiave oggetti ricaricate (" .. count .. ") da " .. NebbieDash.itemKeywordsPath() .. "\n")
+end
+
+-- Punto unico usato da disarmo e macro fame/sete per ottenere le parole
+-- chiave di un oggetto: preferisce l'override esplicito dal file (se
+-- presente), altrimenti ricade sull'euristica automatica. Il secondo valore
+-- di ritorno indica se e' stato usato un override esplicito (utile per
+-- decidere se applicare ulteriori restrizioni euristiche, es. lastKeyword).
+function NebbieDash.resolveItemKeywords(itemName)
+  local key = (itemName or ""):lower():match("^%s*(.-)%s*$")
+  local override = NebbieDash.itemKeywordOverrides[key]
+  if override then return override, true end
+  return NebbieDash.extractItemKeywords(itemName), false
 end
 
 function NebbieDash.runHungerMacro()
@@ -1525,7 +1669,12 @@ function NebbieDash.runHungerMacro()
     return
   end
   local data = NebbieDash.getCharData(name)
-  local backpackKeyword = NebbieDash.lastKeyword(NebbieDash.findBackpackKeywords(data))
+  local backpackKeywords, isOverride = NebbieDash.findBackpackKeywords(data)
+  -- Con un override esplicito ci si fida della parola/e scritte dall'utente
+  -- (potrebbero essere piu' di una, se serve); senza override si ricade
+  -- sull'euristica E si prende solo l'ultima parola per non confondere
+  -- comandi come `wear` (vedi nota su lastKeyword sopra).
+  local backpackKeyword = isOverride and backpackKeywords or NebbieDash.lastKeyword(backpackKeywords)
   local substituted = macro:gsub("{zaino}", backpackKeyword)
   local steps = NebbieDash.expandMacroSteps(substituted)
   for i, cmd in ipairs(steps) do
@@ -1673,10 +1822,33 @@ function NebbieDash.cmdSplit(argStr)
 end
 
 -- ---------------------------------------------------------------------------
--- Installazione trigger (una volta sola per boot)
--- ---------------------------------------------------------------------------
+-- Installazione trigger — IDEMPOTENTE (2026-08-10): elimina prima eventuali
+-- trigger dinamici creati da un boot precedente, poi li ricrea. Prima di
+-- questo fix, un guard "una volta sola per sempre" (_triggersInstalled)
+-- impediva a `installTriggers()` di rifare qualsiasi cosa dopo il primo
+-- avvio della sessione Lua di Mudlet: reinstallare il pacchetto A CALDO
+-- (senza riavviare Mudlet) faceva ripartire lo script principale — che
+-- ridefinisce le funzioni, quindi la LOGICA si aggiornava — ma qualsiasi
+-- trigger NUOVO introdotto dalla versione aggiornata (es. quelli per fame/
+-- sete in questa stessa release) non veniva mai creato, perche' il guard
+-- bloccava `installTriggers()` fin dall'inizio. Da qui il sintomo segnalato
+-- "serve rilanciare Mudlet ogni volta che carico un nuovo package": non era
+-- un limite di Mudlet, era che il nostro script non permetteva mai a se
+-- stesso di ri-registrare i trigger dopo il primo avvio della sessione.
+function NebbieDash.teardownTriggers()
+  local ids = {
+    NebbieDash._promptTrig, NebbieDash._eqOpenTrig, NebbieDash._attribOpenTrig,
+    NebbieDash._eqLineTrig, NebbieDash._attribLineTrig, NebbieDash._lootLineTrig,
+    NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
+    NebbieDash._fallTrig, NebbieDash._disarmTrig, NebbieDash._hungerTrig, NebbieDash._thirstTrig,
+  }
+  for _, id in ipairs(ids) do
+    if id then pcall(function() killTrigger(id) end) end
+  end
+end
+
 function NebbieDash.installTriggers()
-  if NebbieDash._triggersInstalled then return end
+  NebbieDash.teardownTriggers()
   -- Shield " M:" (SENZA spazio dopo i due punti): esistono almeno due
   -- formati di prompt reali (vedi Q&A.md Round 14) — uno con spazio dopo i
   -- due punti ("M: 532/532", personaggio NomiyaMaki) e uno senza
@@ -1716,11 +1888,18 @@ function NebbieDash.installTriggers()
   NebbieDash._thirstTrig = tempTrigger("Hai sete.", [[NebbieDash.onHungerThirstLine()]])
   if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
   if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
-  if type(registerAnonymousEventHandler) == "function" then
+  -- Gli anonymous event handler restano registrati una volta sola (a
+  -- differenza dei trigger sopra, qui non c'e' un modo affidabile per
+  -- "smontarli" per nome/funzione): non serve comunque rifarli ad ogni
+  -- reinstall perche' le funzioni target (onConnectionEvent/onWindowResize)
+  -- sono idempotenti — vengono chiamate per nome ad ogni evento, quindi
+  -- eseguono sempre la versione PIU' RECENTE del codice anche senza essere
+  -- re-registrate.
+  if type(registerAnonymousEventHandler) == "function" and not NebbieDash._eventHandlersRegistered then
     registerAnonymousEventHandler("sysConnectionEvent", "NebbieDash.onConnectionEvent")
     registerAnonymousEventHandler("sysWindowResizeEvent", "NebbieDash.onWindowResize")
+    NebbieDash._eventHandlersRegistered = true
   end
-  NebbieDash._triggersInstalled = true
 end
 
 -- Ridisegna il pannello quando la finestra principale (o i bordi) cambiano
@@ -1735,13 +1914,26 @@ function NebbieDash.onWindowResize(_, _, _)
 end
 
 -- ---------------------------------------------------------------------------
--- Boot (agganciato a sysLoadEvent — NON eseguito incondizionatamente al parse
--- dello script, a differenza del codice legacy — vedi LOG.md/RECOMMENDATION.md)
--- ---------------------------------------------------------------------------
+-- Boot — chiamato SIA dallo script "core" (che si esegue ad ogni caricamento
+-- del profilo E ad ogni installazione/reinstallazione a caldo del package,
+-- senza bisogno di riavviare Mudlet) SIA dallo script "boot" agganciato a
+-- sysLoadEvent (ridondanza difensiva per il normale avvio del profilo). E'
+-- sicuro chiamarlo piu' volte: `installTriggers()` e' idempotente (smonta e
+-- rimonta), `initGUI()`/`initHelpButton()` si limitano a non far nulla se
+-- gia' creati. Il piccolo guard sotto evita solo un doppio messaggio
+-- "pronto" se, per qualche motivo, boot() venisse chiamato due volte nello
+-- stesso istante (es. al primo avvio di Mudlet, se sia lo script "core" sia
+-- l'evento sysLoadEvent scattano nello stesso momento).
 function NebbieDash.boot()
+  local now = os.time()
+  if NebbieDash._mainLoaded and NebbieDash._lastBootTime and (now - NebbieDash._lastBootTime) < 2 then
+    return
+  end
+  NebbieDash._lastBootTime = now
   NebbieDash.loadStore()
   NebbieDash.loadSpeedwalks()
   NebbieDash.loadHungerMacros()
+  NebbieDash.loadItemKeywords()
   NebbieDash.installTriggers()
   NebbieDash.initGUI()
   NebbieDash.initHelpButton()
@@ -1750,18 +1942,19 @@ function NebbieDash.boot()
 end
 
 function NebbieDash.runFix()
-  NebbieDash._triggersInstalled = false
+  NebbieDash._lastBootTime = nil
   NebbieDash.boot()
   cecho("<green>[NebbieDash] nfix completato.\n")
 end
-]]></script>
+\n\nlocal ok, err = pcall(function() NebbieDash.boot() end)
+if not ok then
+  cecho("<red>[NebbieDash] errore boot: " .. tostring(err) .. "\n")
+end]]></script>
    <packageName>nebbie-complete-dashboard-package</packageName>
   </Script>
   <Script isActive="yes" isFolder="no">
    <name>nebbie-complete-dashboard-package - boot</name>
-   <script><![CDATA[local ver = "1.6.1"
-if NebbieDash and NebbieDash.version == ver and NebbieDash._mainLoaded then return end
-local ok, err = pcall(function() NebbieDash.boot() end)
+   <script><![CDATA[local ok, err = pcall(function() NebbieDash.boot() end)
 if not ok then
   cecho("<red>[NebbieDash] errore boot: " .. tostring(err) .. "\n")
 end]]></script>
@@ -1960,6 +2153,13 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nhungermacros$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-itemkeywords</name>
+   <script><![CDATA[NebbieDash.cmdReloadItemKeywords()]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nitemkeywords$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>

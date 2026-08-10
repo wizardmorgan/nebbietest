@@ -59,6 +59,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `.<numero><comando>` | Ripete il comando N volte, es. `.4s` invia `s` quattro volte (funziona con qualsiasi comando: `.3 kill goblin` invia `kill goblin` tre volte). |
 | `nautofeed <on\|off>` | Attiva/disattiva la macro automatica fame/sete (default **on**), vedi sotto. |
 | `nhungermacros` | Ricarica le macro fame/sete dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
+| `nitemkeywords` | Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 
 ## Loot e split automatico
 
@@ -147,6 +148,39 @@ Se non c'è nessuna riga per il personaggio attivo, il pacchetto mostra solo un 
 nessun comando inviato) che ti ricorda di configurarla. Dopo aver modificato il file, digita
 `nhungermacros` in gioco per ricaricarlo senza riavviare Mudlet.
 
+## Parole chiave per oggetto, condivise tra tutti i personaggi
+
+L'estrazione automatica delle parole chiave di un oggetto (usata per il recupero arma dopo un
+disarmo e per il segnaposto `{zaino}` delle macro fame/sete) è solo un'euristica — rimuove articoli
+e preposizioni italiane dal nome, ma non sempre il risultato è la parola giusta per il gioco (es.
+"Non puoi indossare nulla su un inesauribile." se il gioco interpreta male una parola aggiuntiva). Se
+un dato oggetto non funziona bene con l'euristica, o se preferisci semplicemente scrivere tu la
+parola giusta una volta per tutte, puoi farlo in:
+
+```
+getMudletHomeDir()/nebbie-item-keywords.txt
+```
+
+(stessa cartella profilo delle altre configurazioni). Formato, una riga per oggetto:
+
+```
+Nome esatto dell'oggetto (come mostrato in eq): parola chiave da usare
+```
+
+Esempio:
+
+```
+Borsa Inesauribile dei Korred: korred
+la Flamberga di Boris: flamberga boris
+```
+
+**Vale per tutti i personaggi**: un dato oggetto ha sempre le stesse parole chiave in game, quindi
+non serve ripetere la riga per ogni personaggio che possiede quell'oggetto — a differenza del file
+delle macro fame/sete (`nebbie-hunger-macros.txt`), che resta invece per personaggio perché la
+sequenza di comandi può variare. Se un oggetto non ha una riga qui, si continua a usare l'estrazione
+automatica come prima. Dopo aver modificato il file, digita `nitemkeywords` in gioco per ricaricarlo
+senza riavviare Mudlet.
+
 ## Tasto "? Comandi"
 
 In cima allo schermo, centrato tra i due pannelli laterali, compare sempre un piccolo tasto **"?
@@ -161,6 +195,25 @@ Il rilevamento del personaggio è **automatico**: appena il prompt del gioco vie
 che scrivi un qualsiasi comando), il nome del personaggio attivo viene letto dal prompt stesso
 (vedi `DESIGN-OPTIONS.md` D1) e il pannello si aggiorna da solo per quel personaggio. `nchar` serve
 solo come override manuale.
+
+## Bug corretto: serviva riavviare Mudlet dopo ogni aggiornamento del pacchetto
+
+**Sintomo segnalato**: dopo aver (re)installato una versione aggiornata del pacchetto senza
+riavviare Mudlet, le funzionalità nuove/modificate non si attivavano — serviva sempre un riavvio
+completo di Mudlet.
+
+**Causa reale**: la parte del pacchetto che crea i trigger dinamici (`installTriggers()`) aveva un
+controllo "una volta per sempre a sessione" che, dopo il primissimo avvio della sessione Lua di
+Mudlet, impediva a quella funzione di fare qualsiasi cosa per il resto della sessione — anche se nel
+frattempo si reinstallava una versione più recente del pacchetto con trigger nuovi o modificati.
+Il codice si aggiornava correttamente (le funzioni vengono ridefinite ad ogni installazione), ma i
+trigger che li richiamano restavano quelli vecchi, con eventuali trigger nuovi mai creati affatto.
+
+**Fix**: `installTriggers()` ora è idempotente — ad ogni chiamata smonta prima i trigger dinamici
+creati in precedenza e li ricrea da zero — ed è invocata sia dallo script che gira ad ogni
+(re)installazione del pacchetto sia da quello legato al normale avvio del profilo, quindi ora una
+semplice reinstallazione a caldo del pacchetto è sufficiente per attivare tutte le novità, senza
+riavviare Mudlet.
 
 ## Bug corretto: pannelli grigi alla prima installazione
 
@@ -335,6 +388,17 @@ sincronizzazione** (`nattrib`/`nresync`), non è un conto alla rovescia in tempo
 non sa quanti secondi dura un tick sul server, quindi non può stimare da solo quanto manca alla
 scadenza tra un `nattrib` e l'altro. Se vuoi un conto alla rovescia live, serve sapere quanti
 secondi reali dura un tick lato server.
+
+**Elenco "conosciuto", persistente per personaggio**: una volta che una spell è comparsa almeno una
+volta nell'output di `attrib` per un personaggio, resta **per sempre** visibile/cliccabile nel
+pannello di quel personaggio, anche quando scade e non è più attiva — invece di sparire, diventa
+semplicemente rossa (`- tick` al posto del numero), pronta per essere rilanciata con un click. Un
+nuovo `attrib` rimette in verde (con i tick aggiornati) solo le spell che il gioco conferma ancora
+attive; tutte le altre spell conosciute restano rosse. **Cambiando personaggio** (o tornando su uno
+già visitato), tutte le spell conosciute di quel personaggio tornano subito rosse — anche se erano
+verdi l'ultima volta che eri su quel personaggio — perché il pannello non si fida di una durata
+residua ormai vecchia: rilancia `attrib` per confermare quali sono davvero ancora attive in quel
+momento.
 
 ## Speedwalk (terzo pannello, in basso a destra)
 

@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.6.1)
+description = [[# Nebbie Dashboard (1.7.0)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -43,6 +43,19 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   schiena") derivata automaticamente (una sola parola, per non confondere
   comandi come `wear`) e un cooldown di 3s per evitare doppie esecuzioni
   quando fame e sete arrivano insieme.
+- **Parole chiave per oggetto condivise tra personaggi** (`nitemkeywords`,
+  file `nebbie-item-keywords.txt`): puoi fissare tu la parola chiave esatta
+  per un dato oggetto (per nome), usata al posto dell'euristica automatica
+  per il recupero arma dopo un disarmo e per lo zaino delle macro fame/sete
+  — vale per tutti i personaggi, non serve ripeterla.
+- **Corretto (importante)**: non serve più riavviare Mudlet dopo aver
+  (re)installato una nuova versione del pacchetto — prima, i trigger e le
+  funzionalità nuove non venivano attivati finché non si riavviava
+  completamente Mudlet.
+- **Spell "conosciute" persistenti per personaggio**: le spell che lanci
+  restano visibili/cliccabili anche da spente (in rosso) invece di sparire
+  dal pannello; cambiando personaggio tornano tutte rosse finché non
+  rilanci `attrib` per confermare quali sono davvero attive.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -52,4 +65,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.6.1]]
+version = [[1.7.0]]
