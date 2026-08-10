@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.8.1)
+description = [[# Nebbie Dashboard (1.8.2)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -68,6 +68,15 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
   script principale (ordine non garantito da Mudlet tra i due), chiamando
   `NebbieDash.boot()` quando `NebbieDash` non esisteva ancora.
+- **Corretto (bug più grave, causa reale del pannello completamente vuoto
+  dopo un riavvio completo di Mudlet)**: lo script principale del pacchetto
+  aveva un errore di sintassi Lua nel punto di unione tra il codice e la
+  chiamata a `boot()` finale (un a-capo mancante), che ne impediva la
+  compilazione: NESSUNA funzione del pacchetto veniva definita, quindi
+  nessun comando (incluso `nresync`, `nhelp`, ecc.) funzionava più. Il
+  problema era mascherato da tempo dal fatto che le versioni precedenti già
+  caricate in memoria da Mudlet continuavano a funzionare fino al primo
+  riavvio completo del programma.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -77,4 +86,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.8.1]]
+version = [[1.8.2]]

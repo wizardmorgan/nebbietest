@@ -1070,4 +1070,58 @@ Versione alzata a 1.8.1. Aggiornato CHANGELOG.md.
 
 ---
 
+## 2026-08-10 — Causa REALE: errore di sintassi Lua nel build script (v1.8.2)
+
+**Segnalazione utente**: dopo il fix precedente (v1.8.1, guardia sull'ordine "boot"/"core"), l'utente
+riporta un sintomo ancora peggiore: "non appare nulla e non funziona nemmeno nresync. non compare
+nemmeno l'help" — nessun errore visibile stavolta, ma nessuna funzionalità del pacchetto attiva.
+
+**Analisi**: la guardia introdotta in v1.8.1 era corretta ma insufficiente: nascondeva l'ERRORE
+visibile senza risolvere la causa di fondo. Per riprodurre il problema fedelmente, ho estratto il
+testo ESATTO dei due `<script>` dal file XML generato (non il file `core.lua` isolato, che da solo
+compila benissimo) e li ho eseguiti con `lua` standalone e i mock usati dal test offline. Risultato:
+
+```
+core ok=	false	core_extracted.lua:2161: unexpected symbol near '\'
+```
+
+Riga 2161 del testo REALMENTE spedito nel pacchetto conteneva:
+
+```
+end
+\n\nif type(NebbieDash) ~= "table" then
+```
+
+cioè il testo letterale a 4 caratteri `\n\n` (backslash, n, backslash, n) subito dopo `end`, SENZA
+alcun vero a-capo — non un errore di battitura recente, ma un bug preesistente in
+`build-nebbie-complete-dashboard-package.py` (riga che unisce `core_code` e `boot_call`):
+nell'f-string Python `core_code + "\\n\\n" + boot_call`, la sequenza `"\\n\\n"` è Python per "due
+backslash letterali seguiti da n", non per "due a-capo" (che in Python si scrive `"\n\n"`, un solo
+backslash). Introdotto insieme all'unione core+boot_call in v1.7.0 (fix "non serve riavviare
+Mudlet"), il bug rendeva lo script principale del pacchetto NON COMPILABILE fin da allora — ma
+restava invisibile perché ogni test successivo (incluso quello dell'utente) aveva sempre riutilizzato
+una sessione Mudlet già avviata prima, con il codice di una versione precedente (valida) ancora in
+memoria; la guardia della v1.8.1, aggiungendo un `return` silenzioso allo script "boot" quando
+`NebbieDash` non esiste, ha eliminato l'errore visibile ma ha anche smascherato il vero problema:
+con `core` che non compila affatto, `NebbieDash` non viene MAI definita, quindi ANCHE la guardia di
+"boot" restituisce silenziosamente senza fare nulla — nessun errore, nessuna funzionalità, esattamente
+il sintomo segnalato.
+
+**Fix applicato**: corretto il separatore da `"\\n\\n"` a `"\n\n"` in
+`build-nebbie-complete-dashboard-package.py`. Aggiunta anche una validazione PERMANENTE anti-
+regressione: una nuova funzione `validate_lua_syntax()` esegue `luac -p` sul testo ESATTO di
+ciascuno dei due `<script>` prima di scrivere qualunque file, interrompendo la build (nessun
+`.mpackage` aggiornato) se non è Lua valido — questo controllo NON esisteva prima (la build
+validava solo `core.lua` isolato con un comando manuale separato, mai il testo realmente unito che
+finisce nel pacchetto), motivo per cui il bug non era mai stato notato in due release.
+
+**Verifica**: `validate_lua_syntax()` testato contro una ricostruzione del bug originale (rileva
+correttamente l'errore e interrompe la build). Ricostruito il pacchetto: `luac -p` OK su entrambi gli
+script estratti dall'XML generato, XML validato con `xml.dom.minidom`, 131/131 test offline OK,
+simulazione end-to-end (script "boot" eseguito PRIMA di "core", il caso peggiore) con mock completi
+dell'API Mudlet: nessun errore, `NebbieDash._guiCreated == true`, `NebbieDash._mainLoaded == true`,
+messaggio "pronto" mostrato correttamente. Versione alzata a 1.8.2. Aggiornato CHANGELOG.md.
+
+---
+
 (continua...)

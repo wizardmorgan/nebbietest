@@ -14,12 +14,15 @@ Uso:
     python3 docs/mudlet/build-nebbie-complete-dashboard-package.py
 """
 import os
+import shutil
+import subprocess
+import tempfile
 import zipfile
 import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.8.1"
+PKG_VER = "1.8.2"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -95,6 +98,15 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
   script principale (ordine non garantito da Mudlet tra i due), chiamando
   `NebbieDash.boot()` quando `NebbieDash` non esisteva ancora.
+- **Corretto (bug più grave, causa reale del pannello completamente vuoto
+  dopo un riavvio completo di Mudlet)**: lo script principale del pacchetto
+  aveva un errore di sintassi Lua nel punto di unione tra il codice e la
+  chiamata a `boot()` finale (un a-capo mancante), che ne impediva la
+  compilazione: NESSUNA funzione del pacchetto veniva definita, quindi
+  nessun comando (incluso `nresync`, `nhelp`, ecc.) funzionava più. Il
+  problema era mascherato da tempo dal fatto che le versioni precedenti già
+  caricate in memoria da Mudlet continuavano a funzionare fino al primo
+  riavvio completo del programma.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -144,6 +156,38 @@ ALIASES = [
     ("nebbie-dash-hungermacros", "^nhungermacros$", "NebbieDash.cmdReloadHungerMacros()"),
     ("nebbie-dash-itemkeywords", "^nitemkeywords$", "NebbieDash.cmdReloadItemKeywords()"),
 ]
+
+
+def validate_lua_syntax(code, label):
+    """Verifica con `luac -p` che 'code' sia Lua sintatticamente valido PRIMA
+    di scriverlo nel pacchetto. Bug reale osservato (2026-08-10, v1.8.1): un
+    a-capo mancante nella concatenazione tra core_code e boot_call produceva
+    uno script "core" che non compilava affatto — nessuna funzione del
+    pacchetto veniva definita, ma l'errore passava INOSSERVATO da questo
+    script di build (che validava solo core.lua da solo, mai il testo
+    REALMENTE spedito dentro l'XML) ed era mascherato in Mudlet dal codice
+    di una versione precedente ancora in memoria, finche' l'utente non ha
+    fatto un riavvio completo del programma. Questo controllo interrompe la
+    build (nessun file scritto/aggiornato) se il testo esatto che finira'
+    nel pacchetto non e' Lua valido, cosi' il problema si scopre qui e non
+    in produzione.
+    """
+    luac = shutil.which("luac")
+    if not luac:
+        print(f"ATTENZIONE: 'luac' non trovato nel PATH, salto la validazione sintattica di '{label}'.")
+        return
+    with tempfile.NamedTemporaryFile("w", suffix=".lua", delete=False, encoding="utf-8") as tmp:
+        tmp.write(code)
+        tmp_path = tmp.name
+    try:
+        result = subprocess.run([luac, "-p", tmp_path], capture_output=True, text=True)
+        if result.returncode != 0:
+            raise SystemExit(
+                f"BUILD INTERROTTA: errore di sintassi Lua in '{label}' (nessun file scritto).\n"
+                f"{result.stderr.strip()}"
+            )
+    finally:
+        os.remove(tmp_path)
 
 
 def lua_long_string(text):
@@ -196,6 +240,12 @@ if not ok then
   cecho("<red>[NebbieDash] errore boot: " .. tostring(err) .. "\\n")
 end'''
 
+    # Valida ESATTAMENTE il testo che finira' in ciascuno dei due <script> del
+    # pacchetto (non solo core.lua da solo, vedi nota in validate_lua_syntax).
+    core_script_text = core_code + "\n\n" + boot_call
+    validate_lua_syntax(core_script_text, f"{PKG_NAME} - core")
+    validate_lua_syntax(boot_call, f"{PKG_NAME} - boot")
+
     parts = []
     parts.append('<?xml version="1.0" encoding="UTF-8"?>')
     parts.append('<!DOCTYPE MudletPackage>')
@@ -204,7 +254,7 @@ end'''
 
     parts.append('  <Script isActive="yes" isFolder="no">')
     parts.append(f'   <name>{PKG_NAME} - core</name>')
-    parts.append(f'   <script>{cdata(core_code + "\\n\\n" + boot_call)}</script>')
+    parts.append(f'   <script>{cdata(core_script_text)}</script>')
     parts.append(f'   <packageName>{PKG_NAME}</packageName>')
     parts.append('  </Script>')
 

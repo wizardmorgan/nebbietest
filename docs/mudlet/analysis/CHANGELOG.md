@@ -1,5 +1,25 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.8.2 — 2026-08-10
+
+- **Corretto (bug grave, causa reale del pannello completamente vuoto/nessun comando funzionante
+  dopo un riavvio completo di Mudlet)**: lo script build (`build-nebbie-complete-dashboard-
+  package.py`) univa il codice principale e la chiamata finale a `boot()` con un separatore di
+  a-capo scritto in modo errato (`"\\n\\n"` invece di `"\n\n"` nel codice Python), che finiva nel
+  pacchetto come testo letterale `\n\n` invece di un vero a-capo. Il testo Lua risultante non era
+  sintatticamente valido: lo script principale del pacchetto **non compilava affatto**, quindi
+  nessuna delle sue funzioni veniva definita (nessun `nresync`, `nhelp`, pannelli, nulla). Il
+  problema esisteva da quando questa unione era stata introdotta (v1.7.0) ma restava mascherato
+  perché il codice di una versione precedente, già caricato in memoria da Mudlet in sessioni
+  precedenti, continuava a funzionare — si manifestava (in silenzio, senza alcun errore visibile)
+  solo dopo un riavvio COMPLETO di Mudlet, quando la memoria Lua viene ripulita del tutto.
+- **Aggiunto**: il build script ora valida con `luac -p` il testo ESATTO che finirà in ciascuno dei
+  due `<script>` del pacchetto (non solo `nebbie-complete-dashboard-package-core.lua` isolato, che
+  da solo non avrebbe mai potuto rivelare questo bug) e interrompe la build, senza scrivere alcun
+  file, se non è Lua sintatticamente valido — per evitare che questa classe di problema possa
+  ripresentarsi senza essere notata prima di arrivare all'utente.
+- **Versione interna** alzata a 1.8.2.
+
 ## 1.8.1 — 2026-08-10
 
 - **Corretto (bug segnalato dall'utente al primo avvio dopo installazione pulita)**: errore
