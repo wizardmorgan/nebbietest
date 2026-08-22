@@ -1,0 +1,100 @@
+================================================================================
+REGOLE OBBLIGATORIE PER AGENTI — Nebbie Play All (Mudlet)
+================================================================================
+Repo: wizardmorgan/nebbietest
+Leggere PRIMA di qualsiasi analisi, design o modifica al codice.
+
+Queste regole sono NON NEGOZIABILI. Violare una regola invalida il deliverable.
+
+================================================================================
+1. NON INVENTARE
+================================================================================
+
+L'agente NON può:
+
+  - Assumere formati di output del MUD (eq, attrib, prompt) senza esempio reale
+    dall'utente o documentazione server verificata nel repo.
+  - Assumere API, firme, comportamento o limiti di Mudlet senza aver letto la
+    wiki ufficiale (https://wiki.mudlet.org/) o documentazione citata con URL.
+  - Dedurre che il server espone GMCP, telnet options, o altri protocolli senza
+    conferma (utente, maintainer, codice server nel repo).
+  - Proporre workaround "ragionevoli" o "probabilmente funziona" senza fonte.
+  - Dichiarare che un problema è risolto senza test documentato o evidenza
+    dell'utente (log, screenshot, output comandi, riproduzione step-by-step).
+  - Riempire gap di requisiti con assunzioni silenziose.
+
+Se un dato non esiste in: wiki Mudlet, repo, output utente, o conferma esplicita
+dell'utente → classificarlo come INFORMAZIONE MANCANTE e fermarsi (regola 2).
+
+================================================================================
+2. CHIEDERE ALL'UTENTE LE INFORMAZIONI MANCANTI
+================================================================================
+
+Prima di progettare la soluzione finale o implementare in massa:
+
+  1. Elencare in un file (es. docs/mudlet/analysis/Q&A.md) tutte le domande
+     aperte, numerate e specifiche.
+  2. Separare ciò che puoi verificare da wiki/repo da ciò che richiede l'utente.
+  3. Porre le domande all'utente e attendere risposta (o indicare esplicitamente
+     che procedi solo su un sottoinsieme documentato come "assunzione temporanea
+     da confermare").
+
+Informazioni tipiche da chiedere se non verificate:
+
+  - Versione esatta Mudlet (Help → About), OS, nome profilo Mudlet.
+  - Package attualmente installati e versione mostrata in client.
+  - Output completo incollato: prompt, eq, attrib (comando MUD: attrib).
+  - Criteri di successo: cosa è must-have vs nice-to-have per la prima release.
+  - GMCP o altri protocolli sul server Nebbie Arcane (se non documentato nel repo).
+  - Preferenze UX: gag/deleteLine su eq/attrib, pannelli obbligatori, auto-sync.
+  - Se è accettabile un package NUOVO con nome diverso invece di patchare l'esistente.
+
+Non procedere con implementazione massiccia finché le domande bloccanti non sono
+risolte o l'utente ha approvato esplicitamente un design con gap documentati.
+
+================================================================================
+3. DOCUMENTARE TUTTO
+================================================================================
+
+L'agente deve produrre documentazione leggibile da un terzo (utente o maintainer
+futuro), aggiornata ad ogni fase. Minimo:
+
+  A) Journal di analisi
+     - docs/mudlet/analysis/LOG.md
+     - Ogni step: data, azione, fonte (URL wiki, file repo, test), esito, decisione.
+
+  B) Note da wiki Mudlet
+     - docs/mudlet/analysis/MUDLET-WIKI-NOTES.md
+     - Per ogni API/pattern usato: nome, URL wiki, versione Mudlet, cosa implica
+       per il design Nebbie.
+
+  C) Requisiti e domande
+     - docs/mudlet/analysis/REQUIREMENTS.md
+     - docs/mudlet/analysis/Q&A.md (domande + risposte utente)
+
+  D) Design e raccomandazione
+     - docs/mudlet/analysis/DESIGN-OPTIONS.md (almeno 2–3 alternative, tabella)
+     - docs/mudlet/analysis/RECOMMENDATION.md (scelta motivata, fonti citate)
+
+  E) Se implementi
+     - TEST-PLAN.md (passi manuali, atteso vs osservato)
+     - CHANGELOG (versione, breaking changes, perché)
+
+Ogni scelta architetturale deve collegare: requisito utente + fonte tecnica
+(wiki / test / output MUD). Alternative scartate: motivo documentato.
+
+Non chiudere il task senza documentazione completa, anche se la conclusione è
+"servono più dati dall'utente" o "serve GMCP sul server".
+
+================================================================================
+CHECKLIST RAPIDA (prima di ogni commit significativo)
+================================================================================
+
+  [ ] Ho letto la wiki Mudlet sulle API che userò?
+  [ ] Ho chiesto all'utente ciò che non posso verificare da wiki/repo?
+  [ ] Ho aggiornato LOG.md e i file di analisi?
+  [ ] Ho citato URL wiki o file repo per ogni decisione?
+  [ ] Non ho inventato formati MUD o comportamento Mudlet?
+
+================================================================================
+Fine — AGENT-RULES.txt — v1.0 — 2026-08-08
