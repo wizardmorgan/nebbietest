@@ -82,5 +82,6 @@ services:
             - EDIT_STAFF_LEVEL=57
             - EDIT_LIMITED_LEVEL=51
         depends_on:
-            - mysql
-            - mudcompiler
+            mysql:
+                condition: service_healthy
+        # myst avviato da scripts/mud-dev.sh (container --name mudcompiler), non da questo servizio compose.
