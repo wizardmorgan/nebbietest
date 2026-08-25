@@ -1,0 +1,763 @@
+/*ALARMUD* (Do not remove *ALARMUD*, used to automagically manage these lines
+ *ALARMUD* AlarMUD 2.0
+ *ALARMUD* See COPYING for licence information
+ *ALARMUD*/
+#include "edit_portal.hpp"
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstring>
+#include <deque>
+#include <future>
+#include <mutex>
+#include <sstream>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+
+#include "../contrib/slacking/json.hpp"
+#include "autoenums.hpp"
+#include "constants.hpp"
+#include "db.hpp"
+#include "edit_pool.hpp"
+#include "handler.hpp"
+#include "logging.hpp"
+#include "multiclass.hpp"
+#include "obj_value.hpp"
+#include "object_instance.hpp"
+#include "reception.hpp"
+#include "Sql.hpp"
+#include "structs.hpp"
+#include "utils.hpp"
+
+#if USE_MYSQL
+#include <mysql/mysql.h>
+#include <odb/mysql/connection.hxx>
+#include "odb/account-odb.hxx"
+#endif
+
+namespace Alarmud {
+namespace {
+
+using Json = nlohmann::json;
+
+struct EditPortalJob {
+	std::string path;
+	std::string body;
+	std::promise<std::string> response;
+};
+
+std::mutex g_queue_mutex;
+std::condition_variable g_queue_cv;
+std::deque<EditPortalJob> g_jobs;
+std::atomic<bool> g_http_running {false};
+
+[[nodiscard]] std::string api_secret() {
+	const char* s = std::getenv("EDIT_API_SECRET");
+	return s ? std::string(s) : "nebbie-edit-dev-secret";
+}
+
+[[nodiscard]] int api_port() {
+	const char* p = std::getenv("EDIT_API_PORT");
+	if(!p || !*p) {
+		return 8090;
+	}
+	return std::atoi(p);
+}
+
+[[nodiscard]] bool header_has_secret(const std::string& headers) {
+	const std::string key = "x-edit-api-secret:";
+	const auto pos = headers.find(key);
+	if(pos == std::string::npos) {
+		return false;
+	}
+	const auto end = headers.find("\r\n", pos);
+	std::string value = headers.substr(pos + key.size(), end - pos - key.size());
+	while(!value.empty() && (value.front() == ' ' || value.front() == '\t')) {
+		value.erase(value.begin());
+	}
+	return value == api_secret();
+}
+
+[[nodiscard]] std::string json_error(const char* msg, int code = 400) {
+	Json j;
+	j["ok"] = false;
+	j["error"] = msg;
+	j["code"] = code;
+	return j.dump();
+}
+
+[[nodiscard]] std::string json_ok(const Json& data) {
+	Json j;
+	j["ok"] = true;
+	j["data"] = data;
+	return j.dump();
+}
+
+[[nodiscard]] bool is_toon_online_by_name(const std::string& name) {
+	if(name.empty()) {
+		return false;
+	}
+	for(struct char_data* c = character_list; c; c = c->next) {
+		if(IS_NPC(c) || !GET_NAME(c)) {
+			continue;
+		}
+		if(!strcasecmp(GET_NAME(c), name.c_str())) {
+			return true;
+		}
+	}
+	return false;
+}
+
+#if USE_MYSQL
+[[nodiscard]] int max_level_for_toon(unsigned long long toon_id) {
+	DB* db = Sql::getMysql();
+	if(!db || toon_id == 0) {
+		return 0;
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		const std::string sql =
+			"SELECT MAX(level) FROM character_classes WHERE toon_id = " +
+			std::to_string(toon_id);
+		if(mysql_query(h, sql.c_str()) != 0) {
+			return 0;
+		}
+		MYSQL_RES* res = mysql_store_result(h);
+		if(!res) {
+			return 0;
+		}
+		MYSQL_ROW row = mysql_fetch_row(res);
+		const int lvl = row && row[0] ? std::atoi(row[0]) : 0;
+		mysql_free_result(res);
+		return lvl;
+	}
+	catch(...) {
+		return 0;
+	}
+}
+
+[[nodiscard]] std::string toon_name_by_id(unsigned long long toon_id) {
+	const toonPtr pg = Sql::getOne<toon>(toonQuery::id == toon_id);
+	return pg ? pg->name : std::string();
+}
+
+[[nodiscard]] bool load_stats_for_toon(unsigned long long toon_id, int& exp,
+									   int& rune) {
+	DB* db = Sql::getMysql();
+	if(!db || toon_id == 0) {
+		return false;
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		const std::string sql =
+			"SELECT exp, p_rune_dei FROM character_stats WHERE toon_id = " +
+			std::to_string(toon_id) + " LIMIT 1";
+		if(mysql_query(h, sql.c_str()) != 0) {
+			return false;
+		}
+		MYSQL_RES* res = mysql_store_result(h);
+		if(!res) {
+			return false;
+		}
+		MYSQL_ROW row = mysql_fetch_row(res);
+		if(!row) {
+			mysql_free_result(res);
+			return false;
+		}
+		exp = row[0] ? std::atoi(row[0]) : 0;
+		rune = row[1] ? std::atoi(row[1]) : 0;
+		mysql_free_result(res);
+		return true;
+	}
+	catch(...) {
+		return false;
+	}
+}
+
+[[nodiscard]] bool deduct_payment(unsigned long long toon_id, int xp_cost,
+								  int rune_cost, int max_level, std::string& err) {
+	int exp = 0;
+	int rune = 0;
+	if(!load_stats_for_toon(toon_id, exp, rune)) {
+		err = "character_stats non trovato";
+		return false;
+	}
+	const long long prince_reserve =
+		(max_level >= PRINCIPE) ? static_cast<long long>(PRINCEEXP) : 0LL;
+	const long long available_xp = static_cast<long long>(exp) - prince_reserve;
+	if(xp_cost > 0 && available_xp < static_cast<long long>(xp_cost)) {
+		err = "XP insufficienti (riserva principi 400M inclusa)";
+		return false;
+	}
+	if(rune_cost > 0 && rune < rune_cost) {
+		err = "Rune degli Eroi insufficienti";
+		return false;
+	}
+	DB* db = Sql::getMysql();
+	if(!db) {
+		err = "database non disponibile";
+		return false;
+	}
+	try {
+		std::ostringstream sql;
+		sql << "UPDATE character_stats SET exp = exp - " << xp_cost
+			<< ", p_rune_dei = p_rune_dei - " << rune_cost << " WHERE toon_id = "
+			<< toon_id;
+		db->execute(sql.str().c_str());
+		return true;
+	}
+	catch(const std::exception& e) {
+		err = e.what();
+		return false;
+	}
+}
+
+[[nodiscard]] struct obj_data* materialize_inventory_row(
+	const inventory_mysql_row& row) {
+	if(row.elem.item_number <= 0) {
+		return nullptr;
+	}
+	struct obj_data* obj =
+		object_instance_load_stored(row.elem.item_number, row.instance_id);
+	if(!obj) {
+		return nullptr;
+	}
+	if(obj->db_instance_id != 0) {
+		return obj;
+	}
+	obj->obj_flags.value[0] = row.elem.value[0];
+	obj->obj_flags.value[1] = row.elem.value[1];
+	obj->obj_flags.value[2] = row.elem.value[2];
+	obj->obj_flags.value[3] = row.elem.value[3];
+	obj->obj_flags.extra_flags = row.elem.extra_flags;
+	obj->obj_flags.extra_flags2 = row.elem.extra_flags2;
+	obj->obj_flags.weight = row.elem.weight;
+	obj->obj_flags.timer = row.elem.timer;
+	obj->obj_flags.bitvector = row.elem.bitvector;
+	if(obj->name) {
+		free(obj->name);
+	}
+	if(obj->short_description) {
+		free(obj->short_description);
+	}
+	if(obj->description) {
+		free(obj->description);
+	}
+	obj->name = strdup(row.elem.name);
+	obj->short_description = strdup(row.elem.sd);
+	obj->description = strdup(row.elem.desc);
+	for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
+		obj->affected[j] = row.elem.affected[j];
+	}
+	obj->db_inventory_id = row.id;
+	return obj;
+}
+
+[[nodiscard]] inventory_mysql_row* find_inventory_row(
+	std::vector<inventory_mysql_row>& rows, unsigned long long inventory_id) {
+	for(auto& r : rows) {
+		if(r.id == inventory_id) {
+			return &r;
+		}
+	}
+	return nullptr;
+}
+
+[[nodiscard]] bool persist_inventory_affects(unsigned long long inventory_id,
+											 const struct obj_data* obj) {
+	DB* db = Sql::getMysql();
+	if(!db || !obj) {
+		return false;
+	}
+	try {
+		db->execute(("DELETE FROM character_inventory_affect WHERE inventory_id = " +
+					 std::to_string(inventory_id))
+						.c_str());
+		for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+			const int loc = obj->affected[i].location;
+			const int mod = obj->affected[i].modifier;
+			if(loc == APPLY_NONE || loc == APPLY_SKIP || mod == 0) {
+				continue;
+			}
+			std::ostringstream ins;
+			ins << "INSERT INTO character_inventory_affect (inventory_id, affect_slot, "
+				   "location, modifier) VALUES ("
+				<< inventory_id << ',' << i << ',' << loc << ',' << mod << ')';
+			db->execute(ins.str().c_str());
+		}
+		return true;
+	}
+	catch(...) {
+		return false;
+	}
+}
+
+[[nodiscard]] Json analyze_to_json(const struct obj_data* obj) {
+	const ObjEditAnalysis a = AnalyzeObjEdit(obj);
+	Json j;
+	j["has_edit"] = a.has_edit;
+	j["owner_name"] = a.owner_name;
+	j["owner_classes"] = a.owner_classes;
+	j["class_mult"] = a.class_mult;
+	j["diff_xp_mega"] = static_cast<long long>(a.diff.valore / 1000000L);
+	j["diff_xp_raw"] = a.diff.valore;
+	j["diff_rune"] = a.diff.rune;
+	j["diff_derent_mega"] = static_cast<long long>(a.diff.derent / 1000000L);
+	j["changes"] = a.changes;
+	return j;
+}
+
+[[nodiscard]] std::string handle_internal(const std::string& path,
+										  const std::string& body) {
+	try {
+		const Json req = body.empty() ? Json::object() : Json::parse(body);
+
+		if(path == "/internal/ping") {
+			Json d;
+			d["service"] = "myst-edit-api";
+			return json_ok(d);
+		}
+
+		if(path == "/internal/is-online") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const std::string name = toon_name_by_id(toon_id);
+			Json d;
+			d["toon_id"] = toon_id;
+			d["online"] = is_toon_online_by_name(name);
+			return json_ok(d);
+		}
+
+		if(path == "/internal/max-level") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			Json d;
+			d["toon_id"] = toon_id;
+			d["max_level"] = max_level_for_toon(toon_id);
+			return json_ok(d);
+		}
+
+		if(path == "/internal/list-inventory") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			std::vector<inventory_mysql_row> rows;
+			load_character_inventory_mysql(toon_id, rows);
+			Json items = Json::array();
+			for(const auto& r : rows) {
+				Json it;
+				it["inventory_id"] = r.id;
+				it["list_index"] = r.list_index;
+				it["parent_inventory_id"] = r.parent_inventory_id;
+				it["instance_id"] = r.instance_id;
+				it["item_number"] = r.elem.item_number;
+				it["short_desc"] = r.elem.sd;
+				it["name"] = r.elem.name;
+				it["wear_pos"] = r.elem.wearpos;
+				it["depth"] = r.elem.depth;
+				items.push_back(it);
+			}
+			Json d;
+			d["items"] = items;
+			return json_ok(d);
+		}
+
+		if(path == "/internal/quote-item") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long inventory_id = req.value("inventory_id", 0ULL);
+			std::vector<inventory_mysql_row> rows;
+			load_character_inventory_mysql(toon_id, rows);
+			inventory_mysql_row* row = find_inventory_row(rows, inventory_id);
+			if(!row) {
+				return json_error("oggetto non trovato nell'inventario del toon", 404);
+			}
+			struct obj_data* obj = materialize_inventory_row(*row);
+			if(!obj) {
+				return json_error("impossibile materializzare oggetto", 500);
+			}
+			Json d = analyze_to_json(obj);
+			extract_obj(obj);
+			return json_ok(d);
+		}
+
+		if(path == "/internal/apply-affect") {
+			const unsigned long long target_toon_id = req.value("target_toon_id", 0ULL);
+			const unsigned long long inventory_id = req.value("inventory_id", 0ULL);
+			const int location = req.value("location", 0);
+			const int modifier = req.value("modifier", 0);
+			const int pay_xp = req.value("pay_xp", 0);
+			const int pay_rune = req.value("pay_rune", 0);
+
+			const std::string target_name = toon_name_by_id(target_toon_id);
+			if(target_name.empty()) {
+				return json_error("toon target non trovato", 404);
+			}
+			if(is_toon_online_by_name(target_name)) {
+				return json_error("il toon target e collegato al mud", 409);
+			}
+
+			if(edit_pool_is_pool_apply(location)) {
+				return json_error(
+					"hit/mana/move/regen vanno sul personaggio (edit pool), non sull'oggetto",
+					400);
+			}
+
+			std::vector<inventory_mysql_row> rows;
+			load_character_inventory_mysql(target_toon_id, rows);
+			inventory_mysql_row* row = find_inventory_row(rows, inventory_id);
+			if(!row) {
+				return json_error("oggetto non trovato nell'inventario", 404);
+			}
+
+			struct obj_data* before = materialize_inventory_row(*row);
+			if(!before) {
+				return json_error("impossibile materializzare oggetto", 500);
+			}
+
+			struct obj_data* after = materialize_inventory_row(*row);
+			if(!after) {
+				extract_obj(before);
+				return json_error("impossibile clonare oggetto", 500);
+			}
+
+			int slot = -1;
+			for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+				if(after->affected[i].location == APPLY_NONE ||
+				   after->affected[i].location == APPLY_SKIP) {
+					slot = i;
+					break;
+				}
+			}
+			if(slot < 0) {
+				extract_obj(before);
+				extract_obj(after);
+				return json_error("nessuno slot affect libero", 400);
+			}
+
+			after->affected[slot].location = static_cast<sh_int>(location);
+			after->affected[slot].modifier = static_cast<sh_int>(modifier);
+
+			const ExpValue diff_before = CheckDiffValue(before);
+			extract_obj(before);
+			const ExpValue diff_after = CheckDiffValue(after);
+
+			const long long delta_xp = diff_after.valore - diff_before.valore;
+			const int delta_rune = diff_after.rune - diff_before.rune;
+			const int xp_cost =
+				pay_xp > 0 ? pay_xp : static_cast<int>(std::max(0LL, delta_xp));
+			const int rune_cost =
+				pay_rune > 0 ? pay_rune : std::max(0, delta_rune);
+
+			const int max_level = max_level_for_toon(target_toon_id);
+			std::string pay_err;
+			if(!deduct_payment(target_toon_id, xp_cost, rune_cost, max_level, pay_err)) {
+				extract_obj(after);
+				return json_error(pay_err.c_str(), 402);
+			}
+
+			bool saved = false;
+			if(after->db_instance_id != 0) {
+				const int base = object_instance_resolve_base_vnum(after);
+				if(base > 0 &&
+				   object_instance_persist(after, base, 0, nullptr, true,
+										   "edit_portal") != 0) {
+					saved = true;
+				}
+			}
+			else {
+				saved = persist_inventory_affects(inventory_id, after);
+			}
+
+			Json d = analyze_to_json(after);
+			d["paid_xp"] = xp_cost;
+			d["paid_rune"] = rune_cost;
+			d["saved"] = saved;
+			extract_obj(after);
+
+			if(!saved) {
+				return json_error("pagamento eseguito ma salvataggio fallito", 500);
+			}
+			return json_ok(d);
+		}
+
+		if(path == "/internal/apply-pool") {
+			const unsigned long long target_toon_id = req.value("target_toon_id", 0ULL);
+			const std::string field = req.value("field", "");
+			const int delta = req.value("delta", 0);
+			const int pay_xp = req.value("pay_xp", 0);
+			const int pay_rune = req.value("pay_rune", 0);
+
+			const std::string target_name = toon_name_by_id(target_toon_id);
+			if(target_name.empty()) {
+				return json_error("toon target non trovato", 404);
+			}
+			if(is_toon_online_by_name(target_name)) {
+				return json_error("il toon target e collegato al mud", 409);
+			}
+
+			EditPoolField pool_field {};
+			if(field == "hit") {
+				pool_field = EditPoolField::Hp;
+			}
+			else if(field == "mana") {
+				pool_field = EditPoolField::Mana;
+			}
+			else if(field == "move") {
+				pool_field = EditPoolField::Move;
+			}
+			else if(field == "hit_regen") {
+				pool_field = EditPoolField::HpRegen;
+			}
+			else if(field == "mana_regen") {
+				pool_field = EditPoolField::ManaRegen;
+			}
+			else if(field == "move_regen") {
+				pool_field = EditPoolField::MoveRegen;
+			}
+			else {
+				return json_error("campo pool non valido", 400);
+			}
+
+			DB* db = Sql::getMysql();
+			if(!db) {
+				return json_error("database non disponibile", 500);
+			}
+
+			char_edit_pool_data pool {};
+			try {
+				odb::connection_ptr cp(db->connection());
+				auto& mc = static_cast<odb::mysql::connection&>(*cp);
+				MYSQL* h = mc.handle();
+				const std::string sql =
+					"SELECT edit_hp, edit_mana, edit_move, edit_hp_regen, edit_mana_regen, "
+					"edit_move_regen, overedit_hp, overedit_mana, overedit_move, "
+					"overedit_hp_regen, overedit_mana_regen, overedit_move_regen "
+					"FROM character_stats WHERE toon_id = " +
+					std::to_string(target_toon_id) + " LIMIT 1";
+				if(mysql_query(h, sql.c_str()) != 0) {
+					return json_error("lettura edit pool fallita", 500);
+				}
+				MYSQL_RES* res = mysql_store_result(h);
+				if(!res) {
+					return json_error("lettura edit pool fallita", 500);
+				}
+				MYSQL_ROW row = mysql_fetch_row(res);
+				if(!row) {
+					mysql_free_result(res);
+					return json_error("character_stats non trovato", 404);
+				}
+				pool.edit_hp = static_cast<sh_int>(row[0] ? std::atoi(row[0]) : 0);
+				pool.edit_mana = static_cast<sh_int>(row[1] ? std::atoi(row[1]) : 0);
+				pool.edit_move = static_cast<sh_int>(row[2] ? std::atoi(row[2]) : 0);
+				pool.edit_hp_regen = static_cast<sh_int>(row[3] ? std::atoi(row[3]) : 0);
+				pool.edit_mana_regen = static_cast<sh_int>(row[4] ? std::atoi(row[4]) : 0);
+				pool.edit_move_regen = static_cast<sh_int>(row[5] ? std::atoi(row[5]) : 0);
+				pool.overedit_hp = static_cast<sh_int>(row[6] ? std::atoi(row[6]) : 0);
+				pool.overedit_mana = static_cast<sh_int>(row[7] ? std::atoi(row[7]) : 0);
+				pool.overedit_move = static_cast<sh_int>(row[8] ? std::atoi(row[8]) : 0);
+				pool.overedit_hp_regen = static_cast<sh_int>(row[9] ? std::atoi(row[9]) : 0);
+				pool.overedit_mana_regen =
+					static_cast<sh_int>(row[10] ? std::atoi(row[10]) : 0);
+				pool.overedit_move_regen =
+					static_cast<sh_int>(row[11] ? std::atoi(row[11]) : 0);
+				mysql_free_result(res);
+			}
+			catch(...) {
+				return json_error("lettura edit pool fallita", 500);
+			}
+
+			if(!edit_pool_add_delta(&pool, pool_field, delta)) {
+				return json_error("delta pool rifiutato (cap listino)", 400);
+			}
+
+			const int max_level = max_level_for_toon(target_toon_id);
+			std::string pay_err;
+			if(!deduct_payment(target_toon_id, pay_xp, pay_rune, max_level, pay_err)) {
+				return json_error(pay_err.c_str(), 402);
+			}
+
+			try {
+				std::ostringstream upd;
+				upd << "UPDATE character_stats SET edit_hp=" << pool.edit_hp
+					<< ", edit_mana=" << pool.edit_mana << ", edit_move=" << pool.edit_move
+					<< ", edit_hp_regen=" << pool.edit_hp_regen
+					<< ", edit_mana_regen=" << pool.edit_mana_regen
+					<< ", edit_move_regen=" << pool.edit_move_regen
+					<< ", overedit_hp=" << pool.overedit_hp
+					<< ", overedit_mana=" << pool.overedit_mana
+					<< ", overedit_move=" << pool.overedit_move
+					<< ", overedit_hp_regen=" << pool.overedit_hp_regen
+					<< ", overedit_mana_regen=" << pool.overedit_mana_regen
+					<< ", overedit_move_regen=" << pool.overedit_move_regen
+					<< ", edit_pool_migrated=1 WHERE toon_id = " << target_toon_id;
+				db->execute(upd.str().c_str());
+			}
+			catch(const std::exception& e) {
+				return json_error(e.what(), 500);
+			}
+
+			Json d;
+			d["edit_hp"] = pool.edit_hp;
+			d["edit_mana"] = pool.edit_mana;
+			d["edit_move"] = pool.edit_move;
+			d["edit_hp_regen"] = pool.edit_hp_regen;
+			d["edit_mana_regen"] = pool.edit_mana_regen;
+			d["edit_move_regen"] = pool.edit_move_regen;
+			d["paid_xp"] = pay_xp;
+			d["paid_rune"] = pay_rune;
+			return json_ok(d);
+		}
+
+		return json_error("endpoint non trovato", 404);
+	}
+	catch(const std::exception& e) {
+		return json_error(e.what(), 500);
+	}
+}
+#else
+[[nodiscard]] std::string handle_internal(const std::string&, const std::string&) {
+	return json_error("MySQL non attivo in questa build", 503);
+}
+#endif
+
+[[nodiscard]] std::string submit_job(const std::string& path, const std::string& body) {
+	EditPortalJob job;
+	job.path = path;
+	job.body = body;
+	auto fut = job.response.get_future();
+	{
+		std::lock_guard<std::mutex> lock(g_queue_mutex);
+		g_jobs.push_back(std::move(job));
+	}
+	g_queue_cv.notify_one();
+	if(fut.wait_for(std::chrono::seconds(30)) != std::future_status::ready) {
+		return json_error("timeout elaborazione mud", 504);
+	}
+	return fut.get();
+}
+
+void http_thread_main() {
+	const int port = api_port();
+	const int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if(server_fd < 0) {
+		mudlog(LOG_SYSERR, "edit_portal: socket() failed");
+		return;
+	}
+
+	sockaddr_in addr {};
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_port = htons(static_cast<uint16_t>(port));
+
+	if(bind(server_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+		mudlog(LOG_SYSERR, "edit_portal: bind(%d) failed", port);
+		close(server_fd);
+		return;
+	}
+	if(listen(server_fd, 16) < 0) {
+		mudlog(LOG_SYSERR, "edit_portal: listen failed");
+		close(server_fd);
+		return;
+	}
+
+	mudlog(LOG_CHECK, "edit_portal: API listening on port %d", port);
+	g_http_running = true;
+
+	while(g_http_running) {
+		const int client = accept(server_fd, nullptr, nullptr);
+		if(client < 0) {
+			continue;
+		}
+
+		char buf[16384];
+		const ssize_t n = read(client, buf, sizeof(buf) - 1);
+		if(n <= 0) {
+			close(client);
+			continue;
+		}
+		buf[n] = '\0';
+		std::string raw(buf, static_cast<size_t>(n));
+
+		std::string method;
+		std::string path;
+		{
+			std::istringstream ls(raw);
+			ls >> method >> path;
+		}
+
+		const auto hdr_end = raw.find("\r\n\r\n");
+		const std::string headers = hdr_end != std::string::npos
+										? raw.substr(0, hdr_end)
+										: raw;
+		std::string body =
+			hdr_end != std::string::npos ? raw.substr(hdr_end + 4) : std::string();
+
+		std::string response_body;
+		int status = 200;
+		if(!header_has_secret(headers)) {
+			response_body = json_error("unauthorized", 401);
+			status = 401;
+		}
+		else if(method != "POST") {
+			response_body = json_error("solo POST", 405);
+			status = 405;
+		}
+		else {
+			response_body = submit_job(path, body);
+			if(response_body.find("\"ok\":false") != std::string::npos) {
+				const auto cp = response_body.find("\"code\":");
+				if(cp != std::string::npos) {
+					status = std::atoi(response_body.c_str() + cp + 7);
+				}
+			}
+		}
+
+		std::ostringstream out;
+		out << "HTTP/1.1 " << status << " OK\r\n"
+			<< "Content-Type: application/json\r\n"
+			<< "Connection: close\r\n"
+			<< "Content-Length: " << response_body.size() << "\r\n\r\n"
+			<< response_body;
+		const std::string packet = out.str();
+		write(client, packet.data(), packet.size());
+		close(client);
+	}
+
+	close(server_fd);
+}
+
+} // namespace
+
+void edit_portal_process_pending() {
+	std::deque<EditPortalJob> local;
+	{
+		std::lock_guard<std::mutex> lock(g_queue_mutex);
+		local.swap(g_jobs);
+	}
+	for(auto& job : local) {
+		try {
+			job.response.set_value(handle_internal(job.path, job.body));
+		}
+		catch(...) {
+			job.response.set_value(json_error("errore interno", 500));
+		}
+	}
+}
+
+void edit_portal_init() {
+#if USE_MYSQL
+	std::thread(http_thread_main).detach();
+#else
+	mudlog(LOG_CHECK, "edit_portal: disabled (USE_MYSQL=0)");
+#endif
+}
+
+} // namespace Alarmud
