@@ -673,7 +673,7 @@ std::atomic<bool> g_http_running {false};
 			}
 
 			std::string persist_err;
-			if(!legacy_upsert_character_resistance(db->connection(), target_toon_id,
+			if(!legacy_upsert_character_resistance(db, target_toon_id,
 												   damage_type, value, persist_err)) {
 				return json_error(persist_err.c_str(), 500);
 			}
@@ -735,7 +735,7 @@ std::atomic<bool> g_http_running {false};
 		}
 
 		if(path == "/internal/set-system-config") {
-			if(!req.contains("config")) {
+			if(req.find("config") == req.end()) {
 				return json_error("config JSON richiesto", 400);
 			}
 			std::string err;

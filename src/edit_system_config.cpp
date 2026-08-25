@@ -129,7 +129,7 @@ void build_defaults() {
 
 void parse_entries_json(const Json& root) {
 	g_entries.clear();
-	if(!root.contains("entries") || !root["entries"].is_array()) {
+	if(root.find("entries") == root.end() || !root["entries"].is_array()) {
 		build_defaults();
 		return;
 	}
@@ -285,7 +285,7 @@ std::string edit_system_config_to_json() {
 bool edit_system_config_save_json(const std::string& json_text, std::string& err) {
 	try {
 		const Json parsed = Json::parse(json_text);
-		if(!parsed.contains("entries") || !parsed["entries"].is_array()) {
+		if(parsed.find("entries") == parsed.end() || !parsed["entries"].is_array()) {
 			err = "JSON deve contenere array entries";
 			return false;
 		}
