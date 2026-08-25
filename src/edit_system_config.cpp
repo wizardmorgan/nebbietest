@@ -12,9 +12,7 @@
 
 #include "../contrib/slacking/json.hpp"
 #include "autoenums.hpp"
-#include "comm.hpp"
 #include "edit_pool.hpp"
-#include "flags.hpp"
 #include "logging.hpp"
 
 namespace Alarmud {
@@ -105,7 +103,7 @@ void build_defaults() {
 		return std::string(env);
 	}
 	std::ostringstream p;
-	p << DFLT_DIR << "/edit_system.json";
+	p << "lib/edit_system.json";
 	return p.str();
 }
 
