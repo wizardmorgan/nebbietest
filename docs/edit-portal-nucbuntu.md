@@ -192,11 +192,34 @@ git push -u mine feature/edit-portal
 - Non pubblicare porta **8090** (solo rete Docker interna).
 - SSO sito: fase successiva (mapping email → `user.id`).
 
+## 13. Parametri di sistema edit (`lib/edit_system.json`)
+
+Configura **dove** va ogni tipo di edit (oggetto vs personaggio), reversibile senza refactor:
+
+| `target` | Destinazione |
+|----------|----------------|
+| `object` | APPLY su oggetto (`apply-affect`, APPLY_IMMUNE per resistenze) |
+| `character` | PG: `edit_pool` (hit/mana/move/regen) o `character_resistance` (scala -100…+100) |
+
+- Default: `Confs/edit_system.default.json` (copiato in `mudroot/lib/edit_system.json` al primo avvio Docker se assente).
+- Override path: env `EDIT_SYSTEM_CONFIG`.
+- Staff (≥57): sezione **Parametri di sistema** nel portale web, oppure API `POST /internal/get-system-config` / `set-system-config`.
+- Resistenze sul PG usano la stessa tabella `character_resistance` di `legacy_import` (`legacy_upsert_character_resistance`).
+- Cambiare `resistance.fire` da `object` a `character` blocca APPLY_IMMUNE fire sugli oggetti e abilita `apply-resistance`; tornare a `object` ripristina il flusso oggetto (i valori già salvati sul PG restano fino a migrazione manuale).
+
+Esempio — fire sul PG:
+
+```json
+{ "id": "resistance.fire", "kind": "resistance", "damage_type": 1, "target": "character", "enabled": true, "label": "Fire" }
+```
+
 ## File principali
 
 | Path | Descrizione |
 |------|-------------|
 | `src/edit_portal.cpp` | API HTTP su myst, queue sul game loop |
+| `src/edit_system_config.cpp` | Routing object/character da `lib/edit_system.json` |
+| `Confs/edit_system.default.json` | Template config edit di sistema |
 | `edit-portal/server.js` | Auth + proxy API |
 | `scripts/docker-entrypoint-mudcompiler.sh` | Avvio myst dopo MySQL |
 | `docker-compose.yml` | Servizi mysql + mudcompiler + edit-portal |

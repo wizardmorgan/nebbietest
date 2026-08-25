@@ -1,11 +1,10 @@
 'use strict';
 
-const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
 const mysql = require('mysql2/promise');
 const path = require('path');
-const unixCrypt = require('unix-crypt-tiny');
+const unixpass = require('unixpass');
 
 const PORT = parseInt(process.env.EDIT_WEB_PORT || '3080', 10);
 const SESSION_SECRET = process.env.EDIT_SESSION_SECRET || 'nebbie-edit-session-dev';
@@ -91,8 +90,7 @@ app.post('/api/login', async (req, res) => {
   }
   const user = rows[0];
   const hash = String(user.password || '');
-  const check = unixCrypt(password, hash);
-  if (check !== hash) {
+  if (!unixpass.check(password, hash)) {
     return res.status(401).json({ ok: false, error: 'credenziali non valide' });
   }
   req.session.userId = user.id;
@@ -246,6 +244,57 @@ app.post('/api/apply-pool', requireAuth, requireSessionToon, async (req, res) =>
     pay_xp: Number(req.body.payXp || 0),
     pay_rune: Number(req.body.payRune || 0),
   });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.post('/api/apply-resistance', requireAuth, requireSessionToon, async (req, res) => {
+  const targetToonId = Number(req.body.targetToonId);
+  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
+    return res.status(403).json({ ok: false, error: 'accesso negato' });
+  }
+  if (req.session.role === 'limited') {
+    return res.status(403).json({ ok: false, error: 'tier limited: apply non consentito' });
+  }
+  const result = await mystPost('/internal/apply-resistance', {
+    target_toon_id: targetToonId,
+    damage_type: Number(req.body.damageType),
+    value: Number(req.body.value),
+    pay_xp: Number(req.body.payXp || 0),
+    pay_rune: Number(req.body.payRune || 0),
+  });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.get('/api/resistances/:toonId', requireAuth, requireSessionToon, async (req, res) => {
+  const targetToonId = Number(req.params.toonId);
+  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
+    return res.status(403).json({ ok: false, error: 'accesso negato' });
+  }
+  const result = await mystPost('/internal/list-resistances', { toon_id: targetToonId });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.get('/api/staff/system-config', requireAuth, requireSessionToon, async (req, res) => {
+  if (req.session.role !== 'staff') {
+    return res.status(403).json({ ok: false, error: 'solo staff' });
+  }
+  const result = await mystPost('/internal/get-system-config', {});
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.post('/api/staff/system-config', requireAuth, requireSessionToon, async (req, res) => {
+  if (req.session.role !== 'staff') {
+    return res.status(403).json({ ok: false, error: 'solo staff' });
+  }
+  let config = req.body.config;
+  if (typeof config === 'string') {
+    try {
+      config = JSON.parse(config);
+    } catch {
+      return res.status(400).json({ ok: false, error: 'config JSON non valido' });
+    }
+  }
+  const result = await mystPost('/internal/set-system-config', { config });
   res.status(result.ok ? 200 : 400).json(result);
 });
 

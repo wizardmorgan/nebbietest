@@ -81,8 +81,12 @@ async function enterWorkMode() {
   const me = await api('/api/me');
   $('header-meta').textContent = `${me.email} — ${me.sessionToonName} (${me.role}, lv ${me.maxLevel})`;
   await loadTargetToons();
-  if (me.role === 'staff') show('staff-panel');
-  else hide('staff-panel');
+  if (me.role === 'staff') {
+    show('staff-panel');
+    loadSystemConfig();
+  } else {
+    hide('staff-panel');
+  }
 }
 
 async function loadTargetToons() {
@@ -199,6 +203,61 @@ $('pool-form').addEventListener('submit', async (e) => {
   });
   $('apply-result').textContent = JSON.stringify(result, null, 2);
 });
+
+$('resistance-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const result = await api('/api/apply-resistance', {
+    method: 'POST',
+    body: JSON.stringify({
+      targetToonId,
+      damageType: Number($('res-damage-type').value),
+      value: Number($('res-value').value),
+      payXp: Number($('res-pay-xp').value),
+      payRune: Number($('res-pay-rune').value),
+    }),
+  });
+  $('apply-result').textContent = JSON.stringify(result, null, 2);
+  loadResistances();
+});
+
+async function loadResistances() {
+  const data = await api(`/api/resistances/${targetToonId}`);
+  if (data.ok) {
+    $('res-list').textContent = JSON.stringify(data.data?.rows || data.data, null, 2);
+  } else {
+    $('res-list').textContent = data.error || 'errore';
+  }
+}
+
+$('btn-load-res').onclick = () => loadResistances();
+
+async function loadSystemConfig() {
+  const data = await api('/api/staff/system-config');
+  if (!data.ok) {
+    $('config-result').textContent = data.error || 'errore';
+    return;
+  }
+  const cfg = data.data?.config || data.data;
+  $('system-config-editor').value = JSON.stringify(cfg, null, 2);
+  $('config-result').textContent = `path: ${data.data?.path || 'lib/edit_system.json'}`;
+}
+
+$('btn-load-config').onclick = () => loadSystemConfig();
+
+$('btn-save-config').onclick = async () => {
+  let config;
+  try {
+    config = JSON.parse($('system-config-editor').value);
+  } catch {
+    $('config-result').textContent = 'JSON non valido';
+    return;
+  }
+  const data = await api('/api/staff/system-config', {
+    method: 'POST',
+    body: JSON.stringify({ config }),
+  });
+  $('config-result').textContent = JSON.stringify(data, null, 2);
+};
 
 $('btn-inst-search').onclick = async () => {
   const q = $('inst-search').value;

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "comment": "Target edit: object = affect su oggetto; character = campo sul PG (edit_pool o character_resistance). Reversibile cambiando target qui.",
+  "entries": [
+    { "id": "pool.hit", "kind": "pool", "pool_field": "hit", "target": "character", "enabled": true, "label": "Hit points" },
+    { "id": "pool.mana", "kind": "pool", "pool_field": "mana", "target": "character", "enabled": true, "label": "Mana" },
+    { "id": "pool.move", "kind": "pool", "pool_field": "move", "target": "character", "enabled": true, "label": "Move" },
+    { "id": "pool.hit_regen", "kind": "pool", "pool_field": "hit_regen", "target": "character", "enabled": true, "label": "Hit regen" },
+    { "id": "pool.mana_regen", "kind": "pool", "pool_field": "mana_regen", "target": "character", "enabled": true, "label": "Mana regen" },
+    { "id": "pool.move_regen", "kind": "pool", "pool_field": "move_regen", "target": "character", "enabled": true, "label": "Move regen" },
+    { "id": "resistance.fire", "kind": "resistance", "damage_type": 1, "target": "object", "enabled": true, "label": "Fire" },
+    { "id": "resistance.cold", "kind": "resistance", "damage_type": 2, "target": "object", "enabled": true, "label": "Cold" },
+    { "id": "resistance.elec", "kind": "resistance", "damage_type": 4, "target": "object", "enabled": true, "label": "Electricity" },
+    { "id": "resistance.energy", "kind": "resistance", "damage_type": 8, "target": "object", "enabled": true, "label": "Energy" },
+    { "id": "resistance.blunt", "kind": "resistance", "damage_type": 16, "target": "object", "enabled": true, "label": "Blunt" },
+    { "id": "resistance.pierce", "kind": "resistance", "damage_type": 32, "target": "object", "enabled": true, "label": "Pierce" },
+    { "id": "resistance.slash", "kind": "resistance", "damage_type": 64, "target": "object", "enabled": true, "label": "Slash" },
+    { "id": "resistance.acid", "kind": "resistance", "damage_type": 128, "target": "object", "enabled": true, "label": "Acid" },
+    { "id": "resistance.poison", "kind": "resistance", "damage_type": 256, "target": "object", "enabled": true, "label": "Poison" },
+    { "id": "resistance.drain", "kind": "resistance", "damage_type": 512, "target": "object", "enabled": true, "label": "Drain" },
+    { "id": "resistance.sleep", "kind": "resistance", "damage_type": 1024, "target": "object", "enabled": true, "label": "Sleep" },
+    { "id": "resistance.charm", "kind": "resistance", "damage_type": 2048, "target": "object", "enabled": true, "label": "Charm" },
+    { "id": "resistance.hold", "kind": "resistance", "damage_type": 4096, "target": "object", "enabled": true, "label": "Hold" },
+    { "id": "resistance.nonmag", "kind": "resistance", "damage_type": 8192, "target": "object", "enabled": true, "label": "Non-magic" },
+    { "id": "resistance.plus1", "kind": "resistance", "damage_type": 16384, "target": "object", "enabled": true, "label": "Weapon +1" },
+    { "id": "resistance.plus2", "kind": "resistance", "damage_type": 32768, "target": "object", "enabled": true, "label": "Weapon +2" },
+    { "id": "resistance.plus3", "kind": "resistance", "damage_type": 65536, "target": "object", "enabled": true, "label": "Weapon +3" },
+    { "id": "resistance.plus4", "kind": "resistance", "damage_type": 131072, "target": "object", "enabled": true, "label": "Weapon +4" }
+  ]
+}

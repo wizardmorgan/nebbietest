@@ -3,6 +3,7 @@
  *ALARMUD* See COPYING for licence information
  *ALARMUD*/
 #include "edit_pool.hpp"
+#include "edit_system_config.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -541,7 +542,7 @@ bool edit_pool_is_pool_apply(int location) noexcept {
 }
 
 bool edit_pool_location_blocked_on_eq(int location) noexcept {
-	return edit_pool_is_pool_apply(location);
+	return edit_system_blocked_on_object(location, 0);
 }
 
 void edit_pool_accumulate_obj_delta(const struct obj_data* obj,

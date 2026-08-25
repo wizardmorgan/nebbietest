@@ -72,11 +72,30 @@
             <label>Pay rune <input type="number" id="pool-pay-rune" value="0" /></label>
             <button type="submit">Applica pool</button>
           </form>
+          <form id="resistance-form">
+            <h4>Resistenza PG (character_resistance)</h4>
+            <p class="hint">Solo se target=character in edit_system.json (es. fire=1). Scala -100…+100.</p>
+            <label>damage_type (IMM bit)
+              <input type="number" id="res-damage-type" value="1" title="IMM_FIRE=1" />
+            </label>
+            <label>Value <input type="number" id="res-value" value="100" min="-100" max="100" /></label>
+            <label>Pay XP <input type="number" id="res-pay-xp" value="0" /></label>
+            <label>Pay rune <input type="number" id="res-pay-rune" value="0" /></label>
+            <button type="submit">Applica resistenza</button>
+            <button id="btn-load-res" type="button">Carica resistenze PG</button>
+          </form>
+          <pre id="res-list" class="msg"></pre>
           <p id="apply-result" class="msg"></p>
         </div>
       </div>
 
       <div id="staff-panel" class="hidden">
+        <h3>Staff — parametri di sistema (edit_system.json)</h3>
+        <p class="hint">object vs character per pool/resistenze. Reversibile: cambia target e salva (i dati esistenti restano dove sono).</p>
+        <textarea id="system-config-editor" rows="16" spellcheck="false"></textarea>
+        <button id="btn-load-config" type="button">Carica config</button>
+        <button id="btn-save-config" type="button">Salva config</button>
+        <p id="config-result" class="msg"></p>
         <h3>Staff — object_instance</h3>
         <input id="inst-search" placeholder="cerca owner / desc / id" />
         <button id="btn-inst-search" type="button">Cerca</button>
