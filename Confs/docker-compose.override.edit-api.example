@@ -1,0 +1,9 @@
+# Copia in ~/NebbieArcane/Server/docker-compose.override.yml (NON committare).
+# Aggiunge porta API edit (8090) al servizio mudcompiler definito in origin/feature/Razze.
+services:
+    mudcompiler:
+        ports:
+            - "8090:8090"
+        environment:
+            - EDIT_API_PORT=8090
+            - EDIT_API_SECRET=${EDIT_API_SECRET:-nebbie-edit-dev-secret}

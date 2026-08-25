@@ -1,21 +1,43 @@
 #!/bin/bash
-# Dev stack Docker (mysql + adminer + mudcompiler + edit-portal) e myst su porta devel.
-# Uso:
-#   ./scripts/mud-dev.sh status           # analisi + cosa fare
-#   ./scripts/mud-dev.sh start            # mysql + mudcompiler + myst + edit-portal
-#   ./scripts/mud-dev.sh start-mud        # solo myst (avvia mysql/container se serve)
-#   ./scripts/mud-dev.sh start-edit       # solo edit-portal (mysql se serve)
-#   ./scripts/mud-dev.sh start-stack      # mysql + shell interattiva mudcompiler
-#   ./scripts/mud-dev.sh stop-mud         # termina myst
-#   ./scripts/mud-dev.sh stop-edit        # ferma edit-portal
-#   ./scripts/mud-dev.sh stop-all         # ferma tutto (DB in mysql_data/ resta)
+# Dev Docker: mysql/adminer/mudcompiler/myst su NebbieArcane + edit-portal opzionale dal fork.
 #
-# Mac:  cd ~/Documents/GitHub/Server && ./scripts/mud-dev.sh start
-# NUC:  cd ~/NebbieArcane/Server        && ./scripts/mud-dev.sh start
+# Due repo (setup nucbuntu consigliato):
+#   MUD_ROOT   = ~/NebbieArcane/Server   → git pull origin feature/Razze (upstream, non sporcare)
+#   EDIT_REPO  = ~/docker-vms/Server     → git pull mine feature/edit-portal (edit-portal + edit_portal.cpp)
+#   Config:    ~/.config/nebbie/mud-dev.env (vedi docs/nebbie-mud-dev.env.example)
+#
+# Uso:
+#   ./scripts/mud-dev.sh status
+#   ./scripts/mud-dev.sh start-mud          # solo MUD (sorgente = MUD_APP_ROOT, default MUD_ROOT)
+#   ./scripts/mud-dev.sh start-edit         # solo edit-portal (mysql da MUD_ROOT)
+#   ./scripts/mud-dev.sh start              # myst + edit-portal (MUD_APP_ROOT=EDIT_REPO in config)
+#   ./scripts/mud-dev.sh stop-all
+#
+# Lo script può stare in EDIT_REPO; non serve committarlo su NebbieArcane.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ -f "${HOME}/.config/nebbie/mud-dev.env" ]; then
+	# shellcheck source=/dev/null
+	source "${HOME}/.config/nebbie/mud-dev.env"
+fi
+
+# Stack compose (mysql_data/) — di solito NebbieArcane
+if [ -z "${MUD_ROOT:-}" ]; then
+	if [ -d "${HOME}/NebbieArcane/Server" ]; then
+		MUD_ROOT="${HOME}/NebbieArcane/Server"
+	else
+		MUD_ROOT="$SCRIPT_REPO"
+	fi
+fi
+
+# Fork con edit-portal
+EDIT_REPO="${EDIT_REPO:-$SCRIPT_REPO}"
+
+# Sorgente /app nel container mudcompiler (myst build & run)
+MUD_APP_ROOT="${MUD_APP_ROOT:-$MUD_ROOT}"
 
 ENVIRONMENT="${ENVIRONMENT:-devel}"
 MUD_PORT="${MUD_PORT:-4002}"
@@ -24,8 +46,16 @@ EDIT_API_PORT="${EDIT_API_PORT:-8090}"
 EDIT_API_SECRET="${EDIT_API_SECRET:-nebbie-edit-dev-secret}"
 EDIT_WEB_PORT="${EDIT_WEB_PORT:-3080}"
 
+MUD_STACK_NETWORK="${MUD_STACK_NETWORK:-$(basename "$MUD_ROOT" | tr '[:upper:]' '[:lower:]')_default}"
+
+if [ ! -f "$MUD_ROOT/docker-compose.yml" ]; then
+	echo "ERRORE: MUD_ROOT=$MUD_ROOT senza docker-compose.yml" >&2
+	exit 1
+fi
+
 # shellcheck source=scripts/load-mysql-conf.sh
-source "${ROOT}/scripts/load-mysql-conf.sh"
+ROOT="$MUD_ROOT"
+source "${MUD_ROOT}/scripts/load-mysql-conf.sh"
 
 if docker compose version >/dev/null 2>&1; then
 	COMPOSE='docker compose'
@@ -37,10 +67,20 @@ else
 fi
 
 compose() {
-	$COMPOSE "$@"
+	(cd "$MUD_ROOT" && $COMPOSE "$@")
 }
 
-load_mysql_conf
+compose_edit() {
+	if [ ! -f "$EDIT_REPO/docker-compose.edit-portal.yml" ]; then
+		echo "ERRORE: EDIT_REPO=$EDIT_REPO senza docker-compose.edit-portal.yml" >&2
+		return 1
+	fi
+	(
+		cd "$EDIT_REPO"
+		export MUD_STACK_NETWORK EDIT_API_SECRET EDIT_WEB_PORT
+		$COMPOSE -f docker-compose.edit-portal.yml "$@"
+	)
+}
 
 service_running() {
 	local svc="$1"
@@ -114,11 +154,6 @@ myst_has_zombie() {
 	'
 }
 
-myst_running() {
-	local c="$1"
-	myst_is_alive "$c"
-}
-
 force_cleanup_myst() {
 	local mudc="$1"
 	docker exec "$mudc" pkill -x myst 2>/dev/null || true
@@ -136,7 +171,7 @@ cleanup_orphan_mudcompiler_runs() {
 	local ids
 	ids="$(docker ps -aq --filter 'name=server-mudcompiler-run' 2>/dev/null || true)"
 	if [ -n "$ids" ]; then
-		echo "Rimozione container orphan server-mudcompiler-run-* (liberano porte 4000-4002)..."
+		echo "Rimozione container orphan server-mudcompiler-run-*..."
 		docker rm -f $ids 2>/dev/null || true
 	fi
 }
@@ -160,7 +195,7 @@ print_do() {
 
 ensure_mysql_stack() {
 	if ! service_running mysql || ! service_running adminer; then
-		echo "Avvio mysql e adminer..."
+		echo "Avvio mysql e adminer (MUD_ROOT=$MUD_ROOT)..."
 		compose up -d mysql adminer
 	fi
 	echo "Attesa MySQL..."
@@ -186,18 +221,18 @@ ensure_mudcompiler_container() {
 
 	stopped_line="$(find_mudcompiler_stopped)"
 	if [ -n "$stopped_line" ]; then
-		echo "Riavvio container mudcompiler (era fermo)..."
+		echo "Riavvio container mudcompiler..."
 		docker start mudcompiler
 		sleep 2
 		if find_mudcompiler_container >/dev/null; then
-			echo "Container mudcompiler avviato."
 			return 0
 		fi
 	fi
 
-	echo "Creazione container mudcompiler (--name mudcompiler, porte incl. ${EDIT_API_PORT})..."
-	# --name mudcompiler: edit-portal raggiunge myst via http://mudcompiler:8090 sulla rete compose.
-	if compose run -d --name mudcompiler --service-ports --entrypoint /bin/bash mudcompiler -c 'sleep infinity'; then
+	echo "Creazione mudcompiler (--name mudcompiler, /app <- $MUD_APP_ROOT)..."
+	if compose run -d --name mudcompiler --service-ports \
+		-v "${MUD_APP_ROOT}:/app" \
+		--entrypoint /bin/bash mudcompiler -c 'sleep infinity'; then
 		sleep 2
 		if find_mudcompiler_container >/dev/null; then
 			echo "Container mudcompiler creato."
@@ -207,141 +242,101 @@ ensure_mudcompiler_container() {
 
 	echo "ERRORE: impossibile avviare mudcompiler." >&2
 	echo "Porte occupate? ss -tlnp | grep -E '400|8090'" >&2
-	echo "Prova: ./scripts/mud-dev.sh stop-all && ./scripts/mud-dev.sh start" >&2
+	echo "Su NebbieArcane: copia Confs/docker-compose.override.edit-api.example → docker-compose.override.yml" >&2
 	return 1
 }
 
 cmd_start_edit() {
 	ensure_mysql_stack
 	if ! find_mudcompiler_container >/dev/null; then
-		print_warn "mudcompiler non attivo — API edit non raggiungibile finché non avvii myst"
+		print_warn "mudcompiler non attivo — API edit non disponibile"
 	fi
-	echo "Avvio edit-portal (web ${EDIT_WEB_PORT})..."
+	echo "Avvio edit-portal da EDIT_REPO=$EDIT_REPO (rete $MUD_STACK_NETWORK)..."
 	export EDIT_API_SECRET EDIT_WEB_PORT
-	compose up -d --build edit-portal
+	compose_edit up -d --build edit-portal
 	echo "Web UI: http://localhost:${EDIT_WEB_PORT}/"
 }
 
 cmd_stop_edit() {
-	compose stop edit-portal 2>/dev/null || true
-	compose rm -f edit-portal 2>/dev/null || true
+	compose_edit stop edit-portal 2>/dev/null || true
+	compose_edit rm -f edit-portal 2>/dev/null || true
 	echo "edit-portal fermato."
 }
 
 cmd_status() {
 	local mudc=''
-	local mysql_up=0 adminer_up=0 myst_up=0 edit_up=0
-	local users=0 has_myst_bin=0
+	local mysql_up=0 myst_up=0 edit_up=0
 
-	print_header "Contesto"
-	echo "  Repo:       $ROOT"
-	echo "  Porta mud:  $MUD_PORT (devel)"
-	echo "  Edit API:   ${EDIT_API_PORT} (interno Docker: mudcompiler:${EDIT_API_PORT})"
-	echo "  Edit web:   ${EDIT_WEB_PORT}"
-	echo "  Compose:    $COMPOSE"
+	print_header "Percorsi"
+	echo "  MUD_ROOT:      $MUD_ROOT (compose mysql, git pull origin)"
+	echo "  MUD_APP_ROOT:  $MUD_APP_ROOT (sorgente myst in container)"
+	echo "  EDIT_REPO:     $EDIT_REPO (edit-portal)"
+	echo "  Rete Docker:   $MUD_STACK_NETWORK"
+	echo "  Porta mud:     $MUD_PORT | Edit API: $EDIT_API_PORT | Web: $EDIT_WEB_PORT"
 
-	print_header "Docker Compose"
+	print_header "Docker Compose (MUD_ROOT)"
 	if service_running mysql; then
 		mysql_up=1
-		print_ok "mysql in esecuzione"
+		print_ok "mysql"
 	else
 		print_warn "mysql non in esecuzione"
-		print_do "./scripts/mud-dev.sh start"
+		print_do "./scripts/mud-dev.sh start-mud"
 	fi
 	if service_running adminer; then
-		adminer_up=1
-		print_ok "adminer in esecuzione (http://localhost:8080)"
-	else
-		print_warn "adminer non in esecuzione"
-		print_do "./scripts/mud-dev.sh start"
+		print_ok "adminer (http://localhost:8080)"
 	fi
-	if service_running edit-portal || docker ps --filter 'name=^nebbie-edit-portal$' --format '{{.Names}}' | grep -q .; then
+	if docker ps --filter 'name=^nebbie-edit-portal$' --format '{{.Names}}' | grep -q .; then
 		edit_up=1
-		print_ok "edit-portal in esecuzione (http://localhost:${EDIT_WEB_PORT})"
+		print_ok "edit-portal (http://localhost:${EDIT_WEB_PORT})"
 	else
 		print_warn "edit-portal non in esecuzione"
 		print_do "./scripts/mud-dev.sh start-edit"
 	fi
 
-	print_header "Container mudcompiler"
+	print_header "mudcompiler / myst"
 	if mudc="$(find_mudcompiler_container)"; then
 		print_ok "container: $mudc"
 		docker ps --filter "name=$mudc" --format '  Ports: {{.Ports}}'
 		if myst_running "$mudc"; then
 			myst_up=1
-			print_ok "myst in esecuzione"
+			print_ok "myst attivo"
 			echo "  $(myst_pgrep_line "$mudc")"
-		elif myst_has_zombie "$mudc"; then
-			print_warn "myst ZOMBIE/defunct"
-			print_do "./scripts/mud-dev.sh stop-mud && ./scripts/mud-dev.sh start-mud"
 		else
-			print_warn "myst NON in esecuzione"
+			print_warn "myst non attivo"
 			print_do "./scripts/mud-dev.sh start-mud"
 		fi
 		if docker exec "$mudc" test -x "/app/mudroot/myst" 2>/dev/null; then
-			has_myst_bin=1
-			print_ok "binario /app/mudroot/myst presente"
+			print_ok "/app/mudroot/myst presente"
 		else
-			print_warn "binario myst assente nel container"
+			print_warn "myst non compilato in $MUD_APP_ROOT"
 			print_do "docker exec -it $mudc bash -c 'cd /app && ./build.sh devel'"
 		fi
 	else
-		stopped_line="$(find_mudcompiler_stopped)"
-		if [ -n "$stopped_line" ]; then
-			print_warn "mudcompiler fermo: $stopped_line"
-		else
-			print_warn "nessun container mudcompiler"
-		fi
+		print_warn "nessun container mudcompiler"
 		print_do "./scripts/mud-dev.sh start-mud"
 	fi
 
-	print_header "Edit API (porta ${EDIT_API_PORT} host)"
 	if port_open "$EDIT_API_PORT"; then
-		print_ok "porta ${EDIT_API_PORT} aperta sull'host"
+		print_ok "porta host $EDIT_API_PORT aperta"
 	else
-		print_warn "porta ${EDIT_API_PORT} non raggiungibile sull'host"
-		if [ "$myst_up" -eq 1 ]; then
-			print_do "myst deve essere compilato con edit_portal (branch feature/edit-portal)"
-		fi
+		print_warn "porta $EDIT_API_PORT chiusa (override 8090 + myst con edit_portal?)"
 	fi
 
-	print_header "MySQL"
 	if [ "$mysql_up" -eq 1 ] && mysql_ping; then
-		print_ok "mysqladmin ping"
-		users="$(mysql_query 'SELECT COUNT(*) FROM user;' || echo 0)"
-		if [ "${users:-0}" -gt 0 ] 2>/dev/null; then
-			print_ok "tabella user: $users account"
-		else
-			print_warn "tabella user vuota o DB non importato"
-		fi
-	else
-		print_warn "MySQL non risponde"
-		print_do "./scripts/mud-dev.sh start"
+		print_ok "mysql ping"
 	fi
 
-	print_header "Porta $MUD_PORT (host)"
-	if port_open "$MUD_PORT"; then
-		if [ "$myst_up" -eq 1 ]; then
-			print_ok "porta aperta e myst attivo — telnet/Mudlet ok"
-		else
-			print_warn "porta aperta ma myst NON attivo"
-			print_do "./scripts/mud-dev.sh start-mud"
-		fi
-	else
-		print_warn "porta $MUD_PORT non raggiungibile"
-		print_do "./scripts/mud-dev.sh start-mud"
+	if port_open "$MUD_PORT" && [ "$myst_up" -eq 1 ]; then
+		print_ok "telnet localhost $MUD_PORT"
 	fi
 
 	print_header "Riepilogo"
-	if [ "$mysql_up" -eq 1 ] && [ "$myst_up" -eq 1 ] && port_open "$MUD_PORT"; then
-		echo "  MUD ok. telnet localhost $MUD_PORT"
-		if [ "$edit_up" -eq 1 ]; then
-			echo "  Edit web: http://localhost:${EDIT_WEB_PORT}/"
-		fi
+	if [ "$myst_up" -eq 1 ]; then
+		echo "  MUD ok."
+		[ "$edit_up" -eq 1 ] && echo "  Edit: http://localhost:${EDIT_WEB_PORT}/"
 		return 0
 	fi
-
-	echo "  Comando rapido: ./scripts/mud-dev.sh start"
+	echo "  ./scripts/mud-dev.sh start-mud  (o start con config edit)"
 	return 1
 }
 
@@ -353,12 +348,11 @@ cmd_start_mud() {
 	mudc="$(find_mudcompiler_container)"
 
 	if myst_is_alive "$mudc"; then
-		echo "myst già in esecuzione in $mudc:"
+		echo "myst già in esecuzione:"
 		myst_pgrep_line "$mudc"
 		return 0
 	fi
 	if myst_has_zombie "$mudc"; then
-		echo "myst defunct/zombie — pulizia prima del riavvio..."
 		force_cleanup_myst "$mudc"
 		mudc="$(find_mudcompiler_container)"
 	fi
@@ -366,7 +360,7 @@ cmd_start_mud() {
 	docker exec "$mudc" bash -c "
 		set -e
 		cd /app
-		ln -sfn ../pages mudroot/pages
+		ln -sfn ../pages mudroot/pages 2>/dev/null || true
 		cp -n myst.* mudroot/lib/ 2>/dev/null || true
 		if [ ! -f mudroot/lib/edit_system.json ] && [ -f Confs/edit_system.default.json ]; then
 			cp Confs/edit_system.default.json mudroot/lib/edit_system.json
@@ -378,13 +372,12 @@ cmd_start_mud() {
 	"
 	sleep 2
 	if myst_is_alive "$mudc"; then
-		echo "myst avviato (edit API ${EDIT_API_PORT} se compilato con edit_portal):"
+		echo "myst avviato (sorgente $MUD_APP_ROOT):"
 		myst_pgrep_line "$mudc"
 		echo "telnet localhost $MUD_PORT"
 	else
-		echo "ERRORE: myst non partito. Log:" >&2
+		echo "ERRORE: myst non partito." >&2
 		docker exec "$mudc" tail -20 /app/mudroot/errors.log 2>/dev/null || true
-		docker exec "$mudc" tail -30 /app/mudroot/alarmud.log 2>/dev/null || true
 		exit 1
 	fi
 }
@@ -397,34 +390,29 @@ cmd_start() {
 
 cmd_start_stack() {
 	ensure_mysql_stack
-	echo "Shell interattiva mudcompiler (exit per uscire):"
-	exec compose run --rm -it --service-ports --entrypoint /bin/bash mudcompiler
+	exec compose run --rm -it --service-ports \
+		-v "${MUD_APP_ROOT}:/app" \
+		--entrypoint /bin/bash mudcompiler
 }
 
 cmd_stop_mud() {
 	local mudc
 	if mudc="$(find_mudcompiler_container)"; then
 		force_cleanup_myst "$mudc"
-		echo "myst terminato (o container riavviato se era zombie)."
+		echo "myst terminato."
 	else
-		echo "Nessun container mudcompiler attivo."
+		echo "Nessun mudcompiler attivo."
 	fi
 }
 
 cmd_logs() {
 	local mudc lines="${1:-40}"
 	if ! mudc="$(find_mudcompiler_container)"; then
-		echo "Nessun container mudcompiler." >&2
+		echo "Nessun mudcompiler." >&2
 		return 1
 	fi
-	echo "=== errors.log (tail $lines) ==="
-	docker exec "$mudc" tail -n "$lines" /app/mudroot/errors.log 2>/dev/null || echo "(assente)"
-	echo "=== alarmud.log (tail $lines) ==="
-	docker exec "$mudc" tail -n "$lines" /app/mudroot/alarmud.log 2>/dev/null || echo "(assente)"
-	echo "=== edit_portal ==="
+	docker exec "$mudc" tail -n "$lines" /app/mudroot/errors.log 2>/dev/null || true
 	docker exec "$mudc" grep edit_portal /app/mudroot/alarmud.log 2>/dev/null | tail -10 || true
-	echo "=== myst ps ==="
-	myst_pgrep_line "$mudc"
 }
 
 cmd_stop_all() {
@@ -432,33 +420,23 @@ cmd_stop_all() {
 	cmd_stop_edit
 	docker rm -f mudcompiler 2>/dev/null || true
 	cleanup_orphan_mudcompiler_runs
-	local ids
-	ids="$(docker ps -aq --filter 'ancestor=nebbiearcane/mudcompiler:latest' 2>/dev/null || true)"
-	if [ -n "$ids" ]; then
-		docker rm -f $ids 2>/dev/null || true
-	fi
+	docker ps -aq --filter 'ancestor=nebbiearcane/mudcompiler:latest' | xargs -r docker rm -f 2>/dev/null || true
 	compose down --remove-orphans 2>/dev/null || compose stop mysql adminer 2>/dev/null || true
-	echo "Stack fermato (mysql_data/ conservato)."
+	echo "Stack fermato (mysql_data in $MUD_ROOT/mysql_data conservato)."
 }
 
 usage() {
 	cat <<EOF
 Uso: ./scripts/mud-dev.sh <comando>
 
-  status        Analisi e suggerimenti (default)
-  start         Avvia mysql + mudcompiler + myst + edit-portal
-  start-mud     Avvia myst (mysql/container se necessario)
-  start-edit    Avvia solo edit-portal (build se serve)
-  start-stack   mysql + shell interattiva nel container
-  stop-mud      Termina myst
-  stop-edit     Ferma edit-portal
-  logs [n]      Tail log myst nel container
-  stop-all      Ferma myst, mudcompiler, edit-portal, mysql, adminer
+Setup due repo (vedi docs/edit-portal-two-repos.md):
+  MUD_ROOT=$MUD_ROOT
+  EDIT_REPO=$EDIT_REPO
+  MUD_APP_ROOT=$MUD_APP_ROOT
 
-Variabili: MUD_PORT=4002  EDIT_API_PORT=8090  EDIT_WEB_PORT=3080
-           EDIT_API_SECRET=...  ENVIRONMENT=devel  MUD_DATA_DIR=lib
+Comandi: status | start | start-mud | start-edit | start-stack | stop-mud | stop-edit | stop-all | logs
 
-edit-portal richiede myst con edit_portal (branch feature/edit-portal) e container --name mudcompiler.
+Config opzionale: ~/.config/nebbie/mud-dev.env
 EOF
 }
 
