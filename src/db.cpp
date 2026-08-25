@@ -4991,9 +4991,6 @@ static void dedupe_rent_wear_pos(struct obj_file_u* rent) {
 	}
 }
 
-	return true;
-}
-
 bool load_character_inventory_mysql(unsigned long long toon_id,
 									std::vector<inventory_mysql_row>& rows) {
 	rows.clear();

@@ -1,13 +1,61 @@
-# Nebbie — due repo: upstream Razze + fork edit-portal
+# Nebbie — edit-portal con un solo repo (consigliato)
 
-Quando **NebbieArcane/Server** deve restare allineato a `origin/feature/Razze` senza merge locali, usare **due directory** e un solo MySQL.
+## Una directory sola: `~/NebbieArcane/Server`
 
-## Ruoli
+Non **serve** `docker-vms/Server`. Quella directory era solo un clone del fork usato per testare edit-portal **senza** toccare NebbieArcane — utile se volevi `git pull origin feature/Razze` senza file edit-portal nel working tree.
 
-| Path | Git | Contenuto |
-|------|-----|-----------|
-| `~/NebbieArcane/Server` | `git pull origin feature/Razze` | Upstream Montero — **non committare** edit-portal qui |
-| `~/docker-vms/Server` | `git pull mine feature/edit-portal` | Fork: `edit-portal/`, `edit_portal.cpp`, `docker-compose.edit-portal.yml`, `mud-dev.sh` |
+Se il mud già gira su **NebbieArcane/Server**, usa **solo quella**:
+
+| Cosa | Dove |
+|------|------|
+| MUD + myst + mysql | `~/NebbieArcane/Server` |
+| `git pull` Montero | `origin feature/Razze` |
+| edit-portal + `edit_portal.cpp` | stesso repo, branch locale (es. merge da `mine/feature/edit-portal`) |
+| `mud-dev.sh` | `scripts/mud-dev.sh` (dal fork, non in upstream) |
+| `docker-compose.override.yml` | locale, non committato |
+
+`docker-vms/Server` è **opzionale** — puoi ignorarla o eliminarla.
+
+## Git su un solo repo
+
+```bash
+cd ~/NebbieArcane/Server
+
+# Remote fork (se non c'è)
+git remote add mine https://github.com/wizardmorgan/nebbietest.git 2>/dev/null || true
+
+# Porta edit-portal sul branch che usi (es. dopo pull Razze)
+git fetch mine feature/edit-portal
+git merge mine/feature/edit-portal
+# oppure: git checkout -b feature/Razze-edit-portal mine/feature/edit-portal
+
+# Aggiornamenti upstream Montero
+git fetch origin feature/Razze
+git merge origin/feature/Razze
+```
+
+File locali da **non** committare su upstream: `docker-compose.override.yml`, opzionale `scripts/mud-dev.sh` in `.git/info/exclude`.
+
+## Config mud-dev
+
+```bash
+mkdir -p ~/.config/nebbie
+cp docs/nebbie-mud-dev.env.example ~/.config/nebbie/mud-dev.env
+# Tutti i path = NebbieArcane/Server
+
+cp Confs/docker-compose.override.edit-api.example docker-compose.override.yml
+
+./build.sh devel   # oppure docker compose run ... ./build.sh devel
+~/NebbieArcane/Server/scripts/mud-dev.sh start
+```
+
+## Due directory (solo se insisti su pull Razze “pulito”)
+
+Vedi sotto — **non necessario** se accetti un branch locale con edit-portal.
+
+---
+
+# (Opzionale) Due repo separati
 
 | Risorsa | Dove vive |
 |---------|-----------|
