@@ -30,6 +30,28 @@ function roleForLevel(maxLevel) {
   return 'player';
 }
 
+function checkAccountPassword(plain, storedHash) {
+  const hash = String(storedHash || '');
+  if (!plain || !hash) {
+    return false;
+  }
+  // Hash moderni completi (md5/sha/bcrypt)
+  if (hash.startsWith('$')) {
+    return unixpass.check(plain, hash);
+  }
+  // Legacy myst: strncpy(crypt(pwd, salt), 10) — confronto come strcmp(crypt(arg, check), check)
+  try {
+    const computed = unixpass.crypt(plain, hash);
+    if (computed === hash) {
+      return true;
+    }
+    // Account con hash troncato a 10 char (CON_PWDNEW in interpreter.cpp)
+    return computed.substring(0, hash.length) === hash;
+  } catch {
+    return false;
+  }
+}
+
 async function mystPost(pathSuffix, body) {
   const url = `${MYST_API_URL}${pathSuffix}`;
   const res = await fetch(url, {
@@ -90,7 +112,7 @@ app.post('/api/login', async (req, res) => {
   }
   const user = rows[0];
   const hash = String(user.password || '');
-  if (!unixpass.check(password, hash)) {
+  if (!checkAccountPassword(password, hash)) {
     return res.status(401).json({ ok: false, error: 'credenziali non valide' });
   }
   req.session.userId = user.id;
