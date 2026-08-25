@@ -331,38 +331,6 @@ std::size_t legacy_insert_resistances(odb::database* db, unsigned long long toon
 	return n;
 }
 
-bool legacy_upsert_character_resistance(odb::database* db, unsigned long long toon_id,
-										unsigned damage_type, int value,
-										std::string& err) {
-	if(!db || toon_id == 0 || damage_type == 0) {
-		err = "parametri resistenza non validi";
-		return false;
-	}
-	if(value < -100 || value > 100) {
-		err = "value deve essere tra -100 e +100";
-		return false;
-	}
-	try {
-		if(value == 0) {
-			std::ostringstream del;
-			del << "DELETE FROM character_resistance WHERE toon_id = " << toon_id
-				<< " AND damage_type = " << damage_type;
-			db->execute(del.str().c_str());
-			return true;
-		}
-		std::ostringstream sql;
-		sql << "INSERT INTO character_resistance (toon_id, damage_type, value) VALUES ("
-			<< toon_id << ',' << damage_type << ',' << value
-			<< ") ON DUPLICATE KEY UPDATE value = " << value;
-		db->execute(sql.str().c_str());
-		return true;
-	}
-	catch(const std::exception& e) {
-		err = e.what();
-		return false;
-	}
-}
-
 struct LegacyAuxStructuredCounts {
 	std::size_t achievements = 0;
 	std::size_t aliases = 0;
@@ -574,6 +542,38 @@ std::size_t legacy_insert_rent(odb::database* db, unsigned long long toon_id,
 }
 
 } /* anonymous */
+
+bool legacy_upsert_character_resistance(odb::database* db, unsigned long long toon_id,
+										unsigned damage_type, int value,
+										std::string& err) {
+	if(!db || toon_id == 0 || damage_type == 0) {
+		err = "parametri resistenza non validi";
+		return false;
+	}
+	if(value < -100 || value > 100) {
+		err = "value deve essere tra -100 e +100";
+		return false;
+	}
+	try {
+		if(value == 0) {
+			std::ostringstream del;
+			del << "DELETE FROM character_resistance WHERE toon_id = " << toon_id
+				<< " AND damage_type = " << damage_type;
+			db->execute(del.str().c_str());
+			return true;
+		}
+		std::ostringstream sql;
+		sql << "INSERT INTO character_resistance (toon_id, damage_type, value) VALUES ("
+			<< toon_id << ',' << damage_type << ',' << value
+			<< ") ON DUPLICATE KEY UPDATE value = " << value;
+		db->execute(sql.str().c_str());
+		return true;
+	}
+	catch(const std::exception& e) {
+		err = e.what();
+		return false;
+	}
+}
 
 void legacy_delete_character_rows(odb::database* db, unsigned long long toon_id) {
 	const std::string id = std::to_string(toon_id);
