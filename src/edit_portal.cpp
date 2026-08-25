@@ -27,7 +27,9 @@
 #include "constants.hpp"
 #include "db.hpp"
 #include "edit_pool.hpp"
+#include "edit_system_config.hpp"
 #include "handler.hpp"
+#include "legacy_import.hpp"
 #include "logging.hpp"
 #include "multiclass.hpp"
 #include "obj_value.hpp"
@@ -404,10 +406,19 @@ std::atomic<bool> g_http_running {false};
 				return json_error("il toon target e collegato al mud", 409);
 			}
 
-			if(edit_pool_is_pool_apply(location)) {
-				return json_error(
-					"hit/mana/move/regen vanno sul personaggio (edit pool), non sull'oggetto",
-					400);
+			if(edit_system_blocked_on_object(location, modifier)) {
+				if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE ||
+				   location == APPLY_SUSC) {
+					return json_error(
+						"questa resistenza e configurata sul personaggio — usa apply-resistance",
+						400);
+				}
+				if(edit_pool_is_pool_apply(location)) {
+					return json_error(
+						"hit/mana/move/regen vanno sul personaggio (edit pool), non sull'oggetto",
+						400);
+				}
+				return json_error("campo configurato sul personaggio, non sull'oggetto", 400);
 			}
 
 			std::vector<inventory_mysql_row> rows;
@@ -526,6 +537,14 @@ std::atomic<bool> g_http_running {false};
 				return json_error("campo pool non valido", 400);
 			}
 
+			if(!edit_system_pool_enabled(field.c_str())) {
+				return json_error("campo pool disabilitato in edit_system.json", 400);
+			}
+			if(edit_system_pool_target(field.c_str()) != EditSystemTarget::Character) {
+				return json_error(
+					"campo pool configurato sull'oggetto — usa apply-affect (APPLY)", 400);
+			}
+
 			DB* db = Sql::getMysql();
 			if(!db) {
 				return json_error("database non disponibile", 500);
@@ -613,6 +632,119 @@ std::atomic<bool> g_http_running {false};
 			d["edit_move_regen"] = pool.edit_move_regen;
 			d["paid_xp"] = pay_xp;
 			d["paid_rune"] = pay_rune;
+			return json_ok(d);
+		}
+
+		if(path == "/internal/apply-resistance") {
+			const unsigned long long target_toon_id = req.value("target_toon_id", 0ULL);
+			const unsigned damage_type = static_cast<unsigned>(req.value("damage_type", 0));
+			const int value = req.value("value", 0);
+			const int pay_xp = req.value("pay_xp", 0);
+			const int pay_rune = req.value("pay_rune", 0);
+
+			const std::string target_name = toon_name_by_id(target_toon_id);
+			if(target_name.empty()) {
+				return json_error("toon target non trovato", 404);
+			}
+			if(is_toon_online_by_name(target_name)) {
+				return json_error("il toon target e collegato al mud", 409);
+			}
+			if(damage_type == 0) {
+				return json_error("damage_type (bit IMM_*) richiesto", 400);
+			}
+			if(!edit_system_resistance_enabled(damage_type)) {
+				return json_error("resistenza disabilitata in edit_system.json", 400);
+			}
+			if(edit_system_resistance_target(damage_type) != EditSystemTarget::Character) {
+				return json_error(
+					"resistenza configurata sull'oggetto — usa apply-affect (APPLY_IMMUNE)", 400);
+			}
+
+			DB* db = Sql::getMysql();
+			if(!db) {
+				return json_error("database non disponibile", 500);
+			}
+
+			const int max_level = max_level_for_toon(target_toon_id);
+			std::string pay_err;
+			if(!deduct_payment(target_toon_id, pay_xp, pay_rune, max_level, pay_err)) {
+				return json_error(pay_err.c_str(), 402);
+			}
+
+			std::string persist_err;
+			if(!legacy_upsert_character_resistance(db->connection(), target_toon_id,
+												   damage_type, value, persist_err)) {
+				return json_error(persist_err.c_str(), 500);
+			}
+
+			Json d;
+			d["damage_type"] = damage_type;
+			d["value"] = value;
+			d["paid_xp"] = pay_xp;
+			d["paid_rune"] = pay_rune;
+			return json_ok(d);
+		}
+
+		if(path == "/internal/list-resistances") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			DB* db = Sql::getMysql();
+			if(!db || toon_id == 0) {
+				return json_error("toon_id richiesto", 400);
+			}
+			Json rows = Json::array();
+			try {
+				odb::connection_ptr cp(db->connection());
+				auto& mc = static_cast<odb::mysql::connection&>(*cp);
+				MYSQL* h = mc.handle();
+				const std::string sql =
+					"SELECT damage_type, value FROM character_resistance WHERE toon_id = " +
+					std::to_string(toon_id) + " ORDER BY damage_type";
+				if(mysql_query(h, sql.c_str()) == 0) {
+					MYSQL_RES* res = mysql_store_result(h);
+					if(res) {
+						MYSQL_ROW row;
+						while((row = mysql_fetch_row(res))) {
+							Json r;
+							r["damage_type"] = row[0] ? std::atoi(row[0]) : 0;
+							r["value"] = row[1] ? std::atoi(row[1]) : 0;
+							rows.push_back(r);
+						}
+						mysql_free_result(res);
+					}
+				}
+			}
+			catch(...) {
+				return json_error("lettura character_resistance fallita", 500);
+			}
+			Json d;
+			d["rows"] = rows;
+			return json_ok(d);
+		}
+
+		if(path == "/internal/get-system-config") {
+			Json d;
+			d["path"] = edit_system_config_path();
+			try {
+				d["config"] = Json::parse(edit_system_config_to_json());
+			}
+			catch(...) {
+				d["config"] = Json::object();
+			}
+			return json_ok(d);
+		}
+
+		if(path == "/internal/set-system-config") {
+			if(!req.contains("config")) {
+				return json_error("config JSON richiesto", 400);
+			}
+			std::string err;
+			const std::string text = req["config"].dump(2);
+			if(!edit_system_config_save_json(text, err)) {
+				return json_error(err.c_str(), 400);
+			}
+			Json d;
+			d["path"] = edit_system_config_path();
+			d["config"] = req["config"];
 			return json_ok(d);
 		}
 
@@ -754,6 +886,7 @@ void edit_portal_process_pending() {
 
 void edit_portal_init() {
 #if USE_MYSQL
+	edit_system_config_init();
 	std::thread(http_thread_main).detach();
 #else
 	mudlog(LOG_CHECK, "edit_portal: disabled (USE_MYSQL=0)");

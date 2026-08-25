@@ -35,6 +35,11 @@ if [ ! -f "/app/${DATA_DIR}/myst.mob" ]; then
   exit 1
 fi
 
+if [ ! -f "/app/${DATA_DIR}/edit_system.json" ] && [ -f "/app/Confs/edit_system.default.json" ]; then
+  cp "/app/Confs/edit_system.default.json" "/app/${DATA_DIR}/edit_system.json"
+  echo "[mudcompiler] copied default edit_system.json to ${DATA_DIR}/"
+fi
+
 cd /app
 echo "[mudcompiler] starting myst port ${SERVER_PORT}, edit-api ${EDIT_API_PORT}"
 exec /app/mudroot/myst -P "${SERVER_PORT}" -d "${DATA_DIR}" -v 4
