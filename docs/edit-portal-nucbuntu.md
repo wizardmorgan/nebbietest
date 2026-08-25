@@ -24,6 +24,8 @@ dos2unix   # opzionale ma consigliato dopo copia da Windows
 
 Directory di lavoro consigliata: `~/docker-vms/Server` (clone del fork).
 
+Se il MUD quotidiano è su `~/NebbieArcane/Server` con pull da `origin/feature/Razze`, leggi **[edit-portal-two-repos.md](edit-portal-two-repos.md)**.
+
 ## 1. Clone e branch
 
 ```bash
