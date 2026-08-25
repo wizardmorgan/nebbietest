@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nebbie — Portale Edit</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Portale Edit</h1>
+    <div id="header-meta"></div>
+    <button id="btn-logout" class="hidden" type="button">Logout</button>
+  </header>
+
+  <main>
+    <section id="login-panel">
+      <h2>Login account</h2>
+      <form id="login-form">
+        <label>Email <input type="email" id="login-email" required /></label>
+        <label>Password <input type="password" id="login-password" required /></label>
+        <button type="submit">Accedi</button>
+      </form>
+      <p id="login-error" class="error"></p>
+    </section>
+
+    <section id="toon-panel" class="hidden">
+      <h2>Seleziona personaggio (sessione)</h2>
+      <p class="hint">Il personaggio scelto determina i permessi (player / limited / staff ≥57).</p>
+      <div id="toon-list"></div>
+    </section>
+
+    <section id="work-panel" class="hidden">
+      <div class="row">
+        <label>Target toon
+          <select id="target-toon"></select>
+        </label>
+        <button id="btn-refresh-inv" type="button">Aggiorna inventario</button>
+      </div>
+      <p id="online-warn" class="warn hidden"></p>
+
+      <div class="columns">
+        <div>
+          <h3>Inventario (MySQL)</h3>
+          <ul id="inventory-list"></ul>
+        </div>
+        <div>
+          <h3>Dettaglio / apply</h3>
+          <pre id="quote-box">Seleziona un oggetto.</pre>
+          <form id="apply-form" class="hidden">
+            <h4>Applica affect (MVP)</h4>
+            <label>APPLY location <input type="number" id="apply-location" value="12" /></label>
+            <label>Modifier <input type="number" id="apply-modifier" value="1" /></label>
+            <label>Pay XP (raw, 0=auto) <input type="number" id="apply-pay-xp" value="0" /></label>
+            <label>Pay rune (0=auto) <input type="number" id="apply-pay-rune" value="0" /></label>
+            <button type="submit">Applica affect</button>
+          </form>
+          <form id="pool-form">
+            <h4>Edit pool PG</h4>
+            <label>Campo
+              <select id="pool-field">
+                <option value="hit">hit</option>
+                <option value="mana">mana</option>
+                <option value="move">move</option>
+                <option value="hit_regen">hit_regen</option>
+                <option value="mana_regen">mana_regen</option>
+                <option value="move_regen">move_regen</option>
+              </select>
+            </label>
+            <label>Delta <input type="number" id="pool-delta" value="10" /></label>
+            <label>Pay XP <input type="number" id="pool-pay-xp" value="0" /></label>
+            <label>Pay rune <input type="number" id="pool-pay-rune" value="0" /></label>
+            <button type="submit">Applica pool</button>
+          </form>
+          <p id="apply-result" class="msg"></p>
+        </div>
+      </div>
+
+      <div id="staff-panel" class="hidden">
+        <h3>Staff — object_instance</h3>
+        <input id="inst-search" placeholder="cerca owner / desc / id" />
+        <button id="btn-inst-search" type="button">Cerca</button>
+        <ul id="inst-list"></ul>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

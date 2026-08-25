@@ -291,6 +291,9 @@ bool inventory_parent_column_supported();
 bool try_load_rent_mysql_by_parent(const char* name, struct obj_file_u* rent,
 								   unsigned long long* db_inventory_ids,
 								   std::vector<inventory_mysql_row>& rows);
+/** Inventario PG da character_inventory (senza richiedere character_rent). */
+bool load_character_inventory_mysql(unsigned long long toon_id,
+									std::vector<inventory_mysql_row>& rows);
 bool mark_inventory_deleted_mysql(const char* name, const char* cause);
 bool mark_scrapped_item_mysql(const char* name, const struct obj_data* obj);
 bool refund_restore_inventory_mysql(const char* name, long long from_epoch, long long to_epoch,

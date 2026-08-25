@@ -66,6 +66,7 @@
 #include "utility.hpp"
 #include "vt100c.hpp"
 #include "weather.hpp"
+#include "edit_portal.hpp"
 
 namespace Alarmud {
 using std::chrono::duration_cast;
@@ -284,6 +285,7 @@ void run_the_game(int port) {
   signal_setup();
   event_init();
   boot_db();
+  edit_portal_init();
   LOG_FATAL("Verbosity 1: LSYSERR LSERVICE error level enabled");
   LOG_ALERT("Verbosity 2: LERROR LCONNECT error level also enabled");
   LOG_WARN("Verbosity 3: LCHECK error level also enabled");
@@ -564,6 +566,7 @@ void game_loop(int s) {
 
   pulse++;
   event_process();
+  edit_portal_process_pending();
   inventory_save_pulse(pulse);
 
   if (!(pulse % PULSE_ZONE)) {
