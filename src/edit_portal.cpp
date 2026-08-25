@@ -307,7 +307,8 @@ std::atomic<bool> g_http_running {false};
 }
 
 [[nodiscard]] Json analyze_to_json(const struct obj_data* obj) {
-	const ObjEditAnalysis a = AnalyzeObjEdit(obj);
+	const ObjEditAnalysis a =
+		AnalyzeObjEdit(const_cast<struct obj_data*>(obj));
 	Json j;
 	j["has_edit"] = a.has_edit;
 	j["owner_name"] = a.owner_name;
