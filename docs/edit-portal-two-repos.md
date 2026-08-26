@@ -87,20 +87,13 @@ docker compose -f ~/NebbieArcane/Server/docker-compose.yml \
 ## Uso quotidiano
 
 ```bash
-# Solo MUD Razze (sorgente NebbieArcane)
-MUD_APP_ROOT=~/NebbieArcane/Server ~/docker-vms/Server/scripts/mud-dev.sh start-mud
-
-# MUD + edit-portal (sorgente fork, myst con edit_portal)
-~/docker-vms/Server/scripts/mud-dev.sh start
-
-# Status
+~/docker-vms/Server/scripts/mud-dev.sh          # help (default)
+~/docker-vms/Server/scripts/mud-dev.sh dev    # dopo update Montero: sync-all + build + start
+~/docker-vms/Server/scripts/mud-dev.sh start  # solo avvio (senza pull)
 ~/docker-vms/Server/scripts/mud-dev.sh status
-
-# Stop tutto
-~/docker-vms/Server/scripts/mud-dev.sh stop-all
 ```
 
-Con `~/.config/nebbie/mud-dev.env` impostato, basta `~/docker-vms/Server/scripts/mud-dev.sh start`.
+Comandi git/build: `sync-razze`, `sync-edit`, `sync-all`, `update-razze`, `update-all`, `build`, `build-edit`, `health` — vedi `./scripts/mud-dev.sh help`.
 
 ## Aggiornare upstream senza conflitti
 
