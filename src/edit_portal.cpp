@@ -467,6 +467,24 @@ std::atomic<bool> g_http_running {false};
 	return nullptr;
 }
 
+/** Somma dam effettivo (DAMROLL+HITNDAM) su tutto l'inventario, escluso un inventory_id. */
+[[nodiscard]] int sum_inventory_damroll_excluding(
+	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id) {
+	int total = 0;
+	for(auto& r : rows) {
+		if(r.id == exclude_inventory_id) {
+			continue;
+		}
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		total += object_edit_damroll_total(o);
+		extract_obj(o);
+	}
+	return total;
+}
+
 [[nodiscard]] bool persist_inventory_affects(unsigned long long inventory_id,
 											 const struct obj_data* obj) {
 	DB* db = Sql::getMysql();
@@ -1046,6 +1064,18 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["affect_slots"] = object_affect_slots_json(obj);
 			d["inventory_id"] = inventory_id;
 			d["short_desc"] = row->elem.sd;
+			{
+				const int piece_dam = object_edit_damroll_total(obj);
+				const int other_dam =
+					sum_inventory_damroll_excluding(rows, inventory_id);
+				Json dam_budget;
+				dam_budget["piece"] = piece_dam;
+				dam_budget["piece_max"] = kObjEditMaxDamrollPerPiece;
+				dam_budget["other"] = other_dam;
+				dam_budget["char_total"] = other_dam + piece_dam;
+				dam_budget["char_max"] = kObjEditMaxDamrollEditableTotal;
+				d["dam_budget"] = dam_budget;
+			}
 			if(is_armor && is_weapon) {
 				d["item_type"] = "armor+weapon";
 			}
@@ -1103,8 +1133,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			long xp_raw = 0;
 			int pq = 0;
 			std::string quote_err;
+			const int other_dam =
+				object_edit_location_affects_dam(location)
+					? sum_inventory_damroll_excluding(rows, inventory_id)
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
-										   quote_err)) {
+										   quote_err, other_dam)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -1209,8 +1243,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			long quote_xp = 0;
 			int quote_pq = 0;
 			std::string quote_err;
+			const int other_dam =
+				object_edit_location_affects_dam(location)
+					? sum_inventory_damroll_excluding(rows, inventory_id)
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
-										   quote_pq, quote_err)) {
+										   quote_pq, quote_err, other_dam)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -1223,7 +1261,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			extract_obj(obj);
 
 			std::string apply_err;
-			if(!object_apply_affect_target(after, location, target_modifier, apply_err)) {
+			if(!object_apply_affect_target(after, location, target_modifier, apply_err,
+										   other_dam)) {
 				extract_obj(after);
 				return json_error(apply_err.c_str(), 400);
 			}

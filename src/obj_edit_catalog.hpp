@@ -52,13 +52,19 @@ bool inventory_row_is_worn(int wearpos) noexcept;
  * Simula un affect target sull'oggetto e restituisce delta costo vs stato attuale
  * (AnalyzeObjEdit prima/dopo). Per APPLY_IMMUNE modifier = bit IMM da aggiungere.
  */
+/**
+ * Simula affect target. Se owner_dam_excluding_this >= 0 e l'edit tocca il dam,
+ * rifiuta se owner_dam_excluding_this + dam_dopo > kObjEditMaxDamrollEditableTotal.
+ */
 [[nodiscard]] bool object_quote_affect_target(struct obj_data* obj, int location,
 											  int target_modifier, long& xp_raw,
-											  int& pq, std::string& err);
+											  int& pq, std::string& err,
+											  int owner_dam_excluding_this = -1);
 
 /** Imposta affect target (stessa logica di quote). Restituisce false se invalido. */
 [[nodiscard]] bool object_apply_affect_target(struct obj_data* obj, int location,
-											  int target_modifier, std::string& err);
+											  int target_modifier, std::string& err,
+											  int owner_dam_excluding_this = -1);
 
 [[nodiscard]] int object_affect_current_modifier(const struct obj_data* obj,
 												 int location) noexcept;
@@ -66,6 +72,12 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 /** Totale effettivo sul pezzo (include HIT-N-DAM / HIT-N-SP). */
 [[nodiscard]] int object_edit_display_current(const struct obj_data* obj,
 											  int location) noexcept;
+
+/** Dam effettivo sul pezzo (DAMROLL + HITNDAM). */
+[[nodiscard]] int object_edit_damroll_total(const struct obj_data* obj) noexcept;
+
+/** true se location può cambiare il dam effettivo del pezzo. */
+[[nodiscard]] bool object_edit_location_affects_dam(int location) noexcept;
 
 [[nodiscard]] int object_immune_current_bits(const struct obj_data* obj) noexcept;
 

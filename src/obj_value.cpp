@@ -591,14 +591,14 @@ constexpr ListinoRow kObjEditListino[] = {
 	{"wis", "Saggezza (WIS)", APPLY_WIS, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"int", "Intelligenza (INT)", APPLY_INT, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"chr", "Carisma (CHR)", APPLY_CHR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
-	{"hitroll", "Hitroll", APPLY_HITROLL, 1, 0, 1, 4500, 9000},
-	/* Damroll: fino a +3 (come hitndam); il costo alto (10k MXP/pt) fa da gate economico. */
-	{"damroll", "Damroll", APPLY_DAMROLL, 1, 0, 3, 10000, 20000},
+	/* Massimali: https://www.nebbiearcane.it/listino-edits/ (non EditMaster). */
+	{"hitroll", "Hitroll", APPLY_HITROLL, 1, 0, kObjEditMaxHitrollPerPiece, 4500, 9000},
+	{"damroll", "Damroll", APPLY_DAMROLL, 1, 0, kObjEditMaxDamrollPerPiece, 10000, 20000},
 	{"spellpower", "Spellpower", APPLY_SPELLPOWER, 1, 0, 1, 10000, 20000},
 	{"armor", "Armatura (AC)", APPLY_AC, -5, -20, 0, 100, 100},
 	{"spellfail", "Spellfail", APPLY_SPELLFAIL, -2, -10, 0, 600, 600},
-	{"hitndam", "Hit & damage", APPLY_HITNDAM, 1, 0, 3, 14500, 29000},
-	{"hitnsp", "Hit & spellpower", APPLY_HITNSP, 1, 0, 3, 14500, 29000},
+	{"hitndam", "Hit & damage", APPLY_HITNDAM, 1, 0, kObjEditMaxDamrollPerPiece, 14500, 29000},
+	{"hitnsp", "Hit & spellpower", APPLY_HITNSP, 1, 0, 1, 14500, 29000},
 };
 
 constexpr int kObjEditListinoCount =
