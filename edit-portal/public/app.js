@@ -790,7 +790,11 @@ async function loadInventory() {
   items.forEach((it) => {
     const li = document.createElement('li');
     li.className = it.editable ? 'item' : 'item item-disabled';
-    const worn = it.worn ? ' · indossato' : '';
+    const worn = it.worn
+      ? it.editable
+        ? ' · indossato (ri-edit OK)'
+        : ' · indossato'
+      : '';
     const depth = Number(it.depth) > 0 ? ' · in container' : '';
     const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
     const type = it.item_type ? ` [${it.item_type}]` : '';
@@ -1391,9 +1395,32 @@ $('btn-inst-search').onclick = async () => {
   if (!data.ok) return;
   data.instances.forEach((i) => {
     const li = document.createElement('li');
+    li.className = 'inst-item';
     li.innerHTML =
-      `#${escapeHtml(i.id)} base ${escapeHtml(i.base_vnum)} owner ${escapeHtml(i.owner_name)} — ` +
-      mudTextToHtml(i.short_desc);
+      `#${escapeHtml(i.id)} base ${escapeHtml(i.base_vnum)} owner ` +
+      `<button type="button" class="linkish" data-owner="${escapeHtml(i.owner_name)}">${escapeHtml(i.owner_name)}</button>` +
+      ` — ${mudTextToHtml(i.short_desc)}`;
+    const btn = li.querySelector('button[data-owner]');
+    if (btn) {
+      btn.onclick = async () => {
+        const owner = btn.dataset.owner || '';
+        const search = $('target-toon-search');
+        if (search) {
+          search.value = owner;
+          await searchTargetToons(owner);
+          const sel = $('target-toon');
+          if (sel) {
+            const match = [...sel.options].find(
+              (o) => o.textContent.toLowerCase().startsWith(owner.toLowerCase()),
+            );
+            if (match) {
+              sel.value = match.value;
+              sel.dispatchEvent(new Event('change'));
+            }
+          }
+        }
+      };
+    }
     list.appendChild(li);
   });
 };

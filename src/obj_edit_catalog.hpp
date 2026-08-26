@@ -25,8 +25,14 @@ using Json = nlohmann::json;
 [[nodiscard]] std::string object_portal_skip_reason(const struct obj_data* obj,
 												  const char* toon_name);
 
-/** wearpos MySQL: >0 = indossato (non editabile in portale). */
+/** wearpos MySQL: >0 = indossato. */
 bool inventory_row_is_worn(int wearpos) noexcept;
+
+/**
+ * true se l'oggetto può essere editato anche indossato (già personalizzato / ITEM2_EDIT).
+ * I pezzi in object_instance sono quasi sempre equipaggiati: senza questo il ri-edit è inutilizzabile.
+ */
+[[nodiscard]] bool object_portal_allows_worn_edit(const struct obj_data* obj) noexcept;
 
 /** Oggetto editabile nel portale (esclusioni listino + categorie staff). */
 [[nodiscard]] bool object_portal_editable(const struct obj_data* obj,

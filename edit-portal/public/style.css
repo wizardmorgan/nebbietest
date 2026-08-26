@@ -458,6 +458,17 @@ textarea {
   font-size: 0.9rem;
 }
 
+button.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  width: auto;
+}
+
 .collapse-panel {
   padding-top: 0.25rem;
 }

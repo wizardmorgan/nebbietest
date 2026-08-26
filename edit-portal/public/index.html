@@ -151,10 +151,12 @@
         <div class="card-inner">
           <h3>Consultazione object_instance</h3>
           <p class="hint">
-            Tabella MySQL degli oggetti <strong>già personalizzati</strong> (editati) salvati nel mondo:
-            ogni riga ha un id istanza, vnum base, owner e descrizione.
-            Serve allo staff per <strong>cercare</strong> un pezzo editato (es. owner = Venus) — non sostituisce l'inventario del target sopra.
-            Per editare un oggetto usa l'inventario del personaggio target (deve essere offline).
+            Tabella MySQL degli oggetti <strong>già personalizzati</strong> salvati nel mondo
+            (id istanza, vnum base, owner, descrizione).
+            Quasi sempre sono <strong>indossati</strong>: per lavorarci cerca l'owner, impostalo come
+            personaggio target sopra, poi apri l'oggetto dall'inventario —
+            i pezzi già editati (flag EDIT) sono <strong>ri-editabili anche indossati</strong>.
+            Il primo edit su un pezzo nuovo richiede ancora inventario (non wear).
           </p>
           <div class="btn-row">
             <input id="inst-search" placeholder="cerca owner / descrizione / id istanza" />
