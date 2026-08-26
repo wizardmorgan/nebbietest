@@ -106,6 +106,7 @@ struct Entry {
 }
 
 void build_defaults() {
+	portal_type_reset_defaults();
 	g_entries.clear();
 	const char* pool_fields[] = {"hit", "mana", "move", "hit_regen", "mana_regen", "move_regen"};
 	const char* pool_labels[] = {"Hit points", "Mana", "Move", "Hit regen", "Mana regen", "Move regen"};
@@ -161,9 +162,8 @@ void build_defaults() {
 	if(env && *env) {
 		return std::string(env);
 	}
-	std::ostringstream p;
-	p << "lib/edit_system.json";
-	return p.str();
+	/* myst chdir(-d mudroot/lib): file accanto a myst.mob */
+	return "edit_system.json";
 }
 
 [[nodiscard]] bool read_file_text(const std::string& path, std::string& out) {

@@ -23,6 +23,7 @@ for i in $(seq 1 90); do
 done
 
 export EDIT_API_PORT EDIT_API_SECRET
+export EDIT_SYSTEM_CONFIG="/app/mudroot/lib/edit_system.json"
 
 if [ ! -x /app/mudroot/myst ]; then
   echo "[mudcompiler] ERROR: /app/mudroot/myst missing. Build first:" >&2
