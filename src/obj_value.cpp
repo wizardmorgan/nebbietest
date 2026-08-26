@@ -350,7 +350,12 @@ ExpValue CheckValueObj(const struct obj_data* obj) {
 			break;
 
 		case APPLY_AC:
-			valore -= static_cast<long>(mod) * 100;
+			valore -= static_cast<long>(mod) * kObjEditArmorUnitRaw;
+			break;
+
+		case APPLY_SPELLFAIL:
+			/* 2× armor per punto (più negativo = più costoso). */
+			valore -= static_cast<long>(mod) * kObjEditSpellfailUnitRaw;
 			break;
 
 		case APPLY_HITROLL:
@@ -359,7 +364,7 @@ ExpValue CheckValueObj(const struct obj_data* obj) {
 
 		case APPLY_DAMROLL:
 		case APPLY_SPELLPOWER:
-			/* Su ProvaLocale SPELLPOWER era sotto #if NO_SPELLPOWER; qui e' sempre prezzato. */
+			/* Spellpower prezzato come damroll. */
 			valore += SignedAffectCost(mod, 10000, 20000);
 			break;
 
@@ -470,7 +475,6 @@ ExpValue CheckValueObj(const struct obj_data* obj) {
 		case APPLY_PICK:
 		case APPLY_STEAL:
 		case APPLY_TRACK:
-		case APPLY_SPELLFAIL:
 		case APPLY_HASTE:
 		case APPLY_SLOW:
 		case APPLY_ATTACKS:
@@ -585,21 +589,29 @@ struct ListinoRow {
 };
 
 /**
- * Listino portal oggetto — https://www.nebbiearcane.it/listino-edits/
- * Solo voci presenti lì (niente CON/spellfail/spellpower fuori listino).
- * hitndam = convenience hit+dam allo stesso valore (max = dam/hit per pezzo).
+ * Listino portal oggetto — base https://www.nebbiearcane.it/listino-edits/
+ * + CON (come altre stats), spellpower (come damroll), spellfail (2× armor),
+ * hitndam / hitnsp = unione hit+dam / hit+sp.
  */
 constexpr ListinoRow kObjEditListino[] = {
 	{"str", "Forza (STR)", APPLY_STR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"dex", "Destrezza (DEX)", APPLY_DEX, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
+	{"con", "Costituzione (CON)", APPLY_CON, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"wis", "Saggezza (WIS)", APPLY_WIS, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"int", "Intelligenza (INT)", APPLY_INT, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"chr", "Carisma (CHR)", APPLY_CHR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"hitroll", "Hitroll", APPLY_HITROLL, 1, 0, kObjEditMaxHitrollPerPiece, 4500, 9000},
 	{"damroll", "Damroll", APPLY_DAMROLL, 1, 0, kObjEditMaxDamrollPerPiece, 10000, 20000},
+	{"spellpower", "Spellpower", APPLY_SPELLPOWER, 1, 0, kObjEditMaxSpellpowerPerPiece, 10000,
+	 20000},
 	{"armor", "Armatura (AC)", APPLY_AC, kObjEditArmorStep, kObjEditArmorMinTotal,
 	 kObjEditArmorMaxTotal, kObjEditArmorUnitRaw, kObjEditArmorUnitRaw},
+	{"spellfail", "Spellfail", APPLY_SPELLFAIL, kObjEditSpellfailStep,
+	 kObjEditSpellfailMinTotal, kObjEditSpellfailMaxTotal, kObjEditSpellfailUnitRaw,
+	 kObjEditSpellfailUnitRaw},
 	{"hitndam", "Hit & damage", APPLY_HITNDAM, 1, 0, kObjEditMaxDamrollPerPiece, 14500,
+	 29000},
+	{"hitnsp", "Hit & spellpower", APPLY_HITNSP, 1, 0, kObjEditMaxSpellpowerPerPiece, 14500,
 	 29000},
 };
 

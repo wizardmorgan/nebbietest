@@ -784,8 +784,16 @@ bool object_edit_location_affects_dam(int location) noexcept {
 	return location == APPLY_DAMROLL || location == APPLY_HITNDAM;
 }
 
+bool object_edit_location_affects_spellpower(int location) noexcept {
+	return location == APPLY_SPELLPOWER || location == APPLY_HITNSP;
+}
+
 int object_edit_damroll_total(const struct obj_data* obj) noexcept {
 	return combat_damroll_total(obj);
+}
+
+int object_edit_spellpower_total(const struct obj_data* obj) noexcept {
+	return combat_spellpower_total(obj);
 }
 
 [[nodiscard]] static bool enforce_char_dam_budget(const struct obj_data* after_obj,
@@ -806,9 +814,28 @@ int object_edit_damroll_total(const struct obj_data* obj) noexcept {
 	return true;
 }
 
+[[nodiscard]] static bool enforce_char_sp_budget(const struct obj_data* after_obj,
+												 int owner_sp_excluding_this,
+												 std::string& err) {
+	if(owner_sp_excluding_this < 0 || !after_obj) {
+		return true;
+	}
+	const int piece_sp = combat_spellpower_total(after_obj);
+	const int total = owner_sp_excluding_this + piece_sp;
+	if(total > kObjEditMaxSpellpowerEditableTotal) {
+		err = "tetto spellpower editabile personaggio superato (" + std::to_string(total)
+			  + "/" + std::to_string(kObjEditMaxSpellpowerEditableTotal)
+			  + "; altri pezzi " + std::to_string(owner_sp_excluding_this)
+			  + ", questo pezzo " + std::to_string(piece_sp) + ")";
+		return false;
+	}
+	return true;
+}
+
 bool object_quote_affect_target(struct obj_data* obj, int location, int target_modifier,
 								long& xp_raw, int& pq, std::string& err,
-								int owner_dam_excluding_this) {
+								int owner_dam_excluding_this,
+								int owner_sp_excluding_this) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -828,6 +855,11 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		extract_obj(clone);
 		return false;
 	}
+	if(object_edit_location_affects_spellpower(location)
+	   && !enforce_char_sp_budget(clone, owner_sp_excluding_this, err)) {
+		extract_obj(clone);
+		return false;
+	}
 	const ObjEditAnalysis after = AnalyzeObjEdit(clone);
 	extract_obj(clone);
 	xp_raw = std::max(0L, after.diff.valore - before.diff.valore);
@@ -836,12 +868,17 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 }
 
 bool object_apply_affect_target(struct obj_data* obj, int location, int target_modifier,
-								std::string& err, int owner_dam_excluding_this) {
+								std::string& err, int owner_dam_excluding_this,
+								int owner_sp_excluding_this) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
 	}
-	if(object_edit_location_affects_dam(location) && owner_dam_excluding_this >= 0) {
+	const bool need_budget = (object_edit_location_affects_dam(location)
+							  && owner_dam_excluding_this >= 0)
+							 || (object_edit_location_affects_spellpower(location)
+								 && owner_sp_excluding_this >= 0);
+	if(need_budget) {
 		struct obj_data* clone = clone_obj(obj);
 		if(!clone) {
 			err = "impossibile clonare oggetto";
@@ -851,7 +888,8 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 			extract_obj(clone);
 			return false;
 		}
-		if(!enforce_char_dam_budget(clone, owner_dam_excluding_this, err)) {
+		if(!enforce_char_dam_budget(clone, owner_dam_excluding_this, err)
+		   || !enforce_char_sp_budget(clone, owner_sp_excluding_this, err)) {
 			extract_obj(clone);
 			return false;
 		}
