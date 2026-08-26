@@ -2,6 +2,11 @@
 
 Web UI per editing oggetti/PG con listino (`obj_value` / `edit_pool`).
 
+**Massimali e prezzi oggetto:** fonte ufficiale
+[https://www.nebbiearcane.it/listino-edits/](https://www.nebbiearcane.it/listino-edits/)
+(costanti in `src/obj_value.hpp` / tabella `kObjEditListino`).
+Non usare EditMaster/`pedit.cpp` come riferimento.
+
 Vedi **docs/edit-portal-nucbuntu.md** per deploy Docker completo.
 
 ```bash
