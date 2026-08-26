@@ -264,6 +264,7 @@ cmd_sync_edit() {
 	echo "=== sync-edit: $EDIT_REPO ($EDIT_REMOTE/$EDIT_BRANCH) ==="
 	ensure_edit_remote
 	git_discard_local_file "$EDIT_REPO" scripts/mud-dev.sh
+	git_discard_local_file "$EDIT_REPO" pages/wizhelptbl.stamp
 	git_pull_branch "$EDIT_REPO" "$EDIT_REMOTE" "$EDIT_BRANCH"
 	chmod +x "$EDIT_REPO/scripts/mud-dev.sh" 2>/dev/null || true
 	echo "sync-edit ok."
@@ -314,6 +315,15 @@ cmd_update_razze() {
 cmd_update_edit() {
 	cmd_sync_edit
 	cmd_build_edit
+}
+
+cmd_deploy_edit() {
+	echo "=== deploy-edit: sync fork + build myst + build portal + start ==="
+	cmd_sync_edit
+	cmd_build
+	cmd_build_edit
+	cmd_start
+	echo "deploy-edit ok. Web: http://localhost:${EDIT_WEB_PORT}/"
 }
 
 cmd_update_all() {
@@ -585,6 +595,7 @@ UPDATE (sync + build)
   update-razze    sync-razze + build myst
   update-edit     sync-edit + build-edit
   update-all      sync-all + build myst + build-edit
+  deploy-edit     sync-edit + build myst + build-edit + start (workflow portale)
 
 AVVIO / STOP
   start           myst (con edit API) + edit-portal + status
@@ -607,6 +618,7 @@ Esempi:
   $0 dev                    # Montero ha pushato: pull, build, avvio tutto
   $0 update-razze && $0 start-mud   # solo upstream + mud telnet
   $0 sync-edit && $0 build-edit && $0 start-edit
+  $0 deploy-edit              # pull fork + build tutto + avvio (docker-vms)
 
 Vedi docs/edit-portal-two-repos.md
 EOF
@@ -625,6 +637,7 @@ main() {
 	build-edit) cmd_build_edit ;;
 	update-razze) cmd_update_razze ;;
 	update-edit) cmd_update_edit ;;
+	deploy-edit) cmd_deploy_edit ;;
 	update-all) cmd_update_all ;;
 	dev) cmd_dev ;;
 	start) cmd_start ;;
