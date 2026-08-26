@@ -62,12 +62,26 @@ struct CatalogEntry {
 	unsigned immune_mask;
 };
 
+[[nodiscard]] static bool object_has_owner_lock(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return false;
+	}
+	if(obj->personal_owner[0] != '\0') {
+		return true;
+	}
+	return !object_instance_extract_ed_owner(obj->name).empty();
+}
+
 [[nodiscard]] bool owner_matches(const struct obj_data* obj, const char* toon_name) {
 	if(!obj || !toon_name || !*toon_name) {
 		return false;
 	}
+	/* Proto / non ancora editato: nessun ED nel name né personal_owner. */
+	if(!object_has_owner_lock(obj)) {
+		return true;
+	}
 	if(obj->personal_owner[0] != '\0' &&
-	   !strcasecmp(obj->personal_owner, toon_name)) {
+	   strcasecmp(obj->personal_owner, toon_name) == 0) {
 		return true;
 	}
 	const std::string ed = object_instance_extract_ed_owner(obj->name);
@@ -191,15 +205,70 @@ bool object_is_tanned(const struct obj_data* obj) noexcept {
 	return false;
 }
 
-[[nodiscard]] static const char* object_portal_type_category(const struct obj_data* obj) noexcept {
-	if(!obj) {
-		return nullptr;
-	}
-	switch(ITEM_TYPE(obj)) {
-	case ITEM_ARMOR:
-		return "armor";
+const char* object_portal_item_type_slug(int item_type) noexcept {
+	switch(item_type) {
+	case ITEM_LIGHT:
+		return "light";
+	case ITEM_SCROLL:
+		return "scroll";
+	case ITEM_WAND:
+		return "wand";
+	case ITEM_STAFF:
+		return "staff";
 	case ITEM_WEAPON:
 		return "weapon";
+	case ITEM_FIREWEAPON:
+		return "fireweapon";
+	case ITEM_MISSILE:
+		return "missile";
+	case ITEM_TREASURE:
+		return "treasure";
+	case ITEM_ARMOR:
+		return "armor";
+	case ITEM_POTION:
+		return "potion";
+	case ITEM_WORN:
+		return "worn";
+	case ITEM_OTHER:
+		return "other";
+	case ITEM_TRASH:
+		return "trash";
+	case ITEM_TRAP:
+		return "trap";
+	case ITEM_CONTAINER:
+		return "container";
+	case ITEM_NOTE:
+		return "note";
+	case ITEM_DRINKCON:
+		return "drinkcon";
+	case ITEM_KEY:
+		return "key";
+	case ITEM_FOOD:
+		return "food";
+	case ITEM_MONEY:
+		return "money";
+	case ITEM_PEN:
+		return "pen";
+	case ITEM_BOAT:
+		return "boat";
+	case ITEM_AUDIO:
+		return "audio";
+	case ITEM_BOARD:
+		return "board";
+	case ITEM_TREE:
+		return "tree";
+	case ITEM_ROCK:
+		return "rock";
+	case ITEM_M_GEM:
+		return "m_gem";
+	case ITEM_M_MINERAL:
+		return "m_mineral";
+	case ITEM_BAR:
+		return "bar";
+	case ITEM_JEWEL:
+		return "jewel";
+	case ITEM_CLAN_SYMBOL:
+		return "clan_symbol";
 	default:
 		return nullptr;
 	}
@@ -242,16 +311,16 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 		return "oggetto con insert";
 	}
 	if(!owner_matches(obj, toon_name)) {
-		return "owner diverso dal PG";
+		return "owner diverso dal PG (ED/personal per altro PG)";
 	}
 	if(IS_OBJ_STAT2(obj, ITEM2_EDIT) && !edit_system_portal_category_enabled("edited")) {
 		return "categoria EDIT disabilitata (staff)";
 	}
-	const char* type_cat = object_portal_type_category(obj);
-	if(type_cat && !edit_system_portal_category_enabled(type_cat)) {
+	const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
+	if(slug && !edit_system_portal_category_enabled(slug)) {
 		return "categoria disabilitata (staff)";
 	}
-	if(!type_cat && !IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+	if(!slug && !IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
 		return "tipo non supportato nel portale";
 	}
 	return {};
@@ -262,13 +331,12 @@ bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 	if(!obj || !toon_name || !*toon_name) {
 		return false;
 	}
-	const int type = ITEM_TYPE(obj);
-	if(type == ITEM_FOOD || type == ITEM_POTION) {
+	const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
+	if(slug && edit_system_portal_type_always_hidden(slug)) {
 		return false;
 	}
-	const char* type_cat = object_portal_type_category(obj);
-	if(type_cat) {
-		return edit_system_portal_category_enabled(type_cat);
+	if(slug) {
+		return edit_system_portal_category_enabled(slug);
 	}
 	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
 		return edit_system_portal_category_enabled("edited");
@@ -286,8 +354,8 @@ bool object_portal_editable(const struct obj_data* obj, const char* toon_name) n
 	if(!owner_matches(obj, toon_name)) {
 		return false;
 	}
-	const char* type_cat = object_portal_type_category(obj);
-	if(type_cat && edit_system_portal_category_enabled(type_cat)) {
+	const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
+	if(slug && edit_system_portal_category_enabled(slug)) {
 		return true;
 	}
 	if(IS_OBJ_STAT2(obj, ITEM2_EDIT) && edit_system_portal_category_enabled("edited")) {
