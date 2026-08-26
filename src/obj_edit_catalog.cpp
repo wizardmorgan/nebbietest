@@ -133,7 +133,7 @@ static void json_listino_pricing(Json& j, const ObjEditListinoSpec& spec) {
 	return sum_location_mod(obj, APPLY_SPELLPOWER) + sum_location_mod(obj, APPLY_HITNSP);
 }
 
-[[nodiscard]] static bool place_affect_modifier(struct obj_data* obj, int location,
+static bool place_affect_modifier(struct obj_data* obj, int location,
 												int modifier) {
 	if(modifier == 0) {
 		return true;
