@@ -14,7 +14,7 @@ const MYST_API_SECRET = process.env.EDIT_API_SECRET || 'nebbie-edit-dev-secret';
 const STAFF_LEVEL = parseInt(process.env.EDIT_STAFF_LEVEL || '57', 10);
 const LIMITED_LEVEL = parseInt(process.env.EDIT_LIMITED_LEVEL || '51', 10);
 const PRINCE_LEVEL = parseInt(process.env.EDIT_PRINCE_LEVEL || '51', 10);
-const PQ_PER_MEGA_XP = 2000000;
+const PQ_PER_MEGA_XP = 1000000;
 
 const TOON_LEVEL_SQL =
   'COALESCE(MAX(cc.level), t.level, 0) AS max_level';
