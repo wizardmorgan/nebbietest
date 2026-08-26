@@ -61,6 +61,7 @@ services:
             - MYSQL_PASSWORD=secret
             - DATABASE_URL=mysql://root:secret@mysql:33306/nebbie
             - HOME=/app
+            - EDIT_SYSTEM_CONFIG=/app/mudroot/lib/edit_system.json
         depends_on:
             mysql:
                 condition: service_healthy

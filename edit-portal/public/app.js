@@ -1043,7 +1043,7 @@ async function checkMystPortalVersion() {
       warnEl.textContent =
         'Myst non aggiornato (portal_api_version ' +
         (ver ?? 'mancante') +
-        '). Esegui: ./scripts/mud-dev.sh build && docker compose restart mudcompiler';
+        '). Salva categorie disabilitato finché non esegui: ./scripts/mud-dev.sh rebuild-myst';
       show('myst-version-warn');
     } else {
       hide('myst-version-warn');
@@ -1062,7 +1062,7 @@ async function loadSystemConfig() {
   }
   const cfg = data.data?.config || data.data;
   $('system-config-editor').value = JSON.stringify(cfg, null, 2);
-  $('config-result').textContent = `path: ${data.data?.path || 'lib/edit_system.json'}`;
+  $('config-result').textContent = `path: ${data.data?.path || 'mudroot/lib/edit_system.json'}`;
   applyPortalCategoriesToUI(cfg?.object_portal || {});
   await checkMystPortalVersion();
 }
@@ -1126,7 +1126,12 @@ $('btn-save-portal-cats').onclick = async () => {
     body: JSON.stringify({ config }),
   });
   if (!data.ok) {
-    $('portal-cat-result').textContent = data.error || 'salvataggio fallito';
+    let msg = data.error || 'salvataggio fallito';
+    if (/impossibile scrivere|lib\/edit_system/i.test(msg)) {
+      msg +=
+        ' — myst vecchio o permessi file: ./scripts/mud-dev.sh rebuild-myst oppure chmod u+rw mudroot/lib/edit_system.json';
+    }
+    $('portal-cat-result').textContent = msg;
     return;
   }
   $('portal-cat-result').textContent = 'Categorie salvate. Ricarico inventario…';

@@ -516,6 +516,7 @@ cmd_start_mud() {
 		if [ ! -f mudroot/lib/edit_system.json ] && [ -f Confs/edit_system.default.json ]; then
 			cp Confs/edit_system.default.json mudroot/lib/edit_system.json
 		fi
+		chmod u+rw mudroot/lib/edit_system.json 2>/dev/null || true
 		if [ ! -x mudroot/myst ]; then
 			echo 'ERRORE: mudroot/myst mancante — esegui build myst prima di start-mud' >&2
 			exit 1
@@ -609,6 +610,7 @@ UPDATE (sync + build)
   update-edit     sync-edit + build-edit
   update-all      sync-all + build myst + build-edit
   deploy-edit     sync-edit + build myst + build-edit + start (workflow portale)
+  rebuild-myst    build myst + stop-mud + start-mud (dopo merge, senza pull)
 
 AVVIO / STOP
   start           myst (con edit API) + edit-portal + status
@@ -651,6 +653,7 @@ main() {
 	update-razze) cmd_update_razze ;;
 	update-edit) cmd_update_edit ;;
 	deploy-edit) cmd_deploy_edit ;;
+	rebuild-myst) cmd_rebuild_myst ;;
 	update-all) cmd_update_all ;;
 	dev) cmd_dev ;;
 	start) cmd_start ;;
