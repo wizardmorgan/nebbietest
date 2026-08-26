@@ -55,11 +55,22 @@ if ! cmake --build . --parallel "${jobs}"; then
 	exit 1
 fi
 )
+# POST_BUILD cmake può fallire il copy su alcuni mount: copia esplicita.
+if [ -x build/src/myst ]; then
+	cp -f build/src/myst mudroot/myst
+	chmod +x mudroot/myst
+fi
 if [ -x mudroot/myst ] ; then
 	echo "Ready"
+	if strings mudroot/myst 2>/dev/null | grep -q portal_api_version; then
+		echo "myst: edit-portal API v3 marker OK"
+	else
+		echo "WARN: myst senza marker portal_api_version — sorgente non aggiornato o build incompleto" >&2
+	fi
 	cp mudroot/myst "./mudrunner"
 	ln -sf mudroot/myst "./myst"
 	exit 0
 else 
+	echo "ERRORE: mudroot/myst non creato (controlla build/src/myst)" >&2
 	exit 1
 fi
