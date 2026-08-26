@@ -1000,7 +1000,10 @@ function renderObjectEdits(entries, damBudget, spBudget) {
         `Spellpower ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
       );
     }
-    hint.textContent = parts.join(' · ');
+    hint.textContent =
+      (parts.length
+        ? parts.join(' · ') + ' — solo delta vs prototipo su pezzi EDIT+ED'
+        : '') || '';
     box.appendChild(hint);
   }
 

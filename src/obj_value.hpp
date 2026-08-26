@@ -76,9 +76,9 @@ inline constexpr int kObjEditArmorMaxTotal = 0;
 /** Raw CheckValueObj per 1 punto AC (1 MXP → 10 MXP per step −10). */
 inline constexpr long kObjEditArmorUnitRaw = 100;
 
-/** Spellfail: step −2, fino a −10; costo = 2× armor per punto. */
-inline constexpr int kObjEditSpellfailStep = -2;
-inline constexpr int kObjEditSpellfailMinTotal = -10;
+/** Spellfail: come armor (step −10, fino a −40); costo = 2× armor per punto. */
+inline constexpr int kObjEditSpellfailStep = -10;
+inline constexpr int kObjEditSpellfailMinTotal = -40;
 inline constexpr int kObjEditSpellfailMaxTotal = 0;
 inline constexpr long kObjEditSpellfailUnitRaw = kObjEditArmorUnitRaw * 2;
 

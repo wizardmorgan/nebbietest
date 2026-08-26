@@ -467,9 +467,10 @@ std::atomic<bool> g_http_running {false};
 	return nullptr;
 }
 
-/** Somma dam effettivo (DAMROLL+HITNDAM) su tutto l'inventario, escluso un inventory_id. */
-[[nodiscard]] int sum_inventory_damroll_excluding(
-	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id) {
+/** Somma dam *editato* (delta vs proto) su pezzi ITEM2_EDIT+ED toon, escluso un id. */
+[[nodiscard]] int sum_inventory_edited_damroll_excluding(
+	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
+	const char* toon_name) {
 	int total = 0;
 	for(auto& r : rows) {
 		if(r.id == exclude_inventory_id) {
@@ -479,15 +480,18 @@ std::atomic<bool> g_http_running {false};
 		if(!o) {
 			continue;
 		}
-		total += object_edit_damroll_total(o);
+		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
+			total += object_edit_damroll_edited_delta(o);
+		}
 		extract_obj(o);
 	}
 	return total;
 }
 
-/** Somma spellpower effettivo (SPELLPOWER+HITNSP) su inventario, escluso un id. */
-[[nodiscard]] int sum_inventory_spellpower_excluding(
-	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id) {
+/** Somma spellpower *editato* (delta vs proto) su pezzi EDIT+ED, escluso un id. */
+[[nodiscard]] int sum_inventory_edited_spellpower_excluding(
+	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
+	const char* toon_name) {
 	int total = 0;
 	for(auto& r : rows) {
 		if(r.id == exclude_inventory_id) {
@@ -497,7 +501,9 @@ std::atomic<bool> g_http_running {false};
 		if(!o) {
 			continue;
 		}
-		total += object_edit_spellpower_total(o);
+		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
+			total += object_edit_spellpower_edited_delta(o);
+		}
 		extract_obj(o);
 	}
 	return total;
@@ -1088,9 +1094,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["inventory_id"] = inventory_id;
 			d["short_desc"] = row->elem.sd;
 			{
-				const int piece_dam = object_edit_damroll_total(obj);
-				const int other_dam =
-					sum_inventory_damroll_excluding(rows, inventory_id);
+				const int piece_dam = object_edit_damroll_edited_delta(obj);
+				const int other_dam = sum_inventory_edited_damroll_excluding(
+					rows, inventory_id, toon_name.c_str());
 				Json dam_budget;
 				dam_budget["piece"] = piece_dam;
 				dam_budget["piece_max"] = kObjEditMaxDamrollPerPiece;
@@ -1099,9 +1105,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				dam_budget["char_max"] = kObjEditMaxDamrollEditableTotal;
 				d["dam_budget"] = dam_budget;
 
-				const int piece_sp = object_edit_spellpower_total(obj);
-				const int other_sp =
-					sum_inventory_spellpower_excluding(rows, inventory_id);
+				const int piece_sp = object_edit_spellpower_edited_delta(obj);
+				const int other_sp = sum_inventory_edited_spellpower_excluding(
+					rows, inventory_id, toon_name.c_str());
 				Json sp_budget;
 				sp_budget["piece"] = piece_sp;
 				sp_budget["piece_max"] = kObjEditMaxSpellpowerPerPiece;
@@ -1169,11 +1175,13 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			std::string quote_err;
 			const int other_dam =
 				object_edit_location_affects_dam(location)
-					? sum_inventory_damroll_excluding(rows, inventory_id)
+					? sum_inventory_edited_damroll_excluding(rows, inventory_id,
+															 toon_name.c_str())
 					: -1;
 			const int other_sp =
 				object_edit_location_affects_spellpower(location)
-					? sum_inventory_spellpower_excluding(rows, inventory_id)
+					? sum_inventory_edited_spellpower_excluding(rows, inventory_id,
+																toon_name.c_str())
 					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
 										   quote_err, other_dam, other_sp)) {
@@ -1283,11 +1291,13 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			std::string quote_err;
 			const int other_dam =
 				object_edit_location_affects_dam(location)
-					? sum_inventory_damroll_excluding(rows, inventory_id)
+					? sum_inventory_edited_damroll_excluding(rows, inventory_id,
+															 target_name.c_str())
 					: -1;
 			const int other_sp =
 				object_edit_location_affects_spellpower(location)
-					? sum_inventory_spellpower_excluding(rows, inventory_id)
+					? sum_inventory_edited_spellpower_excluding(rows, inventory_id,
+																target_name.c_str())
 					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
 										   quote_pq, quote_err, other_dam, other_sp)) {
