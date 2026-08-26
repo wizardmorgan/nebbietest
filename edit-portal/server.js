@@ -279,14 +279,20 @@ app.get('/api/target-toons', requireAuth, requireSessionToon, async (req, res) =
     return res.json({ ok: true, toons: rows });
   }
   const q = String(req.query.q || '').trim();
+  // Staff: senza ricerca non scaricare i primi 100 alfabeticamente (sembrano "solo quelli con A").
+  if (!q || q.length < 2) {
+    return res.json({
+      ok: true,
+      toons: [],
+      hint: 'Digita almeno 2 lettere del nome del personaggio',
+    });
+  }
   let sql =
     `SELECT t.id, t.name, ${TOON_LEVEL_SQL} FROM toon t LEFT JOIN character_classes cc ON cc.toon_id = t.id`;
   const params = [];
-  if (q) {
-    sql += ' WHERE t.name LIKE ?';
-    params.push(`%${q}%`);
-  }
-  sql += ' GROUP BY t.id, t.name, t.level ORDER BY t.name LIMIT 100';
+  sql += ' WHERE t.name LIKE ?';
+  params.push(`%${q}%`);
+  sql += ' GROUP BY t.id, t.name, t.level ORDER BY t.name LIMIT 80';
   const [rows] = await dbPool.query(sql, params);
   res.json({ ok: true, toons: rows });
 });

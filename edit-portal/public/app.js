@@ -35,6 +35,103 @@ function getTargetToonId() {
   return parseToonId(session?.sessionToonId || targetToonId || 0);
 }
 
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Palette foreground DaleMUD / AlarMUD ($cMBFG, FG 00–15). */
+const MUD_FG_COLORS = [
+  '#000000', // 00 black
+  '#aa0000', // 01 red
+  '#00aa00', // 02 green
+  '#aa5500', // 03 brown
+  '#0000aa', // 04 blue
+  '#aa00aa', // 05 magenta
+  '#00aaaa', // 06 cyan
+  '#aaaaaa', // 07 lt gray
+  '#555555', // 08 dk gray
+  '#ff5555', // 09 lt red
+  '#55ff55', // 10 lt green
+  '#ffff55', // 11 yellow
+  '#5555ff', // 12 lt blue
+  '#ff55ff', // 13 lt magenta
+  '#55ffff', // 14 lt cyan
+  '#ffffff', // 15 white
+];
+
+const MUD_BG_COLORS = [
+  'transparent',
+  '#aa0000',
+  '#00aa00',
+  '#aa5500',
+  '#0000aa',
+  '#aa00aa',
+  '#00aaaa',
+  '#aaaaaa',
+];
+
+/**
+ * Converte `$cMBFG` / `$CMBFG` in HTML colorato (nasconde i codici).
+ * M=mod, B=bg, FG=foreground 00-15 — vedi ansi_parser.cpp.
+ */
+function mudTextToHtml(raw) {
+  const text = String(raw ?? '');
+  if (!text) return '';
+  if (!/\$[cC]\d{4}/.test(text)) {
+    return escapeHtml(text);
+  }
+  let html = '';
+  let i = 0;
+  let style = { color: 'var(--text)', bg: 'transparent', bold: false };
+  const openSpan = () => {
+    const parts = [`color:${style.color}`];
+    if (style.bg && style.bg !== 'transparent') parts.push(`background-color:${style.bg}`);
+    if (style.bold) parts.push('font-weight:700');
+    return `<span class="mud-color" style="${parts.join(';')}">`;
+  };
+  let open = false;
+  const close = () => {
+    if (open) {
+      html += '</span>';
+      open = false;
+    }
+  };
+  while (i < text.length) {
+    if (
+      (text[i + 1] === 'c' || text[i + 1] === 'C') &&
+      text[i] === '$' &&
+      /^\d{4}/.test(text.slice(i + 2, i + 6))
+    ) {
+      const code = text.slice(i + 2, i + 6);
+      const mod = code[0];
+      const bg = Number(code[1]);
+      const fg = Number(code.slice(2, 4));
+      close();
+      style = {
+        color: MUD_FG_COLORS[fg] || 'var(--text)',
+        bg: MUD_BG_COLORS[bg] || 'transparent',
+        bold: mod === '1',
+      };
+      html += openSpan();
+      open = true;
+      i += 6;
+      continue;
+    }
+    if (!open) {
+      html += openSpan();
+      open = true;
+    }
+    html += escapeHtml(text[i]);
+    i += 1;
+  }
+  close();
+  return html;
+}
+
 function restoreSavedLogin() {
   try {
     const raw = localStorage.getItem(LOGIN_STORAGE_KEY);
@@ -259,10 +356,17 @@ async function enterWorkMode() {
   if (me.role === 'staff') {
     show('staff-panel');
     show('target-toon-wrap');
+    const hint = $('session-role-hint');
+    if (hint) {
+      hint.textContent =
+        `Sessione: ${me.sessionToonName} (staff). Cerca sotto il personaggio su cui vuoi lavorare.`;
+    }
     loadSystemConfig();
   } else {
     hide('staff-panel');
     hide('target-toon-wrap');
+    const hint = $('session-role-hint');
+    if (hint) hint.textContent = `Personaggio: ${me.sessionToonName}`;
   }
 
   await loadEditCatalog();
@@ -279,9 +383,117 @@ async function loadEditCatalog() {
   }
 }
 
-async function loadTargetToons() {
-  const data = await api('/api/target-toons');
+function getSelectedTargetLabel() {
   const sel = $('target-toon');
+  if (!sel || !sel.value) return '';
+  const opt = sel.selectedOptions?.[0];
+  return (opt?.textContent || '').replace(/\s*\(lv.*$/, '') || '';
+}
+
+function updateInventoryHeading() {
+  const title = $('inventory-title');
+  const hint = $('inventory-target-hint');
+  const name = getSelectedTargetLabel() || charState?.name || '';
+  if (session?.role === 'staff') {
+    if (!getTargetToonId() || !name) {
+      if (title) title.textContent = 'Inventario';
+      if (hint) {
+        hint.textContent =
+          'Nessun personaggio target: cerca e seleziona un PG sopra. Non viene mostrato l\'inventario del login staff.';
+      }
+      return;
+    }
+    if (title) title.textContent = `Inventario di ${name}`;
+    if (hint) {
+      hint.textContent = `Stai vedendo/editando gli oggetti di ${name} (deve essere offline per gli apply).`;
+    }
+  } else {
+    if (title) title.textContent = name ? `Inventario di ${name}` : 'Inventario';
+    if (hint) hint.textContent = '';
+  }
+}
+
+let targetSearchTimer = null;
+
+async function searchTargetToons(q) {
+  const sel = $('target-toon');
+  if (!sel) return;
+  const query = String(q || '').trim();
+  sel.innerHTML = '';
+  if (query.length < 2) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = '— digita almeno 2 lettere —';
+    sel.appendChild(opt);
+    return;
+  }
+  const data = await api(`/api/target-toons?q=${encodeURIComponent(query)}`);
+  if (!data.ok) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = data.error || 'errore ricerca';
+    sel.appendChild(opt);
+    return;
+  }
+  if (!data.toons?.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'Nessun personaggio trovato';
+    sel.appendChild(opt);
+    return;
+  }
+  data.toons.forEach((t) => {
+    const opt = document.createElement('option');
+    opt.value = String(t.id);
+    opt.textContent = `${t.name} (lv ${t.max_level ?? '?'})`;
+    sel.appendChild(opt);
+  });
+}
+
+async function loadTargetToons() {
+  const sel = $('target-toon');
+  if (!sel) return;
+
+  if (session.role === 'staff') {
+    targetToonId = null;
+    sel.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '— cerca un nome sopra —';
+    sel.appendChild(placeholder);
+
+    const search = $('target-toon-search');
+    if (search && !search.dataset.bound) {
+      search.dataset.bound = '1';
+      search.addEventListener('input', () => {
+        clearTimeout(targetSearchTimer);
+        targetSearchTimer = setTimeout(() => searchTargetToons(search.value), 250);
+      });
+    }
+    sel.onchange = async () => {
+      targetToonId = getTargetToonId();
+      pendingEdit = null;
+      selectedInventoryId = null;
+      updatePaymentUI();
+      updateInventoryHeading();
+      if (!targetToonId) {
+        $('char-stats').textContent = 'Seleziona un personaggio dalla lista.';
+        $('inventory-list').innerHTML = '';
+        $('object-edits').innerHTML = '';
+        $('quote-box').textContent =
+          'Seleziona un personaggio target, poi un oggetto editabile.';
+        return;
+      }
+      await loadCharacterState();
+      await loadInventory();
+    };
+    updateInventoryHeading();
+    $('char-stats').textContent = 'Cerca e seleziona un personaggio target.';
+    $('inventory-list').innerHTML = '';
+    return;
+  }
+
+  const data = await api('/api/target-toons');
   sel.innerHTML = '';
   if (!data.ok) return;
   data.toons.forEach((t) => {
@@ -332,6 +544,7 @@ async function loadCharacterState() {
   charState = data.data;
   renderCharStats();
   renderCharacterEdits();
+  updateInventoryHeading();
 }
 
 function renderCharStats() {
@@ -507,9 +720,11 @@ async function loadInventory() {
   targetToonId = getTargetToonId();
   const prevSelected = selectedInventoryId;
   if (!targetToonId) {
-    showApiWarn('Personaggio target non selezionato — ricarica la pagina o cambia personaggio');
+    showApiWarn('Personaggio target non selezionato — cerca e seleziona un PG');
+    updateInventoryHeading();
     return;
   }
+  updateInventoryHeading();
   const data = await api(`/api/inventory/${targetToonId}`);
   const list = $('inventory-list');
   list.innerHTML = '';
@@ -576,10 +791,11 @@ async function loadInventory() {
     const worn = it.worn ? ' · indossato' : '';
     const depth = Number(it.depth) > 0 ? ' · in container' : '';
     const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
-    li.textContent = `${it.short_desc || it.name} (vnum ${it.item_number})${worn}${depth}${skip}`;
-    if (it.item_type) {
-      li.textContent += ` [${it.item_type}]`;
-    }
+    const type = it.item_type ? ` [${it.item_type}]` : '';
+    const meta = ` (vnum ${it.item_number})${worn}${depth}${skip}${type}`;
+    li.innerHTML =
+      `<span class="item-name">${mudTextToHtml(it.short_desc || it.name)}</span>` +
+      `<span class="item-meta">${escapeHtml(meta)}</span>`;
     li.title = it.editable
       ? `inventory_id ${it.inventory_id}`
       : it.skip_reason || 'non editabile';
@@ -620,13 +836,16 @@ async function selectItem(inventoryId, li) {
 
   selectedObjectOptions = opts.data;
   const d = opts.data;
-  $('quote-box').textContent = [
-    d.short_desc || '',
+  const quoteEl = $('quote-box');
+  const lines = [
     d.owner_name ? `Owner: ${d.owner_name} (${d.owner_classes} classi, x${d.class_mult})` : '',
     d.item_type ? `Tipo: ${d.item_type}` : '',
     `Costo attuale vs prototipo: ${formatMxp(d.diff_xp_mega || 0, d.diff_xp_frac || 0)}`,
     d.diff_rune ? `Runes componente listino: ${d.diff_rune}` : '',
-  ].filter(Boolean).join('\n');
+  ].filter(Boolean);
+  quoteEl.innerHTML =
+    `<div class="quote-name">${mudTextToHtml(d.short_desc || '')}</div>` +
+    lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
 
   renderObjectAffectSlots(d.affect_slots);
   renderObjectEdits(d.entries || []);
@@ -1134,9 +1353,15 @@ $('btn-save-portal-cats').onclick = async () => {
     $('portal-cat-result').textContent = msg;
     return;
   }
-  $('portal-cat-result').textContent = 'Categorie salvate. Ricarico inventario…';
+  $('portal-cat-result').textContent =
+    'Categorie salvate. Ricarico inventario del personaggio target selezionato…';
   await loadEditCatalog();
-  await loadInventory();
+  if (getTargetToonId()) {
+    await loadInventory();
+  } else {
+    $('portal-cat-result').textContent =
+      'Categorie salvate. Seleziona un personaggio target per vedere l\'inventario filtrato.';
+  }
 };
 
 $('btn-save-config').onclick = async () => {
@@ -1164,7 +1389,9 @@ $('btn-inst-search').onclick = async () => {
   if (!data.ok) return;
   data.instances.forEach((i) => {
     const li = document.createElement('li');
-    li.textContent = `#${i.id} base ${i.base_vnum} owner ${i.owner_name} — ${i.short_desc}`;
+    li.innerHTML =
+      `#${escapeHtml(i.id)} base ${escapeHtml(i.base_vnum)} owner ${escapeHtml(i.owner_name)} — ` +
+      mudTextToHtml(i.short_desc);
     list.appendChild(li);
   });
 };
