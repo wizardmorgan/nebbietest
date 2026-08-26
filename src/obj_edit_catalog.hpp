@@ -54,20 +54,20 @@ bool inventory_row_is_worn(int wearpos) noexcept;
  */
 /**
  * Simula affect target.
- * Se portal_dam_used >= 0 e l'edit tocca il dam → tetto 30 (contatore portale).
- * Se portal_sp_used >= 0 e l'edit tocca lo spellpower → tetto 30 sp.
+ * Se other_worn_edited_dam >= 0 e l'edit tocca il dam → tetto 30
+ * (somma delta vs proto su pezzi ITEM2_EDIT *indossati*, escluso questo).
  */
 [[nodiscard]] bool object_quote_affect_target(struct obj_data* obj, int location,
 											  int target_modifier, long& xp_raw,
 											  int& pq, std::string& err,
-											  int portal_dam_used = -1,
-											  int portal_sp_used = -1);
+											  int other_worn_edited_dam = -1,
+											  int other_worn_edited_sp = -1);
 
 /** Imposta affect target (stessa logica di quote). Restituisce false se invalido. */
 [[nodiscard]] bool object_apply_affect_target(struct obj_data* obj, int location,
 											  int target_modifier, std::string& err,
-											  int portal_dam_used = -1,
-											  int portal_sp_used = -1);
+											  int other_worn_edited_dam = -1,
+											  int other_worn_edited_sp = -1);
 
 [[nodiscard]] int object_affect_current_modifier(const struct obj_data* obj,
 												 int location) noexcept;
@@ -96,8 +96,7 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] int object_edit_prototype_vnum(const struct obj_data* obj) noexcept;
 
 /**
- * true se il pezzo entra nel tetto dam/sp personaggio:
- * ITEM2_EDIT (persistito, non forzato su ogni instance) + owner lock del toon.
+ * true se il pezzo ha ITEM2_EDIT (entra nel tetto solo se anche indossato).
  */
 [[nodiscard]] bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 														  const char* toon_name) noexcept;
