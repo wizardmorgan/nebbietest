@@ -893,9 +893,14 @@ function renderObjectAffectSlots(affectSlots) {
       `;
     } else {
       const loc = slot.location_name || `loc ${slot.location}`;
-      let detail = `<strong>${loc}</strong> = ${slot.modifier}`;
-      if (slot.immune_labels) {
-        detail += `<br><span class="slot-hint">${slot.immune_labels}</span>`;
+      const label =
+        (slot.modifier_label && String(slot.modifier_label).trim()) ||
+        (slot.immune_labels && String(slot.immune_labels).trim()) ||
+        '';
+      const shown = label || String(slot.modifier);
+      let detail = `<strong>${loc}</strong> = ${shown}`;
+      if (label && Number(slot.modifier) !== 0 && String(slot.modifier) !== label) {
+        detail += `<br><span class="slot-hint">bit ${slot.modifier}</span>`;
       }
       row.innerHTML = `
         <span class="slot-num">#${slotNum + 1}</span>
@@ -991,20 +996,38 @@ function renderObjectEdits(entries, damBudget, spBudget) {
     hint.className = 'hint';
     const parts = [];
     if (damBudget) {
-      parts.push(
-        `Dam ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`
-      );
+      const pieceCur = Number(damBudget.piece_current);
+      const pieceProto = Number(damBudget.piece_proto);
+      let damLine = `Dam editato ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`;
+      if (Number.isFinite(pieceCur) && Number.isFinite(pieceProto)) {
+        damLine += ` — questo pezzo ${pieceCur} (proto ${pieceProto}, delta +${Number(damBudget.piece || 0)})`;
+      }
+      parts.push(damLine);
     }
     if (spBudget) {
       parts.push(
-        `Spellpower ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
+        `Spellpower editato ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
       );
     }
     hint.textContent =
       (parts.length
-        ? parts.join(' · ') + ' — solo delta vs prototipo su pezzi EDIT+ED'
+        ? parts.join(' · ') + ' — solo pezzi con ITEM2_EDIT + ED/owner, delta vs prototipo'
         : '') || '';
     box.appendChild(hint);
+
+    const contrib = damBudget && Array.isArray(damBudget.contributors)
+      ? damBudget.contributors.filter((c) => Number(c.delta) > 0)
+      : [];
+    if (contrib.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'hint dam-budget-contributors';
+      contrib.forEach((c) => {
+        const li = document.createElement('li');
+        li.textContent = `${c.short_desc || 'oggetto'}: +${Number(c.delta)} dam (ora ${Number(c.current)}, proto ${Number(c.proto)})`;
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+    }
   }
 
   let lastSection = '';

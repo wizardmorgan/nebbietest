@@ -985,7 +985,11 @@ bool object_instance_apply(struct obj_data* obj, unsigned long long instance_id)
 				}
 				obj->char_vnum = orig;
 			}
-			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+			/*
+			 * Non forzare ITEM2_EDIT su ogni instance: il flag deve restare solo se
+			 * è già in extra_flags2 (portal/pedit/oedit). Forzarlo faceva contare
+			 * nel tetto dam/sp del portale tutto l'eq instanziato del PG (es. 56/30).
+			 */
 			if(!row.owner_name.null() && !row.owner_name.get().empty()) {
 				copy_personal_owner(obj, row.owner_name.get());
 			}
