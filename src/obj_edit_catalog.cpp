@@ -10,14 +10,17 @@
 
 #include "autoenums.hpp"
 #include "constants.hpp"
+#include "db.hpp"
 #include "edit_pool.hpp"
 #include "edit_system_config.hpp"
 #include "flags.hpp"
 #include "handler.hpp"
 #include "object_instance.hpp"
 #include "obj_value.hpp"
+#include "spell_parser.hpp"
 #include "structs.hpp"
 #include "typedefs.hpp"
+#include "utility.hpp"
 #include "utils.hpp"
 
 namespace Alarmud {
@@ -360,6 +363,46 @@ static void rewrite_combat_totals(struct obj_data* obj, int hitroll,
 	object_compact_edit_affects(obj);
 }
 
+/** Etichetta umana per modifier (bitvector spell/immune, nomi spell, ecc.). */
+[[nodiscard]] static std::string format_portal_affect_modifier(int loc, int mod) {
+	char buf[MAX_STRING_LENGTH];
+	buf[0] = '\0';
+	switch(loc) {
+	case APPLY_M_IMMUNE:
+	case APPLY_IMMUNE:
+	case APPLY_SUSC:
+		sprintbit(static_cast<unsigned long>(mod), immunity_names, buf);
+		return buf;
+	case APPLY_SPELL:
+		sprintbit(static_cast<unsigned long>(mod), affected_bits, buf);
+		return buf;
+	case APPLY_AFF2:
+		sprintbit(static_cast<unsigned long>(mod), affected_bits2, buf);
+		return buf;
+	case APPLY_WEAPON_SPELL:
+	case APPLY_EAT_SPELL:
+		if(mod >= 1 && spells[mod - 1] && *spells[mod - 1] && *spells[mod - 1] != '\n') {
+			return spells[mod - 1];
+		}
+		return std::to_string(mod);
+	case APPLY_RACE_SLAYER:
+		if(mod >= 0 && RaceName[mod] && *RaceName[mod] && *RaceName[mod] != '\n') {
+			return RaceName[mod];
+		}
+		return std::to_string(mod);
+	case APPLY_ALIGN_SLAYER:
+		sprintbit(static_cast<unsigned long>(mod), gaszAlignSlayerBits, buf);
+		return buf;
+	case APPLY_ATTACKS: {
+		char num[64];
+		snprintf(num, sizeof(num), "%.1f", static_cast<double>(mod) / 10.0);
+		return num;
+	}
+	default:
+		return std::to_string(mod);
+	}
+}
+
 Json object_affect_slots_json(const struct obj_data* obj) {
 	Json root;
 	Json slots = Json::array();
@@ -388,10 +431,11 @@ Json object_affect_slots_json(const struct obj_data* obj) {
 				s["location_name"] = buf;
 			}
 			s["modifier"] = mod;
-			if(loc == APPLY_IMMUNE || loc == APPLY_M_IMMUNE) {
-				char buf[MAX_STRING_LENGTH];
-				sprintbit(static_cast<unsigned long>(mod), immunity_names, buf);
-				s["immune_labels"] = buf;
+			const std::string label = format_portal_affect_modifier(loc, mod);
+			s["modifier_label"] = label;
+			/* Retrocompat UI: immune_labels resta per RESI/IMM. */
+			if(loc == APPLY_IMMUNE || loc == APPLY_M_IMMUNE || loc == APPLY_SUSC) {
+				s["immune_labels"] = label;
 			}
 		}
 		slots.push_back(s);
@@ -857,11 +901,29 @@ int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept {
 	return std::max(0, cur - base);
 }
 
+int object_edit_damroll_prototype_total(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return 0;
+	}
+	struct obj_data* proto = load_edit_prototype(obj);
+	if(!proto) {
+		return 0;
+	}
+	const int base = combat_damroll_total(proto);
+	extract_obj(proto);
+	return base;
+}
+
+int object_edit_prototype_vnum(const struct obj_data* obj) noexcept {
+	return resolve_edit_prototype_vnum(obj);
+}
+
 bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 											 const char* toon_name) noexcept {
 	if(!obj || !toon_name || !*toon_name) {
 		return false;
 	}
+	/* Solo pezzi davvero editati (portal/pedit), non ogni object_instance. */
 	if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
 		return false;
 	}

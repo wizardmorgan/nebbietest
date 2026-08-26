@@ -89,9 +89,15 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] int object_edit_damroll_edited_delta(const struct obj_data* obj) noexcept;
 [[nodiscard]] int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept;
 
+/** Dam sul prototipo risolto (0 se proto assente). */
+[[nodiscard]] int object_edit_damroll_prototype_total(const struct obj_data* obj) noexcept;
+
+/** Vnum prototipo usato per il delta edit (0 se sconosciuto). */
+[[nodiscard]] int object_edit_prototype_vnum(const struct obj_data* obj) noexcept;
+
 /**
  * true se il pezzo entra nel tetto dam/sp personaggio:
- * ITEM2_EDIT + owner lock (ED / personal_owner) del toon.
+ * ITEM2_EDIT (persistito, non forzato su ogni instance) + owner lock del toon.
  */
 [[nodiscard]] bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 														  const char* toon_name) noexcept;

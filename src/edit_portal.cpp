@@ -488,6 +488,36 @@ std::atomic<bool> g_http_running {false};
 	return total;
 }
 
+/** Elenco pezzi che entrano nel tetto dam (per UI / debug Venus). */
+[[nodiscard]] Json dam_budget_contributors_json(
+	std::vector<inventory_mysql_row>& rows, const char* toon_name) {
+	Json list = Json::array();
+	for(auto& r : rows) {
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
+			const int cur = object_edit_damroll_total(o);
+			const int proto = object_edit_damroll_prototype_total(o);
+			const int delta = object_edit_damroll_edited_delta(o);
+			if(delta > 0 || cur > 0) {
+				Json c;
+				c["inventory_id"] = r.id;
+				c["short_desc"] = r.elem.sd;
+				c["current"] = cur;
+				c["proto"] = proto;
+				c["delta"] = delta;
+				c["proto_vnum"] = object_edit_prototype_vnum(o);
+				c["item2_edit"] = true;
+				list.push_back(c);
+			}
+		}
+		extract_obj(o);
+	}
+	return list;
+}
+
 /** Somma spellpower *editato* (delta vs proto) su pezzi EDIT+ED, escluso un id. */
 [[nodiscard]] int sum_inventory_edited_spellpower_excluding(
 	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
@@ -1094,22 +1124,32 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["inventory_id"] = inventory_id;
 			d["short_desc"] = row->elem.sd;
 			{
-				const int piece_dam = object_edit_damroll_edited_delta(obj);
+				const int piece_delta = object_edit_damroll_edited_delta(obj);
+				const bool piece_counts =
+					object_edit_counts_toward_combat_budget(obj, toon_name.c_str());
+				const int piece_dam = piece_counts ? piece_delta : 0;
 				const int other_dam = sum_inventory_edited_damroll_excluding(
 					rows, inventory_id, toon_name.c_str());
 				Json dam_budget;
-				dam_budget["piece"] = piece_dam;
+				dam_budget["piece"] = piece_delta;
+				dam_budget["piece_current"] = object_edit_damroll_total(obj);
+				dam_budget["piece_proto"] = object_edit_damroll_prototype_total(obj);
+				dam_budget["piece_proto_vnum"] = object_edit_prototype_vnum(obj);
+				dam_budget["piece_counts"] = piece_counts;
 				dam_budget["piece_max"] = kObjEditMaxDamrollPerPiece;
 				dam_budget["other"] = other_dam;
 				dam_budget["char_total"] = other_dam + piece_dam;
 				dam_budget["char_max"] = kObjEditMaxDamrollEditableTotal;
+				dam_budget["contributors"] =
+					dam_budget_contributors_json(rows, toon_name.c_str());
 				d["dam_budget"] = dam_budget;
 
-				const int piece_sp = object_edit_spellpower_edited_delta(obj);
+				const int piece_sp_delta = object_edit_spellpower_edited_delta(obj);
+				const int piece_sp = piece_counts ? piece_sp_delta : 0;
 				const int other_sp = sum_inventory_edited_spellpower_excluding(
 					rows, inventory_id, toon_name.c_str());
 				Json sp_budget;
-				sp_budget["piece"] = piece_sp;
+				sp_budget["piece"] = piece_sp_delta;
 				sp_budget["piece_max"] = kObjEditMaxSpellpowerPerPiece;
 				sp_budget["other"] = other_sp;
 				sp_budget["char_total"] = other_sp + piece_sp;
