@@ -45,9 +45,11 @@
         <aside class="sidebar">
           <div class="card">
             <h2>Personaggio</h2>
-            <label class="field-label">Target
-              <select id="target-toon"></select>
-            </label>
+            <div id="target-toon-wrap" class="field-label hidden">
+              <label>Target staff
+                <select id="target-toon"></select>
+              </label>
+            </div>
             <div id="char-stats" class="char-stats"></div>
           </div>
 
@@ -66,7 +68,7 @@
               <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
             </div>
             <ul id="inventory-list" class="inventory-list"></ul>
-            <p class="hint">Solo oggetti editabili (no RARO, armor/weapon con ITEM2_EDIT).</p>
+            <p class="hint">Solo oggetti in inventario o container (non indossati, no RARO/tan).</p>
             <p id="inventory-empty" class="hint hidden">Nessun oggetto editabile — verifica myst, inventario MySQL o flag RARO/costo.</p>
           </div>
 

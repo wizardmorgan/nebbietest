@@ -9,6 +9,7 @@
 #include <string>
 
 #include "autoenums.hpp"
+#include "db.hpp"
 #include "edit_pool.hpp"
 #include "edit_system_config.hpp"
 #include "flags.hpp"
@@ -146,8 +147,31 @@ const CatalogEntry kScalarCatalog[] = {
 	return true;
 }
 
+bool inventory_row_is_worn(ubyte wearpos) noexcept {
+	return wearpos > 0;
+}
+
+bool object_is_tanned(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return false;
+	}
+	if(obj->item_number >= 0 && obj->item_number <= top_of_objt && TANNED(obj)) {
+		return true;
+	}
+	if(obj->short_description && stristr(obj->short_description, "opera di")) {
+		return true;
+	}
+	if(obj->name && stristr(obj->name, "opera di")) {
+		return true;
+	}
+	return false;
+}
+
 bool object_portal_editable(const struct obj_data* obj, const char* toon_name) noexcept {
 	if(!obj || !toon_name || !*toon_name) {
+		return false;
+	}
+	if(object_is_tanned(obj)) {
 		return false;
 	}
 	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
