@@ -9,7 +9,7 @@
 
 namespace Alarmud {
 
-/** Massimali listino edits (per personaggio), unità raw come APPLY sull'eq. */
+/** Massimali listino edits (per personaggio) — https://www.nebbiearcane.it/listino-edits/ */
 inline constexpr int kEditPoolMaxHit = 100;
 inline constexpr int kEditPoolMaxMana = 150;
 inline constexpr int kEditPoolMaxMove = 100;
@@ -61,7 +61,7 @@ enum class EditPoolField {
 
 [[nodiscard]] int edit_pool_field_cap(EditPoolField field) noexcept;
 
-/** Step UI/listino per incrementi sul PG (non coincide con add oggetto EditMaster). */
+/** Step UI/listino: Hit/Mana/Move +10, Regen +5 (listino ufficiale). */
 [[nodiscard]] int edit_pool_field_step(EditPoolField field) noexcept;
 
 /** Chiave config / API: hit, mana, move, hit_regen, ... */
@@ -77,21 +77,18 @@ struct edit_pool_quote {
 };
 
 /**
- * Costo listino EditMaster (pedit comandi) per delta positivo sul pool PG.
+ * Costo listino per delta positivo sul pool PG (Hit/Mana/Move/regen).
  * Delta <= 0 → costo zero (riduzione non pagata).
- *
- * Fonte: stesso listino di obj_value.cpp (CheckValueObj) per i 6 APPLY pool
- * migrati sul PG — NON EditMaster/pedit (mob mai usato in produzione).
- * PQ sul pool è 0: le rune entrano solo come modalità di pagamento alternativa
- * (conversione MXP→PQ nel portale) o da derent su oggetti.
+ * Unità allineate a CheckValueObj / listino ufficiale (MXP per step).
+ * PQ sul pool è 0: le rune entrano come modalità di pagamento alternativa.
  */
 [[nodiscard]] edit_pool_quote edit_pool_quote_delta(EditPoolField field,
 													int delta) noexcept;
 
-/** 1 PQ equivale a questo ammontare di XP raw (PRICE_EXP in pedit). */
-inline constexpr long kEditPoolPqPerMegaXp = 2000000L;
+/** Conversione MXP→rune nel portale (1 MXP listino ≈ 1e6 XP raw). */
+inline constexpr long kEditPoolPqPerMegaXp = 1000000L;
 
-/** PQ di servizio come EditMaster (pagamento in MXP). */
+/** Fee sessione legacy (non usata dal portale per apertura edit). */
 inline constexpr int kEditPoolSessionPqFee = 1;
 
 /**

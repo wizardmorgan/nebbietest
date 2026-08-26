@@ -579,19 +579,24 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 }
 
 [[nodiscard]] long resistance_bit_xp_raw(unsigned damage_type) noexcept {
+	/* MXP listino × 100 raw (× storage → mega): https://www.nebbiearcane.it/listino-edits/ */
 	switch(damage_type) {
 	case IMM_FIRE:
-		return 10000L;
+		return 10000L; /* 100 MXP */
 	case IMM_COLD:
 	case IMM_ACID:
 	case IMM_HOLD:
-		return 7500L;
+		return 7500L; /* 75 MXP */
 	case IMM_ELEC:
 	case IMM_ENERGY:
-		return 15000L;
+	case IMM_SLASH:
+	case IMM_PIERCE:
+		return 15000L; /* 150 MXP */
+	case IMM_BLUNT:
+		return 30000L; /* 300 MXP */
 	case IMM_DRAIN:
 	case IMM_POISON:
-		return 3000L;
+		return 3000L; /* 30 MXP */
 	default:
 		return 5000L;
 	}
