@@ -189,11 +189,11 @@ std::atomic<bool> g_http_running {false};
 	return j.dump();
 }
 
-[[nodiscard]] unsigned long long parse_json_toon_id(const Json& req) {
-	if(req.find("toon_id") == req.end() || req["toon_id"].is_null()) {
+[[nodiscard]] unsigned long long parse_json_ull(const Json& req, const char* key) {
+	if(!key || !*key || req.find(key) == req.end() || req[key].is_null()) {
 		return 0ULL;
 	}
-	const Json& v = req["toon_id"];
+	const Json& v = req[key];
 	if(v.is_number_unsigned()) {
 		return v.get<unsigned long long>();
 	}
@@ -218,6 +218,44 @@ std::atomic<bool> g_http_running {false};
 		}
 	}
 	return 0ULL;
+}
+
+[[nodiscard]] int parse_json_int(const Json& v, int default_val = 0) {
+	if(v.is_number_integer()) {
+		return static_cast<int>(v.get<long long>());
+	}
+	if(v.is_number_unsigned()) {
+		return static_cast<int>(v.get<unsigned long long>());
+	}
+	if(v.is_string()) {
+		try {
+			const std::string t = v.get<std::string>();
+			if(t.empty()) {
+				return default_val;
+			}
+			std::size_t parsed = 0;
+			const int n = std::stoi(t, &parsed);
+			if(parsed != t.size()) {
+				return default_val;
+			}
+			return n;
+		}
+		catch(...) {
+			return default_val;
+		}
+	}
+	return default_val;
+}
+
+[[nodiscard]] int parse_json_int(const Json& req, const char* key, int default_val = 0) {
+	if(!key || !*key || req.find(key) == req.end()) {
+		return default_val;
+	}
+	return parse_json_int(req[key], default_val);
+}
+
+[[nodiscard]] unsigned long long parse_json_toon_id(const Json& req) {
+	return parse_json_ull(req, "toon_id");
 }
 
 [[nodiscard]] bool is_toon_online_by_name(const std::string& name) {
@@ -401,6 +439,11 @@ std::atomic<bool> g_http_running {false};
 		return false;
 	}
 	try {
+		std::ostringstream upd;
+		upd << "UPDATE character_inventory SET extra_flags2="
+			<< static_cast<int>(obj->obj_flags.extra_flags2) << " WHERE id = "
+			<< inventory_id;
+		db->execute(upd.str().c_str());
 		db->execute(("DELETE FROM character_inventory_affect WHERE inventory_id = " +
 					 std::to_string(inventory_id))
 						.c_str());
@@ -592,7 +635,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/is-online") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long toon_id = parse_json_toon_id(req);
 			const std::string name = toon_name_by_id(toon_id);
 			Json d;
 			d["toon_id"] = toon_id;
@@ -601,7 +644,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/max-level") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long toon_id = parse_json_toon_id(req);
 			Json d;
 			d["toon_id"] = toon_id;
 			d["max_level"] = max_level_for_toon(toon_id);
@@ -652,7 +695,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/get-character-state") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long toon_id = parse_json_toon_id(req);
 			if(toon_id == 0) {
 				return json_error("toon_id richiesto", 400);
 			}
@@ -717,7 +760,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/quote-pool") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long toon_id = parse_json_toon_id(req);
 			const std::string field = req.value("field", "");
 			EditPoolField pool_field {};
 			if(toon_id == 0 || !edit_pool_parse_field_key(field.c_str(), pool_field)) {
@@ -737,8 +780,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 			const int current = pool_field_current(pool, pool_field);
 			const int target = req.find("new_value") != req.end()
-								   ? req.value("new_value", current)
-								   : current + req.value("delta", 0);
+								   ? parse_json_int(req, "new_value", current)
+								   : current + parse_json_int(req, "delta", 0);
 			const int delta = target - current;
 			if(delta == 0) {
 				Json d = quote_from_pool(edit_pool_quote {});
@@ -759,10 +802,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/quote-resistance") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long toon_id = parse_json_toon_id(req);
 			const unsigned damage_type =
-				static_cast<unsigned>(req.value("damage_type", 0));
-			const int target_value = req.value("value", 0);
+				static_cast<unsigned>(parse_json_int(req, "damage_type", 0));
+			const int target_value = parse_json_int(req, "value", 0);
 			if(toon_id == 0 || damage_type == 0) {
 				return json_error("toon_id e damage_type richiesti", 400);
 			}
@@ -854,10 +897,26 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 						if(object_portal_editable(obj, toon_name.c_str())) {
 							editable = true;
 							const int item_type = ITEM_TYPE(obj);
-							it["item_type"] =
-								item_type == ITEM_ARMOR ? "armor"
-														: item_type == ITEM_WEAPON ? "weapon"
-																				   : "other";
+							if(item_type == ITEM_ARMOR) {
+								it["item_type"] = "armor";
+								it["portal_category"] = "armor";
+							}
+							else if(item_type == ITEM_WEAPON) {
+								it["item_type"] = "weapon";
+								it["portal_category"] = "weapon";
+							}
+							else if(item_type == ITEM_FOOD) {
+								it["item_type"] = "food";
+								it["portal_category"] = "food";
+							}
+							else if(item_type == ITEM_POTION) {
+								it["item_type"] = "potion";
+								it["portal_category"] = "potion";
+							}
+							else {
+								it["item_type"] = "other";
+								it["portal_category"] = "edited";
+							}
 						}
 						else {
 							skip_reason =
@@ -886,8 +945,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/get-object-edit-options") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
-			const unsigned long long inventory_id = req.value("inventory_id", 0ULL);
+			const unsigned long long toon_id = parse_json_toon_id(req);
+			const unsigned long long inventory_id = parse_json_ull(req, "inventory_id");
 			const std::string toon_name = toon_name_by_id(toon_id);
 			if(toon_name.empty()) {
 				return json_error("toon non trovato", 404);
@@ -917,7 +976,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			const int item_type = ITEM_TYPE(obj);
 			const bool is_armor = item_type == ITEM_ARMOR;
 			const bool is_weapon = item_type == ITEM_WEAPON;
-			Json entries = object_edit_catalog_json(is_armor, is_weapon);
+			const bool is_food = item_type == ITEM_FOOD;
+			const bool is_potion = item_type == ITEM_POTION;
+			Json entries =
+				object_edit_catalog_json(is_armor, is_weapon, is_food, is_potion);
 			for(auto& e : entries) {
 				const std::string kind = e.value("kind", "");
 				if(kind == "scalar") {
@@ -936,18 +998,33 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["entries"] = entries;
 			d["inventory_id"] = inventory_id;
 			d["short_desc"] = row->elem.sd;
-			d["item_type"] = is_armor ? "armor" : is_weapon ? "weapon" : "other";
+			if(is_armor) {
+				d["item_type"] = "armor";
+			}
+			else if(is_weapon) {
+				d["item_type"] = "weapon";
+			}
+			else if(is_food) {
+				d["item_type"] = "food";
+			}
+			else if(is_potion) {
+				d["item_type"] = "potion";
+			}
+			else {
+				d["item_type"] = "other";
+			}
 			extract_obj(obj);
 			return json_ok(d);
 		}
 
 		if(path == "/internal/quote-object-edit") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
-			const unsigned long long inventory_id = req.value("inventory_id", 0ULL);
-			const int location = req.value("location", 0);
-			const int target_modifier = req.find("target_modifier") != req.end()
-											? req.value("target_modifier", 0)
-											: req.value("modifier", 0);
+			const unsigned long long toon_id = parse_json_toon_id(req);
+			const unsigned long long inventory_id = parse_json_ull(req, "inventory_id");
+			const int location = parse_json_int(req, "location", 0);
+			const int target_modifier =
+				req.find("target_modifier") != req.end()
+					? parse_json_int(req, "target_modifier", 0)
+					: parse_json_int(req, "modifier", 0);
 
 			const std::string toon_name = toon_name_by_id(toon_id);
 			if(toon_name.empty()) {
@@ -1006,8 +1083,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/quote-item") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
-			const unsigned long long inventory_id = req.value("inventory_id", 0ULL);
+			const unsigned long long toon_id = parse_json_toon_id(req);
+			const unsigned long long inventory_id = parse_json_ull(req, "inventory_id");
 			std::vector<inventory_mysql_row> rows;
 			load_character_inventory_mysql(toon_id, rows);
 			inventory_mysql_row* row = find_inventory_row(rows, inventory_id);
@@ -1024,14 +1101,15 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/apply-affect") {
-			const unsigned long long target_toon_id = req.value("target_toon_id", 0ULL);
-			const unsigned long long inventory_id = req.value("inventory_id", 0ULL);
-			const int location = req.value("location", 0);
-			const int target_modifier = req.find("target_modifier") != req.end()
-											? req.value("target_modifier", 0)
-											: req.value("modifier", 0);
-			int pay_xp = req.value("pay_xp", 0);
-			int pay_rune = req.value("pay_rune", 0);
+			const unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
+			const unsigned long long inventory_id = parse_json_ull(req, "inventory_id");
+			const int location = parse_json_int(req, "location", 0);
+			const int target_modifier =
+				req.find("target_modifier") != req.end()
+					? parse_json_int(req, "target_modifier", 0)
+					: parse_json_int(req, "modifier", 0);
+			const int pay_xp = parse_json_int(req, "pay_xp", 0);
+			const int pay_rune = parse_json_int(req, "pay_rune", 0);
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
 			if(target_name.empty()) {
@@ -1098,6 +1176,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				extract_obj(after);
 				return json_error(apply_err.c_str(), 400);
 			}
+			if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
+				SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
+			}
 
 			const int xp_cost =
 				pay_xp > 0 ? pay_xp : static_cast<int>(std::max(0L, quote_xp));
@@ -1137,10 +1218,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/apply-pool") {
-			const unsigned long long target_toon_id = req.value("target_toon_id", 0ULL);
+			const unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
 			const std::string field = req.value("field", "");
-			int pay_xp = req.value("pay_xp", 0);
-			int pay_rune = req.value("pay_rune", 0);
+			const int pay_xp = parse_json_int(req, "pay_xp", 0);
+			const int pay_rune = parse_json_int(req, "pay_rune", 0);
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
 			if(target_name.empty()) {
@@ -1175,8 +1256,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 			const int current = pool_field_current(pool, pool_field);
 			const int target = req.find("new_value") != req.end()
-								   ? req.value("new_value", current)
-								   : current + req.value("delta", 0);
+								   ? parse_json_int(req, "new_value", current)
+								   : current + parse_json_int(req, "delta", 0);
 			const int delta = target - current;
 			if(delta == 0) {
 				return json_error("nessuna modifica al pool", 400);
@@ -1230,11 +1311,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/apply-resistance") {
-			const unsigned long long target_toon_id = req.value("target_toon_id", 0ULL);
-			const unsigned damage_type = static_cast<unsigned>(req.value("damage_type", 0));
-			const int value = req.value("value", 0);
-			const int pay_xp = req.value("pay_xp", 0);
-			const int pay_rune = req.value("pay_rune", 0);
+			const unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
+			const unsigned damage_type =
+				static_cast<unsigned>(parse_json_int(req, "damage_type", 0));
+			const int value = parse_json_int(req, "value", 0);
+			const int pay_xp = parse_json_int(req, "pay_xp", 0);
+			const int pay_rune = parse_json_int(req, "pay_rune", 0);
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
 			if(target_name.empty()) {
@@ -1280,7 +1362,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/list-resistances") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long toon_id = parse_json_toon_id(req);
 			DB* db = Sql::getMysql();
 			if(!db || toon_id == 0) {
 				return json_error("toon_id richiesto", 400);

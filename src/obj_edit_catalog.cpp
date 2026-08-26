@@ -191,6 +191,43 @@ bool object_is_tanned(const struct obj_data* obj) noexcept {
 	return false;
 }
 
+[[nodiscard]] static const char* object_portal_type_category(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return nullptr;
+	}
+	switch(ITEM_TYPE(obj)) {
+	case ITEM_ARMOR:
+		return "armor";
+	case ITEM_WEAPON:
+		return "weapon";
+	case ITEM_FOOD:
+		return "food";
+	case ITEM_POTION:
+		return "potion";
+	default:
+		return nullptr;
+	}
+}
+
+[[nodiscard]] static bool object_portal_passes_exclusions(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return false;
+	}
+	if(object_is_tanned(obj)) {
+		return false;
+	}
+	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+		return false;
+	}
+	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
+		return false;
+	}
+	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
+		return false;
+	}
+	return true;
+}
+
 std::string object_portal_skip_reason(const struct obj_data* obj,
 									  const char* toon_name) {
 	if(!obj || !toon_name || !*toon_name) {
@@ -208,15 +245,30 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
 		return "oggetto con insert";
 	}
-	if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-		return "senza flag EDIT";
-	}
-	const int type = ITEM_TYPE(obj);
-	if(type != ITEM_ARMOR && type != ITEM_WEAPON) {
-		return "solo armor/weapon";
-	}
 	if(!owner_matches(obj, toon_name)) {
 		return "owner diverso dal PG";
+	}
+	const char* type_cat = object_portal_type_category(obj);
+	if(type_cat && !edit_system_portal_category_enabled(type_cat)) {
+		if(strcmp(type_cat, "armor") == 0) {
+			return "categoria armor disabilitata (staff)";
+		}
+		if(strcmp(type_cat, "weapon") == 0) {
+			return "categoria weapon disabilitata (staff)";
+		}
+		if(strcmp(type_cat, "food") == 0) {
+			return "categoria food disabilitata (staff)";
+		}
+		if(strcmp(type_cat, "potion") == 0) {
+			return "categoria potion disabilitata (staff)";
+		}
+		return "categoria disabilitata (staff)";
+	}
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT) && !edit_system_portal_category_enabled("edited")) {
+		return "categoria EDIT disabilitata (staff)";
+	}
+	if(!type_cat && !IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return "tipo non supportato nel portale";
 	}
 	return {};
 }
@@ -225,35 +277,37 @@ bool object_portal_editable(const struct obj_data* obj, const char* toon_name) n
 	if(!obj || !toon_name || !*toon_name) {
 		return false;
 	}
-	if(object_is_tanned(obj)) {
+	if(!object_portal_passes_exclusions(obj)) {
 		return false;
 	}
-	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+	if(!owner_matches(obj, toon_name)) {
 		return false;
 	}
-	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
-		return false;
+	const char* type_cat = object_portal_type_category(obj);
+	if(type_cat && edit_system_portal_category_enabled(type_cat)) {
+		return true;
 	}
-	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
-		return false;
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT) && edit_system_portal_category_enabled("edited")) {
+		return true;
 	}
-	if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-		return false;
-	}
-	const int type = ITEM_TYPE(obj);
-	if(type != ITEM_ARMOR && type != ITEM_WEAPON) {
-		return false;
-	}
-	return owner_matches(obj, toon_name);
+	return false;
 }
 
-Json object_edit_catalog_json(bool is_armor, bool is_weapon) {
+Json object_edit_catalog_json(bool is_armor, bool is_weapon, bool is_food,
+							  bool is_potion) {
 	Json entries = Json::array();
 	for(const auto& e : kScalarCatalog) {
-		if(e.armor && !is_armor) {
-			continue;
+		bool matches = false;
+		if(is_armor && e.armor) {
+			matches = true;
 		}
-		if(e.weapon && !is_weapon) {
+		if(is_weapon && e.weapon) {
+			matches = true;
+		}
+		if((is_food || is_potion) && (e.armor || e.weapon)) {
+			matches = true;
+		}
+		if(!matches) {
 			continue;
 		}
 		if(edit_pool_location_blocked_on_eq(e.location)) {
@@ -299,6 +353,9 @@ Json object_edit_catalog_json(bool is_armor, bool is_weapon) {
 			continue;
 		}
 		if(edit_system_resistance_target(r.bit) != EditSystemTarget::Object) {
+			continue;
+		}
+		if(!is_armor && !is_weapon && !is_food && !is_potion) {
 			continue;
 		}
 		Json j;

@@ -26,5 +26,13 @@
     { "id": "resistance.plus2", "kind": "resistance", "damage_type": 32768, "target": "object", "enabled": true, "label": "Weapon +2" },
     { "id": "resistance.plus3", "kind": "resistance", "damage_type": 65536, "target": "object", "enabled": true, "label": "Weapon +3" },
     { "id": "resistance.plus4", "kind": "resistance", "damage_type": 131072, "target": "object", "enabled": true, "label": "Weapon +4" }
-  ]
+  ],
+  "object_portal": {
+    "armor": true,
+    "weapon": true,
+    "food": true,
+    "potion": true,
+    "edited": true,
+    "comment": "Categorie oggetto editabili nel portale (staff). edited = con flag ITEM2_EDIT."
+  }
 }

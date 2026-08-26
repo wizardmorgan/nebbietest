@@ -165,6 +165,19 @@ code {
   margin: 0;
 }
 
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0.75rem 0;
+}
+
+.card-inner {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
 .field-label {
   display: block;
   margin-bottom: 0.75rem;

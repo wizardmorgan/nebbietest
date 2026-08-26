@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cstring>
 
 #include "../contrib/slacking/json.hpp"
 #include "autoenums.hpp"
@@ -30,10 +31,18 @@ struct Entry {
 	std::string label;
 };
 
-std::mutex g_mutex;
-std::vector<Entry> g_entries;
-std::string g_config_path;
-bool g_loaded = false;
+	std::mutex g_mutex;
+	std::vector<Entry> g_entries;
+	std::string g_config_path;
+	bool g_loaded = false;
+
+	struct PortalCategories {
+		bool armor = true;
+		bool weapon = true;
+		bool food = true;
+		bool potion = true;
+		bool edited = true;
+	} g_portal_categories;
 
 [[nodiscard]] EditSystemTarget parse_target(const std::string& s) {
 	if(s == "character") {
@@ -127,8 +136,22 @@ void build_defaults() {
 	return out.good();
 }
 
+void parse_portal_categories(const Json& root) {
+	g_portal_categories = PortalCategories {};
+	if(root.find("object_portal") == root.end() || !root["object_portal"].is_object()) {
+		return;
+	}
+	const Json& p = root["object_portal"];
+	g_portal_categories.armor = p.value("armor", true);
+	g_portal_categories.weapon = p.value("weapon", true);
+	g_portal_categories.food = p.value("food", true);
+	g_portal_categories.potion = p.value("potion", true);
+	g_portal_categories.edited = p.value("edited", true);
+}
+
 void parse_entries_json(const Json& root) {
 	g_entries.clear();
+	parse_portal_categories(root);
 	if(root.find("entries") == root.end() || !root["entries"].is_array()) {
 		build_defaults();
 		return;
@@ -177,6 +200,15 @@ void parse_entries_json(const Json& root) {
 		arr.push_back(item);
 	}
 	root["entries"] = arr;
+	Json portal;
+	portal["armor"] = g_portal_categories.armor;
+	portal["weapon"] = g_portal_categories.weapon;
+	portal["food"] = g_portal_categories.food;
+	portal["potion"] = g_portal_categories.potion;
+	portal["edited"] = g_portal_categories.edited;
+	portal["comment"] =
+		"Categorie oggetto editabili nel portale web (staff). edited = con flag ITEM2_EDIT.";
+	root["object_portal"] = portal;
 	return root;
 }
 
@@ -369,6 +401,29 @@ EditSystemTarget edit_system_resistance_target(unsigned damage_type) noexcept {
 bool edit_system_resistance_enabled(unsigned damage_type) noexcept {
 	const ResistanceLookup lk = lookup_resistance(damage_type);
 	return lk.found && lk.enabled;
+}
+
+bool edit_system_portal_category_enabled(const char* category) noexcept {
+	if(!category || !*category) {
+		return false;
+	}
+	std::lock_guard<std::mutex> lock(g_mutex);
+	if(strcmp(category, "armor") == 0) {
+		return g_portal_categories.armor;
+	}
+	if(strcmp(category, "weapon") == 0) {
+		return g_portal_categories.weapon;
+	}
+	if(strcmp(category, "food") == 0) {
+		return g_portal_categories.food;
+	}
+	if(strcmp(category, "potion") == 0) {
+		return g_portal_categories.potion;
+	}
+	if(strcmp(category, "edited") == 0) {
+		return g_portal_categories.edited;
+	}
+	return false;
 }
 
 const char* edit_system_config_path() {
