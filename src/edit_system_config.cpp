@@ -51,7 +51,7 @@ struct Entry {
 		{"weapon", "Weapon", true},
 		{"fireweapon", "Fire weapon", false},
 		{"missile", "Missile", false},
-		{"treasure", "Treasure", false},
+		{"treasure", "Treasure", true},
 		{"armor", "Armor", true},
 		{"potion", "Potion", false},
 		{"worn", "Worn (medaglie, amuleti, bracciali)", true},
@@ -356,8 +356,34 @@ void load_from_disk() {
 	if(read_file_text(g_config_path, text)) {
 		try {
 			const Json root = Json::parse(text);
+			const bool had_portal =
+				root.find("object_portal") != root.end() && root["object_portal"].is_object();
 			parse_entries_json(root);
 			g_loaded = true;
+			if(!had_portal) {
+				Json upgraded = root;
+				Json portal;
+				Json types = Json::object();
+				for(const auto& def : kPortalTypeDefs) {
+					const auto it = g_portal_type_enabled.find(def.slug);
+					types[def.slug] =
+						it != g_portal_type_enabled.end() ? it->second : def.default_enabled;
+				}
+				portal["types"] = types;
+				portal["comment"] =
+					"types: slug ITEM_* — spunta = visibile e editabile nel portale.";
+				upgraded["object_portal"] = portal;
+				if(write_file_text(g_config_path, upgraded.dump(2))) {
+					mudlog(LOG_CHECK,
+						   "edit_system_config: added missing object_portal to %s",
+						   g_config_path.c_str());
+				}
+				else {
+					mudlog(LOG_SYSERR,
+						   "edit_system_config: could not write object_portal to %s",
+						   g_config_path.c_str());
+				}
+			}
 			mudlog(LOG_CHECK, "edit_system_config: loaded %zu entries from %s",
 				   g_entries.size(), g_config_path.c_str());
 			return;
