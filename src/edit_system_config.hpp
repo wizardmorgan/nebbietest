@@ -14,7 +14,7 @@ enum class EditSystemTarget {
 	Character
 };
 
-/** Carica lib/edit_system.json (o EDIT_SYSTEM_CONFIG). Se assente, usa default built-in. */
+/** Carica edit_system.json nella mudlib (-d) o EDIT_SYSTEM_CONFIG. */
 void edit_system_config_init();
 
 /** Ricarica da file senza riavvio. */
