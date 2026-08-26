@@ -24,7 +24,7 @@ MUD_APP_ROOT="${MUD_APP_ROOT:-$MUD_ROOT}"
 
 ENVIRONMENT="${ENVIRONMENT:-devel}"
 MUD_PORT="${MUD_PORT:-4002}"
-MUD_DATA_DIR="${MUD_DATA_DIR:-lib}"
+MUD_DATA_DIR="${MUD_DATA_DIR:-mudroot/lib}"
 EDIT_API_PORT="${EDIT_API_PORT:-8090}"
 EDIT_API_SECRET="${EDIT_API_SECRET:-nebbie-edit-dev-secret}"
 EDIT_WEB_PORT="${EDIT_WEB_PORT:-3080}"
@@ -328,6 +328,13 @@ cmd_deploy_edit() {
 	echo "deploy-edit ok. Web: http://localhost:${EDIT_WEB_PORT}/"
 }
 
+cmd_rebuild_myst() {
+	cmd_build
+	cmd_stop_mud
+	cmd_start_mud
+	echo "myst ricompilato e riavviato."
+}
+
 cmd_update_all() {
 	cmd_sync_all
 	cmd_build
@@ -504,15 +511,19 @@ cmd_start_mud() {
 	docker exec "$mudc" bash -c "
 		set -e
 		cd /app
-		ln -sfn ../pages mudroot/pages 2>/dev/null || true
+		ln -sfn pages mudroot/pages 2>/dev/null || true
 		cp -n myst.* mudroot/lib/ 2>/dev/null || true
 		if [ ! -f mudroot/lib/edit_system.json ] && [ -f Confs/edit_system.default.json ]; then
 			cp Confs/edit_system.default.json mudroot/lib/edit_system.json
 		fi
-		cd /app/mudroot
+		if [ ! -x mudroot/myst ]; then
+			echo 'ERRORE: mudroot/myst mancante — esegui build myst prima di start-mud' >&2
+			exit 1
+		fi
 		export EDIT_API_PORT='${EDIT_API_PORT}'
 		export EDIT_API_SECRET='${EDIT_API_SECRET}'
-		./myst -D -P $MUD_PORT -d $MUD_DATA_DIR
+		export EDIT_SYSTEM_CONFIG='/app/mudroot/lib/edit_system.json'
+		exec ./mudroot/myst -D -P $MUD_PORT -d $MUD_DATA_DIR -v 4
 	"
 	sleep 2
 	if myst_is_alive "$mudc"; then
