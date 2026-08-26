@@ -625,15 +625,13 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 
 bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 										  const char* toon_name) noexcept {
-	if(!obj || !toon_name || !*toon_name) {
+	(void)toon_name;
+	if(!obj) {
 		return false;
 	}
 	const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
-	if(slug) {
-		return edit_system_portal_category_enabled(slug);
-	}
-	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-		return edit_system_portal_category_enabled("edited");
+	if(slug && edit_system_portal_type_always_hidden(slug)) {
+		return false;
 	}
 	return true;
 }
