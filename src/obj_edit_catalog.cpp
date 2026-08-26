@@ -934,56 +934,46 @@ int object_edit_prototype_vnum(const struct obj_data* obj) noexcept {
 
 bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 											 const char* toon_name) noexcept {
-	if(!obj || !toon_name || !*toon_name) {
+	(void)toon_name;
+	if(!obj) {
 		return false;
 	}
-	/* Solo pezzi davvero editati (portal/pedit), non ogni object_instance. */
-	if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-		return false;
-	}
-	if(obj->personal_owner[0] != '\0') {
-		return strcasecmp(obj->personal_owner, toon_name) == 0;
-	}
-	const std::string ed = object_instance_extract_ed_owner(obj->name);
-	return !ed.empty() && strcasecmp(ed.c_str(), toon_name) == 0;
+	/* Solo pezzi con flag ITEM2_EDIT (indossati o meno lo decide chi somma). */
+	return IS_OBJ_STAT2(obj, ITEM2_EDIT);
 }
 
 [[nodiscard]] static bool enforce_char_dam_budget(const struct obj_data* after_obj,
-												  int before_piece_dam,
-												  int portal_dam_used,
+												  int other_worn_edited_dam,
 												  std::string& err) {
-	if(portal_dam_used < 0 || !after_obj) {
+	if(other_worn_edited_dam < 0 || !after_obj) {
 		return true;
 	}
-	const int after_piece = object_edit_damroll_total(after_obj);
-	const int projected = portal_dam_used + (after_piece - before_piece_dam);
-	if(projected > kObjEditMaxDamrollEditableTotal) {
-		err = "tetto dam editabile personaggio superato (" + std::to_string(projected) + "/"
+	const int piece_dam = object_edit_damroll_edited_delta(after_obj);
+	const int total = other_worn_edited_dam + piece_dam;
+	if(total > kObjEditMaxDamrollEditableTotal) {
+		err = "tetto dam editabile personaggio superato (" + std::to_string(total) + "/"
 			  + std::to_string(kObjEditMaxDamrollEditableTotal)
-			  + "; gia acquistato via portale " + std::to_string(portal_dam_used)
-			  + ", questo pezzo "
-			  + std::to_string(before_piece_dam) + "→" + std::to_string(after_piece) + ")";
+			  + "; altri pezzi EDIT indossati +" + std::to_string(other_worn_edited_dam)
+			  + ", questo pezzo +" + std::to_string(piece_dam) + " vs proto)";
 		return false;
 	}
 	return true;
 }
 
 [[nodiscard]] static bool enforce_char_sp_budget(const struct obj_data* after_obj,
-												 int before_piece_sp,
-												 int portal_sp_used,
+												 int other_worn_edited_sp,
 												 std::string& err) {
-	if(portal_sp_used < 0 || !after_obj) {
+	if(other_worn_edited_sp < 0 || !after_obj) {
 		return true;
 	}
-	const int after_piece = object_edit_spellpower_total(after_obj);
-	const int projected = portal_sp_used + (after_piece - before_piece_sp);
-	if(projected > kObjEditMaxSpellpowerEditableTotal) {
+	const int piece_sp = object_edit_spellpower_edited_delta(after_obj);
+	const int total = other_worn_edited_sp + piece_sp;
+	if(total > kObjEditMaxSpellpowerEditableTotal) {
 		err = "tetto spellpower editabile personaggio superato (" +
-			  std::to_string(projected) + "/" +
+			  std::to_string(total) + "/" +
 			  std::to_string(kObjEditMaxSpellpowerEditableTotal)
-			  + "; gia acquistato via portale " + std::to_string(portal_sp_used)
-			  + ", questo pezzo " + std::to_string(before_piece_sp) + "→"
-			  + std::to_string(after_piece) + ")";
+			  + "; altri pezzi EDIT indossati +" + std::to_string(other_worn_edited_sp)
+			  + ", questo pezzo +" + std::to_string(piece_sp) + " vs proto)";
 		return false;
 	}
 	return true;
@@ -991,7 +981,7 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 
 bool object_quote_affect_target(struct obj_data* obj, int location, int target_modifier,
 								long& xp_raw, int& pq, std::string& err,
-								int portal_dam_used, int portal_sp_used) {
+								int other_worn_edited_dam, int other_worn_edited_sp) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -1001,20 +991,18 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		err = "impossibile clonare oggetto";
 		return false;
 	}
-	const int before_dam = object_edit_damroll_total(obj);
-	const int before_sp = object_edit_spellpower_total(obj);
 	const ObjEditAnalysis before = AnalyzeObjEdit(obj);
 	if(!apply_target_modifier(clone, location, target_modifier, err)) {
 		extract_obj(clone);
 		return false;
 	}
 	if(object_edit_location_affects_dam(location)
-	   && !enforce_char_dam_budget(clone, before_dam, portal_dam_used, err)) {
+	   && !enforce_char_dam_budget(clone, other_worn_edited_dam, err)) {
 		extract_obj(clone);
 		return false;
 	}
 	if(object_edit_location_affects_spellpower(location)
-	   && !enforce_char_sp_budget(clone, before_sp, portal_sp_used, err)) {
+	   && !enforce_char_sp_budget(clone, other_worn_edited_sp, err)) {
 		extract_obj(clone);
 		return false;
 	}
@@ -1026,30 +1014,28 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 }
 
 bool object_apply_affect_target(struct obj_data* obj, int location, int target_modifier,
-								std::string& err, int portal_dam_used,
-								int portal_sp_used) {
+								std::string& err, int other_worn_edited_dam,
+								int other_worn_edited_sp) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
 	}
 	const bool need_budget = (object_edit_location_affects_dam(location)
-							  && portal_dam_used >= 0)
+							  && other_worn_edited_dam >= 0)
 							 || (object_edit_location_affects_spellpower(location)
-								 && portal_sp_used >= 0);
+								 && other_worn_edited_sp >= 0);
 	if(need_budget) {
 		struct obj_data* clone = clone_obj(obj);
 		if(!clone) {
 			err = "impossibile clonare oggetto";
 			return false;
 		}
-		const int before_dam = object_edit_damroll_total(obj);
-		const int before_sp = object_edit_spellpower_total(obj);
 		if(!apply_target_modifier(clone, location, target_modifier, err)) {
 			extract_obj(clone);
 			return false;
 		}
-		if(!enforce_char_dam_budget(clone, before_dam, portal_dam_used, err)
-		   || !enforce_char_sp_budget(clone, before_sp, portal_sp_used, err)) {
+		if(!enforce_char_dam_budget(clone, other_worn_edited_dam, err)
+		   || !enforce_char_sp_budget(clone, other_worn_edited_sp, err)) {
 			extract_obj(clone);
 			return false;
 		}

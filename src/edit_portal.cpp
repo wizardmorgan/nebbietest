@@ -469,109 +469,84 @@ std::atomic<bool> g_http_running {false};
 }
 
 /**
- * Tetto dam/sp listino: contatore su character_stats di quanto acquistato
- * via portale (non il dam naturale/pedit sull'eq). Parti da 0 per tutti.
+ * Tetto dam/sp listino (personaggio):
+ * per ogni pezzo INDOSSATO con ITEM2_EDIT → max(0, dam_attuale − dam_prototipo).
+ * Senza flag EDIT non conta (anche se ha dam).
  */
-void ensure_portal_combat_budget_columns(DB* db) {
-	if(!db) {
-		return;
+[[nodiscard]] int sum_worn_edited_damroll_excluding(
+	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
+	const char* toon_name) {
+	int total = 0;
+	for(auto& r : rows) {
+		if(r.id == exclude_inventory_id) {
+			continue;
+		}
+		if(!inventory_row_is_worn(r.elem.wearpos)) {
+			continue;
+		}
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
+			total += object_edit_damroll_edited_delta(o);
+		}
+		extract_obj(o);
 	}
-	try {
-		db->execute(
-			"ALTER TABLE character_stats ADD COLUMN edit_eq_damroll SMALLINT NOT NULL "
-			"DEFAULT 0");
-	}
-	catch(...) {
-		/* already exists */
-	}
-	try {
-		db->execute(
-			"ALTER TABLE character_stats ADD COLUMN edit_eq_spellpower SMALLINT NOT NULL "
-			"DEFAULT 0");
-	}
-	catch(...) {
-		/* already exists */
-	}
+	return total;
 }
 
-[[nodiscard]] bool load_portal_combat_budget(unsigned long long toon_id, int& dam_used,
-											 int& sp_used) {
-	dam_used = 0;
-	sp_used = 0;
-	DB* db = Sql::getMysql();
-	if(!db || toon_id == 0) {
-		return false;
+[[nodiscard]] int sum_worn_edited_spellpower_excluding(
+	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
+	const char* toon_name) {
+	int total = 0;
+	for(auto& r : rows) {
+		if(r.id == exclude_inventory_id) {
+			continue;
+		}
+		if(!inventory_row_is_worn(r.elem.wearpos)) {
+			continue;
+		}
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
+			total += object_edit_spellpower_edited_delta(o);
+		}
+		extract_obj(o);
 	}
-	ensure_portal_combat_budget_columns(db);
-	try {
-		odb::connection_ptr cp(db->connection());
-		auto& mc = static_cast<odb::mysql::connection&>(*cp);
-		MYSQL* h = mc.handle();
-		const std::string sql =
-			"SELECT edit_eq_damroll, edit_eq_spellpower FROM character_stats WHERE "
-			"toon_id = " +
-			std::to_string(toon_id) + " LIMIT 1";
-		if(mysql_query(h, sql.c_str()) != 0) {
-			return false;
-		}
-		MYSQL_RES* res = mysql_store_result(h);
-		if(!res) {
-			return false;
-		}
-		MYSQL_ROW row = mysql_fetch_row(res);
-		if(!row) {
-			mysql_free_result(res);
-			return false;
-		}
-		dam_used = row[0] ? std::atoi(row[0]) : 0;
-		sp_used = row[1] ? std::atoi(row[1]) : 0;
-		mysql_free_result(res);
-		if(dam_used < 0) {
-			dam_used = 0;
-		}
-		if(sp_used < 0) {
-			sp_used = 0;
-		}
-		return true;
-	}
-	catch(...) {
-		return false;
-	}
+	return total;
 }
 
-[[nodiscard]] bool adjust_portal_combat_budget(unsigned long long toon_id, int dam_delta,
-											   int sp_delta) {
-	if(toon_id == 0 || (dam_delta == 0 && sp_delta == 0)) {
-		return true;
+/** Elenco pezzi indossati+EDIT che contribuiscono al tetto dam (UI). */
+[[nodiscard]] Json worn_dam_budget_contributors_json(
+	std::vector<inventory_mysql_row>& rows, const char* toon_name) {
+	Json list = Json::array();
+	for(auto& r : rows) {
+		if(!inventory_row_is_worn(r.elem.wearpos)) {
+			continue;
+		}
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
+			const int cur = object_edit_damroll_total(o);
+			const int proto = object_edit_damroll_prototype_total(o);
+			const int delta = object_edit_damroll_edited_delta(o);
+			Json c;
+			c["inventory_id"] = r.id;
+			c["short_desc"] = r.elem.sd;
+			c["current"] = cur;
+			c["proto"] = proto;
+			c["delta"] = delta;
+			c["proto_vnum"] = object_edit_prototype_vnum(o);
+			list.push_back(c);
+		}
+		extract_obj(o);
 	}
-	DB* db = Sql::getMysql();
-	if(!db) {
-		return false;
-	}
-	ensure_portal_combat_budget_columns(db);
-	int dam_used = 0;
-	int sp_used = 0;
-	if(!load_portal_combat_budget(toon_id, dam_used, sp_used)) {
-		return false;
-	}
-	dam_used = std::max(0, dam_used + dam_delta);
-	sp_used = std::max(0, sp_used + sp_delta);
-	if(dam_used > kObjEditMaxDamrollEditableTotal) {
-		dam_used = kObjEditMaxDamrollEditableTotal;
-	}
-	if(sp_used > kObjEditMaxSpellpowerEditableTotal) {
-		sp_used = kObjEditMaxSpellpowerEditableTotal;
-	}
-	try {
-		std::ostringstream upd;
-		upd << "UPDATE character_stats SET edit_eq_damroll=" << dam_used
-			<< ", edit_eq_spellpower=" << sp_used << " WHERE toon_id=" << toon_id;
-		db->execute(upd.str().c_str());
-		return true;
-	}
-	catch(...) {
-		return false;
-	}
+	return list;
 }
 
 [[nodiscard]] bool persist_inventory_affects(unsigned long long inventory_id,
@@ -1163,31 +1138,44 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["inventory_id"] = inventory_id;
 			d["short_desc"] = row->elem.sd;
 			{
-				int portal_dam = 0;
-				int portal_sp = 0;
-				if(!load_portal_combat_budget(toon_id, portal_dam, portal_sp)) {
-					portal_dam = 0;
-					portal_sp = 0;
-				}
+				const int piece_delta = object_edit_damroll_edited_delta(obj);
+				const bool piece_worn = inventory_row_is_worn(row->elem.wearpos);
+				const bool piece_edit = object_edit_counts_toward_combat_budget(
+					obj, toon_name.c_str());
+				const int other_dam = sum_worn_edited_damroll_excluding(
+					rows, inventory_id, toon_name.c_str());
+				const int piece_for_total =
+					(piece_worn && piece_edit) ? piece_delta : 0;
 
 				Json dam_budget;
-				dam_budget["piece"] = object_edit_damroll_edited_delta(obj);
+				dam_budget["piece"] = piece_delta;
 				dam_budget["piece_current"] = object_edit_damroll_total(obj);
 				dam_budget["piece_proto"] = object_edit_damroll_prototype_total(obj);
 				dam_budget["piece_proto_vnum"] = object_edit_prototype_vnum(obj);
+				dam_budget["piece_worn"] = piece_worn;
+				dam_budget["piece_edit"] = piece_edit;
 				dam_budget["piece_max"] = kObjEditMaxDamrollPerPiece;
-				dam_budget["char_total"] = portal_dam;
+				dam_budget["other"] = other_dam;
+				dam_budget["char_total"] = other_dam + piece_for_total;
 				dam_budget["char_max"] = kObjEditMaxDamrollEditableTotal;
-				dam_budget["source"] = "portal_purchased";
+				dam_budget["source"] = "worn_edit_delta_vs_proto";
+				dam_budget["contributors"] =
+					worn_dam_budget_contributors_json(rows, toon_name.c_str());
 				d["dam_budget"] = dam_budget;
 
+				const int piece_sp_delta = object_edit_spellpower_edited_delta(obj);
+				const int other_sp = sum_worn_edited_spellpower_excluding(
+					rows, inventory_id, toon_name.c_str());
+				const int piece_sp_for_total =
+					(piece_worn && piece_edit) ? piece_sp_delta : 0;
 				Json sp_budget;
-				sp_budget["piece"] = object_edit_spellpower_edited_delta(obj);
+				sp_budget["piece"] = piece_sp_delta;
 				sp_budget["piece_current"] = object_edit_spellpower_total(obj);
 				sp_budget["piece_max"] = kObjEditMaxSpellpowerPerPiece;
-				sp_budget["char_total"] = portal_sp;
+				sp_budget["other"] = other_sp;
+				sp_budget["char_total"] = other_sp + piece_sp_for_total;
 				sp_budget["char_max"] = kObjEditMaxSpellpowerEditableTotal;
-				sp_budget["source"] = "portal_purchased";
+				sp_budget["source"] = "worn_edit_delta_vs_proto";
 				d["sp_budget"] = sp_budget;
 			}
 			if(is_armor && is_weapon) {
@@ -1265,16 +1253,16 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			long xp_raw = 0;
 			int pq = 0;
 			std::string quote_err;
-			int portal_dam = 0;
-			int portal_sp = 0;
-			if(!load_portal_combat_budget(toon_id, portal_dam, portal_sp)) {
-				portal_dam = 0;
-				portal_sp = 0;
-			}
 			const int other_dam =
-				object_edit_location_affects_dam(location) ? portal_dam : -1;
+				object_edit_location_affects_dam(location)
+					? sum_worn_edited_damroll_excluding(rows, inventory_id,
+														toon_name.c_str())
+					: -1;
 			const int other_sp =
-				object_edit_location_affects_spellpower(location) ? portal_sp : -1;
+				object_edit_location_affects_spellpower(location)
+					? sum_worn_edited_spellpower_excluding(rows, inventory_id,
+														   toon_name.c_str())
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
 										   quote_err, other_dam, other_sp)) {
 				extract_obj(obj);
@@ -1427,16 +1415,16 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			long quote_xp = 0;
 			int quote_pq = 0;
 			std::string quote_err;
-			int portal_dam = 0;
-			int portal_sp = 0;
-			if(!load_portal_combat_budget(target_toon_id, portal_dam, portal_sp)) {
-				portal_dam = 0;
-				portal_sp = 0;
-			}
 			const int other_dam =
-				object_edit_location_affects_dam(location) ? portal_dam : -1;
+				object_edit_location_affects_dam(location)
+					? sum_worn_edited_damroll_excluding(rows, inventory_id,
+														target_name.c_str())
+					: -1;
 			const int other_sp =
-				object_edit_location_affects_spellpower(location) ? portal_sp : -1;
+				object_edit_location_affects_spellpower(location)
+					? sum_worn_edited_spellpower_excluding(rows, inventory_id,
+														   target_name.c_str())
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
 										   quote_pq, quote_err, other_dam, other_sp)) {
 				extract_obj(obj);
@@ -1448,8 +1436,6 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				extract_obj(obj);
 				return json_error("impossibile clonare oggetto", 500);
 			}
-			const int before_dam = object_edit_damroll_total(after);
-			const int before_sp = object_edit_spellpower_total(after);
 			extract_obj(obj);
 
 			std::string apply_err;
@@ -1485,18 +1471,6 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 			else {
 				saved = persist_inventory_affects(inventory_id, after);
-			}
-
-			if(saved) {
-				const int dam_delta = object_edit_damroll_total(after) - before_dam;
-				const int sp_delta = object_edit_spellpower_total(after) - before_sp;
-				if(!adjust_portal_combat_budget(target_toon_id, dam_delta, sp_delta)) {
-					mudlog(LOG_SYSERR,
-						   "edit_portal: salvataggio ok ma budget dam/sp non aggiornato "
-						   "(toon %llu dam%+d sp%+d)",
-						   static_cast<unsigned long long>(target_toon_id), dam_delta,
-						   sp_delta);
-				}
 			}
 
 			Json d = analyze_to_json(after);

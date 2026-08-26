@@ -1011,21 +1011,44 @@ function renderObjectEdits(entries, damBudget, spBudget) {
     hint.className = 'hint budget-banner';
     const parts = [];
     if (damBudget) {
-      parts.push(
-        `Dam acquistato via portale ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`
-      );
+      let line = `Dam editato (EDIT indossati) ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`;
+      const pc = Number(damBudget.piece_current);
+      const pp = Number(damBudget.piece_proto);
+      if (Number.isFinite(pc) && Number.isFinite(pp)) {
+        line += ` — questo pezzo ${pc} vs proto ${pp} (delta +${Number(damBudget.piece || 0)})`;
+        if (damBudget.piece_worn === false) {
+          line += ' [non indossato: non nel totale]';
+        } else if (damBudget.piece_edit === false) {
+          line += ' [senza EDIT: non nel totale]';
+        }
+      }
+      parts.push(line);
     }
     if (spBudget) {
       parts.push(
-        `Spellpower via portale ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
+        `Spellpower editato (EDIT indossati) ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
       );
     }
     hint.textContent =
       (parts.length
         ? parts.join(' · ') +
-          ' — il dam già presente sull\'eq (loot/pedit) non conta nel tetto'
+          ' — solo pezzi indossati con flag EDIT, delta vs prototipo'
         : '') || '';
     box.appendChild(hint);
+
+    const contrib = damBudget && Array.isArray(damBudget.contributors)
+      ? damBudget.contributors.filter((c) => Number(c.delta) > 0)
+      : [];
+    if (contrib.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'hint dam-budget-contributors';
+      contrib.forEach((c) => {
+        const li = document.createElement('li');
+        li.textContent = `${c.short_desc || 'oggetto'}: +${Number(c.delta)} (ora ${Number(c.current)}, proto ${Number(c.proto)})`;
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+    }
   }
 
   const grouped = new Map();
