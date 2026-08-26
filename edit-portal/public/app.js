@@ -1,6 +1,6 @@
 'use strict';
 
-const PQ_PER_MEGA_XP = 2000000;
+const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 
@@ -910,8 +910,8 @@ function renderObjectAffectSlots(affectSlots) {
 
 function objectEditSection(id) {
   if (id.startsWith('immune.')) return 'Resistenze / immunità';
-  if (['armor', 'spellfail'].includes(id)) return 'Armatura / cast';
-  if (['hitndam', 'hitnsp', 'hitroll', 'damroll', 'spellpower'].includes(id)) {
+  if (['armor'].includes(id)) return 'Armatura';
+  if (['hitndam', 'hitroll', 'damroll'].includes(id)) {
     return 'Combattimento';
   }
   return 'Caratteristiche';

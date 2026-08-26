@@ -584,21 +584,23 @@ struct ListinoRow {
 	long neg_unit_raw;
 };
 
+/**
+ * Listino portal oggetto — https://www.nebbiearcane.it/listino-edits/
+ * Solo voci presenti lì (niente CON/spellfail/spellpower fuori listino).
+ * hitndam = convenience hit+dam allo stesso valore (max = dam/hit per pezzo).
+ */
 constexpr ListinoRow kObjEditListino[] = {
 	{"str", "Forza (STR)", APPLY_STR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"dex", "Destrezza (DEX)", APPLY_DEX, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
-	{"con", "Costituzione (CON)", APPLY_CON, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"wis", "Saggezza (WIS)", APPLY_WIS, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"int", "Intelligenza (INT)", APPLY_INT, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"chr", "Carisma (CHR)", APPLY_CHR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
-	/* Massimali: https://www.nebbiearcane.it/listino-edits/ (non EditMaster). */
 	{"hitroll", "Hitroll", APPLY_HITROLL, 1, 0, kObjEditMaxHitrollPerPiece, 4500, 9000},
 	{"damroll", "Damroll", APPLY_DAMROLL, 1, 0, kObjEditMaxDamrollPerPiece, 10000, 20000},
-	{"spellpower", "Spellpower", APPLY_SPELLPOWER, 1, 0, 1, 10000, 20000},
-	{"armor", "Armatura (AC)", APPLY_AC, -5, -20, 0, 100, 100},
-	{"spellfail", "Spellfail", APPLY_SPELLFAIL, -2, -10, 0, 600, 600},
-	{"hitndam", "Hit & damage", APPLY_HITNDAM, 1, 0, kObjEditMaxDamrollPerPiece, 14500, 29000},
-	{"hitnsp", "Hit & spellpower", APPLY_HITNSP, 1, 0, 1, 14500, 29000},
+	{"armor", "Armatura (AC)", APPLY_AC, kObjEditArmorStep, kObjEditArmorMinTotal,
+	 kObjEditArmorMaxTotal, kObjEditArmorUnitRaw, kObjEditArmorUnitRaw},
+	{"hitndam", "Hit & damage", APPLY_HITNDAM, 1, 0, kObjEditMaxDamrollPerPiece, 14500,
+	 29000},
 };
 
 constexpr int kObjEditListinoCount =
