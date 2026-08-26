@@ -9,6 +9,7 @@
 #include <string>
 
 #include "autoenums.hpp"
+#include "act.wizard.hpp"
 #include "edit_pool.hpp"
 #include "edit_system_config.hpp"
 #include "flags.hpp"
