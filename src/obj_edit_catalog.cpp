@@ -147,7 +147,7 @@ const CatalogEntry kScalarCatalog[] = {
 	return true;
 }
 
-bool inventory_row_is_worn(ubyte wearpos) noexcept {
+bool inventory_row_is_worn(int wearpos) noexcept {
 	return wearpos > 0;
 }
 
