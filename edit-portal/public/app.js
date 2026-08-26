@@ -2,6 +2,7 @@
 
 const PQ_PER_MEGA_XP = 2000000;
 const PRINCE_LEVEL = 51;
+const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 
 let session = null;
 let targetToonId = null;
@@ -12,6 +13,37 @@ let selectedObjectOptions = null;
 let pendingEdit = null;
 
 const $ = (id) => document.getElementById(id);
+
+function getTargetToonId() {
+  const fromSelect = Number($('target-toon')?.value);
+  if (fromSelect > 0) return fromSelect;
+  return Number(session?.sessionToonId || targetToonId || 0);
+}
+
+function restoreSavedLogin() {
+  try {
+    const raw = localStorage.getItem(LOGIN_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved?.remember) return;
+    if (saved.email) $('login-email').value = saved.email;
+    if (saved.password) $('login-password').value = saved.password;
+    $('login-remember').checked = true;
+  } catch {
+    localStorage.removeItem(LOGIN_STORAGE_KEY);
+  }
+}
+
+function persistLogin(email, password, remember) {
+  if (!remember) {
+    localStorage.removeItem(LOGIN_STORAGE_KEY);
+    return;
+  }
+  localStorage.setItem(
+    LOGIN_STORAGE_KEY,
+    JSON.stringify({ remember: true, email, password }),
+  );
+}
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -243,9 +275,12 @@ async function loadTargetToons() {
     opt.textContent = `${t.name} (lv ${t.max_level ?? '?'})`;
     sel.appendChild(opt);
   });
-  targetToonId = Number(sel.value);
+  if (session.sessionToonId) {
+    sel.value = String(session.sessionToonId);
+  }
+  targetToonId = getTargetToonId();
   sel.onchange = async () => {
-    targetToonId = Number(sel.value);
+    targetToonId = getTargetToonId();
     pendingEdit = null;
     updatePaymentUI();
     await loadCharacterState();
@@ -267,6 +302,11 @@ function hideApiWarn() {
 
 async function loadCharacterState() {
   hideApiWarn();
+  targetToonId = getTargetToonId();
+  if (!targetToonId) {
+    $('char-stats').textContent = 'Personaggio non selezionato';
+    return;
+  }
   const data = await api(`/api/character-state/${targetToonId}`);
   if (!data.ok) {
     charState = null;
@@ -449,11 +489,21 @@ async function queueResistanceQuote(damageType, value, label, selectEl) {
 }
 
 async function loadInventory() {
-  targetToonId = Number($('target-toon').value);
+  targetToonId = getTargetToonId();
   const prevSelected = selectedInventoryId;
+  if (!targetToonId) {
+    showApiWarn('Personaggio target non selezionato — ricarica la pagina o cambia personaggio');
+    return;
+  }
   const data = await api(`/api/inventory/${targetToonId}`);
   const list = $('inventory-list');
   list.innerHTML = '';
+
+  if (!data.ok) {
+    showApiWarn(data.error || 'Errore caricamento inventario');
+    $('inventory-empty').classList.add('hidden');
+    return;
+  }
 
   if (data.mystErrors && data.mystErrors.length) {
     showApiWarn(`API myst: ${data.mystErrors.join(' · ')}`);
@@ -470,11 +520,31 @@ async function loadInventory() {
   }
 
   const items = data.items || [];
-  const editableCount = Number(data.editable_count ?? items.filter((i) => i.editable).length);
-  $('inventory-empty').classList.toggle('hidden', items.length > 0);
+  const editableCount = Number(
+    data.editable_count ?? items.filter((i) => i.editable).length,
+  );
+  const mysqlCount = Number(data.mysql_count ?? 0);
+  const emptyEl = $('inventory-empty');
+  emptyEl.classList.toggle('hidden', items.length > 0);
+  if (!items.length) {
+    if (mysqlCount > 0 && data.inventory_source === 'myst_empty') {
+      emptyEl.textContent =
+        'MySQL ha ' +
+        mysqlCount +
+        ' oggetti ma myst non li ha restituito: verifica list_index o ricompila myst.';
+      emptyEl.classList.remove('hidden');
+    } else {
+      emptyEl.textContent =
+        'Nessun oggetto in inventario MySQL per questo PG (logout in-game per salvare).';
+    }
+  }
 
   if (items.length && editableCount === 0) {
     showApiWarn('Inventario caricato: nessun oggetto editabile (vedi motivi nella lista).');
+  } else if (data.inventory_source === 'mysql_fallback') {
+    showApiWarn(
+      'Elenco da MySQL: myst non disponibile — selezione edit non attiva finché myst non risponde.',
+    );
   }
 
   items.forEach((it) => {
@@ -733,17 +803,18 @@ async function confirmPayEdit() {
 $('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('login-error').textContent = '';
+  const email = $('login-email').value.trim();
+  const password = $('login-password').value;
+  const remember = $('login-remember').checked;
   const data = await api('/api/login', {
     method: 'POST',
-    body: JSON.stringify({
-      email: $('login-email').value,
-      password: $('login-password').value,
-    }),
+    body: JSON.stringify({ email, password }),
   });
   if (!data.ok) {
     $('login-error').textContent = data.error || 'login fallito';
     return;
   }
+  persistLogin(email, password, remember);
   await refreshMe();
 });
 
@@ -807,4 +878,5 @@ $('btn-inst-search').onclick = async () => {
   });
 };
 
+restoreSavedLogin();
 refreshMe();

@@ -5023,9 +5023,6 @@ bool load_character_inventory_mysql(unsigned long long toon_id,
 
 	while(MYSQL_ROW row = mysql_fetch_row(res)) {
 		const int idx = static_cast<int>(sql_to_ll(row[1], -1));
-		if(idx < 0 || idx >= MAX_OBJ_SAVE) {
-			continue;
-		}
 		inventory_mysql_row inv_row {};
 		inv_row.id = static_cast<unsigned long long>(sql_to_ll(row[0], 0));
 		inv_row.list_index = idx;

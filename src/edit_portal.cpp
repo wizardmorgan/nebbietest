@@ -783,9 +783,14 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 		if(path == "/internal/list-inventory") {
 			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			if(toon_id == 0) {
+				return json_error("toon_id richiesto", 400);
+			}
 			const std::string toon_name = toon_name_by_id(toon_id);
 			std::vector<inventory_mysql_row> rows;
-			load_character_inventory_mysql(toon_id, rows);
+			if(!load_character_inventory_mysql(toon_id, rows)) {
+				return json_error("impossibile leggere character_inventory da MySQL", 500);
+			}
 			Json items = Json::array();
 			int editable_count = 0;
 			for(const auto& r : rows) {
