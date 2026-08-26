@@ -17,10 +17,10 @@ bin_has_marker() {
 }
 
 echo "=== sorgente ==="
-if grep -q 'portal_api_version' src/edit_portal.cpp 2>/dev/null; then
-	echo "OK: src/edit_portal.cpp contiene portal_api_version"
+if grep -qE 'portal_api_version|kEditPortalApiVersion' src/edit_portal.cpp src/edit_portal.hpp 2>/dev/null; then
+	echo "OK: edit_portal espone portal_api_version"
 else
-	fail "src/edit_portal.cpp vecchio — git pull/merge feature/edit-portal"
+	fail "src/edit_portal.cpp/.hpp vecchio — git pull/merge feature/edit-portal"
 fi
 
 echo ""
