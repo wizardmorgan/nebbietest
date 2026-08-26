@@ -161,6 +161,26 @@ force_cleanup_myst() {
 	fi
 }
 
+mudcompiler_container_mount() {
+	local mudc="$1"
+	docker inspect "$mudc" --format '{{range .Mounts}}{{if eq .Destination "/app"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true
+}
+
+ensure_mudcompiler_mount() {
+	local mudc mount expected
+	expected="$(cd "$MUD_APP_ROOT" && pwd)"
+	if ! mudc="$(find_mudcompiler_container)"; then
+		return 0
+	fi
+	mount="$(mudcompiler_container_mount "$mudc")"
+	if [ -n "$mount" ] && [ "$mount" != "$expected" ]; then
+		echo "ATTENZIONE: container mudcompiler monta $mount" >&2
+		echo "  atteso: $expected (MUD_APP_ROOT)" >&2
+		echo "  Ricreo il container (bind mount fissato alla creazione)..." >&2
+		docker rm -f "$mudc"
+	fi
+}
+
 cleanup_orphan_mudcompiler_runs() {
 	local ids
 	ids="$(docker ps -aq --filter 'name=server-mudcompiler-run' 2>/dev/null || true)"
@@ -330,9 +350,53 @@ cmd_deploy_edit() {
 
 cmd_rebuild_myst() {
 	cmd_build
+	ensure_mudcompiler_mount
+	ensure_mudcompiler_container
 	cmd_stop_mud
 	cmd_start_mud
-	echo "myst ricompilato e riavviato."
+	echo ""
+	echo "Verifica: ./scripts/verify-myst-portal.sh"
+}
+
+cmd_doctor() {
+	local mudc mount expected host_md5 cont_md5
+	expected="$(cd "$MUD_APP_ROOT" && pwd)"
+	print_header "Git"
+	if [ -d "$EDIT_REPO/.git" ]; then
+		echo "  branch: $(cd "$EDIT_REPO" && git branch --show-current)"
+		echo "  HEAD:   $(cd "$EDIT_REPO" && git rev-parse --short HEAD)"
+		git -C "$EDIT_REPO" status -sb | head -5
+	fi
+	print_header "Path config"
+	echo "  MUD_APP_ROOT: $expected"
+	if [ -f "$expected/mudroot/myst" ]; then
+		host_md5="$(md5sum "$expected/mudroot/myst" | awk '{print $1}')"
+		echo "  host mudroot/myst: $(ls -la "$expected/mudroot/myst" | awk '{print $5, $6, $7, $8}') md5=$host_md5"
+	else
+		echo "  host mudroot/myst: MANCANTE"
+	fi
+	print_header "Container mudcompiler"
+	if mudc="$(find_mudcompiler_container)"; then
+		mount="$(mudcompiler_container_mount "$mudc")"
+		echo "  container: $mudc"
+		echo "  mount /app: ${mount:-?}"
+		if [ "$mount" != "$expected" ]; then
+			print_warn "MOUNT DIVERSO da MUD_APP_ROOT — build e processo vedono directory diverse"
+			echo "  Fix: docker rm -f mudcompiler && ./scripts/mud-dev.sh rebuild-myst"
+		fi
+		cont_md5="$(docker exec "$mudc" md5sum /app/mudroot/myst 2>/dev/null | awk '{print $1}' || true)"
+		echo "  container myst md5: ${cont_md5:-n/a}"
+		if [ -n "$host_md5" ] && [ -n "$cont_md5" ] && [ "$host_md5" != "$cont_md5" ]; then
+			print_warn "MD5 host != container — myst in esecuzione non è il binario appena compilato"
+		fi
+		docker exec "$mudc" pgrep -a myst 2>/dev/null || echo "  myst non in esecuzione"
+	else
+		print_warn "nessun container mudcompiler"
+	fi
+	print_header "API ping"
+	curl -sf -X POST "http://localhost:${EDIT_API_PORT}/internal/ping" \
+		-H "x-edit-api-secret: ${EDIT_API_SECRET}" \
+		-H "Content-Type: application/json" -d '{}' | python3 -m json.tool 2>/dev/null || echo "(ping fallito)"
 }
 
 cmd_update_all() {
@@ -378,6 +442,7 @@ ensure_mysql_stack() {
 ensure_mudcompiler_container() {
 	local mudc stopped_line
 	cleanup_orphan_mudcompiler_runs
+	ensure_mudcompiler_mount
 
 	if mudc="$(find_mudcompiler_container)"; then
 		echo "Container mudcompiler già attivo: $mudc"
@@ -610,7 +675,8 @@ UPDATE (sync + build)
   update-edit     sync-edit + build-edit
   update-all      sync-all + build myst + build-edit
   deploy-edit     sync-edit + build myst + build-edit + start (workflow portale)
-  rebuild-myst    build myst + stop-mud + start-mud (dopo merge, senza pull)
+  doctor          diagnostica mount/build/myst (perché il deploy fallisce)
+  rebuild-myst    build + ricrea container se mount errato + riavvia myst
 
 AVVIO / STOP
   start           myst (con edit API) + edit-portal + status
@@ -654,6 +720,7 @@ main() {
 	update-edit) cmd_update_edit ;;
 	deploy-edit) cmd_deploy_edit ;;
 	rebuild-myst) cmd_rebuild_myst ;;
+	doctor) cmd_doctor ;;
 	update-all) cmd_update_all ;;
 	dev) cmd_dev ;;
 	start) cmd_start ;;
