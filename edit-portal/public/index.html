@@ -48,37 +48,45 @@
       <div class="layout">
         <aside class="sidebar">
           <div class="card">
-            <h2>Personaggio</h2>
+            <h2>Personaggio target</h2>
+            <p id="session-role-hint" class="hint"></p>
             <div id="target-toon-wrap" class="field-label hidden">
-              <label>Target staff
-                <select id="target-toon"></select>
+              <label>Cerca personaggio (staff)
+                <input type="search" id="target-toon-search" placeholder="Digita almeno 2 lettere del nome…" autocomplete="off" />
               </label>
+              <label class="target-select-label">Seleziona dalla lista
+                <select id="target-toon" size="8">
+                  <option value="">— cerca un nome sopra —</option>
+                </select>
+              </label>
+              <p class="hint">Il personaggio di sessione (in alto) serve solo per i permessi staff. Qui scegli <strong>su chi</strong> lavori: inventario, edit oggetti e pagamento.</p>
             </div>
             <div id="char-stats" class="char-stats"></div>
           </div>
 
           <div class="card" id="char-edit-card">
-            <h2>Edit sul personaggio</h2>
-            <p class="hint">Pool (hit, mana, move, regen) e resistenze configurati sul PG.</p>
+            <h2>Edit sul personaggio target</h2>
+            <p class="hint">Pool (hit, mana, move, regen) e resistenze sul PG selezionato sopra — non sul login staff.</p>
             <div id="pool-edits"></div>
             <div id="resistance-edits"></div>
           </div>
         </aside>
 
         <div class="main-column">
-          <div class="card">
+          <div class="card" id="inventory-card">
             <div class="card-header">
-              <h2>Inventario</h2>
+              <h2 id="inventory-title">Inventario</h2>
               <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
             </div>
+            <p id="inventory-target-hint" class="hint"></p>
             <ul id="inventory-list" class="inventory-list"></ul>
-          <p class="hint">Tipi abilitati dallo staff: visibili e editabili. Food/potion sempre nascosti. Oggetti già editati (flag EDIT) del PG sono sempre inclusi.</p>
+            <p class="hint">Visibilità tipi: impostata dallo staff in basso (categorie). Food/potion sempre nascosti. Oggetti già editati del PG restano ri-editabili.</p>
             <p id="inventory-empty" class="hint hidden">Nessun oggetto in inventario MySQL per questo PG.</p>
           </div>
 
           <div class="card" id="object-detail-card">
             <h2>Oggetto selezionato</h2>
-            <div id="quote-box" class="quote-box">Seleziona un oggetto editabile dall'inventario.</div>
+            <div id="quote-box" class="quote-box">Seleziona un oggetto editabile dall'inventario del personaggio target.</div>
             <div id="object-affect-slots" class="object-affect-slots hidden"></div>
             <div id="object-edits" class="object-edits"></div>
           </div>
@@ -87,6 +95,7 @@
 
       <div id="payment-panel" class="card payment-panel hidden">
         <h2>Pagamento edit</h2>
+        <p class="hint">Il costo viene scalato dal <strong>personaggio target</strong> (MXP / Runes), non dal login staff.</p>
         <div id="payment-summary" class="payment-summary"></div>
         <div class="payment-controls">
           <label class="field-label">Metodo
@@ -108,25 +117,46 @@
 
       <div id="staff-panel" class="card hidden">
         <h2>Staff — configurazione sistema</h2>
+
         <div class="portal-categories card-inner">
           <h3>Categorie oggetto nel portale</h3>
-          <p class="hint">Spunta = tipo visibile nell'inventario e editabile. Senza spunta = nascosto. Food, potion e clan symbol non sono configurabili (sempre nascosti). Gli oggetti con flag EDIT del PG restano sempre visibili per ri-edit.</p>
+          <p class="hint">Spunta = quel tipo ITEM compare nell'inventario del <strong>personaggio target</strong> ed è editabile. Senza spunta = nascosto. Food, potion e clan symbol non sono configurabili. Gli oggetti con flag EDIT del PG restano sempre ri-editabili.</p>
           <p id="myst-version-warn" class="msg warn hidden"></p>
           <div id="portal-category-toggles" class="checkbox-grid"></div>
           <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
           <p id="portal-cat-result" class="msg"></p>
         </div>
-        <p class="hint">Parametri object vs character in <code>edit_system.json</code>.</p>
-        <textarea id="system-config-editor" rows="14" spellcheck="false"></textarea>
-        <div class="btn-row">
-          <button id="btn-load-config" class="btn-secondary" type="button">Carica config</button>
-          <button id="btn-save-config" class="btn-secondary" type="button">Salva config</button>
+
+        <div class="card-inner">
+          <h3>Routing edit: oggetto vs personaggio</h3>
+          <p class="hint">
+            Questo JSON (<code>edit_system.json</code>) decide <strong>dove</strong> va ogni tipo di edit:
+            <code>target: "object"</code> = affect sull'equipaggiamento;
+            <code>target: "character"</code> = valore sul PG (pool hit/mana/move o resistenza in tabella).
+            Non è l'inventario: è la regola di sistema. Di solito lo lasci così e usi le checkbox categorie sopra.
+          </p>
+          <textarea id="system-config-editor" rows="12" spellcheck="false"></textarea>
+          <div class="btn-row">
+            <button id="btn-load-config" class="btn-secondary" type="button">Ricarica JSON</button>
+            <button id="btn-save-config" class="btn-secondary" type="button">Salva JSON</button>
+          </div>
+          <p id="config-result" class="msg"></p>
         </div>
-        <p id="config-result" class="msg"></p>
-        <h3>object_instance</h3>
-        <input id="inst-search" placeholder="cerca owner / desc / id" />
-        <button id="btn-inst-search" class="btn-secondary" type="button">Cerca</button>
-        <ul id="inst-list"></ul>
+
+        <div class="card-inner">
+          <h3>Consultazione object_instance</h3>
+          <p class="hint">
+            Tabella MySQL degli oggetti <strong>già personalizzati</strong> (editati) salvati nel mondo:
+            ogni riga ha un id istanza, vnum base, owner e descrizione.
+            Serve allo staff per <strong>cercare</strong> un pezzo editato (es. owner = Venus) — non sostituisce l'inventario del target sopra.
+            Per editare un oggetto usa l'inventario del personaggio target (deve essere offline).
+          </p>
+          <div class="btn-row">
+            <input id="inst-search" placeholder="cerca owner / descrizione / id istanza" />
+            <button id="btn-inst-search" class="btn-secondary" type="button">Cerca istanze</button>
+          </div>
+          <ul id="inst-list" class="inst-list"></ul>
+        </div>
       </div>
     </section>
   </main>

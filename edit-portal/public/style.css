@@ -424,6 +424,40 @@ textarea {
   background: var(--bg);
 }
 
+.inventory-list .item-meta {
+  color: var(--muted);
+  font-size: 0.88em;
+}
+
+.inventory-list .item-name .mud-color,
+.quote-name .mud-color,
+.inst-list .mud-color {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+.quote-name {
+  margin-bottom: 0.5rem;
+  font-size: 1.05rem;
+}
+
+.target-select-label select {
+  min-height: 10rem;
+}
+
+.inst-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.inst-list li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
 .quote-box {
   background: var(--bg);
   border: 1px solid var(--border);
