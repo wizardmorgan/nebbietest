@@ -917,17 +917,16 @@ function objectEditSection(id) {
   return 'Caratteristiche';
 }
 
+/** Opzioni listino: min/max inclusivi, step in valore assoluto (AC step -5 → -20…0). */
 function buildObjectScalarOptions(entry) {
   const min = Number(entry.min);
   const max = Number(entry.max);
-  const step = Number(entry.step) || 1;
+  const absStep = Math.abs(Number(entry.step)) || 1;
+  const lo = Math.min(min, max);
+  const hi = Math.max(min, max);
   const opts = [];
-  if (step < 0) {
-    for (let v = min; v >= max; v += step) opts.push(v);
-  } else if (min <= max) {
-    for (let v = min; v <= max; v += step) opts.push(v);
-  } else {
-    for (let v = min; v >= max; v -= Math.abs(step)) opts.push(v);
+  for (let v = lo; v <= hi; v += absStep) {
+    opts.push(v);
   }
   return opts;
 }
@@ -1079,6 +1078,11 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
   });
   if (!data.ok) {
     alert(data.error || 'Quote oggetto fallita');
+    if (selectEl) {
+      const cur = Number(entry.current || 0);
+      selectEl.value = String(cur);
+    }
+    clearObjectPending(entry.id);
     return;
   }
   const qd = data.data;
