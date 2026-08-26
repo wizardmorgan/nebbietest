@@ -854,7 +854,7 @@ async function selectItem(inventoryId, li) {
     lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
 
   renderObjectAffectSlots(d.affect_slots);
-  renderObjectEdits(d.entries || [], d.dam_budget);
+  renderObjectEdits(d.entries || [], d.dam_budget, d.sp_budget);
 }
 
 function renderObjectAffectSlots(affectSlots) {
@@ -910,8 +910,8 @@ function renderObjectAffectSlots(affectSlots) {
 
 function objectEditSection(id) {
   if (id.startsWith('immune.')) return 'Resistenze / immunità';
-  if (['armor'].includes(id)) return 'Armatura';
-  if (['hitndam', 'hitroll', 'damroll'].includes(id)) {
+  if (['armor', 'spellfail'].includes(id)) return 'Armatura / cast';
+  if (['hitndam', 'hitnsp', 'hitroll', 'damroll', 'spellpower'].includes(id)) {
     return 'Combattimento';
   }
   return 'Caratteristiche';
@@ -969,7 +969,7 @@ function clearObjectPending(entryId) {
   }
 }
 
-function renderObjectEdits(entries, damBudget) {
+function renderObjectEdits(entries, damBudget, spBudget) {
   const box = $('object-edits');
   box.innerHTML = '';
 
@@ -986,14 +986,21 @@ function renderObjectEdits(entries, damBudget) {
   title.textContent = 'Edit sull\'oggetto';
   box.appendChild(title);
 
-  if (damBudget) {
+  if (damBudget || spBudget) {
     const hint = document.createElement('p');
     hint.className = 'hint';
-    const charTotal = Number(damBudget.char_total || 0);
-    const charMax = Number(damBudget.char_max || 30);
-    const pieceMax = Number(damBudget.piece_max || 2);
-    hint.textContent =
-      `Dam editabile: ${charTotal}/${charMax} sul personaggio · max ${pieceMax} per pezzo (listino ufficiale).`;
+    const parts = [];
+    if (damBudget) {
+      parts.push(
+        `Dam ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`
+      );
+    }
+    if (spBudget) {
+      parts.push(
+        `Spellpower ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
+      );
+    }
+    hint.textContent = parts.join(' · ');
     box.appendChild(hint);
   }
 

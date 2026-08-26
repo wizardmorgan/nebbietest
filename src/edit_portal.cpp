@@ -485,6 +485,24 @@ std::atomic<bool> g_http_running {false};
 	return total;
 }
 
+/** Somma spellpower effettivo (SPELLPOWER+HITNSP) su inventario, escluso un id. */
+[[nodiscard]] int sum_inventory_spellpower_excluding(
+	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id) {
+	int total = 0;
+	for(auto& r : rows) {
+		if(r.id == exclude_inventory_id) {
+			continue;
+		}
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		total += object_edit_spellpower_total(o);
+		extract_obj(o);
+	}
+	return total;
+}
+
 [[nodiscard]] bool persist_inventory_affects(unsigned long long inventory_id,
 											 const struct obj_data* obj) {
 	DB* db = Sql::getMysql();
@@ -1080,6 +1098,17 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				dam_budget["char_total"] = other_dam + piece_dam;
 				dam_budget["char_max"] = kObjEditMaxDamrollEditableTotal;
 				d["dam_budget"] = dam_budget;
+
+				const int piece_sp = object_edit_spellpower_total(obj);
+				const int other_sp =
+					sum_inventory_spellpower_excluding(rows, inventory_id);
+				Json sp_budget;
+				sp_budget["piece"] = piece_sp;
+				sp_budget["piece_max"] = kObjEditMaxSpellpowerPerPiece;
+				sp_budget["other"] = other_sp;
+				sp_budget["char_total"] = other_sp + piece_sp;
+				sp_budget["char_max"] = kObjEditMaxSpellpowerEditableTotal;
+				d["sp_budget"] = sp_budget;
 			}
 			if(is_armor && is_weapon) {
 				d["item_type"] = "armor+weapon";
@@ -1142,8 +1171,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				object_edit_location_affects_dam(location)
 					? sum_inventory_damroll_excluding(rows, inventory_id)
 					: -1;
+			const int other_sp =
+				object_edit_location_affects_spellpower(location)
+					? sum_inventory_spellpower_excluding(rows, inventory_id)
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
-										   quote_err, other_dam)) {
+										   quote_err, other_dam, other_sp)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -1252,8 +1285,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				object_edit_location_affects_dam(location)
 					? sum_inventory_damroll_excluding(rows, inventory_id)
 					: -1;
+			const int other_sp =
+				object_edit_location_affects_spellpower(location)
+					? sum_inventory_spellpower_excluding(rows, inventory_id)
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
-										   quote_pq, quote_err, other_dam)) {
+										   quote_pq, quote_err, other_dam, other_sp)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -1267,7 +1304,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 			std::string apply_err;
 			if(!object_apply_affect_target(after, location, target_modifier, apply_err,
-										   other_dam)) {
+										   other_dam, other_sp)) {
 				extract_obj(after);
 				return json_error(apply_err.c_str(), 400);
 			}

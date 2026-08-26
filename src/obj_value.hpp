@@ -59,13 +59,15 @@ inline constexpr long kObjValuePriceExp = 2000000L;
 inline constexpr double kObjValueClassMultBi = 1.5;
 inline constexpr double kObjValueClassMultTri = 2.0;
 
-/** Massimo listino edits per pezzo (STR/WIS/INT/DEX/CHR). */
+/** Massimo listino edits per pezzo (STR/CON/WIS/INT/DEX/CHR). */
 inline constexpr int kObjEditMaxStatPerPiece = 3;
 
-/** Damroll/hitroll per pezzo e tetto dam editabile sul personaggio (listino ufficiale). */
+/** Damroll/hitroll/spellpower per pezzo; tetti editabili sul personaggio. */
 inline constexpr int kObjEditMaxDamrollPerPiece = 2;
 inline constexpr int kObjEditMaxHitrollPerPiece = 2;
+inline constexpr int kObjEditMaxSpellpowerPerPiece = 2; /* come damroll */
 inline constexpr int kObjEditMaxDamrollEditableTotal = 30;
+inline constexpr int kObjEditMaxSpellpowerEditableTotal = 30; /* come damroll */
 
 /** Armor: step −10, fino a −40 per pezzo (listino ufficiale). */
 inline constexpr int kObjEditArmorStep = -10;
@@ -73,6 +75,12 @@ inline constexpr int kObjEditArmorMinTotal = -40;
 inline constexpr int kObjEditArmorMaxTotal = 0;
 /** Raw CheckValueObj per 1 punto AC (1 MXP → 10 MXP per step −10). */
 inline constexpr long kObjEditArmorUnitRaw = 100;
+
+/** Spellfail: step −2, fino a −10; costo = 2× armor per punto. */
+inline constexpr int kObjEditSpellfailStep = -2;
+inline constexpr int kObjEditSpellfailMinTotal = -10;
+inline constexpr int kObjEditSpellfailMaxTotal = 0;
+inline constexpr long kObjEditSpellfailUnitRaw = kObjEditArmorUnitRaw * 2;
 
 /** Listino portal: 1 MXP listino = 1 Rune (alternativa pagamento). */
 inline constexpr long kObjEditRunePerMegaXp = 1000000L;
