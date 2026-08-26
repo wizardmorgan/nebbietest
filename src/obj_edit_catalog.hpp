@@ -82,6 +82,20 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 /** Spellpower effettivo sul pezzo (SPELLPOWER + HITNSP). */
 [[nodiscard]] int object_edit_spellpower_total(const struct obj_data* obj) noexcept;
 
+/**
+ * Dam/SP *editato* = max(0, totale_pezzo − totale_prototipo).
+ * Conta solo il bonus aggiunto rispetto all'originale.
+ */
+[[nodiscard]] int object_edit_damroll_edited_delta(const struct obj_data* obj) noexcept;
+[[nodiscard]] int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept;
+
+/**
+ * true se il pezzo entra nel tetto dam/sp personaggio:
+ * ITEM2_EDIT + owner lock (ED / personal_owner) del toon.
+ */
+[[nodiscard]] bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
+														  const char* toon_name) noexcept;
+
 /** true se location può cambiare il dam effettivo del pezzo. */
 [[nodiscard]] bool object_edit_location_affects_dam(int location) noexcept;
 

@@ -37,6 +37,8 @@ struct index_data {
 
 extern int top_of_objt;
 extern struct index_data* obj_index;
+extern struct obj_data* read_object(int nr, int type);
+extern int real_object(int iVNum);
 
 struct obj_data* clone_obj(struct obj_data* obj);
 
@@ -796,19 +798,93 @@ int object_edit_spellpower_total(const struct obj_data* obj) noexcept {
 	return combat_spellpower_total(obj);
 }
 
+[[nodiscard]] static int resolve_edit_prototype_vnum(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return 0;
+	}
+	int iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
+	const bool useOriginal =
+		(IS_OBJ_STAT2(obj, ITEM2_PERSONAL) || IS_OBJ_STAT2(obj, ITEM2_EDIT)) &&
+		obj->char_vnum > 0 && static_cast<int>(obj->char_vnum) != iVNum;
+	if(useOriginal) {
+		return static_cast<int>(obj->char_vnum);
+	}
+	/* object_instance: prefer base world vnum when available. */
+	const int base = object_instance_resolve_base_vnum(obj);
+	if(base > 0) {
+		return base;
+	}
+	return iVNum;
+}
+
+[[nodiscard]] static struct obj_data* load_edit_prototype(const struct obj_data* obj) {
+	const int iVNum = resolve_edit_prototype_vnum(obj);
+	if(iVNum <= 0) {
+		return nullptr;
+	}
+	const int rNum = real_object(iVNum);
+	if(rNum < 0) {
+		return nullptr;
+	}
+	return read_object(rNum, REAL);
+}
+
+int object_edit_damroll_edited_delta(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return 0;
+	}
+	const int cur = combat_damroll_total(obj);
+	struct obj_data* proto = load_edit_prototype(obj);
+	if(!proto) {
+		return 0;
+	}
+	const int base = combat_damroll_total(proto);
+	extract_obj(proto);
+	return std::max(0, cur - base);
+}
+
+int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return 0;
+	}
+	const int cur = combat_spellpower_total(obj);
+	struct obj_data* proto = load_edit_prototype(obj);
+	if(!proto) {
+		return 0;
+	}
+	const int base = combat_spellpower_total(proto);
+	extract_obj(proto);
+	return std::max(0, cur - base);
+}
+
+bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
+											 const char* toon_name) noexcept {
+	if(!obj || !toon_name || !*toon_name) {
+		return false;
+	}
+	if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return false;
+	}
+	if(obj->personal_owner[0] != '\0') {
+		return strcasecmp(obj->personal_owner, toon_name) == 0;
+	}
+	const std::string ed = object_instance_extract_ed_owner(obj->name);
+	return !ed.empty() && strcasecmp(ed.c_str(), toon_name) == 0;
+}
+
 [[nodiscard]] static bool enforce_char_dam_budget(const struct obj_data* after_obj,
 												  int owner_dam_excluding_this,
 												  std::string& err) {
 	if(owner_dam_excluding_this < 0 || !after_obj) {
 		return true;
 	}
-	const int piece_dam = combat_damroll_total(after_obj);
+	const int piece_dam = object_edit_damroll_edited_delta(after_obj);
 	const int total = owner_dam_excluding_this + piece_dam;
 	if(total > kObjEditMaxDamrollEditableTotal) {
 		err = "tetto dam editabile personaggio superato (" + std::to_string(total) + "/"
 			  + std::to_string(kObjEditMaxDamrollEditableTotal)
-			  + "; altri pezzi " + std::to_string(owner_dam_excluding_this)
-			  + ", questo pezzo " + std::to_string(piece_dam) + ")";
+			  + "; altri pezzi editati " + std::to_string(owner_dam_excluding_this)
+			  + ", questo pezzo +" + std::to_string(piece_dam) + " vs proto)";
 		return false;
 	}
 	return true;
@@ -820,13 +896,13 @@ int object_edit_spellpower_total(const struct obj_data* obj) noexcept {
 	if(owner_sp_excluding_this < 0 || !after_obj) {
 		return true;
 	}
-	const int piece_sp = combat_spellpower_total(after_obj);
+	const int piece_sp = object_edit_spellpower_edited_delta(after_obj);
 	const int total = owner_sp_excluding_this + piece_sp;
 	if(total > kObjEditMaxSpellpowerEditableTotal) {
 		err = "tetto spellpower editabile personaggio superato (" + std::to_string(total)
 			  + "/" + std::to_string(kObjEditMaxSpellpowerEditableTotal)
-			  + "; altri pezzi " + std::to_string(owner_sp_excluding_this)
-			  + ", questo pezzo " + std::to_string(piece_sp) + ")";
+			  + "; altri pezzi editati " + std::to_string(owner_sp_excluding_this)
+			  + ", questo pezzo +" + std::to_string(piece_sp) + " vs proto)";
 		return false;
 	}
 	return true;
