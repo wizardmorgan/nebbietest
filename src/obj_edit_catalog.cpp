@@ -25,24 +25,6 @@
 
 namespace Alarmud {
 
-struct index_data {
-	int iVNum;
-	long pos;
-	int number;
-	genericspecial_func func;
-	const char* specname;
-	char* specparms;
-	void* data;
-	char* name;
-	char* short_desc;
-	char* long_desc;
-};
-
-extern int top_of_objt;
-extern struct index_data* obj_index;
-extern struct obj_data* read_object(int nr, int type);
-extern int real_object(int iVNum);
-
 struct obj_data* clone_obj(struct obj_data* obj);
 
 [[nodiscard]] static bool proto_vnum_is_tan(int vnum) noexcept {
