@@ -18,6 +18,9 @@ using Json = nlohmann::json;
 
 [[nodiscard]] bool object_is_tanned(const struct obj_data* obj) noexcept;
 
+/** Slug e_item_type senza ITEM_ (es. armor, weapon). nullptr se ITEM_NONE o non mappato. */
+[[nodiscard]] const char* object_portal_item_type_slug(int item_type) noexcept;
+
 /** Motivo se non editabile (stringa vuota se editabile). */
 [[nodiscard]] std::string object_portal_skip_reason(const struct obj_data* obj,
 												  const char* toon_name);
@@ -33,8 +36,11 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 														const char* toon_name) noexcept;
 
-/** Catalogo edit oggetto (listino obj_value; pool PG esclusi sull'eq). */
-[[nodiscard]] Json object_edit_catalog_json(bool is_armor, bool is_weapon);
+/** Slot affect occupati / liberi (MAX_OBJ_AFFECT). */
+[[nodiscard]] Json object_affect_slots_json(const struct obj_data* obj);
+
+/** Catalogo edit oggetto (listino obj_value CheckValueObj; pool PG esclusi sull'eq). */
+[[nodiscard]] Json object_edit_catalog_json(const struct obj_data* obj);
 
 /**
  * Simula un affect target sull'oggetto e restituisce delta costo vs stato attuale
@@ -51,7 +57,14 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] int object_affect_current_modifier(const struct obj_data* obj,
 												 int location) noexcept;
 
+/** Totale effettivo sul pezzo (include HIT-N-DAM / HIT-N-SP). */
+[[nodiscard]] int object_edit_display_current(const struct obj_data* obj,
+											  int location) noexcept;
+
 [[nodiscard]] int object_immune_current_bits(const struct obj_data* obj) noexcept;
+
+/** Ottimizza slot combat (hit-n-dam, hit-n-sp). */
+void object_compact_edit_affects(struct obj_data* obj) noexcept;
 
 } // namespace Alarmud
 

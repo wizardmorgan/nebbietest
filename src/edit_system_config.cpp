@@ -8,6 +8,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <cstring>
 
@@ -41,6 +42,44 @@ struct Entry {
 		bool weapon = true;
 		bool edited = true;
 	} g_portal_categories;
+
+	std::unordered_map<std::string, bool> g_portal_type_enabled;
+
+	void portal_type_reset_defaults() {
+		g_portal_type_enabled.clear();
+		g_portal_categories = PortalCategories {};
+		g_portal_type_enabled["light"] = false;
+		g_portal_type_enabled["scroll"] = false;
+		g_portal_type_enabled["wand"] = false;
+		g_portal_type_enabled["staff"] = false;
+		g_portal_type_enabled["weapon"] = true;
+		g_portal_type_enabled["fireweapon"] = false;
+		g_portal_type_enabled["missile"] = false;
+		g_portal_type_enabled["treasure"] = false;
+		g_portal_type_enabled["armor"] = true;
+		g_portal_type_enabled["potion"] = false;
+		g_portal_type_enabled["worn"] = false;
+		g_portal_type_enabled["other"] = false;
+		g_portal_type_enabled["trash"] = false;
+		g_portal_type_enabled["trap"] = false;
+		g_portal_type_enabled["container"] = false;
+		g_portal_type_enabled["note"] = false;
+		g_portal_type_enabled["drinkcon"] = false;
+		g_portal_type_enabled["key"] = false;
+		g_portal_type_enabled["food"] = false;
+		g_portal_type_enabled["money"] = false;
+		g_portal_type_enabled["pen"] = false;
+		g_portal_type_enabled["boat"] = false;
+		g_portal_type_enabled["audio"] = false;
+		g_portal_type_enabled["board"] = false;
+		g_portal_type_enabled["tree"] = false;
+		g_portal_type_enabled["rock"] = false;
+		g_portal_type_enabled["m_gem"] = false;
+		g_portal_type_enabled["m_mineral"] = false;
+		g_portal_type_enabled["bar"] = false;
+		g_portal_type_enabled["jewel"] = false;
+		g_portal_type_enabled["clan_symbol"] = false;
+	}
 
 [[nodiscard]] EditSystemTarget parse_target(const std::string& s) {
 	if(s == "character") {
@@ -135,14 +174,29 @@ void build_defaults() {
 }
 
 void parse_portal_categories(const Json& root) {
-	g_portal_categories = PortalCategories {};
+	portal_type_reset_defaults();
 	if(root.find("object_portal") == root.end() || !root["object_portal"].is_object()) {
 		return;
 	}
 	const Json& p = root["object_portal"];
-	g_portal_categories.armor = p.value("armor", true);
-	g_portal_categories.weapon = p.value("weapon", true);
 	g_portal_categories.edited = p.value("edited", true);
+	if(p.find("types") != p.end() && p["types"].is_object()) {
+		for(const auto& item : p["types"].items()) {
+			if(item.value().is_boolean()) {
+				g_portal_type_enabled[item.key()] = item.value().get<bool>();
+			}
+		}
+	}
+	// Legacy flat keys (armor/weapon/edited)
+	if(p.find("armor") != p.end()) {
+		g_portal_type_enabled["armor"] = p.value("armor", true);
+	}
+	if(p.find("weapon") != p.end()) {
+		g_portal_type_enabled["weapon"] = p.value("weapon", true);
+	}
+	if(p.find("edited") != p.end()) {
+		g_portal_categories.edited = p.value("edited", true);
+	}
 }
 
 void parse_entries_json(const Json& root) {
@@ -197,12 +251,15 @@ void parse_entries_json(const Json& root) {
 	}
 	root["entries"] = arr;
 	Json portal;
-	portal["armor"] = g_portal_categories.armor;
-	portal["weapon"] = g_portal_categories.weapon;
 	portal["edited"] = g_portal_categories.edited;
+	Json types = Json::object();
+	for(const auto& kv : g_portal_type_enabled) {
+		types[kv.first] = kv.second;
+	}
+	portal["types"] = types;
 	portal["comment"] =
-		"Categorie visibili nel portale. Food/potion non sono mai mostrati. "
-		"edited = con flag ITEM2_EDIT su altri tipi.";
+		"types: slug e_item_type senza ITEM_. food/potion sempre nascosti. "
+		"edited = flag ITEM2_EDIT su tipi non abilitati.";
 	root["object_portal"] = portal;
 	return root;
 }
@@ -398,21 +455,31 @@ bool edit_system_resistance_enabled(unsigned damage_type) noexcept {
 	return lk.found && lk.enabled;
 }
 
+bool edit_system_portal_type_always_hidden(const char* category) noexcept {
+	if(!category || !*category) {
+		return false;
+	}
+	return strcmp(category, "food") == 0 || strcmp(category, "potion") == 0
+		   || strcmp(category, "clan_symbol") == 0 || strcmp(category, "none") == 0;
+}
+
 bool edit_system_portal_category_enabled(const char* category) noexcept {
 	if(!category || !*category) {
 		return false;
 	}
-	std::lock_guard<std::mutex> lock(g_mutex);
-	if(strcmp(category, "armor") == 0) {
-		return g_portal_categories.armor;
-	}
-	if(strcmp(category, "weapon") == 0) {
-		return g_portal_categories.weapon;
+	if(edit_system_portal_type_always_hidden(category)) {
+		return false;
 	}
 	if(strcmp(category, "edited") == 0) {
+		std::lock_guard<std::mutex> lock(g_mutex);
 		return g_portal_categories.edited;
 	}
-	return false;
+	std::lock_guard<std::mutex> lock(g_mutex);
+	const auto it = g_portal_type_enabled.find(category);
+	if(it == g_portal_type_enabled.end()) {
+		return false;
+	}
+	return it->second;
 }
 
 const char* edit_system_config_path() {

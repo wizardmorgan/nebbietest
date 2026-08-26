@@ -59,6 +59,32 @@ inline constexpr long kObjValuePriceExp = 2000000L;
 inline constexpr double kObjValueClassMultBi = 1.5;
 inline constexpr double kObjValueClassMultTri = 2.0;
 
+/** Massimo listino edits per pezzo (STR/CON/WIS/INT/CHR/DEX). */
+inline constexpr int kObjEditMaxStatPerPiece = 3;
+
+/** Listino portal: 1 MXP listino = 1 Rune (alternativa pagamento). */
+inline constexpr long kObjEditRunePerMegaXp = 1000000L;
+
+/** Parametri listino per un APPLY editabile sull'oggetto (totale sul pezzo). */
+struct ObjEditListinoSpec {
+	int location = 0;
+	const char* id = "";
+	const char* label = "";
+	int step = 1;
+	int min_total = 0;
+	int max_total = 0;
+	/** Unità raw CheckValueObj per +1 (o magnitudine −1 su AC/spellfail). */
+	long positive_unit_raw = 0;
+	long negative_unit_raw = 0;
+};
+
+[[nodiscard]] bool obj_edit_listino_spec(int location, ObjEditListinoSpec& out) noexcept;
+
+/** Numero di voci listino oggetto (scalar) esposte al portale. */
+[[nodiscard]] int obj_edit_listino_scalar_count() noexcept;
+
+[[nodiscard]] bool obj_edit_listino_scalar_at(int index, ObjEditListinoSpec& out) noexcept;
+
 /**
  * Stima il valore assoluto di un oggetto dagli affect + cost_per_day.
  * Non modifica l'oggetto. obj == nullptr -> {0,0,0}.

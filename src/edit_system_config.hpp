@@ -45,8 +45,11 @@ bool edit_system_config_save_json(const std::string& json_text, std::string& err
 
 [[nodiscard]] bool edit_system_resistance_enabled(unsigned damage_type) noexcept;
 
-/** Categoria portale: armor, weapon, food, potion, edited. */
+/** Categoria portale: slug e_item_type senza ITEM_, oppure "edited". */
 [[nodiscard]] bool edit_system_portal_category_enabled(const char* category) noexcept;
+
+/** Tipi mai mostrati nel portale (food, potion, clan_symbol). */
+[[nodiscard]] bool edit_system_portal_type_always_hidden(const char* category) noexcept;
 
 /** Percorso effettivo del file di config (per log/admin). */
 [[nodiscard]] const char* edit_system_config_path();

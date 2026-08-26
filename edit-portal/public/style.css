@@ -291,6 +291,75 @@ textarea {
   font-size: 1rem;
 }
 
+.object-affect-slots {
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.object-affect-slots h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.affect-slots-summary {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 0.65rem;
+}
+
+.affect-slots-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.affect-slot {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.75rem;
+  align-items: start;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(58, 66, 82, 0.55);
+  font-size: 0.82rem;
+}
+
+.affect-slot.slot-free {
+  background: rgba(30, 38, 50, 0.5);
+  color: var(--muted);
+}
+
+.affect-slot.slot-used {
+  background: rgba(42, 52, 68, 0.85);
+}
+
+.affect-slot .slot-num {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.affect-slot .slot-detail strong {
+  color: var(--text);
+}
+
+.edit-row.edit-row-disabled {
+  opacity: 0.55;
+}
+
+.edit-row .slot-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.edit-section-title {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .edit-row {
   display: grid;
   grid-template-columns: 1fr auto;

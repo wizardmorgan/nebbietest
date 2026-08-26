@@ -571,4 +571,83 @@ ObjEditAnalysis AnalyzeObjEdit(struct obj_data* obj) {
 	return report;
 }
 
+namespace {
+
+struct ListinoRow {
+	const char* id;
+	const char* label;
+	int location;
+	int step;
+	int min_total;
+	int max_total;
+	long pos_unit_raw;
+	long neg_unit_raw;
+};
+
+constexpr ListinoRow kObjEditListino[] = {
+	{"str", "Forza (STR)", APPLY_STR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
+	{"dex", "Destrezza (DEX)", APPLY_DEX, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
+	{"con", "Costituzione (CON)", APPLY_CON, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
+	{"wis", "Saggezza (WIS)", APPLY_WIS, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
+	{"int", "Intelligenza (INT)", APPLY_INT, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
+	{"chr", "Carisma (CHR)", APPLY_CHR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
+	{"hitroll", "Hitroll", APPLY_HITROLL, 1, 0, 1, 4500, 9000},
+	{"damroll", "Damroll", APPLY_DAMROLL, 1, 0, 1, 10000, 20000},
+	{"spellpower", "Spellpower", APPLY_SPELLPOWER, 1, 0, 1, 10000, 20000},
+	{"armor", "Armatura (AC)", APPLY_AC, -5, -20, 0, 100, 100},
+	{"spellfail", "Spellfail", APPLY_SPELLFAIL, -2, -10, 0, 600, 600},
+	{"hitndam", "Hit & damage", APPLY_HITNDAM, 1, 0, 3, 14500, 29000},
+	{"hitnsp", "Hit & spellpower", APPLY_HITNSP, 1, 0, 3, 14500, 29000},
+};
+
+constexpr int kObjEditListinoCount =
+	static_cast<int>(sizeof(kObjEditListino) / sizeof(kObjEditListino[0]));
+
+[[nodiscard]] const ListinoRow* find_listino_row(int location) noexcept {
+	for(int i = 0; i < kObjEditListinoCount; ++i) {
+		if(kObjEditListino[i].location == location) {
+			return &kObjEditListino[i];
+		}
+	}
+	return nullptr;
+}
+
+} // namespace
+
+bool obj_edit_listino_spec(int location, ObjEditListinoSpec& out) noexcept {
+	const ListinoRow* row = find_listino_row(location);
+	if(!row) {
+		return false;
+	}
+	out.location = row->location;
+	out.id = row->id;
+	out.label = row->label;
+	out.step = row->step;
+	out.min_total = row->min_total;
+	out.max_total = row->max_total;
+	out.positive_unit_raw = row->pos_unit_raw;
+	out.negative_unit_raw = row->neg_unit_raw;
+	return true;
+}
+
+int obj_edit_listino_scalar_count() noexcept {
+	return kObjEditListinoCount;
+}
+
+bool obj_edit_listino_scalar_at(int index, ObjEditListinoSpec& out) noexcept {
+	if(index < 0 || index >= kObjEditListinoCount) {
+		return false;
+	}
+	const ListinoRow& row = kObjEditListino[index];
+	out.location = row.location;
+	out.id = row.id;
+	out.label = row.label;
+	out.step = row.step;
+	out.min_total = row.min_total;
+	out.max_total = row.max_total;
+	out.positive_unit_raw = row.pos_unit_raw;
+	out.negative_unit_raw = row.neg_unit_raw;
+	return true;
+}
+
 } // namespace Alarmud

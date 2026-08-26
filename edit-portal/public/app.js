@@ -583,6 +583,8 @@ async function selectItem(inventoryId, li) {
   selectedObjectOptions = null;
   updatePaymentUI();
   $('object-edits').innerHTML = '';
+  $('object-affect-slots').innerHTML = '';
+  hide('object-affect-slots');
 
   const opts = await api('/api/object-edit-options', {
     method: 'POST',
@@ -604,7 +606,68 @@ async function selectItem(inventoryId, li) {
     d.diff_rune ? `Runes componente listino: ${d.diff_rune}` : '',
   ].filter(Boolean).join('\n');
 
+  renderObjectAffectSlots(d.affect_slots);
   renderObjectEdits(d.entries || []);
+}
+
+function renderObjectAffectSlots(affectSlots) {
+  const box = $('object-affect-slots');
+  if (!affectSlots || !Array.isArray(affectSlots.slots)) {
+    box.innerHTML = '';
+    hide('object-affect-slots');
+    return;
+  }
+
+  const maxSlots = Number(affectSlots.max_slots || affectSlots.slots.length);
+  const used = Number(affectSlots.used ?? affectSlots.slots.filter((s) => !s.free).length);
+  const freeCount = Number(affectSlots.free_count ?? maxSlots - used);
+
+  box.innerHTML = '';
+  const title = document.createElement('h3');
+  title.textContent = 'Slot effetti (affect)';
+  box.appendChild(title);
+
+  const summary = document.createElement('p');
+  summary.className = 'affect-slots-summary';
+  summary.textContent =
+    `${used}/${maxSlots} occupati · ${freeCount} liberi — bonus combat uguali si accorpano (hitroll+damroll → hit-n-dam).`;
+  box.appendChild(summary);
+
+  const grid = document.createElement('div');
+  grid.className = 'affect-slots-grid';
+  affectSlots.slots.forEach((slot) => {
+    const row = document.createElement('div');
+    row.className = slot.free ? 'affect-slot slot-free' : 'affect-slot slot-used';
+    const slotNum = Number(slot.slot);
+    if (slot.free) {
+      row.innerHTML = `
+        <span class="slot-num">#${slotNum + 1}</span>
+        <span>Libero</span>
+      `;
+    } else {
+      const loc = slot.location_name || `loc ${slot.location}`;
+      let detail = `<strong>${loc}</strong> = ${slot.modifier}`;
+      if (slot.immune_labels) {
+        detail += `<br><span class="slot-hint">${slot.immune_labels}</span>`;
+      }
+      row.innerHTML = `
+        <span class="slot-num">#${slotNum + 1}</span>
+        <span class="slot-detail">${detail}</span>
+      `;
+    }
+    grid.appendChild(row);
+  });
+  box.appendChild(grid);
+  show('object-affect-slots');
+}
+
+function objectEditSection(id) {
+  if (id.startsWith('immune.')) return 'Resistenze / immunità';
+  if (['armor', 'spellfail'].includes(id)) return 'Armatura / cast';
+  if (['hitndam', 'hitnsp', 'hitroll', 'damroll', 'spellpower'].includes(id)) {
+    return 'Combattimento';
+  }
+  return 'Caratteristiche';
 }
 
 function buildObjectScalarOptions(entry) {
@@ -612,10 +675,45 @@ function buildObjectScalarOptions(entry) {
   const max = Number(entry.max);
   const step = Number(entry.step) || 1;
   const opts = [];
-  for (let v = min; v <= max; v += step) {
-    opts.push(v);
+  if (step < 0) {
+    for (let v = min; v >= max; v += step) opts.push(v);
+  } else if (min <= max) {
+    for (let v = min; v <= max; v += step) opts.push(v);
+  } else {
+    for (let v = min; v >= max; v -= Math.abs(step)) opts.push(v);
   }
   return opts;
+}
+
+function objectEntryCostHint(entry) {
+  const mxp = Number(entry.mxp_per_step || 0);
+  const rune = Number(entry.rune_per_step ?? mxp);
+  if (!mxp) return '';
+  return `Listino: ${mxp} MXP o ${rune} Runes / punto`;
+}
+
+function objectEntryRangeLabel(entry) {
+  const min = Number(entry.min);
+  const max = Number(entry.max);
+  const step = Number(entry.step) || 1;
+  if (entry.kind === 'immune') return '';
+  return ` (${min}…${max}, step ${step})`;
+}
+
+function objectEntrySlotHint(entry) {
+  const slotIdx = Number(entry.occupied_slot);
+  if (entry.kind === 'immune') {
+    if (entry.has_affect && slotIdx >= 0) {
+      return `slot #${slotIdx + 1} (immunità presente)`;
+    }
+    if (entry.can_add) return 'nuova immunità (usa slot RESISTANCE)';
+    return 'nessuno slot libero';
+  }
+  if (entry.has_affect && slotIdx >= 0) {
+    return `slot #${slotIdx + 1} occupato`;
+  }
+  if (entry.can_add) return 'nuovo bonus (usa uno slot libero)';
+  return 'nessuno slot libero';
 }
 
 function clearObjectPending(entryId) {
@@ -642,11 +740,23 @@ function renderObjectEdits(entries) {
   title.textContent = 'Edit sull\'oggetto';
   box.appendChild(title);
 
+  let lastSection = '';
   entries.forEach((entry) => {
+    const section = objectEditSection(entry.id || '');
+    if (section !== lastSection) {
+      const secTitle = document.createElement('div');
+      secTitle.className = 'edit-section-title';
+      secTitle.textContent = section;
+      box.appendChild(secTitle);
+      lastSection = section;
+    }
+
     const current = Number(entry.current || 0);
+    const canEdit = entry.can_edit !== false;
     const row = document.createElement('div');
-    row.className = 'edit-row';
+    row.className = canEdit ? 'edit-row' : 'edit-row edit-row-disabled';
     const select = document.createElement('select');
+    select.disabled = !canEdit || session.role === 'limited';
 
     if (entry.kind === 'immune') {
       [
@@ -673,7 +783,12 @@ function renderObjectEdits(entries) {
       });
     }
 
+    if (!canEdit) {
+      select.disabled = true;
+    }
+
     select.addEventListener('change', () => {
+      if (!canEdit) return;
       const newVal = Number(select.value);
       if (entry.kind === 'immune') {
         if (newVal === 0 && current === 1) {
@@ -694,8 +809,10 @@ function renderObjectEdits(entries) {
 
     row.innerHTML = `
       <div>
-        <label>${entry.label || entry.id}</label>
+        <label>${entry.label || entry.id}${objectEntryRangeLabel(entry)}</label>
         <div class="current">Attuale: ${entry.kind === 'immune' ? (current ? 'Sì' : 'No') : current}</div>
+        <div class="slot-hint">${objectEntrySlotHint(entry)}</div>
+        ${entry.kind !== 'immune' ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>` : ''}
       </div>
     `;
     row.appendChild(select);
