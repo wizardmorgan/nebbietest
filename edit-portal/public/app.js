@@ -14,10 +14,25 @@ let pendingEdit = null;
 
 const $ = (id) => document.getElementById(id);
 
+function parseToonId(raw) {
+  if (raw == null || raw === '') return 0;
+  const s = String(raw).trim();
+  if (/^\d+$/.test(s)) {
+    try {
+      const bi = BigInt(s);
+      if (bi > 0 && bi <= BigInt(Number.MAX_SAFE_INTEGER)) return Number(bi);
+    } catch {
+      /* ignore */
+    }
+  }
+  const n = Number(s);
+  return Number.isSafeInteger(n) && n > 0 ? n : 0;
+}
+
 function getTargetToonId() {
-  const fromSelect = Number($('target-toon')?.value);
+  const fromSelect = parseToonId($('target-toon')?.value);
   if (fromSelect > 0) return fromSelect;
-  return Number(session?.sessionToonId || targetToonId || 0);
+  return parseToonId(session?.sessionToonId || targetToonId || 0);
 }
 
 function restoreSavedLogin() {
@@ -271,7 +286,7 @@ async function loadTargetToons() {
   if (!data.ok) return;
   data.toons.forEach((t) => {
     const opt = document.createElement('option');
-    opt.value = t.id;
+    opt.value = String(t.id);
     opt.textContent = `${t.name} (lv ${t.max_level ?? '?'})`;
     sel.appendChild(opt);
   });
@@ -547,7 +562,11 @@ async function loadInventory() {
     );
   } else if (data.inventory_source === 'mysql_myst_empty') {
     showApiWarn(
-      'Elenco da MySQL: myst non ha restituito oggetti — edit dettagliato limitato finché myst non è aggiornato.',
+      'Elenco da MySQL: myst non legge character_inventory per questo PG — verifica toon_id e riavvia myst aggiornato.',
+    );
+  } else if (data.myst_toon_name_ok === false) {
+    showApiWarn(
+      'Myst non risolve il nome del PG (toon_id): edit oggetti bloccato finché il record toon è leggibile.',
     );
   }
 

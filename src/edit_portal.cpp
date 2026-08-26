@@ -304,8 +304,43 @@ std::atomic<bool> g_http_running {false};
 }
 
 [[nodiscard]] std::string toon_name_by_id(unsigned long long toon_id) {
+	if(toon_id == 0) {
+		return {};
+	}
 	const toonPtr pg = Sql::getOne<toon>(toonQuery::id == toon_id);
-	return pg ? pg->name : std::string();
+	if(pg && pg->name[0] != '\0') {
+		return pg->name;
+	}
+#if USE_MYSQL
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return {};
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		const std::string sql =
+			"SELECT name FROM toon WHERE id = " + std::to_string(toon_id) + " LIMIT 1";
+		if(mysql_query(h, sql.c_str()) != 0) {
+			return {};
+		}
+		MYSQL_RES* res = mysql_store_result(h);
+		if(!res) {
+			return {};
+		}
+		MYSQL_ROW row = mysql_fetch_row(res);
+		const std::string name = row && row[0] ? row[0] : std::string();
+		mysql_free_result(res);
+		return name;
+	}
+	catch(...) {
+		return {};
+	}
+#else
+	(void)toon_id;
+#endif
+	return {};
 }
 
 [[nodiscard]] bool load_stats_for_toon(unsigned long long toon_id, int& exp,
@@ -867,6 +902,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 			Json items = Json::array();
 			int editable_count = 0;
+			const bool toon_name_ok = !toon_name.empty();
 			for(const auto& r : rows) {
 				struct obj_data* obj = materialize_inventory_row(r);
 				if(obj && !object_portal_show_in_inventory_list(obj, toon_name.c_str())) {
@@ -888,7 +924,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 				std::string skip_reason;
 				bool editable = false;
-				if(!obj) {
+				if(!toon_name_ok) {
+					skip_reason = "PG non risolto in myst (toon_id)";
+				}
+				else if(!obj) {
 					skip_reason = "non materializzabile";
 				}
 				else if(inventory_row_is_worn(r.elem.wearpos)) {
@@ -932,6 +971,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["editable_count"] = editable_count;
 			d["loaded_rows"] = rows.size();
 			d["toon_id"] = toon_id;
+			d["toon_name"] = toon_name;
+			d["toon_name_ok"] = toon_name_ok;
 			return json_ok(d);
 		}
 

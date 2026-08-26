@@ -35,6 +35,21 @@ function roleForLevel(maxLevel) {
   return 'player';
 }
 
+function parseToonId(raw) {
+  if (raw == null || raw === '') return 0;
+  const s = String(raw).trim();
+  if (/^\d+$/.test(s)) {
+    try {
+      const bi = BigInt(s);
+      if (bi > 0 && bi <= BigInt(Number.MAX_SAFE_INTEGER)) return Number(bi);
+    } catch {
+      /* ignore */
+    }
+  }
+  const n = Number(s);
+  return Number.isSafeInteger(n) && n > 0 ? n : 0;
+}
+
 function checkAccountPassword(plain, storedHash) {
   const hash = String(storedHash || '');
   if (!plain || !hash) {
@@ -217,7 +232,7 @@ app.get('/api/toons', requireAuth, async (req, res) => {
 });
 
 app.post('/api/select-toon', requireAuth, async (req, res) => {
-  const toonId = Number(req.body.toonId);
+  const toonId = parseToonId(req.body.toonId);
   if (!toonId) {
     return res.status(400).json({ ok: false, error: 'toonId richiesto' });
   }
@@ -282,7 +297,7 @@ app.get('/api/edit-catalog', requireAuth, requireSessionToon, async (_req, res) 
 });
 
 app.get('/api/character-state/:toonId', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.params.toonId);
+  const targetToonId = parseToonId(req.params.toonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
   }
@@ -291,7 +306,7 @@ app.get('/api/character-state/:toonId', requireAuth, requireSessionToon, async (
 });
 
 app.post('/api/quote-pool', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.body.targetToonId);
+  const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
   }
@@ -305,7 +320,7 @@ app.post('/api/quote-pool', requireAuth, requireSessionToon, async (req, res) =>
 });
 
 app.post('/api/quote-resistance', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.body.targetToonId);
+  const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
   }
@@ -318,7 +333,7 @@ app.post('/api/quote-resistance', requireAuth, requireSessionToon, async (req, r
 });
 
 app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.params.toonId);
+  const targetToonId = parseToonId(req.params.toonId);
   if (!targetToonId) {
     return res.status(400).json({ ok: false, error: 'toonId non valido' });
   }
@@ -328,23 +343,30 @@ app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, r
   const online = await mystPost('/internal/is-online', { toon_id: targetToonId });
   const list = await mystPost('/internal/list-inventory', { toon_id: targetToonId });
   const mysqlRows = await fetchInventoryFromMysql(targetToonId);
+  const mystLoadedRows = list.ok ? Number(list.data?.loaded_rows ?? -1) : -1;
   let items = list.ok ? list.data.items || [] : [];
   let total = list.ok ? Number(list.data.total ?? items.length) : 0;
   let editableCount = list.ok ? Number(list.data.editable_count ?? 0) : 0;
-  let inventorySource = list.ok && items.length ? 'myst' : null;
+  let inventorySource = list.ok ? 'myst' : null;
 
   if (!list.ok && mysqlRows.length) {
     items = inventoryRowsToPortalItems(mysqlRows, 'dettagli edit non disponibili (myst)');
     total = items.length;
     editableCount = 0;
     inventorySource = 'mysql_fallback';
-  } else if (list.ok && !items.length && mysqlRows.length) {
-    items = inventoryRowsToPortalItems(mysqlRows, 'dettagli edit da myst non disponibili');
+  } else if (
+    list.ok &&
+    items.length === 0 &&
+    mysqlRows.length > 0 &&
+    mystLoadedRows === 0
+  ) {
+    items = inventoryRowsToPortalItems(
+      mysqlRows,
+      'myst non legge character_inventory per questo toon_id',
+    );
     total = items.length;
     editableCount = 0;
     inventorySource = 'mysql_myst_empty';
-  } else if (list.ok && items.length) {
-    inventorySource = 'myst';
   }
 
   res.json({
@@ -354,6 +376,9 @@ app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, r
     total,
     editable_count: editableCount,
     mysql_count: mysqlRows.length,
+    myst_loaded_rows: mystLoadedRows,
+    myst_toon_name: list.ok ? list.data?.toon_name ?? null : null,
+    myst_toon_name_ok: list.ok ? list.data?.toon_name_ok ?? null : null,
     inventory_source: inventorySource,
     mystErrors: [online.ok ? null : online.error, list.ok ? null : list.error].filter(Boolean),
     mystOnlineOk: online.ok,
@@ -362,7 +387,7 @@ app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, r
 });
 
 app.post('/api/quote', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.body.targetToonId);
+  const targetToonId = parseToonId(req.body.targetToonId);
   const inventoryId = Number(req.body.inventoryId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -375,7 +400,7 @@ app.post('/api/quote', requireAuth, requireSessionToon, async (req, res) => {
 });
 
 app.post('/api/object-edit-options', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.body.targetToonId);
+  const targetToonId = parseToonId(req.body.targetToonId);
   const inventoryId = Number(req.body.inventoryId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -388,7 +413,7 @@ app.post('/api/object-edit-options', requireAuth, requireSessionToon, async (req
 });
 
 app.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.body.targetToonId);
+  const targetToonId = parseToonId(req.body.targetToonId);
   const inventoryId = Number(req.body.inventoryId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -403,7 +428,7 @@ app.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (req, 
 });
 
 app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.body.targetToonId);
+  const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
   }
@@ -422,7 +447,7 @@ app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) 
 });
 
 app.post('/api/apply-pool', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.body.targetToonId);
+  const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
   }
@@ -441,7 +466,7 @@ app.post('/api/apply-pool', requireAuth, requireSessionToon, async (req, res) =>
 });
 
 app.post('/api/apply-resistance', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.body.targetToonId);
+  const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
   }
@@ -459,7 +484,7 @@ app.post('/api/apply-resistance', requireAuth, requireSessionToon, async (req, r
 });
 
 app.get('/api/resistances/:toonId', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = Number(req.params.toonId);
+  const targetToonId = parseToonId(req.params.toonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
   }
