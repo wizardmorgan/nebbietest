@@ -666,6 +666,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		if(path == "/internal/ping") {
 			Json d;
 			d["service"] = "myst-edit-api";
+			d["portal_api_version"] = 3;
 			return json_ok(d);
 		}
 
