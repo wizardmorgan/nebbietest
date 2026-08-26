@@ -922,6 +922,19 @@ function objectEditSection(id) {
   return 'Caratteristiche';
 }
 
+/** Ordine alfabetico delle sezioni oggetto. */
+const OBJECT_EDIT_SECTION_ORDER = [
+  'Armatura / cast',
+  'Caratteristiche',
+  'Combattimento',
+  'Resistenze / immunità',
+];
+
+function objectEditSectionRank(name) {
+  const i = OBJECT_EDIT_SECTION_ORDER.indexOf(name);
+  return i >= 0 ? i : 99;
+}
+
 /** Opzioni listino: min/max inclusivi, step in valore assoluto (AC step −10 → −40…0). */
 function buildObjectScalarOptions(entry) {
   const min = Number(entry.min);
@@ -993,111 +1006,115 @@ function renderObjectEdits(entries, damBudget, spBudget) {
 
   if (damBudget || spBudget) {
     const hint = document.createElement('p');
-    hint.className = 'hint';
+    hint.className = 'hint budget-banner';
     const parts = [];
     if (damBudget) {
-      const pieceCur = Number(damBudget.piece_current);
-      const pieceProto = Number(damBudget.piece_proto);
-      let damLine = `Dam editato ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`;
-      if (Number.isFinite(pieceCur) && Number.isFinite(pieceProto)) {
-        damLine += ` — questo pezzo ${pieceCur} (proto ${pieceProto}, delta +${Number(damBudget.piece || 0)})`;
-      }
-      parts.push(damLine);
+      parts.push(
+        `Dam acquistato via portale ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`
+      );
     }
     if (spBudget) {
       parts.push(
-        `Spellpower editato ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
+        `Spellpower via portale ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
       );
     }
     hint.textContent =
       (parts.length
-        ? parts.join(' · ') + ' — solo pezzi con ITEM2_EDIT + ED/owner, delta vs prototipo'
+        ? parts.join(' · ') +
+          ' — il dam già presente sull\'eq (loot/pedit) non conta nel tetto'
         : '') || '';
     box.appendChild(hint);
-
-    const contrib = damBudget && Array.isArray(damBudget.contributors)
-      ? damBudget.contributors.filter((c) => Number(c.delta) > 0)
-      : [];
-    if (contrib.length) {
-      const ul = document.createElement('ul');
-      ul.className = 'hint dam-budget-contributors';
-      contrib.forEach((c) => {
-        const li = document.createElement('li');
-        li.textContent = `${c.short_desc || 'oggetto'}: +${Number(c.delta)} dam (ora ${Number(c.current)}, proto ${Number(c.proto)})`;
-        ul.appendChild(li);
-      });
-      box.appendChild(ul);
-    }
   }
 
-  let lastSection = '';
+  const grouped = new Map();
   entries.forEach((entry) => {
     const section = objectEditSection(entry.id || '');
-    if (section !== lastSection) {
-      const secTitle = document.createElement('div');
-      secTitle.className = 'edit-section-title';
-      secTitle.textContent = section;
-      box.appendChild(secTitle);
-      lastSection = section;
-    }
+    if (!grouped.has(section)) grouped.set(section, []);
+    grouped.get(section).push(entry);
+  });
 
-    const current = Number(entry.current || 0);
-    const canEdit = entry.can_edit !== false;
-    const row = document.createElement('div');
-    row.className = canEdit ? 'edit-row' : 'edit-row edit-row-disabled';
-    const select = document.createElement('select');
-    select.disabled = !canEdit || session.role === 'limited';
+  const sectionNames = [...grouped.keys()].sort(
+    (a, b) => objectEditSectionRank(a) - objectEditSectionRank(b) || a.localeCompare(b, 'it')
+  );
 
-    if (entry.kind === 'immune') {
-      [
-        { v: 0, l: 'No' },
-        { v: 1, l: 'Sì' },
-      ].forEach(({ v, l }) => {
-        const opt = document.createElement('option');
-        opt.value = v;
-        opt.textContent = l;
-        if (v === current) opt.selected = true;
-        select.appendChild(opt);
-      });
-      if (current === 1) select.disabled = true;
-    } else {
-      const values = buildObjectScalarOptions(entry);
-      if (!values.includes(current)) values.push(current);
-      values.sort((a, b) => a - b);
-      values.forEach((v) => {
-        const opt = document.createElement('option');
-        opt.value = v;
-        opt.textContent = v;
-        if (v === current) opt.selected = true;
-        select.appendChild(opt);
-      });
-    }
+  sectionNames.forEach((section) => {
+    const list = grouped.get(section) || [];
+    list.sort((a, b) =>
+      String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''), 'it', {
+        sensitivity: 'base',
+      })
+    );
 
-    if (!canEdit) {
-      select.disabled = true;
-    }
+    const details = document.createElement('details');
+    details.className = 'edit-section';
+    details.open = true;
 
-    select.addEventListener('change', () => {
-      if (!canEdit) return;
-      const newVal = Number(select.value);
+    const summary = document.createElement('summary');
+    summary.className = 'edit-section-summary';
+    summary.textContent = `${section} (${list.length})`;
+    details.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'edit-section-body';
+
+    list.forEach((entry) => {
+      const current = Number(entry.current || 0);
+      const canEdit = entry.can_edit !== false;
+      const row = document.createElement('div');
+      row.className = canEdit ? 'edit-row' : 'edit-row edit-row-disabled';
+      const select = document.createElement('select');
+      select.disabled = !canEdit || session.role === 'limited';
+
       if (entry.kind === 'immune') {
-        if (newVal === 0 && current === 1) {
-          select.value = '1';
-          return;
-        }
-        if (newVal === current) {
-          clearObjectPending(entry.id);
-          return;
-        }
-        queueObjectQuote(entry, newVal ? Number(entry.immune_bit) : 0, select);
-      } else if (newVal === current) {
-        clearObjectPending(entry.id);
+        [
+          { v: 0, l: 'No' },
+          { v: 1, l: 'Sì' },
+        ].forEach(({ v, l }) => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = l;
+          if (v === current) opt.selected = true;
+          select.appendChild(opt);
+        });
+        if (current === 1) select.disabled = true;
       } else {
-        queueObjectQuote(entry, newVal, select);
+        const values = buildObjectScalarOptions(entry);
+        if (!values.includes(current)) values.push(current);
+        values.sort((a, b) => a - b);
+        values.forEach((v) => {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = v;
+          if (v === current) opt.selected = true;
+          select.appendChild(opt);
+        });
       }
-    });
 
-    row.innerHTML = `
+      if (!canEdit) {
+        select.disabled = true;
+      }
+
+      select.addEventListener('change', () => {
+        if (!canEdit) return;
+        const newVal = Number(select.value);
+        if (entry.kind === 'immune') {
+          if (newVal === 0 && current === 1) {
+            select.value = '1';
+            return;
+          }
+          if (newVal === current) {
+            clearObjectPending(entry.id);
+            return;
+          }
+          queueObjectQuote(entry, newVal ? Number(entry.immune_bit) : 0, select);
+        } else if (newVal === current) {
+          clearObjectPending(entry.id);
+        } else {
+          queueObjectQuote(entry, newVal, select);
+        }
+      });
+
+      row.innerHTML = `
       <div>
         <label>${entry.label || entry.id}${objectEntryRangeLabel(entry)}</label>
         <div class="current">Attuale: ${entry.kind === 'immune' ? (current ? 'Sì' : 'No') : current}</div>
@@ -1105,8 +1122,12 @@ function renderObjectEdits(entries, damBudget, spBudget) {
         ${entry.kind !== 'immune' ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>` : ''}
       </div>
     `;
-    row.appendChild(select);
-    box.appendChild(row);
+      row.appendChild(select);
+      body.appendChild(row);
+    });
+
+    details.appendChild(body);
+    box.appendChild(details);
   });
 }
 

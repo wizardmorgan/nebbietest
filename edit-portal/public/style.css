@@ -358,6 +358,57 @@ textarea {
   color: var(--muted);
 }
 
+.budget-banner {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(42, 52, 68, 0.55);
+  margin-bottom: 0.85rem;
+}
+
+.edit-section {
+  margin: 0 0 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(28, 32, 41, 0.92);
+  overflow: hidden;
+}
+
+.edit-section-summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--text);
+  background: rgba(37, 43, 54, 0.95);
+  border-bottom: 1px solid transparent;
+  user-select: none;
+}
+
+.edit-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.edit-section-summary::before {
+  content: '▸ ';
+  color: var(--accent);
+  display: inline-block;
+  transition: transform 0.12s ease;
+}
+
+.edit-section[open] > .edit-section-summary::before {
+  transform: rotate(90deg);
+}
+
+.edit-section[open] > .edit-section-summary {
+  border-bottom-color: var(--border);
+}
+
+.edit-section-body {
+  padding: 0.65rem 0.85rem 0.35rem;
+}
+
 .edit-section-title {
   margin: 1rem 0 0.5rem;
   font-size: 0.88rem;
@@ -373,6 +424,11 @@ textarea {
   margin-bottom: 0.65rem;
   padding-bottom: 0.65rem;
   border-bottom: 1px solid rgba(58, 66, 82, 0.4);
+}
+
+.edit-section-body .edit-row:last-child {
+  border-bottom: none;
+  margin-bottom: 0.25rem;
 }
 
 .edit-row label {

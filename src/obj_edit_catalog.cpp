@@ -935,36 +935,41 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 }
 
 [[nodiscard]] static bool enforce_char_dam_budget(const struct obj_data* after_obj,
-												  int owner_dam_excluding_this,
+												  int before_piece_dam,
+												  int portal_dam_used,
 												  std::string& err) {
-	if(owner_dam_excluding_this < 0 || !after_obj) {
+	if(portal_dam_used < 0 || !after_obj) {
 		return true;
 	}
-	const int piece_dam = object_edit_damroll_edited_delta(after_obj);
-	const int total = owner_dam_excluding_this + piece_dam;
-	if(total > kObjEditMaxDamrollEditableTotal) {
-		err = "tetto dam editabile personaggio superato (" + std::to_string(total) + "/"
+	const int after_piece = object_edit_damroll_total(after_obj);
+	const int projected = portal_dam_used + (after_piece - before_piece_dam);
+	if(projected > kObjEditMaxDamrollEditableTotal) {
+		err = "tetto dam editabile personaggio superato (" + std::to_string(projected) + "/"
 			  + std::to_string(kObjEditMaxDamrollEditableTotal)
-			  + "; altri pezzi editati " + std::to_string(owner_dam_excluding_this)
-			  + ", questo pezzo +" + std::to_string(piece_dam) + " vs proto)";
+			  + "; gia acquistato via portale " + std::to_string(portal_dam_used)
+			  + ", questo pezzo "
+			  + std::to_string(before_piece_dam) + "→" + std::to_string(after_piece) + ")";
 		return false;
 	}
 	return true;
 }
 
 [[nodiscard]] static bool enforce_char_sp_budget(const struct obj_data* after_obj,
-												 int owner_sp_excluding_this,
+												 int before_piece_sp,
+												 int portal_sp_used,
 												 std::string& err) {
-	if(owner_sp_excluding_this < 0 || !after_obj) {
+	if(portal_sp_used < 0 || !after_obj) {
 		return true;
 	}
-	const int piece_sp = object_edit_spellpower_edited_delta(after_obj);
-	const int total = owner_sp_excluding_this + piece_sp;
-	if(total > kObjEditMaxSpellpowerEditableTotal) {
-		err = "tetto spellpower editabile personaggio superato (" + std::to_string(total)
-			  + "/" + std::to_string(kObjEditMaxSpellpowerEditableTotal)
-			  + "; altri pezzi editati " + std::to_string(owner_sp_excluding_this)
-			  + ", questo pezzo +" + std::to_string(piece_sp) + " vs proto)";
+	const int after_piece = object_edit_spellpower_total(after_obj);
+	const int projected = portal_sp_used + (after_piece - before_piece_sp);
+	if(projected > kObjEditMaxSpellpowerEditableTotal) {
+		err = "tetto spellpower editabile personaggio superato (" +
+			  std::to_string(projected) + "/" +
+			  std::to_string(kObjEditMaxSpellpowerEditableTotal)
+			  + "; gia acquistato via portale " + std::to_string(portal_sp_used)
+			  + ", questo pezzo " + std::to_string(before_piece_sp) + "→"
+			  + std::to_string(after_piece) + ")";
 		return false;
 	}
 	return true;
@@ -972,8 +977,7 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 
 bool object_quote_affect_target(struct obj_data* obj, int location, int target_modifier,
 								long& xp_raw, int& pq, std::string& err,
-								int owner_dam_excluding_this,
-								int owner_sp_excluding_this) {
+								int portal_dam_used, int portal_sp_used) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -983,18 +987,20 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		err = "impossibile clonare oggetto";
 		return false;
 	}
+	const int before_dam = object_edit_damroll_total(obj);
+	const int before_sp = object_edit_spellpower_total(obj);
 	const ObjEditAnalysis before = AnalyzeObjEdit(obj);
 	if(!apply_target_modifier(clone, location, target_modifier, err)) {
 		extract_obj(clone);
 		return false;
 	}
 	if(object_edit_location_affects_dam(location)
-	   && !enforce_char_dam_budget(clone, owner_dam_excluding_this, err)) {
+	   && !enforce_char_dam_budget(clone, before_dam, portal_dam_used, err)) {
 		extract_obj(clone);
 		return false;
 	}
 	if(object_edit_location_affects_spellpower(location)
-	   && !enforce_char_sp_budget(clone, owner_sp_excluding_this, err)) {
+	   && !enforce_char_sp_budget(clone, before_sp, portal_sp_used, err)) {
 		extract_obj(clone);
 		return false;
 	}
@@ -1006,28 +1012,30 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 }
 
 bool object_apply_affect_target(struct obj_data* obj, int location, int target_modifier,
-								std::string& err, int owner_dam_excluding_this,
-								int owner_sp_excluding_this) {
+								std::string& err, int portal_dam_used,
+								int portal_sp_used) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
 	}
 	const bool need_budget = (object_edit_location_affects_dam(location)
-							  && owner_dam_excluding_this >= 0)
+							  && portal_dam_used >= 0)
 							 || (object_edit_location_affects_spellpower(location)
-								 && owner_sp_excluding_this >= 0);
+								 && portal_sp_used >= 0);
 	if(need_budget) {
 		struct obj_data* clone = clone_obj(obj);
 		if(!clone) {
 			err = "impossibile clonare oggetto";
 			return false;
 		}
+		const int before_dam = object_edit_damroll_total(obj);
+		const int before_sp = object_edit_spellpower_total(obj);
 		if(!apply_target_modifier(clone, location, target_modifier, err)) {
 			extract_obj(clone);
 			return false;
 		}
-		if(!enforce_char_dam_budget(clone, owner_dam_excluding_this, err)
-		   || !enforce_char_sp_budget(clone, owner_sp_excluding_this, err)) {
+		if(!enforce_char_dam_budget(clone, before_dam, portal_dam_used, err)
+		   || !enforce_char_sp_budget(clone, before_sp, portal_sp_used, err)) {
 			extract_obj(clone);
 			return false;
 		}
