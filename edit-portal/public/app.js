@@ -32,6 +32,8 @@ function parseToonId(raw) {
 function getTargetToonId() {
   const fromSelect = parseToonId($('target-toon')?.value);
   if (fromSelect > 0) return fromSelect;
+  // Staff: senza selezione esplicita non usare il toon di sessione (inventario staff inutile).
+  if (session?.role === 'staff') return 0;
   return parseToonId(session?.sessionToonId || targetToonId || 0);
 }
 
