@@ -202,7 +202,16 @@ std::atomic<bool> g_http_running {false};
 	}
 	if(v.is_string()) {
 		try {
-			return static_cast<unsigned long long>(std::stoull(v.get<std::string()));
+			const std::string id_text = v.get<std::string>();
+			if(id_text.empty()) {
+				return 0ULL;
+			}
+			std::size_t parsed = 0;
+			const unsigned long long id = std::stoull(id_text, &parsed);
+			if(parsed != id_text.size()) {
+				return 0ULL;
+			}
+			return id;
 		}
 		catch(...) {
 			return 0ULL;
