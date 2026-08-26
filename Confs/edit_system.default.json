@@ -30,9 +30,7 @@
   "object_portal": {
     "armor": true,
     "weapon": true,
-    "food": true,
-    "potion": true,
     "edited": true,
-    "comment": "Categorie oggetto editabili nel portale (staff). edited = con flag ITEM2_EDIT."
+    "comment": "Categorie visibili nel portale. Food/potion mai mostrati. edited = flag ITEM2_EDIT."
   }
 }

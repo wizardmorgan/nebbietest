@@ -72,7 +72,7 @@
               <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
             </div>
             <ul id="inventory-list" class="inventory-list"></ul>
-            <p class="hint">Tutti gli oggetti in inventario/container; solo quelli editabili sono selezionabili.</p>
+            <p class="hint">Armor/weapon/edit flag nel portale; food e potion non compaiono. Categorie disabilitate dallo staff sono nascoste.</p>
             <p id="inventory-empty" class="hint hidden">Nessun oggetto in inventario MySQL per questo PG.</p>
           </div>
 
@@ -108,13 +108,11 @@
       <div id="staff-panel" class="card hidden">
         <h2>Staff — configurazione sistema</h2>
         <div class="portal-categories card-inner">
-          <h3>Categorie oggetti editabili (portale)</h3>
-          <p class="hint">Abilita o disabilita i tipi di oggetto selezionabili nell'inventario.</p>
+          <h3>Categorie visibili nell'inventario</h3>
+          <p class="hint">Senza spunta: quel tipo non compare nell'inventario del portale. Food e potion non sono mai mostrati.</p>
           <div id="portal-category-toggles" class="checkbox-grid">
             <label class="checkbox-row"><input type="checkbox" id="portal-cat-armor" /> Armor</label>
             <label class="checkbox-row"><input type="checkbox" id="portal-cat-weapon" /> Weapon</label>
-            <label class="checkbox-row"><input type="checkbox" id="portal-cat-food" /> Food</label>
-            <label class="checkbox-row"><input type="checkbox" id="portal-cat-potion" /> Potion</label>
             <label class="checkbox-row"><input type="checkbox" id="portal-cat-edited" /> Con flag EDIT (altri tipi)</label>
           </div>
           <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
