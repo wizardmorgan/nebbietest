@@ -899,14 +899,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				}
 				else if(object_portal_editable(obj, toon_name.c_str())) {
 					editable = true;
-					const int item_type = ITEM_TYPE(obj);
-					if(item_type == ITEM_ARMOR) {
-						it["item_type"] = "armor";
-						it["portal_category"] = "armor";
-					}
-					else if(item_type == ITEM_WEAPON) {
-						it["item_type"] = "weapon";
-						it["portal_category"] = "weapon";
+					const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
+					if(slug) {
+						it["item_type"] = slug;
+						it["portal_category"] = slug;
 					}
 					else {
 						it["item_type"] = "other";
@@ -969,14 +965,17 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 
 			const int item_type = ITEM_TYPE(obj);
-			const bool is_armor = item_type == ITEM_ARMOR;
-			const bool is_weapon = item_type == ITEM_WEAPON;
-			Json entries = object_edit_catalog_json(is_armor, is_weapon);
+			const bool is_armor =
+				item_type == ITEM_ARMOR || item_type == ITEM_WORN;
+			const bool is_weapon =
+				item_type == ITEM_WEAPON || item_type == ITEM_FIREWEAPON ||
+				item_type == ITEM_MISSILE;
+			Json entries = object_edit_catalog_json(obj);
 			for(auto& e : entries) {
 				const std::string kind = e.value("kind", "");
 				if(kind == "scalar") {
 					const int loc = e.value("location", 0);
-					e["current"] = object_affect_current_modifier(obj, loc);
+					e["current"] = object_edit_display_current(obj, loc);
 				}
 				else if(kind == "immune") {
 					const unsigned bit =
@@ -988,9 +987,13 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 			Json d = analyze_to_json(obj);
 			d["entries"] = entries;
+			d["affect_slots"] = object_affect_slots_json(obj);
 			d["inventory_id"] = inventory_id;
 			d["short_desc"] = row->elem.sd;
-			if(is_armor) {
+			if(is_armor && is_weapon) {
+				d["item_type"] = "armor+weapon";
+			}
+			else if(is_armor) {
 				d["item_type"] = "armor";
 			}
 			else if(is_weapon) {
@@ -1055,7 +1058,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
 			}
 			else {
-				current = object_affect_current_modifier(obj, location);
+				current = object_edit_display_current(obj, location);
 			}
 
 			Json d = quote_xp_json(xp_raw, pq);
