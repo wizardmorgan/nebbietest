@@ -293,6 +293,34 @@ app.post('/api/quote', requireAuth, requireSessionToon, async (req, res) => {
   res.status(result.ok ? 200 : 400).json(result);
 });
 
+app.post('/api/object-edit-options', requireAuth, requireSessionToon, async (req, res) => {
+  const targetToonId = Number(req.body.targetToonId);
+  const inventoryId = Number(req.body.inventoryId);
+  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
+    return res.status(403).json({ ok: false, error: 'accesso negato' });
+  }
+  const result = await mystPost('/internal/get-object-edit-options', {
+    toon_id: targetToonId,
+    inventory_id: inventoryId,
+  });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (req, res) => {
+  const targetToonId = Number(req.body.targetToonId);
+  const inventoryId = Number(req.body.inventoryId);
+  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
+    return res.status(403).json({ ok: false, error: 'accesso negato' });
+  }
+  const result = await mystPost('/internal/quote-object-edit', {
+    toon_id: targetToonId,
+    inventory_id: inventoryId,
+    location: Number(req.body.location),
+    target_modifier: Number(req.body.targetModifier),
+  });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
 app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = Number(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
@@ -305,7 +333,7 @@ app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) 
     target_toon_id: targetToonId,
     inventory_id: Number(req.body.inventoryId),
     location: Number(req.body.location),
-    modifier: Number(req.body.modifier),
+    target_modifier: Number(req.body.targetModifier ?? req.body.modifier),
     pay_xp: Number(req.body.payXp || 0),
     pay_rune: Number(req.body.payRune || 0),
   });

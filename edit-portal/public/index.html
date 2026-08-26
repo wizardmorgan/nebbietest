@@ -66,12 +66,14 @@
               <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
             </div>
             <ul id="inventory-list" class="inventory-list"></ul>
-            <p id="inventory-empty" class="hint hidden">Nessun oggetto — verifica che myst sia attivo e che il PG abbia inventario in MySQL.</p>
+            <p class="hint">Solo oggetti editabili (no RARO, armor/weapon con ITEM2_EDIT).</p>
+            <p id="inventory-empty" class="hint hidden">Nessun oggetto editabile — verifica myst, inventario MySQL o flag RARO/costo.</p>
           </div>
 
           <div class="card" id="object-detail-card">
             <h2>Oggetto selezionato</h2>
-            <div id="quote-box" class="quote-box">Seleziona un oggetto dall'inventario.</div>
+            <div id="quote-box" class="quote-box">Seleziona un oggetto editabile dall'inventario.</div>
+            <div id="object-edits" class="object-edits"></div>
           </div>
         </div>
       </div>

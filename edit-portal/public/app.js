@@ -9,6 +9,7 @@ let targetToonId = null;
 let charState = null;
 let editCatalog = null;
 let selectedInventoryId = null;
+let selectedObjectOptions = null;
 let pendingEdit = null;
 
 const $ = (id) => document.getElementById(id);
@@ -124,7 +125,7 @@ function updatePaymentUI() {
   $('payment-summary').innerHTML = `
     <strong>${pendingEdit.label}</strong><br>
     Costo listino: <strong>${plan.displayMxp}</strong>
-    ${plan.pqBase ? ` oppure <strong>${plan.pqBase} PQ</strong>` : ''}
+    ${plan.pqBase ? ` (componente PQ oggetto: ${plan.pqBase})` : ''}
   `;
 
   $('payment-breakdown').innerHTML = `
@@ -447,6 +448,7 @@ async function queueResistanceQuote(damageType, value, label, selectEl) {
 
 async function loadInventory() {
   targetToonId = Number($('target-toon').value);
+  const prevSelected = selectedInventoryId;
   const data = await api(`/api/inventory/${targetToonId}`);
   const list = $('inventory-list');
   list.innerHTML = '';
@@ -471,8 +473,13 @@ async function loadInventory() {
   items.forEach((it) => {
     const li = document.createElement('li');
     li.className = 'item';
-    li.textContent = `${it.short_desc || it.name} (vnum ${it.item_number})`;
+    const worn = Number(it.wear_pos) >= 0 ? ' · indossato' : '';
+    const depth = Number(it.depth) > 0 ? ` · in container` : '';
+    li.textContent = `${it.short_desc || it.name} (vnum ${it.item_number})${worn}${depth}`;
     li.title = `inventory_id ${it.inventory_id}`;
+    if (prevSelected && Number(it.inventory_id) === Number(prevSelected)) {
+      li.classList.add('selected');
+    }
     li.onclick = () => selectItem(it.inventory_id, li);
     list.appendChild(li);
   });
@@ -484,28 +491,159 @@ async function loadInventory() {
 
 async function selectItem(inventoryId, li) {
   document.querySelectorAll('#inventory-list .item').forEach((el) => el.classList.remove('selected'));
-  li.classList.add('selected');
+  if (li) li.classList.add('selected');
   selectedInventoryId = inventoryId;
   pendingEdit = null;
+  selectedObjectOptions = null;
   updatePaymentUI();
+  $('object-edits').innerHTML = '';
 
-  const q = await api('/api/quote', {
+  const opts = await api('/api/object-edit-options', {
     method: 'POST',
     body: JSON.stringify({ targetToonId, inventoryId }),
   });
 
-  if (!q.ok) {
-    $('quote-box').textContent = q.error || 'Quote fallita';
+  if (!opts.ok) {
+    $('quote-box').textContent = opts.error || 'Oggetto non editabile';
     return;
   }
 
-  const d = q.data || q;
+  selectedObjectOptions = opts.data;
+  const d = opts.data;
   $('quote-box').textContent = [
-    d.owner_name ? `Owner edit: ${d.owner_name} (${d.owner_classes} classi, x${d.class_mult})` : '',
-    `Costo vs prototipo: ${formatMxp(d.diff_xp_mega || 0, d.diff_xp_frac || 0)}`,
+    d.short_desc || '',
+    d.owner_name ? `Owner: ${d.owner_name} (${d.owner_classes} classi, x${d.class_mult})` : '',
+    d.item_type ? `Tipo: ${d.item_type}` : '',
+    `Costo attuale vs prototipo: ${formatMxp(d.diff_xp_mega || 0, d.diff_xp_frac || 0)}`,
     d.diff_rune ? `PQ oggetto: ${d.diff_rune}` : '',
-    d.changes ? `\n${d.changes}` : '',
   ].filter(Boolean).join('\n');
+
+  renderObjectEdits(d.entries || []);
+}
+
+function buildObjectScalarOptions(entry) {
+  const min = Number(entry.min);
+  const max = Number(entry.max);
+  const step = Number(entry.step) || 1;
+  const opts = [];
+  for (let v = min; v <= max; v += step) {
+    opts.push(v);
+  }
+  return opts;
+}
+
+function clearObjectPending(entryId) {
+  if (pendingEdit?.type === 'object' && pendingEdit.entryId === entryId) {
+    pendingEdit = null;
+    updatePaymentUI();
+  }
+}
+
+function renderObjectEdits(entries) {
+  const box = $('object-edits');
+  box.innerHTML = '';
+
+  if (!entries.length) {
+    box.innerHTML = '<p class="hint">Nessun campo editabile su questo oggetto.</p>';
+    return;
+  }
+  if (session.role === 'limited') {
+    box.innerHTML = '<p class="hint">Tier limited: edit oggetto non consentito.</p>';
+    return;
+  }
+
+  const title = document.createElement('h3');
+  title.textContent = 'Edit sull\'oggetto';
+  box.appendChild(title);
+
+  entries.forEach((entry) => {
+    const current = Number(entry.current || 0);
+    const row = document.createElement('div');
+    row.className = 'edit-row';
+    const select = document.createElement('select');
+
+    if (entry.kind === 'immune') {
+      [
+        { v: 0, l: 'No' },
+        { v: 1, l: 'Sì' },
+      ].forEach(({ v, l }) => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = l;
+        if (v === current) opt.selected = true;
+        select.appendChild(opt);
+      });
+      if (current === 1) select.disabled = true;
+    } else {
+      const values = buildObjectScalarOptions(entry);
+      if (!values.includes(current)) values.push(current);
+      values.sort((a, b) => a - b);
+      values.forEach((v) => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        if (v === current) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
+    select.addEventListener('change', () => {
+      const newVal = Number(select.value);
+      if (entry.kind === 'immune') {
+        if (newVal === 0 && current === 1) {
+          select.value = '1';
+          return;
+        }
+        if (newVal === current) {
+          clearObjectPending(entry.id);
+          return;
+        }
+        queueObjectQuote(entry, newVal ? Number(entry.immune_bit) : 0, select);
+      } else if (newVal === current) {
+        clearObjectPending(entry.id);
+      } else {
+        queueObjectQuote(entry, newVal, select);
+      }
+    });
+
+    row.innerHTML = `
+      <div>
+        <label>${entry.label || entry.id}</label>
+        <div class="current">Attuale: ${entry.kind === 'immune' ? (current ? 'Sì' : 'No') : current}</div>
+      </div>
+    `;
+    row.appendChild(select);
+    box.appendChild(row);
+  });
+}
+
+async function queueObjectQuote(entry, targetModifier, selectEl) {
+  const data = await api('/api/quote-object-edit', {
+    method: 'POST',
+    body: JSON.stringify({
+      targetToonId,
+      inventoryId: selectedInventoryId,
+      location: Number(entry.location),
+      targetModifier,
+    }),
+  });
+  if (!data.ok) {
+    alert(data.error || 'Quote oggetto fallita');
+    return;
+  }
+  const qd = data.data;
+  const curLabel = entry.kind === 'immune' ? (qd.current ? 'Sì' : 'No') : qd.current;
+  const tgtLabel = entry.kind === 'immune' ? (qd.target ? 'Sì' : 'No') : qd.target;
+  pendingEdit = {
+    type: 'object',
+    entryId: entry.id,
+    location: Number(entry.location),
+    targetModifier,
+    label: `${entry.label}: ${curLabel} → ${tgtLabel}`,
+    quote: qd,
+    selectEl,
+  };
+  updatePaymentUI();
 }
 
 async function confirmPayEdit() {
@@ -548,15 +686,32 @@ async function confirmPayEdit() {
         value: pendingEdit.value,
       }),
     });
+  } else if (pendingEdit.type === 'object') {
+    result = await api('/api/apply-affect', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...body,
+        inventoryId: selectedInventoryId,
+        location: pendingEdit.location,
+        targetModifier: pendingEdit.targetModifier,
+      }),
+    });
   } else {
     return;
   }
 
   if (result.ok) {
     $('apply-result').textContent = 'Edit applicato con successo.';
+    const wasObject = pendingEdit.type === 'object';
+    const invId = selectedInventoryId;
     pendingEdit = null;
     updatePaymentUI();
     await loadCharacterState();
+    if (wasObject && invId) {
+      await loadInventory();
+      const li = document.querySelector('#inventory-list .item.selected');
+      if (li) await selectItem(invId, li);
+    }
   } else {
     $('apply-result').textContent = result.error || 'Apply fallito';
     alert(result.error || 'Apply fallito');

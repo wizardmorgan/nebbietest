@@ -79,6 +79,11 @@ struct edit_pool_quote {
 /**
  * Costo listino EditMaster (pedit comandi) per delta positivo sul pool PG.
  * Delta <= 0 → costo zero (riduzione non pagata).
+ *
+ * Fonte: stesso listino di obj_value.cpp (CheckValueObj) per i 6 APPLY pool
+ * migrati sul PG — NON EditMaster/pedit (mob mai usato in produzione).
+ * PQ sul pool è 0: le rune entrano solo come modalità di pagamento alternativa
+ * (conversione MXP→PQ nel portale) o da derent su oggetti.
  */
 [[nodiscard]] edit_pool_quote edit_pool_quote_delta(EditPoolField field,
 													int delta) noexcept;
