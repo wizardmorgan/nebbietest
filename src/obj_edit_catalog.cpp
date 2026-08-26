@@ -590,6 +590,23 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	return true;
 }
 
+[[nodiscard]] static bool object_portal_included(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return false;
+	}
+	const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
+	if(slug && edit_system_portal_type_always_hidden(slug)) {
+		return false;
+	}
+	if(slug && edit_system_portal_category_enabled(slug)) {
+		return true;
+	}
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return true;
+	}
+	return false;
+}
+
 std::string object_portal_skip_reason(const struct obj_data* obj,
 									  const char* toon_name) {
 	if(!obj || !toon_name || !*toon_name) {
@@ -610,14 +627,11 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 	if(!owner_matches(obj, toon_name)) {
 		return "owner diverso dal PG (ED/personal per altro PG)";
 	}
-	if(IS_OBJ_STAT2(obj, ITEM2_EDIT) && !edit_system_portal_category_enabled("edited")) {
-		return "categoria EDIT disabilitata (staff)";
-	}
-	const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
-	if(slug && !edit_system_portal_category_enabled(slug)) {
-		return "categoria disabilitata (staff)";
-	}
-	if(!slug && !IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+	if(!object_portal_included(obj)) {
+		const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
+		if(slug) {
+			return "categoria disabilitata (staff)";
+		}
 		return "tipo non supportato nel portale";
 	}
 	return {};
@@ -626,14 +640,7 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 										  const char* toon_name) noexcept {
 	(void)toon_name;
-	if(!obj) {
-		return false;
-	}
-	const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
-	if(slug && edit_system_portal_type_always_hidden(slug)) {
-		return false;
-	}
-	return true;
+	return object_portal_included(obj);
 }
 
 bool object_portal_editable(const struct obj_data* obj, const char* toon_name) noexcept {
@@ -646,14 +653,7 @@ bool object_portal_editable(const struct obj_data* obj, const char* toon_name) n
 	if(!owner_matches(obj, toon_name)) {
 		return false;
 	}
-	const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
-	if(slug && edit_system_portal_category_enabled(slug)) {
-		return true;
-	}
-	if(IS_OBJ_STAT2(obj, ITEM2_EDIT) && edit_system_portal_category_enabled("edited")) {
-		return true;
-	}
-	return false;
+	return object_portal_included(obj);
 }
 
 Json object_edit_catalog_json(const struct obj_data* obj) {

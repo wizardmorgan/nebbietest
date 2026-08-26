@@ -37,48 +37,61 @@ struct Entry {
 	std::string g_config_path;
 	bool g_loaded = false;
 
-	struct PortalCategories {
-		bool armor = true;
-		bool weapon = true;
-		bool edited = true;
-	} g_portal_categories;
+	struct PortalTypeDef {
+		const char* slug;
+		const char* label;
+		bool default_enabled;
+	};
+
+	static const PortalTypeDef kPortalTypeDefs[] = {
+		{"light", "Light", false},
+		{"scroll", "Scroll", false},
+		{"wand", "Wand", false},
+		{"staff", "Staff", false},
+		{"weapon", "Weapon", true},
+		{"fireweapon", "Fire weapon", false},
+		{"missile", "Missile", false},
+		{"treasure", "Treasure", false},
+		{"armor", "Armor", true},
+		{"potion", "Potion", false},
+		{"worn", "Worn (medaglie, amuleti, bracciali)", true},
+		{"other", "Other", false},
+		{"trash", "Trash", false},
+		{"trap", "Trap", false},
+		{"container", "Container", false},
+		{"note", "Note", false},
+		{"drinkcon", "Drink container", false},
+		{"key", "Key", false},
+		{"food", "Food", false},
+		{"money", "Money", false},
+		{"pen", "Pen", false},
+		{"boat", "Boat", false},
+		{"audio", "Audio", false},
+		{"board", "Board", false},
+		{"tree", "Tree", false},
+		{"rock", "Rock", false},
+		{"m_gem", "Mineral gem", false},
+		{"m_mineral", "Mineral", false},
+		{"bar", "Bar", false},
+		{"jewel", "Jewel", true},
+		{"clan_symbol", "Clan symbol", false},
+	};
 
 	std::unordered_map<std::string, bool> g_portal_type_enabled;
 
 	void portal_type_reset_defaults() {
 		g_portal_type_enabled.clear();
-		g_portal_categories = PortalCategories {};
-		g_portal_type_enabled["light"] = false;
-		g_portal_type_enabled["scroll"] = false;
-		g_portal_type_enabled["wand"] = false;
-		g_portal_type_enabled["staff"] = false;
-		g_portal_type_enabled["weapon"] = true;
-		g_portal_type_enabled["fireweapon"] = false;
-		g_portal_type_enabled["missile"] = false;
-		g_portal_type_enabled["treasure"] = false;
-		g_portal_type_enabled["armor"] = true;
-		g_portal_type_enabled["potion"] = false;
-		g_portal_type_enabled["worn"] = false;
-		g_portal_type_enabled["other"] = false;
-		g_portal_type_enabled["trash"] = false;
-		g_portal_type_enabled["trap"] = false;
-		g_portal_type_enabled["container"] = false;
-		g_portal_type_enabled["note"] = false;
-		g_portal_type_enabled["drinkcon"] = false;
-		g_portal_type_enabled["key"] = false;
-		g_portal_type_enabled["food"] = false;
-		g_portal_type_enabled["money"] = false;
-		g_portal_type_enabled["pen"] = false;
-		g_portal_type_enabled["boat"] = false;
-		g_portal_type_enabled["audio"] = false;
-		g_portal_type_enabled["board"] = false;
-		g_portal_type_enabled["tree"] = false;
-		g_portal_type_enabled["rock"] = false;
-		g_portal_type_enabled["m_gem"] = false;
-		g_portal_type_enabled["m_mineral"] = false;
-		g_portal_type_enabled["bar"] = false;
-		g_portal_type_enabled["jewel"] = false;
-		g_portal_type_enabled["clan_symbol"] = false;
+		for(const auto& def : kPortalTypeDefs) {
+			g_portal_type_enabled[def.slug] = def.default_enabled;
+		}
+	}
+
+	[[nodiscard]] static bool portal_slug_always_hidden(const char* slug) noexcept {
+		if(!slug || !*slug) {
+			return false;
+		}
+		return strcmp(slug, "food") == 0 || strcmp(slug, "potion") == 0
+			   || strcmp(slug, "clan_symbol") == 0 || strcmp(slug, "none") == 0;
 	}
 
 [[nodiscard]] EditSystemTarget parse_target(const std::string& s) {
@@ -179,7 +192,6 @@ void parse_portal_categories(const Json& root) {
 		return;
 	}
 	const Json& p = root["object_portal"];
-	g_portal_categories.edited = p.value("edited", true);
 	if(p.find("types") != p.end() && p["types"].is_object()) {
 		const Json& types = p["types"];
 		for(auto it = types.begin(); it != types.end(); ++it) {
@@ -188,15 +200,12 @@ void parse_portal_categories(const Json& root) {
 			}
 		}
 	}
-	// Legacy flat keys (armor/weapon/edited)
+	// Legacy flat keys (armor/weapon)
 	if(p.find("armor") != p.end()) {
 		g_portal_type_enabled["armor"] = p.value("armor", true);
 	}
 	if(p.find("weapon") != p.end()) {
 		g_portal_type_enabled["weapon"] = p.value("weapon", true);
-	}
-	if(p.find("edited") != p.end()) {
-		g_portal_categories.edited = p.value("edited", true);
 	}
 }
 
@@ -252,15 +261,28 @@ void parse_entries_json(const Json& root) {
 	}
 	root["entries"] = arr;
 	Json portal;
-	portal["edited"] = g_portal_categories.edited;
 	Json types = Json::object();
-	for(const auto& kv : g_portal_type_enabled) {
-		types[kv.first] = kv.second;
+	for(const auto& def : kPortalTypeDefs) {
+		const auto it = g_portal_type_enabled.find(def.slug);
+		types[def.slug] = it != g_portal_type_enabled.end() ? it->second : def.default_enabled;
 	}
 	portal["types"] = types;
+	Json catalog = Json::array();
+	for(const auto& def : kPortalTypeDefs) {
+		Json row;
+		row["slug"] = def.slug;
+		row["label"] = def.label;
+		const auto it = g_portal_type_enabled.find(def.slug);
+		row["enabled"] =
+			it != g_portal_type_enabled.end() ? it->second : def.default_enabled;
+		row["always_hidden"] = portal_slug_always_hidden(def.slug);
+		catalog.push_back(row);
+	}
+	portal["type_catalog"] = catalog;
 	portal["comment"] =
-		"types: slug e_item_type senza ITEM_. food/potion sempre nascosti. "
-		"edited = flag ITEM2_EDIT su tipi non abilitati.";
+		"types: slug ITEM_* nel portale. Spunta = visibile e editabile. "
+		"food/potion/clan_symbol sempre nascosti. "
+		"Oggetti con flag EDIT del PG sono sempre inclusi (ri-edit).";
 	root["object_portal"] = portal;
 	return root;
 }
@@ -457,11 +479,7 @@ bool edit_system_resistance_enabled(unsigned damage_type) noexcept {
 }
 
 bool edit_system_portal_type_always_hidden(const char* category) noexcept {
-	if(!category || !*category) {
-		return false;
-	}
-	return strcmp(category, "food") == 0 || strcmp(category, "potion") == 0
-		   || strcmp(category, "clan_symbol") == 0 || strcmp(category, "none") == 0;
+	return portal_slug_always_hidden(category);
 }
 
 bool edit_system_portal_category_enabled(const char* category) noexcept {
@@ -470,10 +488,6 @@ bool edit_system_portal_category_enabled(const char* category) noexcept {
 	}
 	if(edit_system_portal_type_always_hidden(category)) {
 		return false;
-	}
-	if(strcmp(category, "edited") == 0) {
-		std::lock_guard<std::mutex> lock(g_mutex);
-		return g_portal_categories.edited;
 	}
 	std::lock_guard<std::mutex> lock(g_mutex);
 	const auto it = g_portal_type_enabled.find(category);
