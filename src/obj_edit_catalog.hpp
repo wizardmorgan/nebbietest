@@ -13,8 +13,12 @@ namespace Alarmud {
 
 using Json = nlohmann::json;
 
-/** Oggetto conciato (skill tan): mai editabile nel portale. */
-[[nodiscard]] bool object_is_tanned(const struct obj_data* obj) noexcept;
+/** Vnum prototipo tan (TAN_* da skill tan). */
+[[nodiscard]] bool object_vnum_is_tan_proto(int vnum) noexcept;
+
+/** Motivo se non editabile (stringa vuota se editabile). */
+[[nodiscard]] std::string object_portal_skip_reason(const struct obj_data* obj,
+												  const char* toon_name);
 
 /** wearpos MySQL: >0 = indossato (non editabile in portale). */
 bool inventory_row_is_worn(int wearpos) noexcept;

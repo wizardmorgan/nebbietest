@@ -68,8 +68,8 @@
               <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
             </div>
             <ul id="inventory-list" class="inventory-list"></ul>
-            <p class="hint">Solo oggetti in inventario o container (non indossati, no RARO/tan).</p>
-            <p id="inventory-empty" class="hint hidden">Nessun oggetto editabile — verifica myst, inventario MySQL o flag RARO/costo.</p>
+            <p class="hint">Tutti gli oggetti in inventario/container; solo quelli editabili sono selezionabili.</p>
+            <p id="inventory-empty" class="hint hidden">Nessun oggetto in inventario MySQL per questo PG.</p>
           </div>
 
           <div class="card" id="object-detail-card">
@@ -86,8 +86,8 @@
         <div class="payment-controls">
           <label class="field-label">Metodo
             <select id="pay-mode">
-              <option value="pq">Solo Runes (PQ)</option>
-              <option value="mxp">Solo MXP (+ 1 PQ di servizio)</option>
+              <option value="mxp">Solo MXP (exp)</option>
+              <option value="runes">Solo Runes degli Eroi</option>
               <option value="mix">Misto MXP + Runes</option>
             </select>
           </label>

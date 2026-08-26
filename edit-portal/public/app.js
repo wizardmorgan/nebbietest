@@ -1,7 +1,6 @@
 'use strict';
 
 const PQ_PER_MEGA_XP = 2000000;
-const SESSION_PQ_FEE = 1;
 const PRINCE_LEVEL = 51;
 
 let session = null;
@@ -56,8 +55,8 @@ function canPayMxp() {
 
 function buildPaymentPlan(quote, mode, runePct) {
   const xpRaw = Number(quote.xp_raw || quote.diff_xp_raw || 0);
-  const pqListino = Number(quote.pq ?? 0);
-  const pqObject = Number(quote.diff_rune || 0);
+  const runeListino = Number(quote.diff_rune || 0);
+  const runePerMega = Number(editCatalog?.pq_per_mega_xp || PQ_PER_MEGA_XP);
   const { mega, frac, raw } = quoteMxpFromRaw(xpRaw);
 
   let payXp = 0;
@@ -65,21 +64,19 @@ function buildPaymentPlan(quote, mode, runePct) {
 
   if (mode === 'mxp') {
     payXp = raw;
-    payRune = SESSION_PQ_FEE;
-  } else if (mode === 'pq') {
-    const pqCost = pqListino > 0 ? pqListino : Math.ceil(raw / PQ_PER_MEGA_XP);
+    payRune = runeListino;
+  } else if (mode === 'runes') {
+    const runesFromMxp = raw > 0 ? Math.ceil(raw / runePerMega) : 0;
     payXp = 0;
-    payRune = pqCost + pqObject + SESSION_PQ_FEE;
+    payRune = runesFromMxp + runeListino;
   } else {
     const runeMega = (mega * runePct) / 100;
     const runeFrac = (frac * runePct) / 100;
     const runeMegaTotal = runeMega + runeFrac / 100;
-    const pqFromMxp = pqListino > 0
-      ? Math.ceil((pqListino * runePct) / 100)
-      : Math.ceil(runeMegaTotal / 2);
-    const xpCovered = pqFromMxp * PQ_PER_MEGA_XP;
+    const runesFromMxp = Math.ceil(runeMegaTotal);
+    const xpCovered = runesFromMxp * runePerMega;
     payXp = Math.max(0, raw - xpCovered);
-    payRune = pqObject + pqFromMxp + (payXp > 0 ? SESSION_PQ_FEE : 0);
+    payRune = runeListino + runesFromMxp;
   }
 
   return {
@@ -87,7 +84,7 @@ function buildPaymentPlan(quote, mode, runePct) {
     payRune,
     displayMxp: formatMxp(mega, frac),
     xpRaw,
-    pqBase: pqListino || pqObject,
+    runeListino,
   };
 }
 
@@ -125,16 +122,16 @@ function updatePaymentUI() {
   $('payment-summary').innerHTML = `
     <strong>${pendingEdit.label}</strong><br>
     Costo listino: <strong>${plan.displayMxp}</strong>
-    ${plan.pqBase ? ` (componente PQ oggetto: ${plan.pqBase})` : ''}
+    ${plan.runeListino ? ` (+ ${plan.runeListino} Runes componente listino)` : ''}
   `;
 
   $('payment-breakdown').innerHTML = `
-    Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong> raw
-    e <strong>${plan.payRune} Runes (PQ)</strong><br>
+    Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong> raw (MXP)
+    e <strong>${plan.payRune} Runes</strong><br>
     Disponibili: ${formatMxp(charState.available_mxp || 0, charState.available_mxp_frac || 0)}
-    · ${charState.rune || 0} PQ<br>
+    · ${charState.rune || 0} Runes<br>
   <span class="${check.okXp ? 'ok' : 'bad'}">MXP ${check.okXp ? 'OK' : 'insufficienti'}</span>
-  · <span class="${check.okRune ? 'ok' : 'bad'}">PQ ${check.okRune ? 'OK' : 'insufficienti'}</span>
+  · <span class="${check.okRune ? 'ok' : 'bad'}">Runes ${check.okRune ? 'OK' : 'insufficienti'}</span>
   `;
 
   $('btn-pay-edit').disabled = !check.ok;
@@ -202,10 +199,12 @@ async function enterWorkMode() {
 
   const payMode = $('pay-mode');
   if (canPayMxp()) {
+    payMode.value = 'mxp';
     payMode.querySelector('option[value="mxp"]').disabled = false;
     payMode.querySelector('option[value="mix"]').disabled = false;
+    payMode.querySelector('option[value="runes"]').disabled = false;
   } else {
-    payMode.value = 'pq';
+    payMode.value = 'runes';
     payMode.querySelector('option[value="mxp"]').disabled = true;
     payMode.querySelector('option[value="mix"]').disabled = true;
   }
@@ -286,7 +285,8 @@ function renderCharStats() {
     <div class="stat-row"><span>Nome</span><strong>${s.name}</strong></div>
     <div class="stat-row"><span>Livello</span><strong>${s.max_level}</strong></div>
     <div class="stat-row"><span>MXP disponibili</span><strong>${formatMxp(s.available_mxp, s.available_mxp_frac)}</strong></div>
-    <div class="stat-row"><span>Runes (PQ)</span><strong>${s.rune}</strong></div>
+    <div class="stat-row"><span>Runes degli Eroi</span><strong>${s.rune}</strong></div>
+    ${s.prince_reserve_mxp ? `<div class="stat-row hint">Riserva principi: ${s.prince_reserve_mxp} MXP</div>` : ''}
   `;
 }
 
@@ -470,18 +470,29 @@ async function loadInventory() {
   }
 
   const items = data.items || [];
+  const editableCount = Number(data.editable_count ?? items.filter((i) => i.editable).length);
   $('inventory-empty').classList.toggle('hidden', items.length > 0);
+
+  if (items.length && editableCount === 0) {
+    showApiWarn('Inventario caricato: nessun oggetto editabile (vedi motivi nella lista).');
+  }
 
   items.forEach((it) => {
     const li = document.createElement('li');
-    li.className = 'item';
+    li.className = it.editable ? 'item' : 'item item-disabled';
+    const worn = it.worn ? ' · indossato' : '';
     const depth = Number(it.depth) > 0 ? ' · in container' : '';
-    li.textContent = `${it.short_desc || it.name} (vnum ${it.item_number})${depth}`;
-    li.title = `inventory_id ${it.inventory_id}`;
+    const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
+    li.textContent = `${it.short_desc || it.name} (vnum ${it.item_number})${worn}${depth}${skip}`;
+    li.title = it.editable
+      ? `inventory_id ${it.inventory_id}`
+      : it.skip_reason || 'non editabile';
     if (prevSelected && Number(it.inventory_id) === Number(prevSelected)) {
       li.classList.add('selected');
     }
-    li.onclick = () => selectItem(it.inventory_id, li);
+    if (it.editable) {
+      li.onclick = () => selectItem(it.inventory_id, li);
+    }
     list.appendChild(li);
   });
 
@@ -516,7 +527,7 @@ async function selectItem(inventoryId, li) {
     d.owner_name ? `Owner: ${d.owner_name} (${d.owner_classes} classi, x${d.class_mult})` : '',
     d.item_type ? `Tipo: ${d.item_type}` : '',
     `Costo attuale vs prototipo: ${formatMxp(d.diff_xp_mega || 0, d.diff_xp_frac || 0)}`,
-    d.diff_rune ? `PQ oggetto: ${d.diff_rune}` : '',
+    d.diff_rune ? `Runes componente listino: ${d.diff_rune}` : '',
   ].filter(Boolean).join('\n');
 
   renderObjectEdits(d.entries || []);
@@ -654,7 +665,7 @@ async function confirmPayEdit() {
   const isStaffOnOther =
     session.role === 'staff' && Number(targetToonId) !== Number(session.sessionToonId);
 
-  const msg1 = `Confermi il pagamento per:\n${pendingEdit.label}\n\nTotale: ${pendingEdit.plan.payXp.toLocaleString('it-IT')} XP + ${pendingEdit.plan.payRune} PQ`;
+  const msg1 = `Confermi il pagamento per:\n${pendingEdit.label}\n\nTotale: ${pendingEdit.plan.payXp.toLocaleString('it-IT')} XP (MXP) + ${pendingEdit.plan.payRune} Runes`;
   if (!confirm(msg1)) return;
 
   if (isStaffOnOther) {
