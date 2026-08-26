@@ -28,9 +28,12 @@
     { "id": "resistance.plus4", "kind": "resistance", "damage_type": 131072, "target": "object", "enabled": true, "label": "Weapon +4" }
   ],
   "object_portal": {
-    "armor": true,
-    "weapon": true,
-    "edited": true,
-    "comment": "Categorie visibili nel portale. Food/potion mai mostrati. edited = flag ITEM2_EDIT."
+    "types": {
+      "armor": true,
+      "weapon": true,
+      "worn": true,
+      "jewel": true
+    },
+    "comment": "types: slug ITEM_* — spunta = visibile e editabile nel portale. food/potion/clan_symbol sempre nascosti."
   }
 }

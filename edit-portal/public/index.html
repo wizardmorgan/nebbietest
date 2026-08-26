@@ -72,7 +72,7 @@
               <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
             </div>
             <ul id="inventory-list" class="inventory-list"></ul>
-            <p class="hint">Armor/weapon/edit flag nel portale; food e potion non compaiono. Categorie disabilitate dallo staff sono nascoste.</p>
+          <p class="hint">Tipi abilitati dallo staff: visibili e editabili. Food/potion sempre nascosti. Oggetti già editati (flag EDIT) del PG sono sempre inclusi.</p>
             <p id="inventory-empty" class="hint hidden">Nessun oggetto in inventario MySQL per questo PG.</p>
           </div>
 
@@ -109,13 +109,9 @@
       <div id="staff-panel" class="card hidden">
         <h2>Staff — configurazione sistema</h2>
         <div class="portal-categories card-inner">
-          <h3>Categorie visibili nell'inventario</h3>
-          <p class="hint">Senza spunta: quel tipo non compare nell'inventario del portale. Food e potion non sono mai mostrati.</p>
-          <div id="portal-category-toggles" class="checkbox-grid">
-            <label class="checkbox-row"><input type="checkbox" id="portal-cat-armor" /> Armor</label>
-            <label class="checkbox-row"><input type="checkbox" id="portal-cat-weapon" /> Weapon</label>
-            <label class="checkbox-row"><input type="checkbox" id="portal-cat-edited" /> Con flag EDIT (altri tipi)</label>
-          </div>
+          <h3>Categorie oggetto nel portale</h3>
+          <p class="hint">Spunta = tipo visibile nell'inventario e editabile. Senza spunta = nascosto. Food, potion e clan symbol non sono configurabili (sempre nascosti). Gli oggetti con flag EDIT del PG restano sempre visibili per ri-edit.</p>
+          <div id="portal-category-toggles" class="checkbox-grid"></div>
           <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
           <p id="portal-cat-result" class="msg"></p>
         </div>

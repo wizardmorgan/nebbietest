@@ -988,18 +988,35 @@ async function loadSystemConfig() {
 }
 
 function applyPortalCategoriesToUI(portal) {
-  $('portal-cat-armor').checked = portal.armor !== false;
-  $('portal-cat-weapon').checked = portal.weapon !== false;
-  $('portal-cat-edited').checked = portal.edited !== false;
+  const container = $('portal-category-toggles');
+  if (!container) return;
+  const catalog = portal.type_catalog || [];
+  const types = portal.types || {};
+  container.innerHTML = '';
+  catalog.forEach((row) => {
+    if (row.always_hidden) return;
+    const label = document.createElement('label');
+    label.className = 'checkbox-row';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.dataset.slug = row.slug;
+    const fromTypes = types[row.slug];
+    input.checked = fromTypes !== undefined ? fromTypes : row.enabled !== false;
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(` ${row.label || row.slug}`));
+    container.appendChild(label);
+  });
 }
 
 function portalCategoriesFromUI() {
+  const types = {};
+  document.querySelectorAll('#portal-category-toggles input[data-slug]').forEach((input) => {
+    types[input.dataset.slug] = input.checked;
+  });
   return {
-    armor: $('portal-cat-armor').checked,
-    weapon: $('portal-cat-weapon').checked,
-    edited: $('portal-cat-edited').checked,
+    types,
     comment:
-      'Categorie visibili nel portale. Food/potion non mostrati. edited = flag ITEM2_EDIT.',
+      'types: slug ITEM_* — spunta = visibile e editabile. food/potion/clan_symbol sempre nascosti. Flag EDIT del PG = sempre incluso.',
   };
 }
 
