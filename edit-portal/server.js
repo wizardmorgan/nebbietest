@@ -64,7 +64,7 @@ async function mystPost(pathSuffix, body) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Edit-Api-Secret': MYST_API_SECRET,
+      'x-edit-api-secret': MYST_API_SECRET,
     },
     body: JSON.stringify(body || {}),
   });

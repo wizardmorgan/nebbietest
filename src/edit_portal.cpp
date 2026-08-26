@@ -63,19 +63,6 @@ std::condition_variable g_queue_cv;
 std::deque<EditPortalJob> g_jobs;
 std::atomic<bool> g_http_running {false};
 
-[[nodiscard]] std::string api_secret() {
-	const char* s = std::getenv("EDIT_API_SECRET");
-	return s ? std::string(s) : "nebbie-edit-dev-secret";
-}
-
-[[nodiscard]] int api_port() {
-	const char* p = std::getenv("EDIT_API_PORT");
-	if(!p || !*p) {
-		return 8090;
-	}
-	return std::atoi(p);
-}
-
 [[nodiscard]] std::string trim_http_value(std::string value) {
 	while(!value.empty() && (value.front() == ' ' || value.front() == '\t')) {
 		value.erase(value.begin());
@@ -84,6 +71,22 @@ std::atomic<bool> g_http_running {false};
 		value.pop_back();
 	}
 	return value;
+}
+
+[[nodiscard]] std::string api_secret() {
+	const char* s = std::getenv("EDIT_API_SECRET");
+	if(!s || !*s) {
+		return "nebbie-edit-dev-secret";
+	}
+	return trim_http_value(std::string(s));
+}
+
+[[nodiscard]] int api_port() {
+	const char* p = std::getenv("EDIT_API_PORT");
+	if(!p || !*p) {
+		return 8090;
+	}
+	return std::atoi(p);
 }
 
 [[nodiscard]] bool header_has_secret(const std::string& headers) {
