@@ -6,12 +6,21 @@ cd "$(dirname "$0")/.."
 API_SECRET="${EDIT_API_SECRET:-nebbie-edit-dev-secret}"
 API_PORT="${EDIT_API_PORT:-8090}"
 
+fail() {
+	echo "ERRORE: $*" >&2
+	exit 1
+}
+
+bin_has_marker() {
+	local f="$1"
+	grep -aq portal_api_version "$f" 2>/dev/null || strings "$f" 2>/dev/null | grep -q portal_api_version
+}
+
 echo "=== sorgente ==="
 if grep -q 'portal_api_version' src/edit_portal.cpp 2>/dev/null; then
 	echo "OK: src/edit_portal.cpp contiene portal_api_version"
 else
-	echo "ERRORE: src/edit_portal.cpp vecchio — git pull/merge mine/feature/edit-portal" >&2
-	exit 1
+	fail "src/edit_portal.cpp vecchio — git pull/merge feature/edit-portal"
 fi
 
 echo ""
@@ -19,10 +28,10 @@ echo "=== binari su disco ==="
 for f in mudroot/myst build/src/myst; do
 	if [ -f "$f" ]; then
 		echo "$f: $(ls -la "$f" | awk '{print $5, $6, $7, $8}')"
-		if strings "$f" 2>/dev/null | grep -q portal_api_version; then
+		if bin_has_marker "$f"; then
 			echo "  -> marker portal_api_version: SI"
 		else
-			echo "  -> marker portal_api_version: NO (ricompila: ./build.sh devel)" >&2
+			echo "  -> marker portal_api_version: NO — ricompila: docker compose run --rm --entrypoint '' mudcompiler ./build.sh devel" >&2
 		fi
 	else
 		echo "$f: non presente"
@@ -32,20 +41,31 @@ done
 echo ""
 echo "=== container mudcompiler ==="
 if ! docker ps --format '{{.Names}}' | grep -qx mudcompiler; then
-	echo "ERRORE: container mudcompiler non in esecuzione" >&2
-	exit 1
+	fail "container mudcompiler non in esecuzione"
 fi
 docker exec mudcompiler bash -c 'ls -la /app/mudroot/myst; pgrep -a myst || true'
 
 echo ""
-echo "=== ping API (host :${API_PORT}) ==="
-curl -sf -X POST "http://localhost:${API_PORT}/internal/ping" \
+echo "=== ping API (host :${API_PORT}) — test principale ==="
+PING_JSON="$(curl -sf -X POST "http://localhost:${API_PORT}/internal/ping" \
 	-H "X-Edit-Api-Secret: ${API_SECRET}" \
-	-H "Content-Type: application/json" -d '{}' | python3 -m json.tool || {
-	echo "ERRORE: ping fallito" >&2
-	exit 1
-}
+	-H "Content-Type: application/json" -d '{}' || true)"
+if [ -z "$PING_JSON" ]; then
+	fail "ping su :${API_PORT} fallito"
+fi
+echo "$PING_JSON" | python3 -m json.tool
+if ! echo "$PING_JSON" | grep -q portal_api_version; then
+	echo "" >&2
+	fail "myst in esecuzione è VECCHIO (no portal_api_version nella risposta). Esegui:" >&2
+	echo "  docker compose run --rm --entrypoint '' mudcompiler ./build.sh devel" >&2
+	echo "  ./scripts/mud-dev.sh stop-mud" >&2
+	echo "  ./scripts/mud-dev.sh start-mud" >&2
+	echo "  oppure: docker compose stop mudcompiler && docker compose rm -f mudcompiler && docker compose up -d mudcompiler" >&2
+fi
 
 echo ""
 echo "=== ping via edit-portal :3080 ==="
 curl -sf "http://localhost:3080/api/health" | python3 -m json.tool || echo "(edit-portal non risponde)"
+
+echo ""
+echo "OK: myst edit-portal API aggiornata."
