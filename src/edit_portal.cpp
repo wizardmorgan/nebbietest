@@ -113,6 +113,67 @@ std::atomic<bool> g_http_running {false};
 	return false;
 }
 
+[[nodiscard]] size_t header_content_length(const std::string& headers) {
+	std::istringstream stream(headers);
+	std::string line;
+	while(std::getline(stream, line)) {
+		if(!line.empty() && line.back() == '\r') {
+			line.pop_back();
+		}
+		const auto colon = line.find(':');
+		if(colon == std::string::npos) {
+			continue;
+		}
+		std::string name = line.substr(0, colon);
+		for(char& c : name) {
+			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		}
+		if(name != "content-length") {
+			continue;
+		}
+		return static_cast<size_t>(
+			std::strtoul(trim_http_value(line.substr(colon + 1)).c_str(), nullptr, 10));
+	}
+	return 0;
+}
+
+[[nodiscard]] std::string read_http_request(int client) {
+	std::string raw;
+	char buf[4096];
+	size_t need = 0;
+	while(raw.size() < 65536) {
+		if(need > 0 && raw.size() >= need) {
+			break;
+		}
+		const ssize_t n = read(client, buf, sizeof(buf));
+		if(n <= 0) {
+			break;
+		}
+		raw.append(buf, static_cast<size_t>(n));
+		const auto hdr_end = raw.find("\r\n\r\n");
+		if(hdr_end == std::string::npos) {
+			continue;
+		}
+		const size_t cl = header_content_length(raw.substr(0, hdr_end));
+		need = hdr_end + 4 + cl;
+	}
+	return raw;
+}
+
+[[nodiscard]] std::string normalize_api_path(std::string path) {
+	if(!path.empty() && path.front() != '/') {
+		path.insert(path.begin(), '/');
+	}
+	const auto q = path.find('?');
+	if(q != std::string::npos) {
+		path = path.substr(0, q);
+	}
+	while(path.size() > 1 && path.back() == '/') {
+		path.pop_back();
+	}
+	return path;
+}
+
 [[nodiscard]] std::string json_error(const char* msg, int code = 400) {
 	Json j;
 	j["ok"] = false;
@@ -728,6 +789,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			load_character_inventory_mysql(toon_id, rows);
 			Json items = Json::array();
 			for(const auto& r : rows) {
+				if(inventory_row_is_worn(r.elem.wearpos)) {
+					continue;
+				}
+
 				struct obj_data* obj = materialize_inventory_row(r);
 				if(!obj) {
 					continue;
@@ -774,6 +839,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(!row) {
 				return json_error("oggetto non trovato nell'inventario del toon", 404);
 			}
+			if(inventory_row_is_worn(row->elem.wearpos)) {
+				return json_error(
+					"l'oggetto e indossato: rimuovilo e mettilo in inventario prima dell'edit",
+					400);
+			}
 
 			struct obj_data* obj = materialize_inventory_row(*row);
 			if(!obj) {
@@ -781,7 +851,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 			if(!object_portal_editable(obj, toon_name.c_str())) {
 				extract_obj(obj);
-				return json_error("oggetto non editabile (RARO, tipo o owner)", 400);
+				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
 			}
 
 			const int item_type = ITEM_TYPE(obj);
@@ -830,6 +900,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(!row) {
 				return json_error("oggetto non trovato nell'inventario del toon", 404);
 			}
+			if(inventory_row_is_worn(row->elem.wearpos)) {
+				return json_error(
+					"l'oggetto e indossato: rimuovilo e mettilo in inventario prima dell'edit",
+					400);
+			}
 
 			struct obj_data* obj = materialize_inventory_row(*row);
 			if(!obj) {
@@ -837,7 +912,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 			if(!object_portal_editable(obj, toon_name.c_str())) {
 				extract_obj(obj);
-				return json_error("oggetto non editabile", 400);
+				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
 			}
 
 			long xp_raw = 0;
@@ -927,6 +1002,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(!row) {
 				return json_error("oggetto non trovato nell'inventario", 404);
 			}
+			if(inventory_row_is_worn(row->elem.wearpos)) {
+				return json_error(
+					"l'oggetto e indossato: rimuovilo e mettilo in inventario prima dell'edit",
+					400);
+			}
 
 			struct obj_data* obj = materialize_inventory_row(*row);
 			if(!obj) {
@@ -934,7 +1014,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 			if(!object_portal_editable(obj, target_name.c_str())) {
 				extract_obj(obj);
-				return json_error("oggetto non editabile (RARO, tipo o owner)", 400);
+				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
 			}
 
 			long quote_xp = 0;
@@ -1263,14 +1343,11 @@ void http_thread_main() {
 			continue;
 		}
 
-		char buf[16384];
-		const ssize_t n = read(client, buf, sizeof(buf) - 1);
-		if(n <= 0) {
+		const std::string raw = read_http_request(client);
+		if(raw.empty()) {
 			close(client);
 			continue;
 		}
-		buf[n] = '\0';
-		std::string raw(buf, static_cast<size_t>(n));
 
 		std::string method;
 		std::string path;
@@ -1278,6 +1355,7 @@ void http_thread_main() {
 			std::istringstream ls(raw);
 			ls >> method >> path;
 		}
+		path = normalize_api_path(path);
 
 		const auto hdr_end = raw.find("\r\n\r\n");
 		const std::string headers = hdr_end != std::string::npos

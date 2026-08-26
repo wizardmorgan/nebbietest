@@ -212,9 +212,11 @@ async function enterWorkMode() {
 
   if (me.role === 'staff') {
     show('staff-panel');
+    show('target-toon-wrap');
     loadSystemConfig();
   } else {
     hide('staff-panel');
+    hide('target-toon-wrap');
   }
 
   await loadEditCatalog();
@@ -473,9 +475,8 @@ async function loadInventory() {
   items.forEach((it) => {
     const li = document.createElement('li');
     li.className = 'item';
-    const worn = Number(it.wear_pos) >= 0 ? ' · indossato' : '';
-    const depth = Number(it.depth) > 0 ? ` · in container` : '';
-    li.textContent = `${it.short_desc || it.name} (vnum ${it.item_number})${worn}${depth}`;
+    const depth = Number(it.depth) > 0 ? ' · in container' : '';
+    li.textContent = `${it.short_desc || it.name} (vnum ${it.item_number})${depth}`;
     li.title = `inventory_id ${it.inventory_id}`;
     if (prevSelected && Number(it.inventory_id) === Number(prevSelected)) {
       li.classList.add('selected');

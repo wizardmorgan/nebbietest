@@ -69,11 +69,16 @@ async function mystPost(pathSuffix, body) {
     body: JSON.stringify(body || {}),
   });
   const text = await res.text();
+  let data;
   try {
-    return JSON.parse(text);
+    data = JSON.parse(text);
   } catch {
     return { ok: false, error: `risposta non JSON da myst: ${text.slice(0, 200)}` };
   }
+  if (data.ok === undefined) {
+    data.ok = res.ok;
+  }
+  return data;
 }
 
 function requireAuth(req, res, next) {
