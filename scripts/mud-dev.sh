@@ -284,9 +284,13 @@ cmd_sync_edit() {
 	echo "=== sync-edit: $EDIT_REPO ($EDIT_REMOTE/$EDIT_BRANCH) ==="
 	ensure_edit_remote
 	git_discard_local_file "$EDIT_REPO" scripts/mud-dev.sh
+	git_discard_local_file "$EDIT_REPO" scripts/verify-myst-portal.sh
+	git_discard_local_file "$EDIT_REPO" scripts/fix-edit-system-perms.sh
 	git_discard_local_file "$EDIT_REPO" pages/wizhelptbl.stamp
 	git_pull_branch "$EDIT_REPO" "$EDIT_REMOTE" "$EDIT_BRANCH"
-	chmod +x "$EDIT_REPO/scripts/mud-dev.sh" 2>/dev/null || true
+	chmod +x "$EDIT_REPO/scripts/mud-dev.sh" \
+		"$EDIT_REPO/scripts/verify-myst-portal.sh" \
+		"$EDIT_REPO/scripts/fix-edit-system-perms.sh" 2>/dev/null || true
 	echo "sync-edit ok."
 }
 
@@ -296,6 +300,7 @@ cmd_sync_all() {
 	ensure_upstream_remote
 	ensure_edit_remote
 	git_discard_local_file "$EDIT_REPO" scripts/mud-dev.sh
+	git_discard_local_file "$EDIT_REPO" scripts/verify-myst-portal.sh
 	(
 		cd "$EDIT_REPO"
 		git fetch "$UPSTREAM_REMOTE" "$RAZZE_BRANCH"
