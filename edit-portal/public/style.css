@@ -119,6 +119,11 @@ code {
   margin-top: 0.5rem;
 }
 
+.msg.warn {
+  color: #c45a00;
+  font-weight: 600;
+}
+
 .alert {
   padding: 0.75rem 1rem;
   border-radius: var(--radius);

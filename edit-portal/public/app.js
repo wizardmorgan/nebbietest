@@ -978,6 +978,82 @@ $('pay-mode').onchange = updatePaymentUI;
 $('pay-rune-pct').oninput = updatePaymentUI;
 $('btn-pay-edit').onclick = () => confirmPayEdit();
 
+/** Slug ITEM_* — allineato a edit_system_config.cpp (fallback se myst vecchio). */
+const PORTAL_TYPE_DEFS = [
+  { slug: 'light', label: 'Light' },
+  { slug: 'scroll', label: 'Scroll' },
+  { slug: 'wand', label: 'Wand' },
+  { slug: 'staff', label: 'Staff' },
+  { slug: 'weapon', label: 'Weapon', defaultOn: true },
+  { slug: 'fireweapon', label: 'Fire weapon' },
+  { slug: 'missile', label: 'Missile' },
+  { slug: 'treasure', label: 'Treasure', defaultOn: true },
+  { slug: 'armor', label: 'Armor', defaultOn: true },
+  { slug: 'worn', label: 'Worn (medaglie, amuleti, bracciali)', defaultOn: true },
+  { slug: 'other', label: 'Other' },
+  { slug: 'trash', label: 'Trash' },
+  { slug: 'trap', label: 'Trap' },
+  { slug: 'container', label: 'Container' },
+  { slug: 'note', label: 'Note' },
+  { slug: 'drinkcon', label: 'Drink container' },
+  { slug: 'key', label: 'Key' },
+  { slug: 'money', label: 'Money' },
+  { slug: 'pen', label: 'Pen' },
+  { slug: 'boat', label: 'Boat' },
+  { slug: 'audio', label: 'Audio' },
+  { slug: 'board', label: 'Board' },
+  { slug: 'tree', label: 'Tree' },
+  { slug: 'rock', label: 'Rock' },
+  { slug: 'm_gem', label: 'Mineral gem' },
+  { slug: 'm_mineral', label: 'Mineral' },
+  { slug: 'bar', label: 'Bar' },
+  { slug: 'jewel', label: 'Jewel', defaultOn: true },
+];
+
+const PORTAL_ALWAYS_HIDDEN = new Set(['food', 'potion', 'clan_symbol', 'none']);
+
+function portalTypesFromLegacyPortal(portal) {
+  const types = { ...(portal.types || {}) };
+  if (portal.armor !== undefined) types.armor = portal.armor !== false;
+  if (portal.weapon !== undefined) types.weapon = portal.weapon !== false;
+  return types;
+}
+
+function buildPortalTypeCatalog(portal) {
+  const types = portalTypesFromLegacyPortal(portal);
+  if (portal.type_catalog && portal.type_catalog.length) {
+    return portal.type_catalog.filter((row) => !row.always_hidden);
+  }
+  return PORTAL_TYPE_DEFS.filter((row) => !PORTAL_ALWAYS_HIDDEN.has(row.slug)).map((row) => ({
+    slug: row.slug,
+    label: row.label,
+    enabled: types[row.slug] !== undefined ? types[row.slug] : row.defaultOn === true,
+    always_hidden: false,
+  }));
+}
+
+async function checkMystPortalVersion() {
+  const warnEl = $('myst-version-warn');
+  if (!warnEl) return;
+  try {
+    const res = await fetch('/api/health');
+    const health = await res.json();
+    const ver = health?.myst?.portal_api_version;
+    if (ver === undefined || ver < 3) {
+      warnEl.textContent =
+        'Myst non aggiornato (portal_api_version ' +
+        (ver ?? 'mancante') +
+        '). Esegui: ./scripts/mud-dev.sh build && docker compose restart mudcompiler';
+      show('myst-version-warn');
+    } else {
+      hide('myst-version-warn');
+    }
+  } catch {
+    warnEl.textContent = 'Impossibile verificare la versione API myst.';
+    show('myst-version-warn');
+  }
+}
+
 async function loadSystemConfig() {
   const data = await api('/api/staff/system-config');
   if (!data.ok) {
@@ -988,23 +1064,28 @@ async function loadSystemConfig() {
   $('system-config-editor').value = JSON.stringify(cfg, null, 2);
   $('config-result').textContent = `path: ${data.data?.path || 'lib/edit_system.json'}`;
   applyPortalCategoriesToUI(cfg?.object_portal || {});
+  await checkMystPortalVersion();
 }
 
 function applyPortalCategoriesToUI(portal) {
   const container = $('portal-category-toggles');
   if (!container) return;
-  const catalog = portal.type_catalog || [];
-  const types = portal.types || {};
+  const types = portalTypesFromLegacyPortal(portal);
+  const catalog = buildPortalTypeCatalog(portal);
   container.innerHTML = '';
+  if (!catalog.length) {
+    container.innerHTML = '<p class="hint">Nessuna categoria — ricarica config.</p>';
+    return;
+  }
   catalog.forEach((row) => {
-    if (row.always_hidden) return;
     const label = document.createElement('label');
     label.className = 'checkbox-row';
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.dataset.slug = row.slug;
     const fromTypes = types[row.slug];
-    input.checked = fromTypes !== undefined ? fromTypes : row.enabled !== false;
+    input.checked =
+      fromTypes !== undefined ? fromTypes : row.enabled !== false;
     label.appendChild(input);
     label.appendChild(document.createTextNode(` ${row.label || row.slug}`));
     container.appendChild(label);
