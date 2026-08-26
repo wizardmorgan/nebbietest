@@ -458,6 +458,49 @@ textarea {
   font-size: 0.9rem;
 }
 
+.collapse-panel {
+  padding-top: 0.25rem;
+}
+
+.collapse-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--text);
+  user-select: none;
+}
+
+.collapse-summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapse-summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1rem;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.collapse-panel[open] > .collapse-summary::before {
+  transform: rotate(90deg);
+}
+
+.collapse-hint {
+  font-weight: 400;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.collapse-body {
+  margin-top: 0.75rem;
+}
+
 .quote-box {
   background: var(--bg);
   border: 1px solid var(--border);

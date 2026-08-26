@@ -89,14 +89,6 @@ struct Entry {
 		}
 	}
 
-	[[nodiscard]] static bool portal_slug_always_hidden(const char* slug) noexcept {
-		if(!slug || !*slug) {
-			return false;
-		}
-		return strcmp(slug, "food") == 0 || strcmp(slug, "potion") == 0
-			   || strcmp(slug, "clan_symbol") == 0 || strcmp(slug, "none") == 0;
-	}
-
 [[nodiscard]] EditSystemTarget parse_target(const std::string& s) {
 	if(s == "character") {
 		return EditSystemTarget::Character;
@@ -301,13 +293,11 @@ void parse_entries_json(const Json& root) {
 		const auto it = g_portal_type_enabled.find(def.slug);
 		row["enabled"] =
 			it != g_portal_type_enabled.end() ? it->second : def.default_enabled;
-		row["always_hidden"] = portal_slug_always_hidden(def.slug);
 		catalog.push_back(row);
 	}
 	portal["type_catalog"] = catalog;
 	portal["comment"] =
-		"types: slug ITEM_* nel portale. Spunta = visibile e editabile. "
-		"food/potion/clan_symbol sempre nascosti. "
+		"types: slug ITEM_* — spunta = visibile e editabile nel portale. "
 		"Oggetti con flag EDIT del PG sono sempre inclusi (ri-edit).";
 	root["object_portal"] = portal;
 	return root;
@@ -531,14 +521,12 @@ bool edit_system_resistance_enabled(unsigned damage_type) noexcept {
 }
 
 bool edit_system_portal_type_always_hidden(const char* category) noexcept {
-	return portal_slug_always_hidden(category);
+	(void)category;
+	return false;
 }
 
 bool edit_system_portal_category_enabled(const char* category) noexcept {
 	if(!category || !*category) {
-		return false;
-	}
-	if(edit_system_portal_type_always_hidden(category)) {
 		return false;
 	}
 	std::lock_guard<std::mutex> lock(g_mutex);

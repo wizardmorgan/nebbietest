@@ -80,7 +80,7 @@
             </div>
             <p id="inventory-target-hint" class="hint"></p>
             <ul id="inventory-list" class="inventory-list"></ul>
-            <p class="hint">Visibilità tipi: impostata dallo staff in basso (categorie). Food/potion sempre nascosti. Oggetti già editati del PG restano ri-editabili.</p>
+            <p class="hint">Visibilità tipi: impostata dallo staff in basso (categorie). Oggetti già editati del PG restano ri-editabili.</p>
             <p id="inventory-empty" class="hint hidden">Nessun oggetto in inventario MySQL per questo PG.</p>
           </div>
 
@@ -120,28 +120,33 @@
 
         <div class="portal-categories card-inner">
           <h3>Categorie oggetto nel portale</h3>
-          <p class="hint">Spunta = quel tipo ITEM compare nell'inventario del <strong>personaggio target</strong> ed è editabile. Senza spunta = nascosto. Food, potion e clan symbol non sono configurabili. Gli oggetti con flag EDIT del PG restano sempre ri-editabili.</p>
+          <p class="hint">Spunta = quel tipo ITEM compare nell'inventario del <strong>personaggio target</strong> ed è editabile. Senza spunta = nascosto. Gli oggetti con flag EDIT del PG restano sempre ri-editabili.</p>
           <p id="myst-version-warn" class="msg warn hidden"></p>
           <div id="portal-category-toggles" class="checkbox-grid"></div>
           <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
           <p id="portal-cat-result" class="msg"></p>
         </div>
 
-        <div class="card-inner">
-          <h3>Routing edit: oggetto vs personaggio</h3>
-          <p class="hint">
-            Questo JSON (<code>edit_system.json</code>) decide <strong>dove</strong> va ogni tipo di edit:
-            <code>target: "object"</code> = affect sull'equipaggiamento;
-            <code>target: "character"</code> = valore sul PG (pool hit/mana/move o resistenza in tabella).
-            Non è l'inventario: è la regola di sistema. Di solito lo lasci così e usi le checkbox categorie sopra.
-          </p>
-          <textarea id="system-config-editor" rows="12" spellcheck="false"></textarea>
-          <div class="btn-row">
-            <button id="btn-load-config" class="btn-secondary" type="button">Ricarica JSON</button>
-            <button id="btn-save-config" class="btn-secondary" type="button">Salva JSON</button>
+        <details class="card-inner collapse-panel" id="routing-edit-panel">
+          <summary class="collapse-summary">
+            <span>Routing edit: oggetto vs personaggio</span>
+            <span class="collapse-hint">avanzato — JSON di sistema</span>
+          </summary>
+          <div class="collapse-body">
+            <p class="hint">
+              Questo JSON (<code>edit_system.json</code>) decide <strong>dove</strong> va ogni tipo di edit:
+              <code>target: "object"</code> = affect sull'equipaggiamento;
+              <code>target: "character"</code> = valore sul PG (pool hit/mana/move o resistenza in tabella).
+              Non è l'inventario: è la regola di sistema. Di solito lo lasci così e usi le checkbox categorie sopra.
+            </p>
+            <textarea id="system-config-editor" rows="12" spellcheck="false"></textarea>
+            <div class="btn-row">
+              <button id="btn-load-config" class="btn-secondary" type="button">Ricarica JSON</button>
+              <button id="btn-save-config" class="btn-secondary" type="button">Salva JSON</button>
+            </div>
+            <p id="config-result" class="msg"></p>
           </div>
-          <p id="config-result" class="msg"></p>
-        </div>
+        </details>
 
         <div class="card-inner">
           <h3>Consultazione object_instance</h3>

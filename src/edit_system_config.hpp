@@ -48,7 +48,7 @@ bool edit_system_config_save_json(const std::string& json_text, std::string& err
 /** Categoria portale: slug e_item_type senza ITEM_. */
 [[nodiscard]] bool edit_system_portal_category_enabled(const char* category) noexcept;
 
-/** Tipi mai mostrati nel portale (food, potion, clan_symbol). */
+/** Tipi forzati nascosti: nessuno (tutti gestiti dalle checkbox staff). */
 [[nodiscard]] bool edit_system_portal_type_always_hidden(const char* category) noexcept;
 
 /** Percorso effettivo del file di config (per log/admin). */

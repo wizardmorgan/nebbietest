@@ -1210,6 +1210,7 @@ const PORTAL_TYPE_DEFS = [
   { slug: 'missile', label: 'Missile' },
   { slug: 'treasure', label: 'Treasure', defaultOn: true },
   { slug: 'armor', label: 'Armor', defaultOn: true },
+  { slug: 'potion', label: 'Potion' },
   { slug: 'worn', label: 'Worn (medaglie, amuleti, bracciali)', defaultOn: true },
   { slug: 'other', label: 'Other' },
   { slug: 'trash', label: 'Trash' },
@@ -1218,6 +1219,7 @@ const PORTAL_TYPE_DEFS = [
   { slug: 'note', label: 'Note' },
   { slug: 'drinkcon', label: 'Drink container' },
   { slug: 'key', label: 'Key' },
+  { slug: 'food', label: 'Food' },
   { slug: 'money', label: 'Money' },
   { slug: 'pen', label: 'Pen' },
   { slug: 'boat', label: 'Boat' },
@@ -1229,9 +1231,8 @@ const PORTAL_TYPE_DEFS = [
   { slug: 'm_mineral', label: 'Mineral' },
   { slug: 'bar', label: 'Bar' },
   { slug: 'jewel', label: 'Jewel', defaultOn: true },
+  { slug: 'clan_symbol', label: 'Clan symbol' },
 ];
-
-const PORTAL_ALWAYS_HIDDEN = new Set(['food', 'potion', 'clan_symbol', 'none']);
 
 function portalTypesFromLegacyPortal(portal) {
   const types = { ...(portal.types || {}) };
@@ -1243,13 +1244,12 @@ function portalTypesFromLegacyPortal(portal) {
 function buildPortalTypeCatalog(portal) {
   const types = portalTypesFromLegacyPortal(portal);
   if (portal.type_catalog && portal.type_catalog.length) {
-    return portal.type_catalog.filter((row) => !row.always_hidden);
+    return portal.type_catalog;
   }
-  return PORTAL_TYPE_DEFS.filter((row) => !PORTAL_ALWAYS_HIDDEN.has(row.slug)).map((row) => ({
+  return PORTAL_TYPE_DEFS.map((row) => ({
     slug: row.slug,
     label: row.label,
     enabled: types[row.slug] !== undefined ? types[row.slug] : row.defaultOn === true,
-    always_hidden: false,
   }));
 }
 
@@ -1321,7 +1321,7 @@ function portalCategoriesFromUI() {
   return {
     types,
     comment:
-      'types: slug ITEM_* — spunta = visibile e editabile. food/potion/clan_symbol sempre nascosti. Flag EDIT del PG = sempre incluso.',
+      'types: slug ITEM_* — spunta = visibile e editabile. Flag EDIT del PG = sempre incluso.',
   };
 }
 

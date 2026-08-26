@@ -32,7 +32,7 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] bool object_portal_editable(const struct obj_data* obj,
 										  const char* toon_name) noexcept;
 
-/** false = non mostrare in inventario portale (food/potion sempre, categorie staff). */
+/** false = non mostrare in inventario portale (categorie staff / tipi disabilitati). */
 [[nodiscard]] bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 														const char* toon_name) noexcept;
 
