@@ -577,6 +577,9 @@ async function loadInventory() {
     const depth = Number(it.depth) > 0 ? ' · in container' : '';
     const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
     li.textContent = `${it.short_desc || it.name} (vnum ${it.item_number})${worn}${depth}${skip}`;
+    if (it.item_type) {
+      li.textContent += ` [${it.item_type}]`;
+    }
     li.title = it.editable
       ? `inventory_id ${it.inventory_id}`
       : it.skip_reason || 'non editabile';

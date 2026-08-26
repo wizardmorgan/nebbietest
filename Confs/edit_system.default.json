@@ -32,7 +32,8 @@
       "armor": true,
       "weapon": true,
       "worn": true,
-      "jewel": true
+      "jewel": true,
+      "treasure": true
     },
     "comment": "types: slug ITEM_* — spunta = visibile e editabile nel portale. food/potion/clan_symbol sempre nascosti."
   }

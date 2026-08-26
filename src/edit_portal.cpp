@@ -922,6 +922,16 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				it["depth"] = r.elem.depth;
 				it["worn"] = inventory_row_is_worn(r.elem.wearpos);
 
+				if(obj) {
+					const char* type_slug = object_portal_item_type_slug(ITEM_TYPE(obj));
+					if(type_slug) {
+						it["item_type"] = type_slug;
+					}
+					else if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+						it["item_type"] = "edited";
+					}
+				}
+
 				std::string skip_reason;
 				bool editable = false;
 				if(!toon_name_ok) {
