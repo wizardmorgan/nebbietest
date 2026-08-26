@@ -770,10 +770,7 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		{IMM_CHARM, "charm", "Charm"},
 		{IMM_HOLD, "hold", "Hold"},
 		{IMM_NONMAG, "nonmag", "Non-magia"},
-		{IMM_PLUS1, "plus1", "Arma +1"},
-		{IMM_PLUS2, "plus2", "Arma +2"},
-		{IMM_PLUS3, "plus3", "Arma +3"},
-		{IMM_PLUS4, "plus4", "Arma +4"},
+		/* IMM_PLUS1..4 = resistenze mob ad armi +N: non editabili sui toon. */
 	};
 	for(const auto& r : resist) {
 		if(!edit_system_resistance_enabled(r.bit)) {
@@ -796,6 +793,23 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["occupied_slot"] = imm_slot;
 		j["can_add"] = can_add;
 		j["can_edit"] = has_affect || can_add;
+		entries.push_back(j);
+	}
+
+	/* Flag ARTIFACT (extra_bits / ITEM_IMMUNE): +50% sul costo edit listino. */
+	{
+		Json j;
+		j["id"] = "artifact";
+		j["label"] = "Artifact";
+		j["kind"] = "flag";
+		j["flag"] = "artifact";
+		j["location"] = 0;
+		j["current"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
+		j["has_affect"] = IS_OBJ_STAT(obj, ITEM_IMMUNE);
+		j["occupied_slot"] = -1;
+		j["can_add"] = !IS_OBJ_STAT(obj, ITEM_IMMUNE);
+		j["can_edit"] = true;
+		j["hint"] = "Se attivo, +50% sul costo degli edit (listino)";
 		entries.push_back(j);
 	}
 

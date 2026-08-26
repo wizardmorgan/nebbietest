@@ -429,6 +429,7 @@ app.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (req, 
     inventory_id: inventoryId,
     location: Number(req.body.location),
     target_modifier: Number(req.body.targetModifier),
+    flag: req.body.flag || '',
   });
   res.status(result.ok ? 200 : 400).json(result);
 });
@@ -448,6 +449,7 @@ app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) 
     target_modifier: Number(req.body.targetModifier ?? req.body.modifier),
     pay_xp: Number(req.body.payXp || 0),
     pay_rune: Number(req.body.payRune || 0),
+    flag: req.body.flag || '',
   });
   res.status(result.ok ? 200 : 400).json(result);
 });

@@ -914,6 +914,7 @@ function renderObjectAffectSlots(affectSlots) {
 }
 
 function objectEditSection(id) {
+  if (id === 'artifact' || id.startsWith('flag.')) return 'Proprietà';
   if (id.startsWith('immune.')) return 'Resistenze / immunità';
   if (['armor', 'spellfail'].includes(id)) return 'Armatura / cast';
   if (['hitndam', 'hitnsp', 'hitroll', 'damroll', 'spellpower'].includes(id)) {
@@ -927,6 +928,7 @@ const OBJECT_EDIT_SECTION_ORDER = [
   'Armatura / cast',
   'Caratteristiche',
   'Combattimento',
+  'Proprietà',
   'Resistenze / immunità',
 ];
 
@@ -1065,7 +1067,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       const select = document.createElement('select');
       select.disabled = !canEdit || session.role === 'limited';
 
-      if (entry.kind === 'immune') {
+      if (entry.kind === 'immune' || entry.kind === 'flag') {
         [
           { v: 0, l: 'No' },
           { v: 1, l: 'Sì' },
@@ -1076,7 +1078,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
           if (v === current) opt.selected = true;
           select.appendChild(opt);
         });
-        if (current === 1) select.disabled = true;
+        if (entry.kind === 'immune' && current === 1) select.disabled = true;
       } else {
         const values = buildObjectScalarOptions(entry);
         if (!values.includes(current)) values.push(current);
@@ -1107,6 +1109,12 @@ function renderObjectEdits(entries, damBudget, spBudget) {
             return;
           }
           queueObjectQuote(entry, newVal ? Number(entry.immune_bit) : 0, select);
+        } else if (entry.kind === 'flag') {
+          if (newVal === current) {
+            clearObjectPending(entry.id);
+            return;
+          }
+          queueObjectQuote(entry, newVal, select);
         } else if (newVal === current) {
           clearObjectPending(entry.id);
         } else {
@@ -1117,9 +1125,17 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       row.innerHTML = `
       <div>
         <label>${entry.label || entry.id}${objectEntryRangeLabel(entry)}</label>
-        <div class="current">Attuale: ${entry.kind === 'immune' ? (current ? 'Sì' : 'No') : current}</div>
-        <div class="slot-hint">${objectEntrySlotHint(entry)}</div>
-        ${entry.kind !== 'immune' ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>` : ''}
+        <div class="current">Attuale: ${
+          entry.kind === 'immune' || entry.kind === 'flag'
+            ? current
+              ? 'Sì'
+              : 'No'
+            : current
+        }</div>
+        <div class="slot-hint">${
+          entry.kind === 'flag' ? entry.hint || '' : objectEntrySlotHint(entry)
+        }</div>
+        ${entry.kind !== 'immune' && entry.kind !== 'flag' ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>` : ''}
       </div>
     `;
       row.appendChild(select);
@@ -1132,14 +1148,18 @@ function renderObjectEdits(entries, damBudget, spBudget) {
 }
 
 async function queueObjectQuote(entry, targetModifier, selectEl) {
+  const payload = {
+    targetToonId,
+    inventoryId: selectedInventoryId,
+    location: Number(entry.location || 0),
+    targetModifier,
+  };
+  if (entry.kind === 'flag' && entry.flag) {
+    payload.flag = entry.flag;
+  }
   const data = await api('/api/quote-object-edit', {
     method: 'POST',
-    body: JSON.stringify({
-      targetToonId,
-      inventoryId: selectedInventoryId,
-      location: Number(entry.location),
-      targetModifier,
-    }),
+    body: JSON.stringify(payload),
   });
   if (!data.ok) {
     alert(data.error || 'Quote oggetto fallita');
@@ -1151,13 +1171,15 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     return;
   }
   const qd = data.data;
-  const curLabel = entry.kind === 'immune' ? (qd.current ? 'Sì' : 'No') : qd.current;
-  const tgtLabel = entry.kind === 'immune' ? (qd.target ? 'Sì' : 'No') : qd.target;
+  const yesNo = entry.kind === 'immune' || entry.kind === 'flag';
+  const curLabel = yesNo ? (qd.current ? 'Sì' : 'No') : qd.current;
+  const tgtLabel = yesNo ? (qd.target ? 'Sì' : 'No') : qd.target;
   pendingEdit = {
     type: 'object',
     entryId: entry.id,
-    location: Number(entry.location),
+    location: Number(entry.location || 0),
     targetModifier,
+    flag: entry.kind === 'flag' ? entry.flag : undefined,
     label: `${entry.label}: ${curLabel} → ${tgtLabel}`,
     quote: qd,
     selectEl,
@@ -1206,14 +1228,18 @@ async function confirmPayEdit() {
       }),
     });
   } else if (pendingEdit.type === 'object') {
+    const affectBody = {
+      ...body,
+      inventoryId: selectedInventoryId,
+      location: pendingEdit.location,
+      targetModifier: pendingEdit.targetModifier,
+    };
+    if (pendingEdit.flag) {
+      affectBody.flag = pendingEdit.flag;
+    }
     result = await api('/api/apply-affect', {
       method: 'POST',
-      body: JSON.stringify({
-        ...body,
-        inventoryId: selectedInventoryId,
-        location: pendingEdit.location,
-        targetModifier: pendingEdit.targetModifier,
-      }),
+      body: JSON.stringify(affectBody),
     });
   } else {
     return;

@@ -135,10 +135,11 @@ void build_defaults() {
 		{IMM_CHARM, "charm", "Charm"},
 		{IMM_HOLD, "hold", "Hold"},
 		{IMM_NONMAG, "nonmag", "Non-magic"},
-		{IMM_PLUS1, "plus1", "Weapon +1"},
-		{IMM_PLUS2, "plus2", "Weapon +2"},
-		{IMM_PLUS3, "plus3", "Weapon +3"},
-		{IMM_PLUS4, "plus4", "Weapon +4"},
+		/* Weapon +N (IMM_PLUS*): resistenze mob, non listino toon — disabilitate. */
+		{IMM_PLUS1, "plus1", "Weapon +1 (solo mob)"},
+		{IMM_PLUS2, "plus2", "Weapon +2 (solo mob)"},
+		{IMM_PLUS3, "plus3", "Weapon +3 (solo mob)"},
+		{IMM_PLUS4, "plus4", "Weapon +4 (solo mob)"},
 	};
 	for(const auto& r : resist) {
 		Entry e;
@@ -146,7 +147,9 @@ void build_defaults() {
 		e.kind = "resistance";
 		e.damage_type = r.bit;
 		e.target = EditSystemTarget::Object;
-		e.enabled = true;
+		/* PLUS* non sono edit PG; restano in config staff ma off di default. */
+		e.enabled = !(r.bit == IMM_PLUS1 || r.bit == IMM_PLUS2 || r.bit == IMM_PLUS3 ||
+					  r.bit == IMM_PLUS4);
 		e.label = r.label;
 		g_entries.push_back(e);
 	}

@@ -582,7 +582,8 @@ void ensure_portal_combat_budget_columns(DB* db) {
 	}
 	try {
 		std::ostringstream upd;
-		upd << "UPDATE character_inventory SET extra_flags2="
+		upd << "UPDATE character_inventory SET extra_flags="
+			<< static_cast<int>(obj->obj_flags.extra_flags) << ", extra_flags2="
 			<< static_cast<int>(obj->obj_flags.extra_flags2) << " WHERE id = "
 			<< inventory_id;
 		db->execute(upd.str().c_str());
@@ -1151,6 +1152,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					const int bits = object_immune_current_bits(obj);
 					e["current"] = (bits & static_cast<int>(bit)) ? 1 : 0;
 				}
+				else if(kind == "flag" && e.value("flag", "") == "artifact") {
+					e["current"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
+				}
 			}
 
 			Json d = analyze_to_json(obj);
@@ -1161,7 +1165,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			{
 				int portal_dam = 0;
 				int portal_sp = 0;
-				load_portal_combat_budget(toon_id, portal_dam, portal_sp);
+				if(!load_portal_combat_budget(toon_id, portal_dam, portal_sp)) {
+					portal_dam = 0;
+					portal_sp = 0;
+				}
 
 				Json dam_budget;
 				dam_budget["piece"] = object_edit_damroll_edited_delta(obj);
@@ -1207,6 +1214,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				req.find("target_modifier") != req.end()
 					? parse_json_int(req, "target_modifier", 0)
 					: parse_json_int(req, "modifier", 0);
+			const std::string flag = req.value("flag", "");
 
 			const std::string toon_name = toon_name_by_id(toon_id);
 			if(toon_name.empty()) {
@@ -1237,12 +1245,32 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
 			}
 
+			if(flag == "artifact") {
+				const int current = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
+				const int target = target_modifier ? 1 : 0;
+				Json d = quote_xp_json(0, 0);
+				d["location"] = 0;
+				d["flag"] = "artifact";
+				d["target_modifier"] = target;
+				d["current"] = current;
+				d["target"] = target;
+				d["inventory_id"] = inventory_id;
+				d["note"] = target
+								? "Artifact ON: i prossimi edit costano +50%"
+								: "Artifact OFF";
+				extract_obj(obj);
+				return json_ok(d);
+			}
+
 			long xp_raw = 0;
 			int pq = 0;
 			std::string quote_err;
 			int portal_dam = 0;
 			int portal_sp = 0;
-			load_portal_combat_budget(toon_id, portal_dam, portal_sp);
+			if(!load_portal_combat_budget(toon_id, portal_dam, portal_sp)) {
+				portal_dam = 0;
+				portal_sp = 0;
+			}
 			const int other_dam =
 				object_edit_location_affects_dam(location) ? portal_dam : -1;
 			const int other_sp =
@@ -1302,6 +1330,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					: parse_json_int(req, "modifier", 0);
 			const int pay_xp = parse_json_int(req, "pay_xp", 0);
 			const int pay_rune = parse_json_int(req, "pay_rune", 0);
+			const std::string flag = req.value("flag", "");
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
 			if(target_name.empty()) {
@@ -1311,7 +1340,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				return json_error("il toon target e collegato al mud", 409);
 			}
 
-			if(edit_system_blocked_on_object(location, target_modifier)) {
+			if(flag.empty() &&
+			   edit_system_blocked_on_object(location, target_modifier)) {
 				if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE ||
 				   location == APPLY_SUSC) {
 					return json_error(
@@ -1350,12 +1380,59 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
 			}
 
+			if(flag == "artifact") {
+				struct obj_data* after = materialize_inventory_row(*row);
+				if(!after) {
+					extract_obj(obj);
+					return json_error("impossibile clonare oggetto", 500);
+				}
+				extract_obj(obj);
+				if(target_modifier) {
+					SET_BIT(after->obj_flags.extra_flags, ITEM_IMMUNE);
+				}
+				else {
+					REMOVE_BIT(after->obj_flags.extra_flags, ITEM_IMMUNE);
+				}
+				if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
+					SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
+				}
+				/* Toggle flag: gratis (il +50% si applica agli edit successivi). */
+				bool saved = false;
+				if(after->db_instance_id != 0) {
+					const int base = object_instance_resolve_base_vnum(after);
+					if(base > 0 &&
+					   object_instance_persist(after, base, 0, nullptr, true,
+											   "edit_portal") != 0) {
+						saved = true;
+					}
+				}
+				else {
+					saved = persist_inventory_affects(inventory_id, after);
+				}
+				Json d = analyze_to_json(after);
+				d["paid_xp"] = 0;
+				d["paid_rune"] = 0;
+				d["saved"] = saved;
+				d["flag"] = "artifact";
+				d["artifact"] = IS_OBJ_STAT(after, ITEM_IMMUNE) ? 1 : 0;
+				extract_obj(after);
+				if(!saved) {
+					return json_error("salvataggio flag artifact fallito", 500);
+				}
+				(void)pay_xp;
+				(void)pay_rune;
+				return json_ok(d);
+			}
+
 			long quote_xp = 0;
 			int quote_pq = 0;
 			std::string quote_err;
 			int portal_dam = 0;
 			int portal_sp = 0;
-			load_portal_combat_budget(target_toon_id, portal_dam, portal_sp);
+			if(!load_portal_combat_budget(target_toon_id, portal_dam, portal_sp)) {
+				portal_dam = 0;
+				portal_sp = 0;
+			}
 			const int other_dam =
 				object_edit_location_affects_dam(location) ? portal_dam : -1;
 			const int other_sp =
