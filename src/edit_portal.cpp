@@ -12,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cctype>
 #include <cstring>
 #include <deque>
 #include <future>
@@ -75,18 +76,38 @@ std::atomic<bool> g_http_running {false};
 	return std::atoi(p);
 }
 
-[[nodiscard]] bool header_has_secret(const std::string& headers) {
-	const std::string key = "x-edit-api-secret:";
-	const auto pos = headers.find(key);
-	if(pos == std::string::npos) {
-		return false;
-	}
-	const auto end = headers.find("\r\n", pos);
-	std::string value = headers.substr(pos + key.size(), end - pos - key.size());
+[[nodiscard]] std::string trim_http_value(std::string value) {
 	while(!value.empty() && (value.front() == ' ' || value.front() == '\t')) {
 		value.erase(value.begin());
 	}
-	return value == api_secret();
+	while(!value.empty() && (value.back() == ' ' || value.back() == '\t')) {
+		value.pop_back();
+	}
+	return value;
+}
+
+[[nodiscard]] bool header_has_secret(const std::string& headers) {
+	const std::string secret = api_secret();
+	std::istringstream stream(headers);
+	std::string line;
+	while(std::getline(stream, line)) {
+		if(!line.empty() && line.back() == '\r') {
+			line.pop_back();
+		}
+		const auto colon = line.find(':');
+		if(colon == std::string::npos) {
+			continue;
+		}
+		std::string name = line.substr(0, colon);
+		for(char& c : name) {
+			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		}
+		if(name != "x-edit-api-secret") {
+			continue;
+		}
+		return trim_http_value(line.substr(colon + 1)) == secret;
+	}
+	return false;
 }
 
 [[nodiscard]] std::string json_error(const char* msg, int code = 400) {
