@@ -1,19 +1,6 @@
 #!/bin/bash
-# Dev Docker: mysql/adminer/mudcompiler/myst su NebbieArcane + edit-portal opzionale dal fork.
-#
-# Due repo (setup nucbuntu consigliato):
-#   MUD_ROOT   = ~/NebbieArcane/Server   → git pull origin feature/Razze (upstream, non sporcare)
-#   EDIT_REPO  = ~/docker-vms/Server     → git pull mine feature/edit-portal (edit-portal + edit_portal.cpp)
-#   Config:    ~/.config/nebbie/mud-dev.env (vedi docs/nebbie-mud-dev.env.example)
-#
-# Uso:
-#   ./scripts/mud-dev.sh status
-#   ./scripts/mud-dev.sh start-mud          # solo MUD (sorgente = MUD_APP_ROOT, default MUD_ROOT)
-#   ./scripts/mud-dev.sh start-edit         # solo edit-portal (mysql da MUD_ROOT)
-#   ./scripts/mud-dev.sh start              # myst + edit-portal (MUD_APP_ROOT=EDIT_REPO in config)
-#   ./scripts/mud-dev.sh stop-all
-#
-# Lo script può stare in EDIT_REPO; non serve committarlo su NebbieArcane.
+# Dev Docker: NebbieArcane (Razze) + fork edit-portal (due repo).
+# Config: ~/.config/nebbie/mud-dev.env (vedi docs/nebbie-mud-dev.env.example)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -24,7 +11,6 @@ if [ -f "${HOME}/.config/nebbie/mud-dev.env" ]; then
 	source "${HOME}/.config/nebbie/mud-dev.env"
 fi
 
-# Stack compose (mysql_data/) — di solito NebbieArcane
 if [ -z "${MUD_ROOT:-}" ]; then
 	if [ -d "${HOME}/NebbieArcane/Server" ]; then
 		MUD_ROOT="${HOME}/NebbieArcane/Server"
@@ -33,10 +19,7 @@ if [ -z "${MUD_ROOT:-}" ]; then
 	fi
 fi
 
-# Fork con edit-portal
 EDIT_REPO="${EDIT_REPO:-$SCRIPT_REPO}"
-
-# Sorgente /app nel container mudcompiler (myst build & run)
 MUD_APP_ROOT="${MUD_APP_ROOT:-$MUD_ROOT}"
 
 ENVIRONMENT="${ENVIRONMENT:-devel}"
@@ -45,6 +28,12 @@ MUD_DATA_DIR="${MUD_DATA_DIR:-lib}"
 EDIT_API_PORT="${EDIT_API_PORT:-8090}"
 EDIT_API_SECRET="${EDIT_API_SECRET:-nebbie-edit-dev-secret}"
 EDIT_WEB_PORT="${EDIT_WEB_PORT:-3080}"
+
+RAZZE_REMOTE="${RAZZE_REMOTE:-origin}"
+RAZZE_BRANCH="${RAZZE_BRANCH:-feature/Razze}"
+EDIT_REMOTE="${EDIT_REMOTE:-mine}"
+EDIT_BRANCH="${EDIT_BRANCH:-feature/edit-portal}"
+UPSTREAM_REMOTE="${UPSTREAM_REMOTE:-upstream}"
 
 MUD_STACK_NETWORK="${MUD_STACK_NETWORK:-$(basename "$MUD_ROOT" | tr '[:upper:]' '[:lower:]')_default}"
 
@@ -193,6 +182,151 @@ print_do() {
 	echo "  -> $1"
 }
 
+ensure_docker_override() {
+	local example="$EDIT_REPO/Confs/docker-compose.override.edit-api.example"
+	local target="$MUD_ROOT/docker-compose.override.yml"
+	if [ ! -f "$target" ] && [ -f "$example" ]; then
+		echo "Copia override API edit → $target"
+		cp "$example" "$target"
+	fi
+}
+
+ensure_edit_remote() {
+	(
+		cd "$EDIT_REPO"
+		if ! git remote get-url "$EDIT_REMOTE" >/dev/null 2>&1; then
+			echo "Aggiunta remote $EDIT_REMOTE → https://github.com/wizardmorgan/nebbietest.git"
+			git remote add "$EDIT_REMOTE" https://github.com/wizardmorgan/nebbietest.git
+		fi
+	)
+}
+
+ensure_upstream_remote() {
+	(
+		cd "$EDIT_REPO"
+		if ! git remote get-url "$UPSTREAM_REMOTE" >/dev/null 2>&1; then
+			echo "Aggiunta remote $UPSTREAM_REMOTE → https://github.com/NebbieArcane/Server.git"
+			git remote add "$UPSTREAM_REMOTE" https://github.com/NebbieArcane/Server.git
+		fi
+	)
+}
+
+git_discard_local_file() {
+	local repo="$1" path="$2"
+	if [ ! -d "$repo/.git" ]; then
+		return 0
+	fi
+	(
+		cd "$repo"
+		if git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
+			if ! git diff --quiet "$path" 2>/dev/null || ! git diff --cached --quiet "$path" 2>/dev/null; then
+				echo "[$repo] ripristino $path (modifiche locali) per permettere pull"
+				git checkout -- "$path"
+			fi
+		else
+			if [ -f "$path" ]; then
+				echo "[$repo] rimuovo $path untracked che blocca merge"
+				rm -f "$path"
+			fi
+		fi
+	)
+}
+
+cmd_sync_razze() {
+	echo "=== sync-razze: $MUD_ROOT ($RAZZE_REMOTE/$RAZZE_BRANCH) ==="
+	(
+		cd "$MUD_ROOT"
+		git fetch "$RAZZE_REMOTE" "$RAZZE_BRANCH"
+		git pull "$RAZZE_REMOTE" "$RAZZE_BRANCH"
+	)
+	ensure_docker_override
+	echo "sync-razze ok."
+}
+
+cmd_sync_edit() {
+	echo "=== sync-edit: $EDIT_REPO ($EDIT_REMOTE/$EDIT_BRANCH) ==="
+	ensure_edit_remote
+	git_discard_local_file "$EDIT_REPO" scripts/mud-dev.sh
+	(
+		cd "$EDIT_REPO"
+		git fetch "$EDIT_REMOTE" "$EDIT_BRANCH"
+		git pull "$EDIT_REMOTE" "$EDIT_BRANCH"
+	)
+	chmod +x "$EDIT_REPO/scripts/mud-dev.sh" 2>/dev/null || true
+	echo "sync-edit ok."
+}
+
+cmd_sync_all() {
+	cmd_sync_razze
+	echo "=== merge Razze in EDIT_REPO ==="
+	ensure_upstream_remote
+	ensure_edit_remote
+	git_discard_local_file "$EDIT_REPO" scripts/mud-dev.sh
+	(
+		cd "$EDIT_REPO"
+		git fetch "$UPSTREAM_REMOTE" "$RAZZE_BRANCH"
+		if git merge --no-edit "$UPSTREAM_REMOTE/$RAZZE_BRANCH"; then
+			echo "merge $UPSTREAM_REMOTE/$RAZZE_BRANCH ok"
+		else
+			echo "ERRORE: conflitti merge in $EDIT_REPO — risolvi, commit, poi riprova." >&2
+			exit 1
+		fi
+		git fetch "$EDIT_REMOTE" "$EDIT_BRANCH"
+		git pull "$EDIT_REMOTE" "$EDIT_BRANCH"
+	)
+	chmod +x "$EDIT_REPO/scripts/mud-dev.sh" 2>/dev/null || true
+	echo "sync-all ok."
+}
+
+cmd_build() {
+	echo "=== build myst (sorgente $MUD_APP_ROOT) ==="
+	ensure_docker_override
+	compose run --rm --entrypoint "" \
+		-v "${MUD_APP_ROOT}:/app" \
+		mudcompiler ./build.sh devel
+	echo "build myst ok."
+}
+
+cmd_build_edit() {
+	echo "=== build edit-portal ==="
+	export MUD_STACK_NETWORK EDIT_API_SECRET EDIT_WEB_PORT
+	compose_edit build edit-portal
+	echo "build edit-portal ok."
+}
+
+cmd_update_razze() {
+	cmd_sync_razze
+	cmd_build
+}
+
+cmd_update_edit() {
+	cmd_sync_edit
+	cmd_build_edit
+}
+
+cmd_update_all() {
+	cmd_sync_all
+	cmd_build
+	cmd_build_edit
+}
+
+cmd_health() {
+	echo "=== health ==="
+	if port_open "$EDIT_WEB_PORT"; then
+		print_ok "edit-portal porta $EDIT_WEB_PORT"
+		curl -sf "http://localhost:${EDIT_WEB_PORT}/api/health" || echo "(curl health fallito)"
+	else
+		print_warn "edit-portal porta $EDIT_WEB_PORT chiusa"
+	fi
+	if port_open "$EDIT_API_PORT"; then
+		print_ok "myst API porta $EDIT_API_PORT"
+		curl -sf -X POST "http://localhost:${EDIT_API_PORT}/internal/ping" \
+			-H "X-Edit-Api-Secret: ${EDIT_API_SECRET}" || echo "(curl ping fallito — secret?)"
+	else
+		print_warn "myst API porta $EDIT_API_PORT chiusa"
+	fi
+}
+
 ensure_mysql_stack() {
 	if ! service_running mysql || ! service_running adminer; then
 		echo "Avvio mysql e adminer (MUD_ROOT=$MUD_ROOT)..."
@@ -242,7 +376,6 @@ ensure_mudcompiler_container() {
 
 	echo "ERRORE: impossibile avviare mudcompiler." >&2
 	echo "Porte occupate? ss -tlnp | grep -E '400|8090'" >&2
-	echo "Su NebbieArcane: copia Confs/docker-compose.override.edit-api.example → docker-compose.override.yml" >&2
 	return 1
 }
 
@@ -251,7 +384,7 @@ cmd_start_edit() {
 	if ! find_mudcompiler_container >/dev/null; then
 		print_warn "mudcompiler non attivo — API edit non disponibile"
 	fi
-	echo "Avvio edit-portal da EDIT_REPO=$EDIT_REPO (rete $MUD_STACK_NETWORK)..."
+	echo "Avvio edit-portal (EDIT_REPO=$EDIT_REPO, rete $MUD_STACK_NETWORK)..."
 	export EDIT_API_SECRET EDIT_WEB_PORT
 	compose_edit up -d --build edit-portal
 	echo "Web UI: http://localhost:${EDIT_WEB_PORT}/"
@@ -268,11 +401,19 @@ cmd_status() {
 	local mysql_up=0 myst_up=0 edit_up=0
 
 	print_header "Percorsi"
-	echo "  MUD_ROOT:      $MUD_ROOT (compose mysql, git pull origin)"
-	echo "  MUD_APP_ROOT:  $MUD_APP_ROOT (sorgente myst in container)"
-	echo "  EDIT_REPO:     $EDIT_REPO (edit-portal)"
+	echo "  MUD_ROOT:      $MUD_ROOT"
+	echo "  MUD_APP_ROOT:  $MUD_APP_ROOT"
+	echo "  EDIT_REPO:     $EDIT_REPO"
 	echo "  Rete Docker:   $MUD_STACK_NETWORK"
 	echo "  Porta mud:     $MUD_PORT | Edit API: $EDIT_API_PORT | Web: $EDIT_WEB_PORT"
+
+	print_header "Git (branch attuale)"
+	if [ -d "$MUD_ROOT/.git" ]; then
+		echo "  MUD_ROOT:  $(cd "$MUD_ROOT" && git branch --show-current) @ $(cd "$MUD_ROOT" && git rev-parse --short HEAD)"
+	fi
+	if [ -d "$EDIT_REPO/.git" ]; then
+		echo "  EDIT_REPO: $(cd "$EDIT_REPO" && git branch --show-current) @ $(cd "$EDIT_REPO" && git rev-parse --short HEAD)"
+	fi
 
 	print_header "Docker Compose (MUD_ROOT)"
 	if service_running mysql; then
@@ -280,7 +421,6 @@ cmd_status() {
 		print_ok "mysql"
 	else
 		print_warn "mysql non in esecuzione"
-		print_do "./scripts/mud-dev.sh start-mud"
 	fi
 	if service_running adminer; then
 		print_ok "adminer (http://localhost:8080)"
@@ -290,7 +430,6 @@ cmd_status() {
 		print_ok "edit-portal (http://localhost:${EDIT_WEB_PORT})"
 	else
 		print_warn "edit-portal non in esecuzione"
-		print_do "./scripts/mud-dev.sh start-edit"
 	fi
 
 	print_header "mudcompiler / myst"
@@ -300,30 +439,11 @@ cmd_status() {
 		if myst_running "$mudc"; then
 			myst_up=1
 			print_ok "myst attivo"
-			echo "  $(myst_pgrep_line "$mudc")"
 		else
 			print_warn "myst non attivo"
-			print_do "./scripts/mud-dev.sh start-mud"
-		fi
-		if docker exec "$mudc" test -x "/app/mudroot/myst" 2>/dev/null; then
-			print_ok "/app/mudroot/myst presente"
-		else
-			print_warn "myst non compilato in $MUD_APP_ROOT"
-			print_do "docker exec -it $mudc bash -c 'cd /app && ./build.sh devel'"
 		fi
 	else
 		print_warn "nessun container mudcompiler"
-		print_do "./scripts/mud-dev.sh start-mud"
-	fi
-
-	if port_open "$EDIT_API_PORT"; then
-		print_ok "porta host $EDIT_API_PORT aperta"
-	else
-		print_warn "porta $EDIT_API_PORT chiusa (override 8090 + myst con edit_portal?)"
-	fi
-
-	if [ "$mysql_up" -eq 1 ] && mysql_ping; then
-		print_ok "mysql ping"
 	fi
 
 	if port_open "$MUD_PORT" && [ "$myst_up" -eq 1 ]; then
@@ -336,8 +456,13 @@ cmd_status() {
 		[ "$edit_up" -eq 1 ] && echo "  Edit: http://localhost:${EDIT_WEB_PORT}/"
 		return 0
 	fi
-	echo "  ./scripts/mud-dev.sh start-mud  (o start con config edit)"
+	echo "  Prova: $0 start   oppure   $0 dev"
 	return 1
+}
+
+myst_running() {
+	local c="$1"
+	myst_is_alive "$c"
 }
 
 cmd_start_mud() {
@@ -425,36 +550,87 @@ cmd_stop_all() {
 	echo "Stack fermato (mysql_data in $MUD_ROOT/mysql_data conservato)."
 }
 
+cmd_dev() {
+	echo "=== dev: sync-all + build + start ==="
+	cmd_update_all
+	cmd_start
+}
+
 usage() {
 	cat <<EOF
-Uso: ./scripts/mud-dev.sh <comando>
+mud-dev.sh — MUD NebbieArcane + edit-portal (due repo)
 
-Setup due repo (vedi docs/edit-portal-two-repos.md):
-  MUD_ROOT=$MUD_ROOT
-  EDIT_REPO=$EDIT_REPO
+Config: ~/.config/nebbie/mud-dev.env
+  MUD_ROOT=$MUD_ROOT        ($RAZZE_REMOTE/$RAZZE_BRANCH)
+  EDIT_REPO=$EDIT_REPO      ($EDIT_REMOTE/$EDIT_BRANCH)
   MUD_APP_ROOT=$MUD_APP_ROOT
 
-Comandi: status | start | start-mud | start-edit | start-stack | stop-mud | stop-edit | stop-all | logs
+SYNC (git)
+  sync-razze      pull Montero su NebbieArcane (solo MUD_ROOT)
+  sync-edit       pull fork edit-portal su EDIT_REPO
+  sync-all        sync-razze + merge Razze in EDIT_REPO + pull edit-portal
 
-Config opzionale: ~/.config/nebbie/mud-dev.env
+BUILD
+  build           compila myst (./build.sh devel, sorgente MUD_APP_ROOT)
+  build-edit      rebuild immagine Docker edit-portal
+
+UPDATE (sync + build)
+  update-razze    sync-razze + build myst
+  update-edit     sync-edit + build-edit
+  update-all      sync-all + build myst + build-edit
+
+AVVIO / STOP
+  start           myst (con edit API) + edit-portal + status
+  start-mud       solo myst
+  start-edit      solo web edit-portal (:${EDIT_WEB_PORT})
+  start-stack     shell interattiva nel container mudcompiler
+  stop-mud        termina myst
+  stop-edit       ferma edit-portal
+  stop-all        myst + edit-portal + mysql/adminer (DB conservato)
+
+INFO
+  status          diagnostica stack e git
+  logs [righe]    tail errors.log / edit_portal in myst
+  health          curl health web + ping API myst
+  dev             update-all + start (workflow dopo update Montero)
+
+  help | --help   questo messaggio (default senza argomenti)
+
+Esempi:
+  $0 dev                    # Montero ha pushato: pull, build, avvio tutto
+  $0 update-razze && $0 start-mud   # solo upstream + mud telnet
+  $0 sync-edit && $0 build-edit && $0 start-edit
+
+Vedi docs/edit-portal-two-repos.md
 EOF
 }
 
 main() {
-	local cmd="${1:-status}"
+	local cmd="${1:-help}"
 	case "$cmd" in
+	help | -h | --help) usage ;;
 	status) cmd_status ;;
+	health) cmd_health ;;
+	sync-razze) cmd_sync_razze ;;
+	sync-edit) cmd_sync_edit ;;
+	sync-all) cmd_sync_all ;;
+	build) cmd_build ;;
+	build-edit) cmd_build_edit ;;
+	update-razze) cmd_update_razze ;;
+	update-edit) cmd_update_edit ;;
+	update-all) cmd_update_all ;;
+	dev) cmd_dev ;;
 	start) cmd_start ;;
 	start-mud) cmd_start_mud ;;
 	start-edit) cmd_start_edit ;;
 	start-stack) cmd_start_stack ;;
 	stop-mud) cmd_stop_mud ;;
 	stop-edit) cmd_stop_edit ;;
-	logs) cmd_logs "${2:-40}" ;;
 	stop-all) cmd_stop_all ;;
-	-h | --help | help) usage ;;
+	logs) cmd_logs "${2:-40}" ;;
 	*)
 		echo "Comando sconosciuto: $cmd" >&2
+		echo "" >&2
 		usage >&2
 		exit 1
 		;;
