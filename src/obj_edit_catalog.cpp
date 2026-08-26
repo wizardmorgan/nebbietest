@@ -181,10 +181,10 @@ bool object_is_tanned(const struct obj_data* obj) noexcept {
 	   && proto_vnum_is_tan(obj_index[obj->item_number].iVNum)) {
 		return true;
 	}
-	if(obj->short_description && stristr(obj->short_description, "opera di")) {
+	if(obj->short_description && strstr(obj->short_description, "opera di")) {
 		return true;
 	}
-	if(obj->name && stristr(obj->name, "opera di")) {
+	if(obj->name && strstr(obj->name, "opera di")) {
 		return true;
 	}
 	return false;
