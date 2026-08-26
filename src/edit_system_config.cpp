@@ -11,6 +11,9 @@
 #include <unordered_map>
 #include <vector>
 #include <cstring>
+#include <cerrno>
+#include <filesystem>
+#include <system_error>
 
 #include "../contrib/slacking/json.hpp"
 #include "autoenums.hpp"
@@ -157,13 +160,26 @@ void build_defaults() {
 	}
 }
 
+[[nodiscard]] std::string myst_lib_config_path() {
+	namespace fs = std::filesystem;
+	try {
+		if(fs::exists("/proc/self/exe")) {
+			const fs::path exe = fs::read_symlink("/proc/self/exe");
+			const fs::path mudroot = exe.parent_path();
+			return (mudroot / "lib" / "edit_system.json").string();
+		}
+	}
+	catch(...) {
+	}
+	return "edit_system.json";
+}
+
 [[nodiscard]] std::string resolve_config_path() {
 	const char* env = std::getenv("EDIT_SYSTEM_CONFIG");
 	if(env && *env) {
 		return std::string(env);
 	}
-	/* myst chdir(-d mudroot/lib): file accanto a myst.mob */
-	return "edit_system.json";
+	return myst_lib_config_path();
 }
 
 [[nodiscard]] bool read_file_text(const std::string& path, std::string& out) {
@@ -178,6 +194,16 @@ void build_defaults() {
 }
 
 [[nodiscard]] bool write_file_text(const std::string& path, const std::string& text) {
+	namespace fs = std::filesystem;
+	try {
+		const fs::path p(path);
+		if(p.has_parent_path()) {
+			std::error_code ec;
+			fs::create_directories(p.parent_path(), ec);
+		}
+	}
+	catch(...) {
+	}
 	std::ofstream out(path, std::ios::trunc);
 	if(!out) {
 		return false;
@@ -425,7 +451,7 @@ bool edit_system_config_save_json(const std::string& json_text, std::string& err
 		const std::string path = resolve_config_path();
 		const std::string pretty = parsed.dump(2);
 		if(!write_file_text(path, pretty)) {
-			err = "impossibile scrivere " + path;
+			err = std::string("impossibile scrivere ") + path + ": " + std::strerror(errno);
 			return false;
 		}
 		parse_entries_json(parsed);
