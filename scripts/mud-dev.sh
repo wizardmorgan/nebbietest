@@ -333,7 +333,7 @@ cmd_health() {
 	if port_open "$EDIT_API_PORT"; then
 		print_ok "myst API porta $EDIT_API_PORT"
 		curl -sf -X POST "http://localhost:${EDIT_API_PORT}/internal/ping" \
-			-H "X-Edit-Api-Secret: ${EDIT_API_SECRET}" || echo "(curl ping fallito — secret?)"
+			-H "x-edit-api-secret: ${EDIT_API_SECRET}" || echo "(curl ping fallito — secret?)"
 	else
 		print_warn "myst API porta $EDIT_API_PORT chiusa"
 	fi
