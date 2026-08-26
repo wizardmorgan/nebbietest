@@ -941,8 +941,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				else if(!obj) {
 					skip_reason = "non materializzabile";
 				}
-				else if(inventory_row_is_worn(r.elem.wearpos)) {
-					skip_reason = "indossato";
+				else if(inventory_row_is_worn(r.elem.wearpos) &&
+						!object_portal_allows_worn_edit(obj)) {
+					skip_reason = "indossato (primo edit: togli e metti in inventario)";
 				}
 				else if(object_is_tanned(obj)) {
 					skip_reason = "conciato (skill tan)";
@@ -1001,15 +1002,18 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(!row) {
 				return json_error("oggetto non trovato nell'inventario del toon", 404);
 			}
-			if(inventory_row_is_worn(row->elem.wearpos)) {
-				return json_error(
-					"l'oggetto e indossato: rimuovilo e mettilo in inventario prima dell'edit",
-					400);
-			}
 
 			struct obj_data* obj = materialize_inventory_row(*row);
 			if(!obj) {
 				return json_error("impossibile materializzare oggetto", 500);
+			}
+			if(inventory_row_is_worn(row->elem.wearpos) &&
+			   !object_portal_allows_worn_edit(obj)) {
+				extract_obj(obj);
+				return json_error(
+					"l'oggetto e indossato: per il primo edit rimuovilo e mettilo in inventario "
+					"(i pezzi gia editati si possono ri-editare anche indossati)",
+					400);
 			}
 			if(!object_portal_editable(obj, toon_name.c_str())) {
 				extract_obj(obj);
@@ -1078,15 +1082,18 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(!row) {
 				return json_error("oggetto non trovato nell'inventario del toon", 404);
 			}
-			if(inventory_row_is_worn(row->elem.wearpos)) {
-				return json_error(
-					"l'oggetto e indossato: rimuovilo e mettilo in inventario prima dell'edit",
-					400);
-			}
 
 			struct obj_data* obj = materialize_inventory_row(*row);
 			if(!obj) {
 				return json_error("impossibile materializzare oggetto", 500);
+			}
+			if(inventory_row_is_worn(row->elem.wearpos) &&
+			   !object_portal_allows_worn_edit(obj)) {
+				extract_obj(obj);
+				return json_error(
+					"l'oggetto e indossato: per il primo edit rimuovilo e mettilo in inventario "
+					"(i pezzi gia editati si possono ri-editare anche indossati)",
+					400);
 			}
 			if(!object_portal_editable(obj, toon_name.c_str())) {
 				extract_obj(obj);
@@ -1181,15 +1188,18 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(!row) {
 				return json_error("oggetto non trovato nell'inventario", 404);
 			}
-			if(inventory_row_is_worn(row->elem.wearpos)) {
-				return json_error(
-					"l'oggetto e indossato: rimuovilo e mettilo in inventario prima dell'edit",
-					400);
-			}
 
 			struct obj_data* obj = materialize_inventory_row(*row);
 			if(!obj) {
 				return json_error("impossibile materializzare oggetto", 500);
+			}
+			if(inventory_row_is_worn(row->elem.wearpos) &&
+			   !object_portal_allows_worn_edit(obj)) {
+				extract_obj(obj);
+				return json_error(
+					"l'oggetto e indossato: per il primo edit rimuovilo e mettilo in inventario "
+					"(i pezzi gia editati si possono ri-editare anche indossati)",
+					400);
 			}
 			if(!object_portal_editable(obj, target_name.c_str())) {
 				extract_obj(obj);

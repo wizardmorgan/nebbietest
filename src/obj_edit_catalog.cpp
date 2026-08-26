@@ -488,6 +488,21 @@ bool inventory_row_is_worn(int wearpos) noexcept {
 	return wearpos > 0;
 }
 
+bool object_portal_allows_worn_edit(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return false;
+	}
+	/* Già passato dal portale / oedit: ri-edit consentito anche in wear. */
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return true;
+	}
+	/* Personalizzato (ED / personal_owner) ma senza flag EDIT ancora: stesso caso. */
+	if(object_has_owner_lock(obj)) {
+		return true;
+	}
+	return false;
+}
+
 bool object_is_tanned(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return false;
