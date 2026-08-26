@@ -45,7 +45,7 @@ struct CatalogEntry {
 	return !ed.empty() && strcasecmp(ed.c_str(), toon_name) == 0;
 }
 
-[[nodiscard]] const CatalogEntry kScalarCatalog[] = {
+const CatalogEntry kScalarCatalog[] = {
 	{"str", "Forza (STR)", APPLY_STR, 1, 1, 1, true, true, false, 0},
 	{"dex", "Destrezza (DEX)", APPLY_DEX, 1, 1, 2, true, true, false, 0},
 	{"con", "Costituzione (CON)", APPLY_CON, 1, 1, 2, true, true, false, 0},
