@@ -917,7 +917,7 @@ function objectEditSection(id) {
   return 'Caratteristiche';
 }
 
-/** Opzioni listino: min/max inclusivi, step in valore assoluto (AC step -5 → -20…0). */
+/** Opzioni listino: min/max inclusivi, step in valore assoluto (AC step −10 → −40…0). */
 function buildObjectScalarOptions(entry) {
   const min = Number(entry.min);
   const max = Number(entry.max);
