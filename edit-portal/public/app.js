@@ -854,8 +854,6 @@ async function loadSystemConfig() {
 function applyPortalCategoriesToUI(portal) {
   $('portal-cat-armor').checked = portal.armor !== false;
   $('portal-cat-weapon').checked = portal.weapon !== false;
-  $('portal-cat-food').checked = portal.food !== false;
-  $('portal-cat-potion').checked = portal.potion !== false;
   $('portal-cat-edited').checked = portal.edited !== false;
 }
 
@@ -863,11 +861,9 @@ function portalCategoriesFromUI() {
   return {
     armor: $('portal-cat-armor').checked,
     weapon: $('portal-cat-weapon').checked,
-    food: $('portal-cat-food').checked,
-    potion: $('portal-cat-potion').checked,
     edited: $('portal-cat-edited').checked,
     comment:
-      'Categorie oggetto editabili nel portale (staff). edited = con flag ITEM2_EDIT.',
+      'Categorie visibili nel portale. Food/potion non mostrati. edited = flag ITEM2_EDIT.',
   };
 }
 

@@ -39,8 +39,6 @@ struct Entry {
 	struct PortalCategories {
 		bool armor = true;
 		bool weapon = true;
-		bool food = true;
-		bool potion = true;
 		bool edited = true;
 	} g_portal_categories;
 
@@ -144,8 +142,6 @@ void parse_portal_categories(const Json& root) {
 	const Json& p = root["object_portal"];
 	g_portal_categories.armor = p.value("armor", true);
 	g_portal_categories.weapon = p.value("weapon", true);
-	g_portal_categories.food = p.value("food", true);
-	g_portal_categories.potion = p.value("potion", true);
 	g_portal_categories.edited = p.value("edited", true);
 }
 
@@ -203,11 +199,10 @@ void parse_entries_json(const Json& root) {
 	Json portal;
 	portal["armor"] = g_portal_categories.armor;
 	portal["weapon"] = g_portal_categories.weapon;
-	portal["food"] = g_portal_categories.food;
-	portal["potion"] = g_portal_categories.potion;
 	portal["edited"] = g_portal_categories.edited;
 	portal["comment"] =
-		"Categorie oggetto editabili nel portale web (staff). edited = con flag ITEM2_EDIT.";
+		"Categorie visibili nel portale. Food/potion non sono mai mostrati. "
+		"edited = con flag ITEM2_EDIT su altri tipi.";
 	root["object_portal"] = portal;
 	return root;
 }
@@ -413,12 +408,6 @@ bool edit_system_portal_category_enabled(const char* category) noexcept {
 	}
 	if(strcmp(category, "weapon") == 0) {
 		return g_portal_categories.weapon;
-	}
-	if(strcmp(category, "food") == 0) {
-		return g_portal_categories.food;
-	}
-	if(strcmp(category, "potion") == 0) {
-		return g_portal_categories.potion;
 	}
 	if(strcmp(category, "edited") == 0) {
 		return g_portal_categories.edited;

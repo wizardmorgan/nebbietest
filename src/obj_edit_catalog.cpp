@@ -200,10 +200,6 @@ bool object_is_tanned(const struct obj_data* obj) noexcept {
 		return "armor";
 	case ITEM_WEAPON:
 		return "weapon";
-	case ITEM_FOOD:
-		return "food";
-	case ITEM_POTION:
-		return "potion";
 	default:
 		return nullptr;
 	}
@@ -248,29 +244,36 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 	if(!owner_matches(obj, toon_name)) {
 		return "owner diverso dal PG";
 	}
-	const char* type_cat = object_portal_type_category(obj);
-	if(type_cat && !edit_system_portal_category_enabled(type_cat)) {
-		if(strcmp(type_cat, "armor") == 0) {
-			return "categoria armor disabilitata (staff)";
-		}
-		if(strcmp(type_cat, "weapon") == 0) {
-			return "categoria weapon disabilitata (staff)";
-		}
-		if(strcmp(type_cat, "food") == 0) {
-			return "categoria food disabilitata (staff)";
-		}
-		if(strcmp(type_cat, "potion") == 0) {
-			return "categoria potion disabilitata (staff)";
-		}
-		return "categoria disabilitata (staff)";
-	}
 	if(IS_OBJ_STAT2(obj, ITEM2_EDIT) && !edit_system_portal_category_enabled("edited")) {
 		return "categoria EDIT disabilitata (staff)";
+	}
+	const char* type_cat = object_portal_type_category(obj);
+	if(type_cat && !edit_system_portal_category_enabled(type_cat)) {
+		return "categoria disabilitata (staff)";
 	}
 	if(!type_cat && !IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
 		return "tipo non supportato nel portale";
 	}
 	return {};
+}
+
+bool object_portal_show_in_inventory_list(const struct obj_data* obj,
+										  const char* toon_name) noexcept {
+	if(!obj || !toon_name || !*toon_name) {
+		return false;
+	}
+	const int type = ITEM_TYPE(obj);
+	if(type == ITEM_FOOD || type == ITEM_POTION) {
+		return false;
+	}
+	const char* type_cat = object_portal_type_category(obj);
+	if(type_cat) {
+		return edit_system_portal_category_enabled(type_cat);
+	}
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return edit_system_portal_category_enabled("edited");
+	}
+	return true;
 }
 
 bool object_portal_editable(const struct obj_data* obj, const char* toon_name) noexcept {
@@ -293,8 +296,7 @@ bool object_portal_editable(const struct obj_data* obj, const char* toon_name) n
 	return false;
 }
 
-Json object_edit_catalog_json(bool is_armor, bool is_weapon, bool is_food,
-							  bool is_potion) {
+Json object_edit_catalog_json(bool is_armor, bool is_weapon) {
 	Json entries = Json::array();
 	for(const auto& e : kScalarCatalog) {
 		bool matches = false;
@@ -302,9 +304,6 @@ Json object_edit_catalog_json(bool is_armor, bool is_weapon, bool is_food,
 			matches = true;
 		}
 		if(is_weapon && e.weapon) {
-			matches = true;
-		}
-		if((is_food || is_potion) && (e.armor || e.weapon)) {
 			matches = true;
 		}
 		if(!matches) {
@@ -355,7 +354,7 @@ Json object_edit_catalog_json(bool is_armor, bool is_weapon, bool is_food,
 		if(edit_system_resistance_target(r.bit) != EditSystemTarget::Object) {
 			continue;
 		}
-		if(!is_armor && !is_weapon && !is_food && !is_potion) {
+		if(!is_armor && !is_weapon) {
 			continue;
 		}
 		Json j;

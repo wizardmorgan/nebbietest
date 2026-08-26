@@ -868,6 +868,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			Json items = Json::array();
 			int editable_count = 0;
 			for(const auto& r : rows) {
+				struct obj_data* obj = materialize_inventory_row(r);
+				if(obj && !object_portal_show_in_inventory_list(obj, toon_name.c_str())) {
+					extract_obj(obj);
+					continue;
+				}
+
 				Json it;
 				it["inventory_id"] = r.id;
 				it["list_index"] = r.list_index;
@@ -882,48 +888,37 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 				std::string skip_reason;
 				bool editable = false;
-				if(inventory_row_is_worn(r.elem.wearpos)) {
+				if(!obj) {
+					skip_reason = "non materializzabile";
+				}
+				else if(inventory_row_is_worn(r.elem.wearpos)) {
 					skip_reason = "indossato";
 				}
-				else if(object_vnum_is_tan_proto(static_cast<int>(r.elem.item_number))) {
+				else if(object_is_tanned(obj)) {
 					skip_reason = "conciato (skill tan)";
 				}
-				else {
-					struct obj_data* obj = materialize_inventory_row(r);
-					if(!obj) {
-						skip_reason = "non materializzabile";
+				else if(object_portal_editable(obj, toon_name.c_str())) {
+					editable = true;
+					const int item_type = ITEM_TYPE(obj);
+					if(item_type == ITEM_ARMOR) {
+						it["item_type"] = "armor";
+						it["portal_category"] = "armor";
+					}
+					else if(item_type == ITEM_WEAPON) {
+						it["item_type"] = "weapon";
+						it["portal_category"] = "weapon";
 					}
 					else {
-						if(object_portal_editable(obj, toon_name.c_str())) {
-							editable = true;
-							const int item_type = ITEM_TYPE(obj);
-							if(item_type == ITEM_ARMOR) {
-								it["item_type"] = "armor";
-								it["portal_category"] = "armor";
-							}
-							else if(item_type == ITEM_WEAPON) {
-								it["item_type"] = "weapon";
-								it["portal_category"] = "weapon";
-							}
-							else if(item_type == ITEM_FOOD) {
-								it["item_type"] = "food";
-								it["portal_category"] = "food";
-							}
-							else if(item_type == ITEM_POTION) {
-								it["item_type"] = "potion";
-								it["portal_category"] = "potion";
-							}
-							else {
-								it["item_type"] = "other";
-								it["portal_category"] = "edited";
-							}
-						}
-						else {
-							skip_reason =
-								object_portal_skip_reason(obj, toon_name.c_str());
-						}
-						extract_obj(obj);
+						it["item_type"] = "other";
+						it["portal_category"] = "edited";
 					}
+				}
+				else {
+					skip_reason = object_portal_skip_reason(obj, toon_name.c_str());
+				}
+
+				if(obj) {
+					extract_obj(obj);
 				}
 
 				it["editable"] = editable;
@@ -976,10 +971,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			const int item_type = ITEM_TYPE(obj);
 			const bool is_armor = item_type == ITEM_ARMOR;
 			const bool is_weapon = item_type == ITEM_WEAPON;
-			const bool is_food = item_type == ITEM_FOOD;
-			const bool is_potion = item_type == ITEM_POTION;
-			Json entries =
-				object_edit_catalog_json(is_armor, is_weapon, is_food, is_potion);
+			Json entries = object_edit_catalog_json(is_armor, is_weapon);
 			for(auto& e : entries) {
 				const std::string kind = e.value("kind", "");
 				if(kind == "scalar") {
@@ -1003,12 +995,6 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 			else if(is_weapon) {
 				d["item_type"] = "weapon";
-			}
-			else if(is_food) {
-				d["item_type"] = "food";
-			}
-			else if(is_potion) {
-				d["item_type"] = "potion";
 			}
 			else {
 				d["item_type"] = "other";
@@ -1220,7 +1206,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		if(path == "/internal/apply-pool") {
 			const unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
 			const std::string field = req.value("field", "");
-			const int pay_xp = parse_json_int(req, "pay_xp", 0);
+			int pay_xp = parse_json_int(req, "pay_xp", 0);
 			const int pay_rune = parse_json_int(req, "pay_rune", 0);
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
