@@ -103,7 +103,7 @@ bool object_vnum_is_tan_proto(int vnum) noexcept {
 	return free_slots;
 }
 
-[[nodiscard]] static void json_listino_pricing(Json& j, const ObjEditListinoSpec& spec) {
+static void json_listino_pricing(Json& j, const ObjEditListinoSpec& spec) {
 	const long raw = spec.positive_unit_raw * kObjValueStorageScale;
 	j["xp_raw_per_step"] = raw;
 	j["mxp_per_step"] = raw / 1000000L;
@@ -303,7 +303,7 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	}
 }
 
-[[nodiscard]] static void rewrite_combat_totals(struct obj_data* obj, int hitroll,
+static void rewrite_combat_totals(struct obj_data* obj, int hitroll,
 												int damroll, int spellpower) {
 	if(!obj) {
 		return;
