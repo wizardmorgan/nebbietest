@@ -57,6 +57,49 @@ function checkAccountPassword(plain, storedHash) {
   }
 }
 
+async function fetchInventoryFromMysql(toonId) {
+  const baseSql =
+    'SELECT id, list_index, item_number, short_desc, obj_name, wear_pos, depth, ' +
+    'parent_inventory_id, instance_id FROM character_inventory WHERE toon_id = ? ' +
+    'ORDER BY list_index';
+  try {
+    const [rows] = await dbPool.query(
+      'SELECT id, list_index, item_number, short_desc, obj_name, wear_pos, depth, ' +
+        'parent_inventory_id, instance_id, deleted FROM character_inventory WHERE toon_id = ? ' +
+        'ORDER BY list_index',
+      [toonId],
+    );
+    return rows.filter((r) => r.deleted === 0 || r.deleted == null);
+  } catch {
+    const [rows] = await dbPool.query(baseSql, [toonId]);
+    return rows;
+  }
+}
+
+function inventoryRowsToPortalItems(rows, skipReason) {
+  return rows.map((r) => {
+    const wearPos = Number(r.wear_pos || 0);
+    const worn = wearPos > 0;
+    let reason = skipReason;
+    if (worn) reason = 'indossato';
+    const item = {
+      inventory_id: r.id,
+      list_index: r.list_index,
+      item_number: r.item_number,
+      short_desc: r.short_desc,
+      name: r.obj_name,
+      wear_pos: wearPos,
+      depth: Number(r.depth || 0),
+      parent_inventory_id: r.parent_inventory_id,
+      instance_id: r.instance_id,
+      worn,
+      editable: false,
+    };
+    if (reason) item.skip_reason = reason;
+    return item;
+  });
+}
+
 async function mystPost(pathSuffix, body) {
   const url = `${MYST_API_URL}${pathSuffix}`;
   const res = await fetch(url, {
@@ -269,15 +312,39 @@ app.post('/api/quote-resistance', requireAuth, requireSessionToon, async (req, r
 
 app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = Number(req.params.toonId);
+  if (!targetToonId) {
+    return res.status(400).json({ ok: false, error: 'toonId non valido' });
+  }
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
   }
   const online = await mystPost('/internal/is-online', { toon_id: targetToonId });
   const list = await mystPost('/internal/list-inventory', { toon_id: targetToonId });
+  const mysqlRows = await fetchInventoryFromMysql(targetToonId);
+  let items = list.ok ? list.data.items || [] : [];
+  let total = list.ok ? Number(list.data.total ?? items.length) : 0;
+  let editableCount = list.ok ? Number(list.data.editable_count ?? 0) : 0;
+  let inventorySource = list.ok && items.length ? 'myst' : null;
+
+  if (!list.ok && mysqlRows.length) {
+    items = inventoryRowsToPortalItems(mysqlRows, 'dettagli edit non disponibili (myst)');
+    total = items.length;
+    editableCount = 0;
+    inventorySource = 'mysql_fallback';
+  } else if (list.ok && !items.length && mysqlRows.length) {
+    inventorySource = 'myst_empty';
+  } else if (list.ok && items.length) {
+    inventorySource = 'myst';
+  }
+
   res.json({
     ok: true,
     online: online.ok ? online.data.online : false,
-    items: list.ok ? list.data.items : [],
+    items,
+    total,
+    editable_count: editableCount,
+    mysql_count: mysqlRows.length,
+    inventory_source: inventorySource,
     mystErrors: [online.ok ? null : online.error, list.ok ? null : list.error].filter(Boolean),
     mystOnlineOk: online.ok,
     mystListOk: list.ok,

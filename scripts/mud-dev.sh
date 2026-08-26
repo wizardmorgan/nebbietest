@@ -319,8 +319,10 @@ cmd_update_edit() {
 
 cmd_deploy_edit() {
 	echo "=== deploy-edit: sync fork + build myst + build portal + start ==="
+	echo "Nota: sync-edit fa pull da $EDIT_REMOTE/$EDIT_BRANCH — pusha le modifiche prima del deploy."
 	cmd_sync_edit
 	cmd_build
+	cmd_stop_mud
 	cmd_build_edit
 	cmd_start
 	echo "deploy-edit ok. Web: http://localhost:${EDIT_WEB_PORT}/"
