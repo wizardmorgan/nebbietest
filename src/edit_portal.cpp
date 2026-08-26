@@ -666,7 +666,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		if(path == "/internal/ping") {
 			Json d;
 			d["service"] = "myst-edit-api";
-			d["portal_api_version"] = 3;
+			d[kEditPortalApiVersionTag] = kEditPortalApiVersion;
 			return json_ok(d);
 		}
 
@@ -1602,8 +1602,8 @@ void edit_portal_process_pending() {
 void edit_portal_init() {
 #if USE_MYSQL
 	edit_system_config_init();
-	mudlog(LOG_CHECK, "edit_portal: API listening on port %d (portal_api_version=3)",
-		   api_port());
+	mudlog(LOG_CHECK, "edit_portal: API listening on port %d (%s=%d)",
+		   api_port(), kEditPortalApiVersionTag, kEditPortalApiVersion);
 	std::thread(http_thread_main).detach();
 #else
 	mudlog(LOG_CHECK, "edit_portal: disabled (USE_MYSQL=0)");

@@ -39,6 +39,23 @@ for f in mudroot/myst build/src/myst; do
 done
 
 echo ""
+echo "=== MD5 host vs container ==="
+if [ -f mudroot/myst ] && docker ps --format '{{.Names}}' | grep -qx mudcompiler; then
+	H="$(md5sum mudroot/myst | awk '{print $1}')"
+	C="$(docker exec mudcompiler md5sum /app/mudroot/myst 2>/dev/null | awk '{print $1}' || true)"
+	echo "host:      $H"
+	echo "container: ${C:-n/a}"
+	if [ -n "$C" ] && [ "$H" != "$C" ]; then
+		echo "" >&2
+		fail "MD5 diverso: il container mudcompiler NON vede il myst appena compilato." >&2
+		echo "  Il bind mount è stato fissato alla creazione del container (path vecchio)." >&2
+		echo "  Fix: docker rm -f mudcompiler && ./scripts/mud-dev.sh rebuild-myst" >&2
+	fi
+	MOUNT="$(docker inspect mudcompiler --format '{{range .Mounts}}{{if eq .Destination \"/app\"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
+	echo "mount /app: ${MOUNT:-?}"
+fi
+
+echo ""
 echo "=== container mudcompiler ==="
 if ! docker ps --format '{{.Names}}' | grep -qx mudcompiler; then
 	fail "container mudcompiler non in esecuzione"
