@@ -45,6 +45,10 @@ struct obj_data* clone_obj(struct obj_data* obj);
 		   || vnum == TAN_SLEEVES || vnum == TAN_HELMET || vnum == TAN_ARMOR;
 }
 
+bool object_vnum_is_tan_proto(int vnum) noexcept {
+	return proto_vnum_is_tan(vnum);
+}
+
 struct CatalogEntry {
 	const char* id;
 	const char* label;
@@ -181,13 +185,40 @@ bool object_is_tanned(const struct obj_data* obj) noexcept {
 	   && proto_vnum_is_tan(obj_index[obj->item_number].iVNum)) {
 		return true;
 	}
-	if(obj->short_description && strstr(obj->short_description, "opera di")) {
-		return true;
-	}
-	if(obj->name && strstr(obj->name, "opera di")) {
+	if(obj->char_vnum > 0 && proto_vnum_is_tan(obj->char_vnum)) {
 		return true;
 	}
 	return false;
+}
+
+std::string object_portal_skip_reason(const struct obj_data* obj,
+									  const char* toon_name) {
+	if(!obj || !toon_name || !*toon_name) {
+		return "oggetto o PG non valido";
+	}
+	if(object_is_tanned(obj)) {
+		return "conciato (skill tan)";
+	}
+	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+		return "RARO";
+	}
+	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
+		return "simbolo clan";
+	}
+	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
+		return "oggetto con insert";
+	}
+	if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return "senza flag EDIT";
+	}
+	const int type = ITEM_TYPE(obj);
+	if(type != ITEM_ARMOR && type != ITEM_WEAPON) {
+		return "solo armor/weapon";
+	}
+	if(!owner_matches(obj, toon_name)) {
+		return "owner diverso dal PG";
+	}
+	return {};
 }
 
 bool object_portal_editable(const struct obj_data* obj, const char* toon_name) noexcept {

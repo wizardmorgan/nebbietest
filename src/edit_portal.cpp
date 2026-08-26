@@ -617,7 +617,6 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			Json d;
 			d["entries"] = entries;
 			d["pq_per_mega_xp"] = kEditPoolPqPerMegaXp;
-			d["session_pq_fee"] = kEditPoolSessionPqFee;
 			return json_ok(d);
 		}
 
@@ -680,7 +679,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["available_xp"] = available_xp;
 			d["available_mxp"] = available_xp / 1000000L;
 			d["available_mxp_frac"] = (available_xp % 1000000L) / 10000L;
-			d["prince_reserve"] = prince_reserve;
+			d["prince_reserve_mxp"] = prince_reserve / 1000000L;
 			d["pool"] = pool_to_json(pool);
 			d["resistances"] = resistances;
 			return json_ok(d);
@@ -788,23 +787,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			std::vector<inventory_mysql_row> rows;
 			load_character_inventory_mysql(toon_id, rows);
 			Json items = Json::array();
+			int editable_count = 0;
 			for(const auto& r : rows) {
-				if(inventory_row_is_worn(r.elem.wearpos)) {
-					continue;
-				}
-
-				struct obj_data* obj = materialize_inventory_row(r);
-				if(!obj) {
-					continue;
-				}
-				const bool editable =
-					!toon_name.empty() && object_portal_editable(obj, toon_name.c_str());
-				const int item_type = ITEM_TYPE(obj);
-				extract_obj(obj);
-				if(!editable) {
-					continue;
-				}
-
 				Json it;
 				it["inventory_id"] = r.id;
 				it["list_index"] = r.list_index;
@@ -815,13 +799,51 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				it["name"] = r.elem.name;
 				it["wear_pos"] = r.elem.wearpos;
 				it["depth"] = r.elem.depth;
-				it["item_type"] =
-					item_type == ITEM_ARMOR ? "armor"
-											: item_type == ITEM_WEAPON ? "weapon" : "other";
+				it["worn"] = inventory_row_is_worn(r.elem.wearpos);
+
+				std::string skip_reason;
+				bool editable = false;
+				if(inventory_row_is_worn(r.elem.wearpos)) {
+					skip_reason = "indossato";
+				}
+				else if(object_vnum_is_tan_proto(static_cast<int>(r.elem.item_number))) {
+					skip_reason = "conciato (skill tan)";
+				}
+				else {
+					struct obj_data* obj = materialize_inventory_row(r);
+					if(!obj) {
+						skip_reason = "non materializzabile";
+					}
+					else {
+						if(object_portal_editable(obj, toon_name.c_str())) {
+							editable = true;
+							const int item_type = ITEM_TYPE(obj);
+							it["item_type"] =
+								item_type == ITEM_ARMOR ? "armor"
+														: item_type == ITEM_WEAPON ? "weapon"
+																				   : "other";
+						}
+						else {
+							skip_reason =
+								object_portal_skip_reason(obj, toon_name.c_str());
+						}
+						extract_obj(obj);
+					}
+				}
+
+				it["editable"] = editable;
+				if(!skip_reason.empty()) {
+					it["skip_reason"] = skip_reason;
+				}
+				if(editable) {
+					++editable_count;
+				}
 				items.push_back(it);
 			}
 			Json d;
 			d["items"] = items;
+			d["total"] = items.size();
+			d["editable_count"] = editable_count;
 			return json_ok(d);
 		}
 
