@@ -7,98 +7,108 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header>
-    <h1>Portale Edit</h1>
-    <div id="header-meta"></div>
-    <button id="btn-logout" class="hidden" type="button">Logout</button>
+  <header class="app-header">
+    <div class="brand">
+      <h1>Portale Edit</h1>
+      <p class="subtitle">Nebbie Arcane</p>
+    </div>
+    <div id="header-meta" class="header-meta"></div>
+    <nav class="header-actions">
+      <button id="btn-change-toon" class="btn-secondary hidden" type="button">Cambia personaggio</button>
+      <button id="btn-logout" class="btn-secondary hidden" type="button">Logout</button>
+    </nav>
   </header>
 
-  <main>
-    <section id="login-panel">
-      <h2>Login account</h2>
-      <form id="login-form">
-        <label>Email <input type="email" id="login-email" required /></label>
-        <label>Password <input type="password" id="login-password" required /></label>
-        <button type="submit">Accedi</button>
+  <main class="app-main">
+    <section id="login-panel" class="panel card">
+      <h2>Accesso account</h2>
+      <p class="hint">Usa l'email e la password dell'<strong>account</strong> (tabella <code>user</code>), non la password del singolo personaggio.</p>
+      <form id="login-form" class="form-grid">
+        <label>Email <input type="email" id="login-email" required autocomplete="username" /></label>
+        <label>Password <input type="password" id="login-password" required autocomplete="current-password" /></label>
+        <button type="submit" class="btn-primary">Accedi</button>
       </form>
       <p id="login-error" class="error"></p>
     </section>
 
-    <section id="toon-panel" class="hidden">
-      <h2>Seleziona personaggio (sessione)</h2>
-      <p class="hint">Il personaggio scelto determina i permessi (player / limited / staff ≥57).</p>
-      <div id="toon-list"></div>
+    <section id="toon-panel" class="panel card hidden">
+      <h2>Seleziona personaggio</h2>
+      <p class="hint">Il personaggio di sessione determina i permessi (player / limited / staff).</p>
+      <div id="toon-list" class="toon-list"></div>
     </section>
 
     <section id="work-panel" class="hidden">
-      <div class="row">
-        <label>Target toon
-          <select id="target-toon"></select>
-        </label>
-        <button id="btn-refresh-inv" type="button">Aggiorna inventario</button>
-      </div>
-      <p id="online-warn" class="warn hidden"></p>
+      <div id="online-warn" class="alert alert-warn hidden"></div>
+      <div id="api-warn" class="alert alert-error hidden"></div>
 
-      <div class="columns">
-        <div>
-          <h3>Inventario (MySQL)</h3>
-          <ul id="inventory-list"></ul>
-        </div>
-        <div>
-          <h3>Dettaglio / apply</h3>
-          <pre id="quote-box">Seleziona un oggetto.</pre>
-          <form id="apply-form" class="hidden">
-            <h4>Applica affect (MVP)</h4>
-            <label>APPLY location <input type="number" id="apply-location" value="12" /></label>
-            <label>Modifier <input type="number" id="apply-modifier" value="1" /></label>
-            <label>Pay XP (raw, 0=auto) <input type="number" id="apply-pay-xp" value="0" /></label>
-            <label>Pay rune (0=auto) <input type="number" id="apply-pay-rune" value="0" /></label>
-            <button type="submit">Applica affect</button>
-          </form>
-          <form id="pool-form">
-            <h4>Edit pool PG</h4>
-            <label>Campo
-              <select id="pool-field">
-                <option value="hit">hit</option>
-                <option value="mana">mana</option>
-                <option value="move">move</option>
-                <option value="hit_regen">hit_regen</option>
-                <option value="mana_regen">mana_regen</option>
-                <option value="move_regen">move_regen</option>
-              </select>
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="card">
+            <h2>Personaggio</h2>
+            <label class="field-label">Target
+              <select id="target-toon"></select>
             </label>
-            <label>Delta <input type="number" id="pool-delta" value="10" /></label>
-            <label>Pay XP <input type="number" id="pool-pay-xp" value="0" /></label>
-            <label>Pay rune <input type="number" id="pool-pay-rune" value="0" /></label>
-            <button type="submit">Applica pool</button>
-          </form>
-          <form id="resistance-form">
-            <h4>Resistenza PG (character_resistance)</h4>
-            <p class="hint">Solo se target=character in edit_system.json (es. fire=1). Scala -100…+100.</p>
-            <label>damage_type (IMM bit)
-              <input type="number" id="res-damage-type" value="1" title="IMM_FIRE=1" />
-            </label>
-            <label>Value <input type="number" id="res-value" value="100" min="-100" max="100" /></label>
-            <label>Pay XP <input type="number" id="res-pay-xp" value="0" /></label>
-            <label>Pay rune <input type="number" id="res-pay-rune" value="0" /></label>
-            <button type="submit">Applica resistenza</button>
-            <button id="btn-load-res" type="button">Carica resistenze PG</button>
-          </form>
-          <pre id="res-list" class="msg"></pre>
-          <p id="apply-result" class="msg"></p>
+            <div id="char-stats" class="char-stats"></div>
+          </div>
+
+          <div class="card" id="char-edit-card">
+            <h2>Edit sul personaggio</h2>
+            <p class="hint">Pool (hit, mana, move, regen) e resistenze configurati sul PG.</p>
+            <div id="pool-edits"></div>
+            <div id="resistance-edits"></div>
+          </div>
+        </aside>
+
+        <div class="main-column">
+          <div class="card">
+            <div class="card-header">
+              <h2>Inventario</h2>
+              <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
+            </div>
+            <ul id="inventory-list" class="inventory-list"></ul>
+            <p id="inventory-empty" class="hint hidden">Nessun oggetto — verifica che myst sia attivo e che il PG abbia inventario in MySQL.</p>
+          </div>
+
+          <div class="card" id="object-detail-card">
+            <h2>Oggetto selezionato</h2>
+            <div id="quote-box" class="quote-box">Seleziona un oggetto dall'inventario.</div>
+          </div>
         </div>
       </div>
 
-      <div id="staff-panel" class="hidden">
-        <h3>Staff — parametri di sistema (edit_system.json)</h3>
-        <p class="hint">object vs character per pool/resistenze. Reversibile: cambia target e salva (i dati esistenti restano dove sono).</p>
-        <textarea id="system-config-editor" rows="16" spellcheck="false"></textarea>
-        <button id="btn-load-config" type="button">Carica config</button>
-        <button id="btn-save-config" type="button">Salva config</button>
+      <div id="payment-panel" class="card payment-panel hidden">
+        <h2>Pagamento edit</h2>
+        <div id="payment-summary" class="payment-summary"></div>
+        <div class="payment-controls">
+          <label class="field-label">Metodo
+            <select id="pay-mode">
+              <option value="pq">Solo Runes (PQ)</option>
+              <option value="mxp">Solo MXP (+ 1 PQ di servizio)</option>
+              <option value="mix">Misto MXP + Runes</option>
+            </select>
+          </label>
+          <label id="rune-pct-wrap" class="field-label hidden">% copertura con Runes
+            <input type="range" id="pay-rune-pct" min="0" max="100" step="5" value="0" />
+            <span id="pay-rune-pct-label">0%</span>
+          </label>
+        </div>
+        <div id="payment-breakdown" class="payment-breakdown"></div>
+        <button id="btn-pay-edit" class="btn-primary" type="button">Paga edit</button>
+        <p id="apply-result" class="msg"></p>
+      </div>
+
+      <div id="staff-panel" class="card hidden">
+        <h2>Staff — configurazione sistema</h2>
+        <p class="hint">Parametri object vs character in <code>edit_system.json</code>.</p>
+        <textarea id="system-config-editor" rows="14" spellcheck="false"></textarea>
+        <div class="btn-row">
+          <button id="btn-load-config" class="btn-secondary" type="button">Carica config</button>
+          <button id="btn-save-config" class="btn-secondary" type="button">Salva config</button>
+        </div>
         <p id="config-result" class="msg"></p>
-        <h3>Staff — object_instance</h3>
+        <h3>object_instance</h3>
         <input id="inst-search" placeholder="cerca owner / desc / id" />
-        <button id="btn-inst-search" type="button">Cerca</button>
+        <button id="btn-inst-search" class="btn-secondary" type="button">Cerca</button>
         <ul id="inst-list"></ul>
       </div>
     </section>

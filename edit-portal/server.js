@@ -13,6 +13,12 @@ const MYST_API_SECRET = process.env.EDIT_API_SECRET || 'nebbie-edit-dev-secret';
 
 const STAFF_LEVEL = parseInt(process.env.EDIT_STAFF_LEVEL || '57', 10);
 const LIMITED_LEVEL = parseInt(process.env.EDIT_LIMITED_LEVEL || '51', 10);
+const PRINCE_LEVEL = parseInt(process.env.EDIT_PRINCE_LEVEL || '51', 10);
+const PQ_PER_MEGA_XP = 2000000;
+const SESSION_PQ_FEE = 1;
+
+const TOON_LEVEL_SQL =
+  'COALESCE(MAX(cc.level), t.level, 0) AS max_level';
 
 const dbPool = mysql.createPool({
   host: process.env.MYSQL_HOST || 'mysql',
@@ -138,12 +144,11 @@ app.get('/api/me', requireAuth, (req, res) => {
 
 app.get('/api/toons', requireAuth, async (req, res) => {
   const [rows] = await dbPool.query(
-    `SELECT t.id, t.name, t.title,
-            COALESCE(MAX(cc.level), 0) AS max_level
+    `SELECT t.id, t.name, t.title, ${TOON_LEVEL_SQL}
      FROM toon t
      LEFT JOIN character_classes cc ON cc.toon_id = t.id
      WHERE t.owner_id = ?
-     GROUP BY t.id, t.name, t.title
+     GROUP BY t.id, t.name, t.title, t.level
      ORDER BY t.name`,
     [req.session.userId],
   );
@@ -163,11 +168,11 @@ app.post('/api/select-toon', requireAuth, async (req, res) => {
     return res.status(400).json({ ok: false, error: 'toonId richiesto' });
   }
   const [rows] = await dbPool.query(
-    `SELECT t.id, t.name, COALESCE(MAX(cc.level), 0) AS max_level
+    `SELECT t.id, t.name, ${TOON_LEVEL_SQL}
      FROM toon t
      LEFT JOIN character_classes cc ON cc.toon_id = t.id
      WHERE t.id = ? AND t.owner_id = ?
-     GROUP BY t.id, t.name`,
+     GROUP BY t.id, t.name, t.level`,
     [toonId, req.session.userId],
   );
   if (!rows.length) {
@@ -184,24 +189,78 @@ app.post('/api/select-toon', requireAuth, async (req, res) => {
   });
 });
 
+app.post('/api/deselect-toon', requireAuth, (req, res) => {
+  delete req.session.sessionToonId;
+  delete req.session.sessionToonName;
+  delete req.session.role;
+  delete req.session.maxLevel;
+  res.json({ ok: true });
+});
+
 app.get('/api/target-toons', requireAuth, requireSessionToon, async (req, res) => {
   if (req.session.role !== 'staff') {
-    const [rows] = await dbPool.query('SELECT id, name FROM toon WHERE id = ?', [
-      req.session.sessionToonId,
-    ]);
+    const [rows] = await dbPool.query(
+      `SELECT t.id, t.name, ${TOON_LEVEL_SQL}
+       FROM toon t
+       LEFT JOIN character_classes cc ON cc.toon_id = t.id
+       WHERE t.id = ?
+       GROUP BY t.id, t.name, t.level`,
+      [req.session.sessionToonId],
+    );
     return res.json({ ok: true, toons: rows });
   }
   const q = String(req.query.q || '').trim();
   let sql =
-    'SELECT t.id, t.name, COALESCE(MAX(cc.level),0) AS max_level FROM toon t LEFT JOIN character_classes cc ON cc.toon_id = t.id';
+    `SELECT t.id, t.name, ${TOON_LEVEL_SQL} FROM toon t LEFT JOIN character_classes cc ON cc.toon_id = t.id`;
   const params = [];
   if (q) {
     sql += ' WHERE t.name LIKE ?';
     params.push(`%${q}%`);
   }
-  sql += ' GROUP BY t.id, t.name ORDER BY t.name LIMIT 100';
+  sql += ' GROUP BY t.id, t.name, t.level ORDER BY t.name LIMIT 100';
   const [rows] = await dbPool.query(sql, params);
   res.json({ ok: true, toons: rows });
+});
+
+app.get('/api/edit-catalog', requireAuth, requireSessionToon, async (_req, res) => {
+  const result = await mystPost('/internal/get-edit-catalog', {});
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.get('/api/character-state/:toonId', requireAuth, requireSessionToon, async (req, res) => {
+  const targetToonId = Number(req.params.toonId);
+  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
+    return res.status(403).json({ ok: false, error: 'accesso negato' });
+  }
+  const result = await mystPost('/internal/get-character-state', { toon_id: targetToonId });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.post('/api/quote-pool', requireAuth, requireSessionToon, async (req, res) => {
+  const targetToonId = Number(req.body.targetToonId);
+  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
+    return res.status(403).json({ ok: false, error: 'accesso negato' });
+  }
+  const result = await mystPost('/internal/quote-pool', {
+    toon_id: targetToonId,
+    field: String(req.body.field || ''),
+    new_value: req.body.newValue !== undefined ? Number(req.body.newValue) : undefined,
+    delta: req.body.delta !== undefined ? Number(req.body.delta) : undefined,
+  });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.post('/api/quote-resistance', requireAuth, requireSessionToon, async (req, res) => {
+  const targetToonId = Number(req.body.targetToonId);
+  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
+    return res.status(403).json({ ok: false, error: 'accesso negato' });
+  }
+  const result = await mystPost('/internal/quote-resistance', {
+    toon_id: targetToonId,
+    damage_type: Number(req.body.damageType),
+    value: Number(req.body.value),
+  });
+  res.status(result.ok ? 200 : 400).json(result);
 });
 
 app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, res) => {
@@ -216,6 +275,8 @@ app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, r
     online: online.ok ? online.data.online : false,
     items: list.ok ? list.data.items : [],
     mystErrors: [online.ok ? null : online.error, list.ok ? null : list.error].filter(Boolean),
+    mystOnlineOk: online.ok,
+    mystListOk: list.ok,
   });
 });
 
@@ -262,7 +323,8 @@ app.post('/api/apply-pool', requireAuth, requireSessionToon, async (req, res) =>
   const result = await mystPost('/internal/apply-pool', {
     target_toon_id: targetToonId,
     field: String(req.body.field || ''),
-    delta: Number(req.body.delta || 0),
+    new_value: req.body.newValue !== undefined ? Number(req.body.newValue) : undefined,
+    delta: req.body.delta !== undefined ? Number(req.body.delta) : undefined,
     pay_xp: Number(req.body.payXp || 0),
     pay_rune: Number(req.body.payRune || 0),
   });
