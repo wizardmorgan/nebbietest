@@ -181,9 +181,10 @@ void parse_portal_categories(const Json& root) {
 	const Json& p = root["object_portal"];
 	g_portal_categories.edited = p.value("edited", true);
 	if(p.find("types") != p.end() && p["types"].is_object()) {
-		for(const auto& item : p["types"].items()) {
-			if(item.value().is_boolean()) {
-				g_portal_type_enabled[item.key()] = item.value().get<bool>();
+		const Json& types = p["types"];
+		for(auto it = types.begin(); it != types.end(); ++it) {
+			if(it->is_boolean()) {
+				g_portal_type_enabled[it.key()] = it->get<bool>();
 			}
 		}
 	}
