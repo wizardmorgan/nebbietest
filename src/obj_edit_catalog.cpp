@@ -9,7 +9,6 @@
 #include <string>
 
 #include "autoenums.hpp"
-#include "act.wizard.hpp"
 #include "edit_pool.hpp"
 #include "edit_system_config.hpp"
 #include "flags.hpp"
@@ -20,6 +19,8 @@
 #include "utils.hpp"
 
 namespace Alarmud {
+
+struct obj_data* clone_obj(struct obj_data* obj);
 
 struct CatalogEntry {
 	const char* id;
