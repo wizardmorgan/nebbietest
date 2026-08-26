@@ -55,7 +55,8 @@ function canPayMxp() {
 
 function buildPaymentPlan(quote, mode, runePct) {
   const xpRaw = Number(quote.xp_raw || quote.diff_xp_raw || 0);
-  const pqBase = Number(quote.pq || quote.diff_rune || 0);
+  const pqListino = Number(quote.pq ?? 0);
+  const pqObject = Number(quote.diff_rune || 0);
   const { mega, frac, raw } = quoteMxpFromRaw(xpRaw);
 
   let payXp = 0;
@@ -65,17 +66,19 @@ function buildPaymentPlan(quote, mode, runePct) {
     payXp = raw;
     payRune = SESSION_PQ_FEE;
   } else if (mode === 'pq') {
-    const pqFromMxp = Math.ceil(raw / PQ_PER_MEGA_XP);
+    const pqCost = pqListino > 0 ? pqListino : Math.ceil(raw / PQ_PER_MEGA_XP);
     payXp = 0;
-    payRune = pqBase + pqFromMxp + SESSION_PQ_FEE;
+    payRune = pqCost + pqObject + SESSION_PQ_FEE;
   } else {
     const runeMega = (mega * runePct) / 100;
     const runeFrac = (frac * runePct) / 100;
     const runeMegaTotal = runeMega + runeFrac / 100;
-    const pqFromMxp = Math.ceil(runeMegaTotal / 2);
+    const pqFromMxp = pqListino > 0
+      ? Math.ceil((pqListino * runePct) / 100)
+      : Math.ceil(runeMegaTotal / 2);
     const xpCovered = pqFromMxp * PQ_PER_MEGA_XP;
     payXp = Math.max(0, raw - xpCovered);
-    payRune = pqBase + pqFromMxp + (payXp > 0 ? SESSION_PQ_FEE : 0);
+    payRune = pqObject + pqFromMxp + (payXp > 0 ? SESSION_PQ_FEE : 0);
   }
 
   return {
@@ -83,7 +86,7 @@ function buildPaymentPlan(quote, mode, runePct) {
     payRune,
     displayMxp: formatMxp(mega, frac),
     xpRaw,
-    pqBase,
+    pqBase: pqListino || pqObject,
   };
 }
 
@@ -121,7 +124,7 @@ function updatePaymentUI() {
   $('payment-summary').innerHTML = `
     <strong>${pendingEdit.label}</strong><br>
     Costo listino: <strong>${plan.displayMxp}</strong>
-    ${plan.pqBase ? ` + <strong>${plan.pqBase} PQ</strong>` : ''}
+    ${plan.pqBase ? ` oppure <strong>${plan.pqBase} PQ</strong>` : ''}
   `;
 
   $('payment-breakdown').innerHTML = `

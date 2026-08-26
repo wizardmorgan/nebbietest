@@ -61,6 +61,34 @@ enum class EditPoolField {
 
 [[nodiscard]] int edit_pool_field_cap(EditPoolField field) noexcept;
 
+/** Step UI/listino per incrementi sul PG (non coincide con add oggetto EditMaster). */
+[[nodiscard]] int edit_pool_field_step(EditPoolField field) noexcept;
+
+/** Chiave config / API: hit, mana, move, hit_regen, ... */
+[[nodiscard]] const char* edit_pool_field_key(EditPoolField field) noexcept;
+
+[[nodiscard]] bool edit_pool_parse_field_key(const char* key, EditPoolField& out) noexcept;
+
+struct edit_pool_quote {
+	long xp_raw = 0;
+	int pq = 0;
+	long mxp = 0;
+	long mxp_frac = 0;
+};
+
+/**
+ * Costo listino EditMaster (pedit comandi) per delta positivo sul pool PG.
+ * Delta <= 0 → costo zero (riduzione non pagata).
+ */
+[[nodiscard]] edit_pool_quote edit_pool_quote_delta(EditPoolField field,
+													int delta) noexcept;
+
+/** 1 PQ equivale a questo ammontare di XP raw (PRICE_EXP in pedit). */
+inline constexpr long kEditPoolPqPerMegaXp = 2000000L;
+
+/** PQ di servizio come EditMaster (pagamento in MXP). */
+inline constexpr int kEditPoolSessionPqFee = 1;
+
 /**
  * Imposta il valore attivo (0..cap). Non tocca overedit_*.
  * Restituisce false se pool null.

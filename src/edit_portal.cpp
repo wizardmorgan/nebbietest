@@ -326,66 +326,24 @@ std::atomic<bool> g_http_running {false};
 	return j;
 }
 
-inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
+inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
-[[nodiscard]] int pool_unit_cost_raw(EditPoolField field) noexcept {
-	switch(field) {
-	case EditPoolField::Hp:
-		return 300;
-	case EditPoolField::Mana:
-		return 150;
-	case EditPoolField::Move:
-		return 100;
-	case EditPoolField::HpRegen:
-	case EditPoolField::ManaRegen:
-		return 300;
-	case EditPoolField::MoveRegen:
-		return 200;
-	}
-	return 0;
+[[nodiscard]] Json quote_from_pool(const edit_pool_quote& quote) {
+	Json q;
+	q["mxp"] = quote.mxp;
+	q["mxp_frac"] = quote.mxp_frac;
+	q["xp_raw"] = quote.xp_raw;
+	q["pq"] = quote.pq;
+	return q;
 }
 
-[[nodiscard]] int pool_field_step(const char* field) noexcept {
-	if(field == nullptr) {
-		return 1;
-	}
-	if(std::strcmp(field, "hit_regen") == 0 || std::strcmp(field, "mana_regen") == 0 ||
-	   std::strcmp(field, "move_regen") == 0) {
-		return 5;
-	}
-	if(std::strcmp(field, "hit") == 0 || std::strcmp(field, "mana") == 0 ||
-	   std::strcmp(field, "move") == 0) {
-		return 10;
-	}
-	return 1;
-}
-
-[[nodiscard]] bool parse_pool_field(const std::string& field, EditPoolField& out) {
-	if(field == "hit") {
-		out = EditPoolField::Hp;
-		return true;
-	}
-	if(field == "mana") {
-		out = EditPoolField::Mana;
-		return true;
-	}
-	if(field == "move") {
-		out = EditPoolField::Move;
-		return true;
-	}
-	if(field == "hit_regen") {
-		out = EditPoolField::HpRegen;
-		return true;
-	}
-	if(field == "mana_regen") {
-		out = EditPoolField::ManaRegen;
-		return true;
-	}
-	if(field == "move_regen") {
-		out = EditPoolField::MoveRegen;
-		return true;
-	}
-	return false;
+[[nodiscard]] Json quote_xp_json(long xp_raw, int pq) {
+	edit_pool_quote q;
+	q.xp_raw = xp_raw;
+	q.pq = pq;
+	q.mxp = xp_raw / 1000000L;
+	q.mxp_frac = (xp_raw % 1000000L) / 10000L;
+	return quote_from_pool(q);
 }
 
 [[nodiscard]] sh_int pool_field_current(const char_edit_pool_data& pool,
@@ -427,14 +385,7 @@ inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
 }
 
 [[nodiscard]] Json quote_xp_json(long xp_raw) {
-	Json q;
-	const long mega = xp_raw / 1000000L;
-	const long frac = (xp_raw - mega * 1000000L) / 10000L;
-	q["mxp"] = mega;
-	q["mxp_frac"] = frac;
-	q["xp_raw"] = xp_raw;
-	q["pq"] = 0;
-	return q;
+	return quote_xp_json(xp_raw, 0);
 }
 
 [[nodiscard]] bool load_edit_pool_for_toon(unsigned long long toon_id,
@@ -558,16 +509,15 @@ inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
 					const std::string kind = e.value("kind", "");
 					if(kind == "pool") {
 						const std::string field = e.value("pool_field", "");
-						out["step"] = pool_field_step(field.c_str());
 						EditPoolField pf {};
-						if(parse_pool_field(field, pf)) {
+						if(edit_pool_parse_field_key(field.c_str(), pf)) {
+							out["step"] = edit_pool_field_step(pf);
 							out["cap"] = edit_pool_field_cap(pf);
-							const int step = pool_field_step(field.c_str());
-							const long xp_raw =
-								static_cast<long>(pool_unit_cost_raw(pf)) * step *
-								kObjValueStorageScale;
-							out["mxp_per_step"] = xp_raw / 1000000L;
-							out["mxp_frac_per_step"] = (xp_raw % 1000000L) / 10000L;
+							const edit_pool_quote step_quote =
+								edit_pool_quote_delta(pf, edit_pool_field_step(pf));
+							out["mxp_per_step"] = step_quote.mxp;
+							out["mxp_frac_per_step"] = step_quote.mxp_frac;
+							out["pq_per_step"] = step_quote.pq;
 						}
 					}
 					if(kind == "resistance") {
@@ -580,8 +530,8 @@ inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
 			}
 			Json d;
 			d["entries"] = entries;
-			d["pq_per_mega_xp"] = kEditPortalPqPerMegaXp;
-			d["session_pq_fee"] = 1;
+			d["pq_per_mega_xp"] = kEditPoolPqPerMegaXp;
+			d["session_pq_fee"] = kEditPoolSessionPqFee;
 			return json_ok(d);
 		}
 
@@ -654,7 +604,7 @@ inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
 			const unsigned long long toon_id = req.value("toon_id", 0ULL);
 			const std::string field = req.value("field", "");
 			EditPoolField pool_field {};
-			if(toon_id == 0 || !parse_pool_field(field, pool_field)) {
+			if(toon_id == 0 || !edit_pool_parse_field_key(field.c_str(), pool_field)) {
 				return json_error("toon_id e campo pool valido richiesti", 400);
 			}
 			if(!edit_system_pool_enabled(field.c_str())) {
@@ -675,7 +625,7 @@ inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
 								   : current + req.value("delta", 0);
 			const int delta = target - current;
 			if(delta == 0) {
-				Json d = quote_xp_json(0);
+				Json d = quote_from_pool(edit_pool_quote {});
 				d["field"] = field;
 				d["current"] = current;
 				d["target"] = target;
@@ -683,10 +633,8 @@ inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
 				return json_ok(d);
 			}
 
-			const long xp_raw =
-				static_cast<long>(std::abs(delta)) * pool_unit_cost_raw(pool_field) *
-				kObjValueStorageScale;
-			Json d = quote_xp_json(xp_raw);
+			const edit_pool_quote quote = edit_pool_quote_delta(pool_field, delta);
+			Json d = quote_from_pool(quote);
 			d["field"] = field;
 			d["current"] = current;
 			d["target"] = target;
@@ -913,7 +861,7 @@ inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
 			}
 
 			EditPoolField pool_field {};
-			if(!parse_pool_field(field, pool_field)) {
+			if(!edit_pool_parse_field_key(field.c_str(), pool_field)) {
 				return json_error("campo pool non valido", 400);
 			}
 
@@ -945,10 +893,8 @@ inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
 			}
 
 			if(pay_xp == 0 && pay_rune == 0) {
-				const long xp_raw =
-					static_cast<long>(std::abs(delta)) * pool_unit_cost_raw(pool_field) *
-					kObjValueStorageScale;
-				pay_xp = static_cast<int>(xp_raw);
+				const edit_pool_quote quote = edit_pool_quote_delta(pool_field, delta);
+				pay_xp = static_cast<int>(quote.xp_raw);
 			}
 
 			if(!edit_pool_add_delta(&pool, pool_field, delta)) {
