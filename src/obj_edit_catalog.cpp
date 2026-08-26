@@ -438,7 +438,9 @@ Json object_affect_slots_json(const struct obj_data* obj) {
 		return false;
 	}
 	if(target_modifier < spec.min_total || target_modifier > spec.max_total) {
-		err = "valore fuori listino (massimo per pezzo)";
+		err = std::string("valore fuori listino per ") + spec.label + " (consentito "
+			  + std::to_string(spec.min_total) + "…" + std::to_string(spec.max_total)
+			  + ", richiesto " + std::to_string(target_modifier) + ")";
 		return false;
 	}
 
