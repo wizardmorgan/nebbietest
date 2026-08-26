@@ -107,6 +107,19 @@
 
       <div id="staff-panel" class="card hidden">
         <h2>Staff — configurazione sistema</h2>
+        <div class="portal-categories card-inner">
+          <h3>Categorie oggetti editabili (portale)</h3>
+          <p class="hint">Abilita o disabilita i tipi di oggetto selezionabili nell'inventario.</p>
+          <div id="portal-category-toggles" class="checkbox-grid">
+            <label class="checkbox-row"><input type="checkbox" id="portal-cat-armor" /> Armor</label>
+            <label class="checkbox-row"><input type="checkbox" id="portal-cat-weapon" /> Weapon</label>
+            <label class="checkbox-row"><input type="checkbox" id="portal-cat-food" /> Food</label>
+            <label class="checkbox-row"><input type="checkbox" id="portal-cat-potion" /> Potion</label>
+            <label class="checkbox-row"><input type="checkbox" id="portal-cat-edited" /> Con flag EDIT (altri tipi)</label>
+          </div>
+          <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
+          <p id="portal-cat-result" class="msg"></p>
+        </div>
         <p class="hint">Parametri object vs character in <code>edit_system.json</code>.</p>
         <textarea id="system-config-editor" rows="14" spellcheck="false"></textarea>
         <div class="btn-row">

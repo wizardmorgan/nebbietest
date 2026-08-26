@@ -23,12 +23,13 @@ using Json = nlohmann::json;
 /** wearpos MySQL: >0 = indossato (non editabile in portale). */
 bool inventory_row_is_worn(int wearpos) noexcept;
 
-/** Oggetto editabile nel portale (no RARO, no tan, ITEM2_EDIT, armor/weapon, owner PG). */
+/** Oggetto editabile nel portale (esclusioni listino + categorie staff). */
 [[nodiscard]] bool object_portal_editable(const struct obj_data* obj,
 										  const char* toon_name) noexcept;
 
 /** Catalogo edit oggetto (listino obj_value; pool PG esclusi sull'eq). */
-[[nodiscard]] Json object_edit_catalog_json(bool is_armor, bool is_weapon);
+[[nodiscard]] Json object_edit_catalog_json(bool is_armor, bool is_weapon, bool is_food = false,
+											bool is_potion = false);
 
 /**
  * Simula un affect target sull'oggetto e restituisce delta costo vs stato attuale

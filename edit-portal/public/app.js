@@ -848,9 +848,58 @@ async function loadSystemConfig() {
   const cfg = data.data?.config || data.data;
   $('system-config-editor').value = JSON.stringify(cfg, null, 2);
   $('config-result').textContent = `path: ${data.data?.path || 'lib/edit_system.json'}`;
+  applyPortalCategoriesToUI(cfg?.object_portal || {});
+}
+
+function applyPortalCategoriesToUI(portal) {
+  $('portal-cat-armor').checked = portal.armor !== false;
+  $('portal-cat-weapon').checked = portal.weapon !== false;
+  $('portal-cat-food').checked = portal.food !== false;
+  $('portal-cat-potion').checked = portal.potion !== false;
+  $('portal-cat-edited').checked = portal.edited !== false;
+}
+
+function portalCategoriesFromUI() {
+  return {
+    armor: $('portal-cat-armor').checked,
+    weapon: $('portal-cat-weapon').checked,
+    food: $('portal-cat-food').checked,
+    potion: $('portal-cat-potion').checked,
+    edited: $('portal-cat-edited').checked,
+    comment:
+      'Categorie oggetto editabili nel portale (staff). edited = con flag ITEM2_EDIT.',
+  };
 }
 
 $('btn-load-config').onclick = () => loadSystemConfig();
+
+$('btn-save-portal-cats').onclick = async () => {
+  $('portal-cat-result').textContent = '';
+  let config;
+  try {
+    config = JSON.parse($('system-config-editor').value);
+  } catch {
+    try {
+      const data = await api('/api/staff/system-config');
+      config = data.data?.config || data.data || { version: 1, entries: [] };
+    } catch {
+      config = { version: 1, entries: [] };
+    }
+  }
+  config.object_portal = portalCategoriesFromUI();
+  $('system-config-editor').value = JSON.stringify(config, null, 2);
+  const data = await api('/api/staff/system-config', {
+    method: 'POST',
+    body: JSON.stringify({ config }),
+  });
+  if (!data.ok) {
+    $('portal-cat-result').textContent = data.error || 'salvataggio fallito';
+    return;
+  }
+  $('portal-cat-result').textContent = 'Categorie salvate. Ricarico inventario…';
+  await loadEditCatalog();
+  await loadInventory();
+};
 
 $('btn-save-config').onclick = async () => {
   let config;
