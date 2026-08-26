@@ -315,10 +315,200 @@ std::atomic<bool> g_http_running {false};
 	j["owner_classes"] = a.owner_classes;
 	j["class_mult"] = a.class_mult;
 	j["diff_xp_mega"] = static_cast<long long>(a.diff.valore / 1000000L);
+	j["diff_xp_frac"] = static_cast<long long>(
+		(a.diff.valore - static_cast<long long>(j["diff_xp_mega"].get<long long>()) *
+							 1000000L) /
+		10000L);
 	j["diff_xp_raw"] = a.diff.valore;
 	j["diff_rune"] = a.diff.rune;
 	j["diff_derent_mega"] = static_cast<long long>(a.diff.derent / 1000000L);
 	j["changes"] = a.changes;
+	return j;
+}
+
+inline constexpr long kEditPortalPqPerMegaXp = 2000000L;
+
+[[nodiscard]] int pool_unit_cost_raw(EditPoolField field) noexcept {
+	switch(field) {
+	case EditPoolField::Hp:
+		return 300;
+	case EditPoolField::Mana:
+		return 150;
+	case EditPoolField::Move:
+		return 100;
+	case EditPoolField::HpRegen:
+	case EditPoolField::ManaRegen:
+		return 300;
+	case EditPoolField::MoveRegen:
+		return 200;
+	}
+	return 0;
+}
+
+[[nodiscard]] int pool_field_step(const char* field) noexcept {
+	if(field == nullptr) {
+		return 1;
+	}
+	if(std::strcmp(field, "hit_regen") == 0 || std::strcmp(field, "mana_regen") == 0 ||
+	   std::strcmp(field, "move_regen") == 0) {
+		return 5;
+	}
+	if(std::strcmp(field, "hit") == 0 || std::strcmp(field, "mana") == 0 ||
+	   std::strcmp(field, "move") == 0) {
+		return 10;
+	}
+	return 1;
+}
+
+[[nodiscard]] bool parse_pool_field(const std::string& field, EditPoolField& out) {
+	if(field == "hit") {
+		out = EditPoolField::Hp;
+		return true;
+	}
+	if(field == "mana") {
+		out = EditPoolField::Mana;
+		return true;
+	}
+	if(field == "move") {
+		out = EditPoolField::Move;
+		return true;
+	}
+	if(field == "hit_regen") {
+		out = EditPoolField::HpRegen;
+		return true;
+	}
+	if(field == "mana_regen") {
+		out = EditPoolField::ManaRegen;
+		return true;
+	}
+	if(field == "move_regen") {
+		out = EditPoolField::MoveRegen;
+		return true;
+	}
+	return false;
+}
+
+[[nodiscard]] sh_int pool_field_current(const char_edit_pool_data& pool,
+										EditPoolField field) noexcept {
+	switch(field) {
+	case EditPoolField::Hp:
+		return pool.edit_hp;
+	case EditPoolField::Mana:
+		return pool.edit_mana;
+	case EditPoolField::Move:
+		return pool.edit_move;
+	case EditPoolField::HpRegen:
+		return pool.edit_hp_regen;
+	case EditPoolField::ManaRegen:
+		return pool.edit_mana_regen;
+	case EditPoolField::MoveRegen:
+		return pool.edit_move_regen;
+	}
+	return 0;
+}
+
+[[nodiscard]] long resistance_bit_xp_raw(unsigned damage_type) noexcept {
+	switch(damage_type) {
+	case IMM_FIRE:
+		return 10000L;
+	case IMM_COLD:
+	case IMM_ACID:
+	case IMM_HOLD:
+		return 7500L;
+	case IMM_ELEC:
+	case IMM_ENERGY:
+		return 15000L;
+	case IMM_DRAIN:
+	case IMM_POISON:
+		return 3000L;
+	default:
+		return 5000L;
+	}
+}
+
+[[nodiscard]] Json quote_xp_json(long xp_raw) {
+	Json q;
+	const long mega = xp_raw / 1000000L;
+	const long frac = (xp_raw - mega * 1000000L) / 10000L;
+	q["mxp"] = mega;
+	q["mxp_frac"] = frac;
+	q["xp_raw"] = xp_raw;
+	q["pq"] = 0;
+	return q;
+}
+
+[[nodiscard]] bool load_edit_pool_for_toon(unsigned long long toon_id,
+										   char_edit_pool_data& pool) {
+	DB* db = Sql::getMysql();
+	if(!db || toon_id == 0) {
+		return false;
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		const std::string sql =
+			"SELECT edit_hp, edit_mana, edit_move, edit_hp_regen, edit_mana_regen, "
+			"edit_move_regen, overedit_hp, overedit_mana, overedit_move, "
+			"overedit_hp_regen, overedit_mana_regen, overedit_move_regen "
+			"FROM character_stats WHERE toon_id = " +
+			std::to_string(toon_id) + " LIMIT 1";
+		if(mysql_query(h, sql.c_str()) != 0) {
+			return false;
+		}
+		MYSQL_RES* res = mysql_store_result(h);
+		if(!res) {
+			return false;
+		}
+		MYSQL_ROW row = mysql_fetch_row(res);
+		if(!row) {
+			mysql_free_result(res);
+			return false;
+		}
+		pool.edit_hp = static_cast<sh_int>(row[0] ? std::atoi(row[0]) : 0);
+		pool.edit_mana = static_cast<sh_int>(row[1] ? std::atoi(row[1]) : 0);
+		pool.edit_move = static_cast<sh_int>(row[2] ? std::atoi(row[2]) : 0);
+		pool.edit_hp_regen = static_cast<sh_int>(row[3] ? std::atoi(row[3]) : 0);
+		pool.edit_mana_regen = static_cast<sh_int>(row[4] ? std::atoi(row[4]) : 0);
+		pool.edit_move_regen = static_cast<sh_int>(row[5] ? std::atoi(row[5]) : 0);
+		pool.overedit_hp = static_cast<sh_int>(row[6] ? std::atoi(row[6]) : 0);
+		pool.overedit_mana = static_cast<sh_int>(row[7] ? std::atoi(row[7]) : 0);
+		pool.overedit_move = static_cast<sh_int>(row[8] ? std::atoi(row[8]) : 0);
+		pool.overedit_hp_regen = static_cast<sh_int>(row[9] ? std::atoi(row[9]) : 0);
+		pool.overedit_mana_regen =
+			static_cast<sh_int>(row[10] ? std::atoi(row[10]) : 0);
+		pool.overedit_move_regen =
+			static_cast<sh_int>(row[11] ? std::atoi(row[11]) : 0);
+		mysql_free_result(res);
+		return true;
+	}
+	catch(...) {
+		return false;
+	}
+}
+
+[[nodiscard]] Json pool_to_json(const char_edit_pool_data& pool) {
+	Json j;
+	j["hit"] = pool.edit_hp;
+	j["mana"] = pool.edit_mana;
+	j["move"] = pool.edit_move;
+	j["hit_regen"] = pool.edit_hp_regen;
+	j["mana_regen"] = pool.edit_mana_regen;
+	j["move_regen"] = pool.edit_move_regen;
+	j["over_hit"] = pool.overedit_hp;
+	j["over_mana"] = pool.overedit_mana;
+	j["over_move"] = pool.overedit_move;
+	j["over_hit_regen"] = pool.overedit_hp_regen;
+	j["over_mana_regen"] = pool.overedit_mana_regen;
+	j["over_move_regen"] = pool.overedit_move_regen;
+	Json caps = Json::object();
+	caps["hit"] = kEditPoolMaxHit;
+	caps["mana"] = kEditPoolMaxMana;
+	caps["move"] = kEditPoolMaxMove;
+	caps["hit_regen"] = kEditPoolMaxHitRegen;
+	caps["mana_regen"] = kEditPoolMaxManaRegen;
+	caps["move_regen"] = kEditPoolMaxMoveRegen;
+	j["caps"] = caps;
 	return j;
 }
 
@@ -347,6 +537,214 @@ std::atomic<bool> g_http_running {false};
 			Json d;
 			d["toon_id"] = toon_id;
 			d["max_level"] = max_level_for_toon(toon_id);
+			return json_ok(d);
+		}
+
+		if(path == "/internal/get-edit-catalog") {
+			Json cfg;
+			try {
+				cfg = Json::parse(edit_system_config_to_json());
+			}
+			catch(...) {
+				cfg = Json::object();
+			}
+			Json entries = Json::array();
+			if(cfg.find("entries") != cfg.end() && cfg["entries"].is_array()) {
+				for(const auto& e : cfg["entries"]) {
+					if(!e.value("enabled", true)) {
+						continue;
+					}
+					Json out = e;
+					const std::string kind = e.value("kind", "");
+					if(kind == "pool") {
+						const std::string field = e.value("pool_field", "");
+						out["step"] = pool_field_step(field.c_str());
+						EditPoolField pf {};
+						if(parse_pool_field(field, pf)) {
+							out["cap"] = edit_pool_field_cap(pf);
+							const int step = pool_field_step(field.c_str());
+							const long xp_raw =
+								static_cast<long>(pool_unit_cost_raw(pf)) * step *
+								kObjValueStorageScale;
+							out["mxp_per_step"] = xp_raw / 1000000L;
+							out["mxp_frac_per_step"] = (xp_raw % 1000000L) / 10000L;
+						}
+					}
+					if(kind == "resistance") {
+						out["min"] = -100;
+						out["max"] = 100;
+						out["step"] = 25;
+					}
+					entries.push_back(out);
+				}
+			}
+			Json d;
+			d["entries"] = entries;
+			d["pq_per_mega_xp"] = kEditPortalPqPerMegaXp;
+			d["session_pq_fee"] = 1;
+			return json_ok(d);
+		}
+
+		if(path == "/internal/get-character-state") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			if(toon_id == 0) {
+				return json_error("toon_id richiesto", 400);
+			}
+			int exp = 0;
+			int rune = 0;
+			if(!load_stats_for_toon(toon_id, exp, rune)) {
+				return json_error("character_stats non trovato", 404);
+			}
+			const int max_level = max_level_for_toon(toon_id);
+			const long long prince_reserve =
+				(max_level >= PRINCIPE) ? static_cast<long long>(PRINCEEXP) : 0LL;
+			const long long available_xp =
+				static_cast<long long>(exp) - prince_reserve;
+
+			char_edit_pool_data pool {};
+			if(!load_edit_pool_for_toon(toon_id, pool)) {
+				return json_error("edit pool non trovato", 404);
+			}
+
+			Json resistances = Json::array();
+			DB* db = Sql::getMysql();
+			if(db) {
+				try {
+					odb::connection_ptr cp(db->connection());
+					auto& mc = static_cast<odb::mysql::connection&>(*cp);
+					MYSQL* h = mc.handle();
+					const std::string sql =
+						"SELECT damage_type, value FROM character_resistance WHERE toon_id = " +
+						std::to_string(toon_id) + " ORDER BY damage_type";
+					if(mysql_query(h, sql.c_str()) == 0) {
+						MYSQL_RES* res = mysql_store_result(h);
+						if(res) {
+							MYSQL_ROW row;
+							while((row = mysql_fetch_row(res))) {
+								Json r;
+								r["damage_type"] = row[0] ? std::atoi(row[0]) : 0;
+								r["value"] = row[1] ? std::atoi(row[1]) : 0;
+								resistances.push_back(r);
+							}
+							mysql_free_result(res);
+						}
+					}
+				}
+				catch(...) {
+					/* resistenze opzionali */
+				}
+			}
+
+			Json d;
+			d["toon_id"] = toon_id;
+			d["name"] = toon_name_by_id(toon_id);
+			d["max_level"] = max_level;
+			d["exp"] = exp;
+			d["rune"] = rune;
+			d["available_xp"] = available_xp;
+			d["available_mxp"] = available_xp / 1000000L;
+			d["available_mxp_frac"] = (available_xp % 1000000L) / 10000L;
+			d["prince_reserve"] = prince_reserve;
+			d["pool"] = pool_to_json(pool);
+			d["resistances"] = resistances;
+			return json_ok(d);
+		}
+
+		if(path == "/internal/quote-pool") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const std::string field = req.value("field", "");
+			EditPoolField pool_field {};
+			if(toon_id == 0 || !parse_pool_field(field, pool_field)) {
+				return json_error("toon_id e campo pool valido richiesti", 400);
+			}
+			if(!edit_system_pool_enabled(field.c_str())) {
+				return json_error("campo pool disabilitato in edit_system.json", 400);
+			}
+			if(edit_system_pool_target(field.c_str()) != EditSystemTarget::Character) {
+				return json_error("campo pool non configurato sul personaggio", 400);
+			}
+
+			char_edit_pool_data pool {};
+			if(!load_edit_pool_for_toon(toon_id, pool)) {
+				return json_error("character_stats non trovato", 404);
+			}
+
+			const int current = pool_field_current(pool, pool_field);
+			const int target = req.find("new_value") != req.end()
+								   ? req.value("new_value", current)
+								   : current + req.value("delta", 0);
+			const int delta = target - current;
+			if(delta == 0) {
+				Json d = quote_xp_json(0);
+				d["field"] = field;
+				d["current"] = current;
+				d["target"] = target;
+				d["delta"] = 0;
+				return json_ok(d);
+			}
+
+			const long xp_raw =
+				static_cast<long>(std::abs(delta)) * pool_unit_cost_raw(pool_field) *
+				kObjValueStorageScale;
+			Json d = quote_xp_json(xp_raw);
+			d["field"] = field;
+			d["current"] = current;
+			d["target"] = target;
+			d["delta"] = delta;
+			return json_ok(d);
+		}
+
+		if(path == "/internal/quote-resistance") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned damage_type =
+				static_cast<unsigned>(req.value("damage_type", 0));
+			const int target_value = req.value("value", 0);
+			if(toon_id == 0 || damage_type == 0) {
+				return json_error("toon_id e damage_type richiesti", 400);
+			}
+			if(!edit_system_resistance_enabled(damage_type)) {
+				return json_error("resistenza disabilitata in edit_system.json", 400);
+			}
+			if(edit_system_resistance_target(damage_type) != EditSystemTarget::Character) {
+				return json_error("resistenza non configurata sul personaggio", 400);
+			}
+
+			int current = 0;
+			DB* db = Sql::getMysql();
+			if(db) {
+				try {
+					odb::connection_ptr cp(db->connection());
+					auto& mc = static_cast<odb::mysql::connection&>(*cp);
+					MYSQL* h = mc.handle();
+					const std::string sql =
+						"SELECT value FROM character_resistance WHERE toon_id = " +
+						std::to_string(toon_id) + " AND damage_type = " +
+						std::to_string(damage_type) + " LIMIT 1";
+					if(mysql_query(h, sql.c_str()) == 0) {
+						MYSQL_RES* res = mysql_store_result(h);
+						if(res) {
+							MYSQL_ROW row = mysql_fetch_row(res);
+							if(row && row[0]) {
+								current = std::atoi(row[0]);
+							}
+							mysql_free_result(res);
+						}
+					}
+				}
+				catch(...) {
+					/* default current 0 */
+				}
+			}
+
+			const int delta = target_value - current;
+			const long xp_raw =
+				static_cast<long>(std::abs(delta)) * resistance_bit_xp_raw(damage_type) /
+				100L * kObjValueStorageScale;
+			Json d = quote_xp_json(xp_raw);
+			d["damage_type"] = damage_type;
+			d["current"] = current;
+			d["target"] = target_value;
+			d["delta"] = delta;
 			return json_ok(d);
 		}
 
@@ -503,9 +901,8 @@ std::atomic<bool> g_http_running {false};
 		if(path == "/internal/apply-pool") {
 			const unsigned long long target_toon_id = req.value("target_toon_id", 0ULL);
 			const std::string field = req.value("field", "");
-			const int delta = req.value("delta", 0);
-			const int pay_xp = req.value("pay_xp", 0);
-			const int pay_rune = req.value("pay_rune", 0);
+			int pay_xp = req.value("pay_xp", 0);
+			int pay_rune = req.value("pay_rune", 0);
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
 			if(target_name.empty()) {
@@ -516,25 +913,7 @@ std::atomic<bool> g_http_running {false};
 			}
 
 			EditPoolField pool_field {};
-			if(field == "hit") {
-				pool_field = EditPoolField::Hp;
-			}
-			else if(field == "mana") {
-				pool_field = EditPoolField::Mana;
-			}
-			else if(field == "move") {
-				pool_field = EditPoolField::Move;
-			}
-			else if(field == "hit_regen") {
-				pool_field = EditPoolField::HpRegen;
-			}
-			else if(field == "mana_regen") {
-				pool_field = EditPoolField::ManaRegen;
-			}
-			else if(field == "move_regen") {
-				pool_field = EditPoolField::MoveRegen;
-			}
-			else {
+			if(!parse_pool_field(field, pool_field)) {
 				return json_error("campo pool non valido", 400);
 			}
 
@@ -552,46 +931,24 @@ std::atomic<bool> g_http_running {false};
 			}
 
 			char_edit_pool_data pool {};
-			try {
-				odb::connection_ptr cp(db->connection());
-				auto& mc = static_cast<odb::mysql::connection&>(*cp);
-				MYSQL* h = mc.handle();
-				const std::string sql =
-					"SELECT edit_hp, edit_mana, edit_move, edit_hp_regen, edit_mana_regen, "
-					"edit_move_regen, overedit_hp, overedit_mana, overedit_move, "
-					"overedit_hp_regen, overedit_mana_regen, overedit_move_regen "
-					"FROM character_stats WHERE toon_id = " +
-					std::to_string(target_toon_id) + " LIMIT 1";
-				if(mysql_query(h, sql.c_str()) != 0) {
-					return json_error("lettura edit pool fallita", 500);
-				}
-				MYSQL_RES* res = mysql_store_result(h);
-				if(!res) {
-					return json_error("lettura edit pool fallita", 500);
-				}
-				MYSQL_ROW row = mysql_fetch_row(res);
-				if(!row) {
-					mysql_free_result(res);
-					return json_error("character_stats non trovato", 404);
-				}
-				pool.edit_hp = static_cast<sh_int>(row[0] ? std::atoi(row[0]) : 0);
-				pool.edit_mana = static_cast<sh_int>(row[1] ? std::atoi(row[1]) : 0);
-				pool.edit_move = static_cast<sh_int>(row[2] ? std::atoi(row[2]) : 0);
-				pool.edit_hp_regen = static_cast<sh_int>(row[3] ? std::atoi(row[3]) : 0);
-				pool.edit_mana_regen = static_cast<sh_int>(row[4] ? std::atoi(row[4]) : 0);
-				pool.edit_move_regen = static_cast<sh_int>(row[5] ? std::atoi(row[5]) : 0);
-				pool.overedit_hp = static_cast<sh_int>(row[6] ? std::atoi(row[6]) : 0);
-				pool.overedit_mana = static_cast<sh_int>(row[7] ? std::atoi(row[7]) : 0);
-				pool.overedit_move = static_cast<sh_int>(row[8] ? std::atoi(row[8]) : 0);
-				pool.overedit_hp_regen = static_cast<sh_int>(row[9] ? std::atoi(row[9]) : 0);
-				pool.overedit_mana_regen =
-					static_cast<sh_int>(row[10] ? std::atoi(row[10]) : 0);
-				pool.overedit_move_regen =
-					static_cast<sh_int>(row[11] ? std::atoi(row[11]) : 0);
-				mysql_free_result(res);
+			if(!load_edit_pool_for_toon(target_toon_id, pool)) {
+				return json_error("character_stats non trovato", 404);
 			}
-			catch(...) {
-				return json_error("lettura edit pool fallita", 500);
+
+			const int current = pool_field_current(pool, pool_field);
+			const int target = req.find("new_value") != req.end()
+								   ? req.value("new_value", current)
+								   : current + req.value("delta", 0);
+			const int delta = target - current;
+			if(delta == 0) {
+				return json_error("nessuna modifica al pool", 400);
+			}
+
+			if(pay_xp == 0 && pay_rune == 0) {
+				const long xp_raw =
+					static_cast<long>(std::abs(delta)) * pool_unit_cost_raw(pool_field) *
+					kObjValueStorageScale;
+				pay_xp = static_cast<int>(xp_raw);
 			}
 
 			if(!edit_pool_add_delta(&pool, pool_field, delta)) {
