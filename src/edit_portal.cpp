@@ -189,6 +189,28 @@ std::atomic<bool> g_http_running {false};
 	return j.dump();
 }
 
+[[nodiscard]] unsigned long long parse_json_toon_id(const Json& req) {
+	if(req.find("toon_id") == req.end() || req["toon_id"].is_null()) {
+		return 0ULL;
+	}
+	const Json& v = req["toon_id"];
+	if(v.is_number_unsigned()) {
+		return v.get<unsigned long long>();
+	}
+	if(v.is_number_integer()) {
+		return static_cast<unsigned long long>(v.get<long long>());
+	}
+	if(v.is_string()) {
+		try {
+			return static_cast<unsigned long long>(std::stoull(v.get<std::string()));
+		}
+		catch(...) {
+			return 0ULL;
+		}
+	}
+	return 0ULL;
+}
+
 [[nodiscard]] bool is_toon_online_by_name(const std::string& name) {
 	if(name.empty()) {
 		return false;
@@ -782,7 +804,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		}
 
 		if(path == "/internal/list-inventory") {
-			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long toon_id = parse_json_toon_id(req);
 			if(toon_id == 0) {
 				return json_error("toon_id richiesto", 400);
 			}
@@ -849,6 +871,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["items"] = items;
 			d["total"] = items.size();
 			d["editable_count"] = editable_count;
+			d["loaded_rows"] = rows.size();
+			d["toon_id"] = toon_id;
 			return json_ok(d);
 		}
 
