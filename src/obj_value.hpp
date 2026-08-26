@@ -51,16 +51,21 @@ struct ObjEditAnalysis {
 /** Fattore usato in ProvaLocale per cachare value_exp / value_exp_total. */
 inline constexpr long kObjValueStorageScale = 10000L;
 
-/** Allineati a pedit.cpp (RentEditor). */
+/** Derent/rent legacy (non usare EditMaster/pedit come listino portal). */
 inline constexpr int kObjValuePriceRune = 1;
 inline constexpr long kObjValuePriceExp = 2000000L;
 
-/** Listino nebbiearcane.it: biclasse x1.5, triclasse x2.0. */
+/** Listino https://www.nebbiearcane.it/listino-edits/ : biclasse x1.5, triclasse x2.0. */
 inline constexpr double kObjValueClassMultBi = 1.5;
 inline constexpr double kObjValueClassMultTri = 2.0;
 
 /** Massimo listino edits per pezzo (STR/CON/WIS/INT/CHR/DEX). */
 inline constexpr int kObjEditMaxStatPerPiece = 3;
+
+/** Damroll/hitroll per pezzo e tetto dam editabile sul personaggio (listino ufficiale). */
+inline constexpr int kObjEditMaxDamrollPerPiece = 2;
+inline constexpr int kObjEditMaxHitrollPerPiece = 2;
+inline constexpr int kObjEditMaxDamrollEditableTotal = 30;
 
 /** Listino portal: 1 MXP listino = 1 Rune (alternativa pagamento). */
 inline constexpr long kObjEditRunePerMegaXp = 1000000L;

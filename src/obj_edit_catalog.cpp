@@ -780,8 +780,35 @@ int object_immune_current_bits(const struct obj_data* obj) noexcept {
 	return sum_location_mod(obj, APPLY_IMMUNE);
 }
 
+bool object_edit_location_affects_dam(int location) noexcept {
+	return location == APPLY_DAMROLL || location == APPLY_HITNDAM;
+}
+
+int object_edit_damroll_total(const struct obj_data* obj) noexcept {
+	return combat_damroll_total(obj);
+}
+
+[[nodiscard]] static bool enforce_char_dam_budget(const struct obj_data* after_obj,
+												  int owner_dam_excluding_this,
+												  std::string& err) {
+	if(owner_dam_excluding_this < 0 || !after_obj) {
+		return true;
+	}
+	const int piece_dam = combat_damroll_total(after_obj);
+	const int total = owner_dam_excluding_this + piece_dam;
+	if(total > kObjEditMaxDamrollEditableTotal) {
+		err = "tetto dam editabile personaggio superato (" + std::to_string(total) + "/"
+			  + std::to_string(kObjEditMaxDamrollEditableTotal)
+			  + "; altri pezzi " + std::to_string(owner_dam_excluding_this)
+			  + ", questo pezzo " + std::to_string(piece_dam) + ")";
+		return false;
+	}
+	return true;
+}
+
 bool object_quote_affect_target(struct obj_data* obj, int location, int target_modifier,
-								long& xp_raw, int& pq, std::string& err) {
+								long& xp_raw, int& pq, std::string& err,
+								int owner_dam_excluding_this) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -796,6 +823,11 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		extract_obj(clone);
 		return false;
 	}
+	if(object_edit_location_affects_dam(location)
+	   && !enforce_char_dam_budget(clone, owner_dam_excluding_this, err)) {
+		extract_obj(clone);
+		return false;
+	}
 	const ObjEditAnalysis after = AnalyzeObjEdit(clone);
 	extract_obj(clone);
 	xp_raw = std::max(0L, after.diff.valore - before.diff.valore);
@@ -804,7 +836,27 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 }
 
 bool object_apply_affect_target(struct obj_data* obj, int location, int target_modifier,
-								std::string& err) {
+								std::string& err, int owner_dam_excluding_this) {
+	if(!obj) {
+		err = "oggetto null";
+		return false;
+	}
+	if(object_edit_location_affects_dam(location) && owner_dam_excluding_this >= 0) {
+		struct obj_data* clone = clone_obj(obj);
+		if(!clone) {
+			err = "impossibile clonare oggetto";
+			return false;
+		}
+		if(!apply_target_modifier(clone, location, target_modifier, err)) {
+			extract_obj(clone);
+			return false;
+		}
+		if(!enforce_char_dam_budget(clone, owner_dam_excluding_this, err)) {
+			extract_obj(clone);
+			return false;
+		}
+		extract_obj(clone);
+	}
 	return apply_target_modifier(obj, location, target_modifier, err);
 }
 

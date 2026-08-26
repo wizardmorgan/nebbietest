@@ -854,7 +854,7 @@ async function selectItem(inventoryId, li) {
     lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
 
   renderObjectAffectSlots(d.affect_slots);
-  renderObjectEdits(d.entries || []);
+  renderObjectEdits(d.entries || [], d.dam_budget);
 }
 
 function renderObjectAffectSlots(affectSlots) {
@@ -969,7 +969,7 @@ function clearObjectPending(entryId) {
   }
 }
 
-function renderObjectEdits(entries) {
+function renderObjectEdits(entries, damBudget) {
   const box = $('object-edits');
   box.innerHTML = '';
 
@@ -985,6 +985,17 @@ function renderObjectEdits(entries) {
   const title = document.createElement('h3');
   title.textContent = 'Edit sull\'oggetto';
   box.appendChild(title);
+
+  if (damBudget) {
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    const charTotal = Number(damBudget.char_total || 0);
+    const charMax = Number(damBudget.char_max || 30);
+    const pieceMax = Number(damBudget.piece_max || 2);
+    hint.textContent =
+      `Dam editabile: ${charTotal}/${charMax} sul personaggio · max ${pieceMax} per pezzo (listino ufficiale).`;
+    box.appendChild(hint);
+  }
 
   let lastSection = '';
   entries.forEach((entry) => {
