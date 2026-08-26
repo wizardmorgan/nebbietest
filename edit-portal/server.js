@@ -101,6 +101,13 @@ function inventoryRowsToPortalItems(rows, skipReason) {
 }
 
 async function mystPost(pathSuffix, body) {
+  const payload = { ...(body || {}) };
+  if (payload.toon_id !== undefined && payload.toon_id !== null) {
+    payload.toon_id = String(payload.toon_id);
+  }
+  if (payload.target_toon_id !== undefined && payload.target_toon_id !== null) {
+    payload.target_toon_id = String(payload.target_toon_id);
+  }
   const url = `${MYST_API_URL}${pathSuffix}`;
   const res = await fetch(url, {
     method: 'POST',
@@ -108,7 +115,7 @@ async function mystPost(pathSuffix, body) {
       'Content-Type': 'application/json',
       'x-edit-api-secret': MYST_API_SECRET,
     },
-    body: JSON.stringify(body || {}),
+    body: JSON.stringify(payload),
   });
   const text = await res.text();
   let data;
@@ -332,7 +339,10 @@ app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, r
     editableCount = 0;
     inventorySource = 'mysql_fallback';
   } else if (list.ok && !items.length && mysqlRows.length) {
-    inventorySource = 'myst_empty';
+    items = inventoryRowsToPortalItems(mysqlRows, 'dettagli edit da myst non disponibili');
+    total = items.length;
+    editableCount = 0;
+    inventorySource = 'mysql_myst_empty';
   } else if (list.ok && items.length) {
     inventorySource = 'myst';
   }

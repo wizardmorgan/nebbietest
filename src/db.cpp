@@ -4991,6 +4991,19 @@ static void dedupe_rent_wear_pos(struct obj_file_u* rent) {
 	}
 }
 
+static void inventory_mysql_row_from_result(const MYSQL_ROW row, int parent_col, int instance_col,
+											inventory_mysql_row& inv_row) {
+	const int idx = static_cast<int>(sql_to_ll(row[1], -1));
+	inv_row = inventory_mysql_row {};
+	inv_row.id = static_cast<unsigned long long>(sql_to_ll(row[0], 0));
+	inv_row.list_index = idx;
+	inv_row.parent_inventory_id =
+		parent_col >= 0 ? static_cast<unsigned long long>(sql_to_ll(row[parent_col], 0)) : 0ULL;
+	inv_row.instance_id =
+		instance_col >= 0 ? static_cast<unsigned long long>(sql_to_ll(row[instance_col], 0)) : 0ULL;
+	elem_from_db_inventory_row(row, inv_row.elem);
+}
+
 bool load_character_inventory_mysql(unsigned long long toon_id,
 									std::vector<inventory_mysql_row>& rows) {
 	rows.clear();
@@ -5005,31 +5018,57 @@ bool load_character_inventory_mysql(unsigned long long toon_id,
 
 	const std::string toon_id_str = std::to_string(toon_id);
 	const bool soft_delete_supported = inventory_soft_delete_supported_tx(db);
+	const bool parent_supported = inventory_parent_id_supported_tx(db);
 	MYSQL_RES* res = nullptr;
+	int parent_col = -1;
+	int instance_col = -1;
+
+	const char* base_cols =
+		"id, list_index, item_number, value0, value1, value2, value3, extra_flags, "
+		"extra_flags2, weight, timer, bitvector, obj_name, short_desc, description, "
+		"wear_pos, depth";
+
+	auto build_where = [&]() {
+		std::ostringstream sql;
+		sql << " FROM character_inventory WHERE toon_id = " << toon_id_str;
+		if(soft_delete_supported) {
+			sql << " AND (deleted = 0 OR deleted IS NULL)";
+		}
+		sql << " ORDER BY list_index";
+		return sql.str();
+	};
 
 	std::ostringstream inv_sql;
-	inv_sql << "SELECT id, list_index, item_number, value0, value1, value2, value3, extra_flags, "
-			   "extra_flags2, weight, timer, bitvector, obj_name, short_desc, description, "
-			   "wear_pos, depth, parent_inventory_id, instance_id FROM character_inventory "
-			   "WHERE toon_id = "
-			<< toon_id_str;
-	if(soft_delete_supported) {
-		inv_sql << " AND (deleted = 0 OR deleted IS NULL)";
+	inv_sql << "SELECT " << base_cols;
+	if(parent_supported) {
+		inv_sql << ", parent_inventory_id";
 	}
-	inv_sql << " ORDER BY list_index";
-	if(!mysql_query_select(db, inv_sql.str(), res) || !res) {
-		return false;
+	inv_sql << ", instance_id" << build_where();
+
+	if(mysql_query_select(db, inv_sql.str(), res) && res) {
+		parent_col = parent_supported ? 17 : -1;
+		instance_col = parent_supported ? 18 : 17;
+	}
+	else {
+		if(res) {
+			mysql_free_result(res);
+			res = nullptr;
+		}
+		std::ostringstream fallback_sql;
+		fallback_sql << "SELECT " << base_cols << build_where();
+		if(!mysql_query_select(db, fallback_sql.str(), res) || !res) {
+			mudlog(LOG_SYSERR,
+				   "load_character_inventory_mysql: query failed for toon_id %s",
+				   toon_id_str.c_str());
+			return false;
+		}
+		parent_col = -1;
+		instance_col = -1;
 	}
 
 	while(MYSQL_ROW row = mysql_fetch_row(res)) {
-		const int idx = static_cast<int>(sql_to_ll(row[1], -1));
 		inventory_mysql_row inv_row {};
-		inv_row.id = static_cast<unsigned long long>(sql_to_ll(row[0], 0));
-		inv_row.list_index = idx;
-		inv_row.parent_inventory_id =
-			static_cast<unsigned long long>(sql_to_ll(row[17], 0));
-		inv_row.instance_id = static_cast<unsigned long long>(sql_to_ll(row[18], 0));
-		elem_from_db_inventory_row(row, inv_row.elem);
+		inventory_mysql_row_from_result(row, parent_col, instance_col, inv_row);
 		rows.push_back(inv_row);
 	}
 	mysql_free_result(res);

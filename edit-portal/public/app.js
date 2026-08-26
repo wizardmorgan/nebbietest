@@ -527,11 +527,11 @@ async function loadInventory() {
   const emptyEl = $('inventory-empty');
   emptyEl.classList.toggle('hidden', items.length > 0);
   if (!items.length) {
-    if (mysqlCount > 0 && data.inventory_source === 'myst_empty') {
+    if (mysqlCount > 0 && data.inventory_source === 'mysql_myst_empty') {
       emptyEl.textContent =
-        'MySQL ha ' +
+        'Elenco da MySQL (' +
         mysqlCount +
-        ' oggetti ma myst non li ha restituito: verifica list_index o ricompila myst.';
+        ' oggetti). Myst non ha arricchito la lista: ricompila e riavvia myst (./scripts/mud-dev.sh stop-mud && deploy-edit).';
       emptyEl.classList.remove('hidden');
     } else {
       emptyEl.textContent =
@@ -544,6 +544,10 @@ async function loadInventory() {
   } else if (data.inventory_source === 'mysql_fallback') {
     showApiWarn(
       'Elenco da MySQL: myst non disponibile — selezione edit non attiva finché myst non risponde.',
+    );
+  } else if (data.inventory_source === 'mysql_myst_empty') {
+    showApiWarn(
+      'Elenco da MySQL: myst non ha restituito oggetti — edit dettagliato limitato finché myst non è aggiornato.',
     );
   }
 
