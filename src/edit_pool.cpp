@@ -737,6 +737,113 @@ int edit_pool_field_cap(EditPoolField field) noexcept {
 	return 0;
 }
 
+int edit_pool_field_step(EditPoolField field) noexcept {
+	switch(field) {
+	case EditPoolField::Hp:
+	case EditPoolField::Mana:
+	case EditPoolField::Move:
+		return 10;
+	case EditPoolField::HpRegen:
+	case EditPoolField::ManaRegen:
+	case EditPoolField::MoveRegen:
+		return 5;
+	}
+	return 1;
+}
+
+const char* edit_pool_field_key(EditPoolField field) noexcept {
+	switch(field) {
+	case EditPoolField::Hp:
+		return "hit";
+	case EditPoolField::Mana:
+		return "mana";
+	case EditPoolField::Move:
+		return "move";
+	case EditPoolField::HpRegen:
+		return "hit_regen";
+	case EditPoolField::ManaRegen:
+		return "mana_regen";
+	case EditPoolField::MoveRegen:
+		return "move_regen";
+	}
+	return "";
+}
+
+bool edit_pool_parse_field_key(const char* key, EditPoolField& out) noexcept {
+	if(!key || !*key) {
+		return false;
+	}
+	if(std::strcmp(key, "hit") == 0 || std::strcmp(key, "hp") == 0) {
+		out = EditPoolField::Hp;
+		return true;
+	}
+	if(std::strcmp(key, "mana") == 0) {
+		out = EditPoolField::Mana;
+		return true;
+	}
+	if(std::strcmp(key, "move") == 0 || std::strcmp(key, "mov") == 0) {
+		out = EditPoolField::Move;
+		return true;
+	}
+	if(std::strcmp(key, "hit_regen") == 0 || std::strcmp(key, "hp_regen") == 0 ||
+	   std::strcmp(key, "hpregen") == 0) {
+		out = EditPoolField::HpRegen;
+		return true;
+	}
+	if(std::strcmp(key, "mana_regen") == 0 || std::strcmp(key, "manaregen") == 0) {
+		out = EditPoolField::ManaRegen;
+		return true;
+	}
+	if(std::strcmp(key, "move_regen") == 0 || std::strcmp(key, "moveregen") == 0) {
+		out = EditPoolField::MoveRegen;
+		return true;
+	}
+	return false;
+}
+
+edit_pool_quote edit_pool_quote_delta(EditPoolField field, int delta) noexcept {
+	edit_pool_quote q;
+	if(delta <= 0) {
+		return q;
+	}
+
+	struct Row {
+		long cost_mxp;
+		int cost_pq;
+		int add;
+	} row {0, 0, 1};
+
+	switch(field) {
+	case EditPoolField::Hp:
+		row = {5L, 1, 2};
+		break;
+	case EditPoolField::Mana:
+		row = {5L, 1, 2};
+		break;
+	case EditPoolField::Move:
+		row = {10L, 1, 10};
+		break;
+	case EditPoolField::HpRegen:
+		row = {6L, 2, 2};
+		break;
+	case EditPoolField::ManaRegen:
+		row = {6L, 1, 1};
+		break;
+	case EditPoolField::MoveRegen:
+		row = {10L, 1, 10};
+		break;
+	default:
+		return q;
+	}
+
+	const int units = delta;
+	q.xp_raw = std::max(0L, row.cost_mxp * units / row.add) * 1000000L;
+	q.pq = std::max(0, row.cost_pq * units / row.add);
+	q.mxp = q.xp_raw / 1000000L;
+	q.mxp_frac = (q.xp_raw % 1000000L) / 10000L;
+	return q;
+}
+
 bool edit_pool_set_absolute(struct char_edit_pool_data* pool, EditPoolField field,
 							int value) {
 	const auto refs = pool_field_refs(pool, field);
