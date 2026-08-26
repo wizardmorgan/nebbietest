@@ -130,6 +130,11 @@ myst_is_alive() {
 	'
 }
 
+myst_running() {
+	local c="$1"
+	myst_is_alive "$c"
+}
+
 myst_has_zombie() {
 	local c="$1"
 	docker exec "$c" bash -c '
@@ -232,13 +237,25 @@ git_discard_local_file() {
 	)
 }
 
+git_pull_branch() {
+	local repo="$1" remote="$2" branch="$3"
+	(
+		cd "$repo"
+		git fetch "$remote" "$branch"
+		if git merge-base --is-ancestor HEAD FETCH_HEAD 2>/dev/null; then
+			git merge --ff-only FETCH_HEAD
+		elif git merge-base --is-ancestor FETCH_HEAD HEAD 2>/dev/null; then
+			echo "[$repo] già aggiornato rispetto a $remote/$branch"
+		else
+			echo "[$repo] merge $remote/$branch (branch divergenti)"
+			git merge --no-edit FETCH_HEAD
+		fi
+	)
+}
+
 cmd_sync_razze() {
 	echo "=== sync-razze: $MUD_ROOT ($RAZZE_REMOTE/$RAZZE_BRANCH) ==="
-	(
-		cd "$MUD_ROOT"
-		git fetch "$RAZZE_REMOTE" "$RAZZE_BRANCH"
-		git pull "$RAZZE_REMOTE" "$RAZZE_BRANCH"
-	)
+	git_pull_branch "$MUD_ROOT" "$RAZZE_REMOTE" "$RAZZE_BRANCH"
 	ensure_docker_override
 	echo "sync-razze ok."
 }
@@ -247,11 +264,7 @@ cmd_sync_edit() {
 	echo "=== sync-edit: $EDIT_REPO ($EDIT_REMOTE/$EDIT_BRANCH) ==="
 	ensure_edit_remote
 	git_discard_local_file "$EDIT_REPO" scripts/mud-dev.sh
-	(
-		cd "$EDIT_REPO"
-		git fetch "$EDIT_REMOTE" "$EDIT_BRANCH"
-		git pull "$EDIT_REMOTE" "$EDIT_BRANCH"
-	)
+	git_pull_branch "$EDIT_REPO" "$EDIT_REMOTE" "$EDIT_BRANCH"
 	chmod +x "$EDIT_REPO/scripts/mud-dev.sh" 2>/dev/null || true
 	echo "sync-edit ok."
 }
@@ -271,9 +284,8 @@ cmd_sync_all() {
 			echo "ERRORE: conflitti merge in $EDIT_REPO — risolvi, commit, poi riprova." >&2
 			exit 1
 		fi
-		git fetch "$EDIT_REMOTE" "$EDIT_BRANCH"
-		git pull "$EDIT_REMOTE" "$EDIT_BRANCH"
 	)
+	git_pull_branch "$EDIT_REPO" "$EDIT_REMOTE" "$EDIT_BRANCH"
 	chmod +x "$EDIT_REPO/scripts/mud-dev.sh" 2>/dev/null || true
 	echo "sync-all ok."
 }
@@ -458,11 +470,6 @@ cmd_status() {
 	fi
 	echo "  Prova: $0 start   oppure   $0 dev"
 	return 1
-}
-
-myst_running() {
-	local c="$1"
-	myst_is_alive "$c"
 }
 
 cmd_start_mud() {
