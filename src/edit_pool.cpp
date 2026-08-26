@@ -21,6 +21,7 @@
 #include "handler.hpp"
 #include "logging.hpp"
 #include "maximums.hpp"
+#include "obj_value.hpp"
 #include "object_instance.hpp"
 #include "Sql.hpp"
 #include "utils.hpp"
@@ -807,38 +808,35 @@ edit_pool_quote edit_pool_quote_delta(EditPoolField field, int delta) noexcept {
 		return q;
 	}
 
-	struct Row {
-		long cost_mxp;
-		int cost_pq;
-		int add;
-	} row {0, 0, 1};
-
+	/*
+	 * Unità "valore" raw come CheckValueObj (prima di kObjValueStorageScale).
+	 * Allineato ai commenti listino in obj_value.cpp.
+	 */
+	long unit_valore = 0;
 	switch(field) {
 	case EditPoolField::Hp:
-		row = {5L, 1, 2};
+		unit_valore = 300L;
 		break;
 	case EditPoolField::Mana:
-		row = {5L, 1, 2};
+		unit_valore = 150L;
 		break;
 	case EditPoolField::Move:
-		row = {10L, 1, 10};
+		unit_valore = 100L;
 		break;
 	case EditPoolField::HpRegen:
-		row = {6L, 2, 2};
-		break;
 	case EditPoolField::ManaRegen:
-		row = {6L, 1, 1};
+		unit_valore = 300L;
 		break;
 	case EditPoolField::MoveRegen:
-		row = {10L, 1, 10};
+		unit_valore = 200L;
 		break;
 	default:
 		return q;
 	}
 
-	const int units = delta;
-	q.xp_raw = std::max(0L, row.cost_mxp * units / row.add) * 1000000L;
-	q.pq = std::max(0, row.cost_pq * units / row.add);
+	const long valore_raw = unit_valore * static_cast<long>(delta);
+	q.xp_raw = valore_raw * kObjValueStorageScale;
+	q.pq = 0;
 	q.mxp = q.xp_raw / 1000000L;
 	q.mxp_frac = (q.xp_raw % 1000000L) / 10000L;
 	return q;

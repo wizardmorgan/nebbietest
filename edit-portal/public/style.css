@@ -255,6 +255,15 @@ textarea {
   color: var(--text);
 }
 
+.quote-box {
+  margin-bottom: 1rem;
+}
+
+.object-edits h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
 .edit-row {
   display: grid;
   grid-template-columns: 1fr auto;

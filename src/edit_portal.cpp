@@ -32,6 +32,7 @@
 #include "legacy_import.hpp"
 #include "logging.hpp"
 #include "multiclass.hpp"
+#include "obj_edit_catalog.hpp"
 #include "obj_value.hpp"
 #include "object_instance.hpp"
 #include "reception.hpp"
@@ -698,10 +699,23 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 		if(path == "/internal/list-inventory") {
 			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const std::string toon_name = toon_name_by_id(toon_id);
 			std::vector<inventory_mysql_row> rows;
 			load_character_inventory_mysql(toon_id, rows);
 			Json items = Json::array();
 			for(const auto& r : rows) {
+				struct obj_data* obj = materialize_inventory_row(r);
+				if(!obj) {
+					continue;
+				}
+				const bool editable =
+					!toon_name.empty() && object_portal_editable(obj, toon_name.c_str());
+				const int item_type = ITEM_TYPE(obj);
+				extract_obj(obj);
+				if(!editable) {
+					continue;
+				}
+
 				Json it;
 				it["inventory_id"] = r.id;
 				it["list_index"] = r.list_index;
@@ -712,10 +726,123 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				it["name"] = r.elem.name;
 				it["wear_pos"] = r.elem.wearpos;
 				it["depth"] = r.elem.depth;
+				it["item_type"] =
+					item_type == ITEM_ARMOR ? "armor"
+											: item_type == ITEM_WEAPON ? "weapon" : "other";
 				items.push_back(it);
 			}
 			Json d;
 			d["items"] = items;
+			return json_ok(d);
+		}
+
+		if(path == "/internal/get-object-edit-options") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long inventory_id = req.value("inventory_id", 0ULL);
+			const std::string toon_name = toon_name_by_id(toon_id);
+			if(toon_name.empty()) {
+				return json_error("toon non trovato", 404);
+			}
+
+			std::vector<inventory_mysql_row> rows;
+			load_character_inventory_mysql(toon_id, rows);
+			inventory_mysql_row* row = find_inventory_row(rows, inventory_id);
+			if(!row) {
+				return json_error("oggetto non trovato nell'inventario del toon", 404);
+			}
+
+			struct obj_data* obj = materialize_inventory_row(*row);
+			if(!obj) {
+				return json_error("impossibile materializzare oggetto", 500);
+			}
+			if(!object_portal_editable(obj, toon_name.c_str())) {
+				extract_obj(obj);
+				return json_error("oggetto non editabile (RARO, tipo o owner)", 400);
+			}
+
+			const int item_type = ITEM_TYPE(obj);
+			const bool is_armor = item_type == ITEM_ARMOR;
+			const bool is_weapon = item_type == ITEM_WEAPON;
+			Json entries = object_edit_catalog_json(is_armor, is_weapon);
+			for(auto& e : entries) {
+				const std::string kind = e.value("kind", "");
+				if(kind == "scalar") {
+					const int loc = e.value("location", 0);
+					e["current"] = object_affect_current_modifier(obj, loc);
+				}
+				else if(kind == "immune") {
+					const unsigned bit =
+						static_cast<unsigned>(e.value("immune_bit", 0U));
+					const int bits = object_immune_current_bits(obj);
+					e["current"] = (bits & static_cast<int>(bit)) ? 1 : 0;
+				}
+			}
+
+			Json d = analyze_to_json(obj);
+			d["entries"] = entries;
+			d["inventory_id"] = inventory_id;
+			d["short_desc"] = row->elem.sd;
+			d["item_type"] = is_armor ? "armor" : is_weapon ? "weapon" : "other";
+			extract_obj(obj);
+			return json_ok(d);
+		}
+
+		if(path == "/internal/quote-object-edit") {
+			const unsigned long long toon_id = req.value("toon_id", 0ULL);
+			const unsigned long long inventory_id = req.value("inventory_id", 0ULL);
+			const int location = req.value("location", 0);
+			const int target_modifier = req.find("target_modifier") != req.end()
+											? req.value("target_modifier", 0)
+											: req.value("modifier", 0);
+
+			const std::string toon_name = toon_name_by_id(toon_id);
+			if(toon_name.empty()) {
+				return json_error("toon non trovato", 404);
+			}
+
+			std::vector<inventory_mysql_row> rows;
+			load_character_inventory_mysql(toon_id, rows);
+			inventory_mysql_row* row = find_inventory_row(rows, inventory_id);
+			if(!row) {
+				return json_error("oggetto non trovato nell'inventario del toon", 404);
+			}
+
+			struct obj_data* obj = materialize_inventory_row(*row);
+			if(!obj) {
+				return json_error("impossibile materializzare oggetto", 500);
+			}
+			if(!object_portal_editable(obj, toon_name.c_str())) {
+				extract_obj(obj);
+				return json_error("oggetto non editabile", 400);
+			}
+
+			long xp_raw = 0;
+			int pq = 0;
+			std::string quote_err;
+			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
+										   quote_err)) {
+				extract_obj(obj);
+				return json_error(quote_err.c_str(), 400);
+			}
+
+			int current = 0;
+			int target = target_modifier;
+			if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE) {
+				const int bits = object_immune_current_bits(obj);
+				current = (bits & target_modifier) ? 1 : 0;
+				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
+			}
+			else {
+				current = object_affect_current_modifier(obj, location);
+			}
+
+			Json d = quote_xp_json(xp_raw, pq);
+			d["location"] = location;
+			d["target_modifier"] = target_modifier;
+			d["current"] = current;
+			d["target"] = target;
+			d["inventory_id"] = inventory_id;
+			extract_obj(obj);
 			return json_ok(d);
 		}
 
@@ -741,9 +868,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			const unsigned long long target_toon_id = req.value("target_toon_id", 0ULL);
 			const unsigned long long inventory_id = req.value("inventory_id", 0ULL);
 			const int location = req.value("location", 0);
-			const int modifier = req.value("modifier", 0);
-			const int pay_xp = req.value("pay_xp", 0);
-			const int pay_rune = req.value("pay_rune", 0);
+			const int target_modifier = req.find("target_modifier") != req.end()
+											? req.value("target_modifier", 0)
+											: req.value("modifier", 0);
+			int pay_xp = req.value("pay_xp", 0);
+			int pay_rune = req.value("pay_rune", 0);
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
 			if(target_name.empty()) {
@@ -753,7 +882,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				return json_error("il toon target e collegato al mud", 409);
 			}
 
-			if(edit_system_blocked_on_object(location, modifier)) {
+			if(edit_system_blocked_on_object(location, target_modifier)) {
 				if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE ||
 				   location == APPLY_SUSC) {
 					return json_error(
@@ -775,44 +904,41 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				return json_error("oggetto non trovato nell'inventario", 404);
 			}
 
-			struct obj_data* before = materialize_inventory_row(*row);
-			if(!before) {
+			struct obj_data* obj = materialize_inventory_row(*row);
+			if(!obj) {
 				return json_error("impossibile materializzare oggetto", 500);
+			}
+			if(!object_portal_editable(obj, target_name.c_str())) {
+				extract_obj(obj);
+				return json_error("oggetto non editabile (RARO, tipo o owner)", 400);
+			}
+
+			long quote_xp = 0;
+			int quote_pq = 0;
+			std::string quote_err;
+			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
+										   quote_pq, quote_err)) {
+				extract_obj(obj);
+				return json_error(quote_err.c_str(), 400);
 			}
 
 			struct obj_data* after = materialize_inventory_row(*row);
 			if(!after) {
-				extract_obj(before);
+				extract_obj(obj);
 				return json_error("impossibile clonare oggetto", 500);
 			}
+			extract_obj(obj);
 
-			int slot = -1;
-			for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
-				if(after->affected[i].location == APPLY_NONE ||
-				   after->affected[i].location == APPLY_SKIP) {
-					slot = i;
-					break;
-				}
-			}
-			if(slot < 0) {
-				extract_obj(before);
+			std::string apply_err;
+			if(!object_apply_affect_target(after, location, target_modifier, apply_err)) {
 				extract_obj(after);
-				return json_error("nessuno slot affect libero", 400);
+				return json_error(apply_err.c_str(), 400);
 			}
 
-			after->affected[slot].location = static_cast<sh_int>(location);
-			after->affected[slot].modifier = static_cast<sh_int>(modifier);
-
-			const ExpValue diff_before = CheckDiffValue(before);
-			extract_obj(before);
-			const ExpValue diff_after = CheckDiffValue(after);
-
-			const long long delta_xp = diff_after.valore - diff_before.valore;
-			const int delta_rune = diff_after.rune - diff_before.rune;
 			const int xp_cost =
-				pay_xp > 0 ? pay_xp : static_cast<int>(std::max(0LL, delta_xp));
+				pay_xp > 0 ? pay_xp : static_cast<int>(std::max(0L, quote_xp));
 			const int rune_cost =
-				pay_rune > 0 ? pay_rune : std::max(0, delta_rune);
+				pay_rune > 0 ? pay_rune : std::max(0, quote_pq);
 
 			const int max_level = max_level_for_toon(target_toon_id);
 			std::string pay_err;
