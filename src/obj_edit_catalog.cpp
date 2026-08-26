@@ -9,7 +9,6 @@
 #include <string>
 
 #include "autoenums.hpp"
-#include "db.hpp"
 #include "edit_pool.hpp"
 #include "edit_system_config.hpp"
 #include "flags.hpp"
@@ -17,11 +16,34 @@
 #include "object_instance.hpp"
 #include "obj_value.hpp"
 #include "structs.hpp"
+#include "typedefs.hpp"
 #include "utils.hpp"
 
 namespace Alarmud {
 
+struct index_data {
+	int iVNum;
+	long pos;
+	int number;
+	genericspecial_func func;
+	const char* specname;
+	char* specparms;
+	void* data;
+	char* name;
+	char* short_desc;
+	char* long_desc;
+};
+
+extern int top_of_objt;
+extern struct index_data* obj_index;
+
 struct obj_data* clone_obj(struct obj_data* obj);
+
+[[nodiscard]] static bool proto_vnum_is_tan(int vnum) noexcept {
+	return vnum == TAN_BAG || vnum == TAN_SHIELD || vnum == TAN_JACKET
+		   || vnum == TAN_BOOTS || vnum == TAN_GLOVES || vnum == TAN_LEGGINGS
+		   || vnum == TAN_SLEEVES || vnum == TAN_HELMET || vnum == TAN_ARMOR;
+}
 
 struct CatalogEntry {
 	const char* id;
@@ -155,7 +177,8 @@ bool object_is_tanned(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return false;
 	}
-	if(obj->item_number >= 0 && obj->item_number <= top_of_objt && TANNED(obj)) {
+	if(obj->item_number >= 0 && obj->item_number <= top_of_objt
+	   && proto_vnum_is_tan(obj_index[obj->item_number].iVNum)) {
 		return true;
 	}
 	if(obj->short_description && stristr(obj->short_description, "opera di")) {
