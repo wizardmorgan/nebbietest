@@ -263,6 +263,9 @@ function buildPaymentPlan(quote, mode, runePct) {
 
 function validatePayment(plan) {
   if (!charState) return { ok: false, reason: 'Stato PG non caricato' };
+  if (charState.stats_missing) {
+    return { ok: false, reason: 'character_stats assente: impossibile pagare edit' };
+  }
   const availXp = Number(charState.available_xp || 0);
   const availRune = Number(charState.rune || 0);
   const okXp = plan.payXp <= availXp;
