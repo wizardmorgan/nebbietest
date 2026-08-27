@@ -1223,18 +1223,16 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 			int exp = 0;
 			int rune = 0;
-			if(!load_stats_for_toon(toon_id, exp, rune)) {
-				return json_error("character_stats non trovato", 404);
-			}
+			const bool has_stats = load_stats_for_toon(toon_id, exp, rune);
 			const int max_level = max_level_for_toon(toon_id);
 			const long long prince_reserve =
 				(max_level >= PRINCIPE) ? static_cast<long long>(PRINCEEXP) : 0LL;
 			const long long available_xp =
-				static_cast<long long>(exp) - prince_reserve;
+				has_stats ? (static_cast<long long>(exp) - prince_reserve) : 0LL;
 
 			char_edit_pool_data pool {};
-			if(!load_edit_pool_for_toon(toon_id, pool)) {
-				return json_error("edit pool non trovato", 404);
+			if(has_stats) {
+				(void)load_edit_pool_for_toon(toon_id, pool);
 			}
 
 			Json resistances = Json::array();
@@ -1278,6 +1276,13 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["prince_reserve_mxp"] = prince_reserve / 1000000L;
 			d["pool"] = pool_to_json(pool);
 			d["resistances"] = resistances;
+			d["stats_missing"] = !has_stats;
+			if(!has_stats) {
+				d["warning"] =
+					"Nessuna riga in character_stats per questo toon (PG non migrato "
+					"o mai creato via login/import). Inventario consultabile; "
+					"pagamenti edit bloccati finche' non esiste character_stats.";
+			}
 			return json_ok(d);
 		}
 
