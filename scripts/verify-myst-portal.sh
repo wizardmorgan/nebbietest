@@ -92,23 +92,26 @@ fi
 
 echo ""
 echo "=== UI build (edit-portal) ==="
+EXPECTED_UI="$(grep -E 'EDIT_PORTAL_UI_BUILD\s*=' edit-portal/public/app.js 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1)"
+EXPECTED_UI="${EXPECTED_UI:-9}"
 UI_BUILD_API="$(echo "$HEALTH_JSON" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("ui_build",""))' 2>/dev/null || true)"
 IN_CONTAINER=""
-if docker exec nebbie-edit-portal grep -q 'EDIT_PORTAL_UI_BUILD = 8' /app/public/app.js 2>/dev/null; then
+if docker exec nebbie-edit-portal grep -q "EDIT_PORTAL_UI_BUILD = ${EXPECTED_UI}" /app/public/app.js 2>/dev/null; then
 	IN_CONTAINER="yes"
 fi
 UI_JS_HEAD="$(curl -sf "http://localhost:${EDIT_PORT}/app.js" 2>/dev/null | head -n 15 || true)"
+echo "  expected UI build: ${EXPECTED_UI}"
 echo "  /api/health ui_build: ${UI_BUILD_API:-?}"
 echo "  container app.js marker: ${IN_CONTAINER:-no}"
 if [ -n "$UI_JS_HEAD" ]; then
 	echo "  curl /app.js (prime righe):"
 	echo "$UI_JS_HEAD" | sed 's/^/    /'
 fi
-if [ "$UI_BUILD_API" = "8" ] && [ "$IN_CONTAINER" = "yes" ]; then
-	echo "OK: edit-portal UI build 8"
+if [ "$UI_BUILD_API" = "$EXPECTED_UI" ] && [ "$IN_CONTAINER" = "yes" ]; then
+	echo "OK: edit-portal UI build ${EXPECTED_UI}"
 else
 	echo "" >&2
-	echo "ERRORE: edit-portal non serve UI build 8." >&2
+	echo "ERRORE: edit-portal non serve UI build ${EXPECTED_UI}." >&2
 	echo "  Fix: ./scripts/mud-dev.sh start-edit" >&2
 	echo "  Poi: docker exec nebbie-edit-portal head -n 12 /app/public/app.js" >&2
 	exit 1
