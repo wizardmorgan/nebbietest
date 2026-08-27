@@ -55,19 +55,29 @@ cd ~/NebbieArcane/Server
 git fetch mine feature/edit-portal
 git merge --no-edit mine/feature/edit-portal
 
-./scripts/mud-dev.sh doctor          # diagnosi mount + md5 + ping
-./scripts/mud-dev.sh rebuild-myst  # build + ricrea container se mount errato + avvio
+./scripts/mud-dev.sh doctor
+./scripts/mud-dev.sh rebuild-myst
+./scripts/mud-dev.sh start-edit    # OBBLIGATORIO: setta MUD_STACK_NETWORK e ricrea il container Node
 ./scripts/verify-myst-portal.sh    # deve mostrare portal_api_version: 8
-
-docker compose up -d --build edit-portal
 ```
+
+**NON usare** a mano:
+`docker compose -f docker-compose.edit-portal.yml up ...`
+senza `MUD_STACK_NETWORK` — fallisce con `network declared as external, but could not be found`
+e **resta in esecuzione il container web vecchio** (JS/CSS non aggiornati).
+
+Dopo `start-edit`, in alto a destra deve comparire `UI build 8`. Se non c’è: hard refresh
+(Ctrl+Shift+R) o finestra anonima.
+
+Restare loggati dopo F5 è normale (cookie di sessione): usa **Logout** se vuoi rivedere login.
 
 ## Cosa deve essere vero alla fine
 
 1. `./scripts/mud-dev.sh doctor` → mount `/app` = `~/NebbieArcane/Server`, MD5 host = container  
 2. Ping `8090` → `"portal_api_version": 8`  
-3. Salvataggio categorie staff → scrive `mudroot/lib/edit_system.json` senza errore  
-4. `pgrep myst` → `-d mudroot/lib` (non `-d lib` da script vecchio)
+3. Header web → `UI build 8`  
+4. Salvataggio categorie staff → scrive `mudroot/lib/edit_system.json` senza errore  
+5. `pgrep myst` → `-d mudroot/lib` (non `-d lib` da script vecchio)
 
 ## Due modi di avviare myst (scegliere uno)
 
