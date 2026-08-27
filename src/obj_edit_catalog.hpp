@@ -113,6 +113,8 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 
 [[nodiscard]] int object_spell_current_bits(const struct obj_data* obj) noexcept;
 
+[[nodiscard]] int object_aff2_current_bits(const struct obj_data* obj) noexcept;
+
 /** Ottimizza slot combat (hit-n-dam, hit-n-sp). */
 void object_compact_edit_affects(struct obj_data* obj) noexcept;
 

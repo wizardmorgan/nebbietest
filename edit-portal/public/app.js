@@ -4,7 +4,7 @@ const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 13;
+const EDIT_PORTAL_UI_BUILD = 14;
 
 let session = null;
 let targetToonId = null;
@@ -81,11 +81,13 @@ const MUD_BG_COLORS = [
 /**
  * Converte `$cMBFG` / `$CMBFG` in HTML colorato (nasconde i codici).
  * M=mod, B=bg, FG=foreground 00-15 — vedi ansi_parser.cpp.
+ * `$$` → `$` letterale. `$` singoli (wrapper tipo `$Forza$` dopo un codice
+ * colore) non vengono mostrati — tipico di short_desc editati a mano.
  */
 function mudTextToHtml(raw) {
   const text = String(raw ?? '');
   if (!text) return '';
-  if (!/\$[cC]\d{4}/.test(text)) {
+  if (!/\$[cC]\d{4}/.test(text) && !text.includes('$')) {
     return escapeHtml(text);
   }
   let html = '';
@@ -104,12 +106,25 @@ function mudTextToHtml(raw) {
       open = false;
     }
   };
+  const isColorCodeAt = (idx) =>
+    text[idx] === '$' &&
+    (text[idx + 1] === 'c' || text[idx + 1] === 'C') &&
+    /^\d{4}/.test(text.slice(idx + 2, idx + 6));
   while (i < text.length) {
-    if (
-      (text[i + 1] === 'c' || text[i + 1] === 'C') &&
-      text[i] === '$' &&
-      /^\d{4}/.test(text.slice(i + 2, i + 6))
-    ) {
+    if (text[i] === '$' && text[i + 1] === '$') {
+      /*
+       * `$$` → `$` letterale. Se il secondo `$` inizia `$cXXXX`, consuma solo
+       * il primo (es. `$$c0007` → `$` + codice colore).
+       */
+      if (!open) {
+        html += openSpan();
+        open = true;
+      }
+      html += '$';
+      i += isColorCodeAt(i + 1) ? 1 : 2;
+      continue;
+    }
+    if (isColorCodeAt(i)) {
       const code = text.slice(i + 2, i + 6);
       const mod = code[0];
       const bg = Number(code[1]);
@@ -123,6 +138,11 @@ function mudTextToHtml(raw) {
       html += openSpan();
       open = true;
       i += 6;
+      continue;
+    }
+    if (text[i] === '$') {
+      /* Wrapper `$parola$` usato con i codici colore: non mostrare. */
+      i += 1;
       continue;
     }
     if (!open) {

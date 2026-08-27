@@ -1465,9 +1465,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					e["current"] = (bits & static_cast<int>(bit)) ? 1 : 0;
 				}
 				else if(kind == "spell") {
-					const unsigned long bit =
-						e.value("spell_bit", 0UL);
-					const int bits = object_spell_current_bits(obj);
+					const int loc = e.value("location", APPLY_SPELL);
+					const unsigned long bit = e.value("spell_bit", 0UL);
+					const int bits =
+						(loc == APPLY_AFF2) ? object_aff2_current_bits(obj)
+											: object_spell_current_bits(obj);
 					e["current"] = (bits & static_cast<int>(bit)) ? 1 : 0;
 				}
 				else if(kind == "flag" && e.value("flag", "") == "artifact") {
@@ -1640,8 +1642,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				current = (bits & target_modifier) ? 1 : 0;
 				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
 			}
-			else if(location == APPLY_SPELL) {
-				const int bits = object_spell_current_bits(obj);
+			else if(location == APPLY_SPELL || location == APPLY_AFF2) {
+				const int bits = (location == APPLY_AFF2)
+									 ? object_aff2_current_bits(obj)
+									 : object_spell_current_bits(obj);
 				current = (bits & target_modifier) ? 1 : 0;
 				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
 			}
