@@ -3,8 +3,9 @@
 const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
+const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 16;
+const EDIT_PORTAL_UI_BUILD = 17;
 
 let session = null;
 let targetToonId = null;
@@ -13,6 +14,8 @@ let editCatalog = null;
 let selectedInventoryId = null;
 let selectedObjectOptions = null;
 let pendingEdit = null;
+/** Ultima lista inventario grezza (per ri-ordinare senza ricaricare). */
+let inventoryItemsCache = [];
 
 const $ = (id) => document.getElementById(id);
 
@@ -746,12 +749,131 @@ async function queueResistanceQuote(damageType, value, label, selectEl) {
   updatePaymentUI();
 }
 
+function stripMudColorCodes(raw) {
+  return String(raw ?? '')
+    .replace(/\$\$/g, '\u0000')
+    .replace(/\$[cC]\d{4}/g, '')
+    .replace(/\$/g, '')
+    .replace(/\u0000/g, '$')
+    .trim();
+}
+
+function inventorySortKeyAlpha(it) {
+  return stripMudColorCodes(it.short_desc || it.name || '').toLocaleLowerCase('it');
+}
+
+function getInventorySortMode() {
+  const sel = $('inventory-sort');
+  if (sel && sel.value) return sel.value;
+  try {
+    return localStorage.getItem(INVENTORY_SORT_KEY) || 'inventory';
+  } catch {
+    return 'inventory';
+  }
+}
+
+function persistInventorySortMode(mode) {
+  try {
+    localStorage.setItem(INVENTORY_SORT_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+function sortInventoryItems(items, mode) {
+  const arr = [...items];
+  const byAlpha = (a, b) =>
+    inventorySortKeyAlpha(a).localeCompare(inventorySortKeyAlpha(b), 'it', {
+      sensitivity: 'base',
+      numeric: true,
+    });
+  const byType = (a, b) =>
+    String(a.item_type || '').localeCompare(String(b.item_type || ''), 'it', {
+      sensitivity: 'base',
+    }) || byAlpha(a, b);
+  const byVnum = (a, b) =>
+    Number(a.item_number || 0) - Number(b.item_number || 0) || byAlpha(a, b);
+  const byList = (a, b) =>
+    Number(a.list_index ?? a.inventory_id ?? 0) -
+    Number(b.list_index ?? b.inventory_id ?? 0);
+
+  switch (mode) {
+    case 'alpha':
+      arr.sort(byAlpha);
+      break;
+    case 'alpha_desc':
+      arr.sort((a, b) => -byAlpha(a, b));
+      break;
+    case 'editable':
+      arr.sort((a, b) => Number(!!b.editable) - Number(!!a.editable) || byAlpha(a, b));
+      break;
+    case 'not_editable':
+      arr.sort((a, b) => Number(!!a.editable) - Number(!!b.editable) || byAlpha(a, b));
+      break;
+    case 'item_type':
+      arr.sort(byType);
+      break;
+    case 'worn':
+      arr.sort(
+        (a, b) => Number(!!b.worn) - Number(!!a.worn) || byAlpha(a, b),
+      );
+      break;
+    case 'vnum':
+      arr.sort(byVnum);
+      break;
+    case 'container':
+      arr.sort(
+        (a, b) => Number(b.depth || 0) - Number(a.depth || 0) || byAlpha(a, b),
+      );
+      break;
+    case 'inventory':
+    default:
+      arr.sort(byList);
+      break;
+  }
+  return arr;
+}
+
+function renderInventoryList(items) {
+  const list = $('inventory-list');
+  list.innerHTML = '';
+  const prevSelected = selectedInventoryId;
+  const sorted = sortInventoryItems(items, getInventorySortMode());
+
+  sorted.forEach((it) => {
+    const li = document.createElement('li');
+    li.className = it.editable ? 'item' : 'item item-disabled';
+    const worn = it.worn
+      ? it.editable
+        ? ' · indossato (ri-edit OK)'
+        : ' · indossato'
+      : '';
+    const depth = Number(it.depth) > 0 ? ' · in container' : '';
+    const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
+    const type = it.item_type ? ` [${it.item_type}]` : '';
+    const meta = ` (vnum ${it.item_number})${worn}${depth}${skip}${type}`;
+    li.innerHTML =
+      `<span class="item-name">${mudTextToHtml(it.short_desc || it.name)}</span>` +
+      `<span class="item-meta">${escapeHtml(meta)}</span>`;
+    li.title = it.editable
+      ? `inventory_id ${it.inventory_id}`
+      : it.skip_reason || 'non editabile';
+    if (prevSelected && Number(it.inventory_id) === Number(prevSelected)) {
+      li.classList.add('selected');
+    }
+    if (it.editable) {
+      li.onclick = () => selectItem(it.inventory_id, li);
+    }
+    list.appendChild(li);
+  });
+}
+
 async function loadInventory() {
   targetToonId = getTargetToonId();
-  const prevSelected = selectedInventoryId;
   if (!targetToonId) {
     showApiWarn('Personaggio target non selezionato — cerca e seleziona un PG');
     updateInventoryHeading();
+    inventoryItemsCache = [];
     return;
   }
   updateInventoryHeading();
@@ -762,6 +884,7 @@ async function loadInventory() {
   if (!data.ok) {
     showApiWarn(data.error || 'Errore caricamento inventario');
     $('inventory-empty').classList.add('hidden');
+    inventoryItemsCache = [];
     return;
   }
 
@@ -780,6 +903,7 @@ async function loadInventory() {
   }
 
   const items = data.items || [];
+  inventoryItemsCache = items;
   const editableCount = Number(
     data.editable_count ?? items.filter((i) => i.editable).length,
   );
@@ -815,36 +939,12 @@ async function loadInventory() {
     );
   }
 
-  items.forEach((it) => {
-    const li = document.createElement('li');
-    li.className = it.editable ? 'item' : 'item item-disabled';
-    const worn = it.worn
-      ? it.editable
-        ? ' · indossato (ri-edit OK)'
-        : ' · indossato'
-      : '';
-    const depth = Number(it.depth) > 0 ? ' · in container' : '';
-    const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
-    const type = it.item_type ? ` [${it.item_type}]` : '';
-    const meta = ` (vnum ${it.item_number})${worn}${depth}${skip}${type}`;
-    li.innerHTML =
-      `<span class="item-name">${mudTextToHtml(it.short_desc || it.name)}</span>` +
-      `<span class="item-meta">${escapeHtml(meta)}</span>`;
-    li.title = it.editable
-      ? `inventory_id ${it.inventory_id}`
-      : it.skip_reason || 'non editabile';
-    if (prevSelected && Number(it.inventory_id) === Number(prevSelected)) {
-      li.classList.add('selected');
-    }
-    if (it.editable) {
-      li.onclick = () => selectItem(it.inventory_id, li);
-    }
-    list.appendChild(li);
-  });
-
   if (!items.length && !data.mystListOk) {
     list.innerHTML = '<li class="hint">Inventario non disponibile — verifica che myst sia avviato e EDIT_API_SECRET allineato.</li>';
+    return;
   }
+
+  renderInventoryList(items);
 }
 
 async function selectItem(inventoryId, li) {
@@ -1574,6 +1674,25 @@ $('btn-change-toon').onclick = async () => {
 };
 
 $('btn-refresh-inv').onclick = () => loadInventory();
+
+(function initInventorySort() {
+  const sel = $('inventory-sort');
+  if (!sel) return;
+  try {
+    const saved = localStorage.getItem(INVENTORY_SORT_KEY);
+    if (saved && [...sel.options].some((o) => o.value === saved)) {
+      sel.value = saved;
+    }
+  } catch {
+    /* ignore */
+  }
+  sel.onchange = () => {
+    persistInventorySortMode(sel.value);
+    if (inventoryItemsCache.length) {
+      renderInventoryList(inventoryItemsCache);
+    }
+  };
+})();
 
 $('pay-mode').onchange = updatePaymentUI;
 $('pay-rune-pct').oninput = updatePaymentUI;
