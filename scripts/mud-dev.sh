@@ -506,13 +506,15 @@ cmd_start_edit() {
 		fi
 		sleep 0.5
 	done
-	local health
+	local health expected_ui
 	health="$(curl -sf "http://localhost:${EDIT_WEB_PORT}/api/health" 2>/dev/null || true)"
 	echo "health: ${health:-"(nessuna risposta)"}"
-	if docker exec nebbie-edit-portal grep -q 'EDIT_PORTAL_UI_BUILD = 8' /app/public/app.js 2>/dev/null; then
-		echo "OK: container ha app.js UI build 8"
+	expected_ui="$(grep -E 'EDIT_PORTAL_UI_BUILD\s*=' "$EDIT_REPO/edit-portal/public/app.js" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1)"
+	expected_ui="${expected_ui:-?}"
+	if docker exec nebbie-edit-portal grep -q "EDIT_PORTAL_UI_BUILD = ${expected_ui}" /app/public/app.js 2>/dev/null; then
+		echo "OK: container ha app.js UI build ${expected_ui}"
 	else
-		print_warn "app.js nel container senza UI build 8 — dump:"
+		print_warn "app.js nel container senza UI build ${expected_ui} — dump:"
 		docker exec nebbie-edit-portal head -n 15 /app/public/app.js 2>/dev/null || \
 			echo "(docker exec fallito — container giu?)"
 	fi
