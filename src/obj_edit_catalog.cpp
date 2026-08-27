@@ -28,6 +28,8 @@ namespace Alarmud {
 
 struct obj_data* clone_obj(struct obj_data* obj);
 
+[[nodiscard]] static struct obj_data* load_edit_prototype(const struct obj_data* obj);
+
 [[nodiscard]] static bool proto_vnum_is_tan(int vnum) noexcept {
 	return vnum == TAN_BAG || vnum == TAN_SHIELD || vnum == TAN_JACKET
 		   || vnum == TAN_BOOTS || vnum == TAN_GLOVES || vnum == TAN_LEGGINGS
@@ -291,6 +293,72 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	}
 }
 
+/**
+ * Cap listino = bonus *oltre* il prototipo (armor −40, hit/dam +2, …).
+ * Stats STR/… restano tetto assoluto 0…3 sul pezzo.
+ */
+[[nodiscard]] static bool listino_uses_proto_relative_range(int location) noexcept {
+	return is_combat_edit_location(location) || location == APPLY_AC
+		   || location == APPLY_SPELLFAIL;
+}
+
+[[nodiscard]] static int prototype_display_current(const struct obj_data* obj,
+												   int location) noexcept {
+	struct obj_data* proto = load_edit_prototype(obj);
+	if(!proto) {
+		return 0;
+	}
+	const int v = object_edit_display_current(proto, location);
+	extract_obj(proto);
+	return v;
+}
+
+[[nodiscard]] static bool listino_target_allowed(const struct obj_data* obj,
+												 const ObjEditListinoSpec& spec,
+												 int target_modifier,
+												 std::string& err) {
+	if(!listino_uses_proto_relative_range(spec.location)) {
+		if(target_modifier < spec.min_total || target_modifier > spec.max_total) {
+			err = std::string("valore fuori listino per ") + spec.label + " (consentito "
+				  + std::to_string(spec.min_total) + "…" + std::to_string(spec.max_total)
+				  + ", richiesto " + std::to_string(target_modifier) + ")";
+			return false;
+		}
+		return true;
+	}
+
+	const int proto_val = prototype_display_current(obj, spec.location);
+	const int delta = target_modifier - proto_val;
+	const int abs_step = std::abs(spec.step) > 0 ? std::abs(spec.step) : 1;
+
+	if(spec.min_total < 0) {
+		/* Armor/spellfail: extra da min_total…0 (es. −40…0) oltre il proto. */
+		if(delta > 0 || delta < spec.min_total) {
+			err = std::string("extra fuori listino per ") + spec.label + " (consentito "
+				  + std::to_string(spec.min_total) + "…0 oltre proto "
+				  + std::to_string(proto_val) + "; richiesto extra "
+				  + std::to_string(delta) + ", totale " + std::to_string(target_modifier)
+				  + ")";
+			return false;
+		}
+	}
+	else if(delta < spec.min_total || delta > spec.max_total) {
+		err = std::string("extra fuori listino per ") + spec.label + " (consentito +"
+			  + std::to_string(spec.min_total) + "…+" + std::to_string(spec.max_total)
+			  + " oltre proto " + std::to_string(proto_val) + "; richiesto extra +"
+			  + std::to_string(delta) + ", totale " + std::to_string(target_modifier)
+			  + ")";
+		return false;
+	}
+
+	if((std::abs(delta) % abs_step) != 0) {
+		err = std::string("step non allineato per ") + spec.label + " (step "
+			  + std::to_string(spec.step) + ")";
+		return false;
+	}
+	return true;
+}
+
 static void rewrite_combat_totals(struct obj_data* obj, int hitroll,
 												int damroll, int spellpower) {
 	if(!obj) {
@@ -445,7 +513,13 @@ Json object_affect_slots_json(const struct obj_data* obj) {
 		return false;
 	}
 
-	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE) {
+	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE
+	   || location == APPLY_SPELL) {
+		if(target_modifier == 0) {
+			err = location == APPLY_SPELL ? "spell bit mancante"
+										 : "immune bit mancante";
+			return false;
+		}
 		const int slot = find_affect_slot_for_location(obj, location);
 		if(slot >= 0) {
 			obj->affected[slot].modifier |= target_modifier;
@@ -466,10 +540,7 @@ Json object_affect_slots_json(const struct obj_data* obj) {
 		err = "campo non presente nel listino oggetto";
 		return false;
 	}
-	if(target_modifier < spec.min_total || target_modifier > spec.max_total) {
-		err = std::string("valore fuori listino per ") + spec.label + " (consentito "
-			  + std::to_string(spec.min_total) + "…" + std::to_string(spec.max_total)
-			  + ", richiesto " + std::to_string(target_modifier) + ")";
+	if(!listino_target_allowed(obj, spec, target_modifier, err)) {
 		return false;
 	}
 
@@ -644,13 +715,12 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	if(slug && edit_system_portal_type_always_hidden(slug)) {
 		return false;
 	}
-	if(slug && edit_system_portal_category_enabled(slug)) {
-		return true;
+	/* Spunta staff = visibile in inventario. Senza spunta: nascosto anche se EDIT. */
+	if(slug) {
+		return edit_system_portal_category_enabled(slug);
 	}
-	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-		return true;
-	}
-	return false;
+	/* Tipo senza slug: solo pezzi gia' EDIT (fallback). */
+	return IS_OBJ_STAT2(obj, ITEM2_EDIT);
 }
 
 std::string object_portal_skip_reason(const struct obj_data* obj,
@@ -716,6 +786,8 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		}
 		const int occupied_slot = find_affect_slot_for_location(obj, spec.location);
 		const int current_total = object_edit_display_current(obj, spec.location);
+		const int proto_total = prototype_display_current(obj, spec.location);
+		const bool relative = listino_uses_proto_relative_range(spec.location);
 		const bool has_affect = occupied_slot >= 0 || current_total != 0;
 		const bool can_edit = scalar_can_edit(obj, spec.location, free_slots);
 		Json j;
@@ -725,6 +797,8 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["step"] = spec.step;
 		j["min"] = spec.min_total;
 		j["max"] = spec.max_total;
+		j["proto"] = proto_total;
+		j["relative"] = relative;
 		j["kind"] = "scalar";
 		j["has_affect"] = has_affect;
 		j["occupied_slot"] = occupied_slot;
@@ -779,6 +853,50 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		entries.push_back(j);
 	}
 
+	/* Spell editabili — listino https://www.nebbiearcane.it/listino-edits/
+	 * Costi in CheckValueObj (APPLY_SPELL). Spy e Danger Sense = AFF_SCRYING. */
+	static const struct {
+		unsigned long bit;
+		const char* slug;
+		const char* label;
+		long mxp;
+		long rune;
+	} spell_edits[] = {
+		{AFF_TELEPATHY, "telepathy", "Telepathy", 50, 70},
+		{AFF_GLOBE_DARKNESS, "darkness", "Darkness", 50, 70},
+		{AFF_WATERBREATH, "waterbreath", "Waterbreath", 50, 70},
+		{AFF_TRUE_SIGHT, "true_sight", "True Sight", 50, 70},
+		{AFF_INVISIBLE, "invisibility", "Invisibility", 30, 70},
+		{AFF_SENSE_LIFE, "sense_life", "Sense Life", 50, 70},
+		{AFF_SCRYING, "danger_sense", "Psionic Danger Sense", 150, 180},
+		{AFF_SCRYING, "spy", "Spy", 150, 180},
+		{AFF_PROTECT_FROM_EVIL, "prot_evil", "Protection from Evil", 50, 70},
+		{AFF_FLYING, "fly", "Fly", 50, 70},
+	};
+	{
+		const int spell_bits = sum_location_mod(obj, APPLY_SPELL);
+		const int spell_slot = find_affect_slot_for_location(obj, APPLY_SPELL);
+		for(const auto& sp : spell_edits) {
+			const bool has_affect =
+				(spell_bits & static_cast<int>(sp.bit)) != 0;
+			const bool can_add = !has_affect && (spell_slot >= 0 || free_slots > 0);
+			Json j;
+			j["id"] = std::string("spell.") + sp.slug;
+			j["label"] = sp.label;
+			j["location"] = APPLY_SPELL;
+			j["spell_bit"] = sp.bit;
+			j["kind"] = "spell";
+			j["has_affect"] = has_affect;
+			j["occupied_slot"] = spell_slot;
+			j["can_add"] = can_add;
+			j["can_edit"] = has_affect || can_add;
+			j["can_remove"] = false;
+			j["mxp_per_step"] = sp.mxp;
+			j["rune_per_step"] = sp.rune;
+			entries.push_back(j);
+		}
+	}
+
 	/* Flag ARTIFACT (extra_bits / ITEM_IMMUNE): +50% sul costo edit listino.
 	 * Una volta impostato (o gia' presente sul pezzo/proto) non e' rimovibile. */
 	{
@@ -819,6 +937,31 @@ int object_edit_display_current(const struct obj_data* obj, int location) noexce
 		return combat_damroll_total(obj);
 	case APPLY_SPELLPOWER:
 		return combat_spellpower_total(obj);
+	case APPLY_HITNDAM: {
+		const int combined = sum_location_mod(obj, APPLY_HITNDAM);
+		if(combined != 0) {
+			return combined;
+		}
+		/* Se hit e dam sono separati ma uguali, tratta come hitndam effettivo. */
+		const int hr = combat_hitroll_total(obj);
+		const int dr = combat_damroll_total(obj);
+		if(hr > 0 && hr == dr) {
+			return hr;
+		}
+		return 0;
+	}
+	case APPLY_HITNSP: {
+		const int combined = sum_location_mod(obj, APPLY_HITNSP);
+		if(combined != 0) {
+			return combined;
+		}
+		const int hr = combat_hitroll_total(obj);
+		const int sp = combat_spellpower_total(obj);
+		if(hr > 0 && hr == sp) {
+			return hr;
+		}
+		return 0;
+	}
 	default:
 		return sum_location_mod(obj, location);
 	}
@@ -826,6 +969,10 @@ int object_edit_display_current(const struct obj_data* obj, int location) noexce
 
 int object_immune_current_bits(const struct obj_data* obj) noexcept {
 	return sum_location_mod(obj, APPLY_IMMUNE);
+}
+
+int object_spell_current_bits(const struct obj_data* obj) noexcept {
+	return sum_location_mod(obj, APPLY_SPELL);
 }
 
 bool object_edit_location_affects_dam(int location) noexcept {
