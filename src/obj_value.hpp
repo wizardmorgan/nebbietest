@@ -85,6 +85,17 @@ inline constexpr long kObjEditSpellfailUnitRaw = kObjEditArmorUnitRaw * 2;
 /** Listino portal: 1 MXP listino = 1 Rune (alternativa pagamento). */
 inline constexpr long kObjEditRunePerMegaXp = 1000000L;
 
+/** Max lunghezza campi testo oggetto (allineati a VARCHAR inventorio/istanza). */
+inline constexpr int kObjEditTextNameMax = 128;
+inline constexpr int kObjEditTextShortMax = 128;
+inline constexpr int kObjEditTextLongMax = 256;
+/**
+ * Costo fisso (non in listino ufficiale) per salvare name/short/long via portal.
+ * 5 MXP raw (= 5_000_000) + 5 rune componente; poi class_mult e Artifact +50%.
+ */
+inline constexpr long kObjEditTextXpRaw = 5000000L;
+inline constexpr int kObjEditTextRune = 5;
+
 /** Parametri listino per un APPLY editabile sull'oggetto (totale sul pezzo). */
 struct ObjEditListinoSpec {
 	int location = 0;

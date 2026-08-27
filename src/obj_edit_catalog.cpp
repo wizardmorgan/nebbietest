@@ -17,6 +17,7 @@
 #include "handler.hpp"
 #include "object_instance.hpp"
 #include "obj_value.hpp"
+#include "clan_symbol.hpp"
 #include "spell_parser.hpp"
 #include "structs.hpp"
 #include "typedefs.hpp"
@@ -921,12 +922,22 @@ int object_edit_prototype_vnum(const struct obj_data* obj) noexcept {
 
 bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 											 const char* toon_name) noexcept {
-	(void)toon_name;
-	if(!obj) {
+	if(!obj || !toon_name || !*toon_name) {
 		return false;
 	}
-	/* Solo pezzi con flag ITEM2_EDIT (indossati o meno lo decide chi somma). */
-	return IS_OBJ_STAT2(obj, ITEM2_EDIT);
+	if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return false;
+	}
+	/* Simbolo di clan: dam/sp non entrano nei tetti edit di nessun toon. */
+	if(clan_symbol_is_obj(obj) || obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
+		return false;
+	}
+	/* Deve essere dell'owner (personal_owner o keyword ED<nome>). */
+	if(obj->personal_owner[0] != '\0') {
+		return strcasecmp(obj->personal_owner, toon_name) == 0;
+	}
+	const std::string ed = object_instance_extract_ed_owner(obj->name);
+	return !ed.empty() && strcasecmp(ed.c_str(), toon_name) == 0;
 }
 
 [[nodiscard]] static bool enforce_char_dam_budget(const struct obj_data* after_obj,
@@ -940,7 +951,7 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 	if(total > kObjEditMaxDamrollEditableTotal) {
 		err = "tetto dam editabile personaggio superato (" + std::to_string(total) + "/"
 			  + std::to_string(kObjEditMaxDamrollEditableTotal)
-			  + "; altri pezzi EDIT indossati +" + std::to_string(other_worn_edited_dam)
+			  + "; altri pezzi EDIT +" + std::to_string(other_worn_edited_dam)
 			  + ", questo pezzo +" + std::to_string(piece_dam) + " vs proto)";
 		return false;
 	}
@@ -959,7 +970,7 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 		err = "tetto spellpower editabile personaggio superato (" +
 			  std::to_string(total) + "/" +
 			  std::to_string(kObjEditMaxSpellpowerEditableTotal)
-			  + "; altri pezzi EDIT indossati +" + std::to_string(other_worn_edited_sp)
+			  + "; altri pezzi EDIT +" + std::to_string(other_worn_edited_sp)
 			  + ", questo pezzo +" + std::to_string(piece_sp) + " vs proto)";
 		return false;
 	}
