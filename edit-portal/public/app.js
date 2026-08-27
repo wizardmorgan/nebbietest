@@ -968,8 +968,6 @@ async function selectItem(inventoryId, li) {
   const textBox = $('object-text-edit');
   if (textBox) textBox.innerHTML = '';
   $('quote-box').textContent = 'Caricamento…';
-  const textBox = $('object-text-edit');
-  if (textBox) textBox.innerHTML = '';
 
   const opts = await api('/api/object-edit-options', {
     method: 'POST',
