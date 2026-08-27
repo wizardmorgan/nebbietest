@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 20;
+const EDIT_PORTAL_UI_BUILD = 21;
 
 let session = null;
 let targetToonId = null;
@@ -1312,7 +1312,9 @@ function renderObjectTextEdit(textEdit) {
   if (!textEdit) {
     return;
   }
-  const canEdit = textEdit.can_edit !== false && session.role !== 'limited';
+  /* Ignora can_edit dal myst: i campi sono sempre digitabili (non limited).
+   * Il salvataggio avviene solo con un affect pagato nello stesso apply. */
+  const canEdit = session.role !== 'limited';
   const nameMax = Number(textEdit.name_max || 128);
   const shortMax = Number(textEdit.short_max || 128);
   const longMax = Number(textEdit.long_max || 256);
@@ -1330,8 +1332,7 @@ function renderObjectTextEdit(textEdit) {
     const locked = document.createElement('p');
     locked.className = 'hint';
     locked.textContent =
-      textEdit.hint ||
-      'Name/short/long solo insieme al pagamento di un nuovo affect.';
+      'Tier limited: name/short/long non modificabili.';
     body.appendChild(locked);
     details.appendChild(body);
     box.appendChild(details);
