@@ -85,4 +85,18 @@ echo "=== ping via edit-portal :3080 ==="
 curl -sf "http://localhost:3080/api/health" | python3 -m json.tool || echo "(edit-portal non risponde)"
 
 echo ""
+echo "=== UI static (edit-portal app.js) ==="
+UI_JS="$(curl -sf "http://localhost:3080/app.js?v=8" 2>/dev/null || curl -sf "http://localhost:3080/app.js" 2>/dev/null || true)"
+if echo "$UI_JS" | grep -q 'EDIT_PORTAL_UI_BUILD = 8'; then
+	echo "OK: app.js serve EDIT_PORTAL_UI_BUILD = 8"
+else
+	echo "" >&2
+	echo "ERRORE: app.js sul :3080 NON ha UI build 8 — container Node vecchio o start-edit fallito." >&2
+	echo "  Nel log cerca: network declared as external, but could not be found" >&2
+	echo "  Fix: ./scripts/mud-dev.sh start-edit" >&2
+	echo "  (non usare docker compose -f docker-compose.edit-portal.yml senza MUD_STACK_NETWORK)" >&2
+	exit 1
+fi
+
+echo ""
 echo "OK: myst edit-portal API aggiornata."
