@@ -4,7 +4,7 @@ const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 15;
+const EDIT_PORTAL_UI_BUILD = 16;
 
 let session = null;
 let targetToonId = null;
@@ -996,12 +996,8 @@ function buildObjectScalarOptions(entry) {
 }
 
 function formatScalarOptionLabel(entry, absolute) {
-  if (!entry.relative) return String(absolute);
-  const proto = Number(entry.proto || 0);
-  const delta = absolute - proto;
-  if (delta === 0) return `nessuno (proto ${proto})`;
-  const sign = delta > 0 ? '+' : '';
-  return `${sign}${delta} → totale ${absolute}`;
+  /* Solo valore numerico (es. 0, -10, 2) — niente "nessuno (proto …)". */
+  return String(absolute);
 }
 
 function objectEntryCostHint(entry) {
