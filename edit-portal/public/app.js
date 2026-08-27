@@ -3,8 +3,9 @@
 const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
+const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 12;
+const EDIT_PORTAL_UI_BUILD = 19;
 
 let session = null;
 let targetToonId = null;
@@ -13,6 +14,10 @@ let editCatalog = null;
 let selectedInventoryId = null;
 let selectedObjectOptions = null;
 let pendingEdit = null;
+/** Ultima lista inventario grezza (per ri-ordinare senza ricaricare). */
+let inventoryItemsCache = [];
+/** Coda edit oggetto: più campi insieme (stesso pezzo) → somma costi listino. */
+let objectEditCart = new Map();
 
 const $ = (id) => document.getElementById(id);
 
@@ -81,11 +86,13 @@ const MUD_BG_COLORS = [
 /**
  * Converte `$cMBFG` / `$CMBFG` in HTML colorato (nasconde i codici).
  * M=mod, B=bg, FG=foreground 00-15 — vedi ansi_parser.cpp.
+ * `$$` → `$` letterale. `$` singoli (wrapper tipo `$Forza$` dopo un codice
+ * colore) non vengono mostrati — tipico di short_desc editati a mano.
  */
 function mudTextToHtml(raw) {
   const text = String(raw ?? '');
   if (!text) return '';
-  if (!/\$[cC]\d{4}/.test(text)) {
+  if (!/\$[cC]\d{4}/.test(text) && !text.includes('$')) {
     return escapeHtml(text);
   }
   let html = '';
@@ -104,12 +111,25 @@ function mudTextToHtml(raw) {
       open = false;
     }
   };
+  const isColorCodeAt = (idx) =>
+    text[idx] === '$' &&
+    (text[idx + 1] === 'c' || text[idx + 1] === 'C') &&
+    /^\d{4}/.test(text.slice(idx + 2, idx + 6));
   while (i < text.length) {
-    if (
-      (text[i + 1] === 'c' || text[i + 1] === 'C') &&
-      text[i] === '$' &&
-      /^\d{4}/.test(text.slice(i + 2, i + 6))
-    ) {
+    if (text[i] === '$' && text[i + 1] === '$') {
+      /*
+       * `$$` → `$` letterale. Se il secondo `$` inizia `$cXXXX`, consuma solo
+       * il primo (es. `$$c0007` → `$` + codice colore).
+       */
+      if (!open) {
+        html += openSpan();
+        open = true;
+      }
+      html += '$';
+      i += isColorCodeAt(i + 1) ? 1 : 2;
+      continue;
+    }
+    if (isColorCodeAt(i)) {
       const code = text.slice(i + 2, i + 6);
       const mod = code[0];
       const bg = Number(code[1]);
@@ -123,6 +143,11 @@ function mudTextToHtml(raw) {
       html += openSpan();
       open = true;
       i += 6;
+      continue;
+    }
+    if (text[i] === '$') {
+      /* Wrapper `$parola$` usato con i codici colore: non mostrare. */
+      i += 1;
       continue;
     }
     if (!open) {
@@ -267,13 +292,18 @@ function updatePaymentUI() {
   const plan = buildPaymentPlan(pendingEdit.quote, mode, runePct);
   const check = validatePayment(plan);
 
+  const labelHtml = String(pendingEdit.label || '')
+    .split('\n')
+    .map((line) => escapeHtml(line))
+    .join('<br>');
+
   $('payment-summary').innerHTML = `
-    <strong>${pendingEdit.label}</strong><br>
+    <strong>${labelHtml}</strong><br>
     Costo listino: <strong>${plan.displayMxp}</strong>
     ${plan.runeListino ? ` (+ ${plan.runeListino} Runes componente listino)` : ''}
     ${
       pendingEdit.quote?.note
-        ? `<br><span class="slot-hint">${pendingEdit.quote.note}</span>`
+        ? `<br><span class="slot-hint">${escapeHtml(pendingEdit.quote.note)}</span>`
         : ''
     }
   `;
@@ -726,12 +756,131 @@ async function queueResistanceQuote(damageType, value, label, selectEl) {
   updatePaymentUI();
 }
 
+function stripMudColorCodes(raw) {
+  return String(raw ?? '')
+    .replace(/\$\$/g, '\u0000')
+    .replace(/\$[cC]\d{4}/g, '')
+    .replace(/\$/g, '')
+    .replace(/\u0000/g, '$')
+    .trim();
+}
+
+function inventorySortKeyAlpha(it) {
+  return stripMudColorCodes(it.short_desc || it.name || '').toLocaleLowerCase('it');
+}
+
+function getInventorySortMode() {
+  const sel = $('inventory-sort');
+  if (sel && sel.value) return sel.value;
+  try {
+    return localStorage.getItem(INVENTORY_SORT_KEY) || 'inventory';
+  } catch {
+    return 'inventory';
+  }
+}
+
+function persistInventorySortMode(mode) {
+  try {
+    localStorage.setItem(INVENTORY_SORT_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+function sortInventoryItems(items, mode) {
+  const arr = [...items];
+  const byAlpha = (a, b) =>
+    inventorySortKeyAlpha(a).localeCompare(inventorySortKeyAlpha(b), 'it', {
+      sensitivity: 'base',
+      numeric: true,
+    });
+  const byType = (a, b) =>
+    String(a.item_type || '').localeCompare(String(b.item_type || ''), 'it', {
+      sensitivity: 'base',
+    }) || byAlpha(a, b);
+  const byVnum = (a, b) =>
+    Number(a.item_number || 0) - Number(b.item_number || 0) || byAlpha(a, b);
+  const byList = (a, b) =>
+    Number(a.list_index ?? a.inventory_id ?? 0) -
+    Number(b.list_index ?? b.inventory_id ?? 0);
+
+  switch (mode) {
+    case 'alpha':
+      arr.sort(byAlpha);
+      break;
+    case 'alpha_desc':
+      arr.sort((a, b) => -byAlpha(a, b));
+      break;
+    case 'editable':
+      arr.sort((a, b) => Number(!!b.editable) - Number(!!a.editable) || byAlpha(a, b));
+      break;
+    case 'not_editable':
+      arr.sort((a, b) => Number(!!a.editable) - Number(!!b.editable) || byAlpha(a, b));
+      break;
+    case 'item_type':
+      arr.sort(byType);
+      break;
+    case 'worn':
+      arr.sort(
+        (a, b) => Number(!!b.worn) - Number(!!a.worn) || byAlpha(a, b),
+      );
+      break;
+    case 'vnum':
+      arr.sort(byVnum);
+      break;
+    case 'container':
+      arr.sort(
+        (a, b) => Number(b.depth || 0) - Number(a.depth || 0) || byAlpha(a, b),
+      );
+      break;
+    case 'inventory':
+    default:
+      arr.sort(byList);
+      break;
+  }
+  return arr;
+}
+
+function renderInventoryList(items) {
+  const list = $('inventory-list');
+  list.innerHTML = '';
+  const prevSelected = selectedInventoryId;
+  const sorted = sortInventoryItems(items, getInventorySortMode());
+
+  sorted.forEach((it) => {
+    const li = document.createElement('li');
+    li.className = it.editable ? 'item' : 'item item-disabled';
+    const worn = it.worn
+      ? it.editable
+        ? ' · indossato (ri-edit OK)'
+        : ' · indossato'
+      : '';
+    const depth = Number(it.depth) > 0 ? ' · in container' : '';
+    const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
+    const type = it.item_type ? ` [${it.item_type}]` : '';
+    const meta = ` (vnum ${it.item_number})${worn}${depth}${skip}${type}`;
+    li.innerHTML =
+      `<span class="item-name">${mudTextToHtml(it.short_desc || it.name)}</span>` +
+      `<span class="item-meta">${escapeHtml(meta)}</span>`;
+    li.title = it.editable
+      ? `inventory_id ${it.inventory_id}`
+      : it.skip_reason || 'non editabile';
+    if (prevSelected && Number(it.inventory_id) === Number(prevSelected)) {
+      li.classList.add('selected');
+    }
+    if (it.editable) {
+      li.onclick = () => selectItem(it.inventory_id, li);
+    }
+    list.appendChild(li);
+  });
+}
+
 async function loadInventory() {
   targetToonId = getTargetToonId();
-  const prevSelected = selectedInventoryId;
   if (!targetToonId) {
     showApiWarn('Personaggio target non selezionato — cerca e seleziona un PG');
     updateInventoryHeading();
+    inventoryItemsCache = [];
     return;
   }
   updateInventoryHeading();
@@ -742,6 +891,7 @@ async function loadInventory() {
   if (!data.ok) {
     showApiWarn(data.error || 'Errore caricamento inventario');
     $('inventory-empty').classList.add('hidden');
+    inventoryItemsCache = [];
     return;
   }
 
@@ -760,6 +910,7 @@ async function loadInventory() {
   }
 
   const items = data.items || [];
+  inventoryItemsCache = items;
   const editableCount = Number(
     data.editable_count ?? items.filter((i) => i.editable).length,
   );
@@ -795,42 +946,19 @@ async function loadInventory() {
     );
   }
 
-  items.forEach((it) => {
-    const li = document.createElement('li');
-    li.className = it.editable ? 'item' : 'item item-disabled';
-    const worn = it.worn
-      ? it.editable
-        ? ' · indossato (ri-edit OK)'
-        : ' · indossato'
-      : '';
-    const depth = Number(it.depth) > 0 ? ' · in container' : '';
-    const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
-    const type = it.item_type ? ` [${it.item_type}]` : '';
-    const meta = ` (vnum ${it.item_number})${worn}${depth}${skip}${type}`;
-    li.innerHTML =
-      `<span class="item-name">${mudTextToHtml(it.short_desc || it.name)}</span>` +
-      `<span class="item-meta">${escapeHtml(meta)}</span>`;
-    li.title = it.editable
-      ? `inventory_id ${it.inventory_id}`
-      : it.skip_reason || 'non editabile';
-    if (prevSelected && Number(it.inventory_id) === Number(prevSelected)) {
-      li.classList.add('selected');
-    }
-    if (it.editable) {
-      li.onclick = () => selectItem(it.inventory_id, li);
-    }
-    list.appendChild(li);
-  });
-
   if (!items.length && !data.mystListOk) {
     list.innerHTML = '<li class="hint">Inventario non disponibile — verifica che myst sia avviato e EDIT_API_SECRET allineato.</li>';
+    return;
   }
+
+  renderInventoryList(items);
 }
 
 async function selectItem(inventoryId, li) {
   document.querySelectorAll('#inventory-list .item').forEach((el) => el.classList.remove('selected'));
   if (li) li.classList.add('selected');
   selectedInventoryId = inventoryId;
+  clearObjectEditCart();
   pendingEdit = null;
   selectedObjectOptions = null;
   updatePaymentUI();
@@ -839,6 +967,7 @@ async function selectItem(inventoryId, li) {
   hide('object-affect-slots');
   const textBox = $('object-text-edit');
   if (textBox) textBox.innerHTML = '';
+  $('quote-box').textContent = 'Caricamento…';
 
   const opts = await api('/api/object-edit-options', {
     method: 'POST',
@@ -927,6 +1056,7 @@ function renderObjectAffectSlots(affectSlots) {
 function objectEditSection(id) {
   if (id === 'artifact' || id.startsWith('flag.')) return 'Proprietà';
   if (id.startsWith('immune.')) return 'Resistenze / immunità';
+  if (id.startsWith('spell.')) return 'Spell editabili';
   if (['armor', 'spellfail'].includes(id)) return 'Armatura / cast';
   if (['hitndam', 'hitnsp', 'hitroll', 'damroll', 'spellpower'].includes(id)) {
     return 'Combattimento';
@@ -941,6 +1071,7 @@ const OBJECT_EDIT_SECTION_ORDER = [
   'Combattimento',
   'Proprietà',
   'Resistenze / immunità',
+  'Spell editabili',
 ];
 
 function objectEditSectionRank(name) {
@@ -948,7 +1079,11 @@ function objectEditSectionRank(name) {
   return i >= 0 ? i : 99;
 }
 
-/** Opzioni listino: min/max inclusivi, step in valore assoluto (AC step −10 → −40…0). */
+/**
+ * Opzioni listino.
+ * relative=true: min/max sono extra oltre proto (es. armor −40…0, hit +0…+2);
+ * i valori nel select sono totali assoluti (proto + extra).
+ */
 function buildObjectScalarOptions(entry) {
   const min = Number(entry.min);
   const max = Number(entry.max);
@@ -956,16 +1091,32 @@ function buildObjectScalarOptions(entry) {
   const lo = Math.min(min, max);
   const hi = Math.max(min, max);
   const opts = [];
+  if (entry.relative) {
+    const proto = Number(entry.proto || 0);
+    for (let d = lo; d <= hi; d += absStep) {
+      opts.push(proto + d);
+    }
+    return opts;
+  }
   for (let v = lo; v <= hi; v += absStep) {
     opts.push(v);
   }
   return opts;
 }
 
+function formatScalarOptionLabel(entry, absolute) {
+  /* Solo valore numerico (es. 0, -10, 2) — niente "nessuno (proto …)". */
+  return String(absolute);
+}
+
 function objectEntryCostHint(entry) {
   const mxp = Number(entry.mxp_per_step || 0);
   const rune = Number(entry.rune_per_step ?? mxp);
+  const step = Number(entry.step) || 1;
   if (!mxp) return '';
+  if (Math.abs(step) !== 1) {
+    return `Listino: ${mxp} MXP o ${rune} Runes / step ${step}`;
+  }
   return `Listino: ${mxp} MXP o ${rune} Runes / punto`;
 }
 
@@ -973,7 +1124,13 @@ function objectEntryRangeLabel(entry) {
   const min = Number(entry.min);
   const max = Number(entry.max);
   const step = Number(entry.step) || 1;
-  if (entry.kind === 'immune') return '';
+  if (entry.kind === 'immune' || entry.kind === 'spell' || entry.kind === 'flag') {
+    return '';
+  }
+  if (entry.relative) {
+    const proto = Number(entry.proto || 0);
+    return ` (extra ${min}…${max} oltre proto ${proto}, step ${step})`;
+  }
   return ` (${min}…${max}, step ${step})`;
 }
 
@@ -986,6 +1143,13 @@ function objectEntrySlotHint(entry) {
     if (entry.can_add) return 'nuova immunità (usa slot RESISTANCE)';
     return 'nessuno slot libero';
   }
+  if (entry.kind === 'spell') {
+    if (entry.has_affect && slotIdx >= 0) {
+      return `slot #${slotIdx + 1} (spell presente)`;
+    }
+    if (entry.can_add) return 'nuova spell (usa slot APPLY_SPELL)';
+    return 'nessuno slot libero';
+  }
   if (entry.has_affect && slotIdx >= 0) {
     return `slot #${slotIdx + 1} occupato`;
   }
@@ -993,11 +1157,118 @@ function objectEntrySlotHint(entry) {
   return 'nessuno slot libero';
 }
 
+function objectAlreadyArtifact() {
+  const entries = selectedObjectOptions?.entries;
+  if (!Array.isArray(entries)) return false;
+  const art = entries.find((e) => e.kind === 'flag' && e.flag === 'artifact');
+  return Number(art?.current || 0) === 1;
+}
+
+function cartAddsArtifact() {
+  return [...objectEditCart.values()].some(
+    (it) => it.flag === 'artifact' && Number(it.targetModifier) === 1
+  );
+}
+
+/** Listino: +50% se Artifact gia' sul pezzo o in coda nello stesso pacchetto. */
+function objectPricingUsesArtifact() {
+  return objectAlreadyArtifact() || cartAddsArtifact();
+}
+
 function clearObjectPending(entryId) {
-  if (pendingEdit?.type === 'object' && pendingEdit.entryId === entryId) {
-    pendingEdit = null;
-    updatePaymentUI();
+  const removed = objectEditCart.get(entryId);
+  if (objectEditCart.has(entryId)) {
+    objectEditCart.delete(entryId);
   }
+  if (removed?.flag === 'artifact') {
+    requoteObjectCartForArtifact();
+    return;
+  }
+  rebuildObjectPendingFromCart();
+}
+
+function clearObjectEditCart() {
+  objectEditCart.clear();
+  if (
+    pendingEdit?.type === 'object' ||
+    pendingEdit?.type === 'object-batch'
+  ) {
+    pendingEdit = null;
+  }
+  updatePaymentUI();
+}
+
+function rebuildObjectPendingFromCart() {
+  if (!objectEditCart.size) {
+    if (
+      pendingEdit?.type === 'object' ||
+      pendingEdit?.type === 'object-batch'
+    ) {
+      pendingEdit = null;
+    }
+    updatePaymentUI();
+    return;
+  }
+  const items = [...objectEditCart.values()];
+  let xpRaw = 0;
+  let rune = 0;
+  const labels = [];
+  const notes = [];
+  items.forEach((it) => {
+    xpRaw += Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
+    rune += Number(it.quote?.diff_rune || it.quote?.pq || 0);
+    labels.push(it.label);
+    if (it.quote?.note) notes.push(it.quote.note);
+  });
+  const mxp = Math.floor(xpRaw / 1000000);
+  const mxpFrac = Math.floor((xpRaw % 1000000) / 10000);
+  const artNote = objectPricingUsesArtifact()
+    ? 'Include maggiorazione Artifact +50% (listino)'
+    : undefined;
+  pendingEdit = {
+    type: 'object-batch',
+    entryId: 'object-batch',
+    label: labels.join('\n'),
+    quote: {
+      xp_raw: xpRaw,
+      mxp,
+      mxp_frac: mxpFrac,
+      diff_rune: rune,
+      note:
+        notes.find((n) => /Artifact/i.test(String(n))) ||
+        artNote ||
+        notes[0] ||
+        (items.length > 1
+          ? `${items.length} edit in coda (costo sommato vs stato attuale del pezzo)`
+          : undefined),
+    },
+    items,
+  };
+  updatePaymentUI();
+}
+
+async function requoteObjectCartForArtifact() {
+  const useArt = objectPricingUsesArtifact();
+  const items = [...objectEditCart.values()];
+  for (const it of items) {
+    if (it.flag === 'artifact') continue;
+    const payload = {
+      targetToonId,
+      inventoryId: selectedInventoryId,
+      location: Number(it.location || 0),
+      targetModifier: it.targetModifier,
+      pendingArtifact: useArt,
+    };
+    if (it.flag) payload.flag = it.flag;
+    const data = await api('/api/quote-object-edit', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (!data.ok) continue;
+    it.quote = data.data;
+    objectEditCart.set(it.entryId, it);
+  }
+  rebuildObjectPendingFromCart();
 }
 
 function renderObjectTextEdit(textEdit) {
@@ -1037,7 +1308,7 @@ function renderObjectTextEdit(textEdit) {
   hint.className = 'hint';
   hint.textContent =
     textEdit.hint ||
-    'Codici colore $cMBFG ammessi. Contatore = lunghezza grezza (come in DB).';
+    'Codici colore $cMBFG ammessi. Contatore = lunghezza grezza (come in DB). Salvataggio gratuito.';
   body.appendChild(hint);
 
   const fields = [
@@ -1098,7 +1369,7 @@ function renderObjectTextEdit(textEdit) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn-secondary';
-  btn.textContent = 'Calcola costo testo';
+  btn.textContent = 'Salva testo';
   btn.onclick = async () => {
     const objName = inputs.name.value;
     const shortDesc = inputs.short.value;
@@ -1108,10 +1379,18 @@ function renderObjectTextEdit(textEdit) {
       shortDesc.length > shortMax ||
       description.length > longMax
     ) {
-      alert('Uno o più campi superano la lunghezza massima: correggi prima di quotare.');
+      alert('Uno o più campi superano la lunghezza massima: correggi prima di salvare.');
       return;
     }
-    const data = await api('/api/quote-object-text', {
+    const targetName = charState?.name || 'personaggio';
+    const isStaffOnOther =
+      session.role === 'staff' && Number(targetToonId) !== Number(session.sessionToonId);
+    let msg = `Salvare name/short/long su "${targetName}"?\n(gratuito, nessun pagamento)`;
+    if (isStaffOnOther) {
+      msg += `\n\nSTAFF: target toon ${targetToonId}.`;
+    }
+    if (!confirm(msg)) return;
+    const result = await api('/api/apply-object-text', {
       method: 'POST',
       body: JSON.stringify({
         targetToonId,
@@ -1119,22 +1398,24 @@ function renderObjectTextEdit(textEdit) {
         objName,
         shortDesc,
         description,
+        payXp: 0,
+        payRune: 0,
       }),
     });
-    if (!data.ok) {
-      alert(data.error || 'Quote testo fallita');
+    if (!result.ok) {
+      alert(result.error || 'Salvataggio testo fallito');
       return;
     }
-    pendingEdit = {
-      type: 'object-text',
-      entryId: 'object-text',
-      label: 'Name / short / long',
-      quote: data.data,
-      objName,
-      shortDesc,
-      description,
-    };
+    $('apply-result').textContent = 'Testo salvato (gratuito).';
+    const invId = selectedInventoryId;
+    pendingEdit = null;
     updatePaymentUI();
+    await loadCharacterState();
+    if (invId) {
+      await loadInventory();
+      const li = document.querySelector('#inventory-list .item.selected');
+      if (li) await selectItem(invId, li);
+    }
   };
   body.appendChild(btn);
   details.appendChild(body);
@@ -1240,7 +1521,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       const select = document.createElement('select');
       select.disabled = !canEdit || session.role === 'limited';
 
-      if (entry.kind === 'immune' || entry.kind === 'flag') {
+      if (entry.kind === 'immune' || entry.kind === 'flag' || entry.kind === 'spell') {
         [
           { v: 0, l: 'No' },
           { v: 1, l: 'Sì' },
@@ -1252,6 +1533,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
           select.appendChild(opt);
         });
         if (entry.kind === 'immune' && current === 1) select.disabled = true;
+        if (entry.kind === 'spell' && current === 1) select.disabled = true;
         if (entry.kind === 'flag' && entry.flag === 'artifact' && current === 1) {
           select.disabled = true;
         }
@@ -1262,7 +1544,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
         values.forEach((v) => {
           const opt = document.createElement('option');
           opt.value = v;
-          opt.textContent = v;
+          opt.textContent = formatScalarOptionLabel(entry, v);
           if (v === current) opt.selected = true;
           select.appendChild(opt);
         });
@@ -1275,7 +1557,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       select.addEventListener('change', () => {
         if (!canEdit) return;
         const newVal = Number(select.value);
-        if (entry.kind === 'immune') {
+        if (entry.kind === 'immune' || entry.kind === 'spell') {
           if (newVal === 0 && current === 1) {
             select.value = '1';
             return;
@@ -1284,7 +1566,11 @@ function renderObjectEdits(entries, damBudget, spBudget) {
             clearObjectPending(entry.id);
             return;
           }
-          queueObjectQuote(entry, newVal ? Number(entry.immune_bit) : 0, select);
+          const bit =
+            entry.kind === 'spell'
+              ? Number(entry.spell_bit)
+              : Number(entry.immune_bit);
+          queueObjectQuote(entry, newVal ? bit : 0, select);
         } else if (entry.kind === 'flag') {
           if (entry.flag === 'artifact' && newVal === 0 && current === 1) {
             select.value = '1';
@@ -1302,20 +1588,28 @@ function renderObjectEdits(entries, damBudget, spBudget) {
         }
       });
 
+      const yesNoKind =
+        entry.kind === 'immune' || entry.kind === 'flag' || entry.kind === 'spell';
       row.innerHTML = `
       <div>
         <label>${entry.label || entry.id}${objectEntryRangeLabel(entry)}</label>
         <div class="current">Attuale: ${
-          entry.kind === 'immune' || entry.kind === 'flag'
+          yesNoKind
             ? current
               ? 'Sì'
               : 'No'
-            : current
+            : entry.relative
+              ? formatScalarOptionLabel(entry, current)
+              : current
         }</div>
         <div class="slot-hint">${
           entry.kind === 'flag' ? entry.hint || '' : objectEntrySlotHint(entry)
         }</div>
-        ${entry.kind !== 'immune' && entry.kind !== 'flag' ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>` : ''}
+        ${
+          entry.kind !== 'immune' && entry.kind !== 'flag'
+            ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>`
+            : ''
+        }
       </div>
     `;
       row.appendChild(select);
@@ -1337,6 +1631,15 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
   if (entry.kind === 'flag' && entry.flag) {
     payload.flag = entry.flag;
   }
+  const addingThisArtifact =
+    entry.kind === 'flag' &&
+    entry.flag === 'artifact' &&
+    Number(targetModifier) === 1;
+  /* +50% se pezzo gia' Artifact o Artifact gia' in coda (non sulla voce flag). */
+  if (!addingThisArtifact && (objectAlreadyArtifact() || cartAddsArtifact())) {
+    payload.pendingArtifact = true;
+  }
+
   const data = await api('/api/quote-object-edit', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -1351,11 +1654,31 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     return;
   }
   const qd = data.data;
-  const yesNo = entry.kind === 'immune' || entry.kind === 'flag';
-  const curLabel = yesNo ? (qd.current ? 'Sì' : 'No') : qd.current;
-  const tgtLabel = yesNo ? (qd.target ? 'Sì' : 'No') : qd.target;
-  pendingEdit = {
-    type: 'object',
+  const yesNo = entry.kind === 'immune' || entry.kind === 'flag' || entry.kind === 'spell';
+  const curLabel = yesNo
+    ? qd.current
+      ? 'Sì'
+      : 'No'
+    : entry.relative
+      ? formatScalarOptionLabel(entry, Number(qd.current))
+      : qd.current;
+  const tgtLabel = yesNo
+    ? qd.target
+      ? 'Sì'
+      : 'No'
+    : entry.relative
+      ? formatScalarOptionLabel(entry, Number(qd.target))
+      : qd.target;
+  /* Altri tipi di pending (pool/resi) non si mischiano con la coda oggetto. */
+  if (
+    pendingEdit &&
+    pendingEdit.type !== 'object' &&
+    pendingEdit.type !== 'object-batch'
+  ) {
+    pendingEdit = null;
+  }
+  const wasAddingArtifact = cartAddsArtifact();
+  objectEditCart.set(entry.id, {
     entryId: entry.id,
     location: Number(entry.location || 0),
     targetModifier,
@@ -1363,8 +1686,14 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     label: `${entry.label}: ${curLabel} → ${tgtLabel}`,
     quote: qd,
     selectEl,
-  };
-  updatePaymentUI();
+    entry,
+  });
+  const nowAddingArtifact = cartAddsArtifact();
+  if (wasAddingArtifact !== nowAddingArtifact || nowAddingArtifact) {
+    await requoteObjectCartForArtifact();
+  } else {
+    rebuildObjectPendingFromCart();
+  }
 }
 
 async function confirmPayEdit() {
@@ -1388,6 +1717,9 @@ async function confirmPayEdit() {
     payRune: pendingEdit.plan.payRune,
   };
 
+  const mode = $('pay-mode').value;
+  const runePct = Number($('pay-rune-pct').value);
+
   let result;
   if (pendingEdit.type === 'pool') {
     result = await api('/api/apply-pool', {
@@ -1407,20 +1739,43 @@ async function confirmPayEdit() {
         value: pendingEdit.value,
       }),
     });
-  } else if (pendingEdit.type === 'object') {
-    const affectBody = {
-      ...body,
-      inventoryId: selectedInventoryId,
-      location: pendingEdit.location,
-      targetModifier: pendingEdit.targetModifier,
-    };
-    if (pendingEdit.flag) {
-      affectBody.flag = pendingEdit.flag;
-    }
-    result = await api('/api/apply-affect', {
-      method: 'POST',
-      body: JSON.stringify(affectBody),
+  } else if (pendingEdit.type === 'object-batch' || pendingEdit.type === 'object') {
+    /*
+     * Applica Artifact per primo (flag gratis), poi le voci pagate:
+     * cosi' AnalyzeObjEdit applica gia' il +50% listino sul pezzo.
+     * (Artifact gia' presente O aggiunto nello stesso pacchetto → ×1.5)
+     */
+    const items =
+      pendingEdit.type === 'object-batch'
+        ? [...pendingEdit.items]
+        : [pendingEdit];
+    items.sort((a, b) => {
+      const aa = a.flag === 'artifact' ? 1 : 0;
+      const bb = b.flag === 'artifact' ? 1 : 0;
+      return bb - aa;
     });
+    result = { ok: true };
+    for (const item of items) {
+      const itemPlan = buildPaymentPlan(item.quote, mode, runePct);
+      const affectBody = {
+        targetToonId,
+        inventoryId: selectedInventoryId,
+        location: item.location,
+        targetModifier: item.targetModifier,
+        payXp: itemPlan.payXp,
+        payRune: itemPlan.payRune,
+      };
+      if (item.flag) {
+        affectBody.flag = item.flag;
+      }
+      result = await api('/api/apply-affect', {
+        method: 'POST',
+        body: JSON.stringify(affectBody),
+      });
+      if (!result.ok) {
+        break;
+      }
+    }
   } else if (pendingEdit.type === 'object-text') {
     result = await api('/api/apply-object-text', {
       method: 'POST',
@@ -1439,8 +1794,11 @@ async function confirmPayEdit() {
   if (result.ok) {
     $('apply-result').textContent = 'Edit applicato con successo.';
     const wasObject =
-      pendingEdit.type === 'object' || pendingEdit.type === 'object-text';
+      pendingEdit.type === 'object' ||
+      pendingEdit.type === 'object-batch' ||
+      pendingEdit.type === 'object-text';
     const invId = selectedInventoryId;
+    clearObjectEditCart();
     pendingEdit = null;
     updatePaymentUI();
     await loadCharacterState();
@@ -1488,6 +1846,25 @@ $('btn-change-toon').onclick = async () => {
 };
 
 $('btn-refresh-inv').onclick = () => loadInventory();
+
+(function initInventorySort() {
+  const sel = $('inventory-sort');
+  if (!sel) return;
+  try {
+    const saved = localStorage.getItem(INVENTORY_SORT_KEY);
+    if (saved && [...sel.options].some((o) => o.value === saved)) {
+      sel.value = saved;
+    }
+  } catch {
+    /* ignore */
+  }
+  sel.onchange = () => {
+    persistInventorySortMode(sel.value);
+    if (inventoryItemsCache.length) {
+      renderInventoryList(inventoryItemsCache);
+    }
+  };
+})();
 
 $('pay-mode').onchange = updatePaymentUI;
 $('pay-rune-pct').oninput = updatePaymentUI;
@@ -1619,7 +1996,7 @@ function portalCategoriesFromUI() {
   return {
     types,
     comment:
-      'types: slug ITEM_* — spunta = visibile e editabile. Flag EDIT del PG = sempre incluso.',
+      'types: slug ITEM_* — spunta = visibile in inventario e editabile. Senza spunta: nascosto (anche se EDIT).',
   };
 }
 

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=12" />
+  <link rel="stylesheet" href="style.css?v=19" />
 </head>
 <body>
   <header class="app-header">
@@ -76,7 +76,22 @@
           <div class="card" id="inventory-card">
             <div class="card-header">
               <h2 id="inventory-title">Inventario</h2>
-              <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
+              <div class="inventory-toolbar">
+                <label class="inventory-sort-label">Ordina
+                  <select id="inventory-sort" title="Criterio di ordinamento della lista">
+                    <option value="inventory">Ordine inventario</option>
+                    <option value="alpha">Alfabetico (A→Z)</option>
+                    <option value="alpha_desc">Alfabetico (Z→A)</option>
+                    <option value="editable">Editabili prima</option>
+                    <option value="not_editable">Non editabili prima</option>
+                    <option value="item_type">Tipo oggetto</option>
+                    <option value="worn">Indossati prima</option>
+                    <option value="vnum">Vnum</option>
+                    <option value="container">In container prima</option>
+                  </select>
+                </label>
+                <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
+              </div>
             </div>
             <p id="inventory-target-hint" class="hint"></p>
             <ul id="inventory-list" class="inventory-list"></ul>
@@ -168,6 +183,6 @@
       </div>
     </section>
   </main>
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=19"></script>
 </body>
 </html>
