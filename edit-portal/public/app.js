@@ -4,7 +4,7 @@ const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 9;
+const EDIT_PORTAL_UI_BUILD = 10;
 
 let session = null;
 let targetToonId = null;
@@ -271,6 +271,11 @@ function updatePaymentUI() {
     <strong>${pendingEdit.label}</strong><br>
     Costo listino: <strong>${plan.displayMxp}</strong>
     ${plan.runeListino ? ` (+ ${plan.runeListino} Runes componente listino)` : ''}
+    ${
+      pendingEdit.quote?.note
+        ? `<br><span class="slot-hint">${pendingEdit.quote.note}</span>`
+        : ''
+    }
   `;
 
   $('payment-breakdown').innerHTML = `
@@ -1105,6 +1110,9 @@ function renderObjectEdits(entries, damBudget, spBudget) {
           select.appendChild(opt);
         });
         if (entry.kind === 'immune' && current === 1) select.disabled = true;
+        if (entry.kind === 'flag' && entry.flag === 'artifact' && current === 1) {
+          select.disabled = true;
+        }
       } else {
         const values = buildObjectScalarOptions(entry);
         if (!values.includes(current)) values.push(current);
@@ -1136,6 +1144,10 @@ function renderObjectEdits(entries, damBudget, spBudget) {
           }
           queueObjectQuote(entry, newVal ? Number(entry.immune_bit) : 0, select);
         } else if (entry.kind === 'flag') {
+          if (entry.flag === 'artifact' && newVal === 0 && current === 1) {
+            select.value = '1';
+            return;
+          }
           if (newVal === current) {
             clearObjectPending(entry.id);
             return;

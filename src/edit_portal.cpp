@@ -889,6 +889,7 @@ std::atomic<bool> g_http_running {false};
 	j["diff_rune"] = a.diff.rune;
 	j["diff_derent_mega"] = static_cast<long long>(a.diff.derent / 1000000L);
 	j["changes"] = a.changes;
+	j["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
 	return j;
 }
 
@@ -1524,6 +1525,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(flag == "artifact") {
 				const int current = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
 				const int target = target_modifier ? 1 : 0;
+				if(current && !target) {
+					extract_obj(obj);
+					return json_error(
+						"Artifact non rimovibile una volta impostato", 400);
+				}
 				Json d = quote_xp_json(0, 0);
 				d["location"] = 0;
 				d["flag"] = "artifact";
@@ -1531,9 +1537,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				d["current"] = current;
 				d["target"] = target;
 				d["inventory_id"] = inventory_id;
-				d["note"] = target
-								? "Artifact ON: i prossimi edit costano +50%"
-								: "Artifact OFF";
+				d["note"] =
+					target ? "Artifact ON (gratis): ogni edit successivo +50% listino"
+						   : "Artifact invariato";
 				extract_obj(obj);
 				return json_ok(d);
 			}
@@ -1574,6 +1580,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["current"] = current;
 			d["target"] = target;
 			d["inventory_id"] = inventory_id;
+			d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
+			if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
+				d["note"] = "Include maggiorazione Artifact +50% (listino)";
+			}
 			extract_obj(obj);
 			return json_ok(d);
 		}
@@ -1657,22 +1667,43 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 
 			if(flag == "artifact") {
+				const bool already = IS_OBJ_STAT(obj, ITEM_IMMUNE);
+				if(already && !target_modifier) {
+					extract_obj(obj);
+					return json_error(
+						"Artifact non rimovibile una volta impostato", 400);
+				}
+				if(already && target_modifier) {
+					/* Gia' artifact: no-op (flag permanente). */
+					Json d = analyze_to_json(obj);
+					d["paid_xp"] = 0;
+					d["paid_rune"] = 0;
+					d["saved"] = true;
+					d["flag"] = "artifact";
+					d["artifact"] = 1;
+					d["instance_id"] = obj->db_instance_id;
+					d["base_vnum"] = object_instance_resolve_base_vnum(obj);
+					extract_obj(obj);
+					(void)pay_xp;
+					(void)pay_rune;
+					return json_ok(d);
+				}
+				if(!target_modifier) {
+					extract_obj(obj);
+					return json_error("Artifact: specificare target_modifier=1 per attivare",
+									  400);
+				}
 				struct obj_data* after = materialize_inventory_row(*row);
 				if(!after) {
 					extract_obj(obj);
 					return json_error("impossibile clonare oggetto", 500);
 				}
 				extract_obj(obj);
-				if(target_modifier) {
-					SET_BIT(after->obj_flags.extra_flags, ITEM_IMMUNE);
-				}
-				else {
-					REMOVE_BIT(after->obj_flags.extra_flags, ITEM_IMMUNE);
-				}
+				SET_BIT(after->obj_flags.extra_flags, ITEM_IMMUNE);
 				if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
 					SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
 				}
-				/* Toggle flag: gratis (il +50% si applica agli edit successivi). */
+				/* Impostazione flag: gratis; +50% listino su ogni edit successivo. */
 				std::string save_err;
 				const bool saved = portal_save_edited_inventory_item(
 					inventory_id, after, save_err, target_name.c_str());
