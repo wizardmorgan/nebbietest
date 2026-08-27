@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 21;
+const EDIT_PORTAL_UI_BUILD = 22;
 
 let session = null;
 let targetToonId = null;
@@ -993,7 +993,20 @@ async function selectItem(inventoryId, li) {
     lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
 
   renderObjectAffectSlots(d.affect_slots);
-  renderObjectTextEdit(d.text_edit);
+  renderObjectTextEdit(
+    d.text_edit || {
+      can_edit: true,
+      requires_paid_affect: true,
+      name: '',
+      short_desc: '',
+      description: '',
+      name_max: 128,
+      short_max: 128,
+      long_max: 256,
+      hint:
+        'Gratuiti ma solo insieme al pagamento di un nuovo affect (stesso salvataggio).',
+    }
+  );
   renderObjectEdits(d.entries || [], d.dam_budget, d.sp_budget);
 }
 
@@ -1055,7 +1068,12 @@ function renderObjectAffectSlots(affectSlots) {
 
 function objectEditSection(id) {
   if (id === 'artifact' || id.startsWith('flag.')) return 'Proprietà';
-  if (id.startsWith('immune.')) return 'Resistenze / immunità';
+  if (id.startsWith('resist.') || id.startsWith('immune.')) {
+    return 'Resistenze (APPLY_IMMUNE)';
+  }
+  if (id.startsWith('immunity.') || id.startsWith('m_immune.')) {
+    return 'Immunità concesse (APPLY_M_IMMUNE)';
+  }
   if (id.startsWith('spell.')) return 'Spell editabili';
   if (['armor', 'spellfail'].includes(id)) return 'Armatura / cast';
   if (['hitndam', 'hitnsp', 'hitroll', 'damroll', 'spellpower'].includes(id)) {
@@ -1069,8 +1087,9 @@ const OBJECT_EDIT_SECTION_ORDER = [
   'Armatura / cast',
   'Caratteristiche',
   'Combattimento',
+  'Immunità concesse (APPLY_M_IMMUNE)',
   'Proprietà',
-  'Resistenze / immunità',
+  'Resistenze (APPLY_IMMUNE)',
   'Spell editabili',
 ];
 
@@ -1124,7 +1143,7 @@ function objectEntryRangeLabel(entry) {
   const min = Number(entry.min);
   const max = Number(entry.max);
   const step = Number(entry.step) || 1;
-  if (entry.kind === 'immune' || entry.kind === 'spell' || entry.kind === 'flag') {
+  if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell' || entry.kind === 'flag') {
     return '';
   }
   if (entry.relative) {
@@ -1136,11 +1155,16 @@ function objectEntryRangeLabel(entry) {
 
 function objectEntrySlotHint(entry) {
   const slotIdx = Number(entry.occupied_slot);
-  if (entry.kind === 'immune') {
+  if (entry.kind === 'immune' || entry.kind === 'm_immune') {
+    const noun = entry.kind === 'm_immune' ? 'immunità' : 'resistenza';
     if (entry.has_affect && slotIdx >= 0) {
-      return `slot #${slotIdx + 1} (immunità presente)`;
+      return `slot #${slotIdx + 1} (${noun} presente)`;
     }
-    if (entry.can_add) return 'nuova immunità (usa slot RESISTANCE)';
+    if (entry.can_add) {
+      return entry.kind === 'm_immune'
+        ? 'nuova immunità (slot APPLY_M_IMMUNE)'
+        : 'nuova resistenza (slot APPLY_IMMUNE)';
+    }
     return 'nessuno slot libero';
   }
   if (entry.kind === 'spell') {
@@ -1598,7 +1622,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
           entry.kind === 'flag' ? entry.hint || '' : objectEntrySlotHint(entry)
         }</div>
         ${
-          entry.kind !== 'immune' && entry.kind !== 'flag'
+          entry.kind !== 'flag'
             ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>`
             : ''
         }
