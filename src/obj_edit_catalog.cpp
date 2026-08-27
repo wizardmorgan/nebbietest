@@ -94,11 +94,16 @@ bool object_vnum_is_tan_proto(int vnum) noexcept {
 }
 
 static void json_listino_pricing(Json& j, const ObjEditListinoSpec& spec) {
-	const long raw = spec.positive_unit_raw * kObjValueStorageScale;
+	/* Costo per uno step UI (es. armor step −10 → 10 MXP, non 1 MXP/punto). */
+	const int abs_step = std::abs(spec.step) > 0 ? std::abs(spec.step) : 1;
+	const long raw =
+		spec.positive_unit_raw * static_cast<long>(abs_step) * kObjValueStorageScale;
 	j["xp_raw_per_step"] = raw;
 	j["mxp_per_step"] = raw / 1000000L;
 	j["mxp_frac_per_step"] = (raw % 1000000L) / 10000L;
 	j["rune_per_step"] = raw / kObjEditRunePerMegaXp;
+	j["unit_raw"] = spec.positive_unit_raw;
+	j["step_abs"] = abs_step;
 }
 
 [[nodiscard]] static int combat_hitroll_total(const struct obj_data* obj) noexcept {
