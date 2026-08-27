@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 22;
+const EDIT_PORTAL_UI_BUILD = 23;
 
 let session = null;
 let targetToonId = null;
@@ -512,16 +512,12 @@ async function loadTargetToons() {
     }
     sel.onchange = async () => {
       targetToonId = getTargetToonId();
-      pendingEdit = null;
-      selectedInventoryId = null;
-      updatePaymentUI();
-      updateInventoryHeading();
+      clearTargetWorkspace(
+        targetToonId
+          ? 'Caricamento personaggio…'
+          : 'Seleziona un personaggio dalla lista.'
+      );
       if (!targetToonId) {
-        $('char-stats').textContent = 'Seleziona un personaggio dalla lista.';
-        $('inventory-list').innerHTML = '';
-        $('object-edits').innerHTML = '';
-        $('quote-box').textContent =
-          'Seleziona un personaggio target, poi un oggetto editabile.';
         return;
       }
       await loadCharacterState();
@@ -548,11 +544,14 @@ async function loadTargetToons() {
   targetToonId = getTargetToonId();
   sel.onchange = async () => {
     targetToonId = getTargetToonId();
-    pendingEdit = null;
-    updatePaymentUI();
+    clearTargetWorkspace(
+      targetToonId ? 'Caricamento personaggio…' : 'Personaggio non selezionato'
+    );
+    if (!targetToonId) return;
     await loadCharacterState();
     await loadInventory();
   };
+  clearTargetWorkspace('Caricamento personaggio…');
   await loadCharacterState();
   await loadInventory();
 }
@@ -567,34 +566,80 @@ function hideApiWarn() {
   hide('api-warn');
 }
 
+function clearTargetWorkspace(message) {
+  clearObjectEditCart();
+  pendingEdit = null;
+  selectedInventoryId = null;
+  selectedObjectOptions = null;
+  charState = null;
+  inventoryItemsCache = [];
+  updatePaymentUI();
+  const statsMsg =
+    message || 'Seleziona un personaggio target.';
+  if ($('char-stats')) $('char-stats').textContent = statsMsg;
+  if ($('inventory-list')) $('inventory-list').innerHTML = '';
+  if ($('inventory-empty')) {
+    $('inventory-empty').textContent = '';
+    $('inventory-empty').classList.add('hidden');
+  }
+  if ($('object-edits')) $('object-edits').innerHTML = '';
+  if ($('object-text-edit')) $('object-text-edit').innerHTML = '';
+  if ($('object-affect-slots')) {
+    $('object-affect-slots').innerHTML = '';
+    hide('object-affect-slots');
+  }
+  if ($('pool-edits')) $('pool-edits').innerHTML = '';
+  if ($('resistance-edits')) $('resistance-edits').innerHTML = '';
+  if ($('quote-box')) {
+    $('quote-box').textContent =
+      'Seleziona un personaggio target, poi un oggetto editabile.';
+  }
+  if ($('apply-result')) $('apply-result').textContent = '';
+  hideApiWarn();
+  updateInventoryHeading();
+}
+
 async function loadCharacterState() {
   hideApiWarn();
   targetToonId = getTargetToonId();
   if (!targetToonId) {
-    $('char-stats').textContent = 'Personaggio non selezionato';
+    clearTargetWorkspace('Personaggio non selezionato');
     return;
   }
   const data = await api(`/api/character-state/${targetToonId}`);
   if (!data.ok) {
     charState = null;
+    if ($('pool-edits')) $('pool-edits').innerHTML = '';
+    if ($('resistance-edits')) $('resistance-edits').innerHTML = '';
     $('char-stats').textContent = data.error || 'Impossibile caricare stato PG (myst attivo?)';
     showApiWarn(`Stato personaggio: ${data.error}`);
     return;
   }
   charState = data.data;
   renderCharStats();
-  renderCharacterEdits();
+  if (charState.stats_missing) {
+    if ($('pool-edits')) $('pool-edits').innerHTML = '';
+    if ($('resistance-edits')) $('resistance-edits').innerHTML = '';
+    showApiWarn(charState.warning || 'character_stats assente per questo toon');
+  } else {
+    renderCharacterEdits();
+  }
   updateInventoryHeading();
 }
 
 function renderCharStats() {
   const s = charState;
+  if (!s) return;
+  const missing = s.stats_missing
+    ? `<div class="stat-row hint">character_stats assente — solo consultazione inventario</div>`
+    : '';
   $('char-stats').innerHTML = `
-    <div class="stat-row"><span>Nome</span><strong>${s.name}</strong></div>
+    <div class="stat-row"><span>Nome</span><strong>${escapeHtml(s.name || '')}</strong></div>
     <div class="stat-row"><span>Livello</span><strong>${s.max_level}</strong></div>
     <div class="stat-row"><span>MXP disponibili</span><strong>${formatMxp(s.available_mxp, s.available_mxp_frac)}</strong></div>
     <div class="stat-row"><span>Runes degli Eroi</span><strong>${s.rune}</strong></div>
     ${s.prince_reserve_mxp ? `<div class="stat-row hint">Riserva principi: ${s.prince_reserve_mxp} MXP</div>` : ''}
+    ${missing}
   `;
 }
 
