@@ -1281,8 +1281,11 @@ async function confirmPayEdit() {
       if (li) await selectItem(invId, li);
     }
   } else {
-    $('apply-result').textContent = result.error || 'Apply fallito';
-    alert(result.error || 'Apply fallito');
+    const ver =
+      result.portal_api_version != null ? ` [api v${result.portal_api_version}]` : '';
+    const msg = (result.error || 'Apply fallito') + ver;
+    $('apply-result').textContent = msg;
+    alert(msg);
   }
 }
 
