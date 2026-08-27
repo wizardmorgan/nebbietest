@@ -178,8 +178,9 @@ std::atomic<bool> g_http_running {false};
 [[nodiscard]] std::string json_error(const char* msg, int code = 400) {
 	Json j;
 	j["ok"] = false;
-	j["error"] = msg;
+	j["error"] = msg ? msg : "errore";
 	j["code"] = code;
+	j[kEditPortalApiVersionTag] = kEditPortalApiVersion;
 	return j.dump();
 }
 
@@ -187,6 +188,7 @@ std::atomic<bool> g_http_running {false};
 	Json j;
 	j["ok"] = true;
 	j["data"] = data;
+	j[kEditPortalApiVersionTag] = kEditPortalApiVersion;
 	return j.dump();
 }
 
@@ -1730,7 +1732,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				}
 			}
 			catch(const std::exception& e) {
-				return json_error(e.what(), 500);
+				return json_error(
+					(std::string("[portal:apply_pool] ") + e.what()).c_str(), 500);
 			}
 
 			Json d;
