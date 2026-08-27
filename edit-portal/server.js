@@ -6,12 +6,24 @@ const mysql = require('mysql2/promise');
 const path = require('path');
 const unixpass = require('unixpass');
 
+const fs = require('fs');
+
 const PORT = parseInt(process.env.EDIT_WEB_PORT || '3080', 10);
 const SESSION_SECRET = process.env.EDIT_SESSION_SECRET || 'nebbie-edit-session-dev';
 const MYST_API_URL = process.env.MYST_EDIT_API_URL || 'http://mudcompiler:8090';
 const MYST_API_SECRET = process.env.EDIT_API_SECRET || 'nebbie-edit-dev-secret';
-/** Deve restare allineato a EDIT_PORTAL_UI_BUILD in public/app.js */
-const UI_BUILD = parseInt(process.env.EDIT_PORTAL_UI_BUILD || '10', 10);
+/** Sorgente unica: public/app.js (ignora env stale nei compose). */
+function readUiBuildFromAppJs() {
+  try {
+    const src = fs.readFileSync(path.join(__dirname, 'public', 'app.js'), 'utf8');
+    const m = src.match(/EDIT_PORTAL_UI_BUILD\s*=\s*(\d+)/);
+    if (m) return parseInt(m[1], 10);
+  } catch (_) {
+    /* fall through */
+  }
+  return 0;
+}
+const UI_BUILD = readUiBuildFromAppJs() || parseInt(process.env.EDIT_PORTAL_UI_BUILD || '10', 10);
 
 const STAFF_LEVEL = parseInt(process.env.EDIT_STAFF_LEVEL || '57', 10);
 const LIMITED_LEVEL = parseInt(process.env.EDIT_LIMITED_LEVEL || '51', 10);
