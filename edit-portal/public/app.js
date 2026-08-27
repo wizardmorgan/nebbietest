@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 17;
+const EDIT_PORTAL_UI_BUILD = 18;
 
 let session = null;
 let targetToonId = null;
@@ -16,6 +16,8 @@ let selectedObjectOptions = null;
 let pendingEdit = null;
 /** Ultima lista inventario grezza (per ri-ordinare senza ricaricare). */
 let inventoryItemsCache = [];
+/** Coda edit oggetto: più campi insieme (stesso pezzo) → somma costi listino. */
+let objectEditCart = new Map();
 
 const $ = (id) => document.getElementById(id);
 
@@ -290,13 +292,18 @@ function updatePaymentUI() {
   const plan = buildPaymentPlan(pendingEdit.quote, mode, runePct);
   const check = validatePayment(plan);
 
+  const labelHtml = String(pendingEdit.label || '')
+    .split('\n')
+    .map((line) => escapeHtml(line))
+    .join('<br>');
+
   $('payment-summary').innerHTML = `
-    <strong>${pendingEdit.label}</strong><br>
+    <strong>${labelHtml}</strong><br>
     Costo listino: <strong>${plan.displayMxp}</strong>
     ${plan.runeListino ? ` (+ ${plan.runeListino} Runes componente listino)` : ''}
     ${
       pendingEdit.quote?.note
-        ? `<br><span class="slot-hint">${pendingEdit.quote.note}</span>`
+        ? `<br><span class="slot-hint">${escapeHtml(pendingEdit.quote.note)}</span>`
         : ''
     }
   `;
@@ -951,12 +958,16 @@ async function selectItem(inventoryId, li) {
   document.querySelectorAll('#inventory-list .item').forEach((el) => el.classList.remove('selected'));
   if (li) li.classList.add('selected');
   selectedInventoryId = inventoryId;
+  clearObjectEditCart();
   pendingEdit = null;
   selectedObjectOptions = null;
   updatePaymentUI();
   $('object-edits').innerHTML = '';
   $('object-affect-slots').innerHTML = '';
   hide('object-affect-slots');
+  const textBox = $('object-text-edit');
+  if (textBox) textBox.innerHTML = '';
+  $('quote-box').textContent = 'Caricamento…';
   const textBox = $('object-text-edit');
   if (textBox) textBox.innerHTML = '';
 
@@ -1103,7 +1114,11 @@ function formatScalarOptionLabel(entry, absolute) {
 function objectEntryCostHint(entry) {
   const mxp = Number(entry.mxp_per_step || 0);
   const rune = Number(entry.rune_per_step ?? mxp);
+  const step = Number(entry.step) || 1;
   if (!mxp) return '';
+  if (Math.abs(step) !== 1) {
+    return `Listino: ${mxp} MXP o ${rune} Runes / step ${step}`;
+  }
   return `Listino: ${mxp} MXP o ${rune} Runes / punto`;
 }
 
@@ -1145,10 +1160,65 @@ function objectEntrySlotHint(entry) {
 }
 
 function clearObjectPending(entryId) {
-  if (pendingEdit?.type === 'object' && pendingEdit.entryId === entryId) {
-    pendingEdit = null;
-    updatePaymentUI();
+  if (objectEditCart.has(entryId)) {
+    objectEditCart.delete(entryId);
   }
+  rebuildObjectPendingFromCart();
+}
+
+function clearObjectEditCart() {
+  objectEditCart.clear();
+  if (
+    pendingEdit?.type === 'object' ||
+    pendingEdit?.type === 'object-batch'
+  ) {
+    pendingEdit = null;
+  }
+  updatePaymentUI();
+}
+
+function rebuildObjectPendingFromCart() {
+  if (!objectEditCart.size) {
+    if (
+      pendingEdit?.type === 'object' ||
+      pendingEdit?.type === 'object-batch'
+    ) {
+      pendingEdit = null;
+    }
+    updatePaymentUI();
+    return;
+  }
+  const items = [...objectEditCart.values()];
+  let xpRaw = 0;
+  let rune = 0;
+  const labels = [];
+  const notes = [];
+  items.forEach((it) => {
+    xpRaw += Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
+    rune += Number(it.quote?.diff_rune || it.quote?.pq || 0);
+    labels.push(it.label);
+    if (it.quote?.note) notes.push(it.quote.note);
+  });
+  const mxp = Math.floor(xpRaw / 1000000);
+  const mxpFrac = Math.floor((xpRaw % 1000000) / 10000);
+  pendingEdit = {
+    type: 'object-batch',
+    entryId: 'object-batch',
+    label: labels.join('\n'),
+    quote: {
+      xp_raw: xpRaw,
+      mxp,
+      mxp_frac: mxpFrac,
+      diff_rune: rune,
+      note:
+        notes[0] ||
+        (items.length > 1
+          ? `${items.length} edit in coda (costo sommato vs stato attuale del pezzo)`
+          : undefined),
+    },
+    items,
+  };
+  updatePaymentUI();
 }
 
 function renderObjectTextEdit(textEdit) {
@@ -1540,8 +1610,15 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     : entry.relative
       ? formatScalarOptionLabel(entry, Number(qd.target))
       : qd.target;
-  pendingEdit = {
-    type: 'object',
+  /* Altri tipi di pending (pool/resi) non si mischiano con la coda oggetto. */
+  if (
+    pendingEdit &&
+    pendingEdit.type !== 'object' &&
+    pendingEdit.type !== 'object-batch'
+  ) {
+    pendingEdit = null;
+  }
+  objectEditCart.set(entry.id, {
     entryId: entry.id,
     location: Number(entry.location || 0),
     targetModifier,
@@ -1549,8 +1626,8 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     label: `${entry.label}: ${curLabel} → ${tgtLabel}`,
     quote: qd,
     selectEl,
-  };
-  updatePaymentUI();
+  });
+  rebuildObjectPendingFromCart();
 }
 
 async function confirmPayEdit() {
@@ -1574,6 +1651,9 @@ async function confirmPayEdit() {
     payRune: pendingEdit.plan.payRune,
   };
 
+  const mode = $('pay-mode').value;
+  const runePct = Number($('pay-rune-pct').value);
+
   let result;
   if (pendingEdit.type === 'pool') {
     result = await api('/api/apply-pool', {
@@ -1593,20 +1673,43 @@ async function confirmPayEdit() {
         value: pendingEdit.value,
       }),
     });
-  } else if (pendingEdit.type === 'object') {
-    const affectBody = {
-      ...body,
-      inventoryId: selectedInventoryId,
-      location: pendingEdit.location,
-      targetModifier: pendingEdit.targetModifier,
-    };
-    if (pendingEdit.flag) {
-      affectBody.flag = pendingEdit.flag;
-    }
-    result = await api('/api/apply-affect', {
-      method: 'POST',
-      body: JSON.stringify(affectBody),
+  } else if (pendingEdit.type === 'object-batch' || pendingEdit.type === 'object') {
+    /*
+     * Applica ogni voce della coda pagando la sua quota.
+     * Artifact per ultimo (gratis): così Darkness/Armor restano a prezzo base
+     * se Artifact non era gia' sul pezzo — allineato al calcolo listino 50+40=90.
+     */
+    const items =
+      pendingEdit.type === 'object-batch'
+        ? [...pendingEdit.items]
+        : [pendingEdit];
+    items.sort((a, b) => {
+      const aa = a.flag === 'artifact' ? 1 : 0;
+      const bb = b.flag === 'artifact' ? 1 : 0;
+      return aa - bb;
     });
+    result = { ok: true };
+    for (const item of items) {
+      const itemPlan = buildPaymentPlan(item.quote, mode, runePct);
+      const affectBody = {
+        targetToonId,
+        inventoryId: selectedInventoryId,
+        location: item.location,
+        targetModifier: item.targetModifier,
+        payXp: itemPlan.payXp,
+        payRune: itemPlan.payRune,
+      };
+      if (item.flag) {
+        affectBody.flag = item.flag;
+      }
+      result = await api('/api/apply-affect', {
+        method: 'POST',
+        body: JSON.stringify(affectBody),
+      });
+      if (!result.ok) {
+        break;
+      }
+    }
   } else if (pendingEdit.type === 'object-text') {
     result = await api('/api/apply-object-text', {
       method: 'POST',
@@ -1625,8 +1728,11 @@ async function confirmPayEdit() {
   if (result.ok) {
     $('apply-result').textContent = 'Edit applicato con successo.';
     const wasObject =
-      pendingEdit.type === 'object' || pendingEdit.type === 'object-text';
+      pendingEdit.type === 'object' ||
+      pendingEdit.type === 'object-batch' ||
+      pendingEdit.type === 'object-text';
     const invId = selectedInventoryId;
+    clearObjectEditCart();
     pendingEdit = null;
     updatePaymentUI();
     await loadCharacterState();
