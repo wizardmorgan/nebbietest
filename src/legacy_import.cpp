@@ -578,7 +578,7 @@ bool legacy_upsert_character_resistance(odb::database* db, unsigned long long to
 		return exec(sql.str());
 	}
 	catch(const std::exception& e) {
-		err = e.what();
+		err = std::string("[portal:resistance] ") + e.what();
 		return false;
 	}
 }

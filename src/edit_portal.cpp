@@ -275,24 +275,61 @@ std::atomic<bool> g_http_running {false};
 }
 
 #if USE_MYSQL
-/** Execute SQL via libmysql (no odb::transaction required). */
-[[nodiscard]] bool portal_mysql_exec(DB* db, const std::string& sql, std::string& err) {
+/** Escape for SQL string literals (portal raw mysql path). */
+[[nodiscard]] std::string portal_sql_escape(const char* s) {
+	if(!s) {
+		return {};
+	}
+	std::string out;
+	out.reserve(std::strlen(s) * 2 + 4);
+	for(const char* p = s; *p; ++p) {
+		if(*p == '\'' || *p == '\\') {
+			out.push_back('\\');
+		}
+		out.push_back(*p);
+	}
+	return out;
+}
+
+[[nodiscard]] std::string portal_sql_literal(const char* s) {
+	return "'" + portal_sql_escape(s ? s : "") + "'";
+}
+
+/**
+ * Execute SQL via libmysql (no odb::transaction required).
+ * Prefer this over db->execute / ODB persist on the mud main thread: ODB object
+ * ops and database::execute need a live transaction TLS slot that has proven
+ * unreliable for portal jobs (not_in_transaction even after begin()).
+ */
+[[nodiscard]] bool portal_mysql_exec(DB* db, const std::string& sql, std::string& err,
+									 const char* where = "portal_mysql_exec") {
 	if(!db) {
-		err = "database non disponibile";
+		err = std::string("[") + where + "] database non disponibile";
 		return false;
 	}
+	const bool had_tx = odb::transaction::has_current();
+	// #region agent log
+	mudlog(LOG_CHECK, "edit_portal: %s sql_len=%zu has_current=%d", where, sql.size(),
+		   had_tx ? 1 : 0);
+	// #endregion
 	try {
-		odb::connection_ptr cp(db->connection());
-		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		odb::connection_ptr owned;
+		odb::connection& conn =
+			had_tx ? odb::transaction::current().connection()
+				   : *(owned = db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(conn);
 		MYSQL* h = mc.handle();
 		if(mysql_query(h, sql.c_str()) != 0) {
-			err = mysql_error(h) ? mysql_error(h) : "mysql_query failed";
+			err = std::string("[") + where + "] mysql: " +
+				  (mysql_error(h) ? mysql_error(h) : "mysql_query failed");
 			return false;
 		}
 		return true;
 	}
 	catch(const std::exception& e) {
-		err = e.what();
+		err = std::string("[") + where + "] odb/conn has_current=" +
+			  (had_tx ? "1" : "0") + ": " + e.what();
+		mudlog(LOG_SYSERR, "edit_portal: %s", err.c_str());
 		return false;
 	}
 }
@@ -406,23 +443,23 @@ std::atomic<bool> g_http_running {false};
 	int exp = 0;
 	int rune = 0;
 	if(!load_stats_for_toon(toon_id, exp, rune)) {
-		err = "character_stats non trovato";
+		err = "[portal:deduct] character_stats non trovato";
 		return false;
 	}
 	const long long prince_reserve =
 		(max_level >= PRINCIPE) ? static_cast<long long>(PRINCEEXP) : 0LL;
 	const long long available_xp = static_cast<long long>(exp) - prince_reserve;
 	if(xp_cost > 0 && available_xp < static_cast<long long>(xp_cost)) {
-		err = "XP insufficienti (riserva principi 400M inclusa)";
+		err = "[portal:deduct] XP insufficienti (riserva principi 400M inclusa)";
 		return false;
 	}
 	if(rune_cost > 0 && rune < rune_cost) {
-		err = "Rune degli Eroi insufficienti";
+		err = "[portal:deduct] Rune degli Eroi insufficienti";
 		return false;
 	}
 	DB* db = Sql::getMysql();
 	if(!db) {
-		err = "database non disponibile";
+		err = "[portal:deduct] database non disponibile";
 		return false;
 	}
 	std::ostringstream sql;
@@ -430,7 +467,7 @@ std::atomic<bool> g_http_running {false};
 		<< ", p_rune_dei = p_rune_dei - " << rune_cost << " WHERE toon_id = "
 		<< toon_id;
 	/* mysql_query: evita odb::execute che richiede transaction sul thread mud. */
-	return portal_mysql_exec(db, sql.str(), err);
+	return portal_mysql_exec(db, sql.str(), err, "portal:deduct");
 }
 
 [[nodiscard]] struct obj_data* materialize_inventory_row(
@@ -566,24 +603,28 @@ std::atomic<bool> g_http_running {false};
 }
 
 [[nodiscard]] bool persist_inventory_affects(unsigned long long inventory_id,
-											 const struct obj_data* obj) {
+											 const struct obj_data* obj,
+											 std::string& err) {
 	DB* db = Sql::getMysql();
 	if(!db || !obj) {
+		err = "[portal:persist_inv] database/obj non disponibile";
 		return false;
 	}
-	std::string err;
 	std::ostringstream upd;
 	upd << "UPDATE character_inventory SET extra_flags="
 		<< static_cast<int>(obj->obj_flags.extra_flags) << ", extra_flags2="
-		<< static_cast<int>(obj->obj_flags.extra_flags2) << " WHERE id = "
-		<< inventory_id;
-	if(!portal_mysql_exec(db, upd.str(), err)) {
+		<< static_cast<int>(obj->obj_flags.extra_flags2);
+	if(obj->db_instance_id != 0) {
+		upd << ", instance_id=" << obj->db_instance_id;
+	}
+	upd << " WHERE id = " << inventory_id;
+	if(!portal_mysql_exec(db, upd.str(), err, "portal:persist_inv_upd")) {
 		return false;
 	}
 	if(!portal_mysql_exec(db,
 						  "DELETE FROM character_inventory_affect WHERE inventory_id = " +
 							  std::to_string(inventory_id),
-						  err)) {
+						  err, "portal:persist_inv_del_aff")) {
 		return false;
 	}
 	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
@@ -596,9 +637,136 @@ std::atomic<bool> g_http_running {false};
 		ins << "INSERT INTO character_inventory_affect (inventory_id, affect_slot, "
 			   "location, modifier) VALUES ("
 			<< inventory_id << ',' << i << ',' << loc << ',' << mod << ')';
-		if(!portal_mysql_exec(db, ins.str(), err)) {
+		if(!portal_mysql_exec(db, ins.str(), err, "portal:persist_inv_ins_aff")) {
 			return false;
 		}
+	}
+	return true;
+}
+
+/**
+ * Persist edited object_instance (+ affects + event) via raw mysql_query.
+ * Avoids ODB persist/update/erase_query which require transaction TLS and have
+ * been throwing not_in_transaction on the mud main thread for portal jobs.
+ */
+[[nodiscard]] bool portal_persist_object_instance_mysql(struct obj_data* obj,
+														int base_vnum,
+														std::string& err) {
+	DB* db = Sql::getMysql();
+	if(!db || !obj || obj->db_instance_id == 0 || base_vnum <= 0) {
+		err = "[portal:persist_inst] parametri non validi (serve db_instance_id!=0)";
+		return false;
+	}
+	const unsigned long long id = obj->db_instance_id;
+	// #region agent log
+	mudlog(LOG_CHECK,
+		   "edit_portal: persist_inst id=%llu base=%d has_current=%d",
+		   static_cast<unsigned long long>(id), base_vnum,
+		   odb::transaction::has_current() ? 1 : 0);
+	// #endregion
+
+	int shell_weight = obj->obj_flags.weight;
+	if(GET_ITEM_TYPE(obj) == ITEM_CONTAINER) {
+		shell_weight -= contained_weight(obj);
+		if(shell_weight < 0) {
+			shell_weight = 0;
+		}
+	}
+	const std::string stripped_name = object_instance_strip_ed_tokens(obj->name);
+	const char* name_src =
+		!stripped_name.empty() ? stripped_name.c_str()
+							   : (obj->name ? obj->name : "");
+	const std::string name_lit = portal_sql_literal(name_src);
+	const std::string sd_lit =
+		portal_sql_literal(obj->short_description ? obj->short_description : "");
+	const std::string desc_lit =
+		portal_sql_literal(obj->description ? obj->description : "");
+
+	std::ostringstream upd;
+	upd << "UPDATE object_instance SET base_vnum=" << base_vnum
+		<< ", type_flag=" << static_cast<int>(obj->obj_flags.type_flag)
+		<< ", wear_flags=" << static_cast<int>(obj->obj_flags.wear_flags)
+		<< ", extra_flags=" << static_cast<int>(obj->obj_flags.extra_flags)
+		<< ", extra_flags2=" << static_cast<int>(obj->obj_flags.extra_flags2)
+		<< ", weight=" << shell_weight << ", cost=" << obj->obj_flags.cost
+		<< ", cost_per_day=" << obj->obj_flags.cost_per_day
+		<< ", timer=" << obj->obj_flags.timer
+		<< ", bitvector=" << obj->obj_flags.bitvector
+		<< ", value0=" << obj->obj_flags.value[0]
+		<< ", value1=" << obj->obj_flags.value[1]
+		<< ", value2=" << obj->obj_flags.value[2]
+		<< ", value3=" << obj->obj_flags.value[3]
+		<< ", obj_name=" << name_lit << ", short_desc=" << sd_lit
+		<< ", description=" << desc_lit
+		<< ", updated_by_name='edit_portal', updated_at=NOW()"
+		<< " WHERE id=" << id << " AND deleted=0";
+	if(!portal_mysql_exec(db, upd.str(), err, "portal:persist_inst_upd")) {
+		return false;
+	}
+	if(!portal_mysql_exec(db,
+						  "DELETE FROM object_instance_affect WHERE instance_id=" +
+							  std::to_string(id),
+						  err, "portal:persist_inst_del_aff")) {
+		return false;
+	}
+	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+		const int loc = obj->affected[i].location;
+		const int mod = obj->affected[i].modifier;
+		if(loc == 0 && mod == 0) {
+			continue;
+		}
+		std::ostringstream ins;
+		ins << "INSERT INTO object_instance_affect (instance_id, affect_slot, "
+			   "location, modifier) VALUES ("
+			<< id << ',' << i << ',' << loc << ',' << mod << ')';
+		if(!portal_mysql_exec(db, ins.str(), err, "portal:persist_inst_ins_aff")) {
+			return false;
+		}
+	}
+	{
+		std::ostringstream ev;
+		ev << "INSERT INTO object_instance_event (instance_id, at, actor_name, kind, "
+			  "note) VALUES ("
+		   << id << ", NOW(), 'edit_portal', 'update', "
+		   << portal_sql_literal(("base=" + std::to_string(base_vnum)).c_str()) << ')';
+		if(!portal_mysql_exec(db, ev.str(), err, "portal:persist_inst_event")) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * Save apply-affect result: instance rows via raw mysql when db_instance_id!=0,
+ * always refresh character_inventory (+ affects). Never uses ODB persist/update.
+ */
+[[nodiscard]] bool portal_save_edited_inventory_item(unsigned long long inventory_id,
+													 struct obj_data* after,
+													 std::string& err) {
+	if(!after) {
+		err = "[portal:save] obj null";
+		return false;
+	}
+	// #region agent log
+	mudlog(LOG_CHECK,
+		   "edit_portal: save inv=%llu instance_id=%llu has_current=%d",
+		   static_cast<unsigned long long>(inventory_id),
+		   static_cast<unsigned long long>(after->db_instance_id),
+		   odb::transaction::has_current() ? 1 : 0);
+	// #endregion
+	if(after->db_instance_id != 0) {
+		const int base = object_instance_resolve_base_vnum(after);
+		if(base <= 0) {
+			err = "[portal:save] base_vnum non risolvibile per instance_id=" +
+				  std::to_string(after->db_instance_id);
+			return false;
+		}
+		if(!portal_persist_object_instance_mysql(after, base, err)) {
+			return false;
+		}
+	}
+	if(!persist_inventory_affects(inventory_id, after, err)) {
+		return false;
 	}
 	return true;
 }
@@ -1404,18 +1572,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
 				}
 				/* Toggle flag: gratis (il +50% si applica agli edit successivi). */
-				bool saved = false;
-				if(after->db_instance_id != 0) {
-					const int base = object_instance_resolve_base_vnum(after);
-					if(base > 0 &&
-					   object_instance_persist(after, base, 0, nullptr, true,
-											   "edit_portal") != 0) {
-						saved = true;
-					}
-				}
-				else {
-					saved = persist_inventory_affects(inventory_id, after);
-				}
+				std::string save_err;
+				const bool saved =
+					portal_save_edited_inventory_item(inventory_id, after, save_err);
 				Json d = analyze_to_json(after);
 				d["paid_xp"] = 0;
 				d["paid_rune"] = 0;
@@ -1424,7 +1583,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				d["artifact"] = IS_OBJ_STAT(after, ITEM_IMMUNE) ? 1 : 0;
 				extract_obj(after);
 				if(!saved) {
-					return json_error("salvataggio flag artifact fallito", 500);
+					return json_error(save_err.empty()
+										  ? "[portal:save] salvataggio flag artifact fallito"
+										  : save_err.c_str(),
+									  500);
 				}
 				(void)pay_xp;
 				(void)pay_rune;
@@ -1479,27 +1641,24 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				return json_error(pay_err.c_str(), 402);
 			}
 
-			bool saved = false;
-			if(after->db_instance_id != 0) {
-				const int base = object_instance_resolve_base_vnum(after);
-				if(base > 0 &&
-				   object_instance_persist(after, base, 0, nullptr, true,
-										   "edit_portal") != 0) {
-					saved = true;
-				}
-			}
-			else {
-				saved = persist_inventory_affects(inventory_id, after);
-			}
+			std::string save_err;
+			const bool saved =
+				portal_save_edited_inventory_item(inventory_id, after, save_err);
 
 			Json d = analyze_to_json(after);
 			d["paid_xp"] = xp_cost;
 			d["paid_rune"] = rune_cost;
 			d["saved"] = saved;
+			if(!save_err.empty()) {
+				d["save_err"] = save_err;
+			}
 			extract_obj(after);
 
 			if(!saved) {
-				return json_error("pagamento eseguito ma salvataggio fallito", 500);
+				return json_error(save_err.empty()
+									  ? "[portal:save] pagamento eseguito ma salvataggio fallito"
+									  : save_err.c_str(),
+								  500);
 			}
 			return json_ok(d);
 		}
@@ -1580,7 +1739,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					<< ", overedit_move_regen=" << pool.overedit_move_regen
 					<< ", edit_pool_migrated=1 WHERE toon_id = " << target_toon_id;
 				std::string sql_err;
-				if(!portal_mysql_exec(db, upd.str(), sql_err)) {
+				if(!portal_mysql_exec(db, upd.str(), sql_err, "portal:apply_pool")) {
 					return json_error(sql_err.c_str(), 500);
 				}
 			}
@@ -1717,7 +1876,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		return json_error("endpoint non trovato", 404);
 	}
 	catch(const std::exception& e) {
-		return json_error(e.what(), 500);
+		mudlog(LOG_SYSERR, "edit_portal: handle_internal exception: %s", e.what());
+		return json_error((std::string("[portal:handle] ") + e.what()).c_str(), 500);
 	}
 }
 #else

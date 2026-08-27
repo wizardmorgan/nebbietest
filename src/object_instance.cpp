@@ -751,11 +751,17 @@ bool replace_instance_affects_tx(DB* db, unsigned long long instance_id,
 	return true;
 }
 
-/** Se c'e' gia' una tx sul thread, riusala (no begin/commit). Altrimenti aprine una. */
+/** Se c'e' gia' una tx sul thread, riusala (no begin/commit). Altrimenti aprine una.
+ *  Se la tx corrente risulta finalized (TLS sporco), reset e aprine una nuova. */
 template <typename F>
 auto with_odb_tx(DB* db, F&& work) -> decltype(work()) {
 	if(odb::transaction::has_current()) {
-		return work();
+		if(!odb::transaction::current().finalized()) {
+			return work();
+		}
+		mudlog(LOG_SYSERR,
+			   "with_odb_tx: has_current but finalized — reset_current");
+		odb::transaction::reset_current();
 	}
 	odb::transaction t(db->begin());
 	t.tracer(logTracer);
@@ -964,7 +970,9 @@ unsigned long long object_instance_persist(struct obj_data* obj, int base_vnum,
 		});
 	}
 	catch(const odb::exception& e) {
-		mudlog(LOG_SYSERR, "object_instance_persist: %s", e.what());
+		mudlog(LOG_SYSERR,
+			   "object_instance_persist: %s (has_current=%d)", e.what(),
+			   odb::transaction::has_current() ? 1 : 0);
 		return 0;
 	}
 
