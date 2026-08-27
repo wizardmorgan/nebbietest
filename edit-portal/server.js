@@ -482,28 +482,20 @@ app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) 
     pay_xp: Number(req.body.payXp || 0),
     pay_rune: Number(req.body.payRune || 0),
     flag: req.body.flag || '',
+    obj_name: req.body.objName != null ? String(req.body.objName) : undefined,
+    short_desc: req.body.shortDesc != null ? String(req.body.shortDesc) : undefined,
+    description:
+      req.body.description != null ? String(req.body.description) : undefined,
   });
   res.status(result.ok ? 200 : 400).json(result);
 });
 
 app.post('/api/apply-object-text', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = parseToonId(req.body.targetToonId);
-  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
-    return res.status(403).json({ ok: false, error: 'accesso negato' });
-  }
-  if (req.session.role === 'limited') {
-    return res.status(403).json({ ok: false, error: 'tier limited: apply non consentito' });
-  }
-  const result = await mystPost('/internal/apply-object-text', {
-    target_toon_id: targetToonId,
-    inventory_id: Number(req.body.inventoryId),
-    obj_name: String(req.body.objName ?? req.body.name ?? ''),
-    short_desc: String(req.body.shortDesc ?? ''),
-    description: String(req.body.description ?? ''),
-    pay_xp: Number(req.body.payXp || 0),
-    pay_rune: Number(req.body.payRune || 0),
+  return res.status(400).json({
+    ok: false,
+    error:
+      'name/short/long non si salvano da soli: includili nel pagamento di un nuovo affect',
   });
-  res.status(result.ok ? 200 : 400).json(result);
 });
 
 app.post('/api/apply-pool', requireAuth, requireSessionToon, async (req, res) => {

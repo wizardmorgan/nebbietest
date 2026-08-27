@@ -12,8 +12,9 @@ non si toglie. Il **+50%** sul costo finale listino vale sia se il pezzo
 era già Artifact sia se il flag viene aggiunto nello stesso pacchetto
 (ordine: listino base → class_mult bi/tri → Artifact +50%).
 
-**Name / short / long:** disponibili solo dopo un edit pagato (`ITEM2_EDIT` /
-`instance_id`). Contatori 128/128/256; costo base 5 MXP (+ class_mult / Artifact).
+**Name / short / long:** gratuiti ma **solo insieme** al pagamento di un
+nuovo affect (stesso `apply-affect`). Non si salvano come passo successivo
+né da soli; Artifact gratis da solo non basta.
 
 Vedi **docs/edit-portal-nucbuntu.md** per deploy Docker completo.
 
