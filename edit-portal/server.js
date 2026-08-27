@@ -444,6 +444,7 @@ app.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (req, 
     location: Number(req.body.location),
     target_modifier: Number(req.body.targetModifier),
     flag: req.body.flag || '',
+    pending_artifact: req.body.pendingArtifact ? 1 : 0,
   });
   res.status(result.ok ? 200 : 400).json(result);
 });

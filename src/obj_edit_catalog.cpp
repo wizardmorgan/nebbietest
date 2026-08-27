@@ -911,8 +911,8 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		entries.push_back(j);
 	}
 
-	/* Flag ARTIFACT (extra_bits / ITEM_IMMUNE): +50% sul costo edit listino.
-	 * Una volta impostato (o gia' presente sul pezzo/proto) non e' rimovibile. */
+	/* Flag ARTIFACT (extra_bits / ITEM_IMMUNE): +50% sul costo finale listino
+	 * (gia' presente OPPURE aggiunto nello stesso pacchetto). Non rimovibile. */
 	{
 		const bool is_artifact = IS_OBJ_STAT(obj, ITEM_IMMUNE);
 		Json j;
@@ -928,8 +928,8 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["can_edit"] = !is_artifact;
 		j["can_remove"] = false;
 		j["hint"] = is_artifact
-						? "Permanente: +50% sul costo di ogni edit (listino)"
-						: "Una volta salvato non si puo' togliere; +50% su ogni edit";
+						? "Permanente: +50% sul costo finale di ogni edit (listino)"
+						: "Flag gratis; +50% sul costo finale di questo edit; poi permanente";
 		entries.push_back(j);
 	}
 
