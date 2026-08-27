@@ -48,6 +48,23 @@ git merge --no-edit mine/feature/edit-portal
 git stash pop   # opzionale
 ```
 
+### 4. `start-edit --remove-orphans` uccide MySQL
+
+Il file `docker-compose.edit-portal.yml` contiene **solo** `edit-portal`.
+Con `--remove-orphans`, Compose considera mysql/adminer “orfani” e li **elimina**.
+Sintomo: `Container server-mysql-1 Removed`, poi `myst <defunct>`, ping :8090 fallito.
+
+**Fix immediato:**
+
+```bash
+./scripts/mud-dev.sh start          # riparte mysql + myst + edit-portal
+# oppure separato:
+cd ~/NebbieArcane/Server
+docker compose up -d mysql adminer
+./scripts/mud-dev.sh start-mud
+./scripts/mud-dev.sh start-edit     # SENZA remove-orphans (rimosso dallo script)
+```
+
 ## Workflow consigliato (un solo repo)
 
 ```bash
