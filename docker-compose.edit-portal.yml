@@ -18,6 +18,7 @@ services:
             - MYSQL_DATABASE=nebbie
             - EDIT_STAFF_LEVEL=57
             - EDIT_LIMITED_LEVEL=51
+            - EDIT_PORTAL_UI_BUILD=8
         networks:
             - mud_stack
 

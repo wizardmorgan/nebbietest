@@ -81,20 +81,36 @@ if ! echo "$PING_JSON" | grep -q portal_api_version; then
 fi
 
 echo ""
-echo "=== ping via edit-portal :3080 ==="
-curl -sf "http://localhost:3080/api/health" | python3 -m json.tool || echo "(edit-portal non risponde)"
+echo "=== ping via edit-portal :${EDIT_WEB_PORT:-3080} ==="
+EDIT_PORT="${EDIT_WEB_PORT:-3080}"
+HEALTH_JSON="$(curl -sf "http://localhost:${EDIT_PORT}/api/health" || true)"
+if [ -z "$HEALTH_JSON" ]; then
+	echo "(edit-portal non risponde su :${EDIT_PORT})"
+else
+	echo "$HEALTH_JSON" | python3 -m json.tool
+fi
 
 echo ""
-echo "=== UI static (edit-portal app.js) ==="
-UI_JS="$(curl -sf "http://localhost:3080/app.js?v=8" 2>/dev/null || curl -sf "http://localhost:3080/app.js" 2>/dev/null || true)"
-if echo "$UI_JS" | grep -q 'EDIT_PORTAL_UI_BUILD = 8'; then
-	echo "OK: app.js serve EDIT_PORTAL_UI_BUILD = 8"
+echo "=== UI build (edit-portal) ==="
+UI_BUILD_API="$(echo "$HEALTH_JSON" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("ui_build",""))' 2>/dev/null || true)"
+IN_CONTAINER=""
+if docker exec nebbie-edit-portal grep -q 'EDIT_PORTAL_UI_BUILD = 8' /app/public/app.js 2>/dev/null; then
+	IN_CONTAINER="yes"
+fi
+UI_JS_HEAD="$(curl -sf "http://localhost:${EDIT_PORT}/app.js" 2>/dev/null | head -n 15 || true)"
+echo "  /api/health ui_build: ${UI_BUILD_API:-?}"
+echo "  container app.js marker: ${IN_CONTAINER:-no}"
+if [ -n "$UI_JS_HEAD" ]; then
+	echo "  curl /app.js (prime righe):"
+	echo "$UI_JS_HEAD" | sed 's/^/    /'
+fi
+if [ "$UI_BUILD_API" = "8" ] && [ "$IN_CONTAINER" = "yes" ]; then
+	echo "OK: edit-portal UI build 8"
 else
 	echo "" >&2
-	echo "ERRORE: app.js sul :3080 NON ha UI build 8 — container Node vecchio o start-edit fallito." >&2
-	echo "  Nel log cerca: network declared as external, but could not be found" >&2
+	echo "ERRORE: edit-portal non serve UI build 8." >&2
 	echo "  Fix: ./scripts/mud-dev.sh start-edit" >&2
-	echo "  (non usare docker compose -f docker-compose.edit-portal.yml senza MUD_STACK_NETWORK)" >&2
+	echo "  Poi: docker exec nebbie-edit-portal head -n 12 /app/public/app.js" >&2
 	exit 1
 fi
 
