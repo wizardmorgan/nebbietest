@@ -408,7 +408,15 @@ std::atomic<bool> g_http_running {false};
 		sql << "UPDATE character_stats SET exp = exp - " << xp_cost
 			<< ", p_rune_dei = p_rune_dei - " << rune_cost << " WHERE toon_id = "
 			<< toon_id;
-		db->execute(sql.str().c_str());
+		if(odb::transaction::has_current()) {
+			db->execute(sql.str().c_str());
+		}
+		else {
+			odb::transaction t(db->begin());
+			t.tracer(logTracer);
+			db->execute(sql.str().c_str());
+			t.commit();
+		}
 		return true;
 	}
 	catch(const std::exception& e) {
@@ -556,26 +564,37 @@ std::atomic<bool> g_http_running {false};
 		return false;
 	}
 	try {
-		std::ostringstream upd;
-		upd << "UPDATE character_inventory SET extra_flags="
-			<< static_cast<int>(obj->obj_flags.extra_flags) << ", extra_flags2="
-			<< static_cast<int>(obj->obj_flags.extra_flags2) << " WHERE id = "
-			<< inventory_id;
-		db->execute(upd.str().c_str());
-		db->execute(("DELETE FROM character_inventory_affect WHERE inventory_id = " +
-					 std::to_string(inventory_id))
-						.c_str());
-		for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
-			const int loc = obj->affected[i].location;
-			const int mod = obj->affected[i].modifier;
-			if(loc == APPLY_NONE || loc == APPLY_SKIP || mod == 0) {
-				continue;
+		auto persist_body = [&]() {
+			std::ostringstream upd;
+			upd << "UPDATE character_inventory SET extra_flags="
+				<< static_cast<int>(obj->obj_flags.extra_flags) << ", extra_flags2="
+				<< static_cast<int>(obj->obj_flags.extra_flags2) << " WHERE id = "
+				<< inventory_id;
+			db->execute(upd.str().c_str());
+			db->execute(("DELETE FROM character_inventory_affect WHERE inventory_id = " +
+						 std::to_string(inventory_id))
+							.c_str());
+			for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+				const int loc = obj->affected[i].location;
+				const int mod = obj->affected[i].modifier;
+				if(loc == APPLY_NONE || loc == APPLY_SKIP || mod == 0) {
+					continue;
+				}
+				std::ostringstream ins;
+				ins << "INSERT INTO character_inventory_affect (inventory_id, affect_slot, "
+					   "location, modifier) VALUES ("
+					<< inventory_id << ',' << i << ',' << loc << ',' << mod << ')';
+				db->execute(ins.str().c_str());
 			}
-			std::ostringstream ins;
-			ins << "INSERT INTO character_inventory_affect (inventory_id, affect_slot, "
-				   "location, modifier) VALUES ("
-				<< inventory_id << ',' << i << ',' << loc << ',' << mod << ')';
-			db->execute(ins.str().c_str());
+		};
+		if(odb::transaction::has_current()) {
+			persist_body();
+		}
+		else {
+			odb::transaction t(db->begin());
+			t.tracer(logTracer);
+			persist_body();
+			t.commit();
 		}
 		return true;
 	}
@@ -1560,7 +1579,15 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					<< ", overedit_mana_regen=" << pool.overedit_mana_regen
 					<< ", overedit_move_regen=" << pool.overedit_move_regen
 					<< ", edit_pool_migrated=1 WHERE toon_id = " << target_toon_id;
-				db->execute(upd.str().c_str());
+				if(odb::transaction::has_current()) {
+					db->execute(upd.str().c_str());
+				}
+				else {
+					odb::transaction t(db->begin());
+					t.tracer(logTracer);
+					db->execute(upd.str().c_str());
+					t.commit();
+				}
 			}
 			catch(const std::exception& e) {
 				return json_error(e.what(), 500);

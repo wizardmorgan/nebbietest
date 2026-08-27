@@ -555,18 +555,29 @@ bool legacy_upsert_character_resistance(odb::database* db, unsigned long long to
 		return false;
 	}
 	try {
-		if(value == 0) {
-			std::ostringstream del;
-			del << "DELETE FROM character_resistance WHERE toon_id = " << toon_id
-				<< " AND damage_type = " << damage_type;
-			db->execute(del.str().c_str());
-			return true;
+		auto upsert_body = [&]() {
+			if(value == 0) {
+				std::ostringstream del;
+				del << "DELETE FROM character_resistance WHERE toon_id = " << toon_id
+					<< " AND damage_type = " << damage_type;
+				db->execute(del.str().c_str());
+				return;
+			}
+			std::ostringstream sql;
+			sql << "INSERT INTO character_resistance (toon_id, damage_type, value) VALUES ("
+				<< toon_id << ',' << damage_type << ',' << value
+				<< ") ON DUPLICATE KEY UPDATE value = " << value;
+			db->execute(sql.str().c_str());
+		};
+		if(odb::transaction::has_current()) {
+			upsert_body();
 		}
-		std::ostringstream sql;
-		sql << "INSERT INTO character_resistance (toon_id, damage_type, value) VALUES ("
-			<< toon_id << ',' << damage_type << ',' << value
-			<< ") ON DUPLICATE KEY UPDATE value = " << value;
-		db->execute(sql.str().c_str());
+		else {
+			odb::transaction t(db->begin());
+			t.tracer(logTracer);
+			upsert_body();
+			t.commit();
+		}
 		return true;
 	}
 	catch(const std::exception& e) {
