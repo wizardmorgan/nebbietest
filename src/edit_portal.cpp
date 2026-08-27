@@ -310,17 +310,10 @@ std::atomic<bool> g_http_running {false};
 	/* TLS ODB sporco (has_current ma finalized) → connection() sulla tx esplode
 	 * con "operation can only be performed in transaction". Reset e usa il pool. */
 	if(odb::transaction::has_current() && odb::transaction::current().finalized()) {
-		mudlog(LOG_SYSERR,
-			   "edit_portal: %s reset finalized ODB transaction before mysql_query",
-			   where);
 		odb::transaction::reset_current();
 	}
-	const bool had_tx = odb::transaction::has_current();
-	mudlog(LOG_CHECK, "edit_portal: %s sql_len=%lu has_current=%d", where,
-		   static_cast<unsigned long>(sql.size()), had_tx ? 1 : 0);
 	try {
-		/* database::connection(): se c'e' tx attiva riusa quella, altrimenti pool.
-		 * Non chiamare transaction::current().connection() a mano. */
+		/* database::connection(): se c'e' tx attiva riusa quella, altrimenti pool. */
 		odb::connection_ptr cp(db->connection());
 		auto& mc = static_cast<odb::mysql::connection&>(*cp);
 		MYSQL* h = mc.handle();
@@ -332,6 +325,7 @@ std::atomic<bool> g_http_running {false};
 		return true;
 	}
 	catch(const std::exception& e) {
+		const bool had_tx = odb::transaction::has_current();
 		err = std::string("[") + where + "] odb/conn has_current=" +
 			  (had_tx ? "1" : "0") + ": " + e.what();
 		mudlog(LOG_SYSERR, "edit_portal: %s", err.c_str());
@@ -663,12 +657,6 @@ std::atomic<bool> g_http_running {false};
 		return false;
 	}
 	const unsigned long long id = obj->db_instance_id;
-	// #region agent log
-	mudlog(LOG_CHECK,
-		   "edit_portal: persist_inst id=%llu base=%d has_current=%d",
-		   static_cast<unsigned long long>(id), base_vnum,
-		   odb::transaction::has_current() ? 1 : 0);
-	// #endregion
 
 	int shell_weight = obj->obj_flags.weight;
 	if(GET_ITEM_TYPE(obj) == ITEM_CONTAINER) {
@@ -752,13 +740,6 @@ std::atomic<bool> g_http_running {false};
 		err = "[portal:save] obj null";
 		return false;
 	}
-	// #region agent log
-	mudlog(LOG_CHECK,
-		   "edit_portal: save inv=%llu instance_id=%llu has_current=%d",
-		   static_cast<unsigned long long>(inventory_id),
-		   static_cast<unsigned long long>(after->db_instance_id),
-		   odb::transaction::has_current() ? 1 : 0);
-	// #endregion
 	if(after->db_instance_id != 0) {
 		const int base = object_instance_resolve_base_vnum(after);
 		if(base <= 0) {
