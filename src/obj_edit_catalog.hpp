@@ -38,7 +38,9 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] bool object_portal_editable(const struct obj_data* obj,
 										  const char* toon_name) noexcept;
 
-/** false = non mostrare in inventario portale (categorie staff / tipi disabilitati). */
+/** false = non mostrare in inventario portale.
+ * Esclude sempre RARO (cost >= LIM_ITEM_COST_MIN), TAN, HAS-GEMS (ITEM2_INSERT),
+ * simboli clan; poi applica categorie staff. */
 [[nodiscard]] bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 														const char* toon_name) noexcept;
 

@@ -693,15 +693,18 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	if(!obj) {
 		return false;
 	}
+	/* TAN_* prototipi / pezzi da skill tan. */
 	if(object_is_tanned(obj)) {
 		return false;
 	}
+	/* [RARO] in stat/ident: cost >= LIM_ITEM_COST_MIN (non c'e' un flag dedicato). */
 	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
 		return false;
 	}
 	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
 		return false;
 	}
+	/* HAS-GEMS (extra_bits2) = ITEM2_INSERT. */
 	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
 		return false;
 	}
@@ -739,7 +742,7 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 		return "simbolo clan";
 	}
 	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
-		return "oggetto con insert";
+		return "HAS-GEMS (insert)";
 	}
 	if(!owner_matches(obj, toon_name)) {
 		return "owner diverso dal PG (ED/personal per altro PG)";
@@ -757,6 +760,13 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 										  const char* toon_name) noexcept {
 	(void)toon_name;
+	if(!obj) {
+		return false;
+	}
+	/* Mai in lista: RARO (cost>=LIM), TAN, HAS-GEMS, simbolo clan. */
+	if(!object_portal_passes_exclusions(obj)) {
+		return false;
+	}
 	return object_portal_included(obj);
 }
 
