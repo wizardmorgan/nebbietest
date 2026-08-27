@@ -16,7 +16,7 @@ void edit_portal_process_pending();
 inline constexpr int kEditPortalStaffLevel = 57;
 inline constexpr int kEditPortalLimitedLevel = 51;
 /** Incrementare quando cambia l'API HTTP interna del portale edit. */
-inline constexpr int kEditPortalApiVersion = 3;
+inline constexpr int kEditPortalApiVersion = 4;
 inline constexpr const char kEditPortalApiVersionTag[] = "portal_api_version";
 
 } // namespace Alarmud
