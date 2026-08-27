@@ -845,6 +845,26 @@ std::atomic<bool> g_http_running {false};
 }
 
 /**
+ * Come do_personalize / SetPersonOnSave: owner sul toon target + flag PERSONAL.
+ * Le keyword restano senza ED* (owner in personal_owner / object_instance.owner_name).
+ */
+void portal_apply_personalize(struct obj_data* obj, const char* owner_name) {
+	if(!obj || !owner_name || !*owner_name) {
+		return;
+	}
+	SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PERSONAL);
+	strncpy(obj->personal_owner, owner_name, sizeof(obj->personal_owner) - 1);
+	obj->personal_owner[sizeof(obj->personal_owner) - 1] = '\0';
+	if(obj->name) {
+		const std::string stripped = object_instance_strip_ed_tokens(obj->name);
+		if(!stripped.empty() && stripped != obj->name) {
+			free(obj->name);
+			obj->name = strdup(stripped.c_str());
+		}
+	}
+}
+
+/**
  * Save apply-affect result: create/update object_instance via raw mysql, then
  * refresh character_inventory (+ affects + instance_id link). Never uses ODB.
  */
@@ -868,6 +888,10 @@ std::atomic<bool> g_http_running {false};
 	}
 	if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
 		SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
+	}
+	/* Stesso effetto di «personalize <obj> <toon>»: PERSONAL + owner del target. */
+	if(owner_name && *owner_name) {
+		portal_apply_personalize(after, owner_name);
 	}
 	if(!portal_persist_object_instance_mysql(after, base, owner_name, err)) {
 		return false;
