@@ -307,17 +307,22 @@ std::atomic<bool> g_http_running {false};
 		err = std::string("[") + where + "] database non disponibile";
 		return false;
 	}
+	/* TLS ODB sporco (has_current ma finalized) → connection() sulla tx esplode
+	 * con "operation can only be performed in transaction". Reset e usa il pool. */
+	if(odb::transaction::has_current() && odb::transaction::current().finalized()) {
+		mudlog(LOG_SYSERR,
+			   "edit_portal: %s reset finalized ODB transaction before mysql_query",
+			   where);
+		odb::transaction::reset_current();
+	}
 	const bool had_tx = odb::transaction::has_current();
-	// #region agent log
 	mudlog(LOG_CHECK, "edit_portal: %s sql_len=%zu has_current=%d", where, sql.size(),
 		   had_tx ? 1 : 0);
-	// #endregion
 	try {
-		odb::connection_ptr owned;
-		odb::connection& conn =
-			had_tx ? odb::transaction::current().connection()
-				   : *(owned = db->connection());
-		auto& mc = static_cast<odb::mysql::connection&>(conn);
+		/* database::connection(): se c'e' tx attiva riusa quella, altrimenti pool.
+		 * Non chiamare transaction::current().connection() a mano. */
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
 		MYSQL* h = mc.handle();
 		if(mysql_query(h, sql.c_str()) != 0) {
 			err = std::string("[") + where + "] mysql: " +
