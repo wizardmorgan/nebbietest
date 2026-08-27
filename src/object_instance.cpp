@@ -928,9 +928,7 @@ unsigned long long object_instance_persist(struct obj_data* obj, int base_vnum,
 		});
 	}
 	catch(const odb::exception& e) {
-		mudlog(LOG_SYSERR,
-			   "object_instance_persist: %s (has_current=%d)", e.what(),
-			   odb::transaction::has_current() ? 1 : 0);
+		mudlog(LOG_SYSERR, "object_instance_persist: %s", e.what());
 		return 0;
 	}
 
