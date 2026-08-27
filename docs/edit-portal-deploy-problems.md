@@ -57,7 +57,7 @@ git merge --no-edit mine/feature/edit-portal
 
 ./scripts/mud-dev.sh doctor          # diagnosi mount + md5 + ping
 ./scripts/mud-dev.sh rebuild-myst  # build + ricrea container se mount errato + avvio
-./scripts/verify-myst-portal.sh    # deve mostrare portal_api_version: 6
+./scripts/verify-myst-portal.sh    # deve mostrare portal_api_version: 7
 
 docker compose up -d --build edit-portal
 ```
@@ -65,7 +65,7 @@ docker compose up -d --build edit-portal
 ## Cosa deve essere vero alla fine
 
 1. `./scripts/mud-dev.sh doctor` → mount `/app` = `~/NebbieArcane/Server`, MD5 host = container  
-2. Ping `8090` → `"portal_api_version": 6`  
+2. Ping `8090` → `"portal_api_version": 7`  
 3. Salvataggio categorie staff → scrive `mudroot/lib/edit_system.json` senza errore  
 4. `pgrep myst` → `-d mudroot/lib` (non `-d lib` da script vecchio)
 
