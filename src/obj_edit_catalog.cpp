@@ -294,12 +294,12 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 }
 
 /**
- * Cap listino = bonus *oltre* il prototipo (armor −40, hit/dam +2, …).
- * Stats STR/… restano tetto assoluto 0…3 sul pezzo.
+ * Cap listino = bonus *oltre* il prototipo (stats +3, armor −40, hit/dam +2, …).
+ * Tutti gli scalar del listino oggetto usano questo modello.
  */
 [[nodiscard]] static bool listino_uses_proto_relative_range(int location) noexcept {
-	return is_combat_edit_location(location) || location == APPLY_AC
-		   || location == APPLY_SPELLFAIL;
+	ObjEditListinoSpec spec;
+	return obj_edit_listino_spec(location, spec);
 }
 
 [[nodiscard]] static int prototype_display_current(const struct obj_data* obj,
@@ -514,10 +514,11 @@ Json object_affect_slots_json(const struct obj_data* obj) {
 	}
 
 	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE
-	   || location == APPLY_SPELL) {
+	   || location == APPLY_SPELL || location == APPLY_AFF2) {
 		if(target_modifier == 0) {
-			err = location == APPLY_SPELL ? "spell bit mancante"
-										 : "immune bit mancante";
+			err = (location == APPLY_SPELL || location == APPLY_AFF2)
+					  ? "spell bit mancante"
+					  : "immune bit mancante";
 			return false;
 		}
 		const int slot = find_affect_slot_for_location(obj, location);
@@ -854,47 +855,45 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 	}
 
 	/* Spell editabili — listino https://www.nebbiearcane.it/listino-edits/
-	 * Costi in CheckValueObj (APPLY_SPELL). Spy e Danger Sense = AFF_SCRYING. */
+	 * Spy = AFF_SCRYING (APPLY_SPELL); Danger Sense = AFF2_DANGER_SENSE (APPLY_AFF2). */
 	static const struct {
+		int location;
 		unsigned long bit;
 		const char* slug;
 		const char* label;
 		long mxp;
 		long rune;
 	} spell_edits[] = {
-		{AFF_TELEPATHY, "telepathy", "Telepathy", 50, 70},
-		{AFF_GLOBE_DARKNESS, "darkness", "Darkness", 50, 70},
-		{AFF_WATERBREATH, "waterbreath", "Waterbreath", 50, 70},
-		{AFF_TRUE_SIGHT, "true_sight", "True Sight", 50, 70},
-		{AFF_INVISIBLE, "invisibility", "Invisibility", 30, 70},
-		{AFF_SENSE_LIFE, "sense_life", "Sense Life", 50, 70},
-		{AFF_SCRYING, "danger_sense", "Psionic Danger Sense", 150, 180},
-		{AFF_SCRYING, "spy", "Spy", 150, 180},
-		{AFF_PROTECT_FROM_EVIL, "prot_evil", "Protection from Evil", 50, 70},
-		{AFF_FLYING, "fly", "Fly", 50, 70},
+		{APPLY_SPELL, AFF_TELEPATHY, "telepathy", "Telepathy", 50, 70},
+		{APPLY_SPELL, AFF_GLOBE_DARKNESS, "darkness", "Darkness", 50, 70},
+		{APPLY_SPELL, AFF_WATERBREATH, "waterbreath", "Waterbreath", 50, 70},
+		{APPLY_SPELL, AFF_TRUE_SIGHT, "true_sight", "True Sight", 50, 70},
+		{APPLY_SPELL, AFF_INVISIBLE, "invisibility", "Invisibility", 30, 70},
+		{APPLY_SPELL, AFF_SENSE_LIFE, "sense_life", "Sense Life", 50, 70},
+		{APPLY_AFF2, AFF2_DANGER_SENSE, "danger_sense", "Psionic Danger Sense", 150, 180},
+		{APPLY_SPELL, AFF_SCRYING, "spy", "Spy", 150, 180},
+		{APPLY_SPELL, AFF_PROTECT_FROM_EVIL, "prot_evil", "Protection from Evil", 50, 70},
+		{APPLY_SPELL, AFF_FLYING, "fly", "Fly", 50, 70},
 	};
-	{
-		const int spell_bits = sum_location_mod(obj, APPLY_SPELL);
-		const int spell_slot = find_affect_slot_for_location(obj, APPLY_SPELL);
-		for(const auto& sp : spell_edits) {
-			const bool has_affect =
-				(spell_bits & static_cast<int>(sp.bit)) != 0;
-			const bool can_add = !has_affect && (spell_slot >= 0 || free_slots > 0);
-			Json j;
-			j["id"] = std::string("spell.") + sp.slug;
-			j["label"] = sp.label;
-			j["location"] = APPLY_SPELL;
-			j["spell_bit"] = sp.bit;
-			j["kind"] = "spell";
-			j["has_affect"] = has_affect;
-			j["occupied_slot"] = spell_slot;
-			j["can_add"] = can_add;
-			j["can_edit"] = has_affect || can_add;
-			j["can_remove"] = false;
-			j["mxp_per_step"] = sp.mxp;
-			j["rune_per_step"] = sp.rune;
-			entries.push_back(j);
-		}
+	for(const auto& sp : spell_edits) {
+		const int bits = sum_location_mod(obj, sp.location);
+		const int sp_slot = find_affect_slot_for_location(obj, sp.location);
+		const bool has_affect = (bits & static_cast<int>(sp.bit)) != 0;
+		const bool can_add = !has_affect && (sp_slot >= 0 || free_slots > 0);
+		Json j;
+		j["id"] = std::string("spell.") + sp.slug;
+		j["label"] = sp.label;
+		j["location"] = sp.location;
+		j["spell_bit"] = sp.bit;
+		j["kind"] = "spell";
+		j["has_affect"] = has_affect;
+		j["occupied_slot"] = sp_slot;
+		j["can_add"] = can_add;
+		j["can_edit"] = has_affect || can_add;
+		j["can_remove"] = false;
+		j["mxp_per_step"] = sp.mxp;
+		j["rune_per_step"] = sp.rune;
+		entries.push_back(j);
 	}
 
 	/* Flag ARTIFACT (extra_bits / ITEM_IMMUNE): +50% sul costo edit listino.
@@ -973,6 +972,10 @@ int object_immune_current_bits(const struct obj_data* obj) noexcept {
 
 int object_spell_current_bits(const struct obj_data* obj) noexcept {
 	return sum_location_mod(obj, APPLY_SPELL);
+}
+
+int object_aff2_current_bits(const struct obj_data* obj) noexcept {
+	return sum_location_mod(obj, APPLY_AFF2);
 }
 
 bool object_edit_location_affects_dam(int location) noexcept {
