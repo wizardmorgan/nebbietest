@@ -555,30 +555,27 @@ bool legacy_upsert_character_resistance(odb::database* db, unsigned long long to
 		return false;
 	}
 	try {
-		auto upsert_body = [&]() {
-			if(value == 0) {
-				std::ostringstream del;
-				del << "DELETE FROM character_resistance WHERE toon_id = " << toon_id
-					<< " AND damage_type = " << damage_type;
-				db->execute(del.str().c_str());
-				return;
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		auto exec = [&](const std::string& sql) -> bool {
+			if(mysql_query(h, sql.c_str()) != 0) {
+				err = mysql_error(h) ? mysql_error(h) : "mysql_query failed";
+				return false;
 			}
-			std::ostringstream sql;
-			sql << "INSERT INTO character_resistance (toon_id, damage_type, value) VALUES ("
-				<< toon_id << ',' << damage_type << ',' << value
-				<< ") ON DUPLICATE KEY UPDATE value = " << value;
-			db->execute(sql.str().c_str());
+			return true;
 		};
-		if(odb::transaction::has_current()) {
-			upsert_body();
+		if(value == 0) {
+			std::ostringstream del;
+			del << "DELETE FROM character_resistance WHERE toon_id = " << toon_id
+				<< " AND damage_type = " << damage_type;
+			return exec(del.str());
 		}
-		else {
-			odb::transaction t(db->begin());
-			t.tracer(logTracer);
-			upsert_body();
-			t.commit();
-		}
-		return true;
+		std::ostringstream sql;
+		sql << "INSERT INTO character_resistance (toon_id, damage_type, value) VALUES ("
+			<< toon_id << ',' << damage_type << ',' << value
+			<< ") ON DUPLICATE KEY UPDATE value = " << value;
+		return exec(sql.str());
 	}
 	catch(const std::exception& e) {
 		err = e.what();

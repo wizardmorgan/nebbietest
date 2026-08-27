@@ -275,6 +275,28 @@ std::atomic<bool> g_http_running {false};
 }
 
 #if USE_MYSQL
+/** Execute SQL via libmysql (no odb::transaction required). */
+[[nodiscard]] bool portal_mysql_exec(DB* db, const std::string& sql, std::string& err) {
+	if(!db) {
+		err = "database non disponibile";
+		return false;
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		if(mysql_query(h, sql.c_str()) != 0) {
+			err = mysql_error(h) ? mysql_error(h) : "mysql_query failed";
+			return false;
+		}
+		return true;
+	}
+	catch(const std::exception& e) {
+		err = e.what();
+		return false;
+	}
+}
+
 [[nodiscard]] int max_level_for_toon(unsigned long long toon_id) {
 	DB* db = Sql::getMysql();
 	if(!db || toon_id == 0) {
@@ -403,26 +425,12 @@ std::atomic<bool> g_http_running {false};
 		err = "database non disponibile";
 		return false;
 	}
-	try {
-		std::ostringstream sql;
-		sql << "UPDATE character_stats SET exp = exp - " << xp_cost
-			<< ", p_rune_dei = p_rune_dei - " << rune_cost << " WHERE toon_id = "
-			<< toon_id;
-		if(odb::transaction::has_current()) {
-			db->execute(sql.str().c_str());
-		}
-		else {
-			odb::transaction t(db->begin());
-			t.tracer(logTracer);
-			db->execute(sql.str().c_str());
-			t.commit();
-		}
-		return true;
-	}
-	catch(const std::exception& e) {
-		err = e.what();
-		return false;
-	}
+	std::ostringstream sql;
+	sql << "UPDATE character_stats SET exp = exp - " << xp_cost
+		<< ", p_rune_dei = p_rune_dei - " << rune_cost << " WHERE toon_id = "
+		<< toon_id;
+	/* mysql_query: evita odb::execute che richiede transaction sul thread mud. */
+	return portal_mysql_exec(db, sql.str(), err);
 }
 
 [[nodiscard]] struct obj_data* materialize_inventory_row(
@@ -563,44 +571,36 @@ std::atomic<bool> g_http_running {false};
 	if(!db || !obj) {
 		return false;
 	}
-	try {
-		auto persist_body = [&]() {
-			std::ostringstream upd;
-			upd << "UPDATE character_inventory SET extra_flags="
-				<< static_cast<int>(obj->obj_flags.extra_flags) << ", extra_flags2="
-				<< static_cast<int>(obj->obj_flags.extra_flags2) << " WHERE id = "
-				<< inventory_id;
-			db->execute(upd.str().c_str());
-			db->execute(("DELETE FROM character_inventory_affect WHERE inventory_id = " +
-						 std::to_string(inventory_id))
-							.c_str());
-			for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
-				const int loc = obj->affected[i].location;
-				const int mod = obj->affected[i].modifier;
-				if(loc == APPLY_NONE || loc == APPLY_SKIP || mod == 0) {
-					continue;
-				}
-				std::ostringstream ins;
-				ins << "INSERT INTO character_inventory_affect (inventory_id, affect_slot, "
-					   "location, modifier) VALUES ("
-					<< inventory_id << ',' << i << ',' << loc << ',' << mod << ')';
-				db->execute(ins.str().c_str());
-			}
-		};
-		if(odb::transaction::has_current()) {
-			persist_body();
-		}
-		else {
-			odb::transaction t(db->begin());
-			t.tracer(logTracer);
-			persist_body();
-			t.commit();
-		}
-		return true;
-	}
-	catch(...) {
+	std::string err;
+	std::ostringstream upd;
+	upd << "UPDATE character_inventory SET extra_flags="
+		<< static_cast<int>(obj->obj_flags.extra_flags) << ", extra_flags2="
+		<< static_cast<int>(obj->obj_flags.extra_flags2) << " WHERE id = "
+		<< inventory_id;
+	if(!portal_mysql_exec(db, upd.str(), err)) {
 		return false;
 	}
+	if(!portal_mysql_exec(db,
+						  "DELETE FROM character_inventory_affect WHERE inventory_id = " +
+							  std::to_string(inventory_id),
+						  err)) {
+		return false;
+	}
+	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+		const int loc = obj->affected[i].location;
+		const int mod = obj->affected[i].modifier;
+		if(loc == APPLY_NONE || loc == APPLY_SKIP || mod == 0) {
+			continue;
+		}
+		std::ostringstream ins;
+		ins << "INSERT INTO character_inventory_affect (inventory_id, affect_slot, "
+			   "location, modifier) VALUES ("
+			<< inventory_id << ',' << i << ',' << loc << ',' << mod << ')';
+		if(!portal_mysql_exec(db, ins.str(), err)) {
+			return false;
+		}
+	}
+	return true;
 }
 
 [[nodiscard]] Json analyze_to_json(const struct obj_data* obj) {
@@ -1579,14 +1579,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					<< ", overedit_mana_regen=" << pool.overedit_mana_regen
 					<< ", overedit_move_regen=" << pool.overedit_move_regen
 					<< ", edit_pool_migrated=1 WHERE toon_id = " << target_toon_id;
-				if(odb::transaction::has_current()) {
-					db->execute(upd.str().c_str());
-				}
-				else {
-					odb::transaction t(db->begin());
-					t.tracer(logTracer);
-					db->execute(upd.str().c_str());
-					t.commit();
+				std::string sql_err;
+				if(!portal_mysql_exec(db, upd.str(), sql_err)) {
+					return json_error(sql_err.c_str(), 500);
 				}
 			}
 			catch(const std::exception& e) {
