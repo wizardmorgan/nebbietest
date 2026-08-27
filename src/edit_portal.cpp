@@ -941,20 +941,6 @@ void portal_set_obj_string(char*& field, const std::string& value) {
 	field = strdup(value.c_str());
 }
 
-[[nodiscard]] long portal_text_edit_xp_raw(const struct obj_data* obj) {
-	long xp = kObjEditTextXpRaw;
-	const ObjEditAnalysis a =
-		AnalyzeObjEdit(const_cast<struct obj_data*>(obj));
-	if(a.class_mult != 1.0 && xp > 0) {
-		xp = static_cast<long>(
-			std::llround(static_cast<double>(xp) * a.class_mult));
-	}
-	if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp > 0) {
-		xp = (xp * 3) / 2;
-	}
-	return xp;
-}
-
 inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 [[nodiscard]] Json quote_from_pool(const edit_pool_quote& quote) {
@@ -1478,6 +1464,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					const int bits = object_immune_current_bits(obj);
 					e["current"] = (bits & static_cast<int>(bit)) ? 1 : 0;
 				}
+				else if(kind == "spell") {
+					const unsigned long bit =
+						e.value("spell_bit", 0UL);
+					const int bits = object_spell_current_bits(obj);
+					e["current"] = (bits & static_cast<int>(bit)) ? 1 : 0;
+				}
 				else if(kind == "flag" && e.value("flag", "") == "artifact") {
 					e["current"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
 				}
@@ -1541,7 +1533,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				text["long_max"] = kObjEditTextLongMax;
 				text["hint"] =
 					can_text
-						? "Name / short / long (codici $c); solo dopo un edit pagato"
+						? "Name / short / long gratuiti (codici $c); solo dopo un edit pagato"
 						: "Disponibile dopo il primo edit pagato sull'oggetto";
 				d["text_edit"] = text;
 			}
@@ -1645,6 +1637,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			int target = target_modifier;
 			if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE) {
 				const int bits = object_immune_current_bits(obj);
+				current = (bits & target_modifier) ? 1 : 0;
+				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
+			}
+			else if(location == APPLY_SPELL) {
+				const int bits = object_spell_current_bits(obj);
 				current = (bits & target_modifier) ? 1 : 0;
 				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
 			}
@@ -1942,11 +1939,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				return json_error("nessuna modifica a name/short/long", 400);
 			}
 
-			const long xp_raw = portal_text_edit_xp_raw(obj);
-			const int rune_cost = kObjEditTextRune;
+			/* Name/short/long: gratis (nessun listino ufficiale). */
 			if(!is_apply) {
-				Json d = quote_xp_json(xp_raw, rune_cost);
-				d["diff_rune"] = rune_cost;
+				Json d = quote_xp_json(0, 0);
+				d["diff_rune"] = 0;
 				d["inventory_id"] = inventory_id;
 				d["obj_name"] = new_name;
 				d["short_desc"] = new_short;
@@ -1957,10 +1953,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				d["name_max"] = kObjEditTextNameMax;
 				d["short_max"] = kObjEditTextShortMax;
 				d["long_max"] = kObjEditTextLongMax;
-				d["note"] = IS_OBJ_STAT(obj, ITEM_IMMUNE)
-								? "Edit testo: include maggiorazione Artifact +50%"
-								: "Edit testo (name/short/long)";
-				d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
+				d["note"] = "Edit testo gratuito (name/short/long)";
+				d["free"] = true;
 				extract_obj(obj);
 				return json_ok(d);
 			}
@@ -1972,21 +1966,16 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
 			}
 
-			const int xp_cost = pay_xp > 0 ? pay_xp : static_cast<int>(std::max(0L, xp_raw));
-			const int rune_pay = pay_rune > 0 ? pay_rune : rune_cost;
-			const int max_level = max_level_for_toon(target_toon_id);
-			std::string pay_err;
-			if(!deduct_payment(target_toon_id, xp_cost, rune_pay, max_level, pay_err)) {
-				extract_obj(obj);
-				return json_error(pay_err.c_str(), 402);
-			}
+			(void)pay_xp;
+			(void)pay_rune;
 			std::string save_err;
 			const bool saved = portal_save_edited_inventory_item(
 				inventory_id, obj, save_err, target_name.c_str());
 			Json d = analyze_to_json(obj);
-			d["paid_xp"] = xp_cost;
-			d["paid_rune"] = rune_pay;
+			d["paid_xp"] = 0;
+			d["paid_rune"] = 0;
 			d["saved"] = saved;
+			d["free"] = true;
 			d["instance_id"] = obj->db_instance_id;
 			d["obj_name"] = obj->name ? obj->name : "";
 			d["short_desc"] = obj->short_description ? obj->short_description : "";
@@ -1994,7 +1983,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			extract_obj(obj);
 			if(!saved) {
 				return json_error(save_err.empty()
-									  ? "[portal:save] pagamento eseguito ma salvataggio testo fallito"
+									  ? "[portal:save] salvataggio testo fallito"
 									  : save_err.c_str(),
 								  500);
 			}

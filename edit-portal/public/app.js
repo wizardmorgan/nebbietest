@@ -4,7 +4,7 @@ const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 12;
+const EDIT_PORTAL_UI_BUILD = 13;
 
 let session = null;
 let targetToonId = null;
@@ -927,6 +927,7 @@ function renderObjectAffectSlots(affectSlots) {
 function objectEditSection(id) {
   if (id === 'artifact' || id.startsWith('flag.')) return 'Proprietà';
   if (id.startsWith('immune.')) return 'Resistenze / immunità';
+  if (id.startsWith('spell.')) return 'Spell editabili';
   if (['armor', 'spellfail'].includes(id)) return 'Armatura / cast';
   if (['hitndam', 'hitnsp', 'hitroll', 'damroll', 'spellpower'].includes(id)) {
     return 'Combattimento';
@@ -941,6 +942,7 @@ const OBJECT_EDIT_SECTION_ORDER = [
   'Combattimento',
   'Proprietà',
   'Resistenze / immunità',
+  'Spell editabili',
 ];
 
 function objectEditSectionRank(name) {
@@ -948,7 +950,11 @@ function objectEditSectionRank(name) {
   return i >= 0 ? i : 99;
 }
 
-/** Opzioni listino: min/max inclusivi, step in valore assoluto (AC step −10 → −40…0). */
+/**
+ * Opzioni listino.
+ * relative=true: min/max sono extra oltre proto (es. armor −40…0, hit +0…+2);
+ * i valori nel select sono totali assoluti (proto + extra).
+ */
 function buildObjectScalarOptions(entry) {
   const min = Number(entry.min);
   const max = Number(entry.max);
@@ -956,10 +962,26 @@ function buildObjectScalarOptions(entry) {
   const lo = Math.min(min, max);
   const hi = Math.max(min, max);
   const opts = [];
+  if (entry.relative) {
+    const proto = Number(entry.proto || 0);
+    for (let d = lo; d <= hi; d += absStep) {
+      opts.push(proto + d);
+    }
+    return opts;
+  }
   for (let v = lo; v <= hi; v += absStep) {
     opts.push(v);
   }
   return opts;
+}
+
+function formatScalarOptionLabel(entry, absolute) {
+  if (!entry.relative) return String(absolute);
+  const proto = Number(entry.proto || 0);
+  const delta = absolute - proto;
+  if (delta === 0) return `nessuno (proto ${proto})`;
+  const sign = delta > 0 ? '+' : '';
+  return `${sign}${delta} → totale ${absolute}`;
 }
 
 function objectEntryCostHint(entry) {
@@ -973,7 +995,13 @@ function objectEntryRangeLabel(entry) {
   const min = Number(entry.min);
   const max = Number(entry.max);
   const step = Number(entry.step) || 1;
-  if (entry.kind === 'immune') return '';
+  if (entry.kind === 'immune' || entry.kind === 'spell' || entry.kind === 'flag') {
+    return '';
+  }
+  if (entry.relative) {
+    const proto = Number(entry.proto || 0);
+    return ` (extra ${min}…${max} oltre proto ${proto}, step ${step})`;
+  }
   return ` (${min}…${max}, step ${step})`;
 }
 
@@ -984,6 +1012,13 @@ function objectEntrySlotHint(entry) {
       return `slot #${slotIdx + 1} (immunità presente)`;
     }
     if (entry.can_add) return 'nuova immunità (usa slot RESISTANCE)';
+    return 'nessuno slot libero';
+  }
+  if (entry.kind === 'spell') {
+    if (entry.has_affect && slotIdx >= 0) {
+      return `slot #${slotIdx + 1} (spell presente)`;
+    }
+    if (entry.can_add) return 'nuova spell (usa slot APPLY_SPELL)';
     return 'nessuno slot libero';
   }
   if (entry.has_affect && slotIdx >= 0) {
@@ -1037,7 +1072,7 @@ function renderObjectTextEdit(textEdit) {
   hint.className = 'hint';
   hint.textContent =
     textEdit.hint ||
-    'Codici colore $cMBFG ammessi. Contatore = lunghezza grezza (come in DB).';
+    'Codici colore $cMBFG ammessi. Contatore = lunghezza grezza (come in DB). Salvataggio gratuito.';
   body.appendChild(hint);
 
   const fields = [
@@ -1098,7 +1133,7 @@ function renderObjectTextEdit(textEdit) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn-secondary';
-  btn.textContent = 'Calcola costo testo';
+  btn.textContent = 'Salva testo';
   btn.onclick = async () => {
     const objName = inputs.name.value;
     const shortDesc = inputs.short.value;
@@ -1108,10 +1143,18 @@ function renderObjectTextEdit(textEdit) {
       shortDesc.length > shortMax ||
       description.length > longMax
     ) {
-      alert('Uno o più campi superano la lunghezza massima: correggi prima di quotare.');
+      alert('Uno o più campi superano la lunghezza massima: correggi prima di salvare.');
       return;
     }
-    const data = await api('/api/quote-object-text', {
+    const targetName = charState?.name || 'personaggio';
+    const isStaffOnOther =
+      session.role === 'staff' && Number(targetToonId) !== Number(session.sessionToonId);
+    let msg = `Salvare name/short/long su "${targetName}"?\n(gratuito, nessun pagamento)`;
+    if (isStaffOnOther) {
+      msg += `\n\nSTAFF: target toon ${targetToonId}.`;
+    }
+    if (!confirm(msg)) return;
+    const result = await api('/api/apply-object-text', {
       method: 'POST',
       body: JSON.stringify({
         targetToonId,
@@ -1119,22 +1162,24 @@ function renderObjectTextEdit(textEdit) {
         objName,
         shortDesc,
         description,
+        payXp: 0,
+        payRune: 0,
       }),
     });
-    if (!data.ok) {
-      alert(data.error || 'Quote testo fallita');
+    if (!result.ok) {
+      alert(result.error || 'Salvataggio testo fallito');
       return;
     }
-    pendingEdit = {
-      type: 'object-text',
-      entryId: 'object-text',
-      label: 'Name / short / long',
-      quote: data.data,
-      objName,
-      shortDesc,
-      description,
-    };
+    $('apply-result').textContent = 'Testo salvato (gratuito).';
+    const invId = selectedInventoryId;
+    pendingEdit = null;
     updatePaymentUI();
+    await loadCharacterState();
+    if (invId) {
+      await loadInventory();
+      const li = document.querySelector('#inventory-list .item.selected');
+      if (li) await selectItem(invId, li);
+    }
   };
   body.appendChild(btn);
   details.appendChild(body);
@@ -1240,7 +1285,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       const select = document.createElement('select');
       select.disabled = !canEdit || session.role === 'limited';
 
-      if (entry.kind === 'immune' || entry.kind === 'flag') {
+      if (entry.kind === 'immune' || entry.kind === 'flag' || entry.kind === 'spell') {
         [
           { v: 0, l: 'No' },
           { v: 1, l: 'Sì' },
@@ -1252,6 +1297,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
           select.appendChild(opt);
         });
         if (entry.kind === 'immune' && current === 1) select.disabled = true;
+        if (entry.kind === 'spell' && current === 1) select.disabled = true;
         if (entry.kind === 'flag' && entry.flag === 'artifact' && current === 1) {
           select.disabled = true;
         }
@@ -1262,7 +1308,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
         values.forEach((v) => {
           const opt = document.createElement('option');
           opt.value = v;
-          opt.textContent = v;
+          opt.textContent = formatScalarOptionLabel(entry, v);
           if (v === current) opt.selected = true;
           select.appendChild(opt);
         });
@@ -1275,7 +1321,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       select.addEventListener('change', () => {
         if (!canEdit) return;
         const newVal = Number(select.value);
-        if (entry.kind === 'immune') {
+        if (entry.kind === 'immune' || entry.kind === 'spell') {
           if (newVal === 0 && current === 1) {
             select.value = '1';
             return;
@@ -1284,7 +1330,11 @@ function renderObjectEdits(entries, damBudget, spBudget) {
             clearObjectPending(entry.id);
             return;
           }
-          queueObjectQuote(entry, newVal ? Number(entry.immune_bit) : 0, select);
+          const bit =
+            entry.kind === 'spell'
+              ? Number(entry.spell_bit)
+              : Number(entry.immune_bit);
+          queueObjectQuote(entry, newVal ? bit : 0, select);
         } else if (entry.kind === 'flag') {
           if (entry.flag === 'artifact' && newVal === 0 && current === 1) {
             select.value = '1';
@@ -1302,20 +1352,28 @@ function renderObjectEdits(entries, damBudget, spBudget) {
         }
       });
 
+      const yesNoKind =
+        entry.kind === 'immune' || entry.kind === 'flag' || entry.kind === 'spell';
       row.innerHTML = `
       <div>
         <label>${entry.label || entry.id}${objectEntryRangeLabel(entry)}</label>
         <div class="current">Attuale: ${
-          entry.kind === 'immune' || entry.kind === 'flag'
+          yesNoKind
             ? current
               ? 'Sì'
               : 'No'
-            : current
+            : entry.relative
+              ? formatScalarOptionLabel(entry, current)
+              : current
         }</div>
         <div class="slot-hint">${
           entry.kind === 'flag' ? entry.hint || '' : objectEntrySlotHint(entry)
         }</div>
-        ${entry.kind !== 'immune' && entry.kind !== 'flag' ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>` : ''}
+        ${
+          entry.kind !== 'immune' && entry.kind !== 'flag'
+            ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>`
+            : ''
+        }
       </div>
     `;
       row.appendChild(select);
@@ -1351,9 +1409,21 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     return;
   }
   const qd = data.data;
-  const yesNo = entry.kind === 'immune' || entry.kind === 'flag';
-  const curLabel = yesNo ? (qd.current ? 'Sì' : 'No') : qd.current;
-  const tgtLabel = yesNo ? (qd.target ? 'Sì' : 'No') : qd.target;
+  const yesNo = entry.kind === 'immune' || entry.kind === 'flag' || entry.kind === 'spell';
+  const curLabel = yesNo
+    ? qd.current
+      ? 'Sì'
+      : 'No'
+    : entry.relative
+      ? formatScalarOptionLabel(entry, Number(qd.current))
+      : qd.current;
+  const tgtLabel = yesNo
+    ? qd.target
+      ? 'Sì'
+      : 'No'
+    : entry.relative
+      ? formatScalarOptionLabel(entry, Number(qd.target))
+      : qd.target;
   pendingEdit = {
     type: 'object',
     entryId: entry.id,
@@ -1619,7 +1689,7 @@ function portalCategoriesFromUI() {
   return {
     types,
     comment:
-      'types: slug ITEM_* — spunta = visibile e editabile. Flag EDIT del PG = sempre incluso.',
+      'types: slug ITEM_* — spunta = visibile in inventario e editabile. Senza spunta: nascosto (anche se EDIT).',
   };
 }
 
