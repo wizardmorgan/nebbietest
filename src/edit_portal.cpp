@@ -941,6 +941,67 @@ void portal_set_obj_string(char*& field, const std::string& value) {
 	field = strdup(value.c_str());
 }
 
+/**
+ * Opzionale: name/short/long dal body JSON.
+ * Restituisce true se almeno un campo e' presente nella richiesta.
+ * Se present e testo diverso dall'attuale, require_paid deve essere true
+ * (affect con costo listino > 0), altrimenti err.
+ */
+[[nodiscard]] bool portal_apply_optional_text_fields(
+	struct obj_data* obj, const Json& req, bool affect_is_paid, std::string& err,
+	bool& text_changed_out) {
+	text_changed_out = false;
+	if(!obj) {
+		err = "oggetto null";
+		return false;
+	}
+	const bool has_name = req.find("obj_name") != req.end() || req.find("name") != req.end();
+	const bool has_short =
+		req.find("short_desc") != req.end() || req.find("short") != req.end();
+	const bool has_long =
+		req.find("description") != req.end() || req.find("long_desc") != req.end();
+	if(!has_name && !has_short && !has_long) {
+		return true;
+	}
+	const std::string new_name =
+		has_name ? std::string(req.value("obj_name", req.value("name", "")))
+				 : std::string(obj->name ? obj->name : "");
+	const std::string new_short =
+		has_short
+			? std::string(req.value("short_desc", req.value("short", "")))
+			: std::string(obj->short_description ? obj->short_description : "");
+	const std::string new_long =
+		has_long
+			? std::string(req.value("description", req.value("long_desc", "")))
+			: std::string(obj->description ? obj->description : "");
+
+	if(!portal_text_field_ok(new_name, kObjEditTextNameMax, "name", err) ||
+	   !portal_text_field_ok(new_short, kObjEditTextShortMax, "short", err) ||
+	   !portal_text_field_ok(new_long, kObjEditTextLongMax, "long", err)) {
+		return false;
+	}
+
+	const std::string cur_name = obj->name ? obj->name : "";
+	const std::string cur_short =
+		obj->short_description ? obj->short_description : "";
+	const std::string cur_long = obj->description ? obj->description : "";
+	const bool changed =
+		(new_name != cur_name) || (new_short != cur_short) || (new_long != cur_long);
+	if(!changed) {
+		return true;
+	}
+	if(!affect_is_paid) {
+		err = "name/short/long solo insieme al pagamento di un nuovo affect "
+			  "(non con Artifact gratis ne' da soli)";
+		return false;
+	}
+	portal_set_obj_string(obj->name, new_name);
+	portal_set_obj_string(obj->short_description, new_short);
+	portal_set_obj_string(obj->description, new_long);
+	text_changed_out = true;
+	return true;
+}
+
 inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 [[nodiscard]] Json quote_from_pool(const edit_pool_quote& quote) {
@@ -1522,10 +1583,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				d["sp_budget"] = sp_budget;
 			}
 			{
-				const bool can_text =
-					obj->db_instance_id != 0 || IS_OBJ_STAT2(obj, ITEM2_EDIT);
+				/* Sempre editabile in UI: si salva solo insieme a un affect pagato
+				 * (stesso apply), mai come passo successivo gratuito. */
 				Json text;
-				text["can_edit"] = can_text;
+				text["can_edit"] = true;
+				text["requires_paid_affect"] = true;
 				text["name"] = obj->name ? obj->name : "";
 				text["short_desc"] =
 					obj->short_description ? obj->short_description : "";
@@ -1534,9 +1596,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				text["short_max"] = kObjEditTextShortMax;
 				text["long_max"] = kObjEditTextLongMax;
 				text["hint"] =
-					can_text
-						? "Name / short / long gratuiti (codici $c); solo dopo un edit pagato"
-						: "Disponibile dopo il primo edit pagato sull'oggetto";
+					"Name / short / long: gratuiti ma solo insieme al pagamento "
+					"di un nuovo affect (stesso salvataggio). Non si salvano da soli.";
 				d["text_edit"] = text;
 			}
 			if(is_armor && is_weapon) {
@@ -1793,6 +1854,15 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
 					SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
 				}
+				/* Artifact gratis: eventuale testo in body e' rifiutato
+				 * (serve un affect pagato nello stesso apply). */
+				bool text_changed = false;
+				std::string text_err;
+				if(!portal_apply_optional_text_fields(after, req, /*affect_is_paid=*/false,
+													  text_err, text_changed)) {
+					extract_obj(after);
+					return json_error(text_err.c_str(), 400);
+				}
 				/* Flag gratis; il +50% e' sul costo degli edit pagati (stesso
 				 * pacchetto o successivi) via AnalyzeObjEdit. */
 				std::string save_err;
@@ -1858,6 +1928,16 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			const int quote_xp_i = static_cast<int>(std::max(0L, quote_xp));
 			const int xp_cost = std::max(pay_xp, quote_xp_i);
 			const int rune_cost = std::max(pay_rune, std::max(0, quote_pq));
+			const bool affect_is_paid = (quote_xp_i > 0) || (quote_pq > 0) ||
+										(xp_cost > 0) || (rune_cost > 0);
+
+			bool text_changed = false;
+			std::string text_err;
+			if(!portal_apply_optional_text_fields(after, req, affect_is_paid, text_err,
+												  text_changed)) {
+				extract_obj(after);
+				return json_error(text_err.c_str(), 400);
+			}
 
 			const int max_level = max_level_for_toon(target_toon_id);
 			std::string pay_err;
@@ -1874,6 +1954,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["paid_xp"] = xp_cost;
 			d["paid_rune"] = rune_cost;
 			d["saved"] = saved;
+			d["text_changed"] = text_changed;
 			d["instance_id"] = after->db_instance_id;
 			d["base_vnum"] = object_instance_resolve_base_vnum(after);
 			if(!save_err.empty()) {
@@ -1892,118 +1973,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 		if(path == "/internal/quote-object-text" ||
 		   path == "/internal/apply-object-text") {
-			const bool is_apply = (path == "/internal/apply-object-text");
-			unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
-			if(target_toon_id == 0) {
-				target_toon_id = parse_json_ull(req, "toon_id");
-			}
-			const unsigned long long inventory_id = parse_json_ull(req, "inventory_id");
-			const std::string new_name = req.value("obj_name", req.value("name", ""));
-			const std::string new_short =
-				req.value("short_desc", req.value("short", ""));
-			const std::string new_long =
-				req.value("description", req.value("long_desc", ""));
-			const int pay_xp = parse_json_int(req, "pay_xp", 0);
-			const int pay_rune = parse_json_int(req, "pay_rune", 0);
-
-			const std::string target_name = toon_name_by_id(target_toon_id);
-			if(target_name.empty()) {
-				return json_error("toon target non trovato", 404);
-			}
-			if(is_apply && is_toon_online_by_name(target_name)) {
-				return json_error("il toon target e collegato al mud", 409);
-			}
-
-			std::vector<inventory_mysql_row> rows;
-			load_character_inventory_mysql(target_toon_id, rows);
-			inventory_mysql_row* row = find_inventory_row(rows, inventory_id);
-			if(!row) {
-				return json_error("oggetto non trovato nell'inventario", 404);
-			}
-			struct obj_data* obj = materialize_inventory_row(*row);
-			if(!obj) {
-				return json_error("impossibile materializzare oggetto", 500);
-			}
-			if(!object_portal_editable(obj, target_name.c_str())) {
-				extract_obj(obj);
-				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
-			}
-			if(obj->db_instance_id == 0 && !IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-				extract_obj(obj);
-				return json_error(
-					"name/short/long disponibili solo dopo un edit pagato sull'oggetto",
-					400);
-			}
-
-			std::string len_err;
-			if(!portal_text_field_ok(new_name, kObjEditTextNameMax, "name", len_err) ||
-			   !portal_text_field_ok(new_short, kObjEditTextShortMax, "short",
-									len_err) ||
-			   !portal_text_field_ok(new_long, kObjEditTextLongMax, "long", len_err)) {
-				extract_obj(obj);
-				return json_error(len_err.c_str(), 400);
-			}
-
-			const std::string cur_name = obj->name ? obj->name : "";
-			const std::string cur_short =
-				obj->short_description ? obj->short_description : "";
-			const std::string cur_long = obj->description ? obj->description : "";
-			const bool changed = (new_name != cur_name) || (new_short != cur_short) ||
-								 (new_long != cur_long);
-			if(!changed) {
-				extract_obj(obj);
-				return json_error("nessuna modifica a name/short/long", 400);
-			}
-
-			/* Name/short/long: gratis (nessun listino ufficiale). */
-			if(!is_apply) {
-				Json d = quote_xp_json(0, 0);
-				d["diff_rune"] = 0;
-				d["inventory_id"] = inventory_id;
-				d["obj_name"] = new_name;
-				d["short_desc"] = new_short;
-				d["description"] = new_long;
-				d["name_len"] = static_cast<int>(new_name.size());
-				d["short_len"] = static_cast<int>(new_short.size());
-				d["long_len"] = static_cast<int>(new_long.size());
-				d["name_max"] = kObjEditTextNameMax;
-				d["short_max"] = kObjEditTextShortMax;
-				d["long_max"] = kObjEditTextLongMax;
-				d["note"] = "Edit testo gratuito (name/short/long)";
-				d["free"] = true;
-				extract_obj(obj);
-				return json_ok(d);
-			}
-
-			portal_set_obj_string(obj->name, new_name);
-			portal_set_obj_string(obj->short_description, new_short);
-			portal_set_obj_string(obj->description, new_long);
-			if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-				SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
-			}
-
-			(void)pay_xp;
-			(void)pay_rune;
-			std::string save_err;
-			const bool saved = portal_save_edited_inventory_item(
-				inventory_id, obj, save_err, target_name.c_str());
-			Json d = analyze_to_json(obj);
-			d["paid_xp"] = 0;
-			d["paid_rune"] = 0;
-			d["saved"] = saved;
-			d["free"] = true;
-			d["instance_id"] = obj->db_instance_id;
-			d["obj_name"] = obj->name ? obj->name : "";
-			d["short_desc"] = obj->short_description ? obj->short_description : "";
-			d["description"] = obj->description ? obj->description : "";
-			extract_obj(obj);
-			if(!saved) {
-				return json_error(save_err.empty()
-									  ? "[portal:save] salvataggio testo fallito"
-									  : save_err.c_str(),
-								  500);
-			}
-			return json_ok(d);
+			return json_error(
+				"name/short/long non si salvano da soli: includili nel pagamento "
+				"di un nuovo affect (apply-affect)",
+				400);
 		}
 
 		if(path == "/internal/apply-pool") {

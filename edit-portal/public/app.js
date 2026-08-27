@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 19;
+const EDIT_PORTAL_UI_BUILD = 20;
 
 let session = null;
 let targetToonId = null;
@@ -1271,6 +1271,40 @@ async function requoteObjectCartForArtifact() {
   rebuildObjectPendingFromCart();
 }
 
+function getObjectTextDraft() {
+  const nameEl = $('obj-text-name');
+  const shortEl = $('obj-text-short');
+  const longEl = $('obj-text-long');
+  if (!nameEl || !shortEl || !longEl) return null;
+  return {
+    objName: nameEl.value,
+    shortDesc: shortEl.value,
+    description: longEl.value,
+    nameMax: Number(nameEl.dataset.max || 128),
+    shortMax: Number(shortEl.dataset.max || 128),
+    longMax: Number(longEl.dataset.max || 256),
+  };
+}
+
+function objectTextDraftIsDirty(draft) {
+  if (!draft || !selectedObjectOptions?.text_edit) return false;
+  const t = selectedObjectOptions.text_edit;
+  return (
+    draft.objName !== String(t.name || '') ||
+    draft.shortDesc !== String(t.short_desc || '') ||
+    draft.description !== String(t.description || '')
+  );
+}
+
+function objectCartHasPaidAffect(items) {
+  return items.some((it) => {
+    if (it.flag === 'artifact') return false;
+    const xp = Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
+    const rune = Number(it.quote?.diff_rune || it.quote?.pq || 0);
+    return xp > 0 || rune > 0;
+  });
+}
+
 function renderObjectTextEdit(textEdit) {
   const box = $('object-text-edit');
   if (!box) return;
@@ -1278,7 +1312,7 @@ function renderObjectTextEdit(textEdit) {
   if (!textEdit) {
     return;
   }
-  const canEdit = textEdit.can_edit === true && session.role !== 'limited';
+  const canEdit = textEdit.can_edit !== false && session.role !== 'limited';
   const nameMax = Number(textEdit.name_max || 128);
   const shortMax = Number(textEdit.short_max || 128);
   const longMax = Number(textEdit.long_max || 256);
@@ -1297,7 +1331,7 @@ function renderObjectTextEdit(textEdit) {
     locked.className = 'hint';
     locked.textContent =
       textEdit.hint ||
-      'Disponibile dopo il primo edit pagato sull\'oggetto (instance / EDIT).';
+      'Name/short/long solo insieme al pagamento di un nuovo affect.';
     body.appendChild(locked);
     details.appendChild(body);
     box.appendChild(details);
@@ -1308,13 +1342,21 @@ function renderObjectTextEdit(textEdit) {
   hint.className = 'hint';
   hint.textContent =
     textEdit.hint ||
-    'Codici colore $cMBFG ammessi. Contatore = lunghezza grezza (come in DB). Salvataggio gratuito.';
+    'Gratuiti ma solo insieme al pagamento di un nuovo affect (stesso salvataggio). Non si salvano da soli.';
   body.appendChild(hint);
 
   const fields = [
-    { key: 'name', label: 'Name (keywords)', max: nameMax, value: textEdit.name || '', multiline: false },
+    {
+      key: 'name',
+      id: 'obj-text-name',
+      label: 'Name (keywords)',
+      max: nameMax,
+      value: textEdit.name || '',
+      multiline: false,
+    },
     {
       key: 'short',
+      id: 'obj-text-short',
       label: 'Short description',
       max: shortMax,
       value: textEdit.short_desc || '',
@@ -1322,6 +1364,7 @@ function renderObjectTextEdit(textEdit) {
     },
     {
       key: 'long',
+      id: 'obj-text-long',
       label: 'Long description',
       max: longMax,
       value: textEdit.description || '',
@@ -1329,12 +1372,12 @@ function renderObjectTextEdit(textEdit) {
     },
   ];
 
-  const inputs = {};
   fields.forEach((f) => {
     const row = document.createElement('div');
     row.className = 'text-edit-row';
     const lab = document.createElement('label');
     lab.textContent = f.label;
+    lab.setAttribute('for', f.id);
     const counter = document.createElement('span');
     counter.className = 'text-len-counter';
     const preview = document.createElement('div');
@@ -1347,6 +1390,7 @@ function renderObjectTextEdit(textEdit) {
       input = document.createElement('input');
       input.type = 'text';
     }
+    input.id = f.id;
     input.value = f.value;
     input.dataset.max = String(f.max);
     const sync = () => {
@@ -1363,61 +1407,8 @@ function renderObjectTextEdit(textEdit) {
     row.appendChild(input);
     row.appendChild(preview);
     body.appendChild(row);
-    inputs[f.key] = input;
   });
 
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'btn-secondary';
-  btn.textContent = 'Salva testo';
-  btn.onclick = async () => {
-    const objName = inputs.name.value;
-    const shortDesc = inputs.short.value;
-    const description = inputs.long.value;
-    if (
-      objName.length > nameMax ||
-      shortDesc.length > shortMax ||
-      description.length > longMax
-    ) {
-      alert('Uno o più campi superano la lunghezza massima: correggi prima di salvare.');
-      return;
-    }
-    const targetName = charState?.name || 'personaggio';
-    const isStaffOnOther =
-      session.role === 'staff' && Number(targetToonId) !== Number(session.sessionToonId);
-    let msg = `Salvare name/short/long su "${targetName}"?\n(gratuito, nessun pagamento)`;
-    if (isStaffOnOther) {
-      msg += `\n\nSTAFF: target toon ${targetToonId}.`;
-    }
-    if (!confirm(msg)) return;
-    const result = await api('/api/apply-object-text', {
-      method: 'POST',
-      body: JSON.stringify({
-        targetToonId,
-        inventoryId: selectedInventoryId,
-        objName,
-        shortDesc,
-        description,
-        payXp: 0,
-        payRune: 0,
-      }),
-    });
-    if (!result.ok) {
-      alert(result.error || 'Salvataggio testo fallito');
-      return;
-    }
-    $('apply-result').textContent = 'Testo salvato (gratuito).';
-    const invId = selectedInventoryId;
-    pendingEdit = null;
-    updatePaymentUI();
-    await loadCharacterState();
-    if (invId) {
-      await loadInventory();
-      const li = document.querySelector('#inventory-list .item.selected');
-      if (li) await selectItem(invId, li);
-    }
-  };
-  body.appendChild(btn);
   details.appendChild(body);
   box.appendChild(details);
 }
@@ -1743,7 +1734,7 @@ async function confirmPayEdit() {
     /*
      * Applica Artifact per primo (flag gratis), poi le voci pagate:
      * cosi' AnalyzeObjEdit applica gia' il +50% listino sul pezzo.
-     * (Artifact gia' presente O aggiunto nello stesso pacchetto → ×1.5)
+     * Name/short/long: solo insieme al primo affect pagato (stesso apply).
      */
     const items =
       pendingEdit.type === 'object-batch'
@@ -1754,7 +1745,28 @@ async function confirmPayEdit() {
       const bb = b.flag === 'artifact' ? 1 : 0;
       return bb - aa;
     });
+
+    const textDraft = getObjectTextDraft();
+    const textDirty = objectTextDraftIsDirty(textDraft);
+    if (textDirty) {
+      if (
+        textDraft.objName.length > textDraft.nameMax ||
+        textDraft.shortDesc.length > textDraft.shortMax ||
+        textDraft.description.length > textDraft.longMax
+      ) {
+        alert('Name/short/long troppo lunghi: correggi prima di pagare.');
+        return;
+      }
+      if (!objectCartHasPaidAffect(items)) {
+        alert(
+          'Name/short/long si salvano solo insieme al pagamento di un nuovo affect (non da soli, non con solo Artifact).'
+        );
+        return;
+      }
+    }
+
     result = { ok: true };
+    let textAttached = false;
     for (const item of items) {
       const itemPlan = buildPaymentPlan(item.quote, mode, runePct);
       const affectBody = {
@@ -1768,6 +1780,16 @@ async function confirmPayEdit() {
       if (item.flag) {
         affectBody.flag = item.flag;
       }
+      const isPaidAffect =
+        item.flag !== 'artifact' &&
+        (Number(item.quote?.xp_raw || item.quote?.diff_xp_raw || 0) > 0 ||
+          Number(item.quote?.diff_rune || item.quote?.pq || 0) > 0);
+      if (textDirty && !textAttached && isPaidAffect) {
+        affectBody.objName = textDraft.objName;
+        affectBody.shortDesc = textDraft.shortDesc;
+        affectBody.description = textDraft.description;
+        textAttached = true;
+      }
       result = await api('/api/apply-affect', {
         method: 'POST',
         body: JSON.stringify(affectBody),
@@ -1777,16 +1799,10 @@ async function confirmPayEdit() {
       }
     }
   } else if (pendingEdit.type === 'object-text') {
-    result = await api('/api/apply-object-text', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...body,
-        inventoryId: selectedInventoryId,
-        objName: pendingEdit.objName,
-        shortDesc: pendingEdit.shortDesc,
-        description: pendingEdit.description,
-      }),
-    });
+    alert(
+      'Name/short/long non si salvano da soli: metti in coda un affect pagato e conferma il pagamento.'
+    );
+    return;
   } else {
     return;
   }
