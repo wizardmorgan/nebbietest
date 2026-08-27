@@ -25,9 +25,15 @@ cd edit-portal && npm install && npm start
 
 Variabili: `MYSQL_*`, `MYST_EDIT_API_URL`, `EDIT_API_SECRET`, `EDIT_WEB_PORT`.
 
+Produzione dietro WordPress: path `/edit/`, SSO obbligatorio — vedi
+[`docs/edit-portal-wordpress.md`](../docs/edit-portal-wordpress.md).
+
 ## Login web vs password MUD
 
-Il portale autentica sulla tabella **`user`** (email + `user.password`), come il login account nel MUD.
+In **produzione** l’accesso avviene via **SSO WordPress** (stessa email dell’account Mud).
+Il form email/password del portale è per **dev locale** (senza secret SSO).
+
+Il portale autentica sulla tabella **`user`** (email), come l’account nel MUD.
 
 La tabella **`toon.password`** è usata solo nel flusso legacy (login digitando il nome del PG).
 

@@ -82,6 +82,14 @@ services:
             - MYSQL_DATABASE=nebbie
             - EDIT_STAFF_LEVEL=57
             - EDIT_LIMITED_LEVEL=51
+            - EDIT_BASE_PATH=${EDIT_BASE_PATH:-}
+            - EDIT_WP_SSO_SECRET=${EDIT_WP_SSO_SECRET:-}
+            - EDIT_WP_SITE_URL=${EDIT_WP_SITE_URL:-}
+            - EDIT_WP_LOGIN_URL=${EDIT_WP_LOGIN_URL:-}
+            - EDIT_SSO_REQUIRED=${EDIT_SSO_REQUIRED:-}
+            - EDIT_ALLOW_PASSWORD_LOGIN=${EDIT_ALLOW_PASSWORD_LOGIN:-}
+            - EDIT_COOKIE_SECURE=${EDIT_COOKIE_SECURE:-}
+            - EDIT_DEV_MINT_SSO=${EDIT_DEV_MINT_SSO:-}
         depends_on:
             mysql:
                 condition: service_healthy

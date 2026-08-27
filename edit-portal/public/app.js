@@ -5,7 +5,79 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 23;
+const EDIT_PORTAL_UI_BUILD = 25;
+
+/** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
+function portalBasePath() {
+  const fromCfg = window.EDIT_PORTAL_CONFIG?.basePath;
+  if (typeof fromCfg === 'string') return fromCfg.replace(/\/+$/, '');
+  const meta = document.querySelector('meta[name="edit-base"]');
+  if (meta && meta.content) return String(meta.content).replace(/\/+$/, '');
+  return '';
+}
+
+function portalUrl(path) {
+  const base = portalBasePath();
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${p}`;
+}
+
+function portalAuthConfig() {
+  return window.EDIT_PORTAL_CONFIG || {};
+}
+
+/**
+ * Mostra SSO e/o form password in base a config.js (EDIT_SSO_REQUIRED / ALLOW_PASSWORD).
+ */
+function applyLoginUiMode() {
+  const cfg = portalAuthConfig();
+  const ssoBlock = $('sso-login-block');
+  const pwdBlock = $('password-login-block');
+  const ssoLink = $('sso-wp-link');
+  const ssoHint = $('sso-login-hint');
+  const allowPassword = cfg.allowPasswordLogin !== false;
+  const ssoRequired = cfg.ssoRequired === true;
+  const wpEntry =
+    cfg.wpSsoEntryUrl || cfg.wpLoginUrl || cfg.wpSiteUrl || '';
+
+  if (ssoBlock) {
+    if (ssoRequired || cfg.wordpressSsoConfigured) {
+      ssoBlock.classList.remove('hidden');
+      if (ssoLink) {
+        if (wpEntry) {
+          ssoLink.href = wpEntry;
+          ssoLink.classList.remove('disabled');
+        } else {
+          ssoLink.href = '#';
+          ssoLink.classList.add('disabled');
+        }
+      }
+      if (ssoHint) {
+        ssoHint.textContent = wpEntry
+          ? 'Se sei già loggato sul sito verrai autenticato subito; altrimenti prima il login WordPress.'
+          : 'SSO WordPress attivo sul server, ma EDIT_WP_SITE_URL non è impostato.';
+      }
+    } else {
+      ssoBlock.classList.add('hidden');
+    }
+  }
+
+  if (pwdBlock) {
+    if (allowPassword) {
+      pwdBlock.classList.remove('hidden');
+      const email = $('login-email');
+      const password = $('login-password');
+      if (email) email.required = true;
+      if (password) password.required = true;
+    } else {
+      pwdBlock.classList.add('hidden');
+      const email = $('login-email');
+      const password = $('login-password');
+      if (email) email.required = false;
+      if (password) password.required = false;
+    }
+  }
+}
 
 let session = null;
 let targetToonId = null;
@@ -187,7 +259,7 @@ function persistLogin(email, password, remember) {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
+  const res = await fetch(portalUrl(path), {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
@@ -328,6 +400,7 @@ async function refreshMe() {
   const me = await api('/api/me');
   if (!me.ok) {
     session = null;
+    applyLoginUiMode();
     show('login-panel');
     hide('toon-panel');
     hide('work-panel');
@@ -2017,7 +2090,7 @@ async function checkMystPortalVersion() {
   const warnEl = $('myst-version-warn');
   if (!warnEl) return;
   try {
-    const res = await fetch('/api/health');
+    const res = await fetch(portalUrl('/api/health'));
     const health = await res.json();
     const ver = health?.myst?.portal_api_version;
     const ui = health?.ui_build;
@@ -2186,5 +2259,6 @@ $('btn-inst-search').onclick = async () => {
 };
 
 restoreSavedLogin();
+applyLoginUiMode();
 $('header-meta').textContent = `UI build ${EDIT_PORTAL_UI_BUILD}`;
 refreshMe();

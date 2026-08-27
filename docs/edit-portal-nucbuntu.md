@@ -190,9 +190,9 @@ git push -u mine feature/edit-portal
 ## 12. Produzione (note)
 
 - Cambiare **tutti** i segreti (`EDIT_API_SECRET`, `EDIT_SESSION_SECRET`).
-- Esporre `edit-portal` solo via HTTPS (reverse proxy).
+- Esporre `edit-portal` solo via HTTPS (reverse proxy) su path **`/edit/`**.
 - Non pubblicare porta **8090** (solo rete Docker interna).
-- SSO sito: fase successiva (mapping email → `user.id`).
+- **SSO WordPress obbligatorio** in produzione: vedi **[edit-portal-wordpress.md](edit-portal-wordpress.md)** (email WP = `user.email`, mu-plugin HMAC).
 
 ## 13. Parametri di sistema edit (`lib/edit_system.json`)
 

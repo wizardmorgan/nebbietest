@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="edit-base" content="" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=23" />
+  <link rel="stylesheet" href="style.css?v=25" />
+  <script src="config.js"></script>
 </head>
 <body>
   <header class="app-header">
@@ -22,16 +24,30 @@
   <main class="app-main">
     <section id="login-panel" class="panel card">
       <h2>Accesso account</h2>
-      <p class="hint">Usa l'email e la password dell'<strong>account</strong> (tabella <code>user</code>), non la password del singolo personaggio.</p>
-      <form id="login-form" class="form-grid">
-        <label>Email <input type="email" id="login-email" required autocomplete="username" /></label>
-        <label>Password <input type="password" id="login-password" required autocomplete="current-password" /></label>
-        <label class="checkbox-row">
-          <input type="checkbox" id="login-remember" />
-          Memorizza password su questo browser
-        </label>
-        <button type="submit" class="btn-primary">Accedi</button>
-      </form>
+      <div id="sso-login-block" class="sso-login-block hidden">
+        <p class="hint">
+          Accedi con lo stesso account del sito WordPress.
+          L'email del sito deve coincidere con l'account Mud (tabella <code>user</code>).
+          Dopo il login usi i personaggi di quell'account con i livelli di utilizzo già definiti
+          (limited / player / staff).
+        </p>
+        <p class="btn-row">
+          <a id="sso-wp-link" class="btn-primary" href="#">Accedi dal sito WordPress</a>
+        </p>
+        <p id="sso-login-hint" class="hint"></p>
+      </div>
+      <div id="password-login-block">
+        <p class="hint">Usa l'email e la password dell'<strong>account</strong> (tabella <code>user</code>), non la password del singolo personaggio.</p>
+        <form id="login-form" class="form-grid">
+          <label>Email <input type="email" id="login-email" required autocomplete="username" /></label>
+          <label>Password <input type="password" id="login-password" required autocomplete="current-password" /></label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="login-remember" />
+            Memorizza password su questo browser
+          </label>
+          <button type="submit" class="btn-primary">Accedi</button>
+        </form>
+      </div>
       <p id="login-error" class="error"></p>
     </section>
 
@@ -183,6 +199,6 @@
       </div>
     </section>
   </main>
-  <script src="app.js?v=23"></script>
+  <script src="app.js?v=25"></script>
 </body>
 </html>

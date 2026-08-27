@@ -259,6 +259,22 @@ textarea {
   background: var(--accent-hover);
 }
 
+a.btn-primary {
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
+}
+
+a.btn-primary.disabled,
+a.btn-primary[href='#'] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.sso-login-block {
+  margin-bottom: 1rem;
+}
+
 .btn-secondary {
   background: var(--surface2);
   color: var(--text);
