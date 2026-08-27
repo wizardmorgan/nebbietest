@@ -3,6 +3,8 @@
 const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
+/** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
+const EDIT_PORTAL_UI_BUILD = 8;
 
 let session = null;
 let targetToonId = null;
@@ -341,7 +343,8 @@ async function enterWorkMode() {
   hide('toon-panel');
   show('work-panel');
   const me = await api('/api/me');
-  $('header-meta').textContent = `${me.email} — ${me.sessionToonName} (${me.role}, lv ${me.maxLevel})`;
+  $('header-meta').textContent =
+    `${me.email} — ${me.sessionToonName} (${me.role}, lv ${me.maxLevel}) · UI ${EDIT_PORTAL_UI_BUILD}`;
 
   const payMode = $('pay-mode');
   if (canPayMxp()) {
@@ -1547,4 +1550,5 @@ $('btn-inst-search').onclick = async () => {
 };
 
 restoreSavedLogin();
+$('header-meta').textContent = `UI build ${EDIT_PORTAL_UI_BUILD}`;
 refreshMe();
