@@ -316,8 +316,8 @@ std::atomic<bool> g_http_running {false};
 		odb::transaction::reset_current();
 	}
 	const bool had_tx = odb::transaction::has_current();
-	mudlog(LOG_CHECK, "edit_portal: %s sql_len=%zu has_current=%d", where, sql.size(),
-		   had_tx ? 1 : 0);
+	mudlog(LOG_CHECK, "edit_portal: %s sql_len=%lu has_current=%d", where,
+		   static_cast<unsigned long>(sql.size()), had_tx ? 1 : 0);
 	try {
 		/* database::connection(): se c'e' tx attiva riusa quella, altrimenti pool.
 		 * Non chiamare transaction::current().connection() a mano. */
