@@ -335,6 +335,43 @@ std::atomic<bool> g_http_running {false};
 	}
 }
 
+/** INSERT via libmysql; returns AUTO_INCREMENT id on the same connection. */
+[[nodiscard]] bool portal_mysql_insert(DB* db, const std::string& sql,
+									   unsigned long long& out_id, std::string& err,
+									   const char* where = "portal_mysql_insert") {
+	out_id = 0;
+	if(!db) {
+		err = std::string("[") + where + "] database non disponibile";
+		return false;
+	}
+	if(odb::transaction::has_current() && odb::transaction::current().finalized()) {
+		odb::transaction::reset_current();
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		if(mysql_query(h, sql.c_str()) != 0) {
+			err = std::string("[") + where + "] mysql: " +
+				  (mysql_error(h) ? mysql_error(h) : "mysql_query failed");
+			return false;
+		}
+		out_id = static_cast<unsigned long long>(mysql_insert_id(h));
+		if(out_id == 0) {
+			err = std::string("[") + where + "] mysql_insert_id=0 dopo INSERT";
+			return false;
+		}
+		return true;
+	}
+	catch(const std::exception& e) {
+		const bool had_tx = odb::transaction::has_current();
+		err = std::string("[") + where + "] odb/conn has_current=" +
+			  (had_tx ? "1" : "0") + ": " + e.what();
+		mudlog(LOG_SYSERR, "edit_portal: %s", err.c_str());
+		return false;
+	}
+}
+
 [[nodiscard]] int max_level_for_toon(unsigned long long toon_id) {
 	DB* db = Sql::getMysql();
 	if(!db || toon_id == 0) {
@@ -471,6 +508,15 @@ std::atomic<bool> g_http_running {false};
 	return portal_mysql_exec(db, sql.str(), err, "portal:deduct");
 }
 
+[[nodiscard]] bool inventory_row_has_affect_overlay(const inventory_mysql_row& row) {
+	for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
+		if(row.elem.affected[j].location != 0 || row.elem.affected[j].modifier != 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
 [[nodiscard]] struct obj_data* materialize_inventory_row(
 	const inventory_mysql_row& row) {
 	if(row.elem.item_number <= 0) {
@@ -505,8 +551,11 @@ std::atomic<bool> g_http_running {false};
 	obj->name = strdup(row.elem.name);
 	obj->short_description = strdup(row.elem.sd);
 	obj->description = strdup(row.elem.desc);
-	for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
-		obj->affected[j] = row.elem.affected[j];
+	/* Empty character_inventory_affect must not zero proto affects. */
+	if(inventory_row_has_affect_overlay(row)) {
+		for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
+			obj->affected[j] = row.elem.affected[j];
+		}
 	}
 	obj->db_inventory_id = row.id;
 	return obj;
@@ -647,18 +696,18 @@ std::atomic<bool> g_http_running {false};
 
 /**
  * Persist edited object_instance (+ affects + event) via raw mysql_query.
- * Avoids ODB persist/update/erase_query which require transaction TLS and have
- * been throwing not_in_transaction on the mud main thread for portal jobs.
+ * Creates a new row when obj->db_instance_id == 0 (first portal edit), otherwise
+ * UPDATEs. Avoids ODB persist/update which require transaction TLS on mud thread.
  */
 [[nodiscard]] bool portal_persist_object_instance_mysql(struct obj_data* obj,
 														int base_vnum,
+														const char* owner_name,
 														std::string& err) {
 	DB* db = Sql::getMysql();
-	if(!db || !obj || obj->db_instance_id == 0 || base_vnum <= 0) {
-		err = "[portal:persist_inst] parametri non validi (serve db_instance_id!=0)";
+	if(!db || !obj || base_vnum <= 0) {
+		err = "[portal:persist_inst] parametri non validi";
 		return false;
 	}
-	const unsigned long long id = obj->db_instance_id;
 
 	int shell_weight = obj->obj_flags.weight;
 	if(GET_ITEM_TYPE(obj) == ITEM_CONTAINER) {
@@ -677,27 +726,84 @@ std::atomic<bool> g_http_running {false};
 	const std::string desc_lit =
 		portal_sql_literal(obj->description ? obj->description : "");
 
-	std::ostringstream upd;
-	upd << "UPDATE object_instance SET base_vnum=" << base_vnum
-		<< ", type_flag=" << static_cast<int>(obj->obj_flags.type_flag)
-		<< ", wear_flags=" << static_cast<int>(obj->obj_flags.wear_flags)
-		<< ", extra_flags=" << static_cast<int>(obj->obj_flags.extra_flags)
-		<< ", extra_flags2=" << static_cast<int>(obj->obj_flags.extra_flags2)
-		<< ", weight=" << shell_weight << ", cost=" << obj->obj_flags.cost
-		<< ", cost_per_day=" << obj->obj_flags.cost_per_day
-		<< ", timer=" << obj->obj_flags.timer
-		<< ", bitvector=" << obj->obj_flags.bitvector
-		<< ", value0=" << obj->obj_flags.value[0]
-		<< ", value1=" << obj->obj_flags.value[1]
-		<< ", value2=" << obj->obj_flags.value[2]
-		<< ", value3=" << obj->obj_flags.value[3]
-		<< ", obj_name=" << name_lit << ", short_desc=" << sd_lit
-		<< ", description=" << desc_lit
-		<< ", updated_by_name='edit_portal', updated_at=NOW()"
-		<< " WHERE id=" << id << " AND deleted=0";
-	if(!portal_mysql_exec(db, upd.str(), err, "portal:persist_inst_upd")) {
-		return false;
+	int char_vnum = obj->char_vnum;
+	if(char_vnum <= 0 ||
+	   (char_vnum >= LOW_EDITED_ITEMS && char_vnum <= HIGH_EDITED_ITEMS)) {
+		char_vnum = base_vnum;
 	}
+	obj->char_vnum = char_vnum;
+
+	std::string owner;
+	if(owner_name && *owner_name) {
+		owner = owner_name;
+	}
+	else if(obj->personal_owner[0] != '\0') {
+		owner = obj->personal_owner;
+	}
+	const std::string owner_sql =
+		owner.empty() ? "NULL" : portal_sql_literal(owner.c_str());
+
+	const bool is_create = (obj->db_instance_id == 0);
+	unsigned long long id = obj->db_instance_id;
+
+	if(is_create) {
+		std::ostringstream ins;
+		ins << "INSERT INTO object_instance ("
+			   "base_vnum, char_vnum, type_flag, wear_flags, extra_flags, "
+			   "extra_flags2, weight, cost, cost_per_day, timer, bitvector, "
+			   "value0, value1, value2, value3, obj_name, short_desc, description, "
+			   "owner_name, created_by_name, updated_by_name, deleted, "
+			   "created_at, updated_at) VALUES ("
+			<< base_vnum << ',' << char_vnum << ','
+			<< static_cast<int>(obj->obj_flags.type_flag) << ','
+			<< static_cast<int>(obj->obj_flags.wear_flags) << ','
+			<< static_cast<int>(obj->obj_flags.extra_flags) << ','
+			<< static_cast<int>(obj->obj_flags.extra_flags2) << ','
+			<< shell_weight << ',' << obj->obj_flags.cost << ','
+			<< obj->obj_flags.cost_per_day << ',' << obj->obj_flags.timer << ','
+			<< obj->obj_flags.bitvector << ',' << obj->obj_flags.value[0] << ','
+			<< obj->obj_flags.value[1] << ',' << obj->obj_flags.value[2] << ','
+			<< obj->obj_flags.value[3] << ',' << name_lit << ',' << sd_lit << ','
+			<< desc_lit << ',' << owner_sql
+			<< ", 'edit_portal', 'edit_portal', 0, NOW(), NOW())";
+		if(!portal_mysql_insert(db, ins.str(), id, err, "portal:persist_inst_ins")) {
+			return false;
+		}
+		obj->db_instance_id = id;
+		if(!owner.empty()) {
+			strncpy(obj->personal_owner, owner.c_str(),
+					sizeof(obj->personal_owner) - 1);
+			obj->personal_owner[sizeof(obj->personal_owner) - 1] = '\0';
+		}
+	}
+	else {
+		std::ostringstream upd;
+		upd << "UPDATE object_instance SET base_vnum=" << base_vnum
+			<< ", char_vnum=" << char_vnum
+			<< ", type_flag=" << static_cast<int>(obj->obj_flags.type_flag)
+			<< ", wear_flags=" << static_cast<int>(obj->obj_flags.wear_flags)
+			<< ", extra_flags=" << static_cast<int>(obj->obj_flags.extra_flags)
+			<< ", extra_flags2=" << static_cast<int>(obj->obj_flags.extra_flags2)
+			<< ", weight=" << shell_weight << ", cost=" << obj->obj_flags.cost
+			<< ", cost_per_day=" << obj->obj_flags.cost_per_day
+			<< ", timer=" << obj->obj_flags.timer
+			<< ", bitvector=" << obj->obj_flags.bitvector
+			<< ", value0=" << obj->obj_flags.value[0]
+			<< ", value1=" << obj->obj_flags.value[1]
+			<< ", value2=" << obj->obj_flags.value[2]
+			<< ", value3=" << obj->obj_flags.value[3]
+			<< ", obj_name=" << name_lit << ", short_desc=" << sd_lit
+			<< ", description=" << desc_lit;
+		if(!owner.empty()) {
+			upd << ", owner_name=" << owner_sql;
+		}
+		upd << ", updated_by_name='edit_portal', updated_at=NOW()"
+			<< " WHERE id=" << id << " AND deleted=0";
+		if(!portal_mysql_exec(db, upd.str(), err, "portal:persist_inst_upd")) {
+			return false;
+		}
+	}
+
 	if(!portal_mysql_exec(db,
 						  "DELETE FROM object_instance_affect WHERE instance_id=" +
 							  std::to_string(id),
@@ -710,11 +816,11 @@ std::atomic<bool> g_http_running {false};
 		if(loc == 0 && mod == 0) {
 			continue;
 		}
-		std::ostringstream ins;
-		ins << "INSERT INTO object_instance_affect (instance_id, affect_slot, "
+		std::ostringstream aff;
+		aff << "INSERT INTO object_instance_affect (instance_id, affect_slot, "
 			   "location, modifier) VALUES ("
 			<< id << ',' << i << ',' << loc << ',' << mod << ')';
-		if(!portal_mysql_exec(db, ins.str(), err, "portal:persist_inst_ins_aff")) {
+		if(!portal_mysql_exec(db, aff.str(), err, "portal:persist_inst_ins_aff")) {
 			return false;
 		}
 	}
@@ -722,7 +828,8 @@ std::atomic<bool> g_http_running {false};
 		std::ostringstream ev;
 		ev << "INSERT INTO object_instance_event (instance_id, at, actor_name, kind, "
 			  "note) VALUES ("
-		   << id << ", NOW(), 'edit_portal', 'update', "
+		   << id << ", NOW(), 'edit_portal', '" << (is_create ? "create" : "update")
+		   << "', "
 		   << portal_sql_literal(("base=" + std::to_string(base_vnum)).c_str()) << ')';
 		if(!portal_mysql_exec(db, ev.str(), err, "portal:persist_inst_event")) {
 			return false;
@@ -732,26 +839,32 @@ std::atomic<bool> g_http_running {false};
 }
 
 /**
- * Save apply-affect result: instance rows via raw mysql when db_instance_id!=0,
- * always refresh character_inventory (+ affects). Never uses ODB persist/update.
+ * Save apply-affect result: create/update object_instance via raw mysql, then
+ * refresh character_inventory (+ affects + instance_id link). Never uses ODB.
  */
 [[nodiscard]] bool portal_save_edited_inventory_item(unsigned long long inventory_id,
 													 struct obj_data* after,
-													 std::string& err) {
+													 std::string& err,
+													 const char* owner_name) {
 	if(!after) {
 		err = "[portal:save] obj null";
 		return false;
 	}
-	if(after->db_instance_id != 0) {
-		const int base = object_instance_resolve_base_vnum(after);
-		if(base <= 0) {
-			err = "[portal:save] base_vnum non risolvibile per instance_id=" +
-				  std::to_string(after->db_instance_id);
-			return false;
-		}
-		if(!portal_persist_object_instance_mysql(after, base, err)) {
-			return false;
-		}
+	const int base = object_instance_resolve_base_vnum(after);
+	if(base <= 0) {
+		err = "[portal:save] base_vnum non risolvibile (item_number/char_vnum)";
+		return false;
+	}
+	if(after->char_vnum == 0 ||
+	   (after->char_vnum >= LOW_EDITED_ITEMS &&
+		after->char_vnum <= HIGH_EDITED_ITEMS)) {
+		after->char_vnum = base;
+	}
+	if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
+		SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
+	}
+	if(!portal_persist_object_instance_mysql(after, base, owner_name, err)) {
+		return false;
 	}
 	if(!persist_inventory_affects(inventory_id, after, err)) {
 		return false;
@@ -1561,14 +1674,16 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				}
 				/* Toggle flag: gratis (il +50% si applica agli edit successivi). */
 				std::string save_err;
-				const bool saved =
-					portal_save_edited_inventory_item(inventory_id, after, save_err);
+				const bool saved = portal_save_edited_inventory_item(
+					inventory_id, after, save_err, target_name.c_str());
 				Json d = analyze_to_json(after);
 				d["paid_xp"] = 0;
 				d["paid_rune"] = 0;
 				d["saved"] = saved;
 				d["flag"] = "artifact";
 				d["artifact"] = IS_OBJ_STAT(after, ITEM_IMMUNE) ? 1 : 0;
+				d["instance_id"] = after->db_instance_id;
+				d["base_vnum"] = object_instance_resolve_base_vnum(after);
 				extract_obj(after);
 				if(!saved) {
 					return json_error(save_err.empty()
@@ -1630,13 +1745,15 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 
 			std::string save_err;
-			const bool saved =
-				portal_save_edited_inventory_item(inventory_id, after, save_err);
+			const bool saved = portal_save_edited_inventory_item(
+				inventory_id, after, save_err, target_name.c_str());
 
 			Json d = analyze_to_json(after);
 			d["paid_xp"] = xp_cost;
 			d["paid_rune"] = rune_cost;
 			d["saved"] = saved;
+			d["instance_id"] = after->db_instance_id;
+			d["base_vnum"] = object_instance_resolve_base_vnum(after);
 			if(!save_err.empty()) {
 				d["save_err"] = save_err;
 			}

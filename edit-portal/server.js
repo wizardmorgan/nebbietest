@@ -11,7 +11,7 @@ const SESSION_SECRET = process.env.EDIT_SESSION_SECRET || 'nebbie-edit-session-d
 const MYST_API_URL = process.env.MYST_EDIT_API_URL || 'http://mudcompiler:8090';
 const MYST_API_SECRET = process.env.EDIT_API_SECRET || 'nebbie-edit-dev-secret';
 /** Deve restare allineato a EDIT_PORTAL_UI_BUILD in public/app.js */
-const UI_BUILD = parseInt(process.env.EDIT_PORTAL_UI_BUILD || '8', 10);
+const UI_BUILD = parseInt(process.env.EDIT_PORTAL_UI_BUILD || '9', 10);
 
 const STAFF_LEVEL = parseInt(process.env.EDIT_STAFF_LEVEL || '57', 10);
 const LIMITED_LEVEL = parseInt(process.env.EDIT_LIMITED_LEVEL || '51', 10);
@@ -535,9 +535,11 @@ app.get('/api/staff/instances', requireAuth, requireSessionToon, async (req, res
     'SELECT id, base_vnum, owner_name, short_desc, cost FROM object_instance WHERE deleted = 0';
   const params = [];
   if (q) {
-    sql += ' AND (owner_name LIKE ? OR short_desc LIKE ? OR obj_name LIKE ? OR id = ?)';
+    sql +=
+      ' AND (owner_name LIKE ? OR short_desc LIKE ? OR obj_name LIKE ? OR id = ? OR base_vnum = ? OR CAST(base_vnum AS CHAR) LIKE ?)';
     const asNum = Number(q);
-    params.push(`%${q}%`, `%${q}%`, `%${q}%`, Number.isFinite(asNum) ? asNum : 0);
+    const num = Number.isFinite(asNum) ? asNum : 0;
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`, num, num, `%${q}%`);
   }
   sql += ' ORDER BY id DESC LIMIT 100';
   const [rows] = await dbPool.query(sql, params);
