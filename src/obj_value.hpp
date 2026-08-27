@@ -122,8 +122,8 @@ struct ObjEditListinoSpec {
 /**
  * Differenza di valore rispetto al prototipo (vnum / char_vnum se PERSONAL).
  * Unita': valore/derent in scala storage (* kObjValueStorageScale), rune raw.
- * Se l'oggetto ha ITEM_IMMUNE (Artifact), il valore e' aumentato del 50%
- * rispetto al listino (anche se il prototipo era gia' artifact).
+ * Se l'oggetto ha ITEM_IMMUNE (Artifact) — gia' presente o aggiunto nello
+ * stesso edit — il valore e' aumentato del 50% sul costo finale (dopo class_mult).
  */
 [[nodiscard]] ExpValue CheckDiffValue(struct obj_data* obj);
 

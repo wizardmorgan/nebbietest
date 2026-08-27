@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 18;
+const EDIT_PORTAL_UI_BUILD = 19;
 
 let session = null;
 let targetToonId = null;
@@ -1157,9 +1157,32 @@ function objectEntrySlotHint(entry) {
   return 'nessuno slot libero';
 }
 
+function objectAlreadyArtifact() {
+  const entries = selectedObjectOptions?.entries;
+  if (!Array.isArray(entries)) return false;
+  const art = entries.find((e) => e.kind === 'flag' && e.flag === 'artifact');
+  return Number(art?.current || 0) === 1;
+}
+
+function cartAddsArtifact() {
+  return [...objectEditCart.values()].some(
+    (it) => it.flag === 'artifact' && Number(it.targetModifier) === 1
+  );
+}
+
+/** Listino: +50% se Artifact gia' sul pezzo o in coda nello stesso pacchetto. */
+function objectPricingUsesArtifact() {
+  return objectAlreadyArtifact() || cartAddsArtifact();
+}
+
 function clearObjectPending(entryId) {
+  const removed = objectEditCart.get(entryId);
   if (objectEditCart.has(entryId)) {
     objectEditCart.delete(entryId);
+  }
+  if (removed?.flag === 'artifact') {
+    requoteObjectCartForArtifact();
+    return;
   }
   rebuildObjectPendingFromCart();
 }
@@ -1199,6 +1222,9 @@ function rebuildObjectPendingFromCart() {
   });
   const mxp = Math.floor(xpRaw / 1000000);
   const mxpFrac = Math.floor((xpRaw % 1000000) / 10000);
+  const artNote = objectPricingUsesArtifact()
+    ? 'Include maggiorazione Artifact +50% (listino)'
+    : undefined;
   pendingEdit = {
     type: 'object-batch',
     entryId: 'object-batch',
@@ -1209,6 +1235,8 @@ function rebuildObjectPendingFromCart() {
       mxp_frac: mxpFrac,
       diff_rune: rune,
       note:
+        notes.find((n) => /Artifact/i.test(String(n))) ||
+        artNote ||
         notes[0] ||
         (items.length > 1
           ? `${items.length} edit in coda (costo sommato vs stato attuale del pezzo)`
@@ -1217,6 +1245,30 @@ function rebuildObjectPendingFromCart() {
     items,
   };
   updatePaymentUI();
+}
+
+async function requoteObjectCartForArtifact() {
+  const useArt = objectPricingUsesArtifact();
+  const items = [...objectEditCart.values()];
+  for (const it of items) {
+    if (it.flag === 'artifact') continue;
+    const payload = {
+      targetToonId,
+      inventoryId: selectedInventoryId,
+      location: Number(it.location || 0),
+      targetModifier: it.targetModifier,
+      pendingArtifact: useArt,
+    };
+    if (it.flag) payload.flag = it.flag;
+    const data = await api('/api/quote-object-edit', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (!data.ok) continue;
+    it.quote = data.data;
+    objectEditCart.set(it.entryId, it);
+  }
+  rebuildObjectPendingFromCart();
 }
 
 function renderObjectTextEdit(textEdit) {
@@ -1579,6 +1631,15 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
   if (entry.kind === 'flag' && entry.flag) {
     payload.flag = entry.flag;
   }
+  const addingThisArtifact =
+    entry.kind === 'flag' &&
+    entry.flag === 'artifact' &&
+    Number(targetModifier) === 1;
+  /* +50% se pezzo gia' Artifact o Artifact gia' in coda (non sulla voce flag). */
+  if (!addingThisArtifact && (objectAlreadyArtifact() || cartAddsArtifact())) {
+    payload.pendingArtifact = true;
+  }
+
   const data = await api('/api/quote-object-edit', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -1616,6 +1677,7 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
   ) {
     pendingEdit = null;
   }
+  const wasAddingArtifact = cartAddsArtifact();
   objectEditCart.set(entry.id, {
     entryId: entry.id,
     location: Number(entry.location || 0),
@@ -1624,8 +1686,14 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     label: `${entry.label}: ${curLabel} → ${tgtLabel}`,
     quote: qd,
     selectEl,
+    entry,
   });
-  rebuildObjectPendingFromCart();
+  const nowAddingArtifact = cartAddsArtifact();
+  if (wasAddingArtifact !== nowAddingArtifact || nowAddingArtifact) {
+    await requoteObjectCartForArtifact();
+  } else {
+    rebuildObjectPendingFromCart();
+  }
 }
 
 async function confirmPayEdit() {
@@ -1673,9 +1741,9 @@ async function confirmPayEdit() {
     });
   } else if (pendingEdit.type === 'object-batch' || pendingEdit.type === 'object') {
     /*
-     * Applica ogni voce della coda pagando la sua quota.
-     * Artifact per ultimo (gratis): così Darkness/Armor restano a prezzo base
-     * se Artifact non era gia' sul pezzo — allineato al calcolo listino 50+40=90.
+     * Applica Artifact per primo (flag gratis), poi le voci pagate:
+     * cosi' AnalyzeObjEdit applica gia' il +50% listino sul pezzo.
+     * (Artifact gia' presente O aggiunto nello stesso pacchetto → ×1.5)
      */
     const items =
       pendingEdit.type === 'object-batch'
@@ -1684,7 +1752,7 @@ async function confirmPayEdit() {
     items.sort((a, b) => {
       const aa = a.flag === 'artifact' ? 1 : 0;
       const bb = b.flag === 'artifact' ? 1 : 0;
-      return aa - bb;
+      return bb - aa;
     });
     result = { ok: true };
     for (const item of items) {

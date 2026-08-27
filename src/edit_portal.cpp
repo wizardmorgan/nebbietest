@@ -1610,10 +1610,20 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				d["target"] = target;
 				d["inventory_id"] = inventory_id;
 				d["note"] =
-					target ? "Artifact ON (gratis): ogni edit successivo +50% listino"
-						   : "Artifact invariato";
+					target
+						? "Artifact: flag gratis; +50% sul costo finale di questo edit "
+						  "(gia' presente o aggiunto nello stesso pacchetto)"
+						: "Artifact invariato";
 				extract_obj(obj);
 				return json_ok(d);
+			}
+
+			/* Listino: +50% se pezzo gia' Artifact OPPURE Artifact e' in coda
+			 * nello stesso edit (pending_artifact dal carrello portal). */
+			const bool pending_artifact =
+				parse_json_int(req, "pending_artifact", 0) != 0;
+			if(pending_artifact || IS_OBJ_STAT(obj, ITEM_IMMUNE)) {
+				SET_BIT(obj->obj_flags.extra_flags, ITEM_IMMUNE);
 			}
 
 			long xp_raw = 0;
@@ -1660,6 +1670,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["target"] = target;
 			d["inventory_id"] = inventory_id;
 			d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
+			d["pending_artifact"] = pending_artifact ? 1 : 0;
 			if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
 				d["note"] = "Include maggiorazione Artifact +50% (listino)";
 			}
@@ -1782,7 +1793,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
 					SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
 				}
-				/* Impostazione flag: gratis; +50% listino su ogni edit successivo. */
+				/* Flag gratis; il +50% e' sul costo degli edit pagati (stesso
+				 * pacchetto o successivi) via AnalyzeObjEdit. */
 				std::string save_err;
 				const bool saved = portal_save_edited_inventory_item(
 					inventory_id, after, save_err, target_name.c_str());
@@ -1842,10 +1854,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
 			}
 
-			const int xp_cost =
-				pay_xp > 0 ? pay_xp : static_cast<int>(std::max(0L, quote_xp));
-			const int rune_cost =
-				pay_rune > 0 ? pay_rune : std::max(0, quote_pq);
+			/* Non accettare underpay rispetto al listino (class_mult / Artifact). */
+			const int quote_xp_i = static_cast<int>(std::max(0L, quote_xp));
+			const int xp_cost = std::max(pay_xp, quote_xp_i);
+			const int rune_cost = std::max(pay_rune, std::max(0, quote_pq));
 
 			const int max_level = max_level_for_toon(target_toon_id);
 			std::string pay_err;
