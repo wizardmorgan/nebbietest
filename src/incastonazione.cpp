@@ -740,8 +740,8 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 		return;
 	}
 	if(!object_can_be_mounted(ch, jeweler, obj)) {
-		mudlog(LOG_PLAYERS, "%s incastona refused on %s", GET_NAME(ch),
-			   obj->short_description ? obj->short_description : "?");
+		const char* oname = obj->short_description ? obj->short_description : "?";
+		mudlog(LOG_PLAYERS, "%s incastona refused on %s", GET_NAME(ch), oname);
 		return;
 	}
 
@@ -950,10 +950,10 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 			TRUE, ch, obj, 0, TO_ROOM);
 	}
 
+	const char* oname = obj->short_description ? obj->short_description : "?";
+	const char* jname = (jeweler && GET_NAME(jeweler)) ? GET_NAME(jeweler) : "self";
 	mudlog(LOG_PLAYERS, "%s incastona %d slot su %s (jeweler=%s)",
-		   GET_NAME(ch), aff,
-		   obj->short_description ? obj->short_description : "?",
-		   jeweler && GET_NAME(jeweler) ? GET_NAME(jeweler) : "self");
+		   GET_NAME(ch), aff, oname, jname);
 	schedule_inventory_save(ch);
 }
 
