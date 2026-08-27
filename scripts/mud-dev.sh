@@ -487,7 +487,23 @@ cmd_start_edit() {
 	fi
 	echo "Avvio edit-portal (EDIT_REPO=$EDIT_REPO, rete $MUD_STACK_NETWORK)..."
 	export EDIT_API_SECRET EDIT_WEB_PORT
-	compose_edit up -d --build edit-portal
+	# Forza recreate: altrimenti resta un container Node con public/ vecchio.
+	docker rm -f nebbie-edit-portal 2>/dev/null || true
+	compose_edit up -d --build --force-recreate --remove-orphans edit-portal
+	echo "Attesa edit-portal..."
+	local i
+	for i in $(seq 1 20); do
+		if curl -sf "http://localhost:${EDIT_WEB_PORT}/api/health" >/dev/null 2>&1; then
+			break
+		fi
+		sleep 0.5
+	done
+	if docker exec nebbie-edit-portal grep -q 'EDIT_PORTAL_UI_BUILD = 8' /app/public/app.js 2>/dev/null; then
+		echo "OK: container ha app.js UI build 8"
+	else
+		print_warn "app.js nel container senza UI build 8 — controlla build context"
+		docker exec nebbie-edit-portal head -n 12 /app/public/app.js 2>/dev/null || true
+	fi
 	echo "Web UI: http://localhost:${EDIT_WEB_PORT}/"
 }
 

@@ -10,6 +10,8 @@ const PORT = parseInt(process.env.EDIT_WEB_PORT || '3080', 10);
 const SESSION_SECRET = process.env.EDIT_SESSION_SECRET || 'nebbie-edit-session-dev';
 const MYST_API_URL = process.env.MYST_EDIT_API_URL || 'http://mudcompiler:8090';
 const MYST_API_SECRET = process.env.EDIT_API_SECRET || 'nebbie-edit-dev-secret';
+/** Deve restare allineato a EDIT_PORTAL_UI_BUILD in public/app.js */
+const UI_BUILD = parseInt(process.env.EDIT_PORTAL_UI_BUILD || '8', 10);
 
 const STAFF_LEVEL = parseInt(process.env.EDIT_STAFF_LEVEL || '57', 10);
 const LIMITED_LEVEL = parseInt(process.env.EDIT_LIMITED_LEVEL || '51', 10);
@@ -547,6 +549,7 @@ app.get('/api/health', async (_req, res) => {
   res.json({
     ok: true,
     web: 'up',
+    ui_build: UI_BUILD,
     myst: myst.ok ? myst.data : null,
     mystError: myst.ok ? null : myst.error,
   });
