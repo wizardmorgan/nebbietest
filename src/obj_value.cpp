@@ -561,9 +561,9 @@ ObjEditAnalysis AnalyzeObjEdit(struct obj_data* obj) {
 										   report.class_mult));
 	}
 
-	/* Listino: Artifact +50% sul costo finale dell'edit. */
-	if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && !IS_OBJ_STAT(original, ITEM_IMMUNE) &&
-	   report.diff.valore > 0) {
+	/* Listino: Artifact +50% sul costo finale di ogni edit sul pezzo
+	 * (anche se il prototipo era gia' artifact). */
+	if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && report.diff.valore > 0) {
 		report.diff.valore = (report.diff.valore * 3) / 2;
 	}
 

@@ -7,6 +7,10 @@ Web UI per editing oggetti/PG con listino (`obj_value` / `edit_pool`).
 (costanti in `src/obj_value.hpp` / tabella `kObjEditListino`).
 Non usare EditMaster/`pedit.cpp` come riferimento.
 
+**Artifact (`ITEM_IMMUNE`):** in maschera oggetto; una volta impostato
+non si toglie. Ogni edit sul pezzo paga **+50%** sul costo finale listino
+(anche se il prototipo era già artifact).
+
 Vedi **docs/edit-portal-nucbuntu.md** per deploy Docker completo.
 
 ```bash
