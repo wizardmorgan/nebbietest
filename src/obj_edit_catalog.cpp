@@ -824,28 +824,33 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		entries.push_back(j);
 	}
 
+	/*
+	 * Listino https://www.nebbiearcane.it/listino-edits/
+	 * Resistenze (APPLY_IMMUNE) ≠ Immunità concesse (APPLY_M_IMMUNE).
+	 * Solo voci del listino: niente sleep/charm/nonmag come "resistenza".
+	 */
 	static const struct {
 		unsigned bit;
 		const char* slug;
 		const char* label;
-	} resist[] = {
-		{IMM_FIRE, "fire", "Fuoco"},
-		{IMM_COLD, "cold", "Freddo"},
-		{IMM_ELEC, "elec", "Elettricità"},
-		{IMM_ENERGY, "energy", "Energia"},
-		{IMM_BLUNT, "blunt", "Contundente"},
-		{IMM_PIERCE, "pierce", "Perforante"},
-		{IMM_SLASH, "slash", "Taglio"},
-		{IMM_ACID, "acid", "Acido"},
-		{IMM_POISON, "poison", "Veleno"},
-		{IMM_DRAIN, "drain", "Drain"},
-		{IMM_SLEEP, "sleep", "Sleep"},
-		{IMM_CHARM, "charm", "Charm"},
-		{IMM_HOLD, "hold", "Hold"},
-		{IMM_NONMAG, "nonmag", "Non-magia"},
-		/* IMM_PLUS1..4 = resistenze mob ad armi +N: non editabili sui toon. */
+		long mxp;
+		long rune;
+	} listino_resists[] = {
+		/* Resistenze Spells */
+		{IMM_ACID, "acid", "Res. Acid", 75, 90},
+		{IMM_ELEC, "elec", "Res. Electricity", 150, 180},
+		{IMM_FIRE, "fire", "Res. Fire", 100, 120},
+		{IMM_COLD, "cold", "Res. Cold", 75, 90},
+		{IMM_ENERGY, "energy", "Res. Energy", 150, 180},
+		{IMM_DRAIN, "drain", "Res. Drain", 30, 35},
+		{IMM_HOLD, "hold", "Res. Hold", 75, 90},
+		{IMM_POISON, "poison", "Res. Poison", 30, 35},
+		/* Resistenze ai Fisici */
+		{IMM_SLASH, "slash", "Res. Slash", 150, 200},
+		{IMM_PIERCE, "pierce", "Res. Pierce", 150, 200},
+		{IMM_BLUNT, "blunt", "Res. Blunt", 300, 400},
 	};
-	for(const auto& r : resist) {
+	for(const auto& r : listino_resists) {
 		if(!edit_system_resistance_enabled(r.bit)) {
 			continue;
 		}
@@ -857,15 +862,51 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		const int imm_slot = find_affect_slot_for_location(obj, APPLY_IMMUNE);
 		const bool can_add = !has_affect && (imm_slot >= 0 || free_slots > 0);
 		Json j;
-		j["id"] = std::string("immune.") + r.slug;
+		j["id"] = std::string("resist.") + r.slug;
 		j["label"] = r.label;
 		j["location"] = APPLY_IMMUNE;
 		j["immune_bit"] = r.bit;
 		j["kind"] = "immune";
+		j["listino_group"] = "resistance";
 		j["has_affect"] = has_affect;
 		j["occupied_slot"] = imm_slot;
 		j["can_add"] = can_add;
 		j["can_edit"] = has_affect || can_add;
+		j["mxp_per_step"] = r.mxp;
+		j["rune_per_step"] = r.rune;
+		entries.push_back(j);
+	}
+
+	/* Immunità Concesse — APPLY_M_IMMUNE (listino), non confondere con Res. */
+	static const struct {
+		unsigned bit;
+		const char* slug;
+		const char* label;
+		long mxp;
+		long rune;
+	} listino_immunities[] = {
+		{IMM_DRAIN, "drain", "Imm. Drain", 100, 100},
+		{IMM_CHARM, "charm", "Imm. Charm", 60, 60},
+		{IMM_POISON, "poison", "Imm. Poison", 100, 100},
+	};
+	for(const auto& r : listino_immunities) {
+		const int bits = object_m_immune_current_bits(obj);
+		const bool has_affect = (bits & static_cast<int>(r.bit)) != 0;
+		const int slot = find_affect_slot_for_location(obj, APPLY_M_IMMUNE);
+		const bool can_add = !has_affect && (slot >= 0 || free_slots > 0);
+		Json j;
+		j["id"] = std::string("immunity.") + r.slug;
+		j["label"] = r.label;
+		j["location"] = APPLY_M_IMMUNE;
+		j["immune_bit"] = r.bit;
+		j["kind"] = "m_immune";
+		j["listino_group"] = "immunity";
+		j["has_affect"] = has_affect;
+		j["occupied_slot"] = slot;
+		j["can_add"] = can_add;
+		j["can_edit"] = has_affect || can_add;
+		j["mxp_per_step"] = r.mxp;
+		j["rune_per_step"] = r.rune;
 		entries.push_back(j);
 	}
 
@@ -983,6 +1024,10 @@ int object_edit_display_current(const struct obj_data* obj, int location) noexce
 
 int object_immune_current_bits(const struct obj_data* obj) noexcept {
 	return sum_location_mod(obj, APPLY_IMMUNE);
+}
+
+int object_m_immune_current_bits(const struct obj_data* obj) noexcept {
+	return sum_location_mod(obj, APPLY_M_IMMUNE);
 }
 
 int object_spell_current_bits(const struct obj_data* obj) noexcept {

@@ -811,7 +811,7 @@ std::atomic<bool> g_http_running {false};
 	}
 
 	if(!portal_mysql_exec(db,
-						  "DELETE FROM object_instance_affect WHERE instance_id=" +
+						  "DELETE FROM object_instance_affect WHERE key_instance_id=" +
 							  std::to_string(id),
 						  err, "portal:persist_inst_del_aff")) {
 		return false;
@@ -823,7 +823,7 @@ std::atomic<bool> g_http_running {false};
 			continue;
 		}
 		std::ostringstream aff;
-		aff << "INSERT INTO object_instance_affect (instance_id, affect_slot, "
+		aff << "INSERT INTO object_instance_affect (key_instance_id, key_affect_slot, "
 			   "location, modifier) VALUES ("
 			<< id << ',' << i << ',' << loc << ',' << mod << ')';
 		if(!portal_mysql_exec(db, aff.str(), err, "portal:persist_inst_ins_aff")) {
@@ -1519,10 +1519,13 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					const int loc = e.value("location", 0);
 					e["current"] = object_edit_display_current(obj, loc);
 				}
-				else if(kind == "immune") {
+				else if(kind == "immune" || kind == "m_immune") {
 					const unsigned bit =
 						static_cast<unsigned>(e.value("immune_bit", 0U));
-					const int bits = object_immune_current_bits(obj);
+					const int loc = e.value("location", APPLY_IMMUNE);
+					const int bits = (loc == APPLY_M_IMMUNE)
+										 ? object_m_immune_current_bits(obj)
+										 : object_immune_current_bits(obj);
 					e["current"] = (bits & static_cast<int>(bit)) ? 1 : 0;
 				}
 				else if(kind == "spell") {
@@ -1709,7 +1712,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			int current = 0;
 			int target = target_modifier;
 			if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE) {
-				const int bits = object_immune_current_bits(obj);
+				const int bits = (location == APPLY_M_IMMUNE)
+									 ? object_m_immune_current_bits(obj)
+									 : object_immune_current_bits(obj);
 				current = (bits & target_modifier) ? 1 : 0;
 				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
 			}
