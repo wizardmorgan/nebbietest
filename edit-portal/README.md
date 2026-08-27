@@ -11,6 +11,9 @@ Non usare EditMaster/`pedit.cpp` come riferimento.
 non si toglie. Ogni edit sul pezzo paga **+50%** sul costo finale listino
 (anche se il prototipo era già artifact).
 
+**Name / short / long:** disponibili solo dopo un edit pagato (`ITEM2_EDIT` /
+`instance_id`). Contatori 128/128/256; costo base 5 MXP (+ class_mult / Artifact).
+
 Vedi **docs/edit-portal-nucbuntu.md** per deploy Docker completo.
 
 ```bash

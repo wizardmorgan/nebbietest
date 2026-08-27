@@ -448,6 +448,23 @@ app.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (req, 
   res.status(result.ok ? 200 : 400).json(result);
 });
 
+app.post('/api/quote-object-text', requireAuth, requireSessionToon, async (req, res) => {
+  const targetToonId = parseToonId(req.body.targetToonId);
+  const inventoryId = Number(req.body.inventoryId);
+  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
+    return res.status(403).json({ ok: false, error: 'accesso negato' });
+  }
+  const result = await mystPost('/internal/quote-object-text', {
+    toon_id: targetToonId,
+    target_toon_id: targetToonId,
+    inventory_id: inventoryId,
+    obj_name: String(req.body.objName ?? req.body.name ?? ''),
+    short_desc: String(req.body.shortDesc ?? ''),
+    description: String(req.body.description ?? ''),
+  });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
 app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
@@ -464,6 +481,26 @@ app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) 
     pay_xp: Number(req.body.payXp || 0),
     pay_rune: Number(req.body.payRune || 0),
     flag: req.body.flag || '',
+  });
+  res.status(result.ok ? 200 : 400).json(result);
+});
+
+app.post('/api/apply-object-text', requireAuth, requireSessionToon, async (req, res) => {
+  const targetToonId = parseToonId(req.body.targetToonId);
+  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
+    return res.status(403).json({ ok: false, error: 'accesso negato' });
+  }
+  if (req.session.role === 'limited') {
+    return res.status(403).json({ ok: false, error: 'tier limited: apply non consentito' });
+  }
+  const result = await mystPost('/internal/apply-object-text', {
+    target_toon_id: targetToonId,
+    inventory_id: Number(req.body.inventoryId),
+    obj_name: String(req.body.objName ?? req.body.name ?? ''),
+    short_desc: String(req.body.shortDesc ?? ''),
+    description: String(req.body.description ?? ''),
+    pay_xp: Number(req.body.payXp || 0),
+    pay_rune: Number(req.body.payRune || 0),
   });
   res.status(result.ok ? 200 : 400).json(result);
 });

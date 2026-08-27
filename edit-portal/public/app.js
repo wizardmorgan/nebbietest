@@ -4,7 +4,7 @@ const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 10;
+const EDIT_PORTAL_UI_BUILD = 11;
 
 let session = null;
 let targetToonId = null;
@@ -837,6 +837,8 @@ async function selectItem(inventoryId, li) {
   $('object-edits').innerHTML = '';
   $('object-affect-slots').innerHTML = '';
   hide('object-affect-slots');
+  const textBox = $('object-text-edit');
+  if (textBox) textBox.innerHTML = '';
 
   const opts = await api('/api/object-edit-options', {
     method: 'POST',
@@ -862,6 +864,7 @@ async function selectItem(inventoryId, li) {
     lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
 
   renderObjectAffectSlots(d.affect_slots);
+  renderObjectTextEdit(d.text_edit);
   renderObjectEdits(d.entries || [], d.dam_budget, d.sp_budget);
 }
 
@@ -997,6 +1000,147 @@ function clearObjectPending(entryId) {
   }
 }
 
+function renderObjectTextEdit(textEdit) {
+  const box = $('object-text-edit');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!textEdit) {
+    return;
+  }
+  const canEdit = textEdit.can_edit === true && session.role !== 'limited';
+  const nameMax = Number(textEdit.name_max || 128);
+  const shortMax = Number(textEdit.short_max || 128);
+  const longMax = Number(textEdit.long_max || 256);
+
+  const details = document.createElement('details');
+  details.className = 'edit-section';
+  details.open = true;
+  const summary = document.createElement('summary');
+  summary.textContent = 'Name / short / long';
+  details.appendChild(summary);
+
+  const body = document.createElement('div');
+  body.className = 'edit-section-body object-text-edit';
+  if (!canEdit) {
+    const locked = document.createElement('p');
+    locked.className = 'hint';
+    locked.textContent =
+      textEdit.hint ||
+      'Disponibile dopo il primo edit pagato sull\'oggetto (instance / EDIT).';
+    body.appendChild(locked);
+    details.appendChild(body);
+    box.appendChild(details);
+    return;
+  }
+
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  hint.textContent =
+    textEdit.hint ||
+    'Codici colore $cMBFG ammessi. Contatore = lunghezza grezza (come in DB).';
+  body.appendChild(hint);
+
+  const fields = [
+    { key: 'name', label: 'Name (keywords)', max: nameMax, value: textEdit.name || '', multiline: false },
+    {
+      key: 'short',
+      label: 'Short description',
+      max: shortMax,
+      value: textEdit.short_desc || '',
+      multiline: false,
+    },
+    {
+      key: 'long',
+      label: 'Long description',
+      max: longMax,
+      value: textEdit.description || '',
+      multiline: true,
+    },
+  ];
+
+  const inputs = {};
+  fields.forEach((f) => {
+    const row = document.createElement('div');
+    row.className = 'text-edit-row';
+    const lab = document.createElement('label');
+    lab.textContent = f.label;
+    const counter = document.createElement('span');
+    counter.className = 'text-len-counter';
+    const preview = document.createElement('div');
+    preview.className = 'text-preview';
+    let input;
+    if (f.multiline) {
+      input = document.createElement('textarea');
+      input.rows = 3;
+    } else {
+      input = document.createElement('input');
+      input.type = 'text';
+    }
+    input.value = f.value;
+    input.dataset.max = String(f.max);
+    const sync = () => {
+      const n = input.value.length;
+      const max = Number(input.dataset.max);
+      counter.textContent = `${n}/${max}`;
+      counter.classList.toggle('over', n > max);
+      preview.innerHTML = mudTextToHtml(input.value) || '<span class="hint">(vuoto)</span>';
+    };
+    input.addEventListener('input', sync);
+    sync();
+    row.appendChild(lab);
+    row.appendChild(counter);
+    row.appendChild(input);
+    row.appendChild(preview);
+    body.appendChild(row);
+    inputs[f.key] = input;
+  });
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-secondary';
+  btn.textContent = 'Calcola costo testo';
+  btn.onclick = async () => {
+    const objName = inputs.name.value;
+    const shortDesc = inputs.short.value;
+    const description = inputs.long.value;
+    if (
+      objName.length > nameMax ||
+      shortDesc.length > shortMax ||
+      description.length > longMax
+    ) {
+      alert('Uno o più campi superano la lunghezza massima: correggi prima di quotare.');
+      return;
+    }
+    const data = await api('/api/quote-object-text', {
+      method: 'POST',
+      body: JSON.stringify({
+        targetToonId,
+        inventoryId: selectedInventoryId,
+        objName,
+        shortDesc,
+        description,
+      }),
+    });
+    if (!data.ok) {
+      alert(data.error || 'Quote testo fallita');
+      return;
+    }
+    pendingEdit = {
+      type: 'object-text',
+      entryId: 'object-text',
+      label: 'Name / short / long',
+      quote: data.data,
+      objName,
+      shortDesc,
+      description,
+    };
+    updatePaymentUI();
+  };
+  body.appendChild(btn);
+  details.appendChild(body);
+  box.appendChild(details);
+}
+
 function renderObjectEdits(entries, damBudget, spBudget) {
   const box = $('object-edits');
   box.innerHTML = '';
@@ -1019,28 +1163,26 @@ function renderObjectEdits(entries, damBudget, spBudget) {
     hint.className = 'hint budget-banner';
     const parts = [];
     if (damBudget) {
-      let line = `Dam editato (EDIT indossati) ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`;
+      let line = `Dam editato (EDIT in possesso) ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`;
       const pc = Number(damBudget.piece_current);
       const pp = Number(damBudget.piece_proto);
       if (Number.isFinite(pc) && Number.isFinite(pp)) {
         line += ` — questo pezzo ${pc} vs proto ${pp} (delta +${Number(damBudget.piece || 0)})`;
-        if (damBudget.piece_worn === false) {
-          line += ' [non indossato: non nel totale]';
-        } else if (damBudget.piece_edit === false) {
-          line += ' [senza EDIT: non nel totale]';
+        if (damBudget.piece_edit === false) {
+          line += ' [non conteggiato: serve EDIT + owner ED/personal; simboli clan esclusi]';
         }
       }
       parts.push(line);
     }
     if (spBudget) {
       parts.push(
-        `Spellpower editato (EDIT indossati) ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
+        `Spellpower editato (EDIT in possesso) ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
       );
     }
     hint.textContent =
       (parts.length
         ? parts.join(' · ') +
-          ' — solo pezzi indossati con flag EDIT, delta vs prototipo'
+          ' — pezzi in possesso con EDIT e owner del toon (delta vs proto); simboli clan esclusi'
         : '') || '';
     box.appendChild(hint);
 
@@ -1279,13 +1421,25 @@ async function confirmPayEdit() {
       method: 'POST',
       body: JSON.stringify(affectBody),
     });
+  } else if (pendingEdit.type === 'object-text') {
+    result = await api('/api/apply-object-text', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...body,
+        inventoryId: selectedInventoryId,
+        objName: pendingEdit.objName,
+        shortDesc: pendingEdit.shortDesc,
+        description: pendingEdit.description,
+      }),
+    });
   } else {
     return;
   }
 
   if (result.ok) {
     $('apply-result').textContent = 'Edit applicato con successo.';
-    const wasObject = pendingEdit.type === 'object';
+    const wasObject =
+      pendingEdit.type === 'object' || pendingEdit.type === 'object-text';
     const invId = selectedInventoryId;
     pendingEdit = null;
     updatePaymentUI();

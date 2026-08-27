@@ -96,7 +96,9 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] int object_edit_prototype_vnum(const struct obj_data* obj) noexcept;
 
 /**
- * true se il pezzo ha ITEM2_EDIT (entra nel tetto solo se anche indossato).
+ * true se il pezzo entra nel tetto dam/sp del toon:
+ * ITEM2_EDIT + owner (personal_owner o ED*) del toon; esclusi simboli di clan.
+ * Conta sia indossati che in inventario.
  */
 [[nodiscard]] bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 														  const char* toon_name) noexcept;

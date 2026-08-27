@@ -12,6 +12,7 @@
 #include <atomic>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cctype>
 #include <cstring>
@@ -573,18 +574,15 @@ std::atomic<bool> g_http_running {false};
 
 /**
  * Tetto dam/sp listino (personaggio):
- * per ogni pezzo INDOSSATO con ITEM2_EDIT → max(0, dam_attuale − dam_prototipo).
- * Senza flag EDIT non conta (anche se ha dam).
+ * pezzi in possesso (inv o indossati) con ITEM2_EDIT e owner del toon
+ * → max(0, dam_attuale − dam_prototipo). Simboli di clan esclusi.
  */
-[[nodiscard]] int sum_worn_edited_damroll_excluding(
+[[nodiscard]] int sum_owned_edited_damroll_excluding(
 	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
 	const char* toon_name) {
 	int total = 0;
 	for(auto& r : rows) {
 		if(r.id == exclude_inventory_id) {
-			continue;
-		}
-		if(!inventory_row_is_worn(r.elem.wearpos)) {
 			continue;
 		}
 		struct obj_data* o = materialize_inventory_row(r);
@@ -599,15 +597,12 @@ std::atomic<bool> g_http_running {false};
 	return total;
 }
 
-[[nodiscard]] int sum_worn_edited_spellpower_excluding(
+[[nodiscard]] int sum_owned_edited_spellpower_excluding(
 	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
 	const char* toon_name) {
 	int total = 0;
 	for(auto& r : rows) {
 		if(r.id == exclude_inventory_id) {
-			continue;
-		}
-		if(!inventory_row_is_worn(r.elem.wearpos)) {
 			continue;
 		}
 		struct obj_data* o = materialize_inventory_row(r);
@@ -622,14 +617,11 @@ std::atomic<bool> g_http_running {false};
 	return total;
 }
 
-/** Elenco pezzi indossati+EDIT che contribuiscono al tetto dam (UI). */
-[[nodiscard]] Json worn_dam_budget_contributors_json(
+/** Elenco pezzi EDIT+owner che contribuiscono al tetto dam (UI). */
+[[nodiscard]] Json owned_dam_budget_contributors_json(
 	std::vector<inventory_mysql_row>& rows, const char* toon_name) {
 	Json list = Json::array();
 	for(auto& r : rows) {
-		if(!inventory_row_is_worn(r.elem.wearpos)) {
-			continue;
-		}
 		struct obj_data* o = materialize_inventory_row(r);
 		if(!o) {
 			continue;
@@ -638,14 +630,17 @@ std::atomic<bool> g_http_running {false};
 			const int cur = object_edit_damroll_total(o);
 			const int proto = object_edit_damroll_prototype_total(o);
 			const int delta = object_edit_damroll_edited_delta(o);
-			Json c;
-			c["inventory_id"] = r.id;
-			c["short_desc"] = r.elem.sd;
-			c["current"] = cur;
-			c["proto"] = proto;
-			c["delta"] = delta;
-			c["proto_vnum"] = object_edit_prototype_vnum(o);
-			list.push_back(c);
+			if(delta > 0) {
+				Json c;
+				c["inventory_id"] = r.id;
+				c["short_desc"] = r.elem.sd;
+				c["current"] = cur;
+				c["proto"] = proto;
+				c["delta"] = delta;
+				c["worn"] = inventory_row_is_worn(r.elem.wearpos);
+				c["proto_vnum"] = object_edit_prototype_vnum(o);
+				list.push_back(c);
+			}
 		}
 		extract_obj(o);
 	}
@@ -660,12 +655,23 @@ std::atomic<bool> g_http_running {false};
 		err = "[portal:persist_inv] database/obj non disponibile";
 		return false;
 	}
+	const int base_vnum = object_instance_resolve_base_vnum(obj);
+	const std::string name_lit =
+		portal_sql_literal(obj->name ? obj->name : "");
+	const std::string sd_lit =
+		portal_sql_literal(obj->short_description ? obj->short_description : "");
+	const std::string desc_lit =
+		portal_sql_literal(obj->description ? obj->description : "");
 	std::ostringstream upd;
 	upd << "UPDATE character_inventory SET extra_flags="
 		<< static_cast<int>(obj->obj_flags.extra_flags) << ", extra_flags2="
-		<< static_cast<int>(obj->obj_flags.extra_flags2);
+		<< static_cast<int>(obj->obj_flags.extra_flags2) << ", obj_name=" << name_lit
+		<< ", short_desc=" << sd_lit << ", description=" << desc_lit;
 	if(obj->db_instance_id != 0) {
 		upd << ", instance_id=" << obj->db_instance_id;
+		if(base_vnum > 0) {
+			upd << ", item_number=" << base_vnum;
+		}
 	}
 	upd << " WHERE id = " << inventory_id;
 	if(!portal_mysql_exec(db, upd.str(), err, "portal:persist_inv_upd")) {
@@ -891,6 +897,38 @@ std::atomic<bool> g_http_running {false};
 	j["changes"] = a.changes;
 	j["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
 	return j;
+}
+
+[[nodiscard]] bool portal_text_field_ok(const std::string& s, int max_len,
+										const char* label, std::string& err) {
+	if(static_cast<int>(s.size()) > max_len) {
+		err = std::string(label) + " troppo lungo (" + std::to_string(s.size()) +
+			  "/" + std::to_string(max_len) + ")";
+		return false;
+	}
+	return true;
+}
+
+void portal_set_obj_string(char*& field, const std::string& value) {
+	if(field) {
+		free(field);
+		field = nullptr;
+	}
+	field = strdup(value.c_str());
+}
+
+[[nodiscard]] long portal_text_edit_xp_raw(const struct obj_data* obj) {
+	long xp = kObjEditTextXpRaw;
+	const ObjEditAnalysis a =
+		AnalyzeObjEdit(const_cast<struct obj_data*>(obj));
+	if(a.class_mult != 1.0 && xp > 0) {
+		xp = static_cast<long>(
+			std::llround(static_cast<double>(xp) * a.class_mult));
+	}
+	if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp > 0) {
+		xp = (xp * 3) / 2;
+	}
+	return xp;
 }
 
 inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
@@ -1431,10 +1469,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				const bool piece_worn = inventory_row_is_worn(row->elem.wearpos);
 				const bool piece_edit = object_edit_counts_toward_combat_budget(
 					obj, toon_name.c_str());
-				const int other_dam = sum_worn_edited_damroll_excluding(
+				const int other_dam = sum_owned_edited_damroll_excluding(
 					rows, inventory_id, toon_name.c_str());
-				const int piece_for_total =
-					(piece_worn && piece_edit) ? piece_delta : 0;
+				const int piece_for_total = piece_edit ? piece_delta : 0;
 
 				Json dam_budget;
 				dam_budget["piece"] = piece_delta;
@@ -1447,16 +1484,15 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				dam_budget["other"] = other_dam;
 				dam_budget["char_total"] = other_dam + piece_for_total;
 				dam_budget["char_max"] = kObjEditMaxDamrollEditableTotal;
-				dam_budget["source"] = "worn_edit_delta_vs_proto";
+				dam_budget["source"] = "owned_edit_delta_vs_proto";
 				dam_budget["contributors"] =
-					worn_dam_budget_contributors_json(rows, toon_name.c_str());
+					owned_dam_budget_contributors_json(rows, toon_name.c_str());
 				d["dam_budget"] = dam_budget;
 
 				const int piece_sp_delta = object_edit_spellpower_edited_delta(obj);
-				const int other_sp = sum_worn_edited_spellpower_excluding(
+				const int other_sp = sum_owned_edited_spellpower_excluding(
 					rows, inventory_id, toon_name.c_str());
-				const int piece_sp_for_total =
-					(piece_worn && piece_edit) ? piece_sp_delta : 0;
+				const int piece_sp_for_total = piece_edit ? piece_sp_delta : 0;
 				Json sp_budget;
 				sp_budget["piece"] = piece_sp_delta;
 				sp_budget["piece_current"] = object_edit_spellpower_total(obj);
@@ -1464,8 +1500,26 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				sp_budget["other"] = other_sp;
 				sp_budget["char_total"] = other_sp + piece_sp_for_total;
 				sp_budget["char_max"] = kObjEditMaxSpellpowerEditableTotal;
-				sp_budget["source"] = "worn_edit_delta_vs_proto";
+				sp_budget["source"] = "owned_edit_delta_vs_proto";
 				d["sp_budget"] = sp_budget;
+			}
+			{
+				const bool can_text =
+					obj->db_instance_id != 0 || IS_OBJ_STAT2(obj, ITEM2_EDIT);
+				Json text;
+				text["can_edit"] = can_text;
+				text["name"] = obj->name ? obj->name : "";
+				text["short_desc"] =
+					obj->short_description ? obj->short_description : "";
+				text["description"] = obj->description ? obj->description : "";
+				text["name_max"] = kObjEditTextNameMax;
+				text["short_max"] = kObjEditTextShortMax;
+				text["long_max"] = kObjEditTextLongMax;
+				text["hint"] =
+					can_text
+						? "Name / short / long (codici $c); solo dopo un edit pagato"
+						: "Disponibile dopo il primo edit pagato sull'oggetto";
+				d["text_edit"] = text;
 			}
 			if(is_armor && is_weapon) {
 				d["item_type"] = "armor+weapon";
@@ -1549,12 +1603,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			std::string quote_err;
 			const int other_dam =
 				object_edit_location_affects_dam(location)
-					? sum_worn_edited_damroll_excluding(rows, inventory_id,
+					? sum_owned_edited_damroll_excluding(rows, inventory_id,
 														toon_name.c_str())
 					: -1;
 			const int other_sp =
 				object_edit_location_affects_spellpower(location)
-					? sum_worn_edited_spellpower_excluding(rows, inventory_id,
+					? sum_owned_edited_spellpower_excluding(rows, inventory_id,
 														   toon_name.c_str())
 					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
@@ -1732,12 +1786,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			std::string quote_err;
 			const int other_dam =
 				object_edit_location_affects_dam(location)
-					? sum_worn_edited_damroll_excluding(rows, inventory_id,
+					? sum_owned_edited_damroll_excluding(rows, inventory_id,
 														target_name.c_str())
 					: -1;
 			const int other_sp =
 				object_edit_location_affects_spellpower(location)
-					? sum_worn_edited_spellpower_excluding(rows, inventory_id,
+					? sum_owned_edited_spellpower_excluding(rows, inventory_id,
 														   target_name.c_str())
 					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
@@ -1793,6 +1847,130 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(!saved) {
 				return json_error(save_err.empty()
 									  ? "[portal:save] pagamento eseguito ma salvataggio fallito"
+									  : save_err.c_str(),
+								  500);
+			}
+			return json_ok(d);
+		}
+
+		if(path == "/internal/quote-object-text" ||
+		   path == "/internal/apply-object-text") {
+			const bool is_apply = (path == "/internal/apply-object-text");
+			unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
+			if(target_toon_id == 0) {
+				target_toon_id = parse_json_ull(req, "toon_id");
+			}
+			const unsigned long long inventory_id = parse_json_ull(req, "inventory_id");
+			const std::string new_name = req.value("obj_name", req.value("name", ""));
+			const std::string new_short =
+				req.value("short_desc", req.value("short", ""));
+			const std::string new_long =
+				req.value("description", req.value("long_desc", ""));
+			const int pay_xp = parse_json_int(req, "pay_xp", 0);
+			const int pay_rune = parse_json_int(req, "pay_rune", 0);
+
+			const std::string target_name = toon_name_by_id(target_toon_id);
+			if(target_name.empty()) {
+				return json_error("toon target non trovato", 404);
+			}
+			if(is_apply && is_toon_online_by_name(target_name)) {
+				return json_error("il toon target e collegato al mud", 409);
+			}
+
+			std::vector<inventory_mysql_row> rows;
+			load_character_inventory_mysql(target_toon_id, rows);
+			inventory_mysql_row* row = find_inventory_row(rows, inventory_id);
+			if(!row) {
+				return json_error("oggetto non trovato nell'inventario", 404);
+			}
+			struct obj_data* obj = materialize_inventory_row(*row);
+			if(!obj) {
+				return json_error("impossibile materializzare oggetto", 500);
+			}
+			if(!object_portal_editable(obj, target_name.c_str())) {
+				extract_obj(obj);
+				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
+			}
+			if(obj->db_instance_id == 0 && !IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+				extract_obj(obj);
+				return json_error(
+					"name/short/long disponibili solo dopo un edit pagato sull'oggetto",
+					400);
+			}
+
+			std::string len_err;
+			if(!portal_text_field_ok(new_name, kObjEditTextNameMax, "name", len_err) ||
+			   !portal_text_field_ok(new_short, kObjEditTextShortMax, "short",
+									len_err) ||
+			   !portal_text_field_ok(new_long, kObjEditTextLongMax, "long", len_err)) {
+				extract_obj(obj);
+				return json_error(len_err.c_str(), 400);
+			}
+
+			const std::string cur_name = obj->name ? obj->name : "";
+			const std::string cur_short =
+				obj->short_description ? obj->short_description : "";
+			const std::string cur_long = obj->description ? obj->description : "";
+			const bool changed = (new_name != cur_name) || (new_short != cur_short) ||
+								 (new_long != cur_long);
+			if(!changed) {
+				extract_obj(obj);
+				return json_error("nessuna modifica a name/short/long", 400);
+			}
+
+			const long xp_raw = portal_text_edit_xp_raw(obj);
+			const int rune_cost = kObjEditTextRune;
+			if(!is_apply) {
+				Json d = quote_xp_json(xp_raw, rune_cost);
+				d["diff_rune"] = rune_cost;
+				d["inventory_id"] = inventory_id;
+				d["obj_name"] = new_name;
+				d["short_desc"] = new_short;
+				d["description"] = new_long;
+				d["name_len"] = static_cast<int>(new_name.size());
+				d["short_len"] = static_cast<int>(new_short.size());
+				d["long_len"] = static_cast<int>(new_long.size());
+				d["name_max"] = kObjEditTextNameMax;
+				d["short_max"] = kObjEditTextShortMax;
+				d["long_max"] = kObjEditTextLongMax;
+				d["note"] = IS_OBJ_STAT(obj, ITEM_IMMUNE)
+								? "Edit testo: include maggiorazione Artifact +50%"
+								: "Edit testo (name/short/long)";
+				d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
+				extract_obj(obj);
+				return json_ok(d);
+			}
+
+			portal_set_obj_string(obj->name, new_name);
+			portal_set_obj_string(obj->short_description, new_short);
+			portal_set_obj_string(obj->description, new_long);
+			if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+				SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+			}
+
+			const int xp_cost = pay_xp > 0 ? pay_xp : static_cast<int>(std::max(0L, xp_raw));
+			const int rune_pay = pay_rune > 0 ? pay_rune : rune_cost;
+			const int max_level = max_level_for_toon(target_toon_id);
+			std::string pay_err;
+			if(!deduct_payment(target_toon_id, xp_cost, rune_pay, max_level, pay_err)) {
+				extract_obj(obj);
+				return json_error(pay_err.c_str(), 402);
+			}
+			std::string save_err;
+			const bool saved = portal_save_edited_inventory_item(
+				inventory_id, obj, save_err, target_name.c_str());
+			Json d = analyze_to_json(obj);
+			d["paid_xp"] = xp_cost;
+			d["paid_rune"] = rune_pay;
+			d["saved"] = saved;
+			d["instance_id"] = obj->db_instance_id;
+			d["obj_name"] = obj->name ? obj->name : "";
+			d["short_desc"] = obj->short_description ? obj->short_description : "";
+			d["description"] = obj->description ? obj->description : "";
+			extract_obj(obj);
+			if(!saved) {
+				return json_error(save_err.empty()
+									  ? "[portal:save] pagamento eseguito ma salvataggio testo fallito"
 									  : save_err.c_str(),
 								  500);
 			}

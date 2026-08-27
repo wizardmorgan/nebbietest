@@ -607,3 +607,53 @@ button.linkish {
 .payment-breakdown .bad {
   color: var(--error);
 }
+
+.object-text-edit-wrap {
+  margin-bottom: 1rem;
+}
+
+.text-edit-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.75rem;
+  margin-bottom: 0.85rem;
+  align-items: baseline;
+}
+
+.text-edit-row label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.text-len-counter {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.text-len-counter.over {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.text-edit-row input,
+.text-edit-row textarea {
+  grid-column: 1 / -1;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font: inherit;
+}
+
+.text-preview {
+  grid-column: 1 / -1;
+  font-size: 0.88rem;
+  padding: 0.4rem 0.55rem;
+  background: var(--surface2);
+  border-radius: 6px;
+  border: 1px dashed var(--border);
+  min-height: 1.6em;
+}
