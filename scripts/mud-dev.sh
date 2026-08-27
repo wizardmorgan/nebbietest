@@ -487,22 +487,34 @@ cmd_start_edit() {
 	fi
 	echo "Avvio edit-portal (EDIT_REPO=$EDIT_REPO, rete $MUD_STACK_NETWORK)..."
 	export EDIT_API_SECRET EDIT_WEB_PORT
-	# Forza recreate: altrimenti resta un container Node con public/ vecchio.
+	# MAI --remove-orphans qui: il compose edit-portal non elenca mysql/adminer,
+	# quindi orphans li UCCIDE (come successso su nucbuntu).
 	docker rm -f nebbie-edit-portal 2>/dev/null || true
-	compose_edit up -d --build --force-recreate --remove-orphans edit-portal
+	if [ -f "$EDIT_REPO/edit-portal/public/app.js" ]; then
+		echo "Host app.js marker:"
+		grep -n 'EDIT_PORTAL_UI_BUILD' "$EDIT_REPO/edit-portal/public/app.js" | head -3 || \
+			print_warn "EDIT_PORTAL_UI_BUILD assente su host — git merge incompleto?"
+	fi
+	compose_edit up -d --build --force-recreate edit-portal
+	# mysql potrebbe essere stato stoppato da altri comandi: ripristina
+	ensure_mysql_stack
 	echo "Attesa edit-portal..."
 	local i
-	for i in $(seq 1 20); do
+	for i in $(seq 1 30); do
 		if curl -sf "http://localhost:${EDIT_WEB_PORT}/api/health" >/dev/null 2>&1; then
 			break
 		fi
 		sleep 0.5
 	done
+	local health
+	health="$(curl -sf "http://localhost:${EDIT_WEB_PORT}/api/health" 2>/dev/null || true)"
+	echo "health: ${health:-"(nessuna risposta)"}"
 	if docker exec nebbie-edit-portal grep -q 'EDIT_PORTAL_UI_BUILD = 8' /app/public/app.js 2>/dev/null; then
 		echo "OK: container ha app.js UI build 8"
 	else
-		print_warn "app.js nel container senza UI build 8 — controlla build context"
-		docker exec nebbie-edit-portal head -n 12 /app/public/app.js 2>/dev/null || true
+		print_warn "app.js nel container senza UI build 8 — dump:"
+		docker exec nebbie-edit-portal head -n 15 /app/public/app.js 2>/dev/null || \
+			echo "(docker exec fallito — container giu?)"
 	fi
 	echo "Web UI: http://localhost:${EDIT_WEB_PORT}/"
 }
