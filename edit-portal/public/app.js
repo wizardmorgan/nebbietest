@@ -1388,6 +1388,10 @@ async function checkMystPortalVersion() {
     const res = await fetch('/api/health');
     const health = await res.json();
     const ver = health?.myst?.portal_api_version;
+    const ui = health?.ui_build;
+    if (ui != null && $('header-meta') && !session) {
+      $('header-meta').textContent = `UI build ${ui}`;
+    }
     if (ver === undefined || ver < 3) {
       warnEl.textContent =
         'Myst non aggiornato (portal_api_version ' +
