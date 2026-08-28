@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 27;
+const EDIT_PORTAL_UI_BUILD = 28;
 
 /** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
 function portalBasePath() {
@@ -1283,10 +1283,19 @@ async function loadInventory() {
   if (!items.length) {
     if (mysqlCount > 0 && data.inventory_source === 'mysql_myst_empty') {
       emptyEl.textContent =
-        'Elenco da MySQL (' +
+        'Elenco MySQL ha ' +
         mysqlCount +
-        ' oggetti). Myst non ha arricchito la lista: ricompila e riavvia myst (./scripts/mud-dev.sh stop-mud && deploy-edit).';
-      emptyEl.classList.remove('hidden');
+        ' oggetti ma myst non li ha arricchiti: ricompila/riavvia myst (API ≥26).';
+    } else if (mysqlCount > 0 && data.inventory_source === 'myst_filtered') {
+      emptyEl.textContent =
+        'Myst ha letto ' +
+        (data.myst_loaded_rows ?? '?') +
+        ' pezzi ma nessuno è mostrato (categorie spente / RARO / TAN / HAS-GEMS). Con API ≥26 i pezzi già EDIT restano visibili anche se la categoria è spenta — fai rebuild-myst.';
+    } else if (mysqlCount > 0) {
+      emptyEl.textContent =
+        'Nessun oggetto mostrato, ma MySQL ha ' +
+        mysqlCount +
+        ' righe inventario. Verifica categorie staff e rebuild-myst (API ≥26).';
     } else {
       emptyEl.textContent =
         'Nessun oggetto in inventario MySQL per questo PG (logout in-game per salvare).';
@@ -1294,7 +1303,13 @@ async function loadInventory() {
   }
 
   if (items.length && editableCount === 0) {
-    showApiWarn('Inventario caricato: nessun oggetto editabile (vedi motivi nella lista).');
+    showApiWarn(
+      'Inventario caricato: nessun oggetto editabile (vedi motivi). EDIT indossati = ri-edit OK; primo edit su proto indossato = togli prima.',
+    );
+  } else if (data.inventory_source === 'myst_filtered') {
+    showApiWarn(
+      'Inventario filtrato da myst: nessun pezzo in lista. Dopo rebuild-myst i pezzi EDIT del PG devono ricomparire.',
+    );
   } else if (data.inventory_source === 'mysql_fallback') {
     showApiWarn(
       'Elenco da MySQL: myst non disponibile — selezione edit non attiva finché myst non risponde.',

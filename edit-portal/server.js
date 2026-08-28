@@ -147,8 +147,13 @@ function inventoryRowsToPortalItems(rows, skipReason) {
   return rows.map((r) => {
     const wearPos = Number(r.wear_pos || 0);
     const worn = wearPos > 0;
+    const hasInstance = Number(r.instance_id || 0) > 0;
     let reason = skipReason;
-    if (worn) reason = 'indossato';
+    if (worn) {
+      reason = hasInstance
+        ? 'indossato (ri-edit: serve myst aggiornato)'
+        : 'indossato (primo edit: togli e metti in inventario / serve myst)';
+    }
     const item = {
       inventory_id: r.id,
       list_index: r.list_index,
@@ -619,6 +624,9 @@ router.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req
     total = items.length;
     editableCount = 0;
     inventorySource = 'mysql_myst_empty';
+  } else if (list.ok && items.length === 0 && mysqlRows.length > 0 && mystLoadedRows > 0) {
+    /* Myst ha letto le righe ma le ha nascoste (categorie / esclusioni). */
+    inventorySource = 'myst_filtered';
   }
 
   res.json({

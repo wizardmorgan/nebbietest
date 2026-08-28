@@ -765,12 +765,19 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	if(slug && edit_system_portal_type_always_hidden(slug)) {
 		return false;
 	}
-	/* Spunta staff = visibile in inventario. Senza spunta: nascosto anche se EDIT. */
+	/*
+	 * Pezzi gia' passati dal portale/oedit (ITEM2_EDIT): sempre in lista per
+	 * ri-edit, anche se la categoria ITEM_* e' spenta dallo staff. Altrimenti
+	 * un PG "non vede i suoi edit" (es. tipo container/other/treasure off).
+	 */
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return true;
+	}
+	/* Spunta staff = visibile per il primo edit su prototipo. */
 	if(slug) {
 		return edit_system_portal_category_enabled(slug);
 	}
-	/* Tipo senza slug: solo pezzi gia' EDIT (fallback). */
-	return IS_OBJ_STAT2(obj, ITEM2_EDIT);
+	return false;
 }
 
 std::string object_portal_skip_reason(const struct obj_data* obj,
