@@ -620,26 +620,117 @@ button.linkish {
   min-height: 80px;
 }
 
-.payment-panel {
-  border-color: var(--accent);
+/* Barra pagamento fissa: costi e pay sempre visibili mentre si editano le select. */
+body.payment-dock-open {
+  padding-bottom: min(42vh, 320px);
+}
+
+.payment-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  padding: 0.65rem 0.85rem calc(0.65rem + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgba(18, 20, 26, 0.97) 55%,
+    rgba(18, 20, 26, 0.72) 85%,
+    rgba(18, 20, 26, 0)
+  );
+}
+
+.payment-dock-inner {
+  pointer-events: auto;
+  max-width: 1320px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45);
+  padding: 0.75rem 1rem;
+  max-height: min(40vh, 300px);
+  overflow: auto;
+}
+
+.payment-dock-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 280px);
+  gap: 0.85rem 1.25rem;
+  align-items: end;
+}
+
+.payment-dock-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.15rem;
+}
+
+.payment-dock-title-row h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.payment-queue-count {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+}
+
+.payment-dock-hint {
+  margin: 0 0 0.45rem;
+  font-size: 0.8rem;
 }
 
 .payment-summary {
-  font-size: 0.95rem;
-  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  margin-bottom: 0.35rem;
+}
+
+.payment-queue-list {
+  font-weight: 600;
+  max-height: 4.6em;
+  overflow: auto;
+  margin-bottom: 0.35rem;
+  line-height: 1.35;
+}
+
+.payment-cost-line,
+.payment-pay-line {
+  margin-bottom: 0.2rem;
+}
+
+.payment-avail-line {
+  font-size: 0.82rem;
+}
+
+.payment-dock-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
 }
 
 .payment-controls {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
+  gap: 0.5rem;
+  margin-bottom: 0;
+}
+
+.btn-pay-dock {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  font-size: 1rem;
 }
 
 .payment-breakdown {
   font-size: 0.88rem;
   color: var(--muted);
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.25rem;
 }
 
 .payment-breakdown .ok {
@@ -648,6 +739,21 @@ button.linkish {
 
 .payment-breakdown .bad {
   color: var(--error);
+}
+
+@media (max-width: 800px) {
+  body.payment-dock-open {
+    padding-bottom: min(52vh, 380px);
+  }
+
+  .payment-dock-main {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .payment-dock-inner {
+    max-height: min(48vh, 360px);
+  }
 }
 
 .object-text-edit-wrap {
