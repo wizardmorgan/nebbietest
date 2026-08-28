@@ -1273,11 +1273,25 @@ function formatScalarOptionLabel(entry, absolute) {
   return String(absolute);
 }
 
+/** Immunità (`m_immune`) e resistenze (`immune`) sono sì/no, non scalari. */
+function isYesNoObjectEntry(entry) {
+  const kind = entry?.kind || '';
+  return (
+    kind === 'immune' ||
+    kind === 'm_immune' ||
+    kind === 'flag' ||
+    kind === 'spell'
+  );
+}
+
 function objectEntryCostHint(entry) {
   const mxp = Number(entry.mxp_per_step || 0);
   const rune = Number(entry.rune_per_step ?? mxp);
   const step = Number(entry.step) || 1;
   if (!mxp) return '';
+  if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') {
+    return `Listino: ${mxp} MXP o ${rune} Runes`;
+  }
   if (Math.abs(step) !== 1) {
     return `Listino: ${mxp} MXP o ${rune} Runes / step ${step}`;
   }
@@ -1682,7 +1696,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       const select = document.createElement('select');
       select.disabled = !canEdit || session.role === 'limited';
 
-      if (entry.kind === 'immune' || entry.kind === 'flag' || entry.kind === 'spell') {
+      if (isYesNoObjectEntry(entry)) {
         [
           { v: 0, l: 'No' },
           { v: 1, l: 'Sì' },
@@ -1693,7 +1707,12 @@ function renderObjectEdits(entries, damBudget, spBudget) {
           if (v === current) opt.selected = true;
           select.appendChild(opt);
         });
-        if (entry.kind === 'immune' && current === 1) select.disabled = true;
+        if (
+          (entry.kind === 'immune' || entry.kind === 'm_immune') &&
+          current === 1
+        ) {
+          select.disabled = true;
+        }
         if (entry.kind === 'spell' && current === 1) select.disabled = true;
         if (entry.kind === 'flag' && entry.flag === 'artifact' && current === 1) {
           select.disabled = true;
@@ -1718,7 +1737,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       select.addEventListener('change', () => {
         if (!canEdit) return;
         const newVal = Number(select.value);
-        if (entry.kind === 'immune' || entry.kind === 'spell') {
+        if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') {
           if (newVal === 0 && current === 1) {
             select.value = '1';
             return;
@@ -1749,8 +1768,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
         }
       });
 
-      const yesNoKind =
-        entry.kind === 'immune' || entry.kind === 'flag' || entry.kind === 'spell';
+      const yesNoKind = isYesNoObjectEntry(entry);
       row.innerHTML = `
       <div>
         <label>${entry.label || entry.id}${objectEntryRangeLabel(entry)}</label>
@@ -1815,7 +1833,7 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     return;
   }
   const qd = data.data;
-  const yesNo = entry.kind === 'immune' || entry.kind === 'flag' || entry.kind === 'spell';
+  const yesNo = isYesNoObjectEntry(entry);
   const curLabel = yesNo
     ? qd.current
       ? 'Sì'

@@ -509,6 +509,37 @@ std::atomic<bool> g_http_running {false};
 	return portal_mysql_exec(db, sql.str(), err, "portal:deduct");
 }
 
+/**
+ * Listino: la parte MXP (quote_xp) si paga in XP e/o Rune (1 MXP = 1 Rune =
+ * kObjEditRunePerMegaXp XP raw). quote_pq sono rune “rent” aggiuntive obbligatorie.
+ * Non forzare mai max(pay_xp, quote_xp): spezzerebbe il pagamento solo-rune.
+ */
+[[nodiscard]] bool resolve_object_edit_payment(int pay_xp, int pay_rune, long quote_xp,
+											  int quote_pq, int& xp_cost, int& rune_cost,
+											  std::string& err) {
+	if(pay_xp < 0 || pay_rune < 0) {
+		err = "[portal:pay] pagamento non valido";
+		return false;
+	}
+	const int quote_xp_i = static_cast<int>(std::max(0L, quote_xp));
+	const int pq = std::max(0, quote_pq);
+	if(pay_rune < pq) {
+		err = "[portal:pay] rune componente listino insufficienti";
+		return false;
+	}
+	const long long rune_cover_xp =
+		static_cast<long long>(pay_rune - pq) * kObjEditRunePerMegaXp;
+	const long long covered =
+		static_cast<long long>(pay_xp) + rune_cover_xp;
+	if(covered < static_cast<long long>(quote_xp_i)) {
+		err = "[portal:pay] copertura XP/Rune insufficiente rispetto al listino";
+		return false;
+	}
+	xp_cost = pay_xp;
+	rune_cost = pay_rune;
+	return true;
+}
+
 [[nodiscard]] bool inventory_row_has_affect_overlay(const inventory_mysql_row& row) {
 	for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
 		if(row.elem.affected[j].location != 0 || row.elem.affected[j].modifier != 0) {
@@ -1934,10 +1965,16 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
 			}
 
-			/* Non accettare underpay rispetto al listino (class_mult / Artifact). */
+			/* Pagamento: XP e/o Rune coprono il listino (1 MXP = 1 Rune). */
+			int xp_cost = 0;
+			int rune_cost = 0;
+			std::string pay_resolve_err;
+			if(!resolve_object_edit_payment(pay_xp, pay_rune, quote_xp, quote_pq, xp_cost,
+										   rune_cost, pay_resolve_err)) {
+				extract_obj(after);
+				return json_error(pay_resolve_err.c_str(), 402);
+			}
 			const int quote_xp_i = static_cast<int>(std::max(0L, quote_xp));
-			const int xp_cost = std::max(pay_xp, quote_xp_i);
-			const int rune_cost = std::max(pay_rune, std::max(0, quote_pq));
 			const bool affect_is_paid = (quote_xp_i > 0) || (quote_pq > 0) ||
 										(xp_cost > 0) || (rune_cost > 0);
 
