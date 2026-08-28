@@ -300,8 +300,10 @@ void parse_entries_json(const Json& root) {
 	}
 	portal["type_catalog"] = catalog;
 	portal["comment"] =
-		"types: slug ITEM_* — spunta = visibile e editabile nel portale. "
-		"Oggetti con flag EDIT del PG sono sempre inclusi (ri-edit).";
+		"types: slug ITEM_* — spunta = editabile nel portale (primo edit). "
+		"Inventario: tutti i pezzi restano visibili (anche indossati); esclusi "
+		"solo RARO/TAN/HAS-GEMS/simbolo. Pezzi EDIT/instance/owner sempre "
+		"ri-editabili (anche indossati).";
 	root["object_portal"] = portal;
 	return root;
 }

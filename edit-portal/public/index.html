@@ -117,7 +117,7 @@
             </div>
             <p id="inventory-target-hint" class="hint"></p>
             <ul id="inventory-list" class="inventory-list"></ul>
-            <p class="hint">Visibilità tipi: impostata dallo staff in basso (categorie). Oggetti già editati del PG restano ri-editabili.</p>
+            <p class="hint">Visibilità tipi: le categorie staff decidono cosa è <strong>editabile</strong> al primo edit. Inventario e pezzi indossati restano comunque in lista (grigi se non editabili). Esclusi solo RARO / TAN / HAS-GEMS / simbolo clan. Pezzi già editati: ri-editabili anche indossati.</p>
             <p id="inventory-empty" class="hint hidden">Nessun oggetto in inventario MySQL per questo PG.</p>
           </div>
 
@@ -175,7 +175,7 @@
 
         <div class="portal-categories card-inner">
           <h3>Categorie oggetto nel portale</h3>
-          <p class="hint">Spunta = quel tipo ITEM compare nell'inventario del <strong>personaggio target</strong> ed è editabile. Senza spunta = nascosto. Gli oggetti con flag EDIT del PG restano sempre ri-editabili.</p>
+          <p class="hint">Spunta = quel tipo ITEM è <strong>editabile</strong> al primo edit sul personaggio target. Senza spunta = in lista ma non editabile (grigio). Inventario/indossati restano sempre visibili (esclusi RARO/TAN/HAS-GEMS/simbolo). Pezzi già EDIT/instance/owner: sempre ri-editabili, anche indossati.</p>
           <p id="myst-version-warn" class="msg warn hidden"></p>
           <div id="portal-category-toggles" class="checkbox-grid"></div>
           <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
