@@ -690,6 +690,32 @@ void clan_symbol_enforce_single(struct char_data* ch) {
 		}
 	}
 	if(!extras.empty()) {
+		unsigned long long template_id = 0;
+		DB* db = Sql::getMysql();
+		if(db && keep && keep->obj_flags.value[0] > 0) {
+			try {
+				odb::connection_ptr cp(db->connection());
+				auto& mc = static_cast<odb::mysql::connection&>(*cp);
+				MYSQL* h = mc.handle();
+				std::ostringstream sql;
+				sql << "SELECT IFNULL(instance_id,0) FROM clan_symbol WHERE "
+					   "prince_toon_id="
+					<< static_cast<unsigned long long>(keep->obj_flags.value[0])
+					<< " AND active=1 LIMIT 1";
+				if(mysql_query(h, sql.str().c_str()) == 0) {
+					MYSQL_RES* res = mysql_store_result(h);
+					if(res) {
+						if(MYSQL_ROW row = mysql_fetch_row(res)) {
+							template_id = row[0] ? parse_ull(row[0]) : 0;
+						}
+						mysql_free_result(res);
+					}
+				}
+			}
+			catch(const odb::exception&) {
+				template_id = 0;
+			}
+		}
 		for(struct obj_data* obj : extras) {
 			if(obj->equipped_by) {
 				const int pos = obj->eq_pos;
@@ -701,7 +727,7 @@ void clan_symbol_enforce_single(struct char_data* ch) {
 				obj_from_obj(obj);
 				obj_to_char(obj, ch);
 			}
-			destroy_clan_symbol_obj(obj, 0, ch);
+			destroy_clan_symbol_obj(obj, template_id, ch);
 		}
 		send_to_char(
 			"Puoi avere un solo simbolo del clan: i pezzi in eccesso sono stati "
@@ -714,6 +740,65 @@ void clan_symbol_enforce_single(struct char_data* ch) {
 		clan_symbol_refresh_affects_from_instance(keep);
 	}
 	clan_symbol_try_auto_wear(ch, keep);
+}
+
+/*
+ * Soft-delete istanze simbolo orfane: non sono il template registrato e non
+ * compaiono in character_inventory. Tipico residuo del boot non idempotente
+ * ("doppio Montero"): N righe The Cross con tot=0 mentre slots_max e' 5-6.
+ */
+void soft_delete_orphan_clan_symbol_dupes(DB* db, unsigned legacy_vnum,
+										  unsigned long long keep_instance_id) {
+	if(!db || keep_instance_id == 0) {
+		return;
+	}
+	std::vector<unsigned long long> doomed;
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		std::ostringstream sql;
+		/* Solo duplicati del template legacy (stesso 34k): le copie da
+		 * clan assegna non hanno legacy_edit_vnum e non vanno toccate qui. */
+		sql << "SELECT oi.id FROM object_instance oi "
+			   "LEFT JOIN character_inventory ci ON ci.instance_id=oi.id "
+			   "AND (ci.deleted=0 OR ci.deleted IS NULL) "
+			   "WHERE oi.deleted=0 AND oi.id<>"
+			<< keep_instance_id
+			<< " AND ci.id IS NULL AND oi.legacy_edit_vnum=" << legacy_vnum;
+		if(mysql_query(h, sql.str().c_str()) != 0) {
+			mudlog(LOG_SYSERR, "clan_symbol orphan scan %u: %s", legacy_vnum,
+				   mysql_error(h));
+			return;
+		}
+		MYSQL_RES* res = mysql_store_result(h);
+		if(!res) {
+			return;
+		}
+		while(MYSQL_ROW row = mysql_fetch_row(res)) {
+			if(row[0] && *row[0]) {
+				doomed.push_back(parse_ull(row[0]));
+			}
+		}
+		mysql_free_result(res);
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "clan_symbol orphan scan %u: %s", legacy_vnum, e.what());
+		return;
+	}
+	int n = 0;
+	for(const unsigned long long iid : doomed) {
+		if(object_instance_delete(iid, nullptr)) {
+			++n;
+		}
+	}
+	if(n > 0) {
+		mudlog(LOG_CHECK,
+			   "clan_symbol: soft-deleted %d orphan instance(s) for legacy %u "
+			   "(kept template %llu)",
+			   n, legacy_vnum,
+			   static_cast<unsigned long long>(keep_instance_id));
+	}
 }
 
 void clan_symbol_boot_migrate() {
@@ -762,8 +847,42 @@ void clan_symbol_boot_migrate() {
 		const int prince_id_i = static_cast<int>(prince_id);
 
 		unsigned existing_base = 0;
-		unsigned long long existing_id =
-			object_instance_find_by_legacy_edit(entry.vnum, &existing_base);
+		unsigned long long existing_id = 0;
+		/* Preferisci il template gia' in clan_symbol.instance_id (idempotenza). */
+		try {
+			odb::connection_ptr cp(db->connection());
+			auto& mc = static_cast<odb::mysql::connection&>(*cp);
+			MYSQL* h = mc.handle();
+			std::ostringstream sql;
+			sql << "SELECT IFNULL(cs.instance_id,0), IFNULL(cs.base_vnum,0), "
+				   "IFNULL(oi.deleted,1) FROM clan_symbol cs "
+				   "LEFT JOIN object_instance oi ON oi.id=cs.instance_id "
+				   "WHERE cs.vnum="
+				<< entry.vnum << " LIMIT 1";
+			if(mysql_query(h, sql.str().c_str()) == 0) {
+				MYSQL_RES* res = mysql_store_result(h);
+				if(res) {
+					if(MYSQL_ROW row = mysql_fetch_row(res)) {
+						const unsigned long long tid = row[0] ? parse_ull(row[0]) : 0;
+						const unsigned b = row[1] ? parse_u(row[1]) : 0;
+						const int del = row[2] ? static_cast<int>(parse_long(row[2])) : 1;
+						if(tid != 0 && del == 0) {
+							existing_id = tid;
+							existing_base = b;
+						}
+					}
+					mysql_free_result(res);
+				}
+			}
+		}
+		catch(const odb::exception& e) {
+			mudlog(LOG_SYSERR, "clan_symbol_boot_migrate: registry lookup %u: %s",
+				   entry.vnum, e.what());
+		}
+		if(existing_id == 0) {
+			existing_id =
+				object_instance_find_by_legacy_edit(entry.vnum, &existing_base);
+		}
 		const int rnum = real_object(static_cast<int>(entry.vnum));
 		const bool file_gone =
 			(rnum < 0) || !objects_file_is_regular(static_cast<int>(entry.vnum));
@@ -774,6 +893,7 @@ void clan_symbol_boot_migrate() {
 								entry.prince_name, existing_id);
 			relink_inventory(db, entry.vnum, existing_base, existing_id, prince_id_i);
 			patch_online_by_instance(existing_id, prince_id_i);
+			soft_delete_orphan_clan_symbol_dupes(db, entry.vnum, existing_id);
 			++skipped;
 			continue;
 		}
@@ -904,6 +1024,7 @@ void clan_symbol_boot_migrate() {
 			++deferred;
 			++converted;
 		}
+		soft_delete_orphan_clan_symbol_dupes(db, entry.vnum, instance_id);
 	}
 
 	mudlog(LOG_CHECK,

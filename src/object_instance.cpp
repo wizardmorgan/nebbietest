@@ -1143,15 +1143,25 @@ unsigned long long object_instance_find_by_legacy_edit(unsigned edit_vnum,
 	try {
 		return with_odb_tx(db, [&]() {
 			using Q = odb::query<object_instance>;
-			object_instance row;
-			if(!db->query_one<object_instance>(
-				   Q::legacy_edit_vnum == edit_vnum && Q::deleted == false, row)) {
-				return 0ull;
+			/*
+			 * Non usare query_one: se il boot ha creato template duplicati
+			 * (bug idempotenza clan_symbol / osave ripetuti), ODB asserta o
+			 * fallisce e il migrate ricrea ancora un'altra riga a ogni reboot.
+			 * Prendi l'id piu' basso = template originale stabile.
+			 */
+			unsigned long long best_id = 0;
+			unsigned best_base = 0;
+			for(const auto& row : db->query<object_instance>(
+					(Q::legacy_edit_vnum == edit_vnum && Q::deleted == false) +
+					"ORDER BY" + Q::id)) {
+				best_id = row.id;
+				best_base = row.base_vnum;
+				break;
 			}
 			if(out_base_vnum) {
-				*out_base_vnum = row.base_vnum;
+				*out_base_vnum = best_base;
 			}
-			return row.id;
+			return best_id;
 		});
 	}
 	catch(const odb::exception& e) {
