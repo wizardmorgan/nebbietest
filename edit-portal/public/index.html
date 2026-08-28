@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="edit-base" content="" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=26" />
+  <link rel="stylesheet" href="style.css?v=27" />
   <script src="config.js"></script>
 </head>
 <body>
@@ -81,8 +81,14 @@
           </div>
 
           <div class="card" id="char-edit-card">
-            <h2>Edit sul personaggio target</h2>
-            <p class="hint">Pool (hit, mana, move, regen) e resistenze sul PG selezionato sopra — non sul login staff.</p>
+            <div class="card-header card-header-tight">
+              <h2>Edit sul personaggio target</h2>
+              <button id="btn-reset-char-edits" class="btn-secondary btn-reset-edits" type="button" title="Annulla tutte le modifiche pool/resistenze in coda">
+                Reset
+              </button>
+            </div>
+            <p class="hint">Pool (hit, mana, move, regen) e resistenze sul PG selezionato sopra — puoi modificarne più di una; i costi si sommano nel carrello.</p>
+            <div id="char-edit-cart" class="edit-cart hidden" aria-live="polite"></div>
             <div id="pool-edits"></div>
             <div id="resistance-edits"></div>
           </div>
@@ -116,8 +122,14 @@
           </div>
 
           <div class="card" id="object-detail-card">
-            <h2>Oggetto selezionato</h2>
+            <div class="card-header card-header-tight">
+              <h2>Oggetto selezionato</h2>
+              <button id="btn-reset-object-edits" class="btn-secondary btn-reset-edits" type="button" title="Annulla tutte le modifiche oggetto in coda">
+                Reset
+              </button>
+            </div>
             <div id="quote-box" class="quote-box">Seleziona un oggetto editabile dall'inventario del personaggio target.</div>
+            <div id="object-edit-cart" class="edit-cart hidden" aria-live="polite"></div>
             <div id="object-affect-slots" class="object-affect-slots hidden"></div>
             <div id="object-text-edit" class="object-text-edit-wrap"></div>
             <div id="object-edits" class="object-edits"></div>
@@ -210,6 +222,6 @@
       </div>
     </section>
   </main>
-  <script src="app.js?v=26"></script>
+  <script src="app.js?v=27"></script>
 </body>
 </html>

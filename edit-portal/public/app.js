@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 26;
+const EDIT_PORTAL_UI_BUILD = 27;
 
 /** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
 function portalBasePath() {
@@ -90,6 +90,8 @@ let pendingEdit = null;
 let inventoryItemsCache = [];
 /** Coda edit oggetto: più campi insieme (stesso pezzo) → somma costi listino. */
 let objectEditCart = new Map();
+/** Coda edit personaggio: più voci pool/resistenze insieme → somma costi. */
+let characterEditCart = new Map();
 
 const $ = (id) => document.getElementById(id);
 
@@ -333,6 +335,153 @@ function buildPaymentPlan(quote, mode, runePct) {
   };
 }
 
+function formatQuoteCostShort(quote) {
+  const xpRaw = Number(quote?.xp_raw || quote?.diff_xp_raw || 0);
+  const rune = Number(quote?.diff_rune || quote?.pq || 0);
+  const mxp = Math.floor(xpRaw / PQ_PER_MEGA_XP);
+  const frac = Math.floor((xpRaw % PQ_PER_MEGA_XP) / 10000);
+  const parts = [];
+  if (xpRaw > 0) parts.push(formatMxp(mxp, frac));
+  if (rune > 0) parts.push(`${rune} Runes`);
+  if (!parts.length) parts.push('gratis');
+  return parts.join(' + ');
+}
+
+function isObjectPendingType(type) {
+  return type === 'object' || type === 'object-batch' || type === 'object-text';
+}
+
+function isCharacterPendingType(type) {
+  return type === 'pool' || type === 'resistance' || type === 'character-batch';
+}
+
+function sumQuotes(items) {
+  let xpRaw = 0;
+  let rune = 0;
+  items.forEach((it) => {
+    xpRaw += Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
+    rune += Number(it.quote?.diff_rune || it.quote?.pq || 0);
+  });
+  return {
+    xp_raw: xpRaw,
+    mxp: Math.floor(xpRaw / PQ_PER_MEGA_XP),
+    mxp_frac: Math.floor((xpRaw % PQ_PER_MEGA_XP) / 10000),
+    diff_rune: rune,
+  };
+}
+
+function renderEditCartBox(el, items, emptyHint) {
+  if (!el) return;
+  if (!items.length) {
+    el.innerHTML = '';
+    el.classList.add('hidden');
+    return;
+  }
+  const rows = items
+    .map(
+      (it) =>
+        `<div class="edit-cart-line"><span class="edit-cart-label">${escapeHtml(
+          it.label
+        )}</span><span class="edit-cart-cost">${escapeHtml(
+          formatQuoteCostShort(it.quote)
+        )}</span></div>`
+    )
+    .join('');
+  const totals = sumQuotes(items);
+  el.innerHTML = `
+    <div class="edit-cart-title">In coda (${items.length})</div>
+    ${rows}
+    <div class="edit-cart-total">Totale listino: <strong>${escapeHtml(
+      formatQuoteCostShort(totals)
+    )}</strong></div>
+    <p class="hint edit-cart-hint">${escapeHtml(emptyHint || '')}</p>
+  `;
+  el.classList.remove('hidden');
+}
+
+function updateCharacterCartUI() {
+  const items = [...characterEditCart.values()];
+  renderEditCartBox(
+    $('char-edit-cart'),
+    items,
+    'Costi aggiornati a ogni selettore. Paga dal pannello in basso.'
+  );
+  document.querySelectorAll('#pool-edits .edit-row, #resistance-edits .edit-row').forEach((row) => {
+    const key = row.dataset.cartKey;
+    row.classList.toggle('edit-row--dirty', key && characterEditCart.has(key));
+  });
+}
+
+function updateObjectCartUI() {
+  const items = [...objectEditCart.values()];
+  renderEditCartBox(
+    $('object-edit-cart'),
+    items,
+    'Costi aggiornati a ogni selettore. Paga dal pannello in basso.'
+  );
+  document.querySelectorAll('#object-edits .edit-row').forEach((row) => {
+    const key = row.dataset.cartKey;
+    row.classList.toggle('edit-row--dirty', key && objectEditCart.has(key));
+  });
+}
+
+function clearCharacterEditCart({ resetSelectors = false } = {}) {
+  if (resetSelectors) {
+    characterEditCart.forEach((it) => {
+      if (it.selectEl && it.selectEl.dataset.current != null) {
+        it.selectEl.value = it.selectEl.dataset.current;
+      }
+    });
+  }
+  characterEditCart.clear();
+  if (isCharacterPendingType(pendingEdit?.type)) {
+    pendingEdit = null;
+  }
+  updateCharacterCartUI();
+  updatePaymentUI();
+}
+
+function rebuildCharacterPendingFromCart() {
+  if (!characterEditCart.size) {
+    if (isCharacterPendingType(pendingEdit?.type)) {
+      pendingEdit = null;
+    }
+    updateCharacterCartUI();
+    updatePaymentUI();
+    return;
+  }
+  const items = [...characterEditCart.values()];
+  const totals = sumQuotes(items);
+  const labels = items.map((it) => it.label);
+  pendingEdit = {
+    type: 'character-batch',
+    entryId: 'character-batch',
+    label: labels.join('\n'),
+    quote: {
+      ...totals,
+      note:
+        items.length > 1
+          ? `${items.length} edit personaggio in coda (costi sommati)`
+          : undefined,
+    },
+    items,
+  };
+  updateCharacterCartUI();
+  updatePaymentUI();
+}
+
+function ensureCharacterCartExclusive() {
+  if (objectEditCart.size || isObjectPendingType(pendingEdit?.type)) {
+    clearObjectEditCart({ resetSelectors: true });
+  }
+}
+
+function ensureObjectCartExclusive() {
+  if (characterEditCart.size || isCharacterPendingType(pendingEdit?.type)) {
+    clearCharacterEditCart({ resetSelectors: true });
+  }
+}
+
 function validatePayment(plan) {
   if (!charState) return { ok: false, reason: 'Stato PG non caricato' };
   if (charState.stats_missing) {
@@ -356,6 +505,7 @@ function updatePaymentUI() {
   if (!pendingEdit || !charState) {
     hide('payment-panel');
     document.body.classList.remove('payment-dock-open');
+    document.body.classList.remove('payment-insufficient');
     return;
   }
   show('payment-panel');
@@ -368,11 +518,16 @@ function updatePaymentUI() {
 
   const plan = buildPaymentPlan(pendingEdit.quote, mode, runePct);
   const check = validatePayment(plan);
+  document.body.classList.toggle('payment-insufficient', !check.ok);
+  panel.classList.toggle('payment-dock--insufficient', !check.ok);
 
-  const lines = String(pendingEdit.label || '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const cartItems = Array.isArray(pendingEdit.items) ? pendingEdit.items : null;
+  const lines = cartItems
+    ? cartItems.map((it) => it.label)
+    : String(pendingEdit.label || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
   const queueCount = $('payment-queue-count');
   if (queueCount) {
     if (lines.length > 1) {
@@ -384,7 +539,18 @@ function updatePaymentUI() {
     }
   }
 
-  const labelHtml = lines.map((line) => escapeHtml(line)).join('<br>');
+  const labelHtml = cartItems
+    ? cartItems
+        .map(
+          (it) =>
+            `<div class="payment-cart-line"><span>${escapeHtml(
+              it.label
+            )}</span><span class="payment-cart-cost">${escapeHtml(
+              formatQuoteCostShort(it.quote)
+            )}</span></div>`
+        )
+        .join('')
+    : lines.map((line) => escapeHtml(line)).join('<br>');
 
   $('payment-summary').innerHTML = `
     <div class="payment-queue-list">${labelHtml}</div>
@@ -399,6 +565,12 @@ function updatePaymentUI() {
     }
   `;
 
+  const insuffHint = !check.ok
+    ? `<div class="payment-insufficient-msg">Fondi insufficienti sul personaggio target${
+        !check.okXp ? ' (XP/MXP)' : ''
+      }${!check.okRune ? ' (Runes)' : ''}.</div>`
+    : '';
+
   $('payment-breakdown').innerHTML = `
     <div class="payment-pay-line">
       Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong>
@@ -407,9 +579,10 @@ function updatePaymentUI() {
     <div class="payment-avail-line">
       Disponibili: ${formatMxp(charState.available_mxp || 0, charState.available_mxp_frac || 0)}
       · ${charState.rune || 0} Runes
-      · <span class="${check.okXp ? 'ok' : 'bad'}">MXP ${check.okXp ? 'OK' : 'no'}</span>
-      · <span class="${check.okRune ? 'ok' : 'bad'}">Runes ${check.okRune ? 'OK' : 'no'}</span>
+      · <span class="${check.okXp ? 'ok' : 'bad'}">MXP ${check.okXp ? 'OK' : 'insufficienti'}</span>
+      · <span class="${check.okRune ? 'ok' : 'bad'}">Runes ${check.okRune ? 'OK' : 'insufficienti'}</span>
     </div>
+    ${insuffHint}
   `;
 
   $('btn-pay-edit').disabled = !check.ok;
@@ -422,7 +595,9 @@ async function refreshMe() {
     session = null;
     pendingEdit = null;
     clearObjectEditCart();
+    clearCharacterEditCart();
     document.body.classList.remove('payment-dock-open');
+    document.body.classList.remove('payment-insufficient');
     applyLoginUiMode();
     show('login-panel');
     hide('toon-panel');
@@ -668,6 +843,7 @@ function hideApiWarn() {
 
 function clearTargetWorkspace(message) {
   clearObjectEditCart();
+  clearCharacterEditCart();
   pendingEdit = null;
   selectedInventoryId = null;
   selectedObjectOptions = null;
@@ -684,6 +860,14 @@ function clearTargetWorkspace(message) {
   }
   if ($('object-edits')) $('object-edits').innerHTML = '';
   if ($('object-text-edit')) $('object-text-edit').innerHTML = '';
+  if ($('object-edit-cart')) {
+    $('object-edit-cart').innerHTML = '';
+    $('object-edit-cart').classList.add('hidden');
+  }
+  if ($('char-edit-cart')) {
+    $('char-edit-cart').innerHTML = '';
+    $('char-edit-cart').classList.add('hidden');
+  }
   if ($('object-affect-slots')) {
     $('object-affect-slots').innerHTML = '';
     hide('object-affect-slots');
@@ -745,7 +929,9 @@ function renderCharStats() {
 
 function catalogEntries(kind, target) {
   if (!editCatalog || !editCatalog.entries) return [];
-  return editCatalog.entries.filter((e) => e.kind === kind && e.target === target && e.enabled);
+  return editCatalog.entries.filter(
+    (e) => e.kind === kind && e.target === target && e.enabled !== false
+  );
 }
 
 function buildStepOptions(cap, step, current) {
@@ -771,6 +957,10 @@ function renderCharacterEdits() {
   const resBox = $('resistance-edits');
   poolBox.innerHTML = '';
   resBox.innerHTML = '';
+  if ($('char-edit-cart')) {
+    $('char-edit-cart').innerHTML = '';
+    $('char-edit-cart').classList.add('hidden');
+  }
 
   if (!charState || session.role === 'limited') {
     poolBox.innerHTML = '<p class="hint">Tier limited: edit non consentito.</p>';
@@ -780,12 +970,15 @@ function renderCharacterEdits() {
   const poolEntries = catalogEntries('pool', 'character');
   poolEntries.forEach((entry) => {
     const field = entry.pool_field;
+    const cartKey = `pool:${field}`;
     const cap = Number(entry.cap || charState.pool?.caps?.[field] || 0);
     const step = Number(entry.step || 10);
     const current = Number(charState.pool?.[field] || 0);
     const row = document.createElement('div');
     row.className = 'edit-row';
+    row.dataset.cartKey = cartKey;
     const select = document.createElement('select');
+    select.dataset.current = String(current);
     buildStepOptions(cap, step, current).forEach((v) => {
       const opt = document.createElement('option');
       opt.value = v;
@@ -793,15 +986,20 @@ function renderCharacterEdits() {
       if (v === current) opt.selected = true;
       select.appendChild(opt);
     });
+    const queued = characterEditCart.get(cartKey);
+    if (queued && queued.newValue != null) {
+      select.value = String(queued.newValue);
+      if (queued.selectEl !== select) queued.selectEl = select;
+    }
     select.addEventListener('change', () => {
       if (Number(select.value) === current) {
-        if (pendingEdit?.type === 'pool' && pendingEdit.field === field) {
-          pendingEdit = null;
-          updatePaymentUI();
+        if (characterEditCart.has(cartKey)) {
+          characterEditCart.delete(cartKey);
+          rebuildCharacterPendingFromCart();
         }
         return;
       }
-      queuePoolQuote(field, Number(select.value), entry.label || field, select);
+      queuePoolQuote(field, Number(select.value), entry.label || field, select, cartKey);
     });
     row.innerHTML = `
       <div>
@@ -822,6 +1020,7 @@ function renderCharacterEdits() {
     grid.className = 'resistance-grid';
     resEntries.forEach((entry) => {
       const dt = Number(entry.damage_type);
+      const cartKey = `res:${dt}`;
       const currentRow = (charState.resistances || []).find((r) => Number(r.damage_type) === dt);
       const current = currentRow ? Number(currentRow.value) : 0;
       const min = Number(entry.min ?? -100);
@@ -829,7 +1028,9 @@ function renderCharacterEdits() {
       const step = Number(entry.step ?? 25);
       const row = document.createElement('div');
       row.className = 'edit-row';
+      row.dataset.cartKey = cartKey;
       const select = document.createElement('select');
+      select.dataset.current = String(current);
       resistanceValueOptions(min, max, step).forEach((v) => {
         const opt = document.createElement('option');
         opt.value = v;
@@ -837,15 +1038,20 @@ function renderCharacterEdits() {
         if (v === current) opt.selected = true;
         select.appendChild(opt);
       });
+      const queued = characterEditCart.get(cartKey);
+      if (queued && queued.value != null) {
+        select.value = String(queued.value);
+        if (queued.selectEl !== select) queued.selectEl = select;
+      }
       select.addEventListener('change', () => {
         if (Number(select.value) === current) {
-          if (pendingEdit?.type === 'resistance' && pendingEdit.damageType === dt) {
-            pendingEdit = null;
-            updatePaymentUI();
+          if (characterEditCart.has(cartKey)) {
+            characterEditCart.delete(cartKey);
+            rebuildCharacterPendingFromCart();
           }
           return;
         }
-        queueResistanceQuote(dt, Number(select.value), entry.label || entry.id, select);
+        queueResistanceQuote(dt, Number(select.value), entry.label || entry.id, select, cartKey);
       });
       row.innerHTML = `
         <div>
@@ -858,47 +1064,59 @@ function renderCharacterEdits() {
     });
     resBox.appendChild(grid);
   }
+  updateCharacterCartUI();
 }
 
-async function queuePoolQuote(field, newValue, label, selectEl) {
+async function queuePoolQuote(field, newValue, label, selectEl, cartKey) {
+  const requested = Number(selectEl.value);
   const data = await api('/api/quote-pool', {
     method: 'POST',
     body: JSON.stringify({ targetToonId, field, newValue }),
   });
+  if (Number(selectEl.value) !== requested) return;
   if (!data.ok) {
     alert(data.error || 'Quote pool fallita');
-    selectEl.value = String(data.data?.current ?? selectEl.dataset.prev ?? selectEl.value);
+    selectEl.value = selectEl.dataset.current || String(data.data?.current ?? selectEl.value);
     return;
   }
-  pendingEdit = {
+  ensureCharacterCartExclusive();
+  const key = cartKey || `pool:${field}`;
+  characterEditCart.set(key, {
+    key,
     type: 'pool',
     field,
     newValue,
     label: `${label}: ${data.data.current} → ${data.data.target}`,
     quote: data.data,
     selectEl,
-  };
-  updatePaymentUI();
+  });
+  rebuildCharacterPendingFromCart();
 }
 
-async function queueResistanceQuote(damageType, value, label, selectEl) {
+async function queueResistanceQuote(damageType, value, label, selectEl, cartKey) {
+  const requested = Number(selectEl.value);
   const data = await api('/api/quote-resistance', {
     method: 'POST',
     body: JSON.stringify({ targetToonId, damageType, value }),
   });
+  if (Number(selectEl.value) !== requested) return;
   if (!data.ok) {
     alert(data.error || 'Quote resistenza fallita');
+    selectEl.value = selectEl.dataset.current || String(selectEl.value);
     return;
   }
-  pendingEdit = {
+  ensureCharacterCartExclusive();
+  const key = cartKey || `res:${damageType}`;
+  characterEditCart.set(key, {
+    key,
     type: 'resistance',
     damageType,
     value,
     label: `${label}: ${data.data.current} → ${data.data.target}`,
     quote: data.data,
     selectEl,
-  };
-  updatePaymentUI();
+  });
+  rebuildCharacterPendingFromCart();
 }
 
 function stripMudColorCodes(raw) {
@@ -1104,8 +1322,13 @@ async function selectItem(inventoryId, li) {
   if (li) li.classList.add('selected');
   selectedInventoryId = inventoryId;
   clearObjectEditCart();
-  pendingEdit = null;
   selectedObjectOptions = null;
+  if (characterEditCart.size) {
+    rebuildCharacterPendingFromCart();
+  } else {
+    pendingEdit = null;
+    updatePaymentUI();
+  }
   updatePaymentUI();
   $('object-edits').innerHTML = '';
   $('object-affect-slots').innerHTML = '';
@@ -1370,41 +1593,39 @@ function clearObjectPending(entryId) {
   rebuildObjectPendingFromCart();
 }
 
-function clearObjectEditCart() {
+function clearObjectEditCart({ resetSelectors = false } = {}) {
+  if (resetSelectors) {
+    objectEditCart.forEach((it) => {
+      if (it.selectEl && it.selectEl.dataset.current != null) {
+        it.selectEl.value = it.selectEl.dataset.current;
+      }
+    });
+  }
   objectEditCart.clear();
-  if (
-    pendingEdit?.type === 'object' ||
-    pendingEdit?.type === 'object-batch'
-  ) {
+  if (isObjectPendingType(pendingEdit?.type)) {
     pendingEdit = null;
   }
+  updateObjectCartUI();
   updatePaymentUI();
 }
 
 function rebuildObjectPendingFromCart() {
   if (!objectEditCart.size) {
-    if (
-      pendingEdit?.type === 'object' ||
-      pendingEdit?.type === 'object-batch'
-    ) {
+    if (isObjectPendingType(pendingEdit?.type)) {
       pendingEdit = null;
     }
+    updateObjectCartUI();
     updatePaymentUI();
     return;
   }
   const items = [...objectEditCart.values()];
-  let xpRaw = 0;
-  let rune = 0;
+  const totals = sumQuotes(items);
   const labels = [];
   const notes = [];
   items.forEach((it) => {
-    xpRaw += Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
-    rune += Number(it.quote?.diff_rune || it.quote?.pq || 0);
     labels.push(it.label);
     if (it.quote?.note) notes.push(it.quote.note);
   });
-  const mxp = Math.floor(xpRaw / 1000000);
-  const mxpFrac = Math.floor((xpRaw % 1000000) / 10000);
   const artNote = objectPricingUsesArtifact()
     ? 'Include maggiorazione Artifact +50% (listino)'
     : undefined;
@@ -1413,10 +1634,7 @@ function rebuildObjectPendingFromCart() {
     entryId: 'object-batch',
     label: labels.join('\n'),
     quote: {
-      xp_raw: xpRaw,
-      mxp,
-      mxp_frac: mxpFrac,
-      diff_rune: rune,
+      ...totals,
       note:
         notes.find((n) => /Artifact/i.test(String(n))) ||
         artNote ||
@@ -1427,6 +1645,7 @@ function rebuildObjectPendingFromCart() {
     },
     items,
   };
+  updateObjectCartUI();
   updatePaymentUI();
 }
 
@@ -1693,8 +1912,10 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       const canEdit = entry.can_edit !== false;
       const row = document.createElement('div');
       row.className = canEdit ? 'edit-row' : 'edit-row edit-row-disabled';
+      row.dataset.cartKey = entry.id;
       const select = document.createElement('select');
       select.disabled = !canEdit || session.role === 'limited';
+      select.dataset.current = String(current);
 
       if (isYesNoObjectEntry(entry)) {
         [
@@ -1732,6 +1953,16 @@ function renderObjectEdits(entries, damBudget, spBudget) {
 
       if (!canEdit) {
         select.disabled = true;
+      }
+
+      const queuedObj = objectEditCart.get(entry.id);
+      if (queuedObj && queuedObj.targetModifier != null && !select.disabled) {
+        if (isYesNoObjectEntry(entry)) {
+          select.value = Number(queuedObj.targetModifier) ? '1' : '0';
+        } else {
+          select.value = String(queuedObj.targetModifier);
+        }
+        queuedObj.selectEl = select;
       }
 
       select.addEventListener('change', () => {
@@ -1798,6 +2029,7 @@ function renderObjectEdits(entries, damBudget, spBudget) {
     details.appendChild(body);
     box.appendChild(details);
   });
+  updateObjectCartUI();
 }
 
 async function queueObjectQuote(entry, targetModifier, selectEl) {
@@ -1826,8 +2058,7 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
   if (!data.ok) {
     alert(data.error || 'Quote oggetto fallita');
     if (selectEl) {
-      const cur = Number(entry.current || 0);
-      selectEl.value = String(cur);
+      selectEl.value = selectEl.dataset.current || String(Number(entry.current || 0));
     }
     clearObjectPending(entry.id);
     return;
@@ -1848,14 +2079,7 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     : entry.relative
       ? formatScalarOptionLabel(entry, Number(qd.target))
       : qd.target;
-  /* Altri tipi di pending (pool/resi) non si mischiano con la coda oggetto. */
-  if (
-    pendingEdit &&
-    pendingEdit.type !== 'object' &&
-    pendingEdit.type !== 'object-batch'
-  ) {
-    pendingEdit = null;
-  }
+  ensureObjectCartExclusive();
   const wasAddingArtifact = cartAddsArtifact();
   objectEditCart.set(entry.id, {
     entryId: entry.id,
@@ -1900,7 +2124,39 @@ async function confirmPayEdit() {
   const runePct = Number($('pay-rune-pct').value);
 
   let result;
-  if (pendingEdit.type === 'pool') {
+  if (pendingEdit.type === 'character-batch') {
+    const items = [...pendingEdit.items];
+    result = { ok: true };
+    for (const item of items) {
+      const itemPlan = buildPaymentPlan(item.quote, mode, runePct);
+      if (item.type === 'pool') {
+        result = await api('/api/apply-pool', {
+          method: 'POST',
+          body: JSON.stringify({
+            targetToonId,
+            field: item.field,
+            newValue: item.newValue,
+            payXp: itemPlan.payXp,
+            payRune: itemPlan.payRune,
+          }),
+        });
+      } else if (item.type === 'resistance') {
+        result = await api('/api/apply-resistance', {
+          method: 'POST',
+          body: JSON.stringify({
+            targetToonId,
+            damageType: item.damageType,
+            value: item.value,
+            payXp: itemPlan.payXp,
+            payRune: itemPlan.payRune,
+          }),
+        });
+      } else {
+        result = { ok: false, error: 'Voce carrello personaggio non valida' };
+      }
+      if (!result.ok) break;
+    }
+  } else if (pendingEdit.type === 'pool') {
     result = await api('/api/apply-pool', {
       method: 'POST',
       body: JSON.stringify({
@@ -2001,8 +2257,10 @@ async function confirmPayEdit() {
       pendingEdit.type === 'object' ||
       pendingEdit.type === 'object-batch' ||
       pendingEdit.type === 'object-text';
+    const wasCharacter = isCharacterPendingType(pendingEdit.type);
     const invId = selectedInventoryId;
     clearObjectEditCart();
+    clearCharacterEditCart();
     pendingEdit = null;
     updatePaymentUI();
     await loadCharacterState();
@@ -2010,6 +2268,8 @@ async function confirmPayEdit() {
       await loadInventory();
       const li = document.querySelector('#inventory-list .item.selected');
       if (li) await selectItem(invId, li);
+    } else if (wasCharacter) {
+      renderCharacterEdits();
     }
   } else {
     const ver =
@@ -2073,6 +2333,21 @@ $('btn-refresh-inv').onclick = () => loadInventory();
 $('pay-mode').onchange = updatePaymentUI;
 $('pay-rune-pct').oninput = updatePaymentUI;
 $('btn-pay-edit').onclick = () => confirmPayEdit();
+
+const btnResetChar = $('btn-reset-char-edits');
+if (btnResetChar) {
+  btnResetChar.onclick = () => {
+    clearCharacterEditCart({ resetSelectors: true });
+    if ($('apply-result')) $('apply-result').textContent = '';
+  };
+}
+const btnResetObj = $('btn-reset-object-edits');
+if (btnResetObj) {
+  btnResetObj.onclick = () => {
+    clearObjectEditCart({ resetSelectors: true });
+    if ($('apply-result')) $('apply-result').textContent = '';
+  };
+}
 
 /** Slug ITEM_* — allineato a edit_system_config.cpp (fallback se myst vecchio). */
 const PORTAL_TYPE_DEFS = [
