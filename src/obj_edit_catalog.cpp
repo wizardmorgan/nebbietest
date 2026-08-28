@@ -26,7 +26,48 @@
 
 namespace Alarmud {
 
-struct obj_data* clone_obj(struct obj_data* obj);
+/**
+ * Copia di lavoro per quote/apply portal: a differenza di clone_obj() (solo
+ * proto + name/short/long), conserva affect, flags, valori e char_vnum dello
+ * stato attuale. Senza questo il delta listino e' spesso 0 (after=proto+nuovo
+ * vs before=pezzo gia' editato).
+ */
+[[nodiscard]] static struct obj_data* portal_clone_obj_state(struct obj_data* obj) {
+	if(!obj || obj->item_number < 0) {
+		return nullptr;
+	}
+	struct obj_data* ocopy = read_object(obj->item_number, REAL);
+	if(!ocopy) {
+		return nullptr;
+	}
+
+	auto replace_str = [](char*& dst, const char* src) {
+		if(dst) {
+			free(dst);
+			dst = nullptr;
+		}
+		if(src) {
+			dst = strdup(src);
+		}
+	};
+	replace_str(ocopy->name, obj->name);
+	replace_str(ocopy->short_description, obj->short_description);
+	replace_str(ocopy->description, obj->description);
+	replace_str(ocopy->action_description, obj->action_description);
+	replace_str(ocopy->szForbiddenWearToChar, obj->szForbiddenWearToChar);
+	replace_str(ocopy->szForbiddenWearToRoom, obj->szForbiddenWearToRoom);
+
+	ocopy->obj_flags = obj->obj_flags;
+	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+		ocopy->affected[i] = obj->affected[i];
+	}
+	ocopy->char_vnum = obj->char_vnum;
+	ocopy->sector = obj->sector;
+	/* Non collegare a instance/inventario: e' un scratch per AnalyzeObjEdit. */
+	ocopy->db_instance_id = 0;
+	ocopy->db_inventory_id = 0;
+	return ocopy;
+}
 
 [[nodiscard]] static struct obj_data* load_edit_prototype(const struct obj_data* obj);
 
@@ -1194,7 +1235,7 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		err = "oggetto null";
 		return false;
 	}
-	struct obj_data* clone = clone_obj(obj);
+	struct obj_data* clone = portal_clone_obj_state(obj);
 	if(!clone) {
 		err = "impossibile clonare oggetto";
 		return false;
@@ -1233,7 +1274,7 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 							 || (object_edit_location_affects_spellpower(location)
 								 && other_worn_edited_sp >= 0);
 	if(need_budget) {
-		struct obj_data* clone = clone_obj(obj);
+		struct obj_data* clone = portal_clone_obj_state(obj);
 		if(!clone) {
 			err = "impossibile clonare oggetto";
 			return false;
