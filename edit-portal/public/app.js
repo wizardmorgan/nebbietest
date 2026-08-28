@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 25;
+const EDIT_PORTAL_UI_BUILD = 26;
 
 /** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
 function portalBasePath() {
@@ -355,9 +355,11 @@ function updatePaymentUI() {
   const panel = $('payment-panel');
   if (!pendingEdit || !charState) {
     hide('payment-panel');
+    document.body.classList.remove('payment-dock-open');
     return;
   }
   show('payment-panel');
+  document.body.classList.add('payment-dock-open');
 
   const mode = $('pay-mode').value;
   const runePct = Number($('pay-rune-pct').value);
@@ -367,29 +369,47 @@ function updatePaymentUI() {
   const plan = buildPaymentPlan(pendingEdit.quote, mode, runePct);
   const check = validatePayment(plan);
 
-  const labelHtml = String(pendingEdit.label || '')
+  const lines = String(pendingEdit.label || '')
     .split('\n')
-    .map((line) => escapeHtml(line))
-    .join('<br>');
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const queueCount = $('payment-queue-count');
+  if (queueCount) {
+    if (lines.length > 1) {
+      queueCount.textContent = `${lines.length} in coda`;
+      queueCount.classList.remove('hidden');
+    } else {
+      queueCount.textContent = '';
+      queueCount.classList.add('hidden');
+    }
+  }
+
+  const labelHtml = lines.map((line) => escapeHtml(line)).join('<br>');
 
   $('payment-summary').innerHTML = `
-    <strong>${labelHtml}</strong><br>
-    Costo listino: <strong>${plan.displayMxp}</strong>
-    ${plan.runeListino ? ` (+ ${plan.runeListino} Runes componente listino)` : ''}
+    <div class="payment-queue-list">${labelHtml}</div>
+    <div class="payment-cost-line">
+      Costo listino: <strong>${plan.displayMxp}</strong>
+      ${plan.runeListino ? ` (+ ${plan.runeListino} Runes listino)` : ''}
+    </div>
     ${
       pendingEdit.quote?.note
-        ? `<br><span class="slot-hint">${escapeHtml(pendingEdit.quote.note)}</span>`
+        ? `<div class="slot-hint">${escapeHtml(pendingEdit.quote.note)}</div>`
         : ''
     }
   `;
 
   $('payment-breakdown').innerHTML = `
-    Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong> raw (MXP)
-    e <strong>${plan.payRune} Runes</strong><br>
-    Disponibili: ${formatMxp(charState.available_mxp || 0, charState.available_mxp_frac || 0)}
-    · ${charState.rune || 0} Runes<br>
-  <span class="${check.okXp ? 'ok' : 'bad'}">MXP ${check.okXp ? 'OK' : 'insufficienti'}</span>
-  · <span class="${check.okRune ? 'ok' : 'bad'}">Runes ${check.okRune ? 'OK' : 'insufficienti'}</span>
+    <div class="payment-pay-line">
+      Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong>
+      + <strong>${plan.payRune} Runes</strong>
+    </div>
+    <div class="payment-avail-line">
+      Disponibili: ${formatMxp(charState.available_mxp || 0, charState.available_mxp_frac || 0)}
+      · ${charState.rune || 0} Runes
+      · <span class="${check.okXp ? 'ok' : 'bad'}">MXP ${check.okXp ? 'OK' : 'no'}</span>
+      · <span class="${check.okRune ? 'ok' : 'bad'}">Runes ${check.okRune ? 'OK' : 'no'}</span>
+    </div>
   `;
 
   $('btn-pay-edit').disabled = !check.ok;
@@ -400,10 +420,14 @@ async function refreshMe() {
   const me = await api('/api/me');
   if (!me.ok) {
     session = null;
+    pendingEdit = null;
+    clearObjectEditCart();
+    document.body.classList.remove('payment-dock-open');
     applyLoginUiMode();
     show('login-panel');
     hide('toon-panel');
     hide('work-panel');
+    hide('payment-panel');
     hide('btn-logout');
     hide('btn-change-toon');
     return;
