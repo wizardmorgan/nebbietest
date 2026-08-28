@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 29;
+const EDIT_PORTAL_UI_BUILD = 30;
 
 /** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
 function portalBasePath() {
