@@ -1504,6 +1504,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["total"] = items.size();
 			d["editable_count"] = editable_count;
 			d["loaded_rows"] = rows.size();
+			d["hidden_rows"] = static_cast<int>(rows.size()) - static_cast<int>(items.size());
 			d["toon_id"] = toon_id;
 			d["toon_name"] = toon_name;
 			d["toon_name_ok"] = toon_name_ok;

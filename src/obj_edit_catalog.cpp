@@ -645,6 +645,10 @@ bool object_portal_allows_worn_edit(const struct obj_data* obj) noexcept {
 	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
 		return true;
 	}
+	/* Istanza MySQL = pezzo personalizzato (anche senza flag EDIT in extra_flags2). */
+	if(obj->db_instance_id != 0) {
+		return true;
+	}
 	/* Personalizzato (ED / personal_owner) ma senza flag EDIT ancora: stesso caso. */
 	if(object_has_owner_lock(obj)) {
 		return true;
@@ -757,6 +761,26 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	return true;
 }
 
+[[nodiscard]] static bool object_portal_is_existing_edit(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return false;
+	}
+	/* Flag impostato dal portale/oedit. */
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return true;
+	}
+	/* Istanza MySQL: edit salvato anche se extra_flags2 non ha ITEM2_EDIT
+	 * (legacy / migrate / persist senza flag). */
+	if(obj->db_instance_id != 0) {
+		return true;
+	}
+	/* Personalizzato ED*/personal_owner: ri-edit / indossato. */
+	if(object_has_owner_lock(obj)) {
+		return true;
+	}
+	return false;
+}
+
 [[nodiscard]] static bool object_portal_included(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return false;
@@ -766,11 +790,11 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 		return false;
 	}
 	/*
-	 * Pezzi gia' passati dal portale/oedit (ITEM2_EDIT): sempre in lista per
-	 * ri-edit, anche se la categoria ITEM_* e' spenta dallo staff. Altrimenti
-	 * un PG "non vede i suoi edit" (es. tipo container/other/treasure off).
+	 * Pezzi gia' personalizzati: sempre in lista per ri-edit, anche se la
+	 * categoria ITEM_* e' spenta. Altrimenti PG come Martin/Cataklisma
+	 * "non vedono i loro edit".
 	 */
-	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+	if(object_portal_is_existing_edit(obj)) {
 		return true;
 	}
 	/* Spunta staff = visibile per il primo edit su prototipo. */

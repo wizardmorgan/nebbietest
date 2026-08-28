@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 28;
+const EDIT_PORTAL_UI_BUILD = 29;
 
 /** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
 function portalBasePath() {
@@ -1288,9 +1288,9 @@ async function loadInventory() {
         ' oggetti ma myst non li ha arricchiti: ricompila/riavvia myst (API ≥26).';
     } else if (mysqlCount > 0 && data.inventory_source === 'myst_filtered') {
       emptyEl.textContent =
-        'Myst ha letto ' +
+        'Myst ha filtrato tutto (' +
         (data.myst_loaded_rows ?? '?') +
-        ' pezzi ma nessuno è mostrato (categorie spente / RARO / TAN / HAS-GEMS). Con API ≥26 i pezzi già EDIT restano visibili anche se la categoria è spenta — fai rebuild-myst.';
+        ' pezzi letti). Mostrati in sola lettura da MySQL — fai rebuild-myst (API ≥27) per ri-edit (pezzi instance/EDIT/owner sempre in lista).';
     } else if (mysqlCount > 0) {
       emptyEl.textContent =
         'Nessun oggetto mostrato, ma MySQL ha ' +
@@ -1308,7 +1308,7 @@ async function loadInventory() {
     );
   } else if (data.inventory_source === 'myst_filtered') {
     showApiWarn(
-      'Inventario filtrato da myst: nessun pezzo in lista. Dopo rebuild-myst i pezzi EDIT del PG devono ricomparire.',
+      'Inventario filtrato da myst: lista da MySQL in sola lettura. Dopo rebuild-myst (API ≥27) i pezzi già editati/instance/owner tornano selezionabili.',
     );
   } else if (data.inventory_source === 'mysql_fallback') {
     showApiWarn(

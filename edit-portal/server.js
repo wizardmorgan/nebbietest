@@ -625,7 +625,14 @@ router.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req
     editableCount = 0;
     inventorySource = 'mysql_myst_empty';
   } else if (list.ok && items.length === 0 && mysqlRows.length > 0 && mystLoadedRows > 0) {
-    /* Myst ha letto le righe ma le ha nascoste (categorie / esclusioni). */
+    /* Myst ha letto le righe ma le ha nascoste (categorie / esclusioni vecchie).
+     * Mostra comunque le righe MySQL cosi' il tester non vede "lista vuota". */
+    items = inventoryRowsToPortalItems(
+      mysqlRows,
+      'nascosto da myst (categorie/filtri) — serve rebuild-myst API ≥27',
+    );
+    total = items.length;
+    editableCount = 0;
     inventorySource = 'myst_filtered';
   }
 
