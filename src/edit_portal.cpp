@@ -568,7 +568,25 @@ std::atomic<bool> g_http_running {false};
 	if(!obj) {
 		return nullptr;
 	}
+	obj->db_inventory_id = row.id;
 	if(obj->db_instance_id != 0) {
+		/*
+		 * Instance e' la source of truth per stats/affects, ma la riga
+		 * character_inventory puo' ancora avere ITEM2_EDIT / ED* mentre
+		 * l'instance e' stata salvata senza flag o con ED gia' strippati.
+		 * Senza merge, pezzi EDIT "spariscono" dai filtri portale.
+		 */
+		if(IS_SET(row.elem.extra_flags2, ITEM2_EDIT)) {
+			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+		}
+		if(obj->personal_owner[0] == '\0' && row.elem.name && *row.elem.name) {
+			const std::string ed = object_instance_extract_ed_owner(row.elem.name);
+			if(!ed.empty()) {
+				strncpy(obj->personal_owner, ed.c_str(),
+						sizeof(obj->personal_owner) - 1);
+				obj->personal_owner[sizeof(obj->personal_owner) - 1] = '\0';
+			}
+		}
 		return obj;
 	}
 	obj->obj_flags.value[0] = row.elem.value[0];
@@ -598,7 +616,6 @@ std::atomic<bool> g_http_running {false};
 			obj->affected[j] = row.elem.affected[j];
 		}
 	}
-	obj->db_inventory_id = row.id;
 	return obj;
 }
 
@@ -1787,10 +1804,29 @@ struct ToonInventoryEditScan {
 			}
 			Json items = Json::array();
 			int editable_count = 0;
+			int hidden_raro = 0;
+			int hidden_tan = 0;
+			int hidden_category = 0;
+			int hidden_other = 0;
 			const bool toon_name_ok = !toon_name.empty();
 			for(const auto& r : rows) {
 				struct obj_data* obj = materialize_inventory_row(r);
 				if(obj && !object_portal_show_in_inventory_list(obj, toon_name.c_str())) {
+					if(object_is_tanned(obj)) {
+						++hidden_tan;
+					}
+					else if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+						++hidden_raro;
+					}
+					else {
+						const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
+						if(slug && !edit_system_portal_category_enabled(slug)) {
+							++hidden_category;
+						}
+						else {
+							++hidden_other;
+						}
+					}
 					extract_obj(obj);
 					continue;
 				}
@@ -1868,9 +1904,18 @@ struct ToonInventoryEditScan {
 			d["editable_count"] = editable_count;
 			d["loaded_rows"] = rows.size();
 			d["hidden_rows"] = static_cast<int>(rows.size()) - static_cast<int>(items.size());
+			{
+				Json filt;
+				filt["raro"] = hidden_raro;
+				filt["tan"] = hidden_tan;
+				filt["category"] = hidden_category;
+				filt["other"] = hidden_other;
+				d["hidden_breakdown"] = filt;
+			}
 			d["toon_id"] = toon_id;
 			d["toon_name"] = toon_name;
 			d["toon_name_ok"] = toon_name_ok;
+			d[kEditPortalApiVersionTag] = kEditPortalApiVersion;
 			return json_ok(d);
 		}
 

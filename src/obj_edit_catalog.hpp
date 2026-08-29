@@ -39,8 +39,8 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 										  const char* toon_name) noexcept;
 
 /** false = non mostrare in inventario portale.
- * Esclude sempre RARO (cost >= LIM_ITEM_COST_MIN), TAN, HAS-GEMS (ITEM2_INSERT),
- * simboli clan; poi applica categorie staff. */
+ * Prototipi: esclude RARO/TAN/HAS-GEMS/simbolo + categorie staff.
+ * Pezzi gia' EDIT/instance/owner: sempre in lista (tranne HAS-GEMS/simbolo). */
 [[nodiscard]] bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 														const char* toon_name) noexcept;
 

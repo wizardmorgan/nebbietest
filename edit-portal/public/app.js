@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 39;
+const EDIT_PORTAL_UI_BUILD = 40;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -1743,17 +1743,27 @@ async function loadInventory() {
       emptyEl.textContent =
         'Elenco MySQL ha ' +
         mysqlCount +
-        ' oggetti ma myst non li ha arricchiti: ricompila/riavvia myst (API ≥26).';
+        ' oggetti ma myst non li ha arricchiti: ricompila/riavvia myst.';
     } else if (mysqlCount > 0 && data.inventory_source === 'myst_filtered') {
+      const br = data.myst_hidden_breakdown;
+      const parts = [];
+      if (br) {
+        if (br.raro) parts.push(`${br.raro} RARO (solo primo edit)`);
+        if (br.tan) parts.push(`${br.tan} tan`);
+        if (br.category) parts.push(`${br.category} categoria spenta`);
+        if (br.other) parts.push(`${br.other} altro`);
+      }
       emptyEl.textContent =
-        'Myst ha filtrato tutto (' +
+        'Myst ha nascosto tutti i pezzi (' +
         (data.myst_loaded_rows ?? '?') +
-        ' pezzi letti). Mostrati in sola lettura da MySQL — fai rebuild-myst (API ≥27) per ri-edit (pezzi instance/EDIT/owner sempre in lista).';
+        ' letti)' +
+        (parts.length ? `: ${parts.join(', ')}` : '') +
+        '. I pezzi già EDIT restano in lista dopo rebuild-myst aggiornato; prototipi RARO/tan restano nascosti.';
     } else if (mysqlCount > 0) {
       emptyEl.textContent =
         'Nessun oggetto mostrato, ma MySQL ha ' +
         mysqlCount +
-        ' righe inventario. Verifica categorie staff e rebuild-myst (API ≥26).';
+        ' righe inventario. Verifica categorie staff.';
     } else {
       emptyEl.textContent =
         'Nessun oggetto in inventario MySQL per questo PG (logout in-game per salvare).';
@@ -1765,8 +1775,18 @@ async function loadInventory() {
       'Inventario caricato: nessun oggetto editabile (vedi motivi nella lista). Pezzi indossati sono editabili se rispettano categorie/esclusioni (PG offline).',
     );
   } else if (data.inventory_source === 'myst_filtered') {
+    const br = data.myst_hidden_breakdown;
+    const parts = [];
+    if (br) {
+      if (br.raro) parts.push(`${br.raro} RARO`);
+      if (br.tan) parts.push(`${br.tan} tan`);
+      if (br.category) parts.push(`${br.category} categoria`);
+      if (br.other) parts.push(`${br.other} altro`);
+    }
     showApiWarn(
-      'Inventario filtrato da myst: lista da MySQL in sola lettura. Dopo rebuild-myst (API ≥27) i pezzi già editati/instance/owner tornano selezionabili.',
+      'Inventario filtrato da myst (sola lettura MySQL)' +
+        (parts.length ? `: ${parts.join(', ')}` : '') +
+        '. Dopo rebuild-myst i pezzi già EDIT/ED*/instance tornano selezionabili; prototipi RARO/tan restano esclusi.',
     );
   } else if (data.inventory_source === 'mysql_fallback') {
     showApiWarn(

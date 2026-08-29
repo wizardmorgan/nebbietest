@@ -727,8 +727,30 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	}
 }
 
+[[nodiscard]] static bool object_portal_hard_block(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return true;
+	}
+	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
+		return true;
+	}
+	/* HAS-GEMS (extra_bits2) = ITEM2_INSERT. */
+	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
+		return true;
+	}
+	return false;
+}
+
+/**
+ * Esclusioni per il *primo* edit su prototipo: TAN, RARO, simbolo, HAS-GEMS.
+ * I pezzi gia' personalizzati (EDIT/instance/owner) bypassano TAN/RARO in
+ * show/editable: altrimenti eq editato "costoso" o da tan sparisce dalla lista.
+ */
 [[nodiscard]] static bool object_portal_passes_exclusions(const struct obj_data* obj) noexcept {
 	if(!obj) {
+		return false;
+	}
+	if(object_portal_hard_block(obj)) {
 		return false;
 	}
 	/* TAN_* prototipi / pezzi da skill tan. */
@@ -737,13 +759,6 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	}
 	/* [RARO] in stat/ident: cost >= LIM_ITEM_COST_MIN (non c'e' un flag dedicato). */
 	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
-		return false;
-	}
-	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
-		return false;
-	}
-	/* HAS-GEMS (extra_bits2) = ITEM2_INSERT. */
-	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
 		return false;
 	}
 	return true;
@@ -797,17 +812,23 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 	if(!obj || !toon_name || !*toon_name) {
 		return "oggetto o PG non valido";
 	}
-	if(object_is_tanned(obj)) {
-		return "conciato (skill tan)";
+	if(object_portal_hard_block(obj)) {
+		if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
+			return "simbolo clan";
+		}
+		if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
+			return "HAS-GEMS (insert)";
+		}
+		return "bloccato";
 	}
-	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
-		return "RARO";
-	}
-	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
-		return "simbolo clan";
-	}
-	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
-		return "HAS-GEMS (insert)";
+	const bool existing = object_portal_is_existing_edit(obj);
+	if(!existing) {
+		if(object_is_tanned(obj)) {
+			return "conciato (skill tan)";
+		}
+		if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+			return "RARO";
+		}
 	}
 	if(!owner_matches(obj, toon_name)) {
 		return "owner diverso dal PG (ED/personal per altro PG)";
@@ -830,11 +851,13 @@ bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 	}
 	/*
 	 * Visibilita' inventario:
-	 * 1) esclusioni dure (RARO/TAN/HAS-GEMS/simbolo)
-	 * 2) categorie staff: senza spunta il tipo e' nascosto
-	 * Pezzi gia' personalizzati (EDIT / instance / owner) restano visibili
-	 * anche con categoria spenta (vedi object_portal_included).
+	 * - pezzi gia' personalizzati (EDIT / instance / owner): sempre in lista
+	 *   (tranne HAS-GEMS / simbolo clan); TAN/RARO non li nascondono
+	 * - prototipi: esclusioni dure + categorie staff
 	 */
+	if(object_portal_is_existing_edit(obj)) {
+		return !object_portal_hard_block(obj);
+	}
 	if(!object_portal_passes_exclusions(obj)) {
 		return false;
 	}
@@ -845,10 +868,16 @@ bool object_portal_editable(const struct obj_data* obj, const char* toon_name) n
 	if(!obj || !toon_name || !*toon_name) {
 		return false;
 	}
-	if(!object_portal_passes_exclusions(obj)) {
+	if(object_portal_hard_block(obj)) {
 		return false;
 	}
 	if(!owner_matches(obj, toon_name)) {
+		return false;
+	}
+	if(object_portal_is_existing_edit(obj)) {
+		return true;
+	}
+	if(!object_portal_passes_exclusions(obj)) {
 		return false;
 	}
 	return object_portal_included(obj);

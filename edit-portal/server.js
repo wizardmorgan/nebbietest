@@ -149,10 +149,10 @@ function inventoryRowsToPortalItems(rows, skipReason) {
     const worn = wearPos > 0;
     const hasInstance = Number(r.instance_id || 0) > 0;
     let reason = skipReason;
-    if (worn) {
+    if (worn && !reason) {
       reason = hasInstance
-        ? 'indossato (dettagli: serve myst aggiornato)'
-        : 'indossato (dettagli: serve myst)';
+        ? 'indossato (dettagli non arricchiti da myst)'
+        : 'indossato (dettagli non arricchiti da myst)';
     }
     const item = {
       inventory_id: r.id,
@@ -170,6 +170,20 @@ function inventoryRowsToPortalItems(rows, skipReason) {
     if (reason) item.skip_reason = reason;
     return item;
   });
+}
+
+function formatHiddenBreakdown(breakdown) {
+  if (!breakdown || typeof breakdown !== 'object') return '';
+  const parts = [];
+  const raro = Number(breakdown.raro || 0);
+  const tan = Number(breakdown.tan || 0);
+  const cat = Number(breakdown.category || 0);
+  const other = Number(breakdown.other || 0);
+  if (raro) parts.push(`${raro} RARO (primo edit)`);
+  if (tan) parts.push(`${tan} tan/conciato (primo edit)`);
+  if (cat) parts.push(`${cat} categoria spenta`);
+  if (other) parts.push(`${other} altro`);
+  return parts.join(', ');
 }
 
 async function mystPost(pathSuffix, body) {
@@ -695,12 +709,12 @@ router.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req
     editableCount = 0;
     inventorySource = 'mysql_myst_empty';
   } else if (list.ok && items.length === 0 && mysqlRows.length > 0 && mystLoadedRows > 0) {
-    /* Myst ha letto le righe ma le ha nascoste (categorie / esclusioni vecchie).
-     * Mostra comunque le righe MySQL cosi' il tester non vede "lista vuota". */
-    items = inventoryRowsToPortalItems(
-      mysqlRows,
-      'nascosto da myst (categorie/filtri) — serve rebuild-myst API ≥27',
-    );
+    /* Myst ha letto le righe ma le ha nascoste (RARO/tan/categorie prototipo). */
+    const br = formatHiddenBreakdown(list.data?.hidden_breakdown);
+    const reason = br
+      ? `nascosto da myst: ${br}`
+      : 'nascosto da myst (filtri RARO/tan/categorie su prototipi)';
+    items = inventoryRowsToPortalItems(mysqlRows, reason);
     total = items.length;
     editableCount = 0;
     inventorySource = 'myst_filtered';
@@ -714,8 +728,13 @@ router.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req
     editable_count: editableCount,
     mysql_count: mysqlRows.length,
     myst_loaded_rows: mystLoadedRows,
+    myst_hidden_rows: list.ok ? Number(list.data?.hidden_rows ?? 0) : 0,
+    myst_hidden_breakdown: list.ok ? list.data?.hidden_breakdown ?? null : null,
     myst_toon_name: list.ok ? list.data?.toon_name ?? null : null,
     myst_toon_name_ok: list.ok ? list.data?.toon_name_ok ?? null : null,
+    portal_api_version: list.ok
+      ? list.data?.portal_api_version ?? null
+      : null,
     inventory_source: inventorySource,
     mystErrors: [online.ok ? null : online.error, list.ok ? null : list.error].filter(Boolean),
     mystOnlineOk: online.ok,
