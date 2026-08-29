@@ -173,6 +173,12 @@ static void json_listino_pricing(Json& j, const ObjEditListinoSpec& spec) {
 static bool place_affect_modifier(struct obj_data* obj, int location,
 												int modifier) {
 	if(modifier == 0) {
+		/* Azzerare = liberare lo slot, non lasciare APPLY_X By 0. */
+		const int existing = find_affect_slot_for_location(obj, location);
+		if(existing >= 0) {
+			obj->affected[existing].location = APPLY_NONE;
+			obj->affected[existing].modifier = 0;
+		}
 		return true;
 	}
 	int slot = find_affect_slot_for_location(obj, location);
@@ -185,6 +191,25 @@ static bool place_affect_modifier(struct obj_data* obj, int location,
 	}
 	obj->affected[slot].modifier = static_cast<sh_int>(modifier);
 	return true;
+}
+
+/** Rimuove affect con modifier 0 che occupano comunque uno slot (fantasma). */
+static void scrub_zero_modifier_affects(struct obj_data* obj) noexcept {
+	if(!obj) {
+		return;
+	}
+	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+		const int loc = obj->affected[i].location;
+		if(loc == APPLY_NONE || loc == APPLY_SKIP) {
+			continue;
+		}
+		if(obj->affected[i].modifier != 0) {
+			continue;
+		}
+		/* Bitvector vuoto (immune/spell) o scalare a 0: libera lo slot. */
+		obj->affected[i].location = APPLY_NONE;
+		obj->affected[i].modifier = 0;
+	}
 }
 
 void object_compact_edit_affects(struct obj_data* obj) noexcept {
@@ -231,7 +256,7 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 		case APPLY_SKIP:
 			break;
 		default:
-			if(saved_count < MAX_OBJ_AFFECT) {
+			if(mod != 0 && saved_count < MAX_OBJ_AFFECT) {
 				saved[saved_count].location = loc;
 				saved[saved_count].modifier = mod;
 				++saved_count;
@@ -264,6 +289,7 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	for(int i = 0; i < saved_count; ++i) {
 		place_affect_modifier(obj, saved[i].location, saved[i].modifier);
 	}
+	scrub_zero_modifier_affects(obj);
 }
 
 [[nodiscard]] static bool scalar_can_edit(const struct obj_data* obj, int location,
@@ -435,7 +461,7 @@ static void rewrite_combat_totals(struct obj_data* obj, int hitroll,
 		case APPLY_SKIP:
 			break;
 		default:
-			if(saved_count < MAX_OBJ_AFFECT) {
+			if(mod != 0 && saved_count < MAX_OBJ_AFFECT) {
 				saved[saved_count].location = loc;
 				saved[saved_count].modifier = mod;
 				++saved_count;
@@ -545,7 +571,7 @@ Json object_affect_slots_json(const struct obj_data* obj) {
 	return root;
 }
 
-[[nodiscard]] static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
+static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 	if(!obj || slot < 0 || slot >= MAX_OBJ_AFFECT) {
 		return;
 	}

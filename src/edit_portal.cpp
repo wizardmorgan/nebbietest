@@ -876,7 +876,8 @@ std::atomic<bool> g_http_running {false};
 	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
 		const int loc = obj->affected[i].location;
 		const int mod = obj->affected[i].modifier;
-		if(loc == 0 && mod == 0) {
+		/* Non salvare APPLY_X By 0 (occupa slot senza effetto; vedi DAMROLL By 0). */
+		if(loc == APPLY_NONE || loc == APPLY_SKIP || mod == 0) {
 			continue;
 		}
 		std::ostringstream aff;

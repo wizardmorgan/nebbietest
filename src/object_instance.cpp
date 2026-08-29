@@ -738,7 +738,8 @@ bool replace_instance_affects_tx(DB* db, unsigned long long instance_id,
 	db->erase_query<object_instance_affect>(AffQ::key.instance_id == instance_id);
 	for(unsigned char slot = 0; slot < MAX_OBJ_AFFECT; ++slot) {
 		const auto& af = obj->affected[slot];
-		if(af.location == 0 && af.modifier == 0) {
+		/* Come inventorio portal: non persistere APPLY_X By 0 (slot fantasma). */
+		if(af.location == 0 || af.location == APPLY_SKIP || af.modifier == 0) {
 			continue;
 		}
 		object_instance_affect row;
