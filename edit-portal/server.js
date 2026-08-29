@@ -179,8 +179,8 @@ function formatHiddenBreakdown(breakdown) {
   const tan = Number(breakdown.tan || 0);
   const cat = Number(breakdown.category || 0);
   const other = Number(breakdown.other || 0);
-  if (raro) parts.push(`${raro} RARO (primo edit)`);
-  if (tan) parts.push(`${tan} tan/conciato (primo edit)`);
+  if (raro) parts.push(`${raro} RARO`);
+  if (tan) parts.push(`${tan} tan/conciato`);
   if (cat) parts.push(`${cat} categoria spenta`);
   if (other) parts.push(`${other} altro`);
   return parts.join(', ');

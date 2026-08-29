@@ -727,30 +727,12 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	}
 }
 
-[[nodiscard]] static bool object_portal_hard_block(const struct obj_data* obj) noexcept {
-	if(!obj) {
-		return true;
-	}
-	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
-		return true;
-	}
-	/* HAS-GEMS (extra_bits2) = ITEM2_INSERT. */
-	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
-		return true;
-	}
-	return false;
-}
-
 /**
- * Esclusioni per il *primo* edit su prototipo: TAN, RARO, simbolo, HAS-GEMS.
- * I pezzi gia' personalizzati (EDIT/instance/owner) bypassano TAN/RARO in
- * show/editable: altrimenti eq editato "costoso" o da tan sparisce dalla lista.
+ * Esclusioni dure assolute (anche su pezzi gia' EDIT/ED*): TAN, RARO,
+ * simbolo clan, HAS-GEMS. Non si bypassano mai.
  */
 [[nodiscard]] static bool object_portal_passes_exclusions(const struct obj_data* obj) noexcept {
 	if(!obj) {
-		return false;
-	}
-	if(object_portal_hard_block(obj)) {
 		return false;
 	}
 	/* TAN_* prototipi / pezzi da skill tan. */
@@ -761,33 +743,27 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
 		return false;
 	}
-	return true;
-}
-
-[[nodiscard]] static bool object_portal_is_personalized(const struct obj_data* obj) noexcept {
-	if(!obj) {
+	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
 		return false;
 	}
-	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-		return true;
+	/* HAS-GEMS (extra_bits2) = ITEM2_INSERT. */
+	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
+		return false;
 	}
-	if(object_has_owner_lock(obj)) {
-		return true;
-	}
-	return false;
+	return true;
 }
 
 [[nodiscard]] static bool object_portal_is_existing_edit(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return false;
 	}
-	/* Flag / ED / personal_owner: pezzo personalizzato. */
-	if(object_portal_is_personalized(obj)) {
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
 		return true;
 	}
-	/* Istanza MySQL: edit salvato anche se extra_flags2 non ha ITEM2_EDIT
-	 * (legacy / migrate / persist senza flag). */
 	if(obj->db_instance_id != 0) {
+		return true;
+	}
+	if(object_has_owner_lock(obj)) {
 		return true;
 	}
 	return false;
@@ -802,13 +778,12 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 		return false;
 	}
 	/*
-	 * Pezzi gia' personalizzati / instance: sempre in lista per ri-edit, anche
-	 * se la categoria ITEM_* e' spenta.
+	 * Pezzi gia' personalizzati / instance: restano in lista anche con
+	 * categoria ITEM_* spenta (ma TAN/RARO restano esclusi a monte).
 	 */
 	if(object_portal_is_existing_edit(obj)) {
 		return true;
 	}
-	/* Spunta staff = visibile per il primo edit su prototipo. */
 	if(slug) {
 		return edit_system_portal_category_enabled(slug);
 	}
@@ -820,23 +795,17 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 	if(!obj || !toon_name || !*toon_name) {
 		return "oggetto o PG non valido";
 	}
-	if(object_portal_hard_block(obj)) {
-		if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
-			return "simbolo clan";
-		}
-		if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
-			return "HAS-GEMS (insert)";
-		}
-		return "bloccato";
+	if(object_is_tanned(obj)) {
+		return "conciato (skill tan)";
 	}
-	/* TAN/RARO bloccano solo il primo edit, non i pezzi gia' EDIT/ED*. */
-	if(!object_portal_is_personalized(obj)) {
-		if(object_is_tanned(obj)) {
-			return "conciato (skill tan)";
-		}
-		if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
-			return "RARO";
-		}
+	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+		return "RARO";
+	}
+	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
+		return "simbolo clan";
+	}
+	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
+		return "HAS-GEMS (insert)";
 	}
 	if(!owner_matches(obj, toon_name)) {
 		return "owner diverso dal PG (ED/personal per altro PG)";
@@ -859,13 +828,9 @@ bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 	}
 	/*
 	 * Visibilita' inventario:
-	 * - pezzi personalizzati (ITEM2_EDIT / ED* / personal_owner): sempre in lista
-	 *   (tranne HAS-GEMS / simbolo); TAN/RARO non li nascondono
-	 * - prototipi / instance generiche: esclusioni dure + categorie staff
+	 * 1) esclusioni dure assolute: RARO / TAN / HAS-GEMS / simbolo
+	 * 2) categorie staff (pezzi EDIT/instance/owner bypassano solo le categorie)
 	 */
-	if(object_portal_is_personalized(obj)) {
-		return !object_portal_hard_block(obj);
-	}
 	if(!object_portal_passes_exclusions(obj)) {
 		return false;
 	}
@@ -876,16 +841,10 @@ bool object_portal_editable(const struct obj_data* obj, const char* toon_name) n
 	if(!obj || !toon_name || !*toon_name) {
 		return false;
 	}
-	if(object_portal_hard_block(obj)) {
+	if(!object_portal_passes_exclusions(obj)) {
 		return false;
 	}
 	if(!owner_matches(obj, toon_name)) {
-		return false;
-	}
-	if(object_portal_is_personalized(obj)) {
-		return true;
-	}
-	if(!object_portal_passes_exclusions(obj)) {
 		return false;
 	}
 	return object_portal_included(obj);

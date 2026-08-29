@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 40;
+const EDIT_PORTAL_UI_BUILD = 41;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -1748,7 +1748,7 @@ async function loadInventory() {
       const br = data.myst_hidden_breakdown;
       const parts = [];
       if (br) {
-        if (br.raro) parts.push(`${br.raro} RARO (solo primo edit)`);
+        if (br.raro) parts.push(`${br.raro} RARO`);
         if (br.tan) parts.push(`${br.tan} tan`);
         if (br.category) parts.push(`${br.category} categoria spenta`);
         if (br.other) parts.push(`${br.other} altro`);
@@ -1758,7 +1758,7 @@ async function loadInventory() {
         (data.myst_loaded_rows ?? '?') +
         ' letti)' +
         (parts.length ? `: ${parts.join(', ')}` : '') +
-        '. I pezzi già EDIT restano in lista dopo rebuild-myst aggiornato; prototipi RARO/tan restano nascosti.';
+        '. RARO e tan non sono mai editabili; pezzi EDIT non-raro restano in lista se la categoria è attiva o sono già personalizzati.';
     } else if (mysqlCount > 0) {
       emptyEl.textContent =
         'Nessun oggetto mostrato, ma MySQL ha ' +
@@ -1786,7 +1786,7 @@ async function loadInventory() {
     showApiWarn(
       'Inventario filtrato da myst (sola lettura MySQL)' +
         (parts.length ? `: ${parts.join(', ')}` : '') +
-        '. Dopo rebuild-myst i pezzi già EDIT/ED*/instance tornano selezionabili; prototipi RARO/tan restano esclusi.',
+        '. RARO e tan non sono mai editabili. Altri pezzi EDIT/ED* non-raro tornano selezionabili con myst aggiornato.',
     );
   } else if (data.inventory_source === 'mysql_fallback') {
     showApiWarn(
