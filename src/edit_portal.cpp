@@ -1729,6 +1729,11 @@ struct ToonInventoryEditScan {
 				d["delta"] = 0;
 				return json_ok(d);
 			}
+			if(delta < 0) {
+				return json_error(
+					"non puoi ridurre il pool edit (solo aumentare rispetto all'attuale)",
+					400);
+			}
 
 			const edit_pool_quote quote = edit_pool_quote_delta(pool_field, delta);
 			Json d = quote_from_pool(quote);
@@ -2185,9 +2190,7 @@ struct ToonInventoryEditScan {
 			d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
 			d["pending_artifact"] = pending_artifact ? 1 : 0;
 			if(clear_slot) {
-				d["note"] = xp_raw > 0
-								? "Rimuovi malus: libera lo slot (costo 2× listino)"
-								: "Rimuovi slot: libera lo slot (gratis, listino)";
+				d["note"] = "Rimuovi slot: libera lo slot (gratis, listino)";
 			}
 			else if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
 				d["note"] = "Include maggiorazione Artifact +50% (listino)";
@@ -2503,6 +2506,11 @@ struct ToonInventoryEditScan {
 			const int delta = target - current;
 			if(delta == 0) {
 				return json_error("nessuna modifica al pool", 400);
+			}
+			if(delta < 0) {
+				return json_error(
+					"non puoi ridurre il pool edit (solo aumentare rispetto all'attuale)",
+					400);
 			}
 
 			if(pay_xp == 0 && pay_rune == 0) {

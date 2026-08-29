@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 45;
+const EDIT_PORTAL_UI_BUILD = 46;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -1378,8 +1378,10 @@ function catalogEntries(kind, target) {
 }
 
 function buildStepOptions(cap, step, current) {
+  /* Pool: solo valori >= attuale (non si riduce un edit gia' pagato). */
   const opts = [];
-  for (let v = 0; v <= cap; v += step) {
+  const start = Math.max(0, Number(current) || 0);
+  for (let v = start; v <= cap; v += step) {
     opts.push(v);
   }
   if (!opts.includes(current)) opts.push(current);
@@ -1974,6 +1976,8 @@ function objectEditSectionRank(name) {
  * Opzioni listino.
  * relative=true: min/max sono extra oltre proto (es. armor −40…0, hit +0…+2);
  * i valori nel select sono totali assoluti (proto + extra).
+ * Con un bonus gia' presente non si offrono valori peggiorativi (solo migliorie
+ * o «Rimuovi slot»); con un malus si puo' andare a 0 / verso il bonus.
  */
 function buildObjectScalarOptions(entry) {
   const min = Number(entry.min);
@@ -1993,6 +1997,29 @@ function buildObjectScalarOptions(entry) {
     opts.push(v);
   }
   return opts;
+}
+
+/** Armor/spellfail: piu' basso = meglio. Altri scalar: piu' alto = meglio. */
+function objectScalarLowerIsBetter(entry) {
+  const id = String(entry?.id || '');
+  return id === 'armor' || id === 'spellfail';
+}
+
+function objectScalarIsPositiveBonus(entry, current) {
+  if (objectScalarLowerIsBetter(entry)) return current < 0;
+  return current > Number(entry.proto || 0);
+}
+
+/** Filtra opzioni: niente dial-down di un bonus (serve «Rimuovi slot»). */
+function filterObjectScalarOptions(entry, values, current) {
+  if (!objectScalarIsPositiveBonus(entry, current)) {
+    return values;
+  }
+  const lowerBetter = objectScalarLowerIsBetter(entry);
+  return values.filter((v) => {
+    if (v === current) return true;
+    return lowerBetter ? v < current : v > current;
+  });
 }
 
 function formatScalarOptionLabel(entry, absolute) {
@@ -2511,15 +2538,14 @@ function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
           select.disabled = true;
         }
       } else {
-        const values = buildObjectScalarOptions(entry);
+        let values = buildObjectScalarOptions(entry);
         if (!values.includes(current)) values.push(current);
+        values = filterObjectScalarOptions(entry, values, current);
         values.sort((a, b) => a - b);
         if (entry.can_clear_slot && canEdit && session.role !== 'limited') {
           const clearOpt = document.createElement('option');
           clearOpt.value = '__clear__';
-          clearOpt.textContent = entry.clear_is_malus
-            ? 'Rimuovi malus (libera slot, costo 2×)'
-            : 'Rimuovi slot (gratis)';
+          clearOpt.textContent = 'Rimuovi slot (gratis)';
           select.appendChild(clearOpt);
         }
         values.forEach((v) => {
@@ -2663,9 +2689,7 @@ async function queueObjectQuote(entry, targetModifier, selectEl, opts = {}) {
       ? formatScalarOptionLabel(entry, Number(qd.current))
       : qd.current;
   const tgtLabel = clearSlot
-    ? entry.clear_is_malus
-      ? 'slot libero (rimuovi malus)'
-      : 'slot libero'
+    ? 'slot libero'
     : yesNo
       ? qd.target
         ? 'Sì'

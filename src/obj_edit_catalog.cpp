@@ -649,6 +649,19 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 	return current > 0;
 }
 
+/** true se `target` e' peggiorativo rispetto a un bonus gia' presente. */
+[[nodiscard]] static bool listino_target_worsens_bonus(int location, int current,
+													  int target) noexcept {
+	if(!listino_current_is_positive_effect(location, current)) {
+		return false;
+	}
+	if(location == APPLY_AC || location == APPLY_SPELLFAIL) {
+		/* Piu' alto = peggio (meno armor / piu' spellfail). */
+		return target > current;
+	}
+	return target < current;
+}
+
 [[nodiscard]] bool apply_target_modifier(struct obj_data* obj, int location,
 										 int target_modifier, std::string& err,
 										 bool clear_slot = false) {
@@ -694,14 +707,34 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 		return false;
 	}
 
-	/* Rimuovi slot (listino): malus pagando 2×, effetto positivo gratis. */
+	/* Rimuovi slot: solo effetti positivi (gratis). I malus si tolgono portando a 0. */
 	if(clear_slot) {
+		const int cur = object_edit_display_current(obj, location);
+		if(listino_current_is_malus(location, cur)) {
+			err = "per eliminare un malus porta il selettore a 0 (o un bonus); "
+				  "il costo e' il doppio del listino e lo slot si libera";
+			return false;
+		}
+		if(!listino_current_is_positive_effect(location, cur)) {
+			err = "nessuno slot bonus da rimuovere";
+			return false;
+		}
 		return clear_listino_affect(obj, location, err);
 	}
 
+	const int current_total = object_edit_display_current(obj, location);
 	/*
-	 * Target 0 = niente affect: libera lo slot (non lasciare APPLY_X con mod 0,
-	 * che occuperebbe comunque uno slot). Vale per malus→0 e bonus→0.
+	 * Bonus gia' pagati: non si dial-down (es. armor −10→0 o STR 2→1).
+	 * Solo «Rimuovi slot» (gratis) oppure migliorare.
+	 */
+	if(listino_target_worsens_bonus(location, current_total, target_modifier)) {
+		err = "non puoi ridurre un bonus: usa «Rimuovi slot» (gratis) oppure migliora";
+		return false;
+	}
+
+	/*
+	 * Target 0 su malus (es. armor +10→0): libera lo slot pagando 2×.
+	 * Su bonus non arriva qui (bloccato sopra → clear_slot).
 	 */
 	if(target_modifier == 0) {
 		if(!listino_target_allowed(obj, spec, target_modifier, err)) {
@@ -1038,15 +1071,10 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["can_add"] = can_edit && !has_affect;
 		j["can_edit"] = can_edit;
 		{
-			const bool clear_malus =
-				listino_current_is_malus(spec.location, current_total);
+			/* Solo bonus positivi: «Rimuovi slot» gratis. Malus → selettore a 0. */
 			const bool clear_positive =
 				listino_current_is_positive_effect(spec.location, current_total);
-			const bool can_clear =
-				can_edit && (occupied_slot >= 0 || current_total != 0) &&
-				(clear_malus || clear_positive || occupied_slot >= 0);
-			j["can_clear_slot"] = can_clear;
-			j["clear_is_malus"] = clear_malus;
+			j["can_clear_slot"] = can_edit && clear_positive;
 		}
 		json_listino_pricing(j, spec);
 		entries.push_back(j);
