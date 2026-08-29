@@ -151,8 +151,8 @@ function inventoryRowsToPortalItems(rows, skipReason) {
     let reason = skipReason;
     if (worn) {
       reason = hasInstance
-        ? 'indossato (ri-edit: serve myst aggiornato)'
-        : 'indossato (primo edit: togli e metti in inventario / serve myst)';
+        ? 'indossato (dettagli: serve myst aggiornato)'
+        : 'indossato (dettagli: serve myst)';
     }
     const item = {
       inventory_id: r.id,

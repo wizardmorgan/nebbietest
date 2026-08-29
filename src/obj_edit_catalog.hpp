@@ -29,8 +29,8 @@ using Json = nlohmann::json;
 bool inventory_row_is_worn(int wearpos) noexcept;
 
 /**
- * true se l'oggetto può essere editato anche indossato (già personalizzato / ITEM2_EDIT).
- * I pezzi in object_instance sono quasi sempre equipaggiati: senza questo il ri-edit è inutilizzabile.
+ * true se l'oggetto può essere editato anche indossato.
+ * Path portale = MySQL offline: primo edit e ri-edit entrambi OK su wear_pos>0.
  */
 [[nodiscard]] bool object_portal_allows_worn_edit(const struct obj_data* obj) noexcept;
 

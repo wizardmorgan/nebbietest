@@ -638,22 +638,10 @@ bool inventory_row_is_worn(int wearpos) noexcept {
 }
 
 bool object_portal_allows_worn_edit(const struct obj_data* obj) noexcept {
-	if(!obj) {
-		return false;
-	}
-	/* Già passato dal portale / oedit: ri-edit consentito anche in wear. */
-	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-		return true;
-	}
-	/* Istanza MySQL = pezzo personalizzato (anche senza flag EDIT in extra_flags2). */
-	if(obj->db_instance_id != 0) {
-		return true;
-	}
-	/* Personalizzato (ED / personal_owner) ma senza flag EDIT ancora: stesso caso. */
-	if(object_has_owner_lock(obj)) {
-		return true;
-	}
-	return false;
+	/* Apply/quote/options lavorano su character_inventory MySQL a PG offline:
+	 * wear_pos e' solo un flag sulla riga, non eq live. Primo edit e ri-edit
+	 * sono entrambi sicuri anche se indossato. */
+	return obj != nullptr;
 }
 
 bool object_is_tanned(const struct obj_data* obj) noexcept {

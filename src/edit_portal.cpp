@@ -1465,7 +1465,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				}
 				else if(inventory_row_is_worn(r.elem.wearpos) &&
 						!object_portal_allows_worn_edit(obj)) {
-					skip_reason = "indossato (primo edit: togli e metti in inventario)";
+					/* Difesa: allows_worn_edit e' sempre true per obj valido. */
+					skip_reason = "indossato (non editabile)";
 				}
 				else if(object_is_tanned(obj)) {
 					skip_reason = "conciato (skill tan)";
@@ -1533,10 +1534,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(inventory_row_is_worn(row->elem.wearpos) &&
 			   !object_portal_allows_worn_edit(obj)) {
 				extract_obj(obj);
-				return json_error(
-					"l'oggetto e indossato: per il primo edit rimuovilo e mettilo in inventario "
-					"(i pezzi gia editati si possono ri-editare anche indossati)",
-					400);
+				return json_error("oggetto indossato non editabile", 400);
 			}
 			if(!object_portal_editable(obj, toon_name.c_str())) {
 				extract_obj(obj);
@@ -1685,10 +1683,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(inventory_row_is_worn(row->elem.wearpos) &&
 			   !object_portal_allows_worn_edit(obj)) {
 				extract_obj(obj);
-				return json_error(
-					"l'oggetto e indossato: per il primo edit rimuovilo e mettilo in inventario "
-					"(i pezzi gia editati si possono ri-editare anche indossati)",
-					400);
+				return json_error("oggetto indossato non editabile", 400);
 			}
 			if(!object_portal_editable(obj, toon_name.c_str())) {
 				extract_obj(obj);
@@ -1849,10 +1844,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(inventory_row_is_worn(row->elem.wearpos) &&
 			   !object_portal_allows_worn_edit(obj)) {
 				extract_obj(obj);
-				return json_error(
-					"l'oggetto e indossato: per il primo edit rimuovilo e mettilo in inventario "
-					"(i pezzi gia editati si possono ri-editare anche indossati)",
-					400);
+				return json_error("oggetto indossato non editabile", 400);
 			}
 			if(!object_portal_editable(obj, target_name.c_str())) {
 				extract_obj(obj);

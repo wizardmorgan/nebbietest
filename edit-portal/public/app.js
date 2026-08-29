@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 30;
+const EDIT_PORTAL_UI_BUILD = 31;
 
 /** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
 function portalBasePath() {
@@ -1213,11 +1213,7 @@ function renderInventoryList(items) {
   sorted.forEach((it) => {
     const li = document.createElement('li');
     li.className = it.editable ? 'item' : 'item item-disabled';
-    const worn = it.worn
-      ? it.editable
-        ? ' · indossato (ri-edit OK)'
-        : ' · indossato'
-      : '';
+    const worn = it.worn ? ' · indossato' : '';
     const depth = Number(it.depth) > 0 ? ' · in container' : '';
     const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
     const type = it.item_type ? ` [${it.item_type}]` : '';
@@ -1304,7 +1300,7 @@ async function loadInventory() {
 
   if (items.length && editableCount === 0) {
     showApiWarn(
-      'Inventario caricato: nessun oggetto editabile (vedi motivi). EDIT indossati = ri-edit OK; primo edit su proto indossato = togli prima.',
+      'Inventario caricato: nessun oggetto editabile (vedi motivi nella lista). Pezzi indossati sono editabili se rispettano categorie/esclusioni (PG offline).',
     );
   } else if (data.inventory_source === 'myst_filtered') {
     showApiWarn(

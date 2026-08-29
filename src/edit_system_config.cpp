@@ -303,7 +303,7 @@ void parse_entries_json(const Json& root) {
 		"types: slug ITEM_* — spunta = editabile nel portale (primo edit). "
 		"Inventario: tutti i pezzi restano visibili (anche indossati); esclusi "
 		"solo RARO/TAN/HAS-GEMS/simbolo. Pezzi EDIT/instance/owner sempre "
-		"ri-editabili (anche indossati).";
+		"ri-editabili. Primo edit e ri-edit OK anche indossati (PG offline).";
 	root["object_portal"] = portal;
 	return root;
 }

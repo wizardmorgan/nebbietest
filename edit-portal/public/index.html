@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="edit-base" content="" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=30" />
+  <link rel="stylesheet" href="style.css?v=31" />
   <script src="config.js"></script>
 </head>
 <body>
@@ -117,7 +117,7 @@
             </div>
             <p id="inventory-target-hint" class="hint"></p>
             <ul id="inventory-list" class="inventory-list"></ul>
-            <p class="hint">Visibilità tipi: le categorie staff decidono cosa è <strong>editabile</strong> al primo edit. Inventario e pezzi indossati restano comunque in lista (grigi se non editabili). Esclusi solo RARO / TAN / HAS-GEMS / simbolo clan. Pezzi già editati: ri-editabili anche indossati.</p>
+            <p class="hint">Visibilità tipi: le categorie staff decidono cosa è <strong>editabile</strong> al primo edit. Inventario e pezzi indossati restano in lista. Esclusi solo RARO / TAN / HAS-GEMS / simbolo clan. <strong>Primo edit e ri-edit vanno anche da indossato</strong> (PG offline).</p>
             <p id="inventory-empty" class="hint hidden">Nessun oggetto in inventario MySQL per questo PG.</p>
           </div>
 
@@ -175,7 +175,7 @@
 
         <div class="portal-categories card-inner">
           <h3>Categorie oggetto nel portale</h3>
-          <p class="hint">Spunta = quel tipo ITEM è <strong>editabile</strong> al primo edit sul personaggio target. Senza spunta = in lista ma non editabile (grigio). Inventario/indossati restano sempre visibili (esclusi RARO/TAN/HAS-GEMS/simbolo). Pezzi già EDIT/instance/owner: sempre ri-editabili, anche indossati.</p>
+          <p class="hint">Spunta = quel tipo ITEM è <strong>editabile</strong> al primo edit sul personaggio target. Senza spunta = in lista ma non editabile (grigio). Inventario/indossati sempre visibili (esclusi RARO/TAN/HAS-GEMS/simbolo). Edit su pezzi indossati: consentito (primo edit e ri-edit) a PG offline.</p>
           <p id="myst-version-warn" class="msg warn hidden"></p>
           <div id="portal-category-toggles" class="checkbox-grid"></div>
           <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
@@ -210,8 +210,9 @@
             (id istanza, vnum base, owner, descrizione).
             Quasi sempre sono <strong>indossati</strong>: per lavorarci cerca l'owner, impostalo come
             personaggio target sopra, poi apri l'oggetto dall'inventario —
-            i pezzi già editati (flag EDIT) sono <strong>ri-editabili anche indossati</strong>.
-            Il primo edit su un pezzo nuovo richiede ancora inventario (non wear).
+            i pezzi sono <strong>editabili anche indossati</strong> (primo edit e ri-edit),
+            purché il PG sia offline e il pezzo rispetti categorie/esclusioni.
+            Cerca l'owner, impostalo come personaggio target, poi apri l'oggetto dall'inventario.
           </p>
           <div class="btn-row">
             <input id="inst-search" placeholder="cerca owner / descrizione / id istanza" />
@@ -222,6 +223,6 @@
       </div>
     </section>
   </main>
-  <script src="app.js?v=30"></script>
+  <script src="app.js?v=31"></script>
 </body>
 </html>
