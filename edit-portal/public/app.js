@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 43;
+const EDIT_PORTAL_UI_BUILD = 44;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -973,7 +973,7 @@ function makePrinceToonCard(t) {
   head.innerHTML =
     `<div><strong class="toon-overview-name">${escapeHtml(t.name)}</strong>` +
     `<span class="toon-overview-meta">lv ${t.maxLevel}` +
-    (title ? ` · ${escapeHtml(title)}` : '') +
+    (title ? ` · ${mudTextToHtml(title)}` : '') +
     (grade ? ` · ${escapeHtml(grade)}` : '') +
     ` · ${escapeHtml(formatMxp(mxp, mxpFrac))} disponibili</span>` +
     moneyMetaLine(s) +

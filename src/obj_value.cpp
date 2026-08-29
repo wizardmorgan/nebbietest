@@ -350,12 +350,21 @@ ExpValue CheckValueObj(const struct obj_data* obj) {
 			break;
 
 		case APPLY_AC:
-			valore -= static_cast<long>(mod) * kObjEditArmorUnitRaw;
+			/*
+			 * Negativo = bonus armor (1× listino). Positivo = malus:
+			 * listino «eliminare slot con malus = doppio del costo».
+			 */
+			valore -= SignedAffectCost(mod, kObjEditArmorUnitRaw * 2,
+									   kObjEditArmorUnitRaw);
 			break;
 
 		case APPLY_SPELLFAIL:
-			/* 2× armor per punto (più negativo = più costoso). */
-			valore -= static_cast<long>(mod) * kObjEditSpellfailUnitRaw;
+			/*
+			 * Spellfail: 2× armor per punto di bonus (più negativo = meglio).
+			 * Malus positivo: ancora 2× rispetto al bonus spellfail (= 4× armor).
+			 */
+			valore -= SignedAffectCost(mod, kObjEditSpellfailUnitRaw * 2,
+									   kObjEditSpellfailUnitRaw);
 			break;
 
 		case APPLY_HITROLL:
@@ -604,10 +613,10 @@ constexpr ListinoRow kObjEditListino[] = {
 	{"spellpower", "Spellpower", APPLY_SPELLPOWER, 1, 0, kObjEditMaxSpellpowerPerPiece, 10000,
 	 20000},
 	{"armor", "Armatura (AC)", APPLY_AC, kObjEditArmorStep, kObjEditArmorMinTotal,
-	 kObjEditArmorMaxTotal, kObjEditArmorUnitRaw, kObjEditArmorUnitRaw},
+	 kObjEditArmorMaxTotal, kObjEditArmorUnitRaw, kObjEditArmorUnitRaw * 2},
 	{"spellfail", "Spellfail", APPLY_SPELLFAIL, kObjEditSpellfailStep,
 	 kObjEditSpellfailMinTotal, kObjEditSpellfailMaxTotal, kObjEditSpellfailUnitRaw,
-	 kObjEditSpellfailUnitRaw},
+	 kObjEditSpellfailUnitRaw * 2},
 	{"hitndam", "Hit & damage", APPLY_HITNDAM, 1, 0, kObjEditMaxDamrollPerPiece, 14500,
 	 29000},
 	{"hitnsp", "Hit & spellpower", APPLY_HITNSP, 1, 0, kObjEditMaxSpellpowerPerPiece, 14500,
