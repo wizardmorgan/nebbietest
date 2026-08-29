@@ -764,21 +764,30 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	return true;
 }
 
+[[nodiscard]] static bool object_portal_is_personalized(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return false;
+	}
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return true;
+	}
+	if(object_has_owner_lock(obj)) {
+		return true;
+	}
+	return false;
+}
+
 [[nodiscard]] static bool object_portal_is_existing_edit(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return false;
 	}
-	/* Flag impostato dal portale/oedit. */
-	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+	/* Flag / ED / personal_owner: pezzo personalizzato. */
+	if(object_portal_is_personalized(obj)) {
 		return true;
 	}
 	/* Istanza MySQL: edit salvato anche se extra_flags2 non ha ITEM2_EDIT
 	 * (legacy / migrate / persist senza flag). */
 	if(obj->db_instance_id != 0) {
-		return true;
-	}
-	/* Personalizzato EDIT personal_owner: ri-edit / indossato. */
-	if(object_has_owner_lock(obj)) {
 		return true;
 	}
 	return false;
@@ -793,9 +802,8 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 		return false;
 	}
 	/*
-	 * Pezzi gia' personalizzati: sempre in lista per ri-edit, anche se la
-	 * categoria ITEM_* e' spenta. Altrimenti PG come Martin/Cataklisma
-	 * "non vedono i loro edit".
+	 * Pezzi gia' personalizzati / instance: sempre in lista per ri-edit, anche
+	 * se la categoria ITEM_* e' spenta.
 	 */
 	if(object_portal_is_existing_edit(obj)) {
 		return true;
@@ -821,8 +829,8 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 		}
 		return "bloccato";
 	}
-	const bool existing = object_portal_is_existing_edit(obj);
-	if(!existing) {
+	/* TAN/RARO bloccano solo il primo edit, non i pezzi gia' EDIT/ED*. */
+	if(!object_portal_is_personalized(obj)) {
 		if(object_is_tanned(obj)) {
 			return "conciato (skill tan)";
 		}
@@ -851,11 +859,11 @@ bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 	}
 	/*
 	 * Visibilita' inventario:
-	 * - pezzi gia' personalizzati (EDIT / instance / owner): sempre in lista
-	 *   (tranne HAS-GEMS / simbolo clan); TAN/RARO non li nascondono
-	 * - prototipi: esclusioni dure + categorie staff
+	 * - pezzi personalizzati (ITEM2_EDIT / ED* / personal_owner): sempre in lista
+	 *   (tranne HAS-GEMS / simbolo); TAN/RARO non li nascondono
+	 * - prototipi / instance generiche: esclusioni dure + categorie staff
 	 */
-	if(object_portal_is_existing_edit(obj)) {
+	if(object_portal_is_personalized(obj)) {
 		return !object_portal_hard_block(obj);
 	}
 	if(!object_portal_passes_exclusions(obj)) {
@@ -874,7 +882,7 @@ bool object_portal_editable(const struct obj_data* obj, const char* toon_name) n
 	if(!owner_matches(obj, toon_name)) {
 		return false;
 	}
-	if(object_portal_is_existing_edit(obj)) {
+	if(object_portal_is_personalized(obj)) {
 		return true;
 	}
 	if(!object_portal_passes_exclusions(obj)) {
