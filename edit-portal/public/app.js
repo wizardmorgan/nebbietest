@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 34;
+const EDIT_PORTAL_UI_BUILD = 35;
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
 let portalCurrencies = null;
@@ -676,30 +676,166 @@ async function refreshMe() {
 }
 
 async function loadToons() {
-  const data = await api('/api/toons');
   const box = $('toon-list');
+  box.innerHTML = '<p class="hint">Caricamento riepilogo personaggi…</p>';
+  const data = await api('/api/account-overview');
   box.innerHTML = '';
   if (!data.ok) {
     box.textContent = data.error || 'errore';
+    /* Fallback lista semplice. */
+    const plain = await api('/api/toons');
+    if (plain.ok) {
+      plain.toons.forEach((t) => box.appendChild(makeToonSelectButton(t)));
+    }
     return;
   }
-  data.toons.forEach((t) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = `${t.name} — livello ${t.maxLevel}, ruolo ${t.role}`;
-    btn.onclick = async () => {
-      const sel = await api('/api/select-toon', {
-        method: 'POST',
-        body: JSON.stringify({ toonId: t.id }),
-      });
-      if (!sel.ok) {
-        alert(sel.error);
-        return;
-      }
-      await refreshMe();
-    };
-    box.appendChild(btn);
+
+  const princeLevel = Number(data.princeLevel || PRINCE_LEVEL);
+  const under = [];
+  const princes = [];
+  const staffBand = [];
+  (data.toons || []).forEach((t) => {
+    const lv = Number(t.maxLevel) || 0;
+    if (lv >= princeLevel + 1) staffBand.push(t);
+    else if (lv >= princeLevel) princes.push(t);
+    else under.push(t);
   });
+
+  const appendSection = (title, list, withSummary) => {
+    const sec = document.createElement('section');
+    sec.className = 'toon-band';
+    const h = document.createElement('h3');
+    h.className = 'toon-band-title';
+    h.textContent = `${title} (${list.length})`;
+    sec.appendChild(h);
+    if (!list.length) {
+      const empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = 'Nessun personaggio in questa fascia.';
+      sec.appendChild(empty);
+    } else {
+      list.forEach((t) => {
+        if (withSummary) {
+          sec.appendChild(makePrinceToonCard(t));
+        } else {
+          sec.appendChild(makeToonSelectButton(t));
+        }
+      });
+    }
+    box.appendChild(sec);
+  };
+
+  appendSection(`Sotto il ${princeLevel}`, under, false);
+  appendSection(`Principi (livello ${princeLevel})`, princes, true);
+  appendSection('Staff (52+)', staffBand, true);
+}
+
+function makeToonSelectButton(t) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'toon-pick-btn';
+  btn.textContent = `${t.name} — livello ${t.maxLevel}, ruolo ${t.role}`;
+  btn.onclick = () => selectAccountToon(t.id);
+  return btn;
+}
+
+function ynMark(ok) {
+  return ok
+    ? '<span class="ov-yes">fatto</span>'
+    : '<span class="ov-no">manca</span>';
+}
+
+function meterLine(label, used, cap, remaining) {
+  const u = Number(used) || 0;
+  const c = Number(cap) || 0;
+  const r = remaining != null ? Number(remaining) : Math.max(0, c - u);
+  return `<div class="ov-meter"><span class="ov-meter-label">${escapeHtml(label)}</span>` +
+    `<strong>${u}/${c}</strong><span class="ov-remain">ancora ${r}</span></div>`;
+}
+
+function makePrinceToonCard(t) {
+  const card = document.createElement('div');
+  card.className = 'toon-overview-card';
+  const s = t.summary && t.summary.ok !== false ? t.summary : null;
+  const head = document.createElement('div');
+  head.className = 'toon-overview-head';
+  head.innerHTML =
+    `<div><strong class="toon-overview-name">${escapeHtml(t.name)}</strong>` +
+    `<span class="toon-overview-meta">lv ${t.maxLevel} · ${escapeHtml(t.role || '')}</span></div>`;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-primary';
+  btn.textContent = 'Entra';
+  btn.onclick = () => selectAccountToon(t.id);
+  head.appendChild(btn);
+  card.appendChild(head);
+
+  if (!s) {
+    const miss = document.createElement('p');
+    miss.className = 'hint';
+    miss.textContent =
+      (t.summary && t.summary.error) ||
+      'Riepilogo non disponibile (myst offline o PG senza inventorio leggibile).';
+    card.appendChild(miss);
+    return card;
+  }
+
+  const main = s.main_edits || {};
+  const clan = s.clan_symbol || {};
+  const pool = s.pool || {};
+  const body = document.createElement('div');
+  body.className = 'toon-overview-body';
+  body.innerHTML = `
+    <div class="ov-block">
+      <h4>Edit principali</h4>
+      <ul class="ov-checklist">
+        <li>Res. Slash ${ynMark(!!main.res_slash)}</li>
+        <li>Res. Pierce ${ynMark(!!main.res_pierce)}</li>
+        <li>Res. Blunt ${ynMark(!!main.res_blunt)}</li>
+      </ul>
+      ${meterLine('Dam editato', main.dam?.used, main.dam?.cap, main.dam?.remaining)}
+      ${meterLine('Spellpower', main.spellpower?.used, main.spellpower?.cap, main.spellpower?.remaining)}
+      ${meterLine('Hitroll editato', main.hitroll?.used, main.hitroll?.cap, main.hitroll?.remaining)}
+    </div>
+    <div class="ov-block">
+      <h4>Residuo pool <span class="ov-source">(${pool.source === 'character' ? 'sul PG' : 'sugli oggetti'})</span></h4>
+      ${(pool.fields || [])
+        .map((f) =>
+          meterLine(
+            ({
+              hit: 'Hit',
+              mana: 'Mana',
+              move: 'Move',
+              hit_regen: 'Hit regen',
+              mana_regen: 'Mana regen',
+              move_regen: 'Move regen',
+            })[f.key] || f.key,
+            f.used,
+            f.cap,
+            f.remaining,
+          ),
+        )
+        .join('')}
+    </div>
+    <div class="ov-block ov-clan">
+      <h4>Simbolo del clan</h4>
+      <p>${clan.present ? '<span class="ov-yes">Sì</span> (origine principe/toon: da definire)' : '<span class="ov-no">No</span>'}</p>
+    </div>
+  `;
+  card.appendChild(body);
+  return card;
+}
+
+async function selectAccountToon(toonId) {
+  const sel = await api('/api/select-toon', {
+    method: 'POST',
+    body: JSON.stringify({ toonId }),
+  });
+  if (!sel.ok) {
+    alert(sel.error);
+    return;
+  }
+  await refreshMe();
 }
 
 async function enterWorkMode() {
@@ -2448,6 +2584,10 @@ async function confirmPayEdit() {
     } else if (wasCharacter) {
       renderCharacterEdits();
     }
+    /* Ricalcola riepilogo login per il PG appena editato (prossimo «Cambia personaggio»). */
+    if (targetToonId) {
+      api(`/api/toon-overview/${targetToonId}`).catch(() => {});
+    }
   } else {
     const ver =
       result.portal_api_version != null ? ` [api v${result.portal_api_version}]` : '';
@@ -2637,9 +2777,14 @@ function applyCurrenciesToUI(currencies) {
   const container = $('portal-currency-toggles');
   if (!container) return;
   container.innerHTML = '';
-  portalCurrencies.forEach((row) => {
+
+  const primary = portalCurrencies.filter((c) => c.slug === 'mxp' || c.slug === 'rune');
+  const extras = portalCurrencies.filter((c) => c.slug !== 'mxp' && c.slug !== 'rune');
+
+  const renderRow = (row, host) => {
     const wrap = document.createElement('div');
-    wrap.className = 'currency-config-row' + (row.visible ? '' : ' currency-config-row--hidden');
+    wrap.className =
+      'currency-config-row' + (row.visible ? '' : ' currency-config-row--hidden');
     wrap.dataset.slug = row.slug;
 
     const title = document.createElement('div');
@@ -2654,7 +2799,7 @@ function applyCurrenciesToUI(currencies) {
     if (!row.visible) {
       const badge = document.createElement('span');
       badge.className = 'currency-badge';
-      badge.textContent = 'nascosta';
+      badge.textContent = 'nascosta ai PG';
       title.appendChild(badge);
     }
     wrap.appendChild(title);
@@ -2673,7 +2818,7 @@ function applyCurrenciesToUI(currencies) {
     flags.className = 'currency-config-flags';
     [
       ['enabled', 'Abilitata'],
-      ['visible', 'Visibile in UI'],
+      ['visible', 'Visibile ai giocatori'],
       ['pays_listino', 'Paga listino'],
     ].forEach(([field, lab]) => {
       const labEl = document.createElement('label');
@@ -2682,7 +2827,6 @@ function applyCurrenciesToUI(currencies) {
       cb.type = 'checkbox';
       cb.dataset.field = field;
       cb.checked = !!row[field];
-      /* MXP/Rune: non spegnere pays_listino per sbaglio senza volerlo. */
       if ((row.slug === 'mxp' || row.slug === 'rune') && field === 'pays_listino') {
         cb.checked = true;
       }
@@ -2691,8 +2835,31 @@ function applyCurrenciesToUI(currencies) {
       flags.appendChild(labEl);
     });
     wrap.appendChild(flags);
-    container.appendChild(wrap);
-  });
+    host.appendChild(wrap);
+  };
+
+  primary.forEach((row) => renderRow(row, container));
+
+  const extrasWrap = document.createElement('details');
+  extrasWrap.className = 'currency-extras collapse-panel';
+  extrasWrap.open = false;
+  const sum = document.createElement('summary');
+  sum.className = 'collapse-summary';
+  sum.innerHTML =
+    '<span>Valute aggiuntive (nascoste ai giocatori)</span>' +
+    '<span class="collapse-hint">attiva «Visibile ai giocatori» per mostrarle</span>';
+  extrasWrap.appendChild(sum);
+  const body = document.createElement('div');
+  body.className = 'collapse-body';
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  hint.textContent =
+    'Gold / Token / Credito edit: predisposte per il futuro. Restano invisibili ai PG finché non le segni visibili e abilitate.';
+  body.appendChild(hint);
+  extras.forEach((row) => renderRow(row, body));
+  extrasWrap.appendChild(body);
+  container.appendChild(extrasWrap);
+
   refreshPayModeLabels();
 }
 

@@ -482,6 +482,76 @@ router.get('/api/toons', requireAuth, async (req, res) => {
   res.json({ ok: true, toons });
 });
 
+/** Riepilogo edit (login): analisi inventario completa via myst. */
+router.get('/api/account-overview', requireAuth, async (req, res) => {
+  const [rows] = await dbPool.query(
+    `SELECT t.id, t.name, t.title, ${TOON_LEVEL_SQL}
+     FROM toon t
+     LEFT JOIN character_classes cc ON cc.toon_id = t.id
+     WHERE t.owner_id = ?
+     GROUP BY t.id, t.name, t.title, t.level
+     ORDER BY t.name`,
+    [req.session.userId],
+  );
+  const toons = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    title: r.title,
+    maxLevel: Number(r.max_level) || 0,
+    role: roleForLevel(r.max_level),
+  }));
+  const needSummary = toons.filter((t) => t.maxLevel >= PRINCE_LEVEL);
+  let summaries = [];
+  if (needSummary.length) {
+    const result = await mystPost('/internal/toons-edit-summary', {
+      toon_ids: needSummary.map((t) => t.id),
+    });
+    if (!result.ok) {
+      return res.status(502).json({
+        ok: false,
+        error: result.error || 'riepilogo edit non disponibile (myst)',
+        toons,
+      });
+    }
+    summaries = result.data?.summaries || [];
+  }
+  const byId = new Map(
+    summaries.map((s) => [String(s.toon_id || s.toonId || ''), s]),
+  );
+  const enriched = toons.map((t) => {
+    const summary = byId.get(String(t.id)) || null;
+    return { ...t, summary };
+  });
+  res.json({
+    ok: true,
+    toons: enriched,
+    princeLevel: PRINCE_LEVEL,
+    staffBandMin: PRINCE_LEVEL + 1,
+  });
+});
+
+/** Refresh riepilogo di un singolo toon (dopo apply edit). */
+router.get('/api/toon-overview/:toonId', requireAuth, async (req, res) => {
+  const toonId = parseToonId(req.params.toonId);
+  if (!toonId) {
+    return res.status(400).json({ ok: false, error: 'toonId richiesto' });
+  }
+  if (req.session.role !== 'staff') {
+    const [rows] = await dbPool.query(
+      `SELECT t.id FROM toon t WHERE t.id = ? AND t.owner_id = ? LIMIT 1`,
+      [toonId, req.session.userId],
+    );
+    if (!rows.length) {
+      return res.status(403).json({ ok: false, error: 'accesso negato' });
+    }
+  }
+  const result = await mystPost('/internal/toon-edit-summary', { toon_id: toonId });
+  if (!result.ok) {
+    return res.status(502).json(result);
+  }
+  res.json({ ok: true, summary: result.data });
+});
+
 router.post('/api/select-toon', requireAuth, async (req, res) => {
   const toonId = parseToonId(req.body.toonId);
   if (!toonId) {

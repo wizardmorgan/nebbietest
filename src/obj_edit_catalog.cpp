@@ -1120,6 +1120,10 @@ int object_edit_spellpower_total(const struct obj_data* obj) noexcept {
 	return combat_spellpower_total(obj);
 }
 
+int object_edit_hitroll_total(const struct obj_data* obj) noexcept {
+	return combat_hitroll_total(obj);
+}
+
 [[nodiscard]] static int resolve_edit_prototype_vnum(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return 0;
@@ -1175,6 +1179,20 @@ int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept {
 		return 0;
 	}
 	const int base = combat_spellpower_total(proto);
+	extract_obj(proto);
+	return std::max(0, cur - base);
+}
+
+int object_edit_hitroll_edited_delta(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return 0;
+	}
+	const int cur = combat_hitroll_total(obj);
+	struct obj_data* proto = load_edit_prototype(obj);
+	if(!proto) {
+		return 0;
+	}
+	const int base = combat_hitroll_total(proto);
 	extract_obj(proto);
 	return std::max(0, cur - base);
 }

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="edit-base" content="" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=34" />
+  <link rel="stylesheet" href="style.css?v=35" />
   <script src="config.js"></script>
 </head>
 <body>
@@ -53,7 +53,7 @@
 
     <section id="toon-panel" class="panel card hidden">
       <h2>Seleziona personaggio</h2>
-      <p class="hint">Il personaggio di sessione determina i permessi (player / limited / staff).</p>
+      <p class="hint">Il personaggio di sessione determina i permessi. I principi (51) e lo staff (52+) mostrano un riepilogo degli edit principali.</p>
       <div id="toon-list" class="toon-list"></div>
     </section>
 
@@ -184,9 +184,9 @@
         <div class="portal-currencies card-inner">
           <h3>Valute di pagamento</h3>
           <p class="hint">
-            MXP e Rune degli eroi sono le valute attive. Le altre sono predisposte per usi futuri:
-            restano <strong>nascoste</strong> ai player finché non le segni visibili e abilitate.
-            Al momento il pagamento listino usa solo MXP/Rune.
+            Al momento il pagamento listino usa solo MXP/Rune. Le altre valute stanno
+            in una sezione collassata: restano <strong>nascoste ai giocatori</strong>
+            finché non attivi «Visibile ai giocatori».
           </p>
           <div id="portal-currency-toggles" class="currency-config-list"></div>
           <button id="btn-save-portal-currencies" class="btn-secondary" type="button">Salva valute</button>
@@ -234,6 +234,6 @@
       </div>
     </section>
   </main>
-  <script src="app.js?v=34"></script>
+  <script src="app.js?v=35"></script>
 </body>
 </html>

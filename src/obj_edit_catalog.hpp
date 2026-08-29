@@ -90,6 +90,10 @@ bool inventory_row_is_worn(int wearpos) noexcept;
  */
 [[nodiscard]] int object_edit_damroll_edited_delta(const struct obj_data* obj) noexcept;
 [[nodiscard]] int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept;
+[[nodiscard]] int object_edit_hitroll_edited_delta(const struct obj_data* obj) noexcept;
+
+/** Hitroll effettivo sul pezzo (HITROLL + HITNDAM + HITNSP). */
+[[nodiscard]] int object_edit_hitroll_total(const struct obj_data* obj) noexcept;
 
 /** Dam sul prototipo risolto (0 se proto assente). */
 [[nodiscard]] int object_edit_damroll_prototype_total(const struct obj_data* obj) noexcept;

@@ -1114,7 +1114,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		const std::string sql =
 			"SELECT edit_hp, edit_mana, edit_move, edit_hp_regen, edit_mana_regen, "
 			"edit_move_regen, overedit_hp, overedit_mana, overedit_move, "
-			"overedit_hp_regen, overedit_mana_regen, overedit_move_regen "
+			"overedit_hp_regen, overedit_mana_regen, overedit_move_regen, "
+			"edit_pool_migrated "
 			"FROM character_stats WHERE toon_id = " +
 			std::to_string(toon_id) + " LIMIT 1";
 		if(mysql_query(h, sql.c_str()) != 0) {
@@ -1143,6 +1144,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			static_cast<sh_int>(row[10] ? std::atoi(row[10]) : 0);
 		pool.overedit_move_regen =
 			static_cast<sh_int>(row[11] ? std::atoi(row[11]) : 0);
+		pool.migrated = static_cast<ubyte>(row[12] ? std::atoi(row[12]) : 0);
 		mysql_free_result(res);
 		return true;
 	}
@@ -1165,6 +1167,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 	j["over_hit_regen"] = pool.overedit_hp_regen;
 	j["over_mana_regen"] = pool.overedit_mana_regen;
 	j["over_move_regen"] = pool.overedit_move_regen;
+	j["migrated"] = pool.migrated ? 1 : 0;
 	Json caps = Json::object();
 	caps["hit"] = kEditPoolMaxHit;
 	caps["mana"] = kEditPoolMaxMana;
@@ -1174,6 +1177,141 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 	caps["move_regen"] = kEditPoolMaxMoveRegen;
 	j["caps"] = caps;
 	return j;
+}
+
+/**
+ * Riepilogo edit principali + residui pool per un toon (login overview).
+ * Analisi inventario completa; simboli clan esclusi dai tetti.
+ */
+[[nodiscard]] Json build_toon_edit_summary(unsigned long long toon_id) {
+	Json out;
+	out["toon_id"] = toon_id;
+	const std::string toon_name = toon_name_by_id(toon_id);
+	out["name"] = toon_name;
+	out["max_level"] = max_level_for_toon(toon_id);
+	if(toon_name.empty()) {
+		out["ok"] = false;
+		out["error"] = "toon non trovato";
+		return out;
+	}
+
+	std::vector<inventory_mysql_row> rows;
+	(void)load_character_inventory_mysql(toon_id, rows);
+
+	int dam_total = 0;
+	int sp_total = 0;
+	int hr_total = 0;
+	bool res_slash = false;
+	bool res_pierce = false;
+	bool res_blunt = false;
+	bool has_clan_symbol = false;
+	char_edit_pool_data pool_from_eq {};
+	int edited_pieces = 0;
+
+	for(auto& r : rows) {
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		const bool is_clan =
+			clan_symbol_is_obj(o) || o->obj_flags.type_flag == ITEM_CLAN_SYMBOL;
+		if(is_clan) {
+			has_clan_symbol = true;
+		}
+		if(object_edit_counts_toward_combat_budget(o, toon_name.c_str())) {
+			++edited_pieces;
+			dam_total += object_edit_damroll_edited_delta(o);
+			sp_total += object_edit_spellpower_edited_delta(o);
+			hr_total += object_edit_hitroll_edited_delta(o);
+			const int bits = object_immune_current_bits(o);
+			if(bits & static_cast<int>(IMM_SLASH)) {
+				res_slash = true;
+			}
+			if(bits & static_cast<int>(IMM_PIERCE)) {
+				res_pierce = true;
+			}
+			if(bits & static_cast<int>(IMM_BLUNT)) {
+				res_blunt = true;
+			}
+			struct obj_data* proto = nullptr;
+			const int pv = object_edit_prototype_vnum(o);
+			if(pv > 0) {
+				const int rn = real_object(pv);
+				if(rn >= 0) {
+					proto = read_object(rn, REAL);
+				}
+			}
+			edit_pool_accumulate_obj_delta(o, proto, &pool_from_eq);
+			if(proto) {
+				extract_obj(proto);
+			}
+		}
+		extract_obj(o);
+	}
+
+	char_edit_pool_data pool_db {};
+	const bool has_pool_row = load_edit_pool_for_toon(toon_id, pool_db);
+	const bool pool_on_character = has_pool_row && pool_db.migrated != 0;
+	const char_edit_pool_data& pool_used =
+		pool_on_character ? pool_db : pool_from_eq;
+
+	auto pool_field = [&](const char* key, int used, int cap) {
+		Json f;
+		f["key"] = key;
+		f["used"] = std::max(0, used);
+		f["cap"] = cap;
+		f["remaining"] = std::max(0, cap - std::max(0, used));
+		return f;
+	};
+	Json pool = Json::object();
+	pool["source"] = pool_on_character ? "character" : "objects";
+	pool["migrated"] = pool_on_character ? 1 : 0;
+	Json fields = Json::array();
+	fields.push_back(pool_field("hit", pool_used.edit_hp, kEditPoolMaxHit));
+	fields.push_back(pool_field("mana", pool_used.edit_mana, kEditPoolMaxMana));
+	fields.push_back(pool_field("move", pool_used.edit_move, kEditPoolMaxMove));
+	fields.push_back(
+		pool_field("hit_regen", pool_used.edit_hp_regen, kEditPoolMaxHitRegen));
+	fields.push_back(
+		pool_field("mana_regen", pool_used.edit_mana_regen, kEditPoolMaxManaRegen));
+	fields.push_back(
+		pool_field("move_regen", pool_used.edit_move_regen, kEditPoolMaxMoveRegen));
+	pool["fields"] = fields;
+
+	Json main = Json::object();
+	main["res_slash"] = res_slash;
+	main["res_pierce"] = res_pierce;
+	main["res_blunt"] = res_blunt;
+	{
+		Json dam;
+		dam["used"] = dam_total;
+		dam["cap"] = kObjEditMaxDamrollEditableTotal;
+		dam["remaining"] = std::max(0, kObjEditMaxDamrollEditableTotal - dam_total);
+		main["dam"] = dam;
+		Json sp;
+		sp["used"] = sp_total;
+		sp["cap"] = kObjEditMaxSpellpowerEditableTotal;
+		sp["remaining"] = std::max(0, kObjEditMaxSpellpowerEditableTotal - sp_total);
+		main["spellpower"] = sp;
+		Json hr;
+		hr["used"] = hr_total;
+		hr["cap"] = kObjEditMaxHitrollEditableTotal;
+		hr["remaining"] = std::max(0, kObjEditMaxHitrollEditableTotal - hr_total);
+		hr["per_piece_max"] = kObjEditMaxHitrollPerPiece;
+		main["hitroll"] = hr;
+	}
+
+	out["ok"] = true;
+	out["edited_pieces"] = edited_pieces;
+	{
+		Json clan;
+		clan["present"] = has_clan_symbol;
+		clan["owner_kind"] = "unknown"; /* proprio principe vs toon: TODO */
+		out["clan_symbol"] = clan;
+	}
+	out["main_edits"] = main;
+	out["pool"] = pool;
+	return out;
 }
 
 [[nodiscard]] std::string handle_internal(const std::string& path,
@@ -1194,6 +1332,43 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			Json d;
 			d["toon_id"] = toon_id;
 			d["online"] = is_toon_online_by_name(name);
+			return json_ok(d);
+		}
+
+		if(path == "/internal/toon-edit-summary") {
+			const unsigned long long toon_id = parse_json_toon_id(req);
+			if(toon_id == 0) {
+				return json_error("toon_id richiesto", 400);
+			}
+			return json_ok(build_toon_edit_summary(toon_id));
+		}
+
+		if(path == "/internal/toons-edit-summary") {
+			Json ids = Json::array();
+			if(req.find("toon_ids") != req.end() && req["toon_ids"].is_array()) {
+				ids = req["toon_ids"];
+			}
+			Json list = Json::array();
+			for(const auto& idv : ids) {
+				unsigned long long tid = 0;
+				if(idv.is_number_unsigned() || idv.is_number_integer()) {
+					tid = idv.get<unsigned long long>();
+				}
+				else if(idv.is_string()) {
+					try {
+						tid = std::stoull(idv.get<std::string>());
+					}
+					catch(...) {
+						tid = 0;
+					}
+				}
+				if(tid == 0) {
+					continue;
+				}
+				list.push_back(build_toon_edit_summary(tid));
+			}
+			Json d;
+			d["summaries"] = list;
 			return json_ok(d);
 		}
 

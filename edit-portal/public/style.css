@@ -435,11 +435,13 @@ a.btn-primary[href='#'] {
 }
 
 .toon-list {
-  display: grid;
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
 }
 
-.toon-list button {
+.toon-list button,
+.toon-pick-btn {
   text-align: left;
   padding: 0.75rem 1rem;
   background: var(--surface2);
@@ -447,10 +449,110 @@ a.btn-primary[href='#'] {
   border-radius: 8px;
   color: var(--text);
   cursor: pointer;
+  width: 100%;
 }
 
-.toon-list button:hover {
+.toon-list button:hover,
+.toon-pick-btn:hover {
   border-color: var(--accent);
+}
+
+.toon-band-title {
+  margin: 0 0 0.55rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #c9d7f5;
+  letter-spacing: 0.02em;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.toon-overview-card {
+  margin-bottom: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(28, 32, 41, 0.92);
+}
+
+.toon-overview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.toon-overview-name {
+  display: block;
+  font-size: 1.05rem;
+}
+
+.toon-overview-meta {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.toon-overview-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ov-block h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ov-source {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.ov-checklist {
+  list-style: none;
+  margin: 0 0 0.45rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  font-size: 0.85rem;
+}
+
+.ov-meter {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.35rem 0.65rem;
+  align-items: baseline;
+  font-size: 0.84rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid rgba(58, 66, 82, 0.35);
+}
+
+.ov-meter-label {
+  color: var(--muted);
+}
+
+.ov-remain {
+  color: var(--success);
+  font-size: 0.78rem;
+}
+
+.ov-yes {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.ov-no {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.currency-extras {
+  margin-top: 0.35rem;
 }
 
 .char-stats {

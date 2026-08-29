@@ -68,6 +68,8 @@ inline constexpr int kObjEditMaxHitrollPerPiece = 2;
 inline constexpr int kObjEditMaxSpellpowerPerPiece = 2; /* come damroll */
 inline constexpr int kObjEditMaxDamrollEditableTotal = 30;
 inline constexpr int kObjEditMaxSpellpowerEditableTotal = 30; /* come damroll */
+/** Hitroll editato totale (2/pezzo × 21 slot, escluso simbolo clan). */
+inline constexpr int kObjEditMaxHitrollEditableTotal = 42;
 
 /** Armor: step −10, fino a −40 per pezzo (listino ufficiale). */
 inline constexpr int kObjEditArmorStep = -10;
