@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 42;
+const EDIT_PORTAL_UI_BUILD = 43;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -214,8 +214,8 @@ const MUD_BG_COLORS = [
 /**
  * Converte `$cMBFG` / `$CMBFG` in HTML colorato (nasconde i codici).
  * M=mod, B=bg, FG=foreground 00-15 — vedi ansi_parser.cpp.
- * `$$` → `$` letterale. `$` singoli (wrapper tipo `$Forza$` dopo un codice
- * colore) non vengono mostrati — tipico di short_desc editati a mano.
+ * `$$` → `$` letterale, ma `$$cXXXX` = fine wrapper `$parola$` + codice colore
+ * (non mostrare `$`). Wrapper `$parola$` isolati: i `$` non si vedono.
  */
 function mudTextToHtml(raw) {
   const text = String(raw ?? '');
@@ -245,16 +245,20 @@ function mudTextToHtml(raw) {
     /^\d{4}/.test(text.slice(idx + 2, idx + 6));
   while (i < text.length) {
     if (text[i] === '$' && text[i + 1] === '$') {
-      /*
-       * `$$` → `$` letterale. Se il secondo `$` inizia `$cXXXX`, consuma solo
-       * il primo (es. `$$c0007` → `$` + codice colore).
-       */
+      if (isColorCodeAt(i + 1)) {
+        /*
+         * `$Vita$$c0007` → fine wrapper + colore: scarta un `$`, poi il
+         * `$cXXXX`. Per un `$` letterale prima del colore usare `$$$cXXXX`.
+         */
+        i += 1;
+        continue;
+      }
       if (!open) {
         html += openSpan();
         open = true;
       }
       html += '$';
-      i += isColorCodeAt(i + 1) ? 1 : 2;
+      i += 2;
       continue;
     }
     if (isColorCodeAt(i)) {
@@ -282,8 +286,10 @@ function mudTextToHtml(raw) {
       html += openSpan();
       open = true;
     }
-    html += escapeHtml(text[i]);
-    i += 1;
+    let j = i;
+    while (j < text.length && text[j] !== '$') j += 1;
+    html += escapeHtml(text.slice(i, j));
+    i = j;
   }
   close();
   return html;
@@ -1758,7 +1764,7 @@ async function loadInventory() {
         (data.myst_loaded_rows ?? '?') +
         ' letti)' +
         (parts.length ? `: ${parts.join(', ')}` : '') +
-        '. TAN mai editabile; RARO solo in ri-edit (EDIT + EDNomeToon).';
+        '. TAN mai; RARO solo se non in DB edits / senza EDIT+EDNomeToon.';
     } else if (mysqlCount > 0) {
       emptyEl.textContent =
         'Nessun oggetto mostrato, ma MySQL ha ' +
@@ -1786,7 +1792,7 @@ async function loadInventory() {
     showApiWarn(
       'Inventario filtrato da myst (sola lettura MySQL)' +
         (parts.length ? `: ${parts.join(', ')}` : '') +
-        '. TAN mai. RARO editabile solo se già EDIT + EDNomeToon.',
+        '. TAN mai. RARO: sì se in DB edits (show db) o EDIT+EDNomeToon.',
     );
   } else if (data.inventory_source === 'mysql_fallback') {
     showApiWarn(
@@ -3196,7 +3202,7 @@ function portalCategoriesFromUI() {
   return {
     types,
     comment:
-      'types: slug ITEM_* — spunta = visibile/editabile al primo edit. Senza spunta: nascosto; EDIT+ED* restano per ri-edit (anche RARO). TAN mai.',
+      'types: slug ITEM_* — spunta = primo edit. EDIT/DB edits (show db) restano per ri-edit (anche RARO). TAN mai.',
   };
 }
 

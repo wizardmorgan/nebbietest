@@ -728,26 +728,30 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 }
 
 /**
- * Pezzo gia' personalizzato per ri-edit: flag ITEM2_EDIT + owner
- * (EDNomeToon nelle keyword oppure personal_owner).
- * Solo questi possono essere ri-editati anche se [RARO].
- * TAN resta sempre escluso.
+ * Pezzo gia' in DB edits (show db / oload db = object_instance) oppure
+ * personalizzato ITEM2_EDIT + EDNomeToon / personal_owner.
+ * Questi possono essere ri-editati anche se [RARO]. TAN resta sempre escluso.
  */
-[[nodiscard]] static bool object_portal_is_named_edit(const struct obj_data* obj) noexcept {
+[[nodiscard]] static bool object_portal_is_registered_edit(
+	const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return false;
 	}
-	if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-		return false;
+	if(obj->db_instance_id != 0) {
+		return true;
 	}
-	return object_has_owner_lock(obj);
+	if(IS_OBJ_STAT2(obj, ITEM2_EDIT) && object_has_owner_lock(obj)) {
+		return true;
+	}
+	return false;
 }
 
 /**
  * Esclusioni dure:
  * - TAN: mai (ne' primo edit ne' ri-edit)
  * - HAS-GEMS / simbolo clan: mai
- * - RARO: bloccato al primo edit; permesso in ri-edit se ITEM2_EDIT + EDNomeToon
+ * - RARO: bloccato al primo edit; permesso in ri-edit se in DB edits
+ *   (object_instance) oppure ITEM2_EDIT + EDNomeToon
  */
 [[nodiscard]] static bool object_portal_passes_exclusions(const struct obj_data* obj) noexcept {
 	if(!obj) {
@@ -762,7 +766,8 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
 		return false;
 	}
-	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN && !object_portal_is_named_edit(obj)) {
+	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN &&
+	   !object_portal_is_registered_edit(obj)) {
 		return false;
 	}
 	return true;
@@ -772,13 +777,10 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	if(!obj) {
 		return false;
 	}
-	if(object_portal_is_named_edit(obj)) {
+	if(object_portal_is_registered_edit(obj)) {
 		return true;
 	}
 	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-		return true;
-	}
-	if(obj->db_instance_id != 0) {
 		return true;
 	}
 	if(object_has_owner_lock(obj)) {
@@ -816,7 +818,8 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 	if(object_is_tanned(obj)) {
 		return "conciato (skill tan)";
 	}
-	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN && !object_portal_is_named_edit(obj)) {
+	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN &&
+	   !object_portal_is_registered_edit(obj)) {
 		return "RARO";
 	}
 	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
@@ -847,7 +850,8 @@ bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 	/*
 	 * Visibilita' inventario:
 	 * - TAN / HAS-GEMS / simbolo: mai
-	 * - RARO senza EDIT+EDNomeToon: nascosto; con EDIT+EDNomeToon: visibile per ri-edit
+	 * - RARO senza registrazione in DB edits / EDIT+EDNomeToon: nascosto;
+	 *   se in object_instance (show db) o EDIT+EDNomeToon: visibile per ri-edit
 	 * - categorie staff (EDIT/instance/owner bypassano solo le categorie)
 	 */
 	if(!object_portal_passes_exclusions(obj)) {
