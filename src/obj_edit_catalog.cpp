@@ -829,12 +829,16 @@ bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 		return false;
 	}
 	/*
-	 * Visibilita' inventario: mostra tutto cio' che non e' escluso di duro
-	 * (RARO/TAN/HAS-GEMS/simbolo). Le categorie staff controllano solo
-	 * l'editabilita' (object_portal_editable), non la presenza in lista —
-	 * altrimenti eq indossato/proto "sparisce" dal portale.
+	 * Visibilita' inventario:
+	 * 1) esclusioni dure (RARO/TAN/HAS-GEMS/simbolo)
+	 * 2) categorie staff: senza spunta il tipo e' nascosto
+	 * Pezzi gia' personalizzati (EDIT / instance / owner) restano visibili
+	 * anche con categoria spenta (vedi object_portal_included).
 	 */
-	return object_portal_passes_exclusions(obj);
+	if(!object_portal_passes_exclusions(obj)) {
+		return false;
+	}
+	return object_portal_included(obj);
 }
 
 bool object_portal_editable(const struct obj_data* obj, const char* toon_name) noexcept {

@@ -300,10 +300,11 @@ void parse_entries_json(const Json& root) {
 	}
 	portal["type_catalog"] = catalog;
 	portal["comment"] =
-		"types: slug ITEM_* — spunta = editabile nel portale (primo edit). "
-		"Inventario: tutti i pezzi restano visibili (anche indossati); esclusi "
-		"solo RARO/TAN/HAS-GEMS/simbolo. Pezzi EDIT/instance/owner sempre "
-		"ri-editabili. Primo edit e ri-edit OK anche indossati (PG offline).";
+		"types: slug ITEM_* — spunta = visibile in inventario e editabile "
+		"(primo edit). Senza spunta: nascosto, salvo pezzi gia' personalizzati "
+		"(EDIT / instance / owner) che restano visibili per ri-edit. "
+		"Sempre esclusi RARO/TAN/HAS-GEMS/simbolo. Edit OK anche indossati "
+		"(PG offline).";
 	root["object_portal"] = portal;
 	return root;
 }
@@ -449,9 +450,12 @@ bool edit_system_config_save_json(const std::string& json_text, std::string& err
 			err = std::string("impossibile scrivere ") + path + ": " + std::strerror(errno);
 			return false;
 		}
-		parse_entries_json(parsed);
-		g_config_path = path;
-		g_loaded = true;
+		{
+			std::lock_guard<std::mutex> lock(g_mutex);
+			parse_entries_json(parsed);
+			g_config_path = path;
+			g_loaded = true;
+		}
 		mudlog(LOG_CHECK, "edit_system_config: saved %zu entries to %s",
 			   g_entries.size(), path.c_str());
 		return true;

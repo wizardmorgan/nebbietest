@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 31;
+const EDIT_PORTAL_UI_BUILD = 32;
 
 /** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
 function portalBasePath() {
@@ -730,39 +730,52 @@ function updateInventoryHeading() {
 
 let targetSearchTimer = null;
 
+function resetStaffTargetSelect(message) {
+  const sel = $('target-toon');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = message || '— cerca un nome sopra —';
+  sel.appendChild(placeholder);
+  sel.value = '';
+  targetToonId = null;
+}
+
 async function searchTargetToons(q) {
   const sel = $('target-toon');
   if (!sel) return;
   const query = String(q || '').trim();
-  sel.innerHTML = '';
+  const prevTarget = targetToonId;
+  // Nuova ricerca: non tenere selezionato/auto-caricato il primo risultato.
+  resetStaffTargetSelect(
+    query.length < 2 ? '— digita almeno 2 lettere —' : '— seleziona un personaggio —',
+  );
+  if (prevTarget) {
+    clearTargetWorkspace('Cerca e seleziona di nuovo il personaggio target.');
+    updateInventoryHeading();
+  }
   if (query.length < 2) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '— digita almeno 2 lettere —';
-    sel.appendChild(opt);
     return;
   }
   const data = await api(`/api/target-toons?q=${encodeURIComponent(query)}`);
   if (!data.ok) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = data.error || 'errore ricerca';
-    sel.appendChild(opt);
+    resetStaffTargetSelect(data.error || 'errore ricerca');
     return;
   }
   if (!data.toons?.length) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'Nessun personaggio trovato';
-    sel.appendChild(opt);
+    resetStaffTargetSelect('Nessun personaggio trovato');
     return;
   }
+  // Placeholder obbligatorio: senza, il browser seleziona il primo PG da solo.
+  resetStaffTargetSelect('— seleziona un personaggio —');
   data.toons.forEach((t) => {
     const opt = document.createElement('option');
     opt.value = String(t.id);
     opt.textContent = `${t.name} (lv ${t.max_level ?? '?'})`;
     sel.appendChild(opt);
   });
+  sel.value = '';
 }
 
 async function loadTargetToons() {
@@ -771,20 +784,18 @@ async function loadTargetToons() {
 
   if (session.role === 'staff') {
     targetToonId = null;
-    sel.innerHTML = '';
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '— cerca un nome sopra —';
-    sel.appendChild(placeholder);
-
     const search = $('target-toon-search');
-    if (search && !search.dataset.bound) {
-      search.dataset.bound = '1';
-      search.addEventListener('input', () => {
-        clearTimeout(targetSearchTimer);
-        targetSearchTimer = setTimeout(() => searchTargetToons(search.value), 250);
-      });
+    if (search) {
+      search.value = '';
+      if (!search.dataset.bound) {
+        search.dataset.bound = '1';
+        search.addEventListener('input', () => {
+          clearTimeout(targetSearchTimer);
+          targetSearchTimer = setTimeout(() => searchTargetToons(search.value), 250);
+        });
+      }
     }
+    resetStaffTargetSelect('— cerca un nome sopra —');
     sel.onchange = async () => {
       targetToonId = getTargetToonId();
       clearTargetWorkspace(
@@ -792,15 +803,15 @@ async function loadTargetToons() {
           ? 'Caricamento personaggio…'
           : 'Seleziona un personaggio dalla lista.'
       );
+      updateInventoryHeading();
       if (!targetToonId) {
         return;
       }
       await loadCharacterState();
       await loadInventory();
     };
+    clearTargetWorkspace('Cerca e seleziona un personaggio target.');
     updateInventoryHeading();
-    $('char-stats').textContent = 'Cerca e seleziona un personaggio target.';
-    $('inventory-list').innerHTML = '';
     return;
   }
 
@@ -2311,12 +2322,24 @@ $('login-form').addEventListener('submit', async (e) => {
 
 $('btn-logout').onclick = async () => {
   await api('/api/logout', { method: 'POST' });
+  targetToonId = null;
+  const search = $('target-toon-search');
+  if (search) search.value = '';
+  const instSearch = $('inst-search');
+  if (instSearch) instSearch.value = '';
+  const instList = $('inst-list');
+  if (instList) instList.innerHTML = '';
+  clearTargetWorkspace('');
   await refreshMe();
 };
 
 $('btn-change-toon').onclick = async () => {
   await api('/api/deselect-toon', { method: 'POST' });
   pendingEdit = null;
+  targetToonId = null;
+  const search = $('target-toon-search');
+  if (search) search.value = '';
+  clearTargetWorkspace('');
   await refreshMe();
 };
 
@@ -2486,7 +2509,7 @@ function portalCategoriesFromUI() {
   return {
     types,
     comment:
-      'types: slug ITEM_* — spunta = visibile in inventario e editabile. Senza spunta: nascosto (anche se EDIT).',
+      'types: slug ITEM_* — spunta = visibile e editabile (primo edit). Senza spunta: nascosto; pezzi EDIT/instance/owner restano visibili per ri-edit.',
   };
 }
 
