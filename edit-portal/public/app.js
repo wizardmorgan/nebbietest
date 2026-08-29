@@ -3196,7 +3196,7 @@ function portalCategoriesFromUI() {
   return {
     types,
     comment:
-      'types: slug ITEM_* — spunta = visibile e editabile (primo edit). Senza spunta: nascosto; pezzi EDIT/instance/owner restano visibili per ri-edit.',
+      'types: slug ITEM_* — spunta = visibile e editabile (primo edit). Senza spunta: nascosto; pezzi EDIT/instance/owner restano visibili per ri-edit (mai RARO/tan).',
   };
 }
 
