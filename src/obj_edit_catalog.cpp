@@ -728,26 +728,41 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 }
 
 /**
- * Esclusioni dure assolute (anche su pezzi gia' EDIT/ED*): TAN, RARO,
- * simbolo clan, HAS-GEMS. Non si bypassano mai.
+ * Pezzo gia' personalizzato per ri-edit: flag ITEM2_EDIT + owner
+ * (EDNomeToon nelle keyword oppure personal_owner).
+ * Solo questi possono essere ri-editati anche se [RARO].
+ * TAN resta sempre escluso.
+ */
+[[nodiscard]] static bool object_portal_is_named_edit(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return false;
+	}
+	if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+		return false;
+	}
+	return object_has_owner_lock(obj);
+}
+
+/**
+ * Esclusioni dure:
+ * - TAN: mai (ne' primo edit ne' ri-edit)
+ * - HAS-GEMS / simbolo clan: mai
+ * - RARO: bloccato al primo edit; permesso in ri-edit se ITEM2_EDIT + ED*/owner
  */
 [[nodiscard]] static bool object_portal_passes_exclusions(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return false;
 	}
-	/* TAN_* prototipi / pezzi da skill tan. */
 	if(object_is_tanned(obj)) {
-		return false;
-	}
-	/* [RARO] in stat/ident: cost >= LIM_ITEM_COST_MIN (non c'e' un flag dedicato). */
-	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
 		return false;
 	}
 	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
 		return false;
 	}
-	/* HAS-GEMS (extra_bits2) = ITEM2_INSERT. */
 	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
+		return false;
+	}
+	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN && !object_portal_is_named_edit(obj)) {
 		return false;
 	}
 	return true;
@@ -756,6 +771,9 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 [[nodiscard]] static bool object_portal_is_existing_edit(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return false;
+	}
+	if(object_portal_is_named_edit(obj)) {
+		return true;
 	}
 	if(IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
 		return true;
@@ -779,7 +797,7 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	}
 	/*
 	 * Pezzi gia' personalizzati / instance: restano in lista anche con
-	 * categoria ITEM_* spenta (ma TAN/RARO restano esclusi a monte).
+	 * categoria ITEM_* spenta (TAN escluso a monte; RARO solo se named edit).
 	 */
 	if(object_portal_is_existing_edit(obj)) {
 		return true;
@@ -798,7 +816,7 @@ std::string object_portal_skip_reason(const struct obj_data* obj,
 	if(object_is_tanned(obj)) {
 		return "conciato (skill tan)";
 	}
-	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+	if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN && !object_portal_is_named_edit(obj)) {
 		return "RARO";
 	}
 	if(obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL) {
@@ -828,8 +846,9 @@ bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 	}
 	/*
 	 * Visibilita' inventario:
-	 * 1) esclusioni dure assolute: RARO / TAN / HAS-GEMS / simbolo
-	 * 2) categorie staff (pezzi EDIT/instance/owner bypassano solo le categorie)
+	 * - TAN / HAS-GEMS / simbolo: mai
+	 * - RARO senza EDIT+ED*: nascosto; con EDIT+ED*/owner: visibile per ri-edit
+	 * - categorie staff (EDIT/instance/owner bypassano solo le categorie)
 	 */
 	if(!object_portal_passes_exclusions(obj)) {
 		return false;

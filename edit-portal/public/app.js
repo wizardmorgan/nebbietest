@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 41;
+const EDIT_PORTAL_UI_BUILD = 42;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -1758,7 +1758,7 @@ async function loadInventory() {
         (data.myst_loaded_rows ?? '?') +
         ' letti)' +
         (parts.length ? `: ${parts.join(', ')}` : '') +
-        '. RARO e tan non sono mai editabili; pezzi EDIT non-raro restano in lista se la categoria è attiva o sono già personalizzati.';
+        '. TAN mai editabile; RARO solo in ri-edit (EDIT + EDNomeToon).';
     } else if (mysqlCount > 0) {
       emptyEl.textContent =
         'Nessun oggetto mostrato, ma MySQL ha ' +
@@ -1786,7 +1786,7 @@ async function loadInventory() {
     showApiWarn(
       'Inventario filtrato da myst (sola lettura MySQL)' +
         (parts.length ? `: ${parts.join(', ')}` : '') +
-        '. RARO e tan non sono mai editabili. Altri pezzi EDIT/ED* non-raro tornano selezionabili con myst aggiornato.',
+        '. TAN mai. RARO editabile solo se già EDIT + EDNomeToon.',
     );
   } else if (data.inventory_source === 'mysql_fallback') {
     showApiWarn(
@@ -3196,7 +3196,7 @@ function portalCategoriesFromUI() {
   return {
     types,
     comment:
-      'types: slug ITEM_* — spunta = visibile e editabile (primo edit). Senza spunta: nascosto; pezzi EDIT/instance/owner restano visibili per ri-edit (mai RARO/tan).',
+      'types: slug ITEM_* — spunta = visibile/editabile al primo edit. Senza spunta: nascosto; EDIT+ED* restano per ri-edit (anche RARO). TAN mai.',
   };
 }
 
