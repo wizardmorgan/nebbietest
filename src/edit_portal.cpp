@@ -1216,7 +1216,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 [[nodiscard]] Json commands_enabled_at_level(int max_level) {
 	Json arr = Json::array();
-	if(max_level <= 0) {
+	/* Solo comandi staff (min_level >= Immortale): non elenca i mortali. */
+	if(max_level < IMMORTALE) {
 		return arr;
 	}
 	struct CmdRow {
@@ -1229,8 +1230,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(!n->name || !*n->name) {
 				continue;
 			}
-			if(static_cast<int>(n->min_level) <= max_level) {
-				rows.push_back({n->name, static_cast<int>(n->min_level)});
+			const int ml = static_cast<int>(n->min_level);
+			if(ml >= IMMORTALE && ml <= max_level) {
+				rows.push_back({n->name, ml});
 			}
 		}
 	}
