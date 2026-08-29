@@ -63,13 +63,16 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 											  int target_modifier, long& xp_raw,
 											  int& pq, std::string& err,
 											  int other_worn_edited_dam = -1,
-											  int other_worn_edited_sp = -1);
+											  int other_worn_edited_sp = -1,
+											  bool clear_slot = false);
 
-/** Imposta affect target (stessa logica di quote). Restituisce false se invalido. */
+/** Imposta affect target (stessa logica di quote). Restituisce false se invalido.
+ *  clear_slot: libera lo slot (malus a 2× / effetto positivo gratis). */
 [[nodiscard]] bool object_apply_affect_target(struct obj_data* obj, int location,
 											  int target_modifier, std::string& err,
 											  int other_worn_edited_dam = -1,
-											  int other_worn_edited_sp = -1);
+											  int other_worn_edited_sp = -1,
+											  bool clear_slot = false);
 
 [[nodiscard]] int object_affect_current_modifier(const struct obj_data* obj,
 												 int location) noexcept;

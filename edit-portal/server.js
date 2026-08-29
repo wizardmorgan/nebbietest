@@ -779,6 +779,7 @@ router.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (re
     inventory_id: inventoryId,
     location: Number(req.body.location),
     target_modifier: Number(req.body.targetModifier),
+    clear_slot: req.body.clearSlot ? 1 : 0,
     flag: req.body.flag || '',
     pending_artifact: req.body.pendingArtifact ? 1 : 0,
   });
@@ -815,6 +816,7 @@ router.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, re
     inventory_id: Number(req.body.inventoryId),
     location: Number(req.body.location),
     target_modifier: Number(req.body.targetModifier ?? req.body.modifier),
+    clear_slot: req.body.clearSlot ? 1 : 0,
     pay_xp: Number(req.body.payXp || 0),
     pay_rune: Number(req.body.payRune || 0),
     flag: req.body.flag || '',

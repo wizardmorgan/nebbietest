@@ -2071,6 +2071,7 @@ struct ToonInventoryEditScan {
 				req.find("target_modifier") != req.end()
 					? parse_json_int(req, "target_modifier", 0)
 					: parse_json_int(req, "modifier", 0);
+			const bool clear_slot = parse_json_int(req, "clear_slot", 0) != 0;
 			const std::string flag = req.value("flag", "");
 
 			const std::string toon_name = toon_name_by_id(toon_id);
@@ -2145,7 +2146,7 @@ struct ToonInventoryEditScan {
 														   toon_name.c_str())
 					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
-										   quote_err, other_dam, other_sp)) {
+										   quote_err, other_dam, other_sp, clear_slot)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -2168,17 +2169,26 @@ struct ToonInventoryEditScan {
 			}
 			else {
 				current = object_edit_display_current(obj, location);
+				if(clear_slot) {
+					target = 0;
+				}
 			}
 
 			Json d = quote_xp_json(xp_raw, pq);
 			d["location"] = location;
-			d["target_modifier"] = target_modifier;
+			d["target_modifier"] = clear_slot ? 0 : target_modifier;
+			d["clear_slot"] = clear_slot ? 1 : 0;
 			d["current"] = current;
 			d["target"] = target;
 			d["inventory_id"] = inventory_id;
 			d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
 			d["pending_artifact"] = pending_artifact ? 1 : 0;
-			if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
+			if(clear_slot) {
+				d["note"] = xp_raw > 0
+								? "Rimuovi malus: libera lo slot (costo 2× listino)"
+								: "Rimuovi slot: libera lo slot (gratis, listino)";
+			}
+			else if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
 				d["note"] = "Include maggiorazione Artifact +50% (listino)";
 			}
 			extract_obj(obj);
@@ -2211,6 +2221,7 @@ struct ToonInventoryEditScan {
 				req.find("target_modifier") != req.end()
 					? parse_json_int(req, "target_modifier", 0)
 					: parse_json_int(req, "modifier", 0);
+			const bool clear_slot = parse_json_int(req, "clear_slot", 0) != 0;
 			const int pay_xp = parse_json_int(req, "pay_xp", 0);
 			const int pay_rune = parse_json_int(req, "pay_rune", 0);
 			const std::string flag = req.value("flag", "");
@@ -2345,7 +2356,8 @@ struct ToonInventoryEditScan {
 														   target_name.c_str())
 					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
-										   quote_pq, quote_err, other_dam, other_sp)) {
+										   quote_pq, quote_err, other_dam, other_sp,
+										   clear_slot)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -2359,7 +2371,7 @@ struct ToonInventoryEditScan {
 
 			std::string apply_err;
 			if(!object_apply_affect_target(after, location, target_modifier, apply_err,
-										   other_dam, other_sp)) {
+										   other_dam, other_sp, clear_slot)) {
 				extract_obj(after);
 				return json_error(apply_err.c_str(), 400);
 			}

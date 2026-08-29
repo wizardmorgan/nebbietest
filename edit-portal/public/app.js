@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 44;
+const EDIT_PORTAL_UI_BUILD = 45;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -2165,6 +2165,7 @@ async function requoteObjectCartForArtifact() {
       targetModifier: it.targetModifier,
       pendingArtifact: useArt,
     };
+    if (it.clearSlot) payload.clearSlot = true;
     if (it.flag) payload.flag = it.flag;
     const data = await api('/api/quote-object-edit', {
       method: 'POST',
@@ -2513,6 +2514,14 @@ function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
         const values = buildObjectScalarOptions(entry);
         if (!values.includes(current)) values.push(current);
         values.sort((a, b) => a - b);
+        if (entry.can_clear_slot && canEdit && session.role !== 'limited') {
+          const clearOpt = document.createElement('option');
+          clearOpt.value = '__clear__';
+          clearOpt.textContent = entry.clear_is_malus
+            ? 'Rimuovi malus (libera slot, costo 2×)'
+            : 'Rimuovi slot (gratis)';
+          select.appendChild(clearOpt);
+        }
         values.forEach((v) => {
           const opt = document.createElement('option');
           opt.value = v;
@@ -2528,7 +2537,9 @@ function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
 
       const queuedObj = objectEditCart.get(entry.id);
       if (queuedObj && queuedObj.targetModifier != null && !select.disabled) {
-        if (isYesNoObjectEntry(entry)) {
+        if (queuedObj.clearSlot) {
+          select.value = '__clear__';
+        } else if (isYesNoObjectEntry(entry)) {
           select.value = Number(queuedObj.targetModifier) ? '1' : '0';
         } else {
           select.value = String(queuedObj.targetModifier);
@@ -2538,6 +2549,10 @@ function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
 
       select.addEventListener('change', () => {
         if (!canEdit) return;
+        if (select.value === '__clear__') {
+          queueObjectQuote(entry, 0, select, { clearSlot: true });
+          return;
+        }
         const newVal = Number(select.value);
         if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') {
           if (newVal === 0 && current === 1) {
@@ -2605,13 +2620,15 @@ function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
   updateObjectCartUI();
 }
 
-async function queueObjectQuote(entry, targetModifier, selectEl) {
+async function queueObjectQuote(entry, targetModifier, selectEl, opts = {}) {
+  const clearSlot = !!opts.clearSlot;
   const payload = {
     targetToonId,
     inventoryId: selectedInventoryId,
     location: Number(entry.location || 0),
     targetModifier,
   };
+  if (clearSlot) payload.clearSlot = true;
   if (entry.kind === 'flag' && entry.flag) {
     payload.flag = entry.flag;
   }
@@ -2645,19 +2662,24 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
     : entry.relative
       ? formatScalarOptionLabel(entry, Number(qd.current))
       : qd.current;
-  const tgtLabel = yesNo
-    ? qd.target
-      ? 'Sì'
-      : 'No'
-    : entry.relative
-      ? formatScalarOptionLabel(entry, Number(qd.target))
-      : qd.target;
+  const tgtLabel = clearSlot
+    ? entry.clear_is_malus
+      ? 'slot libero (rimuovi malus)'
+      : 'slot libero'
+    : yesNo
+      ? qd.target
+        ? 'Sì'
+        : 'No'
+      : entry.relative
+        ? formatScalarOptionLabel(entry, Number(qd.target))
+        : qd.target;
   ensureObjectCartExclusive();
   const wasAddingArtifact = cartAddsArtifact();
   objectEditCart.set(entry.id, {
     entryId: entry.id,
     location: Number(entry.location || 0),
     targetModifier,
+    clearSlot,
     flag: entry.kind === 'flag' ? entry.flag : undefined,
     label: `${entry.label}: ${curLabel} → ${tgtLabel}`,
     quote: qd,
@@ -2794,6 +2816,9 @@ async function confirmPayEdit() {
         payXp: itemPlan.payXp,
         payRune: itemPlan.payRune,
       };
+      if (item.clearSlot) {
+        affectBody.clearSlot = true;
+      }
       if (item.flag) {
         affectBody.flag = item.flag;
       }

@@ -545,8 +545,87 @@ Json object_affect_slots_json(const struct obj_data* obj) {
 	return root;
 }
 
+[[nodiscard]] static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
+	if(!obj || slot < 0 || slot >= MAX_OBJ_AFFECT) {
+		return;
+	}
+	obj->affected[slot].location = APPLY_NONE;
+	obj->affected[slot].modifier = 0;
+}
+
+/**
+ * Libera lo slot listino per `location` (combat → azzera quel componente).
+ * Listino: malus a 2× / effetto positivo gratis; lo slot deve risultare libero.
+ */
+[[nodiscard]] static bool clear_listino_affect(struct obj_data* obj, int location,
+											   std::string& err) {
+	if(!obj) {
+		err = "oggetto null";
+		return false;
+	}
+	if(is_combat_edit_location(location)) {
+		const int before_hr = combat_hitroll_total(obj);
+		const int before_dr = combat_damroll_total(obj);
+		const int before_sp = combat_spellpower_total(obj);
+		int hitroll = before_hr;
+		int damroll = before_dr;
+		int spellpower = before_sp;
+		switch(location) {
+		case APPLY_HITROLL:
+			hitroll = 0;
+			break;
+		case APPLY_DAMROLL:
+			damroll = 0;
+			break;
+		case APPLY_SPELLPOWER:
+			spellpower = 0;
+			break;
+		case APPLY_HITNDAM:
+			hitroll = 0;
+			damroll = 0;
+			break;
+		case APPLY_HITNSP:
+			hitroll = 0;
+			spellpower = 0;
+			break;
+		default:
+			break;
+		}
+		if(hitroll == before_hr && damroll == before_dr && spellpower == before_sp) {
+			err = "nessuno slot da rimuovere";
+			return false;
+		}
+		rewrite_combat_totals(obj, hitroll, damroll, spellpower);
+		return true;
+	}
+
+	const int slot = find_affect_slot_for_location(obj, location);
+	if(slot < 0) {
+		err = "nessuno slot da rimuovere";
+		return false;
+	}
+	wipe_affect_slot(obj, slot);
+	return true;
+}
+
+[[nodiscard]] static bool listino_current_is_malus(int location, int current) noexcept {
+	if(location == APPLY_AC || location == APPLY_SPELLFAIL) {
+		return current > 0;
+	}
+	return current < 0;
+}
+
+[[nodiscard]] static bool listino_current_is_positive_effect(int location,
+															int current) noexcept {
+	if(location == APPLY_AC || location == APPLY_SPELLFAIL) {
+		return current < 0;
+	}
+	return current > 0;
+}
+
 [[nodiscard]] bool apply_target_modifier(struct obj_data* obj, int location,
-										 int target_modifier, std::string& err) {
+										 int target_modifier, std::string& err,
+										 bool clear_slot = false) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -562,10 +641,10 @@ Json object_affect_slots_json(const struct obj_data* obj) {
 
 	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE
 	   || location == APPLY_SPELL || location == APPLY_AFF2) {
-		if(target_modifier == 0) {
+		if(clear_slot || target_modifier == 0) {
 			err = (location == APPLY_SPELL || location == APPLY_AFF2)
-					  ? "spell bit mancante"
-					  : "immune bit mancante";
+					  ? "rimozione spell non supportata qui"
+					  : "rimozione resistenza/immunità non supportata qui";
 			return false;
 		}
 		const int slot = find_affect_slot_for_location(obj, location);
@@ -588,6 +667,32 @@ Json object_affect_slots_json(const struct obj_data* obj) {
 		err = "campo non presente nel listino oggetto";
 		return false;
 	}
+
+	/* Rimuovi slot (listino): malus pagando 2×, effetto positivo gratis. */
+	if(clear_slot) {
+		return clear_listino_affect(obj, location, err);
+	}
+
+	/*
+	 * Target 0 = niente affect: libera lo slot (non lasciare APPLY_X con mod 0,
+	 * che occuperebbe comunque uno slot). Vale per malus→0 e bonus→0.
+	 */
+	if(target_modifier == 0) {
+		if(!listino_target_allowed(obj, spec, target_modifier, err)) {
+			return false;
+		}
+		if(is_combat_edit_location(location)) {
+			std::string clear_err;
+			(void)clear_listino_affect(obj, location, clear_err);
+			return true;
+		}
+		const int slot = find_affect_slot_for_location(obj, location);
+		if(slot >= 0) {
+			wipe_affect_slot(obj, slot);
+		}
+		return true;
+	}
+
 	if(!listino_target_allowed(obj, spec, target_modifier, err)) {
 		return false;
 	}
@@ -906,6 +1011,17 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["occupied_slot"] = occupied_slot;
 		j["can_add"] = can_edit && !has_affect;
 		j["can_edit"] = can_edit;
+		{
+			const bool clear_malus =
+				listino_current_is_malus(spec.location, current_total);
+			const bool clear_positive =
+				listino_current_is_positive_effect(spec.location, current_total);
+			const bool can_clear =
+				can_edit && (occupied_slot >= 0 || current_total != 0) &&
+				(clear_malus || clear_positive || occupied_slot >= 0);
+			j["can_clear_slot"] = can_clear;
+			j["clear_is_malus"] = clear_malus;
+		}
 		json_listino_pricing(j, spec);
 		entries.push_back(j);
 	}
@@ -1293,7 +1409,8 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 
 bool object_quote_affect_target(struct obj_data* obj, int location, int target_modifier,
 								long& xp_raw, int& pq, std::string& err,
-								int other_worn_edited_dam, int other_worn_edited_sp) {
+								int other_worn_edited_dam, int other_worn_edited_sp,
+								bool clear_slot) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -1304,7 +1421,7 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		return false;
 	}
 	const ObjEditAnalysis before = AnalyzeObjEdit(obj);
-	if(!apply_target_modifier(clone, location, target_modifier, err)) {
+	if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot)) {
 		extract_obj(clone);
 		return false;
 	}
@@ -1342,7 +1459,7 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 
 bool object_apply_affect_target(struct obj_data* obj, int location, int target_modifier,
 								std::string& err, int other_worn_edited_dam,
-								int other_worn_edited_sp) {
+								int other_worn_edited_sp, bool clear_slot) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -1357,7 +1474,7 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 			err = "impossibile clonare oggetto";
 			return false;
 		}
-		if(!apply_target_modifier(clone, location, target_modifier, err)) {
+		if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot)) {
 			extract_obj(clone);
 			return false;
 		}
@@ -1368,7 +1485,7 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 		}
 		extract_obj(clone);
 	}
-	return apply_target_modifier(obj, location, target_modifier, err);
+	return apply_target_modifier(obj, location, target_modifier, err, clear_slot);
 }
 
 } // namespace Alarmud
