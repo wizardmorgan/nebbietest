@@ -565,6 +565,10 @@ a.btn-primary[href='#'] {
   color: var(--muted);
 }
 
+.toon-overview-money {
+  margin-top: 0.15rem;
+}
+
 .toon-overview-body {
   display: grid;
   gap: 0.55rem;

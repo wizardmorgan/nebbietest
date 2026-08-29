@@ -445,7 +445,8 @@ std::atomic<bool> g_http_running {false};
 }
 
 [[nodiscard]] bool load_stats_for_toon(unsigned long long toon_id, int& exp,
-									   int& rune) {
+									   int& rune, int* gold = nullptr,
+									   int* bank_gold = nullptr) {
 	DB* db = Sql::getMysql();
 	if(!db || toon_id == 0) {
 		return false;
@@ -455,7 +456,7 @@ std::atomic<bool> g_http_running {false};
 		auto& mc = static_cast<odb::mysql::connection&>(*cp);
 		MYSQL* h = mc.handle();
 		const std::string sql =
-			"SELECT exp, p_rune_dei FROM character_stats WHERE toon_id = " +
+			"SELECT exp, p_rune_dei, gold, bank_gold FROM character_stats WHERE toon_id = " +
 			std::to_string(toon_id) + " LIMIT 1";
 		if(mysql_query(h, sql.c_str()) != 0) {
 			return false;
@@ -471,6 +472,12 @@ std::atomic<bool> g_http_running {false};
 		}
 		exp = row[0] ? std::atoi(row[0]) : 0;
 		rune = row[1] ? std::atoi(row[1]) : 0;
+		if(gold) {
+			*gold = row[2] ? std::atoi(row[2]) : 0;
+		}
+		if(bank_gold) {
+			*bank_gold = row[3] ? std::atoi(row[3]) : 0;
+		}
 		mysql_free_result(res);
 		return true;
 	}
@@ -1462,7 +1469,9 @@ struct ToonInventoryEditScan {
 
 	int exp = 0;
 	int rune = 0;
-	const bool has_stats = load_stats_for_toon(toon_id, exp, rune);
+	int gold = 0;
+	int bank_gold = 0;
+	const bool has_stats = load_stats_for_toon(toon_id, exp, rune, &gold, &bank_gold);
 	const long long prince_reserve =
 		(max_level >= PRINCIPE) ? static_cast<long long>(PRINCEEXP) : 0LL;
 	const long long available_xp =
@@ -1474,6 +1483,8 @@ struct ToonInventoryEditScan {
 	out["available_mxp"] = avail_clamped / 1000000L;
 	out["available_mxp_frac"] = (avail_clamped % 1000000L) / 10000L;
 	out["rune"] = rune;
+	out["gold"] = gold;
+	out["bank_gold"] = bank_gold;
 	{
 		Json clan;
 		clan["present"] = has_clan_symbol;

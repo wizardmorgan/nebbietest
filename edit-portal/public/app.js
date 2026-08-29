@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 38;
+const EDIT_PORTAL_UI_BUILD = 39;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -912,6 +912,19 @@ function formatCommandsDetails(summary, open = false) {
     </details>`;
 }
 
+function formatGoldAmount(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '0';
+  return Math.trunc(v).toLocaleString('it-IT');
+}
+
+function moneyMetaLine(summary) {
+  if (!summary) return '';
+  const gold = formatGoldAmount(summary.gold);
+  const bank = formatGoldAmount(summary.bank_gold);
+  return `<span class="toon-overview-meta toon-overview-money">Soldi: ${gold} addosso · ${bank} in banca</span>`;
+}
+
 function makeStaffToonCard(t) {
   const card = document.createElement('div');
   card.className = 'toon-overview-card toon-staff-card';
@@ -924,6 +937,7 @@ function makeStaffToonCard(t) {
         <span class="toon-overview-meta">lv ${t.maxLevel}${
           grade ? ` · ${escapeHtml(grade)}` : ''
         }</span>
+        ${moneyMetaLine(s)}
       </div>
     </div>
     <div class="toon-overview-body">
@@ -944,6 +958,7 @@ function makePrinceToonCard(t) {
   card.className = 'toon-overview-card toon-prince-card';
   const s = t.summary && t.summary.ok !== false ? t.summary : null;
   const grade = (s && s.grade) || '';
+  const title = String(t.title || '').trim();
   const mxp = s ? Number(s.available_mxp) || 0 : 0;
   const mxpFrac = s ? Number(s.available_mxp_frac) || 0 : 0;
 
@@ -952,8 +967,11 @@ function makePrinceToonCard(t) {
   head.innerHTML =
     `<div><strong class="toon-overview-name">${escapeHtml(t.name)}</strong>` +
     `<span class="toon-overview-meta">lv ${t.maxLevel}` +
+    (title ? ` · ${escapeHtml(title)}` : '') +
     (grade ? ` · ${escapeHtml(grade)}` : '') +
-    ` · ${escapeHtml(formatMxp(mxp, mxpFrac))} disponibili</span></div>`;
+    ` · ${escapeHtml(formatMxp(mxp, mxpFrac))} disponibili</span>` +
+    moneyMetaLine(s) +
+    `</div>`;
   card.appendChild(head);
 
   if (!s) {
