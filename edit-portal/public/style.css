@@ -296,6 +296,55 @@ body.payment-insufficient .payment-dock-inner {
   margin: 0.75rem 0;
 }
 
+.currency-config-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.currency-config-row {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(28, 32, 41, 0.75);
+}
+
+.currency-config-row--hidden {
+  border-style: dashed;
+  opacity: 0.92;
+}
+
+.currency-config-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+}
+
+.currency-config-title code {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.currency-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bg);
+  background: var(--muted);
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+}
+
+.currency-config-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.1rem;
+  margin-top: 0.35rem;
+}
+
 .card-inner {
   margin-bottom: 1rem;
   padding-bottom: 1rem;

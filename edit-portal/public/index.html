@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="edit-base" content="" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=33" />
+  <link rel="stylesheet" href="style.css?v=34" />
   <script src="config.js"></script>
 </head>
 <body>
@@ -144,7 +144,7 @@
                 <h2>Pagamento edit</h2>
                 <span id="payment-queue-count" class="payment-queue-count hidden"></span>
               </div>
-              <p class="hint payment-dock-hint">Costo sul <strong>personaggio target</strong> (MXP / Runes).</p>
+              <p class="hint payment-dock-hint">Costo sul <strong>personaggio target</strong> (MXP / Rune degli eroi).</p>
               <div id="payment-summary" class="payment-summary"></div>
               <div id="payment-breakdown" class="payment-breakdown"></div>
               <p id="apply-result" class="msg"></p>
@@ -154,11 +154,11 @@
                 <label class="field-label">Metodo
                   <select id="pay-mode">
                     <option value="mxp">Solo MXP (exp)</option>
-                    <option value="runes">Solo Runes degli Eroi</option>
-                    <option value="mix">Misto MXP + Runes</option>
+                    <option value="runes">Solo Rune degli eroi</option>
+                    <option value="mix">Misto MXP + Rune</option>
                   </select>
                 </label>
-                <label id="rune-pct-wrap" class="field-label hidden">% copertura con Runes
+                <label id="rune-pct-wrap" class="field-label hidden">% copertura con Rune
                   <input type="range" id="pay-rune-pct" min="0" max="100" step="5" value="0" />
                   <span id="pay-rune-pct-label">0%</span>
                 </label>
@@ -179,6 +179,18 @@
           <div id="portal-category-toggles" class="checkbox-grid"></div>
           <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
           <p id="portal-cat-result" class="msg"></p>
+        </div>
+
+        <div class="portal-currencies card-inner">
+          <h3>Valute di pagamento</h3>
+          <p class="hint">
+            MXP e Rune degli eroi sono le valute attive. Le altre sono predisposte per usi futuri:
+            restano <strong>nascoste</strong> ai player finché non le segni visibili e abilitate.
+            Al momento il pagamento listino usa solo MXP/Rune.
+          </p>
+          <div id="portal-currency-toggles" class="currency-config-list"></div>
+          <button id="btn-save-portal-currencies" class="btn-secondary" type="button">Salva valute</button>
+          <p id="portal-currency-result" class="msg"></p>
         </div>
 
         <details class="card-inner collapse-panel" id="routing-edit-panel">
@@ -222,6 +234,6 @@
       </div>
     </section>
   </main>
-  <script src="app.js?v=33"></script>
+  <script src="app.js?v=34"></script>
 </body>
 </html>

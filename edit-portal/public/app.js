@@ -5,7 +5,60 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 33;
+const EDIT_PORTAL_UI_BUILD = 34;
+
+/** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
+let portalCurrencies = null;
+
+const DEFAULT_CURRENCIES = [
+  { slug: 'mxp', label: 'MXP', enabled: true, visible: true, pays_listino: true },
+  { slug: 'rune', label: 'Rune degli eroi', enabled: true, visible: true, pays_listino: true },
+  { slug: 'gold', label: 'Gold', enabled: false, visible: false, pays_listino: false },
+  { slug: 'token', label: 'Token', enabled: false, visible: false, pays_listino: false },
+  { slug: 'credit', label: 'Credito edit', enabled: false, visible: false, pays_listino: false },
+];
+
+function normalizeCurrencies(raw) {
+  const bySlug = new Map();
+  DEFAULT_CURRENCIES.forEach((d) => bySlug.set(d.slug, { ...d }));
+  const list = Array.isArray(raw?.catalog)
+    ? raw.catalog
+    : Array.isArray(raw)
+      ? raw
+      : [];
+  list.forEach((row) => {
+    if (!row || !row.slug) return;
+    const prev = bySlug.get(row.slug) || {
+      slug: row.slug,
+      label: row.slug,
+      enabled: false,
+      visible: false,
+      pays_listino: false,
+    };
+    bySlug.set(row.slug, {
+      slug: row.slug,
+      label: row.label != null && String(row.label).trim() ? String(row.label) : prev.label,
+      enabled: row.enabled !== undefined ? !!row.enabled : prev.enabled,
+      visible: row.visible !== undefined ? !!row.visible : prev.visible,
+      pays_listino:
+        row.pays_listino !== undefined ? !!row.pays_listino : prev.pays_listino,
+    });
+  });
+  return [...bySlug.values()];
+}
+
+function currencyLabel(slug) {
+  const list = portalCurrencies || DEFAULT_CURRENCIES;
+  const row = list.find((c) => c.slug === slug);
+  return row?.label || (slug === 'rune' ? 'Rune degli eroi' : slug === 'mxp' ? 'MXP' : slug);
+}
+
+function currencyVisibleEnabled(slug) {
+  const list = portalCurrencies || DEFAULT_CURRENCIES;
+  const row = list.find((c) => c.slug === slug);
+  return !!(row && row.enabled && row.visible);
+}
+
 
 /** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
 function portalBasePath() {
@@ -342,7 +395,7 @@ function formatQuoteCostShort(quote) {
   const frac = Math.floor((xpRaw % PQ_PER_MEGA_XP) / 10000);
   const parts = [];
   if (xpRaw > 0) parts.push(formatMxp(mxp, frac));
-  if (rune > 0) parts.push(`${rune} Runes`);
+  if (rune > 0) parts.push(`${rune} ${currencyLabel('rune')}`);
   if (!parts.length) parts.push('gratis');
   return parts.join(' + ');
 }
@@ -556,7 +609,7 @@ function updatePaymentUI() {
     <div class="payment-queue-list">${labelHtml}</div>
     <div class="payment-cost-line">
       Costo listino: <strong>${plan.displayMxp}</strong>
-      ${plan.runeListino ? ` (+ ${plan.runeListino} Runes listino)` : ''}
+      ${plan.runeListino ? ` (+ ${plan.runeListino} ${currencyLabel('rune')} listino)` : ''}
     </div>
     ${
       pendingEdit.quote?.note
@@ -568,19 +621,19 @@ function updatePaymentUI() {
   const insuffHint = !check.ok
     ? `<div class="payment-insufficient-msg">Fondi insufficienti sul personaggio target${
         !check.okXp ? ' (XP/MXP)' : ''
-      }${!check.okRune ? ' (Runes)' : ''}.</div>`
+      }${!check.okRune ? ` (${currencyLabel('rune')})` : ''}.</div>`
     : '';
 
   $('payment-breakdown').innerHTML = `
     <div class="payment-pay-line">
       Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong>
-      + <strong>${plan.payRune} Runes</strong>
+      + <strong>${plan.payRune} ${currencyLabel('rune')}</strong>
     </div>
     <div class="payment-avail-line">
       Disponibili: ${formatMxp(charState.available_mxp || 0, charState.available_mxp_frac || 0)}
-      · ${charState.rune || 0} Runes
+      · ${charState.rune || 0} ${currencyLabel('rune')}
       · <span class="${check.okXp ? 'ok' : 'bad'}">MXP ${check.okXp ? 'OK' : 'insufficienti'}</span>
-      · <span class="${check.okRune ? 'ok' : 'bad'}">Runes ${check.okRune ? 'OK' : 'insufficienti'}</span>
+      · <span class="${check.okRune ? 'ok' : 'bad'}">${currencyLabel('rune')} ${check.okRune ? 'OK' : 'insufficienti'}</span>
     </div>
     ${insuffHint}
   `;
@@ -667,6 +720,7 @@ async function enterWorkMode() {
     payMode.querySelector('option[value="mxp"]').disabled = true;
     payMode.querySelector('option[value="mix"]').disabled = true;
   }
+  refreshPayModeLabels();
 
   if (me.role === 'staff') {
     show('staff-panel');
@@ -932,7 +986,7 @@ function renderCharStats() {
     <div class="stat-row"><span>Nome</span><strong>${escapeHtml(s.name || '')}</strong></div>
     <div class="stat-row"><span>Livello</span><strong>${s.max_level}</strong></div>
     <div class="stat-row"><span>MXP Disponibili</span><strong>${formatMxp(s.available_mxp, s.available_mxp_frac)}</strong></div>
-    <div class="stat-row"><span>Runes degli Eroi</span><strong>${s.rune}</strong></div>
+    <div class="stat-row"><span>${currencyLabel('rune')}</span><strong>${s.rune}</strong></div>
     ${s.prince_reserve_mxp
       ? `<div class="stat-row hint"><span>Limite minimo xp per i principi</span><strong>${s.prince_reserve_mxp} MXP</strong></div>`
       : ''}
@@ -1403,7 +1457,7 @@ async function selectItem(inventoryId, li) {
     d.owner_name ? `Owner: ${d.owner_name} (${d.owner_classes} classi, x${d.class_mult})` : '',
     d.item_type ? `Tipo: ${d.item_type}` : '',
     `Costo attuale vs prototipo: ${formatMxp(d.diff_xp_mega || 0, d.diff_xp_frac || 0)}`,
-    d.diff_rune ? `Runes componente listino: ${d.diff_rune}` : '',
+    d.diff_rune ? `Rune componente listino: ${d.diff_rune}` : '',
   ].filter(Boolean);
   quoteEl.innerHTML =
     `<div class="quote-name">${mudTextToHtml(d.short_desc || '')}</div>` +
@@ -1567,12 +1621,12 @@ function objectEntryCostHint(entry) {
   const step = Number(entry.step) || 1;
   if (!mxp) return '';
   if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') {
-    return `Listino: ${mxp} MXP o ${rune} Runes`;
+    return `Listino: ${mxp} ${currencyLabel('mxp')} o ${rune} ${currencyLabel('rune')}`;
   }
   if (Math.abs(step) !== 1) {
-    return `Listino: ${mxp} MXP o ${rune} Runes / step ${step}`;
+    return `Listino: ${mxp} ${currencyLabel('mxp')} o ${rune} ${currencyLabel('rune')} / step ${step}`;
   }
-  return `Listino: ${mxp} MXP o ${rune} Runes / punto`;
+  return `Listino: ${mxp} ${currencyLabel('mxp')} o ${rune} ${currencyLabel('rune')} / punto`;
 }
 
 function objectEntryRangeLabel(entry) {
@@ -2229,7 +2283,7 @@ async function confirmPayEdit() {
   const isStaffOnOther =
     session.role === 'staff' && Number(targetToonId) !== Number(session.sessionToonId);
 
-  const msg1 = `Confermi il pagamento per:\n${pendingEdit.label}\n\nTotale: ${pendingEdit.plan.payXp.toLocaleString('it-IT')} XP (MXP) + ${pendingEdit.plan.payRune} Runes`;
+  const msg1 = `Confermi il pagamento per:\n${pendingEdit.label}\n\nTotale: ${pendingEdit.plan.payXp.toLocaleString('it-IT')} XP (MXP) + ${pendingEdit.plan.payRune} ${currencyLabel('rune')}`;
   if (!confirm(msg1)) return;
 
   if (isStaffOnOther) {
@@ -2574,7 +2628,118 @@ async function loadSystemConfig() {
   $('system-config-editor').value = JSON.stringify(cfg, null, 2);
   $('config-result').textContent = `path: ${data.data?.path || 'mudroot/lib/edit_system.json'}`;
   applyPortalCategoriesToUI(cfg?.object_portal || {});
+  applyCurrenciesToUI(cfg?.currencies || {});
   await checkMystPortalVersion();
+}
+
+function applyCurrenciesToUI(currencies) {
+  portalCurrencies = normalizeCurrencies(currencies);
+  const container = $('portal-currency-toggles');
+  if (!container) return;
+  container.innerHTML = '';
+  portalCurrencies.forEach((row) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'currency-config-row' + (row.visible ? '' : ' currency-config-row--hidden');
+    wrap.dataset.slug = row.slug;
+
+    const title = document.createElement('div');
+    title.className = 'currency-config-title';
+    const name = document.createElement('strong');
+    name.textContent = row.label;
+    const slug = document.createElement('code');
+    slug.textContent = row.slug;
+    title.appendChild(name);
+    title.appendChild(document.createTextNode(' '));
+    title.appendChild(slug);
+    if (!row.visible) {
+      const badge = document.createElement('span');
+      badge.className = 'currency-badge';
+      badge.textContent = 'nascosta';
+      title.appendChild(badge);
+    }
+    wrap.appendChild(title);
+
+    const labelInput = document.createElement('label');
+    labelInput.className = 'field-label';
+    labelInput.textContent = 'Etichetta';
+    const inputName = document.createElement('input');
+    inputName.type = 'text';
+    inputName.dataset.field = 'label';
+    inputName.value = row.label;
+    labelInput.appendChild(inputName);
+    wrap.appendChild(labelInput);
+
+    const flags = document.createElement('div');
+    flags.className = 'currency-config-flags';
+    [
+      ['enabled', 'Abilitata'],
+      ['visible', 'Visibile in UI'],
+      ['pays_listino', 'Paga listino'],
+    ].forEach(([field, lab]) => {
+      const labEl = document.createElement('label');
+      labEl.className = 'checkbox-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.dataset.field = field;
+      cb.checked = !!row[field];
+      /* MXP/Rune: non spegnere pays_listino per sbaglio senza volerlo. */
+      if ((row.slug === 'mxp' || row.slug === 'rune') && field === 'pays_listino') {
+        cb.checked = true;
+      }
+      labEl.appendChild(cb);
+      labEl.appendChild(document.createTextNode(` ${lab}`));
+      flags.appendChild(labEl);
+    });
+    wrap.appendChild(flags);
+    container.appendChild(wrap);
+  });
+  refreshPayModeLabels();
+}
+
+function currenciesFromUI() {
+  const catalog = [];
+  document.querySelectorAll('#portal-currency-toggles .currency-config-row').forEach((row) => {
+    const slug = row.dataset.slug;
+    if (!slug) return;
+    const labelEl = row.querySelector('input[data-field="label"]');
+    const enabledEl = row.querySelector('input[data-field="enabled"]');
+    const visibleEl = row.querySelector('input[data-field="visible"]');
+    const paysEl = row.querySelector('input[data-field="pays_listino"]');
+    catalog.push({
+      slug,
+      label: (labelEl?.value || slug).trim() || slug,
+      enabled: !!enabledEl?.checked,
+      visible: !!visibleEl?.checked,
+      pays_listino: !!paysEl?.checked,
+    });
+  });
+  return {
+    catalog,
+    comment:
+      'Valute portale. visible=false = nascosta ai player. pays_listino riservato a MXP/Rune per ora.',
+  };
+}
+
+function refreshPayModeLabels() {
+  const payMode = $('pay-mode');
+  if (!payMode) return;
+  const mxp = currencyLabel('mxp');
+  const rune = currencyLabel('rune');
+  const optMxp = payMode.querySelector('option[value="mxp"]');
+  const optRune = payMode.querySelector('option[value="runes"]');
+  const optMix = payMode.querySelector('option[value="mix"]');
+  if (optMxp) optMxp.textContent = `Solo ${mxp} (exp)`;
+  if (optRune) optRune.textContent = `Solo ${rune}`;
+  if (optMix) optMix.textContent = `Misto ${mxp} + ${rune}`;
+  const runePct = $('rune-pct-wrap');
+  if (runePct) {
+    const lab = runePct.querySelector('label, .field-label') || runePct;
+    /* Keep structure: first text node before input — update via data attribute on wrap. */
+  }
+  const hint = document.querySelector('.payment-dock-hint');
+  if (hint) {
+    hint.innerHTML = `Costo sul <strong>personaggio target</strong> (${mxp} / ${rune}).`;
+  }
 }
 
 function applyPortalCategoriesToUI(portal) {
@@ -2615,6 +2780,38 @@ function portalCategoriesFromUI() {
 }
 
 $('btn-load-config').onclick = () => loadSystemConfig();
+
+$('btn-save-portal-currencies').onclick = async () => {
+  const resultEl = $('portal-currency-result');
+  if (resultEl) resultEl.textContent = '';
+  let config;
+  try {
+    config = JSON.parse($('system-config-editor').value);
+  } catch {
+    try {
+      const data = await api('/api/staff/system-config');
+      config = data.data?.config || data.data || { version: 1, entries: [] };
+    } catch {
+      config = { version: 1, entries: [] };
+    }
+  }
+  config.currencies = currenciesFromUI();
+  portalCurrencies = normalizeCurrencies(config.currencies);
+  $('system-config-editor').value = JSON.stringify(config, null, 2);
+  const data = await api('/api/staff/system-config', {
+    method: 'POST',
+    body: JSON.stringify({ config }),
+  });
+  if (!data.ok) {
+    if (resultEl) resultEl.textContent = data.error || 'salvataggio fallito';
+    return;
+  }
+  refreshPayModeLabels();
+  if (resultEl) {
+    resultEl.textContent =
+      'Valute salvate. Le voci non visibili restano nascoste ai player.';
+  }
+};
 
 $('btn-save-portal-cats').onclick = async () => {
   $('portal-cat-result').textContent = '';
