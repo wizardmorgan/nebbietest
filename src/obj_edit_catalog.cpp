@@ -747,7 +747,7 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
  * Esclusioni dure:
  * - TAN: mai (ne' primo edit ne' ri-edit)
  * - HAS-GEMS / simbolo clan: mai
- * - RARO: bloccato al primo edit; permesso in ri-edit se ITEM2_EDIT + ED*/owner
+ * - RARO: bloccato al primo edit; permesso in ri-edit se ITEM2_EDIT + EDNomeToon
  */
 [[nodiscard]] static bool object_portal_passes_exclusions(const struct obj_data* obj) noexcept {
 	if(!obj) {
@@ -847,7 +847,7 @@ bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 	/*
 	 * Visibilita' inventario:
 	 * - TAN / HAS-GEMS / simbolo: mai
-	 * - RARO senza EDIT+ED*: nascosto; con EDIT+ED*/owner: visibile per ri-edit
+	 * - RARO senza EDIT+EDNomeToon: nascosto; con EDIT+EDNomeToon: visibile per ri-edit
 	 * - categorie staff (EDIT/instance/owner bypassano solo le categorie)
 	 */
 	if(!object_portal_passes_exclusions(obj)) {
