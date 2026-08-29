@@ -16,7 +16,6 @@ const LISTINO = {
   int: { unit: 1500, mxp: 15, rune: 15 },
   dex: { unit: 1500, mxp: 15, rune: 15 },
   chr: { unit: 1500, mxp: 15, rune: 10 }, // rune diverse sul listino ufficiale
-  con: { unit: 1500, mxp: 15, rune: 15 },
   armor_step: { unit: 100 * 10, mxp: 10, rune: 15 }, // −10 AC
   hitroll: { unit: 4500, mxp: 45, rune: 50 },
   damroll: { unit: 10000, mxp: 100, rune: 120 },

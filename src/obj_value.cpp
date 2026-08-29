@@ -589,14 +589,13 @@ struct ListinoRow {
 };
 
 /**
- * Listino portal oggetto — base https://www.nebbiearcane.it/listino-edits/
- * + CON (come altre stats), spellpower (come damroll), spellfail (2× armor),
- * hitndam / hitnsp = unione hit+dam / hit+sp.
+ * Listino portal oggetto — https://www.nebbiearcane.it/listino-edits/
+ * Stats: STR/DEX/WIS/INT/CHR (CON non e' nel listino ufficiale).
+ * Spellpower come damroll; spellfail 2× armor; hitndam/hitnsp = unioni.
  */
 constexpr ListinoRow kObjEditListino[] = {
 	{"str", "Forza (STR)", APPLY_STR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"dex", "Destrezza (DEX)", APPLY_DEX, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
-	{"con", "Costituzione (CON)", APPLY_CON, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"wis", "Saggezza (WIS)", APPLY_WIS, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"int", "Intelligenza (INT)", APPLY_INT, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"chr", "Carisma (CHR)", APPLY_CHR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},

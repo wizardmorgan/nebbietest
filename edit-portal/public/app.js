@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 32;
+const EDIT_PORTAL_UI_BUILD = 33;
 
 /** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
 function portalBasePath() {
@@ -931,9 +931,11 @@ function renderCharStats() {
   $('char-stats').innerHTML = `
     <div class="stat-row"><span>Nome</span><strong>${escapeHtml(s.name || '')}</strong></div>
     <div class="stat-row"><span>Livello</span><strong>${s.max_level}</strong></div>
-    <div class="stat-row"><span>MXP disponibili</span><strong>${formatMxp(s.available_mxp, s.available_mxp_frac)}</strong></div>
+    <div class="stat-row"><span>MXP Disponibili</span><strong>${formatMxp(s.available_mxp, s.available_mxp_frac)}</strong></div>
     <div class="stat-row"><span>Runes degli Eroi</span><strong>${s.rune}</strong></div>
-    ${s.prince_reserve_mxp ? `<div class="stat-row hint">Riserva principi: ${s.prince_reserve_mxp} MXP</div>` : ''}
+    ${s.prince_reserve_mxp
+      ? `<div class="stat-row hint"><span>Limite minimo xp per i principi</span><strong>${s.prince_reserve_mxp} MXP</strong></div>`
+      : ''}
     ${missing}
   `;
 }
@@ -979,7 +981,19 @@ function renderCharacterEdits() {
   }
 
   const poolEntries = catalogEntries('pool', 'character');
-  poolEntries.forEach((entry) => {
+  if (poolEntries.length) {
+    const details = document.createElement('details');
+    details.className = 'edit-section';
+    details.open = true;
+    const summary = document.createElement('summary');
+    summary.className = 'edit-section-summary';
+    summary.innerHTML =
+      `<span class="edit-section-name">Pool</span>` +
+      `<span class="edit-section-count">${poolEntries.length}</span>`;
+    details.appendChild(summary);
+    const body = document.createElement('div');
+    body.className = 'edit-section-body';
+    poolEntries.forEach((entry) => {
     const field = entry.pool_field;
     const cartKey = `pool:${field}`;
     const cap = Number(entry.cap || charState.pool?.caps?.[field] || 0);
@@ -1014,19 +1028,30 @@ function renderCharacterEdits() {
     });
     row.innerHTML = `
       <div>
-        <label>${entry.label || field}</label>
+        <label class="effect-name">${entry.label || field}</label>
         <div class="current">Attuale: ${current} / ${cap}</div>
       </div>
     `;
     row.appendChild(select);
-    poolBox.appendChild(row);
-  });
+    body.appendChild(row);
+    });
+    details.appendChild(body);
+    poolBox.appendChild(details);
+  }
 
   const resEntries = catalogEntries('resistance', 'character');
   if (resEntries.length) {
-    const title = document.createElement('h3');
-    title.textContent = 'Resistenze';
-    resBox.appendChild(title);
+    const details = document.createElement('details');
+    details.className = 'edit-section';
+    details.open = true;
+    const summary = document.createElement('summary');
+    summary.className = 'edit-section-summary';
+    summary.innerHTML =
+      `<span class="edit-section-name">Resistenze</span>` +
+      `<span class="edit-section-count">${resEntries.length}</span>`;
+    details.appendChild(summary);
+    const body = document.createElement('div');
+    body.className = 'edit-section-body';
     const grid = document.createElement('div');
     grid.className = 'resistance-grid';
     resEntries.forEach((entry) => {
@@ -1066,14 +1091,16 @@ function renderCharacterEdits() {
       });
       row.innerHTML = `
         <div>
-          <label>${entry.label || entry.id}</label>
+          <label class="effect-name">${entry.label || entry.id}</label>
           <div class="current">Attuale: ${current}</div>
         </div>
       `;
       row.appendChild(select);
       grid.appendChild(row);
     });
-    resBox.appendChild(grid);
+    body.appendChild(grid);
+    details.appendChild(body);
+    resBox.appendChild(details);
   }
   updateCharacterCartUI();
 }
@@ -1397,7 +1424,12 @@ async function selectItem(inventoryId, li) {
         'Gratuiti ma solo insieme al pagamento di un nuovo affect (stesso salvataggio).',
     }
   );
-  renderObjectEdits(d.entries || [], d.dam_budget, d.sp_budget);
+  renderObjectEdits(
+    d.entries || [],
+    d.dam_budget,
+    d.sp_budget,
+    d.clan_symbol === true,
+  );
 }
 
 function renderObjectAffectSlots(affectSlots) {
@@ -1457,30 +1489,30 @@ function renderObjectAffectSlots(affectSlots) {
 }
 
 function objectEditSection(id) {
-  if (id === 'artifact' || id.startsWith('flag.')) return 'Proprietà';
+  if (id === 'artifact' || id.startsWith('flag.')) return 'Artifact';
   if (id.startsWith('resist.') || id.startsWith('immune.')) {
-    return 'Resistenze (APPLY_IMMUNE)';
+    return 'Resistenze';
   }
   if (id.startsWith('immunity.') || id.startsWith('m_immune.')) {
-    return 'Immunità concesse (APPLY_M_IMMUNE)';
+    return 'Immunità';
   }
-  if (id.startsWith('spell.')) return 'Spell editabili';
-  if (['armor', 'spellfail'].includes(id)) return 'Armatura / cast';
+  if (id.startsWith('spell.')) return 'Spell';
+  if (['armor', 'spellfail'].includes(id)) return "Bonus all'Armatura/Cast";
   if (['hitndam', 'hitnsp', 'hitroll', 'damroll', 'spellpower'].includes(id)) {
-    return 'Combattimento';
+    return 'Bonus in Combattimento';
   }
   return 'Caratteristiche';
 }
 
-/** Ordine alfabetico delle sezioni oggetto. */
+/** Ordine sezioni oggetto (listino / UI). */
 const OBJECT_EDIT_SECTION_ORDER = [
-  'Armatura / cast',
+  'Artifact',
+  "Bonus all'Armatura/Cast",
   'Caratteristiche',
-  'Combattimento',
-  'Immunità concesse (APPLY_M_IMMUNE)',
-  'Proprietà',
-  'Resistenze (APPLY_IMMUNE)',
-  'Spell editabili',
+  'Bonus in Combattimento',
+  'Immunità',
+  'Resistenze',
+  'Spell',
 ];
 
 function objectEditSectionRank(name) {
@@ -1747,7 +1779,8 @@ function renderObjectTextEdit(textEdit) {
   details.className = 'edit-section';
   details.open = true;
   const summary = document.createElement('summary');
-  summary.textContent = 'Name / short / long';
+  summary.className = 'edit-section-summary';
+  summary.innerHTML = '<span class="edit-section-name">Name / short / long</span>';
   details.appendChild(summary);
 
   const body = document.createElement('div');
@@ -1838,7 +1871,107 @@ function renderObjectTextEdit(textEdit) {
   box.appendChild(details);
 }
 
-function renderObjectEdits(entries, damBudget, spBudget) {
+function renderMassimaliPanel(box, damBudget, spBudget, isClanSymbol) {
+  const panel = document.createElement('div');
+  panel.className = 'massimali-panel';
+
+  const title = document.createElement('h3');
+  title.className = 'massimali-title';
+  title.textContent = 'Massimali editabili';
+  panel.appendChild(title);
+
+  const grid = document.createElement('div');
+  grid.className = 'massimali-grid';
+
+  if (damBudget) {
+    const card = document.createElement('div');
+    card.className = 'massimale-card';
+    const total = Number(damBudget.char_total || 0);
+    const max = Number(damBudget.char_max || 30);
+    const pieceMax = Number(damBudget.piece_max || 2);
+    const pc = Number(damBudget.piece_current);
+    const pp = Number(damBudget.piece_proto);
+    const delta = Number(damBudget.piece || 0);
+    let detail = `Max ${pieceMax} dam editati per pezzo`;
+    if (Number.isFinite(pc) && Number.isFinite(pp)) {
+      detail = `Questo pezzo: ${pc} vs proto ${pp} (delta +${delta}) · max ${pieceMax}/pezzo`;
+      if (damBudget.piece_edit === false) {
+        detail += ' · non conteggiato (serve EDIT + owner; clan esclusi)';
+      }
+    }
+    card.innerHTML = `
+      <div class="massimale-label">Dam totale editato</div>
+      <div class="massimale-value">${total}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-detail">${escapeHtml(detail)}</div>
+    `;
+    grid.appendChild(card);
+  }
+
+  if (spBudget) {
+    const card = document.createElement('div');
+    card.className = 'massimale-card';
+    const total = Number(spBudget.char_total || 0);
+    const max = Number(spBudget.char_max || 30);
+    const pieceMax = Number(spBudget.piece_max || 2);
+    const pc = Number(spBudget.piece_current);
+    const delta = Number(spBudget.piece || 0);
+    let detail = `Max ${pieceMax} spellpower editati per pezzo`;
+    if (Number.isFinite(pc)) {
+      detail = `Questo pezzo: totale ${pc} (delta edit +${delta}) · max ${pieceMax}/pezzo`;
+    }
+    card.innerHTML = `
+      <div class="massimale-label">Spellpower totale editato</div>
+      <div class="massimale-value">${total}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-detail">${escapeHtml(detail)}</div>
+    `;
+    grid.appendChild(card);
+  }
+
+  {
+    const card = document.createElement('div');
+    card.className = 'massimale-card massimale-clan';
+    const yn = isClanSymbol ? 'Y' : 'N';
+    card.innerHTML = `
+      <div class="massimale-label">Simbolo del clan</div>
+      <div class="massimale-value massimale-yn ${isClanSymbol ? 'is-yes' : 'is-no'}">${yn}</div>
+      <div class="massimale-detail">${
+        isClanSymbol
+          ? 'Questo oggetto è un simbolo di clan'
+          : 'Questo oggetto non è un simbolo di clan'
+      }</div>
+    `;
+    grid.appendChild(card);
+  }
+
+  panel.appendChild(grid);
+
+  const contrib =
+    damBudget && Array.isArray(damBudget.contributors)
+      ? damBudget.contributors.filter((c) => Number(c.delta) > 0)
+      : [];
+  if (contrib.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'massimali-contributors';
+    const sub = document.createElement('div');
+    sub.className = 'massimali-contributors-title';
+    sub.textContent = 'Contributi dam (pezzi EDIT in possesso)';
+    wrap.appendChild(sub);
+    const ul = document.createElement('ul');
+    contrib.forEach((c) => {
+      const li = document.createElement('li');
+      li.innerHTML =
+        `<span class="effect-name">${mudTextToHtml(c.short_desc || 'oggetto')}</span>` +
+        `<span class="massimale-detail">+${Number(c.delta)} (ora ${Number(c.current)}, proto ${Number(c.proto)})</span>`;
+      ul.appendChild(li);
+    });
+    wrap.appendChild(ul);
+    panel.appendChild(wrap);
+  }
+
+  box.appendChild(panel);
+}
+
+function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
   const box = $('object-edits');
   box.innerHTML = '';
 
@@ -1851,55 +1984,19 @@ function renderObjectEdits(entries, damBudget, spBudget) {
     return;
   }
 
-  const title = document.createElement('h3');
-  title.textContent = 'Edit sull\'oggetto';
-  box.appendChild(title);
+  renderMassimaliPanel(box, damBudget, spBudget, !!isClanSymbol);
 
-  if (damBudget || spBudget) {
-    const hint = document.createElement('p');
-    hint.className = 'hint budget-banner';
-    const parts = [];
-    if (damBudget) {
-      let line = `Dam editato (EDIT in possesso) ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`;
-      const pc = Number(damBudget.piece_current);
-      const pp = Number(damBudget.piece_proto);
-      if (Number.isFinite(pc) && Number.isFinite(pp)) {
-        line += ` — questo pezzo ${pc} vs proto ${pp} (delta +${Number(damBudget.piece || 0)})`;
-        if (damBudget.piece_edit === false) {
-          line += ' [non conteggiato: serve EDIT + owner ED/personal; simboli clan esclusi]';
-        }
-      }
-      parts.push(line);
-    }
-    if (spBudget) {
-      parts.push(
-        `Spellpower editato (EDIT in possesso) ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
-      );
-    }
-    hint.textContent =
-      (parts.length
-        ? parts.join(' · ') +
-          ' — pezzi in possesso con EDIT e owner del toon (delta vs proto); simboli clan esclusi'
-        : '') || '';
-    box.appendChild(hint);
-
-    const contrib = damBudget && Array.isArray(damBudget.contributors)
-      ? damBudget.contributors.filter((c) => Number(c.delta) > 0)
-      : [];
-    if (contrib.length) {
-      const ul = document.createElement('ul');
-      ul.className = 'hint dam-budget-contributors';
-      contrib.forEach((c) => {
-        const li = document.createElement('li');
-        li.textContent = `${c.short_desc || 'oggetto'}: +${Number(c.delta)} (ora ${Number(c.current)}, proto ${Number(c.proto)})`;
-        ul.appendChild(li);
-      });
-      box.appendChild(ul);
-    }
-  }
+  const editsWrap = document.createElement('div');
+  editsWrap.className = 'object-edit-groups';
+  const editsTitle = document.createElement('h3');
+  editsTitle.className = 'object-edit-groups-title';
+  editsTitle.textContent = 'Opzioni di edit';
+  editsWrap.appendChild(editsTitle);
 
   const grouped = new Map();
   entries.forEach((entry) => {
+    /* CON non e' nel listino ufficiale — non mostrare anche se myst vecchio lo manda. */
+    if (entry.id === 'con' || Number(entry.location) === 5) return;
     const section = objectEditSection(entry.id || '');
     if (!grouped.has(section)) grouped.set(section, []);
     grouped.get(section).push(entry);
@@ -1923,7 +2020,9 @@ function renderObjectEdits(entries, damBudget, spBudget) {
 
     const summary = document.createElement('summary');
     summary.className = 'edit-section-summary';
-    summary.textContent = `${section} (${list.length})`;
+    summary.innerHTML =
+      `<span class="edit-section-name">${escapeHtml(section)}</span>` +
+      `<span class="edit-section-count">${list.length}</span>`;
     details.appendChild(summary);
 
     const body = document.createElement('div');
@@ -2022,9 +2121,9 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       });
 
       const yesNoKind = isYesNoObjectEntry(entry);
-      row.innerHTML = `
-      <div>
-        <label>${entry.label || entry.id}${objectEntryRangeLabel(entry)}</label>
+      const meta = document.createElement('div');
+      meta.innerHTML = `
+        <label class="effect-name">${escapeHtml(entry.label || entry.id)}${escapeHtml(objectEntryRangeLabel(entry))}</label>
         <div class="current">Attuale: ${
           yesNoKind
             ? current
@@ -2035,22 +2134,24 @@ function renderObjectEdits(entries, damBudget, spBudget) {
               : current
         }</div>
         <div class="slot-hint">${
-          entry.kind === 'flag' ? entry.hint || '' : objectEntrySlotHint(entry)
+          entry.kind === 'flag' ? escapeHtml(entry.hint || '') : escapeHtml(objectEntrySlotHint(entry))
         }</div>
         ${
           entry.kind !== 'flag'
-            ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>`
+            ? `<div class="cost-hint">${escapeHtml(objectEntryCostHint(entry))}</div>`
             : ''
         }
-      </div>
-    `;
+      `;
+      row.appendChild(meta);
       row.appendChild(select);
       body.appendChild(row);
     });
 
     details.appendChild(body);
-    box.appendChild(details);
+    editsWrap.appendChild(details);
   });
+
+  box.appendChild(editsWrap);
   updateObjectCartUI();
 }
 

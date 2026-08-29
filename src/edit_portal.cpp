@@ -27,6 +27,7 @@
 
 #include "../contrib/slacking/json.hpp"
 #include "autoenums.hpp"
+#include "clan_symbol.hpp"
 #include "constants.hpp"
 #include "db.hpp"
 #include "edit_pool.hpp"
@@ -1581,6 +1582,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["affect_slots"] = object_affect_slots_json(obj);
 			d["inventory_id"] = inventory_id;
 			d["short_desc"] = row->elem.sd;
+			d["clan_symbol"] =
+				clan_symbol_is_obj(obj) || obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL;
 			{
 				const int piece_delta = object_edit_damroll_edited_delta(obj);
 				const bool piece_worn = inventory_row_is_worn(row->elem.wearpos);

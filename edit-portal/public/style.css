@@ -426,9 +426,233 @@ a.btn-primary[href='#'] {
   margin-bottom: 1rem;
 }
 
-.object-edits h3 {
+.object-edits h3,
+.object-edit-groups-title,
+.massimali-title {
   margin: 0 0 0.75rem;
-  font-size: 1rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.object-edit-groups {
+  margin-top: 1.1rem;
+}
+
+.object-edit-groups-title {
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.massimali-panel {
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(42, 52, 68, 0.75), rgba(28, 32, 41, 0.95));
+}
+
+.massimali-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.massimale-card {
+  padding: 0.7rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid rgba(91, 141, 239, 0.28);
+  background: rgba(18, 20, 26, 0.55);
+}
+
+.massimale-label {
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.massimale-value {
+  font-size: 1.55rem;
+  font-weight: 750;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.massimale-max {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.massimale-detail {
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.massimale-yn.is-yes {
+  color: var(--success);
+}
+
+.massimale-yn.is-no {
+  color: var(--muted);
+}
+
+.massimali-contributors {
+  margin-top: 0.85rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(58, 66, 82, 0.7);
+}
+
+.massimali-contributors-title {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.massimali-contributors ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.massimali-contributors li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  margin-bottom: 0.25rem;
+  font-size: 0.82rem;
+}
+
+.budget-banner {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(42, 52, 68, 0.55);
+  margin-bottom: 0.85rem;
+}
+
+.edit-section {
+  margin: 0 0 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(28, 32, 41, 0.92);
+  overflow: hidden;
+}
+
+.edit-section-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(37, 43, 54, 0.98);
+  border-bottom: 1px solid transparent;
+  user-select: none;
+}
+
+.edit-section-name {
+  color: #c9d7f5;
+  letter-spacing: 0.02em;
+}
+
+.edit-section-count {
+  flex-shrink: 0;
+  min-width: 1.6rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 0.12rem 0.45rem;
+}
+
+.edit-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.edit-section-summary::before {
+  content: '▸';
+  color: var(--accent);
+  display: inline-block;
+  margin-right: 0.45rem;
+  transition: transform 0.12s ease;
+}
+
+.edit-section[open] > .edit-section-summary::before {
+  transform: rotate(90deg);
+}
+
+.edit-section[open] > .edit-section-summary {
+  border-bottom-color: var(--border);
+}
+
+.edit-section-body {
+  padding: 0.65rem 0.85rem 0.35rem;
+}
+
+.edit-section-title {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.edit-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: end;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid rgba(58, 66, 82, 0.4);
+}
+
+.edit-section-body .edit-row:last-child {
+  border-bottom: none;
+  margin-bottom: 0.25rem;
+}
+
+.edit-row label,
+.edit-row .effect-name {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.edit-row .cost-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.edit-row .current {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.stat-row.hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.stat-row.hint strong {
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .object-affect-slots {

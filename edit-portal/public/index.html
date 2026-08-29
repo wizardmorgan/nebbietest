@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="edit-base" content="" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=32" />
+  <link rel="stylesheet" href="style.css?v=33" />
   <script src="config.js"></script>
 </head>
 <body>
@@ -82,12 +82,12 @@
 
           <div class="card" id="char-edit-card">
             <div class="card-header card-header-tight">
-              <h2>Edit sul personaggio target</h2>
+              <h2>Edit sul Personaggio</h2>
               <button id="btn-reset-char-edits" class="btn-secondary btn-reset-edits" type="button" title="Annulla tutte le modifiche pool/resistenze in coda">
                 Reset
               </button>
             </div>
-            <p class="hint">Pool (hit, mana, move, regen) e resistenze sul PG selezionato sopra — puoi modificarne più di una; i costi si sommano nel carrello.</p>
+            <p class="hint">Pool (hit, mana, move, regen) e resistenze sul personaggio — puoi modificarne più di una; i costi si sommano nel carrello.</p>
             <div id="char-edit-cart" class="edit-cart hidden" aria-live="polite"></div>
             <div id="pool-edits"></div>
             <div id="resistance-edits"></div>
@@ -117,7 +117,6 @@
             </div>
             <p id="inventory-target-hint" class="hint"></p>
             <ul id="inventory-list" class="inventory-list"></ul>
-            <p class="hint">Visibilità tipi: le categorie staff decidono cosa è <strong>editabile</strong> al primo edit. Inventario e pezzi indossati restano in lista. Esclusi solo RARO / TAN / HAS-GEMS / simbolo clan. <strong>Primo edit e ri-edit vanno anche da indossato</strong> (PG offline).</p>
             <p id="inventory-empty" class="hint hidden">Nessun oggetto in inventario MySQL per questo PG.</p>
           </div>
 
@@ -175,7 +174,7 @@
 
         <div class="portal-categories card-inner">
           <h3>Categorie oggetto nel portale</h3>
-          <p class="hint">Spunta = quel tipo ITEM è <strong>editabile</strong> al primo edit sul personaggio target. Senza spunta = in lista ma non editabile (grigio). Inventario/indossati sempre visibili (esclusi RARO/TAN/HAS-GEMS/simbolo). Edit su pezzi indossati: consentito (primo edit e ri-edit) a PG offline.</p>
+          <p class="hint">Spunta = tipo visibile e editabile al primo edit. Senza spunta = nascosto (i pezzi già EDIT/instance/owner restano visibili). Sempre esclusi RARO/TAN/HAS-GEMS/simbolo. Edit da indossato consentito (PG offline).</p>
           <p id="myst-version-warn" class="msg warn hidden"></p>
           <div id="portal-category-toggles" class="checkbox-grid"></div>
           <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
@@ -223,6 +222,6 @@
       </div>
     </section>
   </main>
-  <script src="app.js?v=32"></script>
+  <script src="app.js?v=33"></script>
 </body>
 </html>
