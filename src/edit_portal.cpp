@@ -579,7 +579,7 @@ std::atomic<bool> g_http_running {false};
 		if(IS_SET(row.elem.extra_flags2, ITEM2_EDIT)) {
 			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
 		}
-		if(obj->personal_owner[0] == '\0' && row.elem.name && *row.elem.name) {
+		if(obj->personal_owner[0] == '\0' && row.elem.name[0] != '\0') {
 			const std::string ed = object_instance_extract_ed_owner(row.elem.name);
 			if(!ed.empty()) {
 				strncpy(obj->personal_owner, ed.c_str(),
