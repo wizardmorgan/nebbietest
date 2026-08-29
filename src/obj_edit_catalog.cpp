@@ -774,7 +774,7 @@ const char* object_portal_item_type_slug(int item_type) noexcept {
 	if(obj->db_instance_id != 0) {
 		return true;
 	}
-	/* Personalizzato ED*/personal_owner: ri-edit / indossato. */
+	/* Personalizzato EDIT personal_owner: ri-edit / indossato. */
 	if(object_has_owner_lock(obj)) {
 		return true;
 	}
