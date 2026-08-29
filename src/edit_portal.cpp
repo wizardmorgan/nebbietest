@@ -39,6 +39,7 @@
 #include "obj_edit_catalog.hpp"
 #include "obj_value.hpp"
 #include "object_instance.hpp"
+#include "parser.hpp"
 #include "reception.hpp"
 #include "Sql.hpp"
 #include "structs.hpp"
@@ -1179,34 +1180,134 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 	return j;
 }
 
-/**
- * Riepilogo edit principali + residui pool per un toon (login overview).
- * Analisi inventario completa; simboli clan esclusi dai tetti.
- */
-[[nodiscard]] Json build_toon_edit_summary(unsigned long long toon_id) {
-	Json out;
-	out["toon_id"] = toon_id;
-	const std::string toon_name = toon_name_by_id(toon_id);
-	out["name"] = toon_name;
-	out["max_level"] = max_level_for_toon(toon_id);
-	if(toon_name.empty()) {
-		out["ok"] = false;
-		out["error"] = "toon non trovato";
-		return out;
+[[nodiscard]] const char* immortal_grade_label(int max_level) noexcept {
+	if(max_level >= IMMENSO) {
+		return "Immenso";
 	}
+	if(max_level >= MAESTRO_DEI_CREATORI) {
+		return "Maestro dei Creatori";
+	}
+	if(max_level >= MAESTRO_DEL_CREATO) {
+		return "Maestro del Creato";
+	}
+	if(max_level >= QUESTMASTER) {
+		return "Maestro del Fato";
+	}
+	if(max_level >= CREATORE) {
+		return "Creatore";
+	}
+	if(max_level >= MAESTRO_DEGLI_DEI) {
+		return "Maestro degli Dei";
+	}
+	if(max_level >= DIO) {
+		return "Dio";
+	}
+	if(max_level >= DIO_MINORE) {
+		return "Dio Minore";
+	}
+	if(max_level >= IMMORTALE) {
+		return "Immortale";
+	}
+	if(max_level >= PRINCIPE) {
+		return "Principe";
+	}
+	return "Mortale";
+}
 
-	std::vector<inventory_mysql_row> rows;
-	(void)load_character_inventory_mysql(toon_id, rows);
+[[nodiscard]] Json commands_enabled_at_level(int max_level) {
+	Json arr = Json::array();
+	if(max_level <= 0) {
+		return arr;
+	}
+	struct CmdRow {
+		std::string name;
+		int min_level;
+	};
+	std::vector<CmdRow> rows;
+	for(int i = 0; i < 27; ++i) {
+		for(NODE* n = radix_head[i].next; n != nullptr; n = n->next) {
+			if(!n->name || !*n->name) {
+				continue;
+			}
+			if(static_cast<int>(n->min_level) <= max_level) {
+				rows.push_back({n->name, static_cast<int>(n->min_level)});
+			}
+		}
+	}
+	std::sort(rows.begin(), rows.end(), [](const CmdRow& a, const CmdRow& b) {
+		if(a.min_level != b.min_level) {
+			return a.min_level < b.min_level;
+		}
+		return a.name < b.name;
+	});
+	for(const auto& r : rows) {
+		Json c;
+		c["name"] = r.name;
+		c["min_level"] = r.min_level;
+		c["grade"] = immortal_grade_label(r.min_level);
+		arr.push_back(c);
+	}
+	return arr;
+}
 
+[[nodiscard]] bool pool_data_has_values(const char_edit_pool_data& p) noexcept {
+	return p.edit_hp != 0 || p.edit_mana != 0 || p.edit_move != 0 ||
+		   p.edit_hp_regen != 0 || p.edit_mana_regen != 0 || p.edit_move_regen != 0;
+}
+
+[[nodiscard]] Json resist_status_json(bool present, bool from_proto, bool from_edit) {
+	Json j;
+	j["present"] = present;
+	if(!present) {
+		j["origin"] = nullptr;
+		j["origin_label"] = "";
+		return j;
+	}
+	if(from_proto && from_edit) {
+		j["origin"] = "proto+edit";
+		j["origin_label"] = "sul proto e anche aggiunta in edit";
+	}
+	else if(from_proto) {
+		j["origin"] = "proto";
+		j["origin_label"] = "già sul proto";
+	}
+	else {
+		j["origin"] = "edit";
+		j["origin_label"] = "aggiunta in edit";
+	}
+	return j;
+}
+
+struct ToonInventoryEditScan {
 	int dam_total = 0;
 	int sp_total = 0;
 	int hr_total = 0;
 	bool res_slash = false;
 	bool res_pierce = false;
 	bool res_blunt = false;
+	bool slash_proto = false;
+	bool slash_edit = false;
+	bool pierce_proto = false;
+	bool pierce_edit = false;
+	bool blunt_proto = false;
+	bool blunt_edit = false;
 	bool has_clan_symbol = false;
 	char_edit_pool_data pool_from_eq {};
 	int edited_pieces = 0;
+};
+
+/**
+ * Analisi inventario completa: budget combat, resistenze (proto vs edit),
+ * delta pool vs proto sugli oggetti EDIT del toon.
+ */
+[[nodiscard]] ToonInventoryEditScan scan_toon_inventory_edits(
+	unsigned long long toon_id, const std::string& toon_name) {
+	ToonInventoryEditScan s;
+	if(toon_name.empty()) {
+		return s;
+	}
+	std::vector<inventory_mysql_row> rows;
+	(void)load_character_inventory_mysql(toon_id, rows);
 
 	for(auto& r : rows) {
 		struct obj_data* o = materialize_inventory_row(r);
@@ -1216,23 +1317,14 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		const bool is_clan =
 			clan_symbol_is_obj(o) || o->obj_flags.type_flag == ITEM_CLAN_SYMBOL;
 		if(is_clan) {
-			has_clan_symbol = true;
+			s.has_clan_symbol = true;
 		}
 		if(object_edit_counts_toward_combat_budget(o, toon_name.c_str())) {
-			++edited_pieces;
-			dam_total += object_edit_damroll_edited_delta(o);
-			sp_total += object_edit_spellpower_edited_delta(o);
-			hr_total += object_edit_hitroll_edited_delta(o);
-			const int bits = object_immune_current_bits(o);
-			if(bits & static_cast<int>(IMM_SLASH)) {
-				res_slash = true;
-			}
-			if(bits & static_cast<int>(IMM_PIERCE)) {
-				res_pierce = true;
-			}
-			if(bits & static_cast<int>(IMM_BLUNT)) {
-				res_blunt = true;
-			}
+			++s.edited_pieces;
+			s.dam_total += object_edit_damroll_edited_delta(o);
+			s.sp_total += object_edit_spellpower_edited_delta(o);
+			s.hr_total += object_edit_hitroll_edited_delta(o);
+
 			struct obj_data* proto = nullptr;
 			const int pv = object_edit_prototype_vnum(o);
 			if(pv > 0) {
@@ -1241,17 +1333,76 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					proto = read_object(rn, REAL);
 				}
 			}
-			edit_pool_accumulate_obj_delta(o, proto, &pool_from_eq);
+			const int bits = object_immune_current_bits(o);
+			const int proto_bits = proto ? object_immune_current_bits(proto) : 0;
+			auto note_res = [&](int bit, bool& present, bool& from_p, bool& from_e) {
+				if((bits & bit) == 0) {
+					return;
+				}
+				present = true;
+				if(proto_bits & bit) {
+					from_p = true;
+				}
+				else {
+					from_e = true;
+				}
+			};
+			note_res(static_cast<int>(IMM_SLASH), s.res_slash, s.slash_proto,
+					 s.slash_edit);
+			note_res(static_cast<int>(IMM_PIERCE), s.res_pierce, s.pierce_proto,
+					 s.pierce_edit);
+			note_res(static_cast<int>(IMM_BLUNT), s.res_blunt, s.blunt_proto,
+					 s.blunt_edit);
+
+			edit_pool_accumulate_obj_delta(o, proto, &s.pool_from_eq);
 			if(proto) {
 				extract_obj(proto);
 			}
 		}
 		extract_obj(o);
 	}
+	return s;
+}
+
+/**
+ * Riepilogo edit principali + residui pool per un toon (login overview).
+ * Analisi inventario completa; simboli clan esclusi dai tetti.
+ */
+[[nodiscard]] Json build_toon_edit_summary(unsigned long long toon_id) {
+	Json out;
+	out["toon_id"] = toon_id;
+	const std::string toon_name = toon_name_by_id(toon_id);
+	out["name"] = toon_name;
+	const int max_level = max_level_for_toon(toon_id);
+	out["max_level"] = max_level;
+	out["grade"] = immortal_grade_label(max_level);
+	if(toon_name.empty()) {
+		out["ok"] = false;
+		out["error"] = "toon non trovato";
+		return out;
+	}
+
+	const ToonInventoryEditScan scan = scan_toon_inventory_edits(toon_id, toon_name);
+	const int dam_total = scan.dam_total;
+	const int sp_total = scan.sp_total;
+	const int hr_total = scan.hr_total;
+	const bool res_slash = scan.res_slash;
+	const bool res_pierce = scan.res_pierce;
+	const bool res_blunt = scan.res_blunt;
+	const bool slash_proto = scan.slash_proto;
+	const bool slash_edit = scan.slash_edit;
+	const bool pierce_proto = scan.pierce_proto;
+	const bool pierce_edit = scan.pierce_edit;
+	const bool blunt_proto = scan.blunt_proto;
+	const bool blunt_edit = scan.blunt_edit;
+	const bool has_clan_symbol = scan.has_clan_symbol;
+	const char_edit_pool_data& pool_from_eq = scan.pool_from_eq;
+	const int edited_pieces = scan.edited_pieces;
 
 	char_edit_pool_data pool_db {};
 	const bool has_pool_row = load_edit_pool_for_toon(toon_id, pool_db);
 	const bool pool_on_character = has_pool_row && pool_db.migrated != 0;
+	const bool residual_on_objects = pool_data_has_values(pool_from_eq);
 	const char_edit_pool_data& pool_used =
 		pool_on_character ? pool_db : pool_from_eq;
 
@@ -1266,6 +1417,12 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 	Json pool = Json::object();
 	pool["source"] = pool_on_character ? "character" : "objects";
 	pool["migrated"] = pool_on_character ? 1 : 0;
+	pool["residual_on_objects"] = residual_on_objects && pool_on_character;
+	if(pool_on_character && residual_on_objects) {
+		pool["warning"] =
+			"Pool migrato sul PG ma restano delta HIT/MANA/MOVE/regen su oggetti "
+			"EDIT: stato misto anomalo (migrazione incompleta).";
+	}
 	Json fields = Json::array();
 	fields.push_back(pool_field("hit", pool_used.edit_hp, kEditPoolMaxHit));
 	fields.push_back(pool_field("mana", pool_used.edit_mana, kEditPoolMaxMana));
@@ -1279,9 +1436,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 	pool["fields"] = fields;
 
 	Json main = Json::object();
-	main["res_slash"] = res_slash;
-	main["res_pierce"] = res_pierce;
-	main["res_blunt"] = res_blunt;
+	main["res_slash"] = resist_status_json(res_slash, slash_proto, slash_edit);
+	main["res_pierce"] = resist_status_json(res_pierce, pierce_proto, pierce_edit);
+	main["res_blunt"] = resist_status_json(res_blunt, blunt_proto, blunt_edit);
 	{
 		Json dam;
 		dam["used"] = dam_total;
@@ -1311,6 +1468,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 	}
 	out["main_edits"] = main;
 	out["pool"] = pool;
+	if(max_level >= IMMORTALE) {
+		out["commands"] = commands_enabled_at_level(max_level);
+		out["commands_count"] = out["commands"].size();
+	}
 	return out;
 }
 
@@ -2234,6 +2395,24 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				return json_error("character_stats non trovato", 404);
 			}
 
+			/*
+			 * Invariante: niente pool misto. Se non migrato e restano delta
+			 * HIT/MANA/MOVE/regen sugli oggetti EDIT, non impostare
+			 * edit_pool_migrated=1 (nasconderebbe il residuo). Prima va
+			 * completata la migrazione login/boot (credit + strip).
+			 */
+			if(pool.migrated == 0) {
+				const ToonInventoryEditScan inv =
+					scan_toon_inventory_edits(target_toon_id, target_name);
+				if(pool_data_has_values(inv.pool_from_eq)) {
+					return json_error(
+						"Pool ancora sugli oggetti EDIT (migrazione incompleta). "
+						"Entra in gioco una volta: la migrazione sposta i valori "
+						"sul PG e li toglie dagli oggetti. Poi riprova dal portale.",
+						409);
+				}
+			}
+
 			const int current = pool_field_current(pool, pool_field);
 			const int target = req.find("new_value") != req.end()
 								   ? parse_json_int(req, "new_value", current)
@@ -2291,6 +2470,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["edit_move_regen"] = pool.edit_move_regen;
 			d["paid_xp"] = pay_xp;
 			d["paid_rune"] = pay_rune;
+			d["edit_pool_migrated"] = 1;
 			return json_ok(d);
 		}
 

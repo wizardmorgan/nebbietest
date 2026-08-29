@@ -551,6 +551,62 @@ a.btn-primary[href='#'] {
   font-weight: 700;
 }
 
+.ov-origin {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.78rem;
+}
+
+.ov-warn {
+  color: var(--warn);
+  font-size: 0.82rem;
+  margin: 0 0 0.45rem;
+}
+
+.ov-commands details {
+  margin-top: 0.25rem;
+}
+
+.ov-commands summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.ov-cmd-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  max-height: 14rem;
+  overflow: auto;
+  font-size: 0.8rem;
+  border: 1px solid rgba(58, 66, 82, 0.45);
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+}
+
+.ov-cmd-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  padding: 0.15rem 0;
+  border-bottom: 1px solid rgba(58, 66, 82, 0.25);
+}
+
+.ov-cmd-list li:last-child {
+  border-bottom: none;
+}
+
+.ov-cmd-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.ov-cmd-meta {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
 .currency-extras {
   margin-top: 0.35rem;
 }

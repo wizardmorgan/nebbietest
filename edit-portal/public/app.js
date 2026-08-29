@@ -5,7 +5,7 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 35;
+const EDIT_PORTAL_UI_BUILD = 36;
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
 let portalCurrencies = null;
@@ -741,8 +741,20 @@ function makeToonSelectButton(t) {
 
 function ynMark(ok) {
   return ok
-    ? '<span class="ov-yes">fatto</span>'
-    : '<span class="ov-no">manca</span>';
+    ? '<span class="ov-yes">sì</span>'
+    : '<span class="ov-no">no</span>';
+}
+
+function resistLine(label, entry) {
+  const e =
+    entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? entry
+      : { present: !!entry, origin_label: '' };
+  const present = !!e.present;
+  const origin = present && e.origin_label
+    ? ` <span class="ov-origin">(${escapeHtml(e.origin_label)})</span>`
+    : '';
+  return `<li>${escapeHtml(label)} ${ynMark(present)}${origin}</li>`;
 }
 
 function meterLine(label, used, cap, remaining) {
@@ -753,15 +765,40 @@ function meterLine(label, used, cap, remaining) {
     `<strong>${u}/${c}</strong><span class="ov-remain">ancora ${r}</span></div>`;
 }
 
+function formatCommandsBlock(summary) {
+  const cmds = Array.isArray(summary.commands) ? summary.commands : [];
+  if (!cmds.length) return '';
+  const grade = summary.grade || '';
+  const rows = cmds
+    .map((c) => {
+      const name = escapeHtml(c.name || '');
+      const min = Number(c.min_level) || 0;
+      const g = escapeHtml(c.grade || '');
+      return `<li><code>${name}</code> <span class="ov-cmd-meta">lv≥${min}${g ? ` · ${g}` : ''}</span></li>`;
+    })
+    .join('');
+  return `
+    <div class="ov-block ov-commands">
+      <h4>Grado: ${escapeHtml(grade || '—')}</h4>
+      <details>
+        <summary>Comandi abilitati (${cmds.length})</summary>
+        <ul class="ov-cmd-list">${rows}</ul>
+      </details>
+    </div>`;
+}
+
 function makePrinceToonCard(t) {
   const card = document.createElement('div');
   card.className = 'toon-overview-card';
   const s = t.summary && t.summary.ok !== false ? t.summary : null;
+  const grade = (s && s.grade) || '';
   const head = document.createElement('div');
   head.className = 'toon-overview-head';
   head.innerHTML =
     `<div><strong class="toon-overview-name">${escapeHtml(t.name)}</strong>` +
-    `<span class="toon-overview-meta">lv ${t.maxLevel} · ${escapeHtml(t.role || '')}</span></div>`;
+    `<span class="toon-overview-meta">lv ${t.maxLevel}` +
+    (grade ? ` · ${escapeHtml(grade)}` : '') +
+    ` · ${escapeHtml(t.role || '')}</span></div>`;
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn-primary';
@@ -783,15 +820,21 @@ function makePrinceToonCard(t) {
   const main = s.main_edits || {};
   const clan = s.clan_symbol || {};
   const pool = s.pool || {};
+  const poolWarn = pool.residual_on_objects
+    ? `<p class="ov-warn">${escapeHtml(
+        pool.warning ||
+          'Pool migrato sul PG ma restano delta sugli oggetti EDIT (stato misto).',
+      )}</p>`
+    : '';
   const body = document.createElement('div');
   body.className = 'toon-overview-body';
   body.innerHTML = `
     <div class="ov-block">
       <h4>Edit principali</h4>
       <ul class="ov-checklist">
-        <li>Res. Slash ${ynMark(!!main.res_slash)}</li>
-        <li>Res. Pierce ${ynMark(!!main.res_pierce)}</li>
-        <li>Res. Blunt ${ynMark(!!main.res_blunt)}</li>
+        ${resistLine('Res. Slash', main.res_slash)}
+        ${resistLine('Res. Pierce', main.res_pierce)}
+        ${resistLine('Res. Blunt', main.res_blunt)}
       </ul>
       ${meterLine('Dam editato', main.dam?.used, main.dam?.cap, main.dam?.remaining)}
       ${meterLine('Spellpower', main.spellpower?.used, main.spellpower?.cap, main.spellpower?.remaining)}
@@ -799,6 +842,7 @@ function makePrinceToonCard(t) {
     </div>
     <div class="ov-block">
       <h4>Residuo pool <span class="ov-source">(${pool.source === 'character' ? 'sul PG' : 'sugli oggetti'})</span></h4>
+      ${poolWarn}
       ${(pool.fields || [])
         .map((f) =>
           meterLine(
@@ -821,6 +865,7 @@ function makePrinceToonCard(t) {
       <h4>Simbolo del clan</h4>
       <p>${clan.present ? '<span class="ov-yes">Sì</span> (origine principe/toon: da definire)' : '<span class="ov-no">No</span>'}</p>
     </div>
+    ${Number(t.maxLevel) >= 52 ? formatCommandsBlock(s) : ''}
   `;
   card.appendChild(body);
   return card;
