@@ -1458,8 +1458,20 @@ struct ToonInventoryEditScan {
 		main["hitroll"] = hr;
 	}
 
+	int exp = 0;
+	int rune = 0;
+	const bool has_stats = load_stats_for_toon(toon_id, exp, rune);
+	const long long prince_reserve =
+		(max_level >= PRINCIPE) ? static_cast<long long>(PRINCEEXP) : 0LL;
+	const long long available_xp =
+		has_stats ? (static_cast<long long>(exp) - prince_reserve) : 0LL;
+	const long long avail_clamped = std::max(0LL, available_xp);
+
 	out["ok"] = true;
 	out["edited_pieces"] = edited_pieces;
+	out["available_mxp"] = avail_clamped / 1000000L;
+	out["available_mxp_frac"] = (avail_clamped % 1000000L) / 10000L;
+	out["rune"] = rune;
 	{
 		Json clan;
 		clan["present"] = has_clan_symbol;

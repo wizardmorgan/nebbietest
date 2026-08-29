@@ -5,7 +5,8 @@ const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 36;
+const EDIT_PORTAL_UI_BUILD = 37;
+const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
 let portalCurrencies = null;
@@ -682,7 +683,6 @@ async function loadToons() {
   box.innerHTML = '';
   if (!data.ok) {
     box.textContent = data.error || 'errore';
-    /* Fallback lista semplice. */
     const plain = await api('/api/toons');
     if (plain.ok) {
       plain.toons.forEach((t) => box.appendChild(makeToonSelectButton(t)));
@@ -700,34 +700,162 @@ async function loadToons() {
     else if (lv >= princeLevel) princes.push(t);
     else under.push(t);
   });
+  under.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'it'));
+  staffBand.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'it'));
 
-  const appendSection = (title, list, withSummary) => {
-    const sec = document.createElement('section');
-    sec.className = 'toon-band';
-    const h = document.createElement('h3');
-    h.className = 'toon-band-title';
-    h.textContent = `${title} (${list.length})`;
-    sec.appendChild(h);
-    if (!list.length) {
+  const layout = document.createElement('div');
+  layout.className = 'toon-overview-layout';
+
+  const left = document.createElement('div');
+  left.className = 'toon-overview-left';
+  left.appendChild(makeStaffColumn(staffBand));
+  left.appendChild(makeUnderColumn(under, princeLevel));
+  layout.appendChild(left);
+
+  const right = document.createElement('div');
+  right.className = 'toon-overview-right';
+  right.appendChild(makePrincesColumn(princes, princeLevel));
+  layout.appendChild(right);
+
+  box.appendChild(layout);
+}
+
+function makeStaffColumn(list) {
+  const sec = document.createElement('section');
+  sec.className = 'toon-band toon-band-staff';
+  const h = document.createElement('h3');
+  h.className = 'toon-band-title';
+  h.textContent = `Staff (52+) (${list.length})`;
+  sec.appendChild(h);
+  if (!list.length) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = 'Nessun personaggio staff.';
+    sec.appendChild(empty);
+    return sec;
+  }
+  list.forEach((t) => sec.appendChild(makeStaffToonCard(t)));
+  return sec;
+}
+
+function makeUnderColumn(list, princeLevel) {
+  const sec = document.createElement('section');
+  sec.className = 'toon-band toon-band-under';
+  const h = document.createElement('h3');
+  h.className = 'toon-band-title';
+  h.textContent = `Sotto il ${princeLevel} (${list.length})`;
+  sec.appendChild(h);
+  if (!list.length) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = 'Nessun personaggio in questa fascia.';
+    sec.appendChild(empty);
+    return sec;
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'toon-under-list';
+  list.forEach((t) => wrap.appendChild(makeToonSelectButton(t)));
+  sec.appendChild(wrap);
+  return sec;
+}
+
+function makePrincesColumn(list, princeLevel) {
+  const sec = document.createElement('section');
+  sec.className = 'toon-band toon-band-princes';
+
+  const head = document.createElement('div');
+  head.className = 'toon-princes-head';
+  const h = document.createElement('h3');
+  h.className = 'toon-band-title';
+  h.textContent = `Principi (livello ${princeLevel})`;
+  head.appendChild(h);
+
+  const sortLabel = document.createElement('label');
+  sortLabel.className = 'prince-sort-label';
+  sortLabel.innerHTML = 'Ordina ';
+  const sortSel = document.createElement('select');
+  sortSel.id = 'prince-sort';
+  sortSel.innerHTML = `
+    <option value="alpha">Alfabetico (A→Z)</option>
+    <option value="mxp">MXP disponibili</option>
+    <option value="clan">Simbolo del clan</option>
+  `;
+  let saved = 'alpha';
+  try {
+    saved = localStorage.getItem(PRINCE_SORT_KEY) || 'alpha';
+  } catch (_) {
+    /* ignore */
+  }
+  if (![...sortSel.options].some((o) => o.value === saved)) saved = 'alpha';
+  sortSel.value = saved;
+  sortLabel.appendChild(sortSel);
+  head.appendChild(sortLabel);
+  sec.appendChild(head);
+
+  const countHint = document.createElement('p');
+  countHint.className = 'hint prince-count-hint';
+  sec.appendChild(countHint);
+
+  const listBox = document.createElement('div');
+  listBox.className = 'prince-cards';
+  sec.appendChild(listBox);
+
+  const render = () => {
+    const mode = sortSel.value || 'alpha';
+    try {
+      localStorage.setItem(PRINCE_SORT_KEY, mode);
+    } catch (_) {
+      /* ignore */
+    }
+    const sorted = sortPrinceToons(list.slice(), mode);
+    countHint.textContent = `${sorted.length} personaggi`;
+    listBox.innerHTML = '';
+    if (!sorted.length) {
       const empty = document.createElement('p');
       empty.className = 'hint';
-      empty.textContent = 'Nessun personaggio in questa fascia.';
-      sec.appendChild(empty);
-    } else {
-      list.forEach((t) => {
-        if (withSummary) {
-          sec.appendChild(makePrinceToonCard(t));
-        } else {
-          sec.appendChild(makeToonSelectButton(t));
-        }
-      });
+      empty.textContent = 'Nessun principe in questa fascia.';
+      listBox.appendChild(empty);
+      return;
     }
-    box.appendChild(sec);
+    sorted.forEach((t) => listBox.appendChild(makePrinceToonCard(t)));
   };
+  sortSel.onchange = render;
+  render();
+  return sec;
+}
 
-  appendSection(`Sotto il ${princeLevel}`, under, false);
-  appendSection(`Principi (livello ${princeLevel})`, princes, true);
-  appendSection('Staff (52+)', staffBand, true);
+function toonAvailableMxp(t) {
+  const s = t.summary || {};
+  const whole = Number(s.available_mxp);
+  if (Number.isFinite(whole)) return whole;
+  return 0;
+}
+
+function toonHasClan(t) {
+  return !!(t.summary && t.summary.clan_symbol && t.summary.clan_symbol.present);
+}
+
+function sortPrinceToons(list, mode) {
+  const byName = (a, b) =>
+    String(a.name || '').localeCompare(String(b.name || ''), 'it', {
+      sensitivity: 'base',
+    });
+  if (mode === 'mxp') {
+    list.sort((a, b) => {
+      const d = toonAvailableMxp(b) - toonAvailableMxp(a);
+      return d !== 0 ? d : byName(a, b);
+    });
+  } else if (mode === 'clan') {
+    list.sort((a, b) => {
+      const ca = toonHasClan(a) ? 1 : 0;
+      const cb = toonHasClan(b) ? 1 : 0;
+      if (ca !== cb) return cb - ca;
+      return byName(a, b);
+    });
+  } else {
+    list.sort(byName);
+  }
+  return list;
 }
 
 function makeToonSelectButton(t) {
@@ -765,10 +893,11 @@ function meterLine(label, used, cap, remaining) {
     `<strong>${u}/${c}</strong><span class="ov-remain">ancora ${r}</span></div>`;
 }
 
-function formatCommandsBlock(summary) {
-  const cmds = Array.isArray(summary.commands) ? summary.commands : [];
-  if (!cmds.length) return '';
-  const grade = summary.grade || '';
+function formatCommandsDetails(summary, open = false) {
+  const cmds = Array.isArray(summary?.commands) ? summary.commands : [];
+  if (!cmds.length) {
+    return '<p class="hint">Nessun comando staff disponibile (myst offline o lista vuota).</p>';
+  }
   const rows = cmds
     .map((c) => {
       const name = escapeHtml(c.name || '');
@@ -777,34 +906,54 @@ function formatCommandsBlock(summary) {
       return `<li><code>${name}</code> <span class="ov-cmd-meta">lv≥${min}${g ? ` · ${g}` : ''}</span></li>`;
     })
     .join('');
-  return `
-    <div class="ov-block ov-commands">
-      <h4>Grado: ${escapeHtml(grade || '—')}</h4>
-      <details>
-        <summary>Comandi abilitati (${cmds.length})</summary>
-        <ul class="ov-cmd-list">${rows}</ul>
-      </details>
-    </div>`;
+  return `<details class="ov-commands-details"${open ? ' open' : ''}>
+      <summary>Comandi abilitati (${cmds.length})</summary>
+      <ul class="ov-cmd-list">${rows}</ul>
+    </details>`;
+}
+
+function makeStaffToonCard(t) {
+  const card = document.createElement('div');
+  card.className = 'toon-overview-card toon-staff-card';
+  const s = t.summary && t.summary.ok !== false ? t.summary : null;
+  const grade = (s && s.grade) || '';
+  card.innerHTML = `
+    <div class="toon-overview-head toon-overview-head-stack">
+      <div>
+        <strong class="toon-overview-name">${escapeHtml(t.name)}</strong>
+        <span class="toon-overview-meta">lv ${t.maxLevel}${
+          grade ? ` · ${escapeHtml(grade)}` : ''
+        }</span>
+      </div>
+    </div>
+    <div class="toon-overview-body">
+      ${s ? formatCommandsDetails(s) : '<p class="hint">Comandi non disponibili.</p>'}
+    </div>
+  `;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-primary toon-enter-btn';
+  btn.textContent = 'Entra';
+  btn.onclick = () => selectAccountToon(t.id);
+  card.appendChild(btn);
+  return card;
 }
 
 function makePrinceToonCard(t) {
   const card = document.createElement('div');
-  card.className = 'toon-overview-card';
+  card.className = 'toon-overview-card toon-prince-card';
   const s = t.summary && t.summary.ok !== false ? t.summary : null;
   const grade = (s && s.grade) || '';
+  const mxp = s ? Number(s.available_mxp) || 0 : 0;
+  const mxpFrac = s ? Number(s.available_mxp_frac) || 0 : 0;
+
   const head = document.createElement('div');
-  head.className = 'toon-overview-head';
+  head.className = 'toon-overview-head toon-overview-head-stack';
   head.innerHTML =
     `<div><strong class="toon-overview-name">${escapeHtml(t.name)}</strong>` +
     `<span class="toon-overview-meta">lv ${t.maxLevel}` +
     (grade ? ` · ${escapeHtml(grade)}` : '') +
-    ` · ${escapeHtml(t.role || '')}</span></div>`;
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'btn-primary';
-  btn.textContent = 'Entra';
-  btn.onclick = () => selectAccountToon(t.id);
-  head.appendChild(btn);
+    ` · ${escapeHtml(formatMxp(mxp, mxpFrac))} disponibili</span></div>`;
   card.appendChild(head);
 
   if (!s) {
@@ -814,6 +963,12 @@ function makePrinceToonCard(t) {
       (t.summary && t.summary.error) ||
       'Riepilogo non disponibile (myst offline o PG senza inventorio leggibile).';
     card.appendChild(miss);
+    const btnEarly = document.createElement('button');
+    btnEarly.type = 'button';
+    btnEarly.className = 'btn-primary toon-enter-btn';
+    btnEarly.textContent = 'Entra';
+    btnEarly.onclick = () => selectAccountToon(t.id);
+    card.appendChild(btnEarly);
     return card;
   }
 
@@ -829,45 +984,61 @@ function makePrinceToonCard(t) {
   const body = document.createElement('div');
   body.className = 'toon-overview-body';
   body.innerHTML = `
-    <div class="ov-block">
-      <h4>Edit principali</h4>
-      <ul class="ov-checklist">
-        ${resistLine('Res. Slash', main.res_slash)}
-        ${resistLine('Res. Pierce', main.res_pierce)}
-        ${resistLine('Res. Blunt', main.res_blunt)}
-      </ul>
-      ${meterLine('Dam editato', main.dam?.used, main.dam?.cap, main.dam?.remaining)}
-      ${meterLine('Spellpower', main.spellpower?.used, main.spellpower?.cap, main.spellpower?.remaining)}
-      ${meterLine('Hitroll editato', main.hitroll?.used, main.hitroll?.cap, main.hitroll?.remaining)}
-    </div>
-    <div class="ov-block">
-      <h4>Residuo pool <span class="ov-source">(${pool.source === 'character' ? 'sul PG' : 'sugli oggetti'})</span></h4>
-      ${poolWarn}
-      ${(pool.fields || [])
-        .map((f) =>
-          meterLine(
-            ({
-              hit: 'Hit',
-              mana: 'Mana',
-              move: 'Move',
-              hit_regen: 'Hit regen',
-              mana_regen: 'Mana regen',
-              move_regen: 'Move regen',
-            })[f.key] || f.key,
-            f.used,
-            f.cap,
-            f.remaining,
-          ),
-        )
-        .join('')}
-    </div>
+    <details class="ov-collapse">
+      <summary>Edit principali</summary>
+      <div class="ov-collapse-body">
+        <ul class="ov-checklist">
+          ${resistLine('Res. Slash', main.res_slash)}
+          ${resistLine('Res. Pierce', main.res_pierce)}
+          ${resistLine('Res. Blunt', main.res_blunt)}
+        </ul>
+        ${meterLine('Dam editato', main.dam?.used, main.dam?.cap, main.dam?.remaining)}
+        ${meterLine('Spellpower', main.spellpower?.used, main.spellpower?.cap, main.spellpower?.remaining)}
+        ${meterLine('Hitroll editato', main.hitroll?.used, main.hitroll?.cap, main.hitroll?.remaining)}
+      </div>
+    </details>
+    <details class="ov-collapse">
+      <summary>Residuo pool <span class="ov-source">(${
+        pool.source === 'character' ? 'sul PG' : 'sugli oggetti'
+      })</span></summary>
+      <div class="ov-collapse-body">
+        ${poolWarn}
+        ${(pool.fields || [])
+          .map((f) =>
+            meterLine(
+              ({
+                hit: 'Hit',
+                mana: 'Mana',
+                move: 'Move',
+                hit_regen: 'Hit regen',
+                mana_regen: 'Mana regen',
+                move_regen: 'Move regen',
+              })[f.key] || f.key,
+              f.used,
+              f.cap,
+              f.remaining,
+            ),
+          )
+          .join('')}
+      </div>
+    </details>
     <div class="ov-block ov-clan">
       <h4>Simbolo del clan</h4>
-      <p>${clan.present ? '<span class="ov-yes">Sì</span> (origine principe/toon: da definire)' : '<span class="ov-no">No</span>'}</p>
+      <p>${
+        clan.present
+          ? '<span class="ov-yes">Sì</span> (origine principe/toon: da definire)'
+          : '<span class="ov-no">No</span>'
+      }</p>
     </div>
-    ${Number(t.maxLevel) >= 52 ? formatCommandsBlock(s) : ''}
   `;
   card.appendChild(body);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-primary toon-enter-btn';
+  btn.textContent = 'Entra';
+  btn.onclick = () => selectAccountToon(t.id);
+  card.appendChild(btn);
   return card;
 }
 
