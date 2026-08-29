@@ -5,6 +5,7 @@
 #include "obj_edit_catalog.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <string>
 
@@ -1318,8 +1319,23 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		return false;
 	}
 	const ObjEditAnalysis after = AnalyzeObjEdit(clone);
+	const bool artifact = IS_OBJ_STAT(clone, ITEM_IMMUNE);
 	extract_obj(clone);
-	xp_raw = std::max(0L, after.diff.valore - before.diff.valore);
+	/*
+	 * Costo = incremento di CheckValueObj assoluto (scalato), non la diff
+	 * clampata vs proto. La clamp a ≥0 azzerava (o sottostimava) la rimozione
+	 * di malus sotto il prototipo — es. armor +10→0 o spellfail malus→0 a 0 MXP.
+	 * class_mult / Artifact come in AnalyzeObjEdit, applicati al delta pagato.
+	 */
+	const long delta_raw = after.absolute.valore - before.absolute.valore;
+	xp_raw = std::max(0L, delta_raw * kObjValueStorageScale);
+	if(after.class_mult != 1.0 && xp_raw > 0) {
+		xp_raw = static_cast<long>(std::llround(
+			static_cast<double>(xp_raw) * after.class_mult));
+	}
+	if(artifact && xp_raw > 0) {
+		xp_raw = (xp_raw * 3) / 2;
+	}
 	pq = std::max(0, after.diff.rune - before.diff.rune);
 	return true;
 }

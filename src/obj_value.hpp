@@ -71,14 +71,16 @@ inline constexpr int kObjEditMaxSpellpowerEditableTotal = 30; /* come damroll */
 /** Hitroll editato totale (2/pezzo × 21 slot, escluso simbolo clan). */
 inline constexpr int kObjEditMaxHitrollEditableTotal = 42;
 
-/** Armor: step −10, fino a −40 per pezzo (listino ufficiale). */
+/** Armor: step −10, fino a −40 per pezzo (listino ufficiale).
+ *  Malus AC positivo: rimozione a 2× il costo del bonus equivalente. */
 inline constexpr int kObjEditArmorStep = -10;
 inline constexpr int kObjEditArmorMinTotal = -40;
 inline constexpr int kObjEditArmorMaxTotal = 0;
-/** Raw CheckValueObj per 1 punto AC (1 MXP → 10 MXP per step −10). */
+/** Raw CheckValueObj per 1 punto AC bonus (1 MXP → 10 MXP per step −10). */
 inline constexpr long kObjEditArmorUnitRaw = 100;
 
-/** Spellfail: come armor (step −10, fino a −40); costo = 2× armor per punto. */
+/** Spellfail: come armor (step −10, fino a −40); costo bonus = 2× armor per punto.
+ *  Malus positivo: rimozione a 2× il bonus spellfail. */
 inline constexpr int kObjEditSpellfailStep = -10;
 inline constexpr int kObjEditSpellfailMinTotal = -40;
 inline constexpr int kObjEditSpellfailMaxTotal = 0;
