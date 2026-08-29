@@ -376,7 +376,7 @@ void parse_entries_json(const Json& root) {
 		"(PG offline).";
 	root["object_portal"] = portal;
 	Json currencies;
-	Json catalog = Json::array();
+	Json currency_catalog = Json::array();
 	for(const auto& c : g_currencies) {
 		Json row;
 		row["slug"] = c.slug;
@@ -384,9 +384,9 @@ void parse_entries_json(const Json& root) {
 		row["enabled"] = c.enabled;
 		row["visible"] = c.visible;
 		row["pays_listino"] = c.pays_listino;
-		catalog.push_back(row);
+		currency_catalog.push_back(row);
 	}
-	currencies["catalog"] = catalog;
+	currencies["catalog"] = currency_catalog;
 	currencies["comment"] =
 		"Valute portale. visible=false nasconde ai player. "
 		"pays_listino oggi solo mxp/rune.";
