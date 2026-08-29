@@ -179,7 +179,7 @@ function formatHiddenBreakdown(breakdown) {
   const tan = Number(breakdown.tan || 0);
   const cat = Number(breakdown.category || 0);
   const other = Number(breakdown.other || 0);
-  if (raro) parts.push(`${raro} RARO (senza EDIT+ED*)`);
+  if (raro) parts.push(`${raro} RARO (non in DB edits)`);
   if (tan) parts.push(`${tan} tan`);
   if (cat) parts.push(`${cat} categoria spenta`);
   if (other) parts.push(`${other} altro`);
