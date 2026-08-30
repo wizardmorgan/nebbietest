@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="edit-base" content="" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=46" />
+  <link rel="stylesheet" href="style.css?v=47" />
   <script src="config.js"></script>
 </head>
 <body>
@@ -61,7 +61,13 @@
       <div id="online-warn" class="alert alert-warn hidden"></div>
       <div id="api-warn" class="alert alert-error hidden"></div>
 
-      <div class="layout">
+      <div class="work-toolbar">
+        <button id="btn-toggle-tools" class="btn-secondary btn-tools-toggle hidden" type="button" aria-pressed="false" title="Mostra o nascondi categorie, valute e strumenti staff">
+          Opzioni sistema
+        </button>
+      </div>
+
+      <div class="layout" id="work-layout">
         <aside class="sidebar">
           <div class="card">
             <h2>Personaggio target</h2>
@@ -134,6 +140,72 @@
             <div id="object-edits" class="object-edits"></div>
           </div>
         </div>
+
+        <aside id="tools-column" class="tools-column card hidden" aria-label="Opzioni sistema staff">
+          <div class="tools-column-header">
+            <h2>Staff — configurazione sistema</h2>
+          </div>
+
+          <div class="portal-categories card-inner">
+            <h3>Categorie oggetto nel portale</h3>
+            <p class="hint">Spunta = tipo visibile e editabile al primo edit. Senza spunta = nascosto (pezzi in DB edits / EDIT+ED* restano, anche RARO). TAN/HAS-GEMS/simbolo sempre esclusi. Edit da indossato consentito (PG offline).</p>
+            <p id="myst-version-warn" class="msg warn hidden"></p>
+            <div id="portal-category-toggles" class="checkbox-grid"></div>
+            <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
+            <p id="portal-cat-result" class="msg"></p>
+          </div>
+
+          <div class="portal-currencies card-inner">
+            <h3>Valute di pagamento</h3>
+            <p class="hint">
+              Al momento il pagamento listino usa solo MXP/Rune. Le altre valute stanno
+              in una sezione collassata: restano <strong>nascoste ai giocatori</strong>
+              finché non attivi «Visibile ai giocatori».
+            </p>
+            <div id="portal-currency-toggles" class="currency-config-list"></div>
+            <button id="btn-save-portal-currencies" class="btn-secondary" type="button">Salva valute</button>
+            <p id="portal-currency-result" class="msg"></p>
+          </div>
+
+          <details class="card-inner collapse-panel" id="routing-edit-panel">
+            <summary class="collapse-summary">
+              <span>Routing edit: oggetto vs personaggio</span>
+              <span class="collapse-hint">avanzato — JSON di sistema</span>
+            </summary>
+            <div class="collapse-body">
+              <p class="hint">
+                Questo JSON (<code>edit_system.json</code>) decide <strong>dove</strong> va ogni tipo di edit:
+                <code>target: "object"</code> = affect sull'equipaggiamento;
+                <code>target: "character"</code> = valore sul PG (pool hit/mana/move o resistenza in tabella).
+                Non è l'inventario: è la regola di sistema. Di solito lo lasci così e usi le checkbox categorie sopra.
+              </p>
+              <textarea id="system-config-editor" rows="12" spellcheck="false"></textarea>
+              <div class="btn-row">
+                <button id="btn-load-config" class="btn-secondary" type="button">Ricarica JSON</button>
+                <button id="btn-save-config" class="btn-secondary" type="button">Salva JSON</button>
+              </div>
+              <p id="config-result" class="msg"></p>
+            </div>
+          </details>
+
+          <div class="card-inner">
+            <h3>Consultazione object_instance</h3>
+            <p class="hint">
+              Tabella MySQL degli oggetti <strong>già personalizzati</strong> salvati nel mondo
+              (id istanza, vnum base, owner, descrizione).
+              Quasi sempre sono <strong>indossati</strong>: per lavorarci cerca l'owner, impostalo come
+              personaggio target sopra, poi apri l'oggetto dall'inventario —
+              i pezzi sono <strong>editabili anche indossati</strong> (primo edit e ri-edit),
+              purché il PG sia offline e il pezzo rispetti categorie/esclusioni.
+              Cerca l'owner, impostalo come personaggio target, poi apri l'oggetto dall'inventario.
+            </p>
+            <div class="btn-row">
+              <input id="inst-search" placeholder="cerca owner / descrizione / id istanza" />
+              <button id="btn-inst-search" class="btn-secondary" type="button">Cerca istanze</button>
+            </div>
+            <ul id="inst-list" class="inst-list"></ul>
+          </div>
+        </aside>
       </div>
 
       <div id="payment-panel" class="payment-dock hidden" aria-live="polite">
@@ -169,71 +241,8 @@
         </div>
       </div>
 
-      <div id="staff-panel" class="card hidden">
-        <h2>Staff — configurazione sistema</h2>
-
-        <div class="portal-categories card-inner">
-          <h3>Categorie oggetto nel portale</h3>
-          <p class="hint">Spunta = tipo visibile e editabile al primo edit. Senza spunta = nascosto (pezzi in DB edits / EDIT+ED* restano, anche RARO). TAN/HAS-GEMS/simbolo sempre esclusi. Edit da indossato consentito (PG offline).</p>
-          <p id="myst-version-warn" class="msg warn hidden"></p>
-          <div id="portal-category-toggles" class="checkbox-grid"></div>
-          <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
-          <p id="portal-cat-result" class="msg"></p>
-        </div>
-
-        <div class="portal-currencies card-inner">
-          <h3>Valute di pagamento</h3>
-          <p class="hint">
-            Al momento il pagamento listino usa solo MXP/Rune. Le altre valute stanno
-            in una sezione collassata: restano <strong>nascoste ai giocatori</strong>
-            finché non attivi «Visibile ai giocatori».
-          </p>
-          <div id="portal-currency-toggles" class="currency-config-list"></div>
-          <button id="btn-save-portal-currencies" class="btn-secondary" type="button">Salva valute</button>
-          <p id="portal-currency-result" class="msg"></p>
-        </div>
-
-        <details class="card-inner collapse-panel" id="routing-edit-panel">
-          <summary class="collapse-summary">
-            <span>Routing edit: oggetto vs personaggio</span>
-            <span class="collapse-hint">avanzato — JSON di sistema</span>
-          </summary>
-          <div class="collapse-body">
-            <p class="hint">
-              Questo JSON (<code>edit_system.json</code>) decide <strong>dove</strong> va ogni tipo di edit:
-              <code>target: "object"</code> = affect sull'equipaggiamento;
-              <code>target: "character"</code> = valore sul PG (pool hit/mana/move o resistenza in tabella).
-              Non è l'inventario: è la regola di sistema. Di solito lo lasci così e usi le checkbox categorie sopra.
-            </p>
-            <textarea id="system-config-editor" rows="12" spellcheck="false"></textarea>
-            <div class="btn-row">
-              <button id="btn-load-config" class="btn-secondary" type="button">Ricarica JSON</button>
-              <button id="btn-save-config" class="btn-secondary" type="button">Salva JSON</button>
-            </div>
-            <p id="config-result" class="msg"></p>
-          </div>
-        </details>
-
-        <div class="card-inner">
-          <h3>Consultazione object_instance</h3>
-          <p class="hint">
-            Tabella MySQL degli oggetti <strong>già personalizzati</strong> salvati nel mondo
-            (id istanza, vnum base, owner, descrizione).
-            Quasi sempre sono <strong>indossati</strong>: per lavorarci cerca l'owner, impostalo come
-            personaggio target sopra, poi apri l'oggetto dall'inventario —
-            i pezzi sono <strong>editabili anche indossati</strong> (primo edit e ri-edit),
-            purché il PG sia offline e il pezzo rispetti categorie/esclusioni.
-            Cerca l'owner, impostalo come personaggio target, poi apri l'oggetto dall'inventario.
-          </p>
-          <div class="btn-row">
-            <input id="inst-search" placeholder="cerca owner / descrizione / id istanza" />
-            <button id="btn-inst-search" class="btn-secondary" type="button">Cerca istanze</button>
-          </div>
-          <ul id="inst-list" class="inst-list"></ul>
-        </div>
-      </div>
     </section>
   </main>
-  <script src="app.js?v=46"></script>
+  <script src="app.js?v=47"></script>
 </body>
 </html>

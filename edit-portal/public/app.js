@@ -4,8 +4,9 @@ const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
+const TOOLS_OPEN_KEY = 'nebbie-edit-tools-open';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 46;
+const EDIT_PORTAL_UI_BUILD = 47;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -899,6 +900,49 @@ function meterLine(label, used, cap, remaining) {
     `<strong>${u}/${c}</strong><span class="ov-remain">ancora ${r}</span></div>`;
 }
 
+function meterLineWithNote(label, entry) {
+  const line = meterLine(label, entry?.used, entry?.cap, entry?.remaining);
+  const note = entry?.note
+    ? `<div class="ov-meter-note">${escapeHtml(entry.note)}</div>`
+    : '';
+  return line + note;
+}
+
+function isToolsColumnOpen() {
+  return localStorage.getItem(TOOLS_OPEN_KEY) === '1';
+}
+
+function syncToolsColumnUI() {
+  const layout = $('work-layout');
+  const col = $('tools-column');
+  const btn = $('btn-toggle-tools');
+  if (!layout || !col) return;
+  const open = isToolsColumnOpen();
+  layout.classList.toggle('layout--tools-open', open);
+  col.classList.toggle('hidden', !open);
+  if (btn) {
+    btn.classList.toggle('btn-active', open);
+    btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+    btn.textContent = open ? 'Nascondi opzioni sistema' : 'Opzioni sistema';
+  }
+}
+
+function setToolsColumnOpen(open) {
+  localStorage.setItem(TOOLS_OPEN_KEY, open ? '1' : '0');
+  syncToolsColumnUI();
+}
+
+function initStaffToolsColumn() {
+  show('btn-toggle-tools');
+  syncToolsColumnUI();
+}
+
+function hideStaffToolsColumn() {
+  hide('btn-toggle-tools');
+  hide('tools-column');
+  $('work-layout')?.classList.remove('layout--tools-open');
+}
+
 function formatCommandsDetails(summary, open = false) {
   const cmds = Array.isArray(summary?.commands) ? summary.commands : [];
   if (!cmds.length) {
@@ -1016,9 +1060,10 @@ function makePrinceToonCard(t) {
           ${resistLine('Res. Pierce', main.res_pierce)}
           ${resistLine('Res. Blunt', main.res_blunt)}
         </ul>
-        ${meterLine('Dam editato', main.dam?.used, main.dam?.cap, main.dam?.remaining)}
-        ${meterLine('Spellpower', main.spellpower?.used, main.spellpower?.cap, main.spellpower?.remaining)}
+        ${meterLineWithNote('Dam editato', main.dam)}
+        ${meterLineWithNote('Spellpower', main.spellpower)}
         ${meterLine('Hitroll editato', main.hitroll?.used, main.hitroll?.cap, main.hitroll?.remaining)}
+        ${meterLine('Spellfail editato', main.spellfail?.used, main.spellfail?.cap, main.spellfail?.remaining)}
       </div>
     </details>
     <details class="ov-collapse">
@@ -1099,7 +1144,7 @@ async function enterWorkMode() {
   refreshPayModeLabels();
 
   if (me.role === 'staff') {
-    show('staff-panel');
+    initStaffToolsColumn();
     show('target-toon-wrap');
     const hint = $('session-role-hint');
     if (hint) {
@@ -1108,7 +1153,7 @@ async function enterWorkMode() {
     }
     loadSystemConfig();
   } else {
-    hide('staff-panel');
+    hideStaffToolsColumn();
     hide('target-toon-wrap');
     const hint = $('session-role-hint');
     if (hint) hint.textContent = `Personaggio: ${me.sessionToonName}`;
@@ -1461,7 +1506,7 @@ function renderCharacterEdits() {
     row.innerHTML = `
       <div>
         <label class="effect-name">${entry.label || field}</label>
-        <div class="current">Attuale: ${current} / ${cap}</div>
+        <div class="current">Attuale: ${current} / ${cap} (solo aumento)</div>
       </div>
     `;
     row.appendChild(select);
@@ -1880,6 +1925,7 @@ async function selectItem(inventoryId, li) {
     d.entries || [],
     d.dam_budget,
     d.sp_budget,
+    d.sf_budget,
     d.clan_symbol === true,
   );
 }
@@ -1938,6 +1984,16 @@ function renderObjectAffectSlots(affectSlots) {
   });
   box.appendChild(grid);
   show('object-affect-slots');
+}
+
+function objectEntryAffectsDam(entry) {
+  const id = String(entry?.id || '');
+  return id === 'damroll' || id === 'hitndam';
+}
+
+function objectEntryAffectsSpellpower(entry) {
+  const id = String(entry?.id || '');
+  return id === 'spellpower' || id === 'hitnsp';
 }
 
 function objectEditSection(id) {
@@ -2349,7 +2405,7 @@ function renderObjectTextEdit(textEdit) {
   box.appendChild(details);
 }
 
-function renderMassimaliPanel(box, damBudget, spBudget, isClanSymbol) {
+function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) {
   const panel = document.createElement('div');
   panel.className = 'massimali-panel';
 
@@ -2360,6 +2416,11 @@ function renderMassimaliPanel(box, damBudget, spBudget, isClanSymbol) {
 
   const grid = document.createElement('div');
   grid.className = 'massimali-grid';
+
+  const damMutexNote =
+    'Su ogni pezzo: dam editato oppure spellpower (hit-n-sp incluso), non entrambi.';
+  const spMutexNote =
+    'Su ogni pezzo: spellpower editato oppure dam (hit-n-dam incluso), non entrambi.';
 
   if (damBudget) {
     const card = document.createElement('div');
@@ -2377,10 +2438,13 @@ function renderMassimaliPanel(box, damBudget, spBudget, isClanSymbol) {
         detail += ' · non conteggiato (serve EDIT + owner; clan esclusi)';
       }
     }
+    const mutexNote =
+      damBudget.mutex_with_spellpower !== false ? damMutexNote : '';
     card.innerHTML = `
       <div class="massimale-label">Dam totale editato</div>
       <div class="massimale-value">${total}<span class="massimale-max"> / ${max}</span></div>
       <div class="massimale-detail">${escapeHtml(detail)}</div>
+      ${mutexNote ? `<div class="massimale-note">${escapeHtml(mutexNote)}</div>` : ''}
     `;
     grid.appendChild(card);
   }
@@ -2397,8 +2461,33 @@ function renderMassimaliPanel(box, damBudget, spBudget, isClanSymbol) {
     if (Number.isFinite(pc)) {
       detail = `Questo pezzo: totale ${pc} (delta edit +${delta}) · max ${pieceMax}/pezzo`;
     }
+    const mutexNote = spBudget.mutex_with_dam !== false ? spMutexNote : '';
     card.innerHTML = `
       <div class="massimale-label">Spellpower totale editato</div>
+      <div class="massimale-value">${total}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-detail">${escapeHtml(detail)}</div>
+      ${mutexNote ? `<div class="massimale-note">${escapeHtml(mutexNote)}</div>` : ''}
+    `;
+    grid.appendChild(card);
+  }
+
+  if (sfBudget) {
+    const card = document.createElement('div');
+    card.className = 'massimale-card';
+    const total = Number(sfBudget.char_total || 0);
+    const max = Number(sfBudget.char_max || 30);
+    const pieceMax = Math.abs(Number(sfBudget.piece_max || 40));
+    const pc = Number(sfBudget.piece_current);
+    const pp = Number(sfBudget.piece_proto);
+    const delta = Number(sfBudget.piece || 0);
+    const stepMag = Math.abs(Number(sfBudget.step || 5));
+    const mxpStep = Number(sfBudget.mxp_per_step || 20);
+    let detail = `Step −${stepMag}, ${mxpStep} MXP/step · max ${pieceMax} spellfail editato per pezzo`;
+    if (Number.isFinite(pc) && Number.isFinite(pp)) {
+      detail = `Questo pezzo: ${pc} vs proto ${pp} (delta +${delta}) · step −${stepMag}, ${mxpStep} MXP/step`;
+    }
+    card.innerHTML = `
+      <div class="massimale-label">Spellfail totale editato</div>
       <div class="massimale-value">${total}<span class="massimale-max"> / ${max}</span></div>
       <div class="massimale-detail">${escapeHtml(detail)}</div>
     `;
@@ -2449,7 +2538,7 @@ function renderMassimaliPanel(box, damBudget, spBudget, isClanSymbol) {
   box.appendChild(panel);
 }
 
-function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
+function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol) {
   const box = $('object-edits');
   box.innerHTML = '';
 
@@ -2462,7 +2551,12 @@ function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
     return;
   }
 
-  renderMassimaliPanel(box, damBudget, spBudget, !!isClanSymbol);
+  renderMassimaliPanel(box, damBudget, spBudget, sfBudget, !!isClanSymbol);
+
+  const damPiece = Number(damBudget?.piece || 0);
+  const spPiece = Number(spBudget?.piece || 0);
+  const damMutexActive = damPiece > 0 && damBudget?.mutex_with_spellpower !== false;
+  const spMutexActive = spPiece > 0 && spBudget?.mutex_with_dam !== false;
 
   const editsWrap = document.createElement('div');
   editsWrap.className = 'object-edit-groups';
@@ -2561,6 +2655,17 @@ function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
         select.disabled = true;
       }
 
+      let mutexHint = '';
+      if (canEdit && damMutexActive && objectEntryAffectsSpellpower(entry)) {
+        select.disabled = true;
+        mutexHint =
+          'Su questo pezzo c\'è già dam editato: rimuovi prima quello slot per editare spellpower/hit-n-sp.';
+      } else if (canEdit && spMutexActive && objectEntryAffectsDam(entry)) {
+        select.disabled = true;
+        mutexHint =
+          'Su questo pezzo c\'è già spellpower editato: rimuovi prima quello slot per editare dam/hit-n-dam.';
+      }
+
       const queuedObj = objectEditCart.get(entry.id);
       if (queuedObj && queuedObj.targetModifier != null && !select.disabled) {
         if (queuedObj.clearSlot) {
@@ -2632,6 +2737,7 @@ function renderObjectEdits(entries, damBudget, spBudget, isClanSymbol) {
             ? `<div class="cost-hint">${escapeHtml(objectEntryCostHint(entry))}</div>`
             : ''
         }
+        ${mutexHint ? `<div class="slot-hint massimale-note">${escapeHtml(mutexHint)}</div>` : ''}
       `;
       row.appendChild(meta);
       row.appendChild(select);
@@ -3166,6 +3272,89 @@ function applyCurrenciesToUI(currencies) {
     'Gold / Token / Credito edit: predisposte per il futuro. Restano invisibili ai PG finché non le segni visibili e abilitate.';
   body.appendChild(hint);
   extras.forEach((row) => renderRow(row, body));
+
+  const addForm = document.createElement('div');
+  addForm.className = 'currency-add-form';
+  const addTitle = document.createElement('h4');
+  addTitle.textContent = 'Aggiungi valuta';
+  addForm.appendChild(addTitle);
+
+  const addFields = document.createElement('div');
+  addFields.className = 'currency-add-fields';
+
+  const slugLab = document.createElement('label');
+  slugLab.className = 'field-label';
+  slugLab.textContent = 'Slug (a-z, 0-9, _)';
+  const slugInput = document.createElement('input');
+  slugInput.type = 'text';
+  slugInput.autocomplete = 'off';
+  slugInput.placeholder = 'es. platinum';
+  slugLab.appendChild(slugInput);
+  addFields.appendChild(slugLab);
+
+  const newLabelLab = document.createElement('label');
+  newLabelLab.className = 'field-label';
+  newLabelLab.textContent = 'Etichetta';
+  const newLabelInput = document.createElement('input');
+  newLabelInput.type = 'text';
+  newLabelInput.autocomplete = 'off';
+  newLabelInput.placeholder = 'es. Platino';
+  newLabelLab.appendChild(newLabelInput);
+  addFields.appendChild(newLabelLab);
+  addForm.appendChild(addFields);
+
+  const addResult = document.createElement('p');
+  addResult.className = 'currency-add-result msg';
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn-secondary';
+  addBtn.textContent = 'Aggiungi valuta';
+  addBtn.onclick = () => {
+    addResult.textContent = '';
+    addResult.className = 'currency-add-result msg';
+    const slug = slugInput.value.trim().toLowerCase();
+    const label = newLabelInput.value.trim();
+    if (!/^[a-z0-9_]+$/.test(slug)) {
+      addResult.textContent =
+        'Slug non valido: usa solo lettere minuscole, cifre e underscore.';
+      addResult.classList.add('error');
+      return;
+    }
+    if (slug === 'mxp' || slug === 'rune') {
+      addResult.textContent = 'MXP e Rune sono già nella sezione principale.';
+      addResult.classList.add('error');
+      return;
+    }
+    if (portalCurrencies.some((c) => c.slug === slug)) {
+      addResult.textContent = 'Slug già presente.';
+      addResult.classList.add('error');
+      return;
+    }
+    if (!label) {
+      addResult.textContent = 'Inserisci un\'etichetta.';
+      addResult.classList.add('error');
+      return;
+    }
+    const row = {
+      slug,
+      label,
+      enabled: false,
+      visible: false,
+      pays_listino: false,
+    };
+    portalCurrencies.push(row);
+    renderRow(row, body);
+    extrasWrap.open = true;
+    slugInput.value = '';
+    newLabelInput.value = '';
+    addResult.textContent = `Valuta «${slug}» aggiunta (salva per persistere).`;
+    addResult.classList.add('ok');
+  };
+  addForm.appendChild(addBtn);
+  addForm.appendChild(addResult);
+  body.appendChild(addForm);
+
   extrasWrap.appendChild(body);
   container.appendChild(extrasWrap);
 
@@ -3382,6 +3571,11 @@ $('btn-inst-search').onclick = async () => {
     list.appendChild(li);
   });
 };
+
+const btnToggleTools = $('btn-toggle-tools');
+if (btnToggleTools) {
+  btnToggleTools.onclick = () => setToolsColumnOpen(!isToolsColumnOpen());
+}
 
 restoreSavedLogin();
 applyLoginUiMode();
