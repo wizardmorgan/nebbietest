@@ -1494,13 +1494,13 @@ struct ToonInventoryEditScan {
 		dam["used"] = dam_total;
 		dam["cap"] = kObjEditMaxDamrollEditableTotal;
 		dam["remaining"] = std::max(0, kObjEditMaxDamrollEditableTotal - dam_total);
-		dam["note"] = "Su ogni pezzo: dam editato oppure spellpower, non entrambi";
+		dam["note"] = "Su ogni pezzo: dam/hit-n-dam oppure spellpower, non entrambi";
 		main["dam"] = dam;
 		Json sp;
 		sp["used"] = sp_total;
 		sp["cap"] = kObjEditMaxSpellpowerEditableTotal;
 		sp["remaining"] = std::max(0, kObjEditMaxSpellpowerEditableTotal - sp_total);
-		sp["note"] = "Su ogni pezzo: spellpower editato oppure dam, non entrambi";
+		sp["note"] = "Su ogni pezzo: spellpower/hit-n-sp oppure dam, non entrambi";
 		main["spellpower"] = sp;
 		Json hr;
 		hr["used"] = hr_total;
