@@ -1302,6 +1302,10 @@ bool object_edit_location_affects_spellpower(int location) noexcept {
 	return location == APPLY_SPELLPOWER || location == APPLY_HITNSP;
 }
 
+bool object_edit_location_affects_spellfail(int location) noexcept {
+	return location == APPLY_SPELLFAIL;
+}
+
 int object_edit_damroll_total(const struct obj_data* obj) noexcept {
 	return combat_damroll_total(obj);
 }
@@ -1371,6 +1375,35 @@ int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept {
 	const int base = combat_spellpower_total(proto);
 	extract_obj(proto);
 	return std::max(0, cur - base);
+}
+
+int object_edit_spellfail_total(const struct obj_data* obj) noexcept {
+	return sum_location_mod(obj, APPLY_SPELLFAIL);
+}
+
+int object_edit_spellfail_prototype_total(const struct obj_data* obj) noexcept {
+	struct obj_data* proto = load_edit_prototype(obj);
+	if(!proto) {
+		return 0;
+	}
+	const int base = sum_location_mod(proto, APPLY_SPELLFAIL);
+	extract_obj(proto);
+	return base;
+}
+
+int object_edit_spellfail_edited_delta(const struct obj_data* obj) noexcept {
+	if(!obj) {
+		return 0;
+	}
+	/* Piu' negativo = piu' edit: proto 0, current −20 → delta 20. */
+	const int cur = sum_location_mod(obj, APPLY_SPELLFAIL);
+	struct obj_data* proto = load_edit_prototype(obj);
+	if(!proto) {
+		return 0;
+	}
+	const int base = sum_location_mod(proto, APPLY_SPELLFAIL);
+	extract_obj(proto);
+	return std::max(0, base - cur);
 }
 
 int object_edit_hitroll_edited_delta(const struct obj_data* obj) noexcept {
@@ -1461,12 +1494,60 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 	return true;
 }
 
+[[nodiscard]] static bool enforce_char_spellfail_budget(const struct obj_data* after_obj,
+														int other_edited_sf,
+														std::string& err) {
+	if(other_edited_sf < 0 || !after_obj) {
+		return true;
+	}
+	const int piece_sf = object_edit_spellfail_edited_delta(after_obj);
+	const int total = other_edited_sf + piece_sf;
+	if(total > kObjEditMaxSpellfailEditableTotal) {
+		err = "tetto spellfail editabile personaggio superato (" +
+			  std::to_string(total) + "/" +
+			  std::to_string(kObjEditMaxSpellfailEditableTotal)
+			  + "; altri pezzi EDIT +" + std::to_string(other_edited_sf)
+			  + ", questo pezzo +" + std::to_string(piece_sf) + " vs proto)";
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Su un pezzo: dam editato XOR spellpower editato (hit-n-dam / hit-n-sp inclusi).
+ * Per passare all'altro bisogna prima liberare lo slot (Rimuovi slot / azzerare).
+ */
+[[nodiscard]] static bool enforce_dam_spellpower_mutex(const struct obj_data* before_obj,
+													   int location, bool clear_slot,
+													   std::string& err) {
+	if(!before_obj || clear_slot) {
+		return true;
+	}
+	const int dam_ed = object_edit_damroll_edited_delta(before_obj);
+	const int sp_ed = object_edit_spellpower_edited_delta(before_obj);
+	if(object_edit_location_affects_dam(location) && sp_ed > 0) {
+		err = "su questo pezzo c'e' gia' spellpower editato (+" +
+			  std::to_string(sp_ed) +
+			  " vs proto): rimuovi prima quello slot, poi puoi editare dam";
+		return false;
+	}
+	if(object_edit_location_affects_spellpower(location) && dam_ed > 0) {
+		err = "su questo pezzo c'e' gia' dam editato (+" + std::to_string(dam_ed) +
+			  " vs proto): rimuovi prima quello slot, poi puoi editare spellpower";
+		return false;
+	}
+	return true;
+}
+
 bool object_quote_affect_target(struct obj_data* obj, int location, int target_modifier,
 								long& xp_raw, int& pq, std::string& err,
 								int other_worn_edited_dam, int other_worn_edited_sp,
-								bool clear_slot) {
+								bool clear_slot, int other_owned_edited_spellfail) {
 	if(!obj) {
 		err = "oggetto null";
+		return false;
+	}
+	if(!enforce_dam_spellpower_mutex(obj, location, clear_slot, err)) {
 		return false;
 	}
 	struct obj_data* clone = portal_clone_obj_state(obj);
@@ -1486,6 +1567,11 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 	}
 	if(object_edit_location_affects_spellpower(location)
 	   && !enforce_char_sp_budget(clone, other_worn_edited_sp, err)) {
+		extract_obj(clone);
+		return false;
+	}
+	if(object_edit_location_affects_spellfail(location)
+	   && !enforce_char_spellfail_budget(clone, other_owned_edited_spellfail, err)) {
 		extract_obj(clone);
 		return false;
 	}
@@ -1513,15 +1599,21 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 
 bool object_apply_affect_target(struct obj_data* obj, int location, int target_modifier,
 								std::string& err, int other_worn_edited_dam,
-								int other_worn_edited_sp, bool clear_slot) {
+								int other_worn_edited_sp, bool clear_slot,
+								int other_owned_edited_spellfail) {
 	if(!obj) {
 		err = "oggetto null";
+		return false;
+	}
+	if(!enforce_dam_spellpower_mutex(obj, location, clear_slot, err)) {
 		return false;
 	}
 	const bool need_budget = (object_edit_location_affects_dam(location)
 							  && other_worn_edited_dam >= 0)
 							 || (object_edit_location_affects_spellpower(location)
-								 && other_worn_edited_sp >= 0);
+								 && other_worn_edited_sp >= 0)
+							 || (object_edit_location_affects_spellfail(location)
+								 && other_owned_edited_spellfail >= 0);
 	if(need_budget) {
 		struct obj_data* clone = portal_clone_obj_state(obj);
 		if(!clone) {
@@ -1533,7 +1625,8 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 			return false;
 		}
 		if(!enforce_char_dam_budget(clone, other_worn_edited_dam, err)
-		   || !enforce_char_sp_budget(clone, other_worn_edited_sp, err)) {
+		   || !enforce_char_sp_budget(clone, other_worn_edited_sp, err)
+		   || !enforce_char_spellfail_budget(clone, other_owned_edited_spellfail, err)) {
 			extract_obj(clone);
 			return false;
 		}

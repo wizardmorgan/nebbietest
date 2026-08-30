@@ -79,12 +79,18 @@ inline constexpr int kObjEditArmorMaxTotal = 0;
 /** Raw CheckValueObj per 1 punto AC bonus (1 MXP → 10 MXP per step −10). */
 inline constexpr long kObjEditArmorUnitRaw = 100;
 
-/** Spellfail: come armor (step −10, fino a −40); costo bonus = 2× armor per punto.
- *  Malus positivo: rimozione a 2× il bonus spellfail. */
-inline constexpr int kObjEditSpellfailStep = -10;
-inline constexpr int kObjEditSpellfailMinTotal = -40;
+/**
+ * Spellfail: step −5, 20 MXP per step (−5).
+ * Per pezzo fino a −100 oltre proto; tetto personaggio −100 (somma delta vs proto).
+ * Malus positivo: rimozione a 2× il bonus spellfail.
+ */
+inline constexpr int kObjEditSpellfailStep = -5;
+inline constexpr int kObjEditSpellfailMinTotal = -100;
 inline constexpr int kObjEditSpellfailMaxTotal = 0;
-inline constexpr long kObjEditSpellfailUnitRaw = kObjEditArmorUnitRaw * 2;
+/** 20 MXP / step −5 → unit_raw * 5 * 10000 = 20e6 → unit = 400. */
+inline constexpr long kObjEditSpellfailUnitRaw = 400;
+/** Magnitudine massima edit spellfail sul personaggio (somma pezzi). */
+inline constexpr int kObjEditMaxSpellfailEditableTotal = 100;
 
 /** Listino portal: 1 MXP listino = 1 Rune (alternativa pagamento). */
 inline constexpr long kObjEditRunePerMegaXp = 1000000L;

@@ -674,6 +674,26 @@ std::atomic<bool> g_http_running {false};
 	return total;
 }
 
+[[nodiscard]] int sum_owned_edited_spellfail_excluding(
+	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
+	const char* toon_name) {
+	int total = 0;
+	for(auto& r : rows) {
+		if(r.id == exclude_inventory_id) {
+			continue;
+		}
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
+			total += object_edit_spellfail_edited_delta(o);
+		}
+		extract_obj(o);
+	}
+	return total;
+}
+
 /** Elenco pezzi EDIT+owner che contribuiscono al tetto dam (UI). */
 [[nodiscard]] Json owned_dam_budget_contributors_json(
 	std::vector<inventory_mysql_row>& rows, const char* toon_name) {
@@ -1309,6 +1329,7 @@ struct ToonInventoryEditScan {
 	int dam_total = 0;
 	int sp_total = 0;
 	int hr_total = 0;
+	int spellfail_total = 0;
 	bool res_slash = false;
 	bool res_pierce = false;
 	bool res_blunt = false;
@@ -1351,6 +1372,7 @@ struct ToonInventoryEditScan {
 			s.dam_total += object_edit_damroll_edited_delta(o);
 			s.sp_total += object_edit_spellpower_edited_delta(o);
 			s.hr_total += object_edit_hitroll_edited_delta(o);
+			s.spellfail_total += object_edit_spellfail_edited_delta(o);
 
 			struct obj_data* proto = nullptr;
 			const int pv = object_edit_prototype_vnum(o);
@@ -1413,6 +1435,7 @@ struct ToonInventoryEditScan {
 	const int dam_total = scan.dam_total;
 	const int sp_total = scan.sp_total;
 	const int hr_total = scan.hr_total;
+	const int spellfail_total = scan.spellfail_total;
 	const bool res_slash = scan.res_slash;
 	const bool res_pierce = scan.res_pierce;
 	const bool res_blunt = scan.res_blunt;
@@ -1471,11 +1494,13 @@ struct ToonInventoryEditScan {
 		dam["used"] = dam_total;
 		dam["cap"] = kObjEditMaxDamrollEditableTotal;
 		dam["remaining"] = std::max(0, kObjEditMaxDamrollEditableTotal - dam_total);
+		dam["note"] = "Su ogni pezzo: dam editato oppure spellpower, non entrambi";
 		main["dam"] = dam;
 		Json sp;
 		sp["used"] = sp_total;
 		sp["cap"] = kObjEditMaxSpellpowerEditableTotal;
 		sp["remaining"] = std::max(0, kObjEditMaxSpellpowerEditableTotal - sp_total);
+		sp["note"] = "Su ogni pezzo: spellpower editato oppure dam, non entrambi";
 		main["spellpower"] = sp;
 		Json hr;
 		hr["used"] = hr_total;
@@ -1483,6 +1508,14 @@ struct ToonInventoryEditScan {
 		hr["remaining"] = std::max(0, kObjEditMaxHitrollEditableTotal - hr_total);
 		hr["per_piece_max"] = kObjEditMaxHitrollPerPiece;
 		main["hitroll"] = hr;
+		Json sf;
+		sf["used"] = spellfail_total;
+		sf["cap"] = kObjEditMaxSpellfailEditableTotal;
+		sf["remaining"] =
+			std::max(0, kObjEditMaxSpellfailEditableTotal - spellfail_total);
+		sf["step"] = kObjEditSpellfailStep;
+		sf["mxp_per_step"] = 20;
+		main["spellfail"] = sf;
 	}
 
 	int exp = 0;
@@ -2033,7 +2066,28 @@ struct ToonInventoryEditScan {
 				sp_budget["char_total"] = other_sp + piece_sp_for_total;
 				sp_budget["char_max"] = kObjEditMaxSpellpowerEditableTotal;
 				sp_budget["source"] = "owned_edit_delta_vs_proto";
+				sp_budget["mutex_with_dam"] = true;
 				d["sp_budget"] = sp_budget;
+
+				const int piece_sf_delta = object_edit_spellfail_edited_delta(obj);
+				const int other_sf = sum_owned_edited_spellfail_excluding(
+					rows, inventory_id, toon_name.c_str());
+				const int piece_sf_for_total = piece_edit ? piece_sf_delta : 0;
+				Json sf_budget;
+				sf_budget["piece"] = piece_sf_delta;
+				sf_budget["piece_current"] = object_edit_spellfail_total(obj);
+				sf_budget["piece_proto"] = object_edit_spellfail_prototype_total(obj);
+				sf_budget["piece_max"] = -kObjEditSpellfailMinTotal;
+				sf_budget["other"] = other_sf;
+				sf_budget["char_total"] = other_sf + piece_sf_for_total;
+				sf_budget["char_max"] = kObjEditMaxSpellfailEditableTotal;
+				sf_budget["step"] = kObjEditSpellfailStep;
+				sf_budget["mxp_per_step"] = 20;
+				sf_budget["source"] = "owned_edit_delta_vs_proto";
+				d["sf_budget"] = sf_budget;
+
+				dam_budget["mutex_with_spellpower"] = true;
+				d["dam_budget"] = dam_budget;
 			}
 			{
 				/* Sempre editabile in UI: si salva solo insieme a un affect pagato
@@ -2151,8 +2205,14 @@ struct ToonInventoryEditScan {
 					? sum_owned_edited_spellpower_excluding(rows, inventory_id,
 														   toon_name.c_str())
 					: -1;
+			const int other_sf =
+				object_edit_location_affects_spellfail(location)
+					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
+														  toon_name.c_str())
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
-										   quote_err, other_dam, other_sp, clear_slot)) {
+										   quote_err, other_dam, other_sp, clear_slot,
+										   other_sf)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -2359,9 +2419,14 @@ struct ToonInventoryEditScan {
 					? sum_owned_edited_spellpower_excluding(rows, inventory_id,
 														   target_name.c_str())
 					: -1;
+			const int other_sf =
+				object_edit_location_affects_spellfail(location)
+					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
+														  target_name.c_str())
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
 										   quote_pq, quote_err, other_dam, other_sp,
-										   clear_slot)) {
+										   clear_slot, other_sf)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -2375,7 +2440,7 @@ struct ToonInventoryEditScan {
 
 			std::string apply_err;
 			if(!object_apply_affect_target(after, location, target_modifier, apply_err,
-										   other_dam, other_sp, clear_slot)) {
+										   other_dam, other_sp, clear_slot, other_sf)) {
 				extract_obj(after);
 				return json_error(apply_err.c_str(), 400);
 			}

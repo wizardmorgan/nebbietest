@@ -600,7 +600,7 @@ struct ListinoRow {
 /**
  * Listino portal oggetto — https://www.nebbiearcane.it/listino-edits/
  * Stats: STR/DEX/WIS/INT/CHR (CON non e' nel listino ufficiale).
- * Spellpower come damroll; spellfail 2× armor; hitndam/hitnsp = unioni.
+ * Spellpower come damroll; spellfail step −5 a 20 MXP; hitndam/hitnsp = unioni.
  */
 constexpr ListinoRow kObjEditListino[] = {
 	{"str", "Forza (STR)", APPLY_STR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},

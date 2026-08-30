@@ -64,7 +64,8 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 											  int& pq, std::string& err,
 											  int other_worn_edited_dam = -1,
 											  int other_worn_edited_sp = -1,
-											  bool clear_slot = false);
+											  bool clear_slot = false,
+											  int other_owned_edited_spellfail = -1);
 
 /** Imposta affect target (stessa logica di quote). Restituisce false se invalido.
  *  clear_slot: libera lo slot (malus a 2× / effetto positivo gratis). */
@@ -72,7 +73,8 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 											  int target_modifier, std::string& err,
 											  int other_worn_edited_dam = -1,
 											  int other_worn_edited_sp = -1,
-											  bool clear_slot = false);
+											  bool clear_slot = false,
+											  int other_owned_edited_spellfail = -1);
 
 [[nodiscard]] int object_affect_current_modifier(const struct obj_data* obj,
 												 int location) noexcept;
@@ -94,6 +96,14 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] int object_edit_damroll_edited_delta(const struct obj_data* obj) noexcept;
 [[nodiscard]] int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept;
 [[nodiscard]] int object_edit_hitroll_edited_delta(const struct obj_data* obj) noexcept;
+
+/**
+ * Spellfail *editato* = max(0, proto − current) (piu' negativo = piu' edit).
+ * Conta verso il tetto personaggio kObjEditMaxSpellfailEditableTotal.
+ */
+[[nodiscard]] int object_edit_spellfail_edited_delta(const struct obj_data* obj) noexcept;
+[[nodiscard]] int object_edit_spellfail_total(const struct obj_data* obj) noexcept;
+[[nodiscard]] int object_edit_spellfail_prototype_total(const struct obj_data* obj) noexcept;
 
 /** Hitroll effettivo sul pezzo (HITROLL + HITNDAM + HITNSP). */
 [[nodiscard]] int object_edit_hitroll_total(const struct obj_data* obj) noexcept;
@@ -117,6 +127,9 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 
 /** true se location può cambiare lo spellpower effettivo del pezzo. */
 [[nodiscard]] bool object_edit_location_affects_spellpower(int location) noexcept;
+
+/** true se location tocca APPLY_SPELLFAIL. */
+[[nodiscard]] bool object_edit_location_affects_spellfail(int location) noexcept;
 
 [[nodiscard]] int object_immune_current_bits(const struct obj_data* obj) noexcept;
 
