@@ -276,9 +276,11 @@ body.payment-insufficient .payment-dock-inner {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) 1fr;
+  /* Minimi come prima; crescono in proporzione alla finestra (niente tetto fisso). */
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 2.4fr);
   gap: 1rem;
   align-items: start;
+  width: 100%;
 }
 
 .main-column {
@@ -291,9 +293,10 @@ body.payment-insufficient .payment-dock-inner {
 /* Inventario a sinistra + dettaglio oggetto a destra: meno scroll verticale. */
 .main-column.main-column--split {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 0.9fr) minmax(0, 2.2fr);
   gap: 1rem;
   align-items: start;
+  width: 100%;
 }
 
 .main-column--split #inventory-card {
@@ -302,6 +305,7 @@ body.payment-insufficient .payment-dock-inner {
   max-height: calc(100vh - 5.5rem);
   overflow: auto;
   margin: 0;
+  min-width: 0;
 }
 
 .main-column--split #inventory-card .inventory-list {
@@ -315,10 +319,11 @@ body.payment-insufficient .payment-dock-inner {
 
 .object-workspace {
   display: grid;
-  grid-template-columns: minmax(200px, 300px) minmax(0, 1fr);
+  grid-template-columns: minmax(200px, 0.95fr) minmax(0, 2fr);
   gap: 0.85rem;
   align-items: start;
   margin-top: 0.35rem;
+  width: 100%;
 }
 
 .object-workspace-meta {
@@ -405,7 +410,7 @@ body.payment-insufficient .payment-dock-inner {
 }
 
 .layout.layout--tools-open {
-  grid-template-columns: minmax(280px, 360px) 1fr minmax(280px, 320px);
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 2.2fr) minmax(280px, 0.95fr);
 }
 
 .tools-column {
