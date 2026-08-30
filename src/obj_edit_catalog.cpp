@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <string>
 
 #include "autoenums.hpp"
@@ -189,7 +191,9 @@ static bool place_affect_modifier(struct obj_data* obj, int location,
 		}
 		obj->affected[slot].location = static_cast<sh_int>(location);
 	}
-	obj->affected[slot].modifier = static_cast<sh_int>(modifier);
+	/* modifier e' int su obj_affected_type: NON castare a sh_int — bitvector
+	 * APPLY_SPELL (es. AFF_SCRYING=67108864) andrebbero a 0 e scrub li cancella. */
+	obj->affected[slot].modifier = modifier;
 	return true;
 }
 
@@ -432,10 +436,18 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	return true;
 }
 
-static void rewrite_combat_totals(struct obj_data* obj, int hitroll,
-												int damroll, int spellpower) {
+/**
+ * Riscrive i totali combat preservando gli altri affect.
+ * Compatta HITNDAM/HITNSP PRIMA di ripristinare non-combat: con MAX_OBJ_AFFECT=5
+ * piazzare HITROLL+DAMROLL separati mangia uno slot di troppo e droppava
+ * IMMUNE/SPELL in silenzio (es. hit-n-dam dopo resi+spy).
+ */
+[[nodiscard]] static bool rewrite_combat_totals(struct obj_data* obj, int hitroll,
+												int damroll, int spellpower,
+												std::string& err) {
 	if(!obj) {
-		return;
+		err = "oggetto null";
+		return false;
 	}
 
 	struct SavedAffect {
@@ -470,21 +482,55 @@ static void rewrite_combat_totals(struct obj_data* obj, int hitroll,
 		}
 	}
 
-	if(hitroll > 0) {
-		place_affect_modifier(obj, APPLY_HITROLL, hitroll);
+	int hr = hitroll;
+	int dr = damroll;
+	int sp = spellpower;
+	auto place_or_fail = [&](int location, int modifier) -> bool {
+		if(!place_affect_modifier(obj, location, modifier)) {
+			err = "slot affect insufficienti per salvare combat e gli altri bonus "
+				  "(max " +
+				  std::to_string(MAX_OBJ_AFFECT) +
+				  "): libera uno slot o unisci hit/dam";
+			return false;
+		}
+		return true;
+	};
+
+	if(hr > 0 && hr == dr && dr > 0) {
+		if(!place_or_fail(APPLY_HITNDAM, hr)) {
+			return false;
+		}
+		hr = 0;
+		dr = 0;
 	}
-	if(damroll > 0) {
-		place_affect_modifier(obj, APPLY_DAMROLL, damroll);
+	if(hr > 0 && hr == sp && dr == 0) {
+		if(!place_or_fail(APPLY_HITNSP, hr)) {
+			return false;
+		}
+		hr = 0;
+		sp = 0;
 	}
-	if(spellpower > 0) {
-		place_affect_modifier(obj, APPLY_SPELLPOWER, spellpower);
+	if(hr > 0 && !place_or_fail(APPLY_HITROLL, hr)) {
+		return false;
+	}
+	if(dr > 0 && !place_or_fail(APPLY_DAMROLL, dr)) {
+		return false;
+	}
+	if(sp > 0 && !place_or_fail(APPLY_SPELLPOWER, sp)) {
+		return false;
 	}
 
 	for(int i = 0; i < saved_count; ++i) {
-		place_affect_modifier(obj, saved[i].location, saved[i].modifier);
+		if(!place_affect_modifier(obj, saved[i].location, saved[i].modifier)) {
+			err = "slot affect insufficienti: non posso mantenere tutti i bonus "
+				  "non-combat dopo l'edit (max " +
+				  std::to_string(MAX_OBJ_AFFECT) + " slot)";
+			return false;
+		}
 	}
 
-	object_compact_edit_affects(obj);
+	scrub_zero_modifier_affects(obj);
+	return true;
 }
 
 /** Etichetta umana per modifier (bitvector spell/immune, nomi spell, ecc.). */
@@ -621,8 +667,7 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 			err = "nessuno slot da rimuovere";
 			return false;
 		}
-		rewrite_combat_totals(obj, hitroll, damroll, spellpower);
-		return true;
+		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err);
 	}
 
 	const int slot = find_affect_slot_for_location(obj, location);
@@ -806,8 +851,7 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 		default:
 			break;
 		}
-		rewrite_combat_totals(obj, hitroll, damroll, spellpower);
-		return true;
+		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err);
 	}
 
 	int slot = find_affect_slot_for_location(obj, location);
@@ -819,7 +863,7 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 		}
 		obj->affected[slot].location = static_cast<sh_int>(location);
 	}
-	obj->affected[slot].modifier = static_cast<sh_int>(target_modifier);
+	obj->affected[slot].modifier = target_modifier;
 	return true;
 }
 
