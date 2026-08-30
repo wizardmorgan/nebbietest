@@ -2052,6 +2052,8 @@ struct ToonInventoryEditScan {
 				dam_budget["source"] = "owned_edit_delta_vs_proto";
 				dam_budget["contributors"] =
 					owned_dam_budget_contributors_json(rows, toon_name.c_str());
+				/* Mutex UI: presenza sul pezzo (proto o edit), non solo delta. */
+				dam_budget["piece_has_dam"] = object_edit_damroll_total(obj) > 0;
 				dam_budget["mutex_with_spellpower"] = true;
 				d["dam_budget"] = dam_budget;
 
@@ -2067,6 +2069,8 @@ struct ToonInventoryEditScan {
 				sp_budget["char_total"] = other_sp + piece_sp_for_total;
 				sp_budget["char_max"] = kObjEditMaxSpellpowerEditableTotal;
 				sp_budget["source"] = "owned_edit_delta_vs_proto";
+				sp_budget["piece_has_spellpower"] =
+					object_edit_spellpower_total(obj) > 0;
 				sp_budget["mutex_with_dam"] = true;
 				d["sp_budget"] = sp_budget;
 

@@ -1585,8 +1585,9 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 }
 
 /**
- * Su un pezzo: dam editato XOR spellpower editato (hit-n-dam / hit-n-sp inclusi).
- * Per passare all'altro bisogna prima liberare lo slot (Rimuovi slot / azzerare).
+ * Su un pezzo: dam (incl. hit-n-dam) XOR spellpower (incl. hit-n-sp).
+ * Basta che il pezzo abbia dam/sp presente (anche da proto): per passare
+ * all'altro bisogna prima «Rimuovi slot» sull'asse occupato.
  */
 [[nodiscard]] static bool enforce_dam_spellpower_mutex(const struct obj_data* before_obj,
 													   int location, bool clear_slot,
@@ -1594,17 +1595,17 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 	if(!before_obj || clear_slot) {
 		return true;
 	}
-	const int dam_ed = object_edit_damroll_edited_delta(before_obj);
-	const int sp_ed = object_edit_spellpower_edited_delta(before_obj);
-	if(object_edit_location_affects_dam(location) && sp_ed > 0) {
-		err = "su questo pezzo c'e' gia' spellpower editato (+" +
-			  std::to_string(sp_ed) +
-			  " vs proto): rimuovi prima quello slot, poi puoi editare dam";
+	const int dam_now = combat_damroll_total(before_obj);
+	const int sp_now = combat_spellpower_total(before_obj);
+	if(object_edit_location_affects_dam(location) && sp_now > 0) {
+		err = "su questo pezzo c'e' gia' spellpower (+" + std::to_string(sp_now) +
+			  ", hit-n-sp incluso): rimuovi prima quello slot, poi puoi editare dam";
 		return false;
 	}
-	if(object_edit_location_affects_spellpower(location) && dam_ed > 0) {
-		err = "su questo pezzo c'e' gia' dam editato (+" + std::to_string(dam_ed) +
-			  " vs proto): rimuovi prima quello slot, poi puoi editare spellpower";
+	if(object_edit_location_affects_spellpower(location) && dam_now > 0) {
+		err = "su questo pezzo c'e' gia' dam (+" + std::to_string(dam_now) +
+			  ", hit-n-dam incluso): rimuovi prima quello slot, poi puoi editare "
+			  "spellpower";
 		return false;
 	}
 	return true;

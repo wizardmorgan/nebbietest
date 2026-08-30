@@ -6,7 +6,7 @@ const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 const TOOLS_OPEN_KEY = 'nebbie-edit-tools-open';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 49;
+const EDIT_PORTAL_UI_BUILD = 50;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -2449,9 +2449,9 @@ function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) 
   grid.className = 'massimali-grid';
 
   const damMutexNote =
-    'Su ogni pezzo: dam editato oppure spellpower (hit-n-sp incluso), non entrambi.';
+    'Su ogni pezzo: se c\'è dam o hit-n-dam, spellpower è bloccato finché non rimuovi quello slot (e viceversa).';
   const spMutexNote =
-    'Su ogni pezzo: spellpower editato oppure dam (hit-n-dam incluso), non entrambi.';
+    'Su ogni pezzo: se c\'è spellpower o hit-n-sp, dam è bloccato finché non rimuovi quello slot (e viceversa).';
 
   if (damBudget) {
     const card = document.createElement('div');
@@ -2593,8 +2593,17 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
 
   const damPiece = Number(damBudget?.piece || 0);
   const spPiece = Number(spBudget?.piece || 0);
-  const damMutexActive = damPiece > 0 && damBudget?.mutex_with_spellpower !== false;
-  const spMutexActive = spPiece > 0 && spBudget?.mutex_with_dam !== false;
+  /* Mutex: presenza dam/sp sul pezzo (hit-n-dam incluso), non solo delta vs proto. */
+  const damPresent =
+    damBudget?.piece_has_dam === true ||
+    Number(damBudget?.piece_current || 0) > 0 ||
+    damPiece > 0;
+  const spPresent =
+    spBudget?.piece_has_spellpower === true ||
+    Number(spBudget?.piece_current || 0) > 0 ||
+    spPiece > 0;
+  const damMutexActive = damPresent && damBudget?.mutex_with_spellpower !== false;
+  const spMutexActive = spPresent && spBudget?.mutex_with_dam !== false;
 
   const editsWrap = document.createElement('div');
   editsWrap.className = 'object-edit-groups';
