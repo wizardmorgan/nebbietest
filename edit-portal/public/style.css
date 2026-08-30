@@ -281,6 +281,129 @@ body.payment-insufficient .payment-dock-inner {
   align-items: start;
 }
 
+.main-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* Inventario a sinistra + dettaglio oggetto a destra: meno scroll verticale. */
+.main-column.main-column--split {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.main-column--split #inventory-card {
+  position: sticky;
+  top: 0.75rem;
+  max-height: calc(100vh - 5.5rem);
+  overflow: auto;
+  margin: 0;
+}
+
+.main-column--split #inventory-card .inventory-list {
+  max-height: none;
+}
+
+.main-column--split #object-detail-card {
+  min-width: 0;
+  margin: 0;
+}
+
+.object-workspace {
+  display: grid;
+  grid-template-columns: minmax(200px, 300px) minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+  margin-top: 0.35rem;
+}
+
+.object-workspace-meta {
+  position: sticky;
+  top: 0.75rem;
+  max-height: calc(100vh - 9rem);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.object-workspace-edits {
+  min-width: 0;
+  max-height: calc(100vh - 9rem);
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.object-massimali:empty {
+  display: none;
+}
+
+.object-edit-filter {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.65rem;
+}
+
+.object-edit-filter input[type='search'] {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.object-edit-filter-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.massimale-value.massimale-usage-low {
+  color: #3ecf8e;
+}
+
+.massimale-value.massimale-usage-mid {
+  color: #e6b84d;
+}
+
+.massimale-value.massimale-usage-high {
+  color: #e85d5d;
+}
+
+@media (max-width: 1200px) {
+  .main-column.main-column--split {
+    grid-template-columns: 1fr;
+  }
+
+  .main-column--split #inventory-card {
+    position: static;
+    max-height: none;
+  }
+
+  .main-column--split #inventory-card .inventory-list {
+    max-height: 280px;
+  }
+
+  .object-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .object-workspace-meta,
+  .object-workspace-edits {
+    position: static;
+    max-height: none;
+  }
+}
+
 .layout.layout--tools-open {
   grid-template-columns: minmax(280px, 360px) 1fr minmax(280px, 320px);
 }

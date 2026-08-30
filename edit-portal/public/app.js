@@ -6,7 +6,7 @@ const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 const TOOLS_OPEN_KEY = 'nebbie-edit-tools-open';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 47;
+const EDIT_PORTAL_UI_BUILD = 48;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -1346,6 +1346,7 @@ function clearTargetWorkspace(message) {
   }
   if ($('object-edits')) $('object-edits').innerHTML = '';
   if ($('object-text-edit')) $('object-text-edit').innerHTML = '';
+  if ($('object-massimali')) $('object-massimali').innerHTML = '';
   if ($('object-edit-cart')) {
     $('object-edit-cart').innerHTML = '';
     $('object-edit-cart').classList.add('hidden');
@@ -1358,6 +1359,7 @@ function clearTargetWorkspace(message) {
     $('object-affect-slots').innerHTML = '';
     hide('object-affect-slots');
   }
+  setMainColumnSplit(false);
   if ($('pool-edits')) $('pool-edits').innerHTML = '';
   if ($('resistance-edits')) $('resistance-edits').innerHTML = '';
   if ($('quote-box')) {
@@ -1877,11 +1879,13 @@ async function selectItem(inventoryId, li) {
   }
   updatePaymentUI();
   $('object-edits').innerHTML = '';
+  if ($('object-massimali')) $('object-massimali').innerHTML = '';
   $('object-affect-slots').innerHTML = '';
   hide('object-affect-slots');
   const textBox = $('object-text-edit');
   if (textBox) textBox.innerHTML = '';
   $('quote-box').textContent = 'Caricamento…';
+  setMainColumnSplit(true);
 
   const opts = await api('/api/object-edit-options', {
     method: 'POST',
@@ -1890,6 +1894,7 @@ async function selectItem(inventoryId, li) {
 
   if (!opts.ok) {
     $('quote-box').textContent = opts.error || 'Oggetto non editabile';
+    setMainColumnSplit(false);
     return;
   }
 
@@ -1944,7 +1949,7 @@ function renderObjectAffectSlots(affectSlots) {
 
   box.innerHTML = '';
   const title = document.createElement('h3');
-  title.textContent = 'Slot effetti (affect)';
+  title.textContent = 'Slot affect';
   box.appendChild(title);
 
   const summary = document.createElement('p');
@@ -2108,18 +2113,24 @@ function objectEntryCostHint(entry) {
   return `Listino: ${mxp} ${currencyLabel('mxp')} o ${rune} ${currencyLabel('rune')} / punto`;
 }
 
+/**
+ * I valori selezionabili sono già nel menu a tendina: non ripetere range
+ * tecnici tipo «extra 0…3 oltre proto». Solo step ≠ 1 se utile.
+ */
 function objectEntryRangeLabel(entry) {
-  const min = Number(entry.min);
-  const max = Number(entry.max);
-  const step = Number(entry.step) || 1;
-  if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell' || entry.kind === 'flag') {
+  if (
+    entry.kind === 'immune' ||
+    entry.kind === 'm_immune' ||
+    entry.kind === 'spell' ||
+    entry.kind === 'flag'
+  ) {
     return '';
   }
-  if (entry.relative) {
-    const proto = Number(entry.proto || 0);
-    return ` (extra ${min}…${max} oltre proto ${proto}, step ${step})`;
+  const step = Number(entry.step) || 1;
+  if (Math.abs(step) !== 1) {
+    return ` (step ${step})`;
   }
-  return ` (${min}…${max}, step ${step})`;
+  return '';
 }
 
 function objectEntrySlotHint(entry) {
@@ -2314,7 +2325,7 @@ function renderObjectTextEdit(textEdit) {
   details.open = true;
   const summary = document.createElement('summary');
   summary.className = 'edit-section-summary';
-  summary.innerHTML = '<span class="edit-section-name">Name / short / long</span>';
+  summary.innerHTML = '<span class="edit-section-name">Sezione String</span>';
   details.appendChild(summary);
 
   const body = document.createElement('div');
@@ -2405,7 +2416,27 @@ function renderObjectTextEdit(textEdit) {
   box.appendChild(details);
 }
 
+function massimaleUsageClass(total, max) {
+  const t = Number(total);
+  const m = Number(max);
+  if (!(m > 0) || !Number.isFinite(t)) return '';
+  const pct = (Math.max(0, t) / m) * 100;
+  if (pct <= 30) return 'massimale-usage-low';
+  if (pct <= 70) return 'massimale-usage-mid';
+  return 'massimale-usage-high';
+}
+
+function setMainColumnSplit(active) {
+  const col = document.querySelector('.main-column');
+  if (!col) return;
+  col.classList.toggle('main-column--split', !!active);
+}
+
 function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) {
+  const host = $('object-massimali') || box;
+  if (!host) return;
+  if (host !== box) host.innerHTML = '';
+
   const panel = document.createElement('div');
   panel.className = 'massimali-panel';
 
@@ -2431,6 +2462,7 @@ function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) 
     const pc = Number(damBudget.piece_current);
     const pp = Number(damBudget.piece_proto);
     const delta = Number(damBudget.piece || 0);
+    const usage = massimaleUsageClass(total, max);
     let detail = `Max ${pieceMax} dam editati per pezzo`;
     if (Number.isFinite(pc) && Number.isFinite(pp)) {
       detail = `Questo pezzo: ${pc} vs proto ${pp} (delta +${delta}) · max ${pieceMax}/pezzo`;
@@ -2442,7 +2474,7 @@ function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) 
       damBudget.mutex_with_spellpower !== false ? damMutexNote : '';
     card.innerHTML = `
       <div class="massimale-label">Dam totale editato</div>
-      <div class="massimale-value">${total}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-value ${usage}">${total}<span class="massimale-max"> / ${max}</span></div>
       <div class="massimale-detail">${escapeHtml(detail)}</div>
       ${mutexNote ? `<div class="massimale-note">${escapeHtml(mutexNote)}</div>` : ''}
     `;
@@ -2457,6 +2489,7 @@ function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) 
     const pieceMax = Number(spBudget.piece_max || 2);
     const pc = Number(spBudget.piece_current);
     const delta = Number(spBudget.piece || 0);
+    const usage = massimaleUsageClass(total, max);
     let detail = `Max ${pieceMax} spellpower editati per pezzo`;
     if (Number.isFinite(pc)) {
       detail = `Questo pezzo: totale ${pc} (delta edit +${delta}) · max ${pieceMax}/pezzo`;
@@ -2464,7 +2497,7 @@ function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) 
     const mutexNote = spBudget.mutex_with_dam !== false ? spMutexNote : '';
     card.innerHTML = `
       <div class="massimale-label">Spellpower totale editato</div>
-      <div class="massimale-value">${total}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-value ${usage}">${total}<span class="massimale-max"> / ${max}</span></div>
       <div class="massimale-detail">${escapeHtml(detail)}</div>
       ${mutexNote ? `<div class="massimale-note">${escapeHtml(mutexNote)}</div>` : ''}
     `;
@@ -2482,13 +2515,14 @@ function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) 
     const delta = Number(sfBudget.piece || 0);
     const stepMag = Math.abs(Number(sfBudget.step || 5));
     const mxpStep = Number(sfBudget.mxp_per_step || 20);
+    const usage = massimaleUsageClass(total, max);
     let detail = `Step −${stepMag}, ${mxpStep} MXP/step · max ${pieceMax} spellfail editato per pezzo`;
     if (Number.isFinite(pc) && Number.isFinite(pp)) {
       detail = `Questo pezzo: ${pc} vs proto ${pp} (delta +${delta}) · step −${stepMag}, ${mxpStep} MXP/step`;
     }
     card.innerHTML = `
       <div class="massimale-label">Spellfail totale editato</div>
-      <div class="massimale-value">${total}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-value ${usage}">${total}<span class="massimale-max"> / ${max}</span></div>
       <div class="massimale-detail">${escapeHtml(detail)}</div>
     `;
     grid.appendChild(card);
@@ -2535,19 +2569,23 @@ function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) 
     panel.appendChild(wrap);
   }
 
-  box.appendChild(panel);
+  host.appendChild(panel);
 }
 
 function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol) {
   const box = $('object-edits');
   box.innerHTML = '';
+  const massHost = $('object-massimali');
+  if (massHost) massHost.innerHTML = '';
 
   if (!entries.length) {
     box.innerHTML = '<p class="hint">Nessun campo editabile su questo oggetto.</p>';
+    setMainColumnSplit(!!selectedInventoryId);
     return;
   }
   if (session.role === 'limited') {
     box.innerHTML = '<p class="hint">Tier limited: edit oggetto non consentito.</p>';
+    setMainColumnSplit(!!selectedInventoryId);
     return;
   }
 
@@ -2565,6 +2603,20 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
   editsTitle.textContent = 'Opzioni di edit';
   editsWrap.appendChild(editsTitle);
 
+  const filterRow = document.createElement('div');
+  filterRow.className = 'object-edit-filter';
+  const filterInput = document.createElement('input');
+  filterInput.type = 'search';
+  filterInput.placeholder = 'Filtra opzioni…';
+  filterInput.setAttribute('aria-label', 'Filtra opzioni di edit');
+  filterRow.appendChild(filterInput);
+  editsWrap.appendChild(filterRow);
+  const filterHint = document.createElement('p');
+  filterHint.className = 'object-edit-filter-hint';
+  filterHint.textContent =
+    'Sezioni chiuse di default: aprine una o usa il filtro. Slot affect / String / Massimali restano a sinistra.';
+  editsWrap.appendChild(filterHint);
+
   const grouped = new Map();
   entries.forEach((entry) => {
     /* CON non e' nel listino ufficiale — non mostrare anche se myst vecchio lo manda. */
@@ -2578,6 +2630,8 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
     (a, b) => objectEditSectionRank(a) - objectEditSectionRank(b) || a.localeCompare(b, 'it')
   );
 
+  const sectionEls = [];
+
   sectionNames.forEach((section) => {
     const list = grouped.get(section) || [];
     list.sort((a, b) =>
@@ -2588,7 +2642,8 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
 
     const details = document.createElement('details');
     details.className = 'edit-section';
-    details.open = true;
+    const sectionHasPresent = list.some((e) => e.has_affect || Number(e.current) !== 0);
+    details.open = sectionHasPresent;
 
     const summary = document.createElement('summary');
     summary.className = 'edit-section-summary';
@@ -2606,30 +2661,43 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
       const row = document.createElement('div');
       row.className = canEdit ? 'edit-row' : 'edit-row edit-row-disabled';
       row.dataset.cartKey = entry.id;
+      row.dataset.filterText = `${entry.label || ''} ${entry.id || ''} ${section}`.toLowerCase();
       const select = document.createElement('select');
       select.disabled = !canEdit || session.role === 'limited';
       select.dataset.current = String(current);
 
+      const canClearYesNo =
+        (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') &&
+        (entry.can_clear_slot || entry.has_affect) &&
+        current === 1 &&
+        canEdit &&
+        session.role !== 'limited';
+
       if (isYesNoObjectEntry(entry)) {
-        [
-          { v: 0, l: 'No' },
-          { v: 1, l: 'Sì' },
-        ].forEach(({ v, l }) => {
-          const opt = document.createElement('option');
-          opt.value = v;
-          opt.textContent = l;
-          if (v === current) opt.selected = true;
-          select.appendChild(opt);
-        });
-        if (
-          (entry.kind === 'immune' || entry.kind === 'm_immune') &&
-          current === 1
-        ) {
-          select.disabled = true;
-        }
-        if (entry.kind === 'spell' && current === 1) select.disabled = true;
-        if (entry.kind === 'flag' && entry.flag === 'artifact' && current === 1) {
-          select.disabled = true;
+        if (canClearYesNo) {
+          const keep = document.createElement('option');
+          keep.value = '1';
+          keep.textContent = 'Sì';
+          keep.selected = true;
+          select.appendChild(keep);
+          const clearOpt = document.createElement('option');
+          clearOpt.value = '__clear__';
+          clearOpt.textContent = 'No, rimuovi dallo slot';
+          select.appendChild(clearOpt);
+        } else {
+          [
+            { v: 0, l: 'No' },
+            { v: 1, l: 'Sì' },
+          ].forEach(({ v, l }) => {
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = l;
+            if (v === current) opt.selected = true;
+            select.appendChild(opt);
+          });
+          if (entry.kind === 'flag' && entry.flag === 'artifact' && current === 1) {
+            select.disabled = true;
+          }
         }
       } else {
         let values = buildObjectScalarOptions(entry);
@@ -2681,15 +2749,19 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
       select.addEventListener('change', () => {
         if (!canEdit) return;
         if (select.value === '__clear__') {
+          if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') {
+            const bit =
+              entry.kind === 'spell'
+                ? Number(entry.spell_bit)
+                : Number(entry.immune_bit);
+            queueObjectQuote(entry, bit, select, { clearSlot: true });
+            return;
+          }
           queueObjectQuote(entry, 0, select, { clearSlot: true });
           return;
         }
         const newVal = Number(select.value);
         if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') {
-          if (newVal === 0 && current === 1) {
-            select.value = '1';
-            return;
-          }
           if (newVal === current) {
             clearObjectPending(entry.id);
             return;
@@ -2717,6 +2789,9 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
       });
 
       const yesNoKind = isYesNoObjectEntry(entry);
+      const proto = Number(entry.proto);
+      const showProto =
+        entry.relative && Number.isFinite(proto) && entry.kind === 'scalar';
       const meta = document.createElement('div');
       meta.innerHTML = `
         <label class="effect-name">${escapeHtml(entry.label || entry.id)}${escapeHtml(objectEntryRangeLabel(entry))}</label>
@@ -2728,7 +2803,7 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
             : entry.relative
               ? formatScalarOptionLabel(entry, current)
               : current
-        }</div>
+        }${showProto ? ` · proto ${proto}` : ''}</div>
         <div class="slot-hint">${
           entry.kind === 'flag' ? escapeHtml(entry.hint || '') : escapeHtml(objectEntrySlotHint(entry))
         }</div>
@@ -2746,9 +2821,30 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
 
     details.appendChild(body);
     editsWrap.appendChild(details);
+    sectionEls.push(details);
+  });
+
+  filterInput.addEventListener('input', () => {
+    const q = filterInput.value.trim().toLowerCase();
+    sectionEls.forEach((details) => {
+      let visible = 0;
+      details.querySelectorAll('.edit-row').forEach((row) => {
+        const match = !q || (row.dataset.filterText || '').includes(q);
+        row.classList.toggle('hidden', !match);
+        if (match) visible += 1;
+      });
+      details.classList.toggle('hidden', visible === 0);
+      if (q && visible > 0) details.open = true;
+      const countEl = details.querySelector('.edit-section-count');
+      if (countEl) {
+        const total = details.querySelectorAll('.edit-row').length;
+        countEl.textContent = q ? `${visible}/${total}` : String(total);
+      }
+    });
   });
 
   box.appendChild(editsWrap);
+  setMainColumnSplit(true);
   updateObjectCartUI();
 }
 
@@ -3085,12 +3181,32 @@ if (btnResetChar) {
     if ($('apply-result')) $('apply-result').textContent = '';
   };
 }
+function resetObjectEditsToSelection() {
+  clearObjectEditCart({ resetSelectors: true });
+  const t = selectedObjectOptions?.text_edit;
+  if (t) {
+    const nameEl = $('obj-text-name');
+    const shortEl = $('obj-text-short');
+    const longEl = $('obj-text-long');
+    if (nameEl) {
+      nameEl.value = t.name || '';
+      nameEl.dispatchEvent(new Event('input'));
+    }
+    if (shortEl) {
+      shortEl.value = t.short_desc || '';
+      shortEl.dispatchEvent(new Event('input'));
+    }
+    if (longEl) {
+      longEl.value = t.description || '';
+      longEl.dispatchEvent(new Event('input'));
+    }
+  }
+  if ($('apply-result')) $('apply-result').textContent = '';
+}
+
 const btnResetObj = $('btn-reset-object-edits');
 if (btnResetObj) {
-  btnResetObj.onclick = () => {
-    clearObjectEditCart({ resetSelectors: true });
-    if ($('apply-result')) $('apply-result').textContent = '';
-  };
+  btnResetObj.onclick = () => resetObjectEditsToSelection();
 }
 
 /** Slug ITEM_* — allineato a edit_system_config.cpp (fallback se myst vecchio). */

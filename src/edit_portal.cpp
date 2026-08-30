@@ -2222,14 +2222,14 @@ struct ToonInventoryEditScan {
 									 ? object_m_immune_current_bits(obj)
 									 : object_immune_current_bits(obj);
 				current = (bits & target_modifier) ? 1 : 0;
-				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
+				target = clear_slot ? 0 : (current ? 1 : (target_modifier != 0 ? 1 : 0));
 			}
 			else if(location == APPLY_SPELL || location == APPLY_AFF2) {
 				const int bits = (location == APPLY_AFF2)
 									 ? object_aff2_current_bits(obj)
 									 : object_spell_current_bits(obj);
 				current = (bits & target_modifier) ? 1 : 0;
-				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
+				target = clear_slot ? 0 : (current ? 1 : (target_modifier != 0 ? 1 : 0));
 			}
 			else {
 				current = object_edit_display_current(obj, location);
@@ -2240,7 +2240,8 @@ struct ToonInventoryEditScan {
 
 			Json d = quote_xp_json(xp_raw, pq);
 			d["location"] = location;
-			d["target_modifier"] = clear_slot ? 0 : target_modifier;
+			/* Su clear bit (resi/imm/spell) serve il bit in target_modifier. */
+			d["target_modifier"] = target_modifier;
 			d["clear_slot"] = clear_slot ? 1 : 0;
 			d["current"] = current;
 			d["target"] = target;

@@ -680,10 +680,35 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 
 	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE
 	   || location == APPLY_SPELL || location == APPLY_AFF2) {
-		if(clear_slot || target_modifier == 0) {
+		/*
+		 * Listino: rimozione effetto positivo gratis.
+		 * clear_slot + bit in target_modifier: spegne quel bit; se lo slot
+		 * resta a 0 lo libera (es. Res. Slash → «No, rimuovi dallo slot»).
+		 */
+		if(clear_slot) {
+			if(target_modifier == 0) {
+				err = "specifica il bit da rimuovere dallo slot";
+				return false;
+			}
+			const int slot = find_affect_slot_for_location(obj, location);
+			if(slot < 0) {
+				err = "nessuno slot da rimuovere";
+				return false;
+			}
+			if((obj->affected[slot].modifier & target_modifier) == 0) {
+				err = "effetto non presente sullo slot";
+				return false;
+			}
+			obj->affected[slot].modifier &= ~target_modifier;
+			if(obj->affected[slot].modifier == 0) {
+				wipe_affect_slot(obj, slot);
+			}
+			return true;
+		}
+		if(target_modifier == 0) {
 			err = (location == APPLY_SPELL || location == APPLY_AFF2)
-					  ? "rimozione spell non supportata qui"
-					  : "rimozione resistenza/immunità non supportata qui";
+					  ? "per togliere una spell usa «No, rimuovi dallo slot»"
+					  : "per togliere una resistenza/immunità usa «No, rimuovi dallo slot»";
 			return false;
 		}
 		const int slot = find_affect_slot_for_location(obj, location);
@@ -1128,6 +1153,8 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["occupied_slot"] = imm_slot;
 		j["can_add"] = can_add;
 		j["can_edit"] = has_affect || can_add;
+		/* Resistenza presente: rimozione gratis (stesso listino dei bonus). */
+		j["can_clear_slot"] = has_affect;
 		j["mxp_per_step"] = r.mxp;
 		j["rune_per_step"] = r.rune;
 		entries.push_back(j);
@@ -1161,6 +1188,7 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["occupied_slot"] = slot;
 		j["can_add"] = can_add;
 		j["can_edit"] = has_affect || can_add;
+		j["can_clear_slot"] = has_affect;
 		j["mxp_per_step"] = r.mxp;
 		j["rune_per_step"] = r.rune;
 		entries.push_back(j);
@@ -1202,7 +1230,8 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["occupied_slot"] = sp_slot;
 		j["can_add"] = can_add;
 		j["can_edit"] = has_affect || can_add;
-		j["can_remove"] = false;
+		j["can_clear_slot"] = has_affect;
+		j["can_remove"] = has_affect;
 		j["mxp_per_step"] = sp.mxp;
 		j["rune_per_step"] = sp.rune;
 		entries.push_back(j);

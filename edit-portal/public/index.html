@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="edit-base" content="" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=47" />
+  <link rel="stylesheet" href="style.css?v=48" />
   <script src="config.js"></script>
 </head>
 <body>
@@ -129,15 +129,22 @@
           <div class="card" id="object-detail-card">
             <div class="card-header card-header-tight">
               <h2>Oggetto selezionato</h2>
-              <button id="btn-reset-object-edits" class="btn-secondary btn-reset-edits" type="button" title="Annulla tutte le modifiche oggetto in coda">
+              <button id="btn-reset-object-edits" class="btn-secondary btn-reset-edits" type="button" title="Ripristina opzioni e stringhe allo stato di caricamento alla selezione">
                 Reset
               </button>
             </div>
             <div id="quote-box" class="quote-box">Seleziona un oggetto editabile dall'inventario del personaggio target.</div>
             <div id="object-edit-cart" class="edit-cart hidden" aria-live="polite"></div>
-            <div id="object-affect-slots" class="object-affect-slots hidden"></div>
-            <div id="object-text-edit" class="object-text-edit-wrap"></div>
-            <div id="object-edits" class="object-edits"></div>
+            <div class="object-workspace" id="object-workspace">
+              <aside class="object-workspace-meta" id="object-workspace-meta" aria-label="Stato oggetto">
+                <div id="object-affect-slots" class="object-affect-slots hidden"></div>
+                <div id="object-text-edit" class="object-text-edit-wrap"></div>
+                <div id="object-massimali" class="object-massimali"></div>
+              </aside>
+              <div class="object-workspace-edits" id="object-workspace-edits">
+                <div id="object-edits" class="object-edits"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -243,6 +250,6 @@
 
     </section>
   </main>
-  <script src="app.js?v=47"></script>
+  <script src="app.js?v=48"></script>
 </body>
 </html>
