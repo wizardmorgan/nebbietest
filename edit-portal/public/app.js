@@ -2475,7 +2475,7 @@ function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) 
     const card = document.createElement('div');
     card.className = 'massimale-card';
     const total = Number(sfBudget.char_total || 0);
-    const max = Number(sfBudget.char_max || 30);
+    const max = Number(sfBudget.char_max || 100);
     const pieceMax = Math.abs(Number(sfBudget.piece_max || 40));
     const pc = Number(sfBudget.piece_current);
     const pp = Number(sfBudget.piece_proto);

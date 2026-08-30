@@ -2052,6 +2052,7 @@ struct ToonInventoryEditScan {
 				dam_budget["source"] = "owned_edit_delta_vs_proto";
 				dam_budget["contributors"] =
 					owned_dam_budget_contributors_json(rows, toon_name.c_str());
+				dam_budget["mutex_with_spellpower"] = true;
 				d["dam_budget"] = dam_budget;
 
 				const int piece_sp_delta = object_edit_spellpower_edited_delta(obj);
@@ -2085,9 +2086,6 @@ struct ToonInventoryEditScan {
 				sf_budget["mxp_per_step"] = 20;
 				sf_budget["source"] = "owned_edit_delta_vs_proto";
 				d["sf_budget"] = sf_budget;
-
-				dam_budget["mutex_with_spellpower"] = true;
-				d["dam_budget"] = dam_budget;
 			}
 			{
 				/* Sempre editabile in UI: si salva solo insieme a un affect pagato
