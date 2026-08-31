@@ -9,16 +9,13 @@ l’app GitHub Cursor non include `edit-portal`. Pubblicazione UI: **GitHub Desk
 ## Primo import
 
 1. GitHub Desktop → **Clone** `NebbieArcane/edit-portal`.
-2. Scarica il tarball solo-portale dall’agent (artifact
-   `nebbie_edit_portal_only_YYYYMMDD.tgz`) oppure riesportalo dalla cartella
-   `edit-portal/` + docs/script come in `docs/edit-portal-two-repos.md`.
-3. Estrai **nella root** del clone (non in una sottocartella `edit-portal/`):
+2. Scarica lo ZIP del branch solo-portale sul fork (niente artifact cloud):
 
-   ```bash
-   cd ~/path/al/clone/edit-portal
-   tar -xzf ~/Downloads/nebbie_edit_portal_only_YYYYMMDD.tgz
-   ```
+   - Branch: https://github.com/wizardmorgan/nebbietest/tree/publish/edit-portal-ui  
+   - ZIP diretto: https://github.com/wizardmorgan/nebbietest/archive/refs/heads/publish/edit-portal-ui.zip  
 
+3. Estrai lo ZIP e copia i file **nella root** del clone `edit-portal`  
+   (ignora la cartella wrapper `nebbietest-publish-edit-portal-ui/` dello ZIP).
 4. Desktop → rivedi i file → **Commit** → **Push origin**.
 
 Contenuto atteso in root: `server.js`, `public/`, `package.json`,
