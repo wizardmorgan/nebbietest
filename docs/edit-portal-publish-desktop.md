@@ -23,10 +23,14 @@ Contenuto atteso in root: `server.js`, `public/`, `package.json`,
 
 ## Aggiornamenti successivi
 
-1. Sviluppo quotidiano UI/API Node: branch `feature/edit-portal` su
-   `wizardmorgan/nebbietest` (o merge locale in Server).
-2. Quando vuoi pubblicare l’UI ufficiale: chiedi all’agent un **nuovo tarball**
-   (o esporta a mano), estrailo nel clone Desktop, Commit + Push.
+**Target ufficiale:** sviluppo UI su `NebbieArcane/edit-portal` con **git flow**
+(`feature/*` da `develop`/`main`). Vedi `edit-portal-git-flow.md`.
+
+Finché un Cloud Agent non ha accesso a quel repo privato:
+
+1. Si può ancora lavorare UI sul fork mud (`feature/edit-portal`) e ripubblicare
+   lo snapshot `publish/edit-portal-ui`, oppure
+2. Lavorare in locale/Desktop direttamente su `NebbieArcane/edit-portal`.
 
 Le modifiche C++ (`src/edit_portal.cpp`, catalogo, …) **non** vanno in
 `NebbieArcane/edit-portal`: restano PR verso Server / fork mud.
