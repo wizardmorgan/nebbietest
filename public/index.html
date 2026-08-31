@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="edit-base" content="" />
+  <title>Nebbie — Portale Edit</title>
+  <link rel="stylesheet" href="style.css?v=50" />
+  <script src="config.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <h1>Portale Edit</h1>
+      <p class="subtitle">Nebbie Arcane</p>
+    </div>
+    <div id="header-meta" class="header-meta"></div>
+    <nav class="header-actions">
+      <button id="btn-change-toon" class="btn-secondary hidden" type="button">Cambia personaggio</button>
+      <button id="btn-logout" class="btn-secondary hidden" type="button">Logout</button>
+    </nav>
+  </header>
+
+  <main class="app-main">
+    <section id="login-panel" class="panel card">
+      <h2>Accesso account</h2>
+      <div id="sso-login-block" class="sso-login-block hidden">
+        <p class="hint">
+          Accedi con lo stesso account del sito WordPress.
+          L'email del sito deve coincidere con l'account Mud (tabella <code>user</code>).
+          Dopo il login usi i personaggi di quell'account con i livelli di utilizzo già definiti
+          (limited / player / staff).
+        </p>
+        <p class="btn-row">
+          <a id="sso-wp-link" class="btn-primary" href="#">Accedi dal sito WordPress</a>
+        </p>
+        <p id="sso-login-hint" class="hint"></p>
+      </div>
+      <div id="password-login-block">
+        <p class="hint">Usa l'email e la password dell'<strong>account</strong> (tabella <code>user</code>), non la password del singolo personaggio.</p>
+        <form id="login-form" class="form-grid">
+          <label>Email <input type="email" id="login-email" required autocomplete="username" /></label>
+          <label>Password <input type="password" id="login-password" required autocomplete="current-password" /></label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="login-remember" />
+            Memorizza password su questo browser
+          </label>
+          <button type="submit" class="btn-primary">Accedi</button>
+        </form>
+      </div>
+      <p id="login-error" class="error"></p>
+    </section>
+
+    <section id="toon-panel" class="panel card hidden">
+      <h2>Seleziona personaggio</h2>
+      <p class="hint">A sinistra: staff (comandi) e personaggi sotto il 51. A destra: principi con riepilogo edit.</p>
+      <div id="toon-list" class="toon-list"></div>
+    </section>
+
+    <section id="work-panel" class="hidden">
+      <div id="online-warn" class="alert alert-warn hidden"></div>
+      <div id="api-warn" class="alert alert-error hidden"></div>
+
+      <div class="work-toolbar">
+        <button id="btn-toggle-tools" class="btn-secondary btn-tools-toggle hidden" type="button" aria-pressed="false" title="Mostra o nascondi categorie, valute e strumenti staff">
+          Opzioni sistema
+        </button>
+      </div>
+
+      <div class="layout" id="work-layout">
+        <aside class="sidebar">
+          <div class="card">
+            <h2>Personaggio target</h2>
+            <p id="session-role-hint" class="hint"></p>
+            <div id="target-toon-wrap" class="field-label hidden">
+              <label>Cerca personaggio (staff)
+                <input type="search" id="target-toon-search" placeholder="Digita almeno 2 lettere del nome…" autocomplete="off" />
+              </label>
+              <label class="target-select-label">Seleziona dalla lista
+                <select id="target-toon" size="8">
+                  <option value="">— cerca un nome sopra —</option>
+                </select>
+              </label>
+              <p class="hint">Il personaggio di sessione (in alto) serve solo per i permessi staff. Qui scegli <strong>su chi</strong> lavori: inventario, edit oggetti e pagamento.</p>
+            </div>
+            <div id="char-stats" class="char-stats"></div>
+          </div>
+
+          <div class="card" id="char-edit-card">
+            <div class="card-header card-header-tight">
+              <h2>Edit sul Personaggio</h2>
+              <button id="btn-reset-char-edits" class="btn-secondary btn-reset-edits" type="button" title="Annulla tutte le modifiche pool/resistenze in coda">
+                Reset
+              </button>
+            </div>
+            <p class="hint">Pool (hit, mana, move, regen) e resistenze sul personaggio — puoi modificarne più di una; i costi si sommano nel carrello.</p>
+            <div id="char-edit-cart" class="edit-cart hidden" aria-live="polite"></div>
+            <div id="pool-edits"></div>
+            <div id="resistance-edits"></div>
+          </div>
+        </aside>
+
+        <div class="main-column">
+          <div class="card" id="inventory-card">
+            <div class="card-header">
+              <h2 id="inventory-title">Inventario</h2>
+              <div class="inventory-toolbar">
+                <label class="inventory-sort-label">Ordina
+                  <select id="inventory-sort" title="Criterio di ordinamento della lista">
+                    <option value="inventory">Ordine inventario</option>
+                    <option value="alpha">Alfabetico (A→Z)</option>
+                    <option value="alpha_desc">Alfabetico (Z→A)</option>
+                    <option value="editable">Editabili prima</option>
+                    <option value="not_editable">Non editabili prima</option>
+                    <option value="item_type">Tipo oggetto</option>
+                    <option value="worn">Indossati prima</option>
+                    <option value="vnum">Vnum</option>
+                    <option value="container">In container prima</option>
+                  </select>
+                </label>
+                <button id="btn-refresh-inv" class="btn-secondary" type="button">Aggiorna inventario</button>
+              </div>
+            </div>
+            <p id="inventory-target-hint" class="hint"></p>
+            <ul id="inventory-list" class="inventory-list"></ul>
+            <p id="inventory-empty" class="hint hidden">Nessun oggetto in inventario MySQL per questo PG.</p>
+          </div>
+
+          <div class="card" id="object-detail-card">
+            <div class="card-header card-header-tight">
+              <h2>Oggetto selezionato</h2>
+              <button id="btn-reset-object-edits" class="btn-secondary btn-reset-edits" type="button" title="Ripristina opzioni e stringhe allo stato di caricamento alla selezione">
+                Reset
+              </button>
+            </div>
+            <div id="quote-box" class="quote-box">Seleziona un oggetto editabile dall'inventario del personaggio target.</div>
+            <div id="object-edit-cart" class="edit-cart hidden" aria-live="polite"></div>
+            <div class="object-workspace" id="object-workspace">
+              <aside class="object-workspace-meta" id="object-workspace-meta" aria-label="Stato oggetto">
+                <div id="object-affect-slots" class="object-affect-slots hidden"></div>
+                <div id="object-text-edit" class="object-text-edit-wrap"></div>
+                <div id="object-massimali" class="object-massimali"></div>
+              </aside>
+              <div class="object-workspace-edits" id="object-workspace-edits">
+                <div id="object-edits" class="object-edits"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside id="tools-column" class="tools-column card hidden" aria-label="Opzioni sistema staff">
+          <div class="tools-column-header">
+            <h2>Staff — configurazione sistema</h2>
+          </div>
+
+          <div class="portal-categories card-inner">
+            <h3>Categorie oggetto nel portale</h3>
+            <p class="hint">Spunta = tipo visibile e editabile al primo edit. Senza spunta = nascosto (pezzi in DB edits / EDIT+ED* restano, anche RARO). TAN/HAS-GEMS/simbolo sempre esclusi. Edit da indossato consentito (PG offline).</p>
+            <p id="myst-version-warn" class="msg warn hidden"></p>
+            <div id="portal-category-toggles" class="checkbox-grid"></div>
+            <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
+            <p id="portal-cat-result" class="msg"></p>
+          </div>
+
+          <div class="portal-currencies card-inner">
+            <h3>Valute di pagamento</h3>
+            <p class="hint">
+              Al momento il pagamento listino usa solo MXP/Rune. Le altre valute stanno
+              in una sezione collassata: restano <strong>nascoste ai giocatori</strong>
+              finché non attivi «Visibile ai giocatori».
+            </p>
+            <div id="portal-currency-toggles" class="currency-config-list"></div>
+            <button id="btn-save-portal-currencies" class="btn-secondary" type="button">Salva valute</button>
+            <p id="portal-currency-result" class="msg"></p>
+          </div>
+
+          <details class="card-inner collapse-panel" id="routing-edit-panel">
+            <summary class="collapse-summary">
+              <span>Routing edit: oggetto vs personaggio</span>
+              <span class="collapse-hint">avanzato — JSON di sistema</span>
+            </summary>
+            <div class="collapse-body">
+              <p class="hint">
+                Questo JSON (<code>edit_system.json</code>) decide <strong>dove</strong> va ogni tipo di edit:
+                <code>target: "object"</code> = affect sull'equipaggiamento;
+                <code>target: "character"</code> = valore sul PG (pool hit/mana/move o resistenza in tabella).
+                Non è l'inventario: è la regola di sistema. Di solito lo lasci così e usi le checkbox categorie sopra.
+              </p>
+              <textarea id="system-config-editor" rows="12" spellcheck="false"></textarea>
+              <div class="btn-row">
+                <button id="btn-load-config" class="btn-secondary" type="button">Ricarica JSON</button>
+                <button id="btn-save-config" class="btn-secondary" type="button">Salva JSON</button>
+              </div>
+              <p id="config-result" class="msg"></p>
+            </div>
+          </details>
+
+          <div class="card-inner">
+            <h3>Consultazione object_instance</h3>
+            <p class="hint">
+              Tabella MySQL degli oggetti <strong>già personalizzati</strong> salvati nel mondo
+              (id istanza, vnum base, owner, descrizione).
+              Quasi sempre sono <strong>indossati</strong>: per lavorarci cerca l'owner, impostalo come
+              personaggio target sopra, poi apri l'oggetto dall'inventario —
+              i pezzi sono <strong>editabili anche indossati</strong> (primo edit e ri-edit),
+              purché il PG sia offline e il pezzo rispetti categorie/esclusioni.
+              Cerca l'owner, impostalo come personaggio target, poi apri l'oggetto dall'inventario.
+            </p>
+            <div class="btn-row">
+              <input id="inst-search" placeholder="cerca owner / descrizione / id istanza" />
+              <button id="btn-inst-search" class="btn-secondary" type="button">Cerca istanze</button>
+            </div>
+            <ul id="inst-list" class="inst-list"></ul>
+          </div>
+        </aside>
+      </div>
+
+      <div id="payment-panel" class="payment-dock hidden" aria-live="polite">
+        <div class="payment-dock-inner">
+          <div class="payment-dock-main">
+            <div class="payment-dock-info">
+              <div class="payment-dock-title-row">
+                <h2>Pagamento edit</h2>
+                <span id="payment-queue-count" class="payment-queue-count hidden"></span>
+              </div>
+              <p class="hint payment-dock-hint">Costo sul <strong>personaggio target</strong> (MXP / Rune degli eroi).</p>
+              <div id="payment-summary" class="payment-summary"></div>
+              <div id="payment-breakdown" class="payment-breakdown"></div>
+              <p id="apply-result" class="msg"></p>
+            </div>
+            <div class="payment-dock-controls">
+              <div class="payment-controls">
+                <label class="field-label">Metodo
+                  <select id="pay-mode">
+                    <option value="mxp">Solo MXP (exp)</option>
+                    <option value="runes">Solo Rune degli eroi</option>
+                    <option value="mix">Misto MXP + Rune</option>
+                  </select>
+                </label>
+                <label id="rune-pct-wrap" class="field-label hidden">% copertura con Rune
+                  <input type="range" id="pay-rune-pct" min="0" max="100" step="5" value="0" />
+                  <span id="pay-rune-pct-label">0%</span>
+                </label>
+              </div>
+              <button id="btn-pay-edit" class="btn-primary btn-pay-dock" type="button">Paga edit</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+  <script src="app.js?v=50"></script>
+</body>
+</html>

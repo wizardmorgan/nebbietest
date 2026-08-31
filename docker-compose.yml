@@ -1,0 +1,35 @@
+# Overlay: solo edit-portal. Stack mysql/mudcompiler da NebbieArcane/Server (mud-dev.sh).
+# Uso: da EDIT_REPO con MUD_STACK_NETWORK impostato (vedi scripts/mud-dev.sh).
+services:
+    edit-portal:
+        build: .
+        container_name: nebbie-edit-portal
+        ports:
+            - "${EDIT_WEB_PORT:-3080}:3080"
+        environment:
+            - EDIT_WEB_PORT=${EDIT_WEB_PORT:-3080}
+            - EDIT_SESSION_SECRET=${EDIT_SESSION_SECRET:-nebbie-edit-session-dev}
+            - EDIT_API_SECRET=${EDIT_API_SECRET:-nebbie-edit-dev-secret}
+            - MYST_EDIT_API_URL=http://mudcompiler:8090
+            - MYSQL_HOST=mysql
+            - MYSQL_PORT=33306
+            - MYSQL_USER=root
+            - MYSQL_PASSWORD=secret
+            - MYSQL_DATABASE=nebbie
+            - EDIT_STAFF_LEVEL=57
+            - EDIT_LIMITED_LEVEL=51
+            - EDIT_BASE_PATH=${EDIT_BASE_PATH:-}
+            - EDIT_WP_SSO_SECRET=${EDIT_WP_SSO_SECRET:-}
+            - EDIT_WP_SITE_URL=${EDIT_WP_SITE_URL:-}
+            - EDIT_WP_LOGIN_URL=${EDIT_WP_LOGIN_URL:-}
+            - EDIT_SSO_REQUIRED=${EDIT_SSO_REQUIRED:-}
+            - EDIT_ALLOW_PASSWORD_LOGIN=${EDIT_ALLOW_PASSWORD_LOGIN:-}
+            - EDIT_COOKIE_SECURE=${EDIT_COOKIE_SECURE:-}
+            - EDIT_DEV_MINT_SSO=${EDIT_DEV_MINT_SSO:-}
+        networks:
+            - mud_stack
+
+networks:
+    mud_stack:
+        name: ${MUD_STACK_NETWORK}
+        external: true
