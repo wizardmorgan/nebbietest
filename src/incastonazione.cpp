@@ -1077,13 +1077,23 @@ MOBSPECIAL_FUNC(Incastonatore) {
 		if(!saw_pc) {
 			return FALSE;
 		}
-		if(number(0, 1) == 0) {
+		switch(number(0, 3)) {
+		case 0:
 			act("$n dice '$c0010Se volete un intarsio, posate il pezzo sul mio banco e nominate pietra e foggia. Ci lavoro io: non serve affidarmelo.$c0007'",
 				FALSE, mob, 0, 0, TO_ROOM);
-		}
-		else {
+			break;
+		case 1:
 			act("$n dice '$c0010Se non sapete da dove cominciare, $c0015chiedetemi aiuto$c0010: vi spiego il mestiere.$c0007'",
 				FALSE, mob, 0, 0, TO_ROOM);
+			break;
+		case 2:
+			act("$n dice '$c0010Volete sapere che potere cela ciascuna pietra? Chiedetemi il $c0015listino$c0010.$c0007'",
+				FALSE, mob, 0, 0, TO_ROOM);
+			break;
+		default:
+			act("$n dice '$c0010Pronunciate $c0015incastona$c0010, poi il nome del pezzo e delle pietre. Opale e ossidiana ne vogliono due, il quarzo rosa tre.$c0007'",
+				FALSE, mob, 0, 0, TO_ROOM);
+			break;
 		}
 		return FALSE;
 	}
