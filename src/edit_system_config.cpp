@@ -82,6 +82,30 @@ struct Entry {
 
 	std::unordered_map<std::string, bool> g_portal_type_enabled;
 
+	struct CurrencyDef {
+		std::string slug;
+		std::string label;
+		bool enabled = false;
+		bool visible = false;
+		bool pays_listino = false;
+	};
+
+	std::vector<CurrencyDef> g_currencies;
+
+	[[nodiscard]] std::vector<CurrencyDef> default_currencies() {
+		return {
+			{"mxp", "MXP", true, true, true},
+			{"rune", "Rune degli eroi", true, true, true},
+			{"gold", "Gold", false, false, false},
+			{"token", "Token", false, false, false},
+			{"credit", "Credito edit", false, false, false},
+		};
+	}
+
+	void currencies_reset_defaults() {
+		g_currencies = default_currencies();
+	}
+
 	void portal_type_reset_defaults() {
 		g_portal_type_enabled.clear();
 		for(const auto& def : kPortalTypeDefs) {
@@ -102,6 +126,7 @@ struct Entry {
 
 void build_defaults() {
 	portal_type_reset_defaults();
+	currencies_reset_defaults();
 	g_entries.clear();
 	const char* pool_fields[] = {"hit", "mana", "move", "hit_regen", "mana_regen", "move_regen"};
 	const char* pool_labels[] = {"Hit points", "Mana", "Move", "Hit regen", "Mana regen", "Move regen"};
@@ -230,11 +255,55 @@ void parse_portal_categories(const Json& root) {
 	}
 }
 
+void parse_currencies(const Json& root) {
+	currencies_reset_defaults();
+	if(root.find("currencies") == root.end() || !root["currencies"].is_object()) {
+		return;
+	}
+	const Json& c = root["currencies"];
+	if(c.find("catalog") == c.end() || !c["catalog"].is_array()) {
+		return;
+	}
+	std::unordered_map<std::string, size_t> index;
+	for(size_t i = 0; i < g_currencies.size(); ++i) {
+		index[g_currencies[i].slug] = i;
+	}
+	for(const auto& item : c["catalog"]) {
+		if(!item.is_object()) {
+			continue;
+		}
+		const std::string slug = item.value("slug", "");
+		if(slug.empty()) {
+			continue;
+		}
+		CurrencyDef row;
+		row.slug = slug;
+		row.label = item.value("label", slug);
+		row.enabled = item.value("enabled", false);
+		row.visible = item.value("visible", false);
+		row.pays_listino = item.value("pays_listino", false);
+		const auto it = index.find(slug);
+		if(it != index.end()) {
+			g_currencies[it->second] = row;
+		}
+		else {
+			index[slug] = g_currencies.size();
+			g_currencies.push_back(row);
+		}
+	}
+}
+
 void parse_entries_json(const Json& root) {
 	g_entries.clear();
 	parse_portal_categories(root);
+	parse_currencies(root);
 	if(root.find("entries") == root.end() || !root["entries"].is_array()) {
+		/* Defaults entries, ma conserva object_portal/currencies gia' parsati. */
+		const auto portal_types = g_portal_type_enabled;
+		const auto currencies = g_currencies;
 		build_defaults();
+		g_portal_type_enabled = portal_types;
+		g_currencies = currencies;
 		return;
 	}
 	for(const auto& item : root["entries"]) {
@@ -300,9 +369,28 @@ void parse_entries_json(const Json& root) {
 	}
 	portal["type_catalog"] = catalog;
 	portal["comment"] =
-		"types: slug ITEM_* — spunta = visibile e editabile nel portale. "
-		"Oggetti con flag EDIT del PG sono sempre inclusi (ri-edit).";
+		"types: slug ITEM_* — spunta = visibile in inventario e editabile "
+		"(primo edit). Senza spunta: nascosto, salvo pezzi gia' personalizzati "
+		"(EDIT / instance / owner) che restano visibili per ri-edit. "
+		"Sempre esclusi RARO/TAN/HAS-GEMS/simbolo. Edit OK anche indossati "
+		"(PG offline).";
 	root["object_portal"] = portal;
+	Json currencies;
+	Json currency_catalog = Json::array();
+	for(const auto& c : g_currencies) {
+		Json row;
+		row["slug"] = c.slug;
+		row["label"] = c.label;
+		row["enabled"] = c.enabled;
+		row["visible"] = c.visible;
+		row["pays_listino"] = c.pays_listino;
+		currency_catalog.push_back(row);
+	}
+	currencies["catalog"] = currency_catalog;
+	currencies["comment"] =
+		"Valute portale. visible=false nasconde ai player. "
+		"pays_listino oggi solo mxp/rune.";
+	root["currencies"] = currencies;
 	return root;
 }
 
@@ -447,9 +535,12 @@ bool edit_system_config_save_json(const std::string& json_text, std::string& err
 			err = std::string("impossibile scrivere ") + path + ": " + std::strerror(errno);
 			return false;
 		}
-		parse_entries_json(parsed);
-		g_config_path = path;
-		g_loaded = true;
+		{
+			std::lock_guard<std::mutex> lock(g_mutex);
+			parse_entries_json(parsed);
+			g_config_path = path;
+			g_loaded = true;
+		}
 		mudlog(LOG_CHECK, "edit_system_config: saved %zu entries to %s",
 			   g_entries.size(), path.c_str());
 		return true;

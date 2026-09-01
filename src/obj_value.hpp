@@ -68,33 +68,40 @@ inline constexpr int kObjEditMaxHitrollPerPiece = 2;
 inline constexpr int kObjEditMaxSpellpowerPerPiece = 2; /* come damroll */
 inline constexpr int kObjEditMaxDamrollEditableTotal = 30;
 inline constexpr int kObjEditMaxSpellpowerEditableTotal = 30; /* come damroll */
+/** Hitroll editato totale (2/pezzo × 21 slot, escluso simbolo clan). */
+inline constexpr int kObjEditMaxHitrollEditableTotal = 42;
 
-/** Armor: step −10, fino a −40 per pezzo (listino ufficiale). */
+/** Armor: step −10, fino a −40 per pezzo (listino ufficiale).
+ *  Malus AC positivo: rimozione a 2× il costo del bonus equivalente. */
 inline constexpr int kObjEditArmorStep = -10;
 inline constexpr int kObjEditArmorMinTotal = -40;
 inline constexpr int kObjEditArmorMaxTotal = 0;
-/** Raw CheckValueObj per 1 punto AC (1 MXP → 10 MXP per step −10). */
+/** Raw CheckValueObj per 1 punto AC bonus (1 MXP → 10 MXP per step −10). */
 inline constexpr long kObjEditArmorUnitRaw = 100;
 
-/** Spellfail: come armor (step −10, fino a −40); costo = 2× armor per punto. */
-inline constexpr int kObjEditSpellfailStep = -10;
-inline constexpr int kObjEditSpellfailMinTotal = -40;
+/**
+ * Spellfail: step −5, 20 MXP per step (−5).
+ * Per pezzo fino a −100 oltre proto; tetto personaggio −100 (somma delta vs proto).
+ * Malus positivo: rimozione a 2× il bonus spellfail.
+ */
+inline constexpr int kObjEditSpellfailStep = -5;
+inline constexpr int kObjEditSpellfailMinTotal = -100;
 inline constexpr int kObjEditSpellfailMaxTotal = 0;
-inline constexpr long kObjEditSpellfailUnitRaw = kObjEditArmorUnitRaw * 2;
+/** 20 MXP / step −5 → unit_raw * 5 * 10000 = 20e6 → unit = 400. */
+inline constexpr long kObjEditSpellfailUnitRaw = 400;
+/** Magnitudine massima edit spellfail sul personaggio (somma pezzi). */
+inline constexpr int kObjEditMaxSpellfailEditableTotal = 100;
 
 /** Listino portal: 1 MXP listino = 1 Rune (alternativa pagamento). */
 inline constexpr long kObjEditRunePerMegaXp = 1000000L;
 
-/** Max lunghezza campi testo oggetto (allineati a VARCHAR inventorio/istanza). */
+/**
+ * Max lunghezza campi testo oggetto (allineati a VARCHAR inventorio/istanza).
+ * Name/short/long via portal sono gratuiti (nessun listino ufficiale).
+ */
 inline constexpr int kObjEditTextNameMax = 128;
 inline constexpr int kObjEditTextShortMax = 128;
 inline constexpr int kObjEditTextLongMax = 256;
-/**
- * Costo fisso (non in listino ufficiale) per salvare name/short/long via portal.
- * 5 MXP raw (= 5_000_000) + 5 rune componente; poi class_mult e Artifact +50%.
- */
-inline constexpr long kObjEditTextXpRaw = 5000000L;
-inline constexpr int kObjEditTextRune = 5;
 
 /** Parametri listino per un APPLY editabile sull'oggetto (totale sul pezzo). */
 struct ObjEditListinoSpec {
@@ -125,8 +132,8 @@ struct ObjEditListinoSpec {
 /**
  * Differenza di valore rispetto al prototipo (vnum / char_vnum se PERSONAL).
  * Unita': valore/derent in scala storage (* kObjValueStorageScale), rune raw.
- * Se l'oggetto ha ITEM_IMMUNE (Artifact), il valore e' aumentato del 50%
- * rispetto al listino (anche se il prototipo era gia' artifact).
+ * Se l'oggetto ha ITEM_IMMUNE (Artifact) — gia' presente o aggiunto nello
+ * stesso edit — il valore e' aumentato del 50% sul costo finale (dopo class_mult).
  */
 [[nodiscard]] ExpValue CheckDiffValue(struct obj_data* obj);
 

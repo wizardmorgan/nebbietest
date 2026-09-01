@@ -3,8 +3,136 @@
 const PQ_PER_MEGA_XP = 1000000;
 const PRINCE_LEVEL = 51;
 const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
+const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
+const TOOLS_OPEN_KEY = 'nebbie-edit-tools-open';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 12;
+const EDIT_PORTAL_UI_BUILD = 50;
+const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
+
+/** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
+let portalCurrencies = null;
+
+const DEFAULT_CURRENCIES = [
+  { slug: 'mxp', label: 'MXP', enabled: true, visible: true, pays_listino: true },
+  { slug: 'rune', label: 'Rune degli eroi', enabled: true, visible: true, pays_listino: true },
+  { slug: 'gold', label: 'Gold', enabled: false, visible: false, pays_listino: false },
+  { slug: 'token', label: 'Token', enabled: false, visible: false, pays_listino: false },
+  { slug: 'credit', label: 'Credito edit', enabled: false, visible: false, pays_listino: false },
+];
+
+function normalizeCurrencies(raw) {
+  const bySlug = new Map();
+  DEFAULT_CURRENCIES.forEach((d) => bySlug.set(d.slug, { ...d }));
+  const list = Array.isArray(raw?.catalog)
+    ? raw.catalog
+    : Array.isArray(raw)
+      ? raw
+      : [];
+  list.forEach((row) => {
+    if (!row || !row.slug) return;
+    const prev = bySlug.get(row.slug) || {
+      slug: row.slug,
+      label: row.slug,
+      enabled: false,
+      visible: false,
+      pays_listino: false,
+    };
+    bySlug.set(row.slug, {
+      slug: row.slug,
+      label: row.label != null && String(row.label).trim() ? String(row.label) : prev.label,
+      enabled: row.enabled !== undefined ? !!row.enabled : prev.enabled,
+      visible: row.visible !== undefined ? !!row.visible : prev.visible,
+      pays_listino:
+        row.pays_listino !== undefined ? !!row.pays_listino : prev.pays_listino,
+    });
+  });
+  return [...bySlug.values()];
+}
+
+function currencyLabel(slug) {
+  const list = portalCurrencies || DEFAULT_CURRENCIES;
+  const row = list.find((c) => c.slug === slug);
+  return row?.label || (slug === 'rune' ? 'Rune degli eroi' : slug === 'mxp' ? 'MXP' : slug);
+}
+
+function currencyVisibleEnabled(slug) {
+  const list = portalCurrencies || DEFAULT_CURRENCIES;
+  const row = list.find((c) => c.slug === slug);
+  return !!(row && row.enabled && row.visible);
+}
+
+
+/** Prefisso reverse-proxy (es. "/edit"); da config.js o meta. */
+function portalBasePath() {
+  const fromCfg = window.EDIT_PORTAL_CONFIG?.basePath;
+  if (typeof fromCfg === 'string') return fromCfg.replace(/\/+$/, '');
+  const meta = document.querySelector('meta[name="edit-base"]');
+  if (meta && meta.content) return String(meta.content).replace(/\/+$/, '');
+  return '';
+}
+
+function portalUrl(path) {
+  const base = portalBasePath();
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${p}`;
+}
+
+function portalAuthConfig() {
+  return window.EDIT_PORTAL_CONFIG || {};
+}
+
+/**
+ * Mostra SSO e/o form password in base a config.js (EDIT_SSO_REQUIRED / ALLOW_PASSWORD).
+ */
+function applyLoginUiMode() {
+  const cfg = portalAuthConfig();
+  const ssoBlock = $('sso-login-block');
+  const pwdBlock = $('password-login-block');
+  const ssoLink = $('sso-wp-link');
+  const ssoHint = $('sso-login-hint');
+  const allowPassword = cfg.allowPasswordLogin !== false;
+  const ssoRequired = cfg.ssoRequired === true;
+  const wpEntry =
+    cfg.wpSsoEntryUrl || cfg.wpLoginUrl || cfg.wpSiteUrl || '';
+
+  if (ssoBlock) {
+    if (ssoRequired || cfg.wordpressSsoConfigured) {
+      ssoBlock.classList.remove('hidden');
+      if (ssoLink) {
+        if (wpEntry) {
+          ssoLink.href = wpEntry;
+          ssoLink.classList.remove('disabled');
+        } else {
+          ssoLink.href = '#';
+          ssoLink.classList.add('disabled');
+        }
+      }
+      if (ssoHint) {
+        ssoHint.textContent = wpEntry
+          ? 'Se sei già loggato sul sito verrai autenticato subito; altrimenti prima il login WordPress.'
+          : 'SSO WordPress attivo sul server, ma EDIT_WP_SITE_URL non è impostato.';
+      }
+    } else {
+      ssoBlock.classList.add('hidden');
+    }
+  }
+
+  if (pwdBlock) {
+    if (allowPassword) {
+      pwdBlock.classList.remove('hidden');
+      const email = $('login-email');
+      const password = $('login-password');
+      if (email) email.required = true;
+      if (password) password.required = true;
+    } else {
+      pwdBlock.classList.add('hidden');
+      const email = $('login-email');
+      const password = $('login-password');
+      if (email) email.required = false;
+      if (password) password.required = false;
+    }
+  }
+}
 
 let session = null;
 let targetToonId = null;
@@ -13,6 +141,12 @@ let editCatalog = null;
 let selectedInventoryId = null;
 let selectedObjectOptions = null;
 let pendingEdit = null;
+/** Ultima lista inventario grezza (per ri-ordinare senza ricaricare). */
+let inventoryItemsCache = [];
+/** Coda edit oggetto: più campi insieme (stesso pezzo) → somma costi listino. */
+let objectEditCart = new Map();
+/** Coda edit personaggio: più voci pool/resistenze insieme → somma costi. */
+let characterEditCart = new Map();
 
 const $ = (id) => document.getElementById(id);
 
@@ -81,11 +215,13 @@ const MUD_BG_COLORS = [
 /**
  * Converte `$cMBFG` / `$CMBFG` in HTML colorato (nasconde i codici).
  * M=mod, B=bg, FG=foreground 00-15 — vedi ansi_parser.cpp.
+ * `$$` → `$` letterale, ma `$$cXXXX` = fine wrapper `$parola$` + codice colore
+ * (non mostrare `$`). Wrapper `$parola$` isolati: i `$` non si vedono.
  */
 function mudTextToHtml(raw) {
   const text = String(raw ?? '');
   if (!text) return '';
-  if (!/\$[cC]\d{4}/.test(text)) {
+  if (!/\$[cC]\d{4}/.test(text) && !text.includes('$')) {
     return escapeHtml(text);
   }
   let html = '';
@@ -104,12 +240,29 @@ function mudTextToHtml(raw) {
       open = false;
     }
   };
+  const isColorCodeAt = (idx) =>
+    text[idx] === '$' &&
+    (text[idx + 1] === 'c' || text[idx + 1] === 'C') &&
+    /^\d{4}/.test(text.slice(idx + 2, idx + 6));
   while (i < text.length) {
-    if (
-      (text[i + 1] === 'c' || text[i + 1] === 'C') &&
-      text[i] === '$' &&
-      /^\d{4}/.test(text.slice(i + 2, i + 6))
-    ) {
+    if (text[i] === '$' && text[i + 1] === '$') {
+      if (isColorCodeAt(i + 1)) {
+        /*
+         * `$Vita$$c0007` → fine wrapper + colore: scarta un `$`, poi il
+         * `$cXXXX`. Per un `$` letterale prima del colore usare `$$$cXXXX`.
+         */
+        i += 1;
+        continue;
+      }
+      if (!open) {
+        html += openSpan();
+        open = true;
+      }
+      html += '$';
+      i += 2;
+      continue;
+    }
+    if (isColorCodeAt(i)) {
       const code = text.slice(i + 2, i + 6);
       const mod = code[0];
       const bg = Number(code[1]);
@@ -125,12 +278,19 @@ function mudTextToHtml(raw) {
       i += 6;
       continue;
     }
+    if (text[i] === '$') {
+      /* Wrapper `$parola$` usato con i codici colore: non mostrare. */
+      i += 1;
+      continue;
+    }
     if (!open) {
       html += openSpan();
       open = true;
     }
-    html += escapeHtml(text[i]);
-    i += 1;
+    let j = i;
+    while (j < text.length && text[j] !== '$') j += 1;
+    html += escapeHtml(text.slice(i, j));
+    i = j;
   }
   close();
   return html;
@@ -162,7 +322,7 @@ function persistLogin(email, password, remember) {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
+  const res = await fetch(portalUrl(path), {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
@@ -236,8 +396,158 @@ function buildPaymentPlan(quote, mode, runePct) {
   };
 }
 
+function formatQuoteCostShort(quote) {
+  const xpRaw = Number(quote?.xp_raw || quote?.diff_xp_raw || 0);
+  const rune = Number(quote?.diff_rune || quote?.pq || 0);
+  const mxp = Math.floor(xpRaw / PQ_PER_MEGA_XP);
+  const frac = Math.floor((xpRaw % PQ_PER_MEGA_XP) / 10000);
+  const parts = [];
+  if (xpRaw > 0) parts.push(formatMxp(mxp, frac));
+  if (rune > 0) parts.push(`${rune} ${currencyLabel('rune')}`);
+  if (!parts.length) parts.push('gratis');
+  return parts.join(' + ');
+}
+
+function isObjectPendingType(type) {
+  return type === 'object' || type === 'object-batch' || type === 'object-text';
+}
+
+function isCharacterPendingType(type) {
+  return type === 'pool' || type === 'resistance' || type === 'character-batch';
+}
+
+function sumQuotes(items) {
+  let xpRaw = 0;
+  let rune = 0;
+  items.forEach((it) => {
+    xpRaw += Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
+    rune += Number(it.quote?.diff_rune || it.quote?.pq || 0);
+  });
+  return {
+    xp_raw: xpRaw,
+    mxp: Math.floor(xpRaw / PQ_PER_MEGA_XP),
+    mxp_frac: Math.floor((xpRaw % PQ_PER_MEGA_XP) / 10000),
+    diff_rune: rune,
+  };
+}
+
+function renderEditCartBox(el, items, emptyHint) {
+  if (!el) return;
+  if (!items.length) {
+    el.innerHTML = '';
+    el.classList.add('hidden');
+    return;
+  }
+  const rows = items
+    .map(
+      (it) =>
+        `<div class="edit-cart-line"><span class="edit-cart-label">${escapeHtml(
+          it.label
+        )}</span><span class="edit-cart-cost">${escapeHtml(
+          formatQuoteCostShort(it.quote)
+        )}</span></div>`
+    )
+    .join('');
+  const totals = sumQuotes(items);
+  el.innerHTML = `
+    <div class="edit-cart-title">In coda (${items.length})</div>
+    ${rows}
+    <div class="edit-cart-total">Totale listino: <strong>${escapeHtml(
+      formatQuoteCostShort(totals)
+    )}</strong></div>
+    <p class="hint edit-cart-hint">${escapeHtml(emptyHint || '')}</p>
+  `;
+  el.classList.remove('hidden');
+}
+
+function updateCharacterCartUI() {
+  const items = [...characterEditCart.values()];
+  renderEditCartBox(
+    $('char-edit-cart'),
+    items,
+    'Costi aggiornati a ogni selettore. Paga dal pannello in basso.'
+  );
+  document.querySelectorAll('#pool-edits .edit-row, #resistance-edits .edit-row').forEach((row) => {
+    const key = row.dataset.cartKey;
+    row.classList.toggle('edit-row--dirty', key && characterEditCart.has(key));
+  });
+}
+
+function updateObjectCartUI() {
+  const items = [...objectEditCart.values()];
+  renderEditCartBox(
+    $('object-edit-cart'),
+    items,
+    'Costi aggiornati a ogni selettore. Paga dal pannello in basso.'
+  );
+  document.querySelectorAll('#object-edits .edit-row').forEach((row) => {
+    const key = row.dataset.cartKey;
+    row.classList.toggle('edit-row--dirty', key && objectEditCart.has(key));
+  });
+}
+
+function clearCharacterEditCart({ resetSelectors = false } = {}) {
+  if (resetSelectors) {
+    characterEditCart.forEach((it) => {
+      if (it.selectEl && it.selectEl.dataset.current != null) {
+        it.selectEl.value = it.selectEl.dataset.current;
+      }
+    });
+  }
+  characterEditCart.clear();
+  if (isCharacterPendingType(pendingEdit?.type)) {
+    pendingEdit = null;
+  }
+  updateCharacterCartUI();
+  updatePaymentUI();
+}
+
+function rebuildCharacterPendingFromCart() {
+  if (!characterEditCart.size) {
+    if (isCharacterPendingType(pendingEdit?.type)) {
+      pendingEdit = null;
+    }
+    updateCharacterCartUI();
+    updatePaymentUI();
+    return;
+  }
+  const items = [...characterEditCart.values()];
+  const totals = sumQuotes(items);
+  const labels = items.map((it) => it.label);
+  pendingEdit = {
+    type: 'character-batch',
+    entryId: 'character-batch',
+    label: labels.join('\n'),
+    quote: {
+      ...totals,
+      note:
+        items.length > 1
+          ? `${items.length} edit personaggio in coda (costi sommati)`
+          : undefined,
+    },
+    items,
+  };
+  updateCharacterCartUI();
+  updatePaymentUI();
+}
+
+function ensureCharacterCartExclusive() {
+  if (objectEditCart.size || isObjectPendingType(pendingEdit?.type)) {
+    clearObjectEditCart({ resetSelectors: true });
+  }
+}
+
+function ensureObjectCartExclusive() {
+  if (characterEditCart.size || isCharacterPendingType(pendingEdit?.type)) {
+    clearCharacterEditCart({ resetSelectors: true });
+  }
+}
+
 function validatePayment(plan) {
   if (!charState) return { ok: false, reason: 'Stato PG non caricato' };
+  if (charState.stats_missing) {
+    return { ok: false, reason: 'character_stats assente: impossibile pagare edit' };
+  }
   const availXp = Number(charState.available_xp || 0);
   const availRune = Number(charState.rune || 0);
   const okXp = plan.payXp <= availXp;
@@ -255,9 +565,12 @@ function updatePaymentUI() {
   const panel = $('payment-panel');
   if (!pendingEdit || !charState) {
     hide('payment-panel');
+    document.body.classList.remove('payment-dock-open');
+    document.body.classList.remove('payment-insufficient');
     return;
   }
   show('payment-panel');
+  document.body.classList.add('payment-dock-open');
 
   const mode = $('pay-mode').value;
   const runePct = Number($('pay-rune-pct').value);
@@ -266,25 +579,71 @@ function updatePaymentUI() {
 
   const plan = buildPaymentPlan(pendingEdit.quote, mode, runePct);
   const check = validatePayment(plan);
+  document.body.classList.toggle('payment-insufficient', !check.ok);
+  panel.classList.toggle('payment-dock--insufficient', !check.ok);
+
+  const cartItems = Array.isArray(pendingEdit.items) ? pendingEdit.items : null;
+  const lines = cartItems
+    ? cartItems.map((it) => it.label)
+    : String(pendingEdit.label || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+  const queueCount = $('payment-queue-count');
+  if (queueCount) {
+    if (lines.length > 1) {
+      queueCount.textContent = `${lines.length} in coda`;
+      queueCount.classList.remove('hidden');
+    } else {
+      queueCount.textContent = '';
+      queueCount.classList.add('hidden');
+    }
+  }
+
+  const labelHtml = cartItems
+    ? cartItems
+        .map(
+          (it) =>
+            `<div class="payment-cart-line"><span>${escapeHtml(
+              it.label
+            )}</span><span class="payment-cart-cost">${escapeHtml(
+              formatQuoteCostShort(it.quote)
+            )}</span></div>`
+        )
+        .join('')
+    : lines.map((line) => escapeHtml(line)).join('<br>');
 
   $('payment-summary').innerHTML = `
-    <strong>${pendingEdit.label}</strong><br>
-    Costo listino: <strong>${plan.displayMxp}</strong>
-    ${plan.runeListino ? ` (+ ${plan.runeListino} Runes componente listino)` : ''}
+    <div class="payment-queue-list">${labelHtml}</div>
+    <div class="payment-cost-line">
+      Costo listino: <strong>${plan.displayMxp}</strong>
+      ${plan.runeListino ? ` (+ ${plan.runeListino} ${currencyLabel('rune')} listino)` : ''}
+    </div>
     ${
       pendingEdit.quote?.note
-        ? `<br><span class="slot-hint">${pendingEdit.quote.note}</span>`
+        ? `<div class="slot-hint">${escapeHtml(pendingEdit.quote.note)}</div>`
         : ''
     }
   `;
 
+  const insuffHint = !check.ok
+    ? `<div class="payment-insufficient-msg">Fondi insufficienti sul personaggio target${
+        !check.okXp ? ' (XP/MXP)' : ''
+      }${!check.okRune ? ` (${currencyLabel('rune')})` : ''}.</div>`
+    : '';
+
   $('payment-breakdown').innerHTML = `
-    Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong> raw (MXP)
-    e <strong>${plan.payRune} Runes</strong><br>
-    Disponibili: ${formatMxp(charState.available_mxp || 0, charState.available_mxp_frac || 0)}
-    · ${charState.rune || 0} Runes<br>
-  <span class="${check.okXp ? 'ok' : 'bad'}">MXP ${check.okXp ? 'OK' : 'insufficienti'}</span>
-  · <span class="${check.okRune ? 'ok' : 'bad'}">Runes ${check.okRune ? 'OK' : 'insufficienti'}</span>
+    <div class="payment-pay-line">
+      Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong>
+      + <strong>${plan.payRune} ${currencyLabel('rune')}</strong>
+    </div>
+    <div class="payment-avail-line">
+      Disponibili: ${formatMxp(charState.available_mxp || 0, charState.available_mxp_frac || 0)}
+      · ${charState.rune || 0} ${currencyLabel('rune')}
+      · <span class="${check.okXp ? 'ok' : 'bad'}">MXP ${check.okXp ? 'OK' : 'insufficienti'}</span>
+      · <span class="${check.okRune ? 'ok' : 'bad'}">${currencyLabel('rune')} ${check.okRune ? 'OK' : 'insufficienti'}</span>
+    </div>
+    ${insuffHint}
   `;
 
   $('btn-pay-edit').disabled = !check.ok;
@@ -295,9 +654,16 @@ async function refreshMe() {
   const me = await api('/api/me');
   if (!me.ok) {
     session = null;
+    pendingEdit = null;
+    clearObjectEditCart();
+    clearCharacterEditCart();
+    document.body.classList.remove('payment-dock-open');
+    document.body.classList.remove('payment-insufficient');
+    applyLoginUiMode();
     show('login-panel');
     hide('toon-panel');
     hide('work-panel');
+    hide('payment-panel');
     hide('btn-logout');
     hide('btn-change-toon');
     return;
@@ -318,30 +684,443 @@ async function refreshMe() {
 }
 
 async function loadToons() {
-  const data = await api('/api/toons');
   const box = $('toon-list');
+  box.innerHTML = '<p class="hint">Caricamento riepilogo personaggi…</p>';
+  const data = await api('/api/account-overview');
   box.innerHTML = '';
   if (!data.ok) {
     box.textContent = data.error || 'errore';
+    const plain = await api('/api/toons');
+    if (plain.ok) {
+      plain.toons.forEach((t) => box.appendChild(makeToonSelectButton(t)));
+    }
     return;
   }
-  data.toons.forEach((t) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = `${t.name} — livello ${t.maxLevel}, ruolo ${t.role}`;
-    btn.onclick = async () => {
-      const sel = await api('/api/select-toon', {
-        method: 'POST',
-        body: JSON.stringify({ toonId: t.id }),
-      });
-      if (!sel.ok) {
-        alert(sel.error);
-        return;
-      }
-      await refreshMe();
-    };
-    box.appendChild(btn);
+
+  const princeLevel = Number(data.princeLevel || PRINCE_LEVEL);
+  const under = [];
+  const princes = [];
+  const staffBand = [];
+  (data.toons || []).forEach((t) => {
+    const lv = Number(t.maxLevel) || 0;
+    if (lv >= princeLevel + 1) staffBand.push(t);
+    else if (lv >= princeLevel) princes.push(t);
+    else under.push(t);
   });
+  under.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'it'));
+  staffBand.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'it'));
+
+  const layout = document.createElement('div');
+  layout.className = 'toon-overview-layout';
+
+  const left = document.createElement('div');
+  left.className = 'toon-overview-left';
+  left.appendChild(makeStaffColumn(staffBand));
+  left.appendChild(makeUnderColumn(under, princeLevel));
+  layout.appendChild(left);
+
+  const right = document.createElement('div');
+  right.className = 'toon-overview-right';
+  right.appendChild(makePrincesColumn(princes, princeLevel));
+  layout.appendChild(right);
+
+  box.appendChild(layout);
+}
+
+function makeStaffColumn(list) {
+  const sec = document.createElement('section');
+  sec.className = 'toon-band toon-band-staff';
+  const h = document.createElement('h3');
+  h.className = 'toon-band-title';
+  h.textContent = `Staff (52+) (${list.length})`;
+  sec.appendChild(h);
+  if (!list.length) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = 'Nessun personaggio staff.';
+    sec.appendChild(empty);
+    return sec;
+  }
+  list.forEach((t) => sec.appendChild(makeStaffToonCard(t)));
+  return sec;
+}
+
+function makeUnderColumn(list, princeLevel) {
+  const sec = document.createElement('section');
+  sec.className = 'toon-band toon-band-under';
+  const h = document.createElement('h3');
+  h.className = 'toon-band-title';
+  h.textContent = `Sotto il ${princeLevel} (${list.length})`;
+  sec.appendChild(h);
+  if (!list.length) {
+    const empty = document.createElement('p');
+    empty.className = 'hint';
+    empty.textContent = 'Nessun personaggio in questa fascia.';
+    sec.appendChild(empty);
+    return sec;
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'toon-under-list';
+  list.forEach((t) => wrap.appendChild(makeToonSelectButton(t)));
+  sec.appendChild(wrap);
+  return sec;
+}
+
+function makePrincesColumn(list, princeLevel) {
+  const sec = document.createElement('section');
+  sec.className = 'toon-band toon-band-princes';
+
+  const head = document.createElement('div');
+  head.className = 'toon-princes-head';
+  const h = document.createElement('h3');
+  h.className = 'toon-band-title';
+  h.textContent = `Principi (livello ${princeLevel})`;
+  head.appendChild(h);
+
+  const sortLabel = document.createElement('label');
+  sortLabel.className = 'prince-sort-label';
+  sortLabel.innerHTML = 'Ordina ';
+  const sortSel = document.createElement('select');
+  sortSel.id = 'prince-sort';
+  sortSel.innerHTML = `
+    <option value="alpha">Alfabetico (A→Z)</option>
+    <option value="mxp">MXP disponibili</option>
+    <option value="clan">Simbolo del clan</option>
+  `;
+  let saved = 'alpha';
+  try {
+    saved = localStorage.getItem(PRINCE_SORT_KEY) || 'alpha';
+  } catch (_) {
+    /* ignore */
+  }
+  if (![...sortSel.options].some((o) => o.value === saved)) saved = 'alpha';
+  sortSel.value = saved;
+  sortLabel.appendChild(sortSel);
+  head.appendChild(sortLabel);
+  sec.appendChild(head);
+
+  const countHint = document.createElement('p');
+  countHint.className = 'hint prince-count-hint';
+  sec.appendChild(countHint);
+
+  const listBox = document.createElement('div');
+  listBox.className = 'prince-cards';
+  sec.appendChild(listBox);
+
+  const render = () => {
+    const mode = sortSel.value || 'alpha';
+    try {
+      localStorage.setItem(PRINCE_SORT_KEY, mode);
+    } catch (_) {
+      /* ignore */
+    }
+    const sorted = sortPrinceToons(list.slice(), mode);
+    countHint.textContent = `${sorted.length} personaggi`;
+    listBox.innerHTML = '';
+    if (!sorted.length) {
+      const empty = document.createElement('p');
+      empty.className = 'hint';
+      empty.textContent = 'Nessun principe in questa fascia.';
+      listBox.appendChild(empty);
+      return;
+    }
+    sorted.forEach((t) => listBox.appendChild(makePrinceToonCard(t)));
+  };
+  sortSel.onchange = render;
+  render();
+  return sec;
+}
+
+function toonAvailableMxp(t) {
+  const s = t.summary || {};
+  const whole = Number(s.available_mxp);
+  if (Number.isFinite(whole)) return whole;
+  return 0;
+}
+
+function toonHasClan(t) {
+  return !!(t.summary && t.summary.clan_symbol && t.summary.clan_symbol.present);
+}
+
+function sortPrinceToons(list, mode) {
+  const byName = (a, b) =>
+    String(a.name || '').localeCompare(String(b.name || ''), 'it', {
+      sensitivity: 'base',
+    });
+  if (mode === 'mxp') {
+    list.sort((a, b) => {
+      const d = toonAvailableMxp(b) - toonAvailableMxp(a);
+      return d !== 0 ? d : byName(a, b);
+    });
+  } else if (mode === 'clan') {
+    list.sort((a, b) => {
+      const ca = toonHasClan(a) ? 1 : 0;
+      const cb = toonHasClan(b) ? 1 : 0;
+      if (ca !== cb) return cb - ca;
+      return byName(a, b);
+    });
+  } else {
+    list.sort(byName);
+  }
+  return list;
+}
+
+function makeToonSelectButton(t) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'toon-pick-btn';
+  btn.textContent = `${t.name} — livello ${t.maxLevel}, ruolo ${t.role}`;
+  btn.onclick = () => selectAccountToon(t.id);
+  return btn;
+}
+
+function ynMark(ok) {
+  return ok
+    ? '<span class="ov-yes">sì</span>'
+    : '<span class="ov-no">no</span>';
+}
+
+function resistLine(label, entry) {
+  const e =
+    entry && typeof entry === 'object' && !Array.isArray(entry)
+      ? entry
+      : { present: !!entry, origin_label: '' };
+  const present = !!e.present;
+  const origin = present && e.origin_label
+    ? ` <span class="ov-origin">(${escapeHtml(e.origin_label)})</span>`
+    : '';
+  return `<li>${escapeHtml(label)} ${ynMark(present)}${origin}</li>`;
+}
+
+function meterLine(label, used, cap, remaining) {
+  const u = Number(used) || 0;
+  const c = Number(cap) || 0;
+  const r = remaining != null ? Number(remaining) : Math.max(0, c - u);
+  return `<div class="ov-meter"><span class="ov-meter-label">${escapeHtml(label)}</span>` +
+    `<strong>${u}/${c}</strong><span class="ov-remain">ancora ${r}</span></div>`;
+}
+
+function meterLineWithNote(label, entry) {
+  const line = meterLine(label, entry?.used, entry?.cap, entry?.remaining);
+  const note = entry?.note
+    ? `<div class="ov-meter-note">${escapeHtml(entry.note)}</div>`
+    : '';
+  return line + note;
+}
+
+function isToolsColumnOpen() {
+  return localStorage.getItem(TOOLS_OPEN_KEY) === '1';
+}
+
+function syncToolsColumnUI() {
+  const layout = $('work-layout');
+  const col = $('tools-column');
+  const btn = $('btn-toggle-tools');
+  if (!layout || !col) return;
+  const open = isToolsColumnOpen();
+  layout.classList.toggle('layout--tools-open', open);
+  col.classList.toggle('hidden', !open);
+  if (btn) {
+    btn.classList.toggle('btn-active', open);
+    btn.setAttribute('aria-pressed', open ? 'true' : 'false');
+    btn.textContent = open ? 'Nascondi opzioni sistema' : 'Opzioni sistema';
+  }
+}
+
+function setToolsColumnOpen(open) {
+  localStorage.setItem(TOOLS_OPEN_KEY, open ? '1' : '0');
+  syncToolsColumnUI();
+}
+
+function initStaffToolsColumn() {
+  show('btn-toggle-tools');
+  syncToolsColumnUI();
+}
+
+function hideStaffToolsColumn() {
+  hide('btn-toggle-tools');
+  hide('tools-column');
+  $('work-layout')?.classList.remove('layout--tools-open');
+}
+
+function formatCommandsDetails(summary, open = false) {
+  const cmds = Array.isArray(summary?.commands) ? summary.commands : [];
+  if (!cmds.length) {
+    return '<p class="hint">Nessun comando staff disponibile (myst offline o lista vuota).</p>';
+  }
+  const rows = cmds
+    .map((c) => {
+      const name = escapeHtml(c.name || '');
+      const min = Number(c.min_level) || 0;
+      const g = escapeHtml(c.grade || '');
+      return `<li><code>${name}</code> <span class="ov-cmd-meta">lv≥${min}${g ? ` · ${g}` : ''}</span></li>`;
+    })
+    .join('');
+  return `<details class="ov-commands-details"${open ? ' open' : ''}>
+      <summary>Comandi abilitati (${cmds.length})</summary>
+      <ul class="ov-cmd-list">${rows}</ul>
+    </details>`;
+}
+
+function formatGoldAmount(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return '0';
+  return Math.trunc(v).toLocaleString('it-IT');
+}
+
+function moneyMetaLine(summary) {
+  if (!summary) return '';
+  const gold = formatGoldAmount(summary.gold);
+  const bank = formatGoldAmount(summary.bank_gold);
+  return `<span class="toon-overview-meta toon-overview-money">Soldi: ${gold} addosso · ${bank} in banca</span>`;
+}
+
+function makeStaffToonCard(t) {
+  const card = document.createElement('div');
+  card.className = 'toon-overview-card toon-staff-card';
+  const s = t.summary && t.summary.ok !== false ? t.summary : null;
+  const grade = (s && s.grade) || '';
+  card.innerHTML = `
+    <div class="toon-overview-head toon-overview-head-stack">
+      <div>
+        <strong class="toon-overview-name">${escapeHtml(t.name)}</strong>
+        <span class="toon-overview-meta">lv ${t.maxLevel}${
+          grade ? ` · ${escapeHtml(grade)}` : ''
+        }</span>
+        ${moneyMetaLine(s)}
+      </div>
+    </div>
+    <div class="toon-overview-body">
+      ${s ? formatCommandsDetails(s) : '<p class="hint">Comandi non disponibili.</p>'}
+    </div>
+  `;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-primary toon-enter-btn';
+  btn.textContent = 'Entra';
+  btn.onclick = () => selectAccountToon(t.id);
+  card.appendChild(btn);
+  return card;
+}
+
+function makePrinceToonCard(t) {
+  const card = document.createElement('div');
+  card.className = 'toon-overview-card toon-prince-card';
+  const s = t.summary && t.summary.ok !== false ? t.summary : null;
+  const grade = (s && s.grade) || '';
+  const title = String(t.title || '').trim();
+  const mxp = s ? Number(s.available_mxp) || 0 : 0;
+  const mxpFrac = s ? Number(s.available_mxp_frac) || 0 : 0;
+
+  const head = document.createElement('div');
+  head.className = 'toon-overview-head toon-overview-head-stack';
+  head.innerHTML =
+    `<div><strong class="toon-overview-name">${escapeHtml(t.name)}</strong>` +
+    `<span class="toon-overview-meta">lv ${t.maxLevel}` +
+    (title ? ` · ${mudTextToHtml(title)}` : '') +
+    (grade ? ` · ${escapeHtml(grade)}` : '') +
+    ` · ${escapeHtml(formatMxp(mxp, mxpFrac))} disponibili</span>` +
+    moneyMetaLine(s) +
+    `</div>`;
+  card.appendChild(head);
+
+  if (!s) {
+    const miss = document.createElement('p');
+    miss.className = 'hint';
+    miss.textContent =
+      (t.summary && t.summary.error) ||
+      'Riepilogo non disponibile (myst offline o PG senza inventorio leggibile).';
+    card.appendChild(miss);
+    const btnEarly = document.createElement('button');
+    btnEarly.type = 'button';
+    btnEarly.className = 'btn-primary toon-enter-btn';
+    btnEarly.textContent = 'Entra';
+    btnEarly.onclick = () => selectAccountToon(t.id);
+    card.appendChild(btnEarly);
+    return card;
+  }
+
+  const main = s.main_edits || {};
+  const clan = s.clan_symbol || {};
+  const pool = s.pool || {};
+  const poolWarn = pool.residual_on_objects
+    ? `<p class="ov-warn">${escapeHtml(
+        pool.warning ||
+          'Pool migrato sul PG ma restano delta sugli oggetti EDIT (stato misto).',
+      )}</p>`
+    : '';
+  const body = document.createElement('div');
+  body.className = 'toon-overview-body';
+  body.innerHTML = `
+    <details class="ov-collapse">
+      <summary>Edit principali</summary>
+      <div class="ov-collapse-body">
+        <ul class="ov-checklist">
+          ${resistLine('Res. Slash', main.res_slash)}
+          ${resistLine('Res. Pierce', main.res_pierce)}
+          ${resistLine('Res. Blunt', main.res_blunt)}
+        </ul>
+        ${meterLineWithNote('Dam editato', main.dam)}
+        ${meterLineWithNote('Spellpower', main.spellpower)}
+        ${meterLine('Hitroll editato', main.hitroll?.used, main.hitroll?.cap, main.hitroll?.remaining)}
+        ${meterLine('Spellfail editato', main.spellfail?.used, main.spellfail?.cap, main.spellfail?.remaining)}
+      </div>
+    </details>
+    <details class="ov-collapse">
+      <summary>Residuo pool <span class="ov-source">(${
+        pool.source === 'character' ? 'sul PG' : 'sugli oggetti'
+      })</span></summary>
+      <div class="ov-collapse-body">
+        ${poolWarn}
+        ${(pool.fields || [])
+          .map((f) =>
+            meterLine(
+              ({
+                hit: 'Hit',
+                mana: 'Mana',
+                move: 'Move',
+                hit_regen: 'Hit regen',
+                mana_regen: 'Mana regen',
+                move_regen: 'Move regen',
+              })[f.key] || f.key,
+              f.used,
+              f.cap,
+              f.remaining,
+            ),
+          )
+          .join('')}
+      </div>
+    </details>
+    <div class="ov-block ov-clan">
+      <h4>Simbolo del clan</h4>
+      <p>${
+        clan.present
+          ? '<span class="ov-yes">Sì</span> (origine principe/toon: da definire)'
+          : '<span class="ov-no">No</span>'
+      }</p>
+    </div>
+  `;
+  card.appendChild(body);
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-primary toon-enter-btn';
+  btn.textContent = 'Entra';
+  btn.onclick = () => selectAccountToon(t.id);
+  card.appendChild(btn);
+  return card;
+}
+
+async function selectAccountToon(toonId) {
+  const sel = await api('/api/select-toon', {
+    method: 'POST',
+    body: JSON.stringify({ toonId }),
+  });
+  if (!sel.ok) {
+    alert(sel.error);
+    return;
+  }
+  await refreshMe();
 }
 
 async function enterWorkMode() {
@@ -362,9 +1141,10 @@ async function enterWorkMode() {
     payMode.querySelector('option[value="mxp"]').disabled = true;
     payMode.querySelector('option[value="mix"]').disabled = true;
   }
+  refreshPayModeLabels();
 
   if (me.role === 'staff') {
-    show('staff-panel');
+    initStaffToolsColumn();
     show('target-toon-wrap');
     const hint = $('session-role-hint');
     if (hint) {
@@ -373,7 +1153,7 @@ async function enterWorkMode() {
     }
     loadSystemConfig();
   } else {
-    hide('staff-panel');
+    hideStaffToolsColumn();
     hide('target-toon-wrap');
     const hint = $('session-role-hint');
     if (hint) hint.textContent = `Personaggio: ${me.sessionToonName}`;
@@ -425,39 +1205,52 @@ function updateInventoryHeading() {
 
 let targetSearchTimer = null;
 
+function resetStaffTargetSelect(message) {
+  const sel = $('target-toon');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = message || '— cerca un nome sopra —';
+  sel.appendChild(placeholder);
+  sel.value = '';
+  targetToonId = null;
+}
+
 async function searchTargetToons(q) {
   const sel = $('target-toon');
   if (!sel) return;
   const query = String(q || '').trim();
-  sel.innerHTML = '';
+  const prevTarget = targetToonId;
+  // Nuova ricerca: non tenere selezionato/auto-caricato il primo risultato.
+  resetStaffTargetSelect(
+    query.length < 2 ? '— digita almeno 2 lettere —' : '— seleziona un personaggio —',
+  );
+  if (prevTarget) {
+    clearTargetWorkspace('Cerca e seleziona di nuovo il personaggio target.');
+    updateInventoryHeading();
+  }
   if (query.length < 2) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = '— digita almeno 2 lettere —';
-    sel.appendChild(opt);
     return;
   }
   const data = await api(`/api/target-toons?q=${encodeURIComponent(query)}`);
   if (!data.ok) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = data.error || 'errore ricerca';
-    sel.appendChild(opt);
+    resetStaffTargetSelect(data.error || 'errore ricerca');
     return;
   }
   if (!data.toons?.length) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'Nessun personaggio trovato';
-    sel.appendChild(opt);
+    resetStaffTargetSelect('Nessun personaggio trovato');
     return;
   }
+  // Placeholder obbligatorio: senza, il browser seleziona il primo PG da solo.
+  resetStaffTargetSelect('— seleziona un personaggio —');
   data.toons.forEach((t) => {
     const opt = document.createElement('option');
     opt.value = String(t.id);
     opt.textContent = `${t.name} (lv ${t.max_level ?? '?'})`;
     sel.appendChild(opt);
   });
+  sel.value = '';
 }
 
 async function loadTargetToons() {
@@ -466,40 +1259,34 @@ async function loadTargetToons() {
 
   if (session.role === 'staff') {
     targetToonId = null;
-    sel.innerHTML = '';
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '— cerca un nome sopra —';
-    sel.appendChild(placeholder);
-
     const search = $('target-toon-search');
-    if (search && !search.dataset.bound) {
-      search.dataset.bound = '1';
-      search.addEventListener('input', () => {
-        clearTimeout(targetSearchTimer);
-        targetSearchTimer = setTimeout(() => searchTargetToons(search.value), 250);
-      });
+    if (search) {
+      search.value = '';
+      if (!search.dataset.bound) {
+        search.dataset.bound = '1';
+        search.addEventListener('input', () => {
+          clearTimeout(targetSearchTimer);
+          targetSearchTimer = setTimeout(() => searchTargetToons(search.value), 250);
+        });
+      }
     }
+    resetStaffTargetSelect('— cerca un nome sopra —');
     sel.onchange = async () => {
       targetToonId = getTargetToonId();
-      pendingEdit = null;
-      selectedInventoryId = null;
-      updatePaymentUI();
+      clearTargetWorkspace(
+        targetToonId
+          ? 'Caricamento personaggio…'
+          : 'Seleziona un personaggio dalla lista.'
+      );
       updateInventoryHeading();
       if (!targetToonId) {
-        $('char-stats').textContent = 'Seleziona un personaggio dalla lista.';
-        $('inventory-list').innerHTML = '';
-        $('object-edits').innerHTML = '';
-        $('quote-box').textContent =
-          'Seleziona un personaggio target, poi un oggetto editabile.';
         return;
       }
       await loadCharacterState();
       await loadInventory();
     };
+    clearTargetWorkspace('Cerca e seleziona un personaggio target.');
     updateInventoryHeading();
-    $('char-stats').textContent = 'Cerca e seleziona un personaggio target.';
-    $('inventory-list').innerHTML = '';
     return;
   }
 
@@ -518,11 +1305,14 @@ async function loadTargetToons() {
   targetToonId = getTargetToonId();
   sel.onchange = async () => {
     targetToonId = getTargetToonId();
-    pendingEdit = null;
-    updatePaymentUI();
+    clearTargetWorkspace(
+      targetToonId ? 'Caricamento personaggio…' : 'Personaggio non selezionato'
+    );
+    if (!targetToonId) return;
     await loadCharacterState();
     await loadInventory();
   };
+  clearTargetWorkspace('Caricamento personaggio…');
   await loadCharacterState();
   await loadInventory();
 }
@@ -537,45 +1327,108 @@ function hideApiWarn() {
   hide('api-warn');
 }
 
+function clearTargetWorkspace(message) {
+  clearObjectEditCart();
+  clearCharacterEditCart();
+  pendingEdit = null;
+  selectedInventoryId = null;
+  selectedObjectOptions = null;
+  charState = null;
+  inventoryItemsCache = [];
+  updatePaymentUI();
+  const statsMsg =
+    message || 'Seleziona un personaggio target.';
+  if ($('char-stats')) $('char-stats').textContent = statsMsg;
+  if ($('inventory-list')) $('inventory-list').innerHTML = '';
+  if ($('inventory-empty')) {
+    $('inventory-empty').textContent = '';
+    $('inventory-empty').classList.add('hidden');
+  }
+  if ($('object-edits')) $('object-edits').innerHTML = '';
+  if ($('object-text-edit')) $('object-text-edit').innerHTML = '';
+  if ($('object-massimali')) $('object-massimali').innerHTML = '';
+  if ($('object-edit-cart')) {
+    $('object-edit-cart').innerHTML = '';
+    $('object-edit-cart').classList.add('hidden');
+  }
+  if ($('char-edit-cart')) {
+    $('char-edit-cart').innerHTML = '';
+    $('char-edit-cart').classList.add('hidden');
+  }
+  if ($('object-affect-slots')) {
+    $('object-affect-slots').innerHTML = '';
+    hide('object-affect-slots');
+  }
+  setMainColumnSplit(false);
+  if ($('pool-edits')) $('pool-edits').innerHTML = '';
+  if ($('resistance-edits')) $('resistance-edits').innerHTML = '';
+  if ($('quote-box')) {
+    $('quote-box').textContent =
+      'Seleziona un personaggio target, poi un oggetto editabile.';
+  }
+  if ($('apply-result')) $('apply-result').textContent = '';
+  hideApiWarn();
+  updateInventoryHeading();
+}
+
 async function loadCharacterState() {
   hideApiWarn();
   targetToonId = getTargetToonId();
   if (!targetToonId) {
-    $('char-stats').textContent = 'Personaggio non selezionato';
+    clearTargetWorkspace('Personaggio non selezionato');
     return;
   }
   const data = await api(`/api/character-state/${targetToonId}`);
   if (!data.ok) {
     charState = null;
+    if ($('pool-edits')) $('pool-edits').innerHTML = '';
+    if ($('resistance-edits')) $('resistance-edits').innerHTML = '';
     $('char-stats').textContent = data.error || 'Impossibile caricare stato PG (myst attivo?)';
     showApiWarn(`Stato personaggio: ${data.error}`);
     return;
   }
   charState = data.data;
   renderCharStats();
-  renderCharacterEdits();
+  if (charState.stats_missing) {
+    if ($('pool-edits')) $('pool-edits').innerHTML = '';
+    if ($('resistance-edits')) $('resistance-edits').innerHTML = '';
+    showApiWarn(charState.warning || 'character_stats assente per questo toon');
+  } else {
+    renderCharacterEdits();
+  }
   updateInventoryHeading();
 }
 
 function renderCharStats() {
   const s = charState;
+  if (!s) return;
+  const missing = s.stats_missing
+    ? `<div class="stat-row hint">character_stats assente — solo consultazione inventario</div>`
+    : '';
   $('char-stats').innerHTML = `
-    <div class="stat-row"><span>Nome</span><strong>${s.name}</strong></div>
+    <div class="stat-row"><span>Nome</span><strong>${escapeHtml(s.name || '')}</strong></div>
     <div class="stat-row"><span>Livello</span><strong>${s.max_level}</strong></div>
-    <div class="stat-row"><span>MXP disponibili</span><strong>${formatMxp(s.available_mxp, s.available_mxp_frac)}</strong></div>
-    <div class="stat-row"><span>Runes degli Eroi</span><strong>${s.rune}</strong></div>
-    ${s.prince_reserve_mxp ? `<div class="stat-row hint">Riserva principi: ${s.prince_reserve_mxp} MXP</div>` : ''}
+    <div class="stat-row"><span>MXP Disponibili</span><strong>${formatMxp(s.available_mxp, s.available_mxp_frac)}</strong></div>
+    <div class="stat-row"><span>${currencyLabel('rune')}</span><strong>${s.rune}</strong></div>
+    ${s.prince_reserve_mxp
+      ? `<div class="stat-row hint"><span>Limite minimo xp per i principi</span><strong>${s.prince_reserve_mxp} MXP</strong></div>`
+      : ''}
+    ${missing}
   `;
 }
 
 function catalogEntries(kind, target) {
   if (!editCatalog || !editCatalog.entries) return [];
-  return editCatalog.entries.filter((e) => e.kind === kind && e.target === target && e.enabled);
+  return editCatalog.entries.filter(
+    (e) => e.kind === kind && e.target === target && e.enabled !== false
+  );
 }
 
 function buildStepOptions(cap, step, current) {
+  /* Pool: solo valori >= attuale (non si riduce un edit gia' pagato). */
   const opts = [];
-  for (let v = 0; v <= cap; v += step) {
+  const start = Math.max(0, Number(current) || 0);
+  for (let v = start; v <= cap; v += step) {
     opts.push(v);
   }
   if (!opts.includes(current)) opts.push(current);
@@ -596,6 +1449,10 @@ function renderCharacterEdits() {
   const resBox = $('resistance-edits');
   poolBox.innerHTML = '';
   resBox.innerHTML = '';
+  if ($('char-edit-cart')) {
+    $('char-edit-cart').innerHTML = '';
+    $('char-edit-cart').classList.add('hidden');
+  }
 
   if (!charState || session.role === 'limited') {
     poolBox.innerHTML = '<p class="hint">Tier limited: edit non consentito.</p>';
@@ -603,14 +1460,29 @@ function renderCharacterEdits() {
   }
 
   const poolEntries = catalogEntries('pool', 'character');
-  poolEntries.forEach((entry) => {
+  if (poolEntries.length) {
+    const details = document.createElement('details');
+    details.className = 'edit-section';
+    details.open = true;
+    const summary = document.createElement('summary');
+    summary.className = 'edit-section-summary';
+    summary.innerHTML =
+      `<span class="edit-section-name">Pool</span>` +
+      `<span class="edit-section-count">${poolEntries.length}</span>`;
+    details.appendChild(summary);
+    const body = document.createElement('div');
+    body.className = 'edit-section-body';
+    poolEntries.forEach((entry) => {
     const field = entry.pool_field;
+    const cartKey = `pool:${field}`;
     const cap = Number(entry.cap || charState.pool?.caps?.[field] || 0);
     const step = Number(entry.step || 10);
     const current = Number(charState.pool?.[field] || 0);
     const row = document.createElement('div');
     row.className = 'edit-row';
+    row.dataset.cartKey = cartKey;
     const select = document.createElement('select');
+    select.dataset.current = String(current);
     buildStepOptions(cap, step, current).forEach((v) => {
       const opt = document.createElement('option');
       opt.value = v;
@@ -618,35 +1490,52 @@ function renderCharacterEdits() {
       if (v === current) opt.selected = true;
       select.appendChild(opt);
     });
+    const queued = characterEditCart.get(cartKey);
+    if (queued && queued.newValue != null) {
+      select.value = String(queued.newValue);
+      if (queued.selectEl !== select) queued.selectEl = select;
+    }
     select.addEventListener('change', () => {
       if (Number(select.value) === current) {
-        if (pendingEdit?.type === 'pool' && pendingEdit.field === field) {
-          pendingEdit = null;
-          updatePaymentUI();
+        if (characterEditCart.has(cartKey)) {
+          characterEditCart.delete(cartKey);
+          rebuildCharacterPendingFromCart();
         }
         return;
       }
-      queuePoolQuote(field, Number(select.value), entry.label || field, select);
+      queuePoolQuote(field, Number(select.value), entry.label || field, select, cartKey);
     });
     row.innerHTML = `
       <div>
-        <label>${entry.label || field}</label>
-        <div class="current">Attuale: ${current} / ${cap}</div>
+        <label class="effect-name">${entry.label || field}</label>
+        <div class="current">Attuale: ${current} / ${cap} (solo aumento)</div>
       </div>
     `;
     row.appendChild(select);
-    poolBox.appendChild(row);
-  });
+    body.appendChild(row);
+    });
+    details.appendChild(body);
+    poolBox.appendChild(details);
+  }
 
   const resEntries = catalogEntries('resistance', 'character');
   if (resEntries.length) {
-    const title = document.createElement('h3');
-    title.textContent = 'Resistenze';
-    resBox.appendChild(title);
+    const details = document.createElement('details');
+    details.className = 'edit-section';
+    details.open = true;
+    const summary = document.createElement('summary');
+    summary.className = 'edit-section-summary';
+    summary.innerHTML =
+      `<span class="edit-section-name">Resistenze</span>` +
+      `<span class="edit-section-count">${resEntries.length}</span>`;
+    details.appendChild(summary);
+    const body = document.createElement('div');
+    body.className = 'edit-section-body';
     const grid = document.createElement('div');
     grid.className = 'resistance-grid';
     resEntries.forEach((entry) => {
       const dt = Number(entry.damage_type);
+      const cartKey = `res:${dt}`;
       const currentRow = (charState.resistances || []).find((r) => Number(r.damage_type) === dt);
       const current = currentRow ? Number(currentRow.value) : 0;
       const min = Number(entry.min ?? -100);
@@ -654,7 +1543,9 @@ function renderCharacterEdits() {
       const step = Number(entry.step ?? 25);
       const row = document.createElement('div');
       row.className = 'edit-row';
+      row.dataset.cartKey = cartKey;
       const select = document.createElement('select');
+      select.dataset.current = String(current);
       resistanceValueOptions(min, max, step).forEach((v) => {
         const opt = document.createElement('option');
         opt.value = v;
@@ -662,147 +1553,184 @@ function renderCharacterEdits() {
         if (v === current) opt.selected = true;
         select.appendChild(opt);
       });
+      const queued = characterEditCart.get(cartKey);
+      if (queued && queued.value != null) {
+        select.value = String(queued.value);
+        if (queued.selectEl !== select) queued.selectEl = select;
+      }
       select.addEventListener('change', () => {
         if (Number(select.value) === current) {
-          if (pendingEdit?.type === 'resistance' && pendingEdit.damageType === dt) {
-            pendingEdit = null;
-            updatePaymentUI();
+          if (characterEditCart.has(cartKey)) {
+            characterEditCart.delete(cartKey);
+            rebuildCharacterPendingFromCart();
           }
           return;
         }
-        queueResistanceQuote(dt, Number(select.value), entry.label || entry.id, select);
+        queueResistanceQuote(dt, Number(select.value), entry.label || entry.id, select, cartKey);
       });
       row.innerHTML = `
         <div>
-          <label>${entry.label || entry.id}</label>
+          <label class="effect-name">${entry.label || entry.id}</label>
           <div class="current">Attuale: ${current}</div>
         </div>
       `;
       row.appendChild(select);
       grid.appendChild(row);
     });
-    resBox.appendChild(grid);
+    body.appendChild(grid);
+    details.appendChild(body);
+    resBox.appendChild(details);
   }
+  updateCharacterCartUI();
 }
 
-async function queuePoolQuote(field, newValue, label, selectEl) {
+async function queuePoolQuote(field, newValue, label, selectEl, cartKey) {
+  const requested = Number(selectEl.value);
   const data = await api('/api/quote-pool', {
     method: 'POST',
     body: JSON.stringify({ targetToonId, field, newValue }),
   });
+  if (Number(selectEl.value) !== requested) return;
   if (!data.ok) {
     alert(data.error || 'Quote pool fallita');
-    selectEl.value = String(data.data?.current ?? selectEl.dataset.prev ?? selectEl.value);
+    selectEl.value = selectEl.dataset.current || String(data.data?.current ?? selectEl.value);
     return;
   }
-  pendingEdit = {
+  ensureCharacterCartExclusive();
+  const key = cartKey || `pool:${field}`;
+  characterEditCart.set(key, {
+    key,
     type: 'pool',
     field,
     newValue,
     label: `${label}: ${data.data.current} → ${data.data.target}`,
     quote: data.data,
     selectEl,
-  };
-  updatePaymentUI();
+  });
+  rebuildCharacterPendingFromCart();
 }
 
-async function queueResistanceQuote(damageType, value, label, selectEl) {
+async function queueResistanceQuote(damageType, value, label, selectEl, cartKey) {
+  const requested = Number(selectEl.value);
   const data = await api('/api/quote-resistance', {
     method: 'POST',
     body: JSON.stringify({ targetToonId, damageType, value }),
   });
+  if (Number(selectEl.value) !== requested) return;
   if (!data.ok) {
     alert(data.error || 'Quote resistenza fallita');
+    selectEl.value = selectEl.dataset.current || String(selectEl.value);
     return;
   }
-  pendingEdit = {
+  ensureCharacterCartExclusive();
+  const key = cartKey || `res:${damageType}`;
+  characterEditCart.set(key, {
+    key,
     type: 'resistance',
     damageType,
     value,
     label: `${label}: ${data.data.current} → ${data.data.target}`,
     quote: data.data,
     selectEl,
-  };
-  updatePaymentUI();
+  });
+  rebuildCharacterPendingFromCart();
 }
 
-async function loadInventory() {
-  targetToonId = getTargetToonId();
-  const prevSelected = selectedInventoryId;
-  if (!targetToonId) {
-    showApiWarn('Personaggio target non selezionato — cerca e seleziona un PG');
-    updateInventoryHeading();
-    return;
+function stripMudColorCodes(raw) {
+  return String(raw ?? '')
+    .replace(/\$\$/g, '\u0000')
+    .replace(/\$[cC]\d{4}/g, '')
+    .replace(/\$/g, '')
+    .replace(/\u0000/g, '$')
+    .trim();
+}
+
+function inventorySortKeyAlpha(it) {
+  return stripMudColorCodes(it.short_desc || it.name || '').toLocaleLowerCase('it');
+}
+
+function getInventorySortMode() {
+  const sel = $('inventory-sort');
+  if (sel && sel.value) return sel.value;
+  try {
+    return localStorage.getItem(INVENTORY_SORT_KEY) || 'inventory';
+  } catch {
+    return 'inventory';
   }
-  updateInventoryHeading();
-  const data = await api(`/api/inventory/${targetToonId}`);
+}
+
+function persistInventorySortMode(mode) {
+  try {
+    localStorage.setItem(INVENTORY_SORT_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+function sortInventoryItems(items, mode) {
+  const arr = [...items];
+  const byAlpha = (a, b) =>
+    inventorySortKeyAlpha(a).localeCompare(inventorySortKeyAlpha(b), 'it', {
+      sensitivity: 'base',
+      numeric: true,
+    });
+  const byType = (a, b) =>
+    String(a.item_type || '').localeCompare(String(b.item_type || ''), 'it', {
+      sensitivity: 'base',
+    }) || byAlpha(a, b);
+  const byVnum = (a, b) =>
+    Number(a.item_number || 0) - Number(b.item_number || 0) || byAlpha(a, b);
+  const byList = (a, b) =>
+    Number(a.list_index ?? a.inventory_id ?? 0) -
+    Number(b.list_index ?? b.inventory_id ?? 0);
+
+  switch (mode) {
+    case 'alpha':
+      arr.sort(byAlpha);
+      break;
+    case 'alpha_desc':
+      arr.sort((a, b) => -byAlpha(a, b));
+      break;
+    case 'editable':
+      arr.sort((a, b) => Number(!!b.editable) - Number(!!a.editable) || byAlpha(a, b));
+      break;
+    case 'not_editable':
+      arr.sort((a, b) => Number(!!a.editable) - Number(!!b.editable) || byAlpha(a, b));
+      break;
+    case 'item_type':
+      arr.sort(byType);
+      break;
+    case 'worn':
+      arr.sort(
+        (a, b) => Number(!!b.worn) - Number(!!a.worn) || byAlpha(a, b),
+      );
+      break;
+    case 'vnum':
+      arr.sort(byVnum);
+      break;
+    case 'container':
+      arr.sort(
+        (a, b) => Number(b.depth || 0) - Number(a.depth || 0) || byAlpha(a, b),
+      );
+      break;
+    case 'inventory':
+    default:
+      arr.sort(byList);
+      break;
+  }
+  return arr;
+}
+
+function renderInventoryList(items) {
   const list = $('inventory-list');
   list.innerHTML = '';
+  const prevSelected = selectedInventoryId;
+  const sorted = sortInventoryItems(items, getInventorySortMode());
 
-  if (!data.ok) {
-    showApiWarn(data.error || 'Errore caricamento inventario');
-    $('inventory-empty').classList.add('hidden');
-    return;
-  }
-
-  if (data.mystErrors && data.mystErrors.length) {
-    showApiWarn(`API myst: ${data.mystErrors.join(' · ')}`);
-  } else {
-    hideApiWarn();
-  }
-
-  const warn = $('online-warn');
-  if (data.online) {
-    warn.textContent = 'Il personaggio target è collegato al mud: gli apply sono bloccati fino al logout in-game.';
-    show('online-warn');
-  } else {
-    hide('online-warn');
-  }
-
-  const items = data.items || [];
-  const editableCount = Number(
-    data.editable_count ?? items.filter((i) => i.editable).length,
-  );
-  const mysqlCount = Number(data.mysql_count ?? 0);
-  const emptyEl = $('inventory-empty');
-  emptyEl.classList.toggle('hidden', items.length > 0);
-  if (!items.length) {
-    if (mysqlCount > 0 && data.inventory_source === 'mysql_myst_empty') {
-      emptyEl.textContent =
-        'Elenco da MySQL (' +
-        mysqlCount +
-        ' oggetti). Myst non ha arricchito la lista: ricompila e riavvia myst (./scripts/mud-dev.sh stop-mud && deploy-edit).';
-      emptyEl.classList.remove('hidden');
-    } else {
-      emptyEl.textContent =
-        'Nessun oggetto in inventario MySQL per questo PG (logout in-game per salvare).';
-    }
-  }
-
-  if (items.length && editableCount === 0) {
-    showApiWarn('Inventario caricato: nessun oggetto editabile (vedi motivi nella lista).');
-  } else if (data.inventory_source === 'mysql_fallback') {
-    showApiWarn(
-      'Elenco da MySQL: myst non disponibile — selezione edit non attiva finché myst non risponde.',
-    );
-  } else if (data.inventory_source === 'mysql_myst_empty') {
-    showApiWarn(
-      'Elenco da MySQL: myst non legge character_inventory per questo PG — verifica toon_id e riavvia myst aggiornato.',
-    );
-  } else if (data.myst_toon_name_ok === false) {
-    showApiWarn(
-      'Myst non risolve il nome del PG (toon_id): edit oggetti bloccato finché il record toon è leggibile.',
-    );
-  }
-
-  items.forEach((it) => {
+  sorted.forEach((it) => {
     const li = document.createElement('li');
     li.className = it.editable ? 'item' : 'item item-disabled';
-    const worn = it.worn
-      ? it.editable
-        ? ' · indossato (ri-edit OK)'
-        : ' · indossato'
-      : '';
+    const worn = it.worn ? ' · indossato' : '';
     const depth = Number(it.depth) > 0 ? ' · in container' : '';
     const skip = it.skip_reason ? ` — ${it.skip_reason}` : '';
     const type = it.item_type ? ` [${it.item_type}]` : '';
@@ -821,24 +1749,143 @@ async function loadInventory() {
     }
     list.appendChild(li);
   });
+}
+
+async function loadInventory() {
+  targetToonId = getTargetToonId();
+  if (!targetToonId) {
+    showApiWarn('Personaggio target non selezionato — cerca e seleziona un PG');
+    updateInventoryHeading();
+    inventoryItemsCache = [];
+    return;
+  }
+  updateInventoryHeading();
+  const data = await api(`/api/inventory/${targetToonId}`);
+  const list = $('inventory-list');
+  list.innerHTML = '';
+
+  if (!data.ok) {
+    showApiWarn(data.error || 'Errore caricamento inventario');
+    $('inventory-empty').classList.add('hidden');
+    inventoryItemsCache = [];
+    return;
+  }
+
+  if (data.mystErrors && data.mystErrors.length) {
+    showApiWarn(`API myst: ${data.mystErrors.join(' · ')}`);
+  } else {
+    hideApiWarn();
+  }
+
+  const warn = $('online-warn');
+  if (data.online) {
+    warn.textContent = 'Il personaggio target è collegato al mud: gli apply sono bloccati fino al logout in-game.';
+    show('online-warn');
+  } else {
+    hide('online-warn');
+  }
+
+  const items = data.items || [];
+  inventoryItemsCache = items;
+  const editableCount = Number(
+    data.editable_count ?? items.filter((i) => i.editable).length,
+  );
+  const mysqlCount = Number(data.mysql_count ?? 0);
+  const emptyEl = $('inventory-empty');
+  emptyEl.classList.toggle('hidden', items.length > 0);
+  if (!items.length) {
+    if (mysqlCount > 0 && data.inventory_source === 'mysql_myst_empty') {
+      emptyEl.textContent =
+        'Elenco MySQL ha ' +
+        mysqlCount +
+        ' oggetti ma myst non li ha arricchiti: ricompila/riavvia myst.';
+    } else if (mysqlCount > 0 && data.inventory_source === 'myst_filtered') {
+      const br = data.myst_hidden_breakdown;
+      const parts = [];
+      if (br) {
+        if (br.raro) parts.push(`${br.raro} RARO`);
+        if (br.tan) parts.push(`${br.tan} tan`);
+        if (br.category) parts.push(`${br.category} categoria spenta`);
+        if (br.other) parts.push(`${br.other} altro`);
+      }
+      emptyEl.textContent =
+        'Myst ha nascosto tutti i pezzi (' +
+        (data.myst_loaded_rows ?? '?') +
+        ' letti)' +
+        (parts.length ? `: ${parts.join(', ')}` : '') +
+        '. TAN mai; RARO solo se non in DB edits / senza EDIT+EDNomeToon.';
+    } else if (mysqlCount > 0) {
+      emptyEl.textContent =
+        'Nessun oggetto mostrato, ma MySQL ha ' +
+        mysqlCount +
+        ' righe inventario. Verifica categorie staff.';
+    } else {
+      emptyEl.textContent =
+        'Nessun oggetto in inventario MySQL per questo PG (logout in-game per salvare).';
+    }
+  }
+
+  if (items.length && editableCount === 0) {
+    showApiWarn(
+      'Inventario caricato: nessun oggetto editabile (vedi motivi nella lista). Pezzi indossati sono editabili se rispettano categorie/esclusioni (PG offline).',
+    );
+  } else if (data.inventory_source === 'myst_filtered') {
+    const br = data.myst_hidden_breakdown;
+    const parts = [];
+    if (br) {
+      if (br.raro) parts.push(`${br.raro} RARO`);
+      if (br.tan) parts.push(`${br.tan} tan`);
+      if (br.category) parts.push(`${br.category} categoria`);
+      if (br.other) parts.push(`${br.other} altro`);
+    }
+    showApiWarn(
+      'Inventario filtrato da myst (sola lettura MySQL)' +
+        (parts.length ? `: ${parts.join(', ')}` : '') +
+        '. TAN mai. RARO: sì se in DB edits (show db) o EDIT+EDNomeToon.',
+    );
+  } else if (data.inventory_source === 'mysql_fallback') {
+    showApiWarn(
+      'Elenco da MySQL: myst non disponibile — selezione edit non attiva finché myst non risponde.',
+    );
+  } else if (data.inventory_source === 'mysql_myst_empty') {
+    showApiWarn(
+      'Elenco da MySQL: myst non legge character_inventory per questo PG — verifica toon_id e riavvia myst aggiornato.',
+    );
+  } else if (data.myst_toon_name_ok === false) {
+    showApiWarn(
+      'Myst non risolve il nome del PG (toon_id): edit oggetti bloccato finché il record toon è leggibile.',
+    );
+  }
 
   if (!items.length && !data.mystListOk) {
     list.innerHTML = '<li class="hint">Inventario non disponibile — verifica che myst sia avviato e EDIT_API_SECRET allineato.</li>';
+    return;
   }
+
+  renderInventoryList(items);
 }
 
 async function selectItem(inventoryId, li) {
   document.querySelectorAll('#inventory-list .item').forEach((el) => el.classList.remove('selected'));
   if (li) li.classList.add('selected');
   selectedInventoryId = inventoryId;
-  pendingEdit = null;
+  clearObjectEditCart();
   selectedObjectOptions = null;
+  if (characterEditCart.size) {
+    rebuildCharacterPendingFromCart();
+  } else {
+    pendingEdit = null;
+    updatePaymentUI();
+  }
   updatePaymentUI();
   $('object-edits').innerHTML = '';
+  if ($('object-massimali')) $('object-massimali').innerHTML = '';
   $('object-affect-slots').innerHTML = '';
   hide('object-affect-slots');
   const textBox = $('object-text-edit');
   if (textBox) textBox.innerHTML = '';
+  $('quote-box').textContent = 'Caricamento…';
+  setMainColumnSplit(true);
 
   const opts = await api('/api/object-edit-options', {
     method: 'POST',
@@ -847,6 +1894,7 @@ async function selectItem(inventoryId, li) {
 
   if (!opts.ok) {
     $('quote-box').textContent = opts.error || 'Oggetto non editabile';
+    setMainColumnSplit(false);
     return;
   }
 
@@ -857,15 +1905,34 @@ async function selectItem(inventoryId, li) {
     d.owner_name ? `Owner: ${d.owner_name} (${d.owner_classes} classi, x${d.class_mult})` : '',
     d.item_type ? `Tipo: ${d.item_type}` : '',
     `Costo attuale vs prototipo: ${formatMxp(d.diff_xp_mega || 0, d.diff_xp_frac || 0)}`,
-    d.diff_rune ? `Runes componente listino: ${d.diff_rune}` : '',
+    d.diff_rune ? `Rune componente listino: ${d.diff_rune}` : '',
   ].filter(Boolean);
   quoteEl.innerHTML =
     `<div class="quote-name">${mudTextToHtml(d.short_desc || '')}</div>` +
     lines.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
 
   renderObjectAffectSlots(d.affect_slots);
-  renderObjectTextEdit(d.text_edit);
-  renderObjectEdits(d.entries || [], d.dam_budget, d.sp_budget);
+  renderObjectTextEdit(
+    d.text_edit || {
+      can_edit: true,
+      requires_paid_affect: true,
+      name: '',
+      short_desc: '',
+      description: '',
+      name_max: 128,
+      short_max: 128,
+      long_max: 256,
+      hint:
+        'Gratuiti ma solo insieme al pagamento di un nuovo affect (stesso salvataggio).',
+    }
+  );
+  renderObjectEdits(
+    d.entries || [],
+    d.dam_budget,
+    d.sp_budget,
+    d.sf_budget,
+    d.clan_symbol === true,
+  );
 }
 
 function renderObjectAffectSlots(affectSlots) {
@@ -882,7 +1949,7 @@ function renderObjectAffectSlots(affectSlots) {
 
   box.innerHTML = '';
   const title = document.createElement('h3');
-  title.textContent = 'Slot effetti (affect)';
+  title.textContent = 'Slot affect';
   box.appendChild(title);
 
   const summary = document.createElement('p');
@@ -924,23 +1991,41 @@ function renderObjectAffectSlots(affectSlots) {
   show('object-affect-slots');
 }
 
+function objectEntryAffectsDam(entry) {
+  const id = String(entry?.id || '');
+  return id === 'damroll' || id === 'hitndam';
+}
+
+function objectEntryAffectsSpellpower(entry) {
+  const id = String(entry?.id || '');
+  return id === 'spellpower' || id === 'hitnsp';
+}
+
 function objectEditSection(id) {
-  if (id === 'artifact' || id.startsWith('flag.')) return 'Proprietà';
-  if (id.startsWith('immune.')) return 'Resistenze / immunità';
-  if (['armor', 'spellfail'].includes(id)) return 'Armatura / cast';
+  if (id === 'artifact' || id.startsWith('flag.')) return 'Artifact';
+  if (id.startsWith('resist.') || id.startsWith('immune.')) {
+    return 'Resistenze';
+  }
+  if (id.startsWith('immunity.') || id.startsWith('m_immune.')) {
+    return 'Immunità';
+  }
+  if (id.startsWith('spell.')) return 'Spell';
+  if (['armor', 'spellfail'].includes(id)) return "Bonus all'Armatura/Cast";
   if (['hitndam', 'hitnsp', 'hitroll', 'damroll', 'spellpower'].includes(id)) {
-    return 'Combattimento';
+    return 'Bonus in Combattimento';
   }
   return 'Caratteristiche';
 }
 
-/** Ordine alfabetico delle sezioni oggetto. */
+/** Ordine sezioni oggetto (listino / UI). */
 const OBJECT_EDIT_SECTION_ORDER = [
-  'Armatura / cast',
+  'Artifact',
+  "Bonus all'Armatura/Cast",
   'Caratteristiche',
-  'Combattimento',
-  'Proprietà',
-  'Resistenze / immunità',
+  'Bonus in Combattimento',
+  'Immunità',
+  'Resistenze',
+  'Spell',
 ];
 
 function objectEditSectionRank(name) {
@@ -948,7 +2033,13 @@ function objectEditSectionRank(name) {
   return i >= 0 ? i : 99;
 }
 
-/** Opzioni listino: min/max inclusivi, step in valore assoluto (AC step −10 → −40…0). */
+/**
+ * Opzioni listino.
+ * relative=true: min/max sono extra oltre proto (es. armor −40…0, hit +0…+2);
+ * i valori nel select sono totali assoluti (proto + extra).
+ * Con un bonus gia' presente non si offrono valori peggiorativi (solo migliorie
+ * o «Rimuovi slot»); con un malus si puo' andare a 0 / verso il bonus.
+ */
 function buildObjectScalarOptions(entry) {
   const min = Number(entry.min);
   const max = Number(entry.max);
@@ -956,34 +2047,111 @@ function buildObjectScalarOptions(entry) {
   const lo = Math.min(min, max);
   const hi = Math.max(min, max);
   const opts = [];
+  if (entry.relative) {
+    const proto = Number(entry.proto || 0);
+    for (let d = lo; d <= hi; d += absStep) {
+      opts.push(proto + d);
+    }
+    return opts;
+  }
   for (let v = lo; v <= hi; v += absStep) {
     opts.push(v);
   }
   return opts;
 }
 
+/** Armor/spellfail: piu' basso = meglio. Altri scalar: piu' alto = meglio. */
+function objectScalarLowerIsBetter(entry) {
+  const id = String(entry?.id || '');
+  return id === 'armor' || id === 'spellfail';
+}
+
+function objectScalarIsPositiveBonus(entry, current) {
+  if (objectScalarLowerIsBetter(entry)) return current < 0;
+  return current > Number(entry.proto || 0);
+}
+
+/** Filtra opzioni: niente dial-down di un bonus (serve «Rimuovi slot»). */
+function filterObjectScalarOptions(entry, values, current) {
+  if (!objectScalarIsPositiveBonus(entry, current)) {
+    return values;
+  }
+  const lowerBetter = objectScalarLowerIsBetter(entry);
+  return values.filter((v) => {
+    if (v === current) return true;
+    return lowerBetter ? v < current : v > current;
+  });
+}
+
+function formatScalarOptionLabel(entry, absolute) {
+  /* Solo valore numerico (es. 0, -10, 2) — niente "nessuno (proto …)". */
+  return String(absolute);
+}
+
+/** Immunità (`m_immune`) e resistenze (`immune`) sono sì/no, non scalari. */
+function isYesNoObjectEntry(entry) {
+  const kind = entry?.kind || '';
+  return (
+    kind === 'immune' ||
+    kind === 'm_immune' ||
+    kind === 'flag' ||
+    kind === 'spell'
+  );
+}
+
 function objectEntryCostHint(entry) {
   const mxp = Number(entry.mxp_per_step || 0);
   const rune = Number(entry.rune_per_step ?? mxp);
+  const step = Number(entry.step) || 1;
   if (!mxp) return '';
-  return `Listino: ${mxp} MXP o ${rune} Runes / punto`;
+  if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') {
+    return `Listino: ${mxp} ${currencyLabel('mxp')} o ${rune} ${currencyLabel('rune')}`;
+  }
+  if (Math.abs(step) !== 1) {
+    return `Listino: ${mxp} ${currencyLabel('mxp')} o ${rune} ${currencyLabel('rune')} / step ${step}`;
+  }
+  return `Listino: ${mxp} ${currencyLabel('mxp')} o ${rune} ${currencyLabel('rune')} / punto`;
 }
 
+/**
+ * I valori selezionabili sono già nel menu a tendina: non ripetere range
+ * tecnici tipo «extra 0…3 oltre proto». Solo step ≠ 1 se utile.
+ */
 function objectEntryRangeLabel(entry) {
-  const min = Number(entry.min);
-  const max = Number(entry.max);
+  if (
+    entry.kind === 'immune' ||
+    entry.kind === 'm_immune' ||
+    entry.kind === 'spell' ||
+    entry.kind === 'flag'
+  ) {
+    return '';
+  }
   const step = Number(entry.step) || 1;
-  if (entry.kind === 'immune') return '';
-  return ` (${min}…${max}, step ${step})`;
+  if (Math.abs(step) !== 1) {
+    return ` (step ${step})`;
+  }
+  return '';
 }
 
 function objectEntrySlotHint(entry) {
   const slotIdx = Number(entry.occupied_slot);
-  if (entry.kind === 'immune') {
+  if (entry.kind === 'immune' || entry.kind === 'm_immune') {
+    const noun = entry.kind === 'm_immune' ? 'immunità' : 'resistenza';
     if (entry.has_affect && slotIdx >= 0) {
-      return `slot #${slotIdx + 1} (immunità presente)`;
+      return `slot #${slotIdx + 1} (${noun} presente)`;
     }
-    if (entry.can_add) return 'nuova immunità (usa slot RESISTANCE)';
+    if (entry.can_add) {
+      return entry.kind === 'm_immune'
+        ? 'nuova immunità (slot APPLY_M_IMMUNE)'
+        : 'nuova resistenza (slot APPLY_IMMUNE)';
+    }
+    return 'nessuno slot libero';
+  }
+  if (entry.kind === 'spell') {
+    if (entry.has_affect && slotIdx >= 0) {
+      return `slot #${slotIdx + 1} (spell presente)`;
+    }
+    if (entry.can_add) return 'nuova spell (usa slot APPLY_SPELL)';
     return 'nessuno slot libero';
   }
   if (entry.has_affect && slotIdx >= 0) {
@@ -993,11 +2161,149 @@ function objectEntrySlotHint(entry) {
   return 'nessuno slot libero';
 }
 
+function objectAlreadyArtifact() {
+  const entries = selectedObjectOptions?.entries;
+  if (!Array.isArray(entries)) return false;
+  const art = entries.find((e) => e.kind === 'flag' && e.flag === 'artifact');
+  return Number(art?.current || 0) === 1;
+}
+
+function cartAddsArtifact() {
+  return [...objectEditCart.values()].some(
+    (it) => it.flag === 'artifact' && Number(it.targetModifier) === 1
+  );
+}
+
+/** Listino: +50% se Artifact gia' sul pezzo o in coda nello stesso pacchetto. */
+function objectPricingUsesArtifact() {
+  return objectAlreadyArtifact() || cartAddsArtifact();
+}
+
 function clearObjectPending(entryId) {
-  if (pendingEdit?.type === 'object' && pendingEdit.entryId === entryId) {
-    pendingEdit = null;
-    updatePaymentUI();
+  const removed = objectEditCart.get(entryId);
+  if (objectEditCart.has(entryId)) {
+    objectEditCart.delete(entryId);
   }
+  if (removed?.flag === 'artifact') {
+    requoteObjectCartForArtifact();
+    return;
+  }
+  rebuildObjectPendingFromCart();
+}
+
+function clearObjectEditCart({ resetSelectors = false } = {}) {
+  if (resetSelectors) {
+    objectEditCart.forEach((it) => {
+      if (it.selectEl && it.selectEl.dataset.current != null) {
+        it.selectEl.value = it.selectEl.dataset.current;
+      }
+    });
+  }
+  objectEditCart.clear();
+  if (isObjectPendingType(pendingEdit?.type)) {
+    pendingEdit = null;
+  }
+  updateObjectCartUI();
+  updatePaymentUI();
+}
+
+function rebuildObjectPendingFromCart() {
+  if (!objectEditCart.size) {
+    if (isObjectPendingType(pendingEdit?.type)) {
+      pendingEdit = null;
+    }
+    updateObjectCartUI();
+    updatePaymentUI();
+    return;
+  }
+  const items = [...objectEditCart.values()];
+  const totals = sumQuotes(items);
+  const labels = [];
+  const notes = [];
+  items.forEach((it) => {
+    labels.push(it.label);
+    if (it.quote?.note) notes.push(it.quote.note);
+  });
+  const artNote = objectPricingUsesArtifact()
+    ? 'Include maggiorazione Artifact +50% (listino)'
+    : undefined;
+  pendingEdit = {
+    type: 'object-batch',
+    entryId: 'object-batch',
+    label: labels.join('\n'),
+    quote: {
+      ...totals,
+      note:
+        notes.find((n) => /Artifact/i.test(String(n))) ||
+        artNote ||
+        notes[0] ||
+        (items.length > 1
+          ? `${items.length} edit in coda (costo sommato vs stato attuale del pezzo)`
+          : undefined),
+    },
+    items,
+  };
+  updateObjectCartUI();
+  updatePaymentUI();
+}
+
+async function requoteObjectCartForArtifact() {
+  const useArt = objectPricingUsesArtifact();
+  const items = [...objectEditCart.values()];
+  for (const it of items) {
+    if (it.flag === 'artifact') continue;
+    const payload = {
+      targetToonId,
+      inventoryId: selectedInventoryId,
+      location: Number(it.location || 0),
+      targetModifier: it.targetModifier,
+      pendingArtifact: useArt,
+    };
+    if (it.clearSlot) payload.clearSlot = true;
+    if (it.flag) payload.flag = it.flag;
+    const data = await api('/api/quote-object-edit', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (!data.ok) continue;
+    it.quote = data.data;
+    objectEditCart.set(it.entryId, it);
+  }
+  rebuildObjectPendingFromCart();
+}
+
+function getObjectTextDraft() {
+  const nameEl = $('obj-text-name');
+  const shortEl = $('obj-text-short');
+  const longEl = $('obj-text-long');
+  if (!nameEl || !shortEl || !longEl) return null;
+  return {
+    objName: nameEl.value,
+    shortDesc: shortEl.value,
+    description: longEl.value,
+    nameMax: Number(nameEl.dataset.max || 128),
+    shortMax: Number(shortEl.dataset.max || 128),
+    longMax: Number(longEl.dataset.max || 256),
+  };
+}
+
+function objectTextDraftIsDirty(draft) {
+  if (!draft || !selectedObjectOptions?.text_edit) return false;
+  const t = selectedObjectOptions.text_edit;
+  return (
+    draft.objName !== String(t.name || '') ||
+    draft.shortDesc !== String(t.short_desc || '') ||
+    draft.description !== String(t.description || '')
+  );
+}
+
+function objectCartHasPaidAffect(items) {
+  return items.some((it) => {
+    if (it.flag === 'artifact') return false;
+    const xp = Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
+    const rune = Number(it.quote?.diff_rune || it.quote?.pq || 0);
+    return xp > 0 || rune > 0;
+  });
 }
 
 function renderObjectTextEdit(textEdit) {
@@ -1007,7 +2313,9 @@ function renderObjectTextEdit(textEdit) {
   if (!textEdit) {
     return;
   }
-  const canEdit = textEdit.can_edit === true && session.role !== 'limited';
+  /* Ignora can_edit dal myst: i campi sono sempre digitabili (non limited).
+   * Il salvataggio avviene solo con un affect pagato nello stesso apply. */
+  const canEdit = session.role !== 'limited';
   const nameMax = Number(textEdit.name_max || 128);
   const shortMax = Number(textEdit.short_max || 128);
   const longMax = Number(textEdit.long_max || 256);
@@ -1016,7 +2324,8 @@ function renderObjectTextEdit(textEdit) {
   details.className = 'edit-section';
   details.open = true;
   const summary = document.createElement('summary');
-  summary.textContent = 'Name / short / long';
+  summary.className = 'edit-section-summary';
+  summary.innerHTML = '<span class="edit-section-name">Sezione String</span>';
   details.appendChild(summary);
 
   const body = document.createElement('div');
@@ -1025,8 +2334,7 @@ function renderObjectTextEdit(textEdit) {
     const locked = document.createElement('p');
     locked.className = 'hint';
     locked.textContent =
-      textEdit.hint ||
-      'Disponibile dopo il primo edit pagato sull\'oggetto (instance / EDIT).';
+      'Tier limited: name/short/long non modificabili.';
     body.appendChild(locked);
     details.appendChild(body);
     box.appendChild(details);
@@ -1037,13 +2345,21 @@ function renderObjectTextEdit(textEdit) {
   hint.className = 'hint';
   hint.textContent =
     textEdit.hint ||
-    'Codici colore $cMBFG ammessi. Contatore = lunghezza grezza (come in DB).';
+    'Gratuiti ma solo insieme al pagamento di un nuovo affect (stesso salvataggio). Non si salvano da soli.';
   body.appendChild(hint);
 
   const fields = [
-    { key: 'name', label: 'Name (keywords)', max: nameMax, value: textEdit.name || '', multiline: false },
+    {
+      key: 'name',
+      id: 'obj-text-name',
+      label: 'Name (keywords)',
+      max: nameMax,
+      value: textEdit.name || '',
+      multiline: false,
+    },
     {
       key: 'short',
+      id: 'obj-text-short',
       label: 'Short description',
       max: shortMax,
       value: textEdit.short_desc || '',
@@ -1051,6 +2367,7 @@ function renderObjectTextEdit(textEdit) {
     },
     {
       key: 'long',
+      id: 'obj-text-long',
       label: 'Long description',
       max: longMax,
       value: textEdit.description || '',
@@ -1058,12 +2375,12 @@ function renderObjectTextEdit(textEdit) {
     },
   ];
 
-  const inputs = {};
   fields.forEach((f) => {
     const row = document.createElement('div');
     row.className = 'text-edit-row';
     const lab = document.createElement('label');
     lab.textContent = f.label;
+    lab.setAttribute('for', f.id);
     const counter = document.createElement('span');
     counter.className = 'text-len-counter';
     const preview = document.createElement('div');
@@ -1076,6 +2393,7 @@ function renderObjectTextEdit(textEdit) {
       input = document.createElement('input');
       input.type = 'text';
     }
+    input.id = f.id;
     input.value = f.value;
     input.dataset.max = String(f.max);
     const sync = () => {
@@ -1092,117 +2410,226 @@ function renderObjectTextEdit(textEdit) {
     row.appendChild(input);
     row.appendChild(preview);
     body.appendChild(row);
-    inputs[f.key] = input;
   });
 
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'btn-secondary';
-  btn.textContent = 'Calcola costo testo';
-  btn.onclick = async () => {
-    const objName = inputs.name.value;
-    const shortDesc = inputs.short.value;
-    const description = inputs.long.value;
-    if (
-      objName.length > nameMax ||
-      shortDesc.length > shortMax ||
-      description.length > longMax
-    ) {
-      alert('Uno o più campi superano la lunghezza massima: correggi prima di quotare.');
-      return;
-    }
-    const data = await api('/api/quote-object-text', {
-      method: 'POST',
-      body: JSON.stringify({
-        targetToonId,
-        inventoryId: selectedInventoryId,
-        objName,
-        shortDesc,
-        description,
-      }),
-    });
-    if (!data.ok) {
-      alert(data.error || 'Quote testo fallita');
-      return;
-    }
-    pendingEdit = {
-      type: 'object-text',
-      entryId: 'object-text',
-      label: 'Name / short / long',
-      quote: data.data,
-      objName,
-      shortDesc,
-      description,
-    };
-    updatePaymentUI();
-  };
-  body.appendChild(btn);
   details.appendChild(body);
   box.appendChild(details);
 }
 
-function renderObjectEdits(entries, damBudget, spBudget) {
+function massimaleUsageClass(total, max) {
+  const t = Number(total);
+  const m = Number(max);
+  if (!(m > 0) || !Number.isFinite(t)) return '';
+  const pct = (Math.max(0, t) / m) * 100;
+  if (pct <= 30) return 'massimale-usage-low';
+  if (pct <= 70) return 'massimale-usage-mid';
+  return 'massimale-usage-high';
+}
+
+function setMainColumnSplit(active) {
+  const col = document.querySelector('.main-column');
+  if (!col) return;
+  col.classList.toggle('main-column--split', !!active);
+}
+
+function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) {
+  const host = $('object-massimali') || box;
+  if (!host) return;
+  if (host !== box) host.innerHTML = '';
+
+  const panel = document.createElement('div');
+  panel.className = 'massimali-panel';
+
+  const title = document.createElement('h3');
+  title.className = 'massimali-title';
+  title.textContent = 'Massimali editabili';
+  panel.appendChild(title);
+
+  const grid = document.createElement('div');
+  grid.className = 'massimali-grid';
+
+  const damMutexNote =
+    'Su ogni pezzo: se c\'è dam o hit-n-dam, spellpower è bloccato finché non rimuovi quello slot (e viceversa).';
+  const spMutexNote =
+    'Su ogni pezzo: se c\'è spellpower o hit-n-sp, dam è bloccato finché non rimuovi quello slot (e viceversa).';
+
+  if (damBudget) {
+    const card = document.createElement('div');
+    card.className = 'massimale-card';
+    const total = Number(damBudget.char_total || 0);
+    const max = Number(damBudget.char_max || 30);
+    const pieceMax = Number(damBudget.piece_max || 2);
+    const pc = Number(damBudget.piece_current);
+    const pp = Number(damBudget.piece_proto);
+    const delta = Number(damBudget.piece || 0);
+    const usage = massimaleUsageClass(total, max);
+    let detail = `Max ${pieceMax} dam editati per pezzo`;
+    if (Number.isFinite(pc) && Number.isFinite(pp)) {
+      detail = `Questo pezzo: ${pc} vs proto ${pp} (delta +${delta}) · max ${pieceMax}/pezzo`;
+      if (damBudget.piece_edit === false) {
+        detail += ' · non conteggiato (serve EDIT + owner; clan esclusi)';
+      }
+    }
+    const mutexNote =
+      damBudget.mutex_with_spellpower !== false ? damMutexNote : '';
+    card.innerHTML = `
+      <div class="massimale-label">Dam totale editato</div>
+      <div class="massimale-value ${usage}">${total}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-detail">${escapeHtml(detail)}</div>
+      ${mutexNote ? `<div class="massimale-note">${escapeHtml(mutexNote)}</div>` : ''}
+    `;
+    grid.appendChild(card);
+  }
+
+  if (spBudget) {
+    const card = document.createElement('div');
+    card.className = 'massimale-card';
+    const total = Number(spBudget.char_total || 0);
+    const max = Number(spBudget.char_max || 30);
+    const pieceMax = Number(spBudget.piece_max || 2);
+    const pc = Number(spBudget.piece_current);
+    const delta = Number(spBudget.piece || 0);
+    const usage = massimaleUsageClass(total, max);
+    let detail = `Max ${pieceMax} spellpower editati per pezzo`;
+    if (Number.isFinite(pc)) {
+      detail = `Questo pezzo: totale ${pc} (delta edit +${delta}) · max ${pieceMax}/pezzo`;
+    }
+    const mutexNote = spBudget.mutex_with_dam !== false ? spMutexNote : '';
+    card.innerHTML = `
+      <div class="massimale-label">Spellpower totale editato</div>
+      <div class="massimale-value ${usage}">${total}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-detail">${escapeHtml(detail)}</div>
+      ${mutexNote ? `<div class="massimale-note">${escapeHtml(mutexNote)}</div>` : ''}
+    `;
+    grid.appendChild(card);
+  }
+
+  if (sfBudget) {
+    const card = document.createElement('div');
+    card.className = 'massimale-card';
+    const total = Number(sfBudget.char_total || 0);
+    const max = Number(sfBudget.char_max || 100);
+    const pieceMax = Math.abs(Number(sfBudget.piece_max || 40));
+    const pc = Number(sfBudget.piece_current);
+    const pp = Number(sfBudget.piece_proto);
+    const delta = Number(sfBudget.piece || 0);
+    const stepMag = Math.abs(Number(sfBudget.step || 5));
+    const mxpStep = Number(sfBudget.mxp_per_step || 20);
+    const usage = massimaleUsageClass(total, max);
+    let detail = `Step −${stepMag}, ${mxpStep} MXP/step · max ${pieceMax} spellfail editato per pezzo`;
+    if (Number.isFinite(pc) && Number.isFinite(pp)) {
+      detail = `Questo pezzo: ${pc} vs proto ${pp} (delta +${delta}) · step −${stepMag}, ${mxpStep} MXP/step`;
+    }
+    card.innerHTML = `
+      <div class="massimale-label">Spellfail totale editato</div>
+      <div class="massimale-value ${usage}">${total}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-detail">${escapeHtml(detail)}</div>
+    `;
+    grid.appendChild(card);
+  }
+
+  {
+    const card = document.createElement('div');
+    card.className = 'massimale-card massimale-clan';
+    const yn = isClanSymbol ? 'Y' : 'N';
+    card.innerHTML = `
+      <div class="massimale-label">Simbolo del clan</div>
+      <div class="massimale-value massimale-yn ${isClanSymbol ? 'is-yes' : 'is-no'}">${yn}</div>
+      <div class="massimale-detail">${
+        isClanSymbol
+          ? 'Questo oggetto è un simbolo di clan'
+          : 'Questo oggetto non è un simbolo di clan'
+      }</div>
+    `;
+    grid.appendChild(card);
+  }
+
+  panel.appendChild(grid);
+
+  const contrib =
+    damBudget && Array.isArray(damBudget.contributors)
+      ? damBudget.contributors.filter((c) => Number(c.delta) > 0)
+      : [];
+  if (contrib.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'massimali-contributors';
+    const sub = document.createElement('div');
+    sub.className = 'massimali-contributors-title';
+    sub.textContent = 'Contributi dam (pezzi EDIT in possesso)';
+    wrap.appendChild(sub);
+    const ul = document.createElement('ul');
+    contrib.forEach((c) => {
+      const li = document.createElement('li');
+      li.innerHTML =
+        `<span class="effect-name">${mudTextToHtml(c.short_desc || 'oggetto')}</span>` +
+        `<span class="massimale-detail">+${Number(c.delta)} (ora ${Number(c.current)}, proto ${Number(c.proto)})</span>`;
+      ul.appendChild(li);
+    });
+    wrap.appendChild(ul);
+    panel.appendChild(wrap);
+  }
+
+  host.appendChild(panel);
+}
+
+function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol) {
   const box = $('object-edits');
   box.innerHTML = '';
+  const massHost = $('object-massimali');
+  if (massHost) massHost.innerHTML = '';
 
   if (!entries.length) {
     box.innerHTML = '<p class="hint">Nessun campo editabile su questo oggetto.</p>';
+    setMainColumnSplit(!!selectedInventoryId);
     return;
   }
   if (session.role === 'limited') {
     box.innerHTML = '<p class="hint">Tier limited: edit oggetto non consentito.</p>';
+    setMainColumnSplit(!!selectedInventoryId);
     return;
   }
 
-  const title = document.createElement('h3');
-  title.textContent = 'Edit sull\'oggetto';
-  box.appendChild(title);
+  renderMassimaliPanel(box, damBudget, spBudget, sfBudget, !!isClanSymbol);
 
-  if (damBudget || spBudget) {
-    const hint = document.createElement('p');
-    hint.className = 'hint budget-banner';
-    const parts = [];
-    if (damBudget) {
-      let line = `Dam editato (EDIT in possesso) ${Number(damBudget.char_total || 0)}/${Number(damBudget.char_max || 30)} (max ${Number(damBudget.piece_max || 2)}/pezzo)`;
-      const pc = Number(damBudget.piece_current);
-      const pp = Number(damBudget.piece_proto);
-      if (Number.isFinite(pc) && Number.isFinite(pp)) {
-        line += ` — questo pezzo ${pc} vs proto ${pp} (delta +${Number(damBudget.piece || 0)})`;
-        if (damBudget.piece_edit === false) {
-          line += ' [non conteggiato: serve EDIT + owner ED/personal; simboli clan esclusi]';
-        }
-      }
-      parts.push(line);
-    }
-    if (spBudget) {
-      parts.push(
-        `Spellpower editato (EDIT in possesso) ${Number(spBudget.char_total || 0)}/${Number(spBudget.char_max || 30)} (max ${Number(spBudget.piece_max || 2)}/pezzo)`
-      );
-    }
-    hint.textContent =
-      (parts.length
-        ? parts.join(' · ') +
-          ' — pezzi in possesso con EDIT e owner del toon (delta vs proto); simboli clan esclusi'
-        : '') || '';
-    box.appendChild(hint);
+  const damPiece = Number(damBudget?.piece || 0);
+  const spPiece = Number(spBudget?.piece || 0);
+  /* Mutex: presenza dam/sp sul pezzo (hit-n-dam incluso), non solo delta vs proto. */
+  const damPresent =
+    damBudget?.piece_has_dam === true ||
+    Number(damBudget?.piece_current || 0) > 0 ||
+    damPiece > 0;
+  const spPresent =
+    spBudget?.piece_has_spellpower === true ||
+    Number(spBudget?.piece_current || 0) > 0 ||
+    spPiece > 0;
+  const damMutexActive = damPresent && damBudget?.mutex_with_spellpower !== false;
+  const spMutexActive = spPresent && spBudget?.mutex_with_dam !== false;
 
-    const contrib = damBudget && Array.isArray(damBudget.contributors)
-      ? damBudget.contributors.filter((c) => Number(c.delta) > 0)
-      : [];
-    if (contrib.length) {
-      const ul = document.createElement('ul');
-      ul.className = 'hint dam-budget-contributors';
-      contrib.forEach((c) => {
-        const li = document.createElement('li');
-        li.textContent = `${c.short_desc || 'oggetto'}: +${Number(c.delta)} (ora ${Number(c.current)}, proto ${Number(c.proto)})`;
-        ul.appendChild(li);
-      });
-      box.appendChild(ul);
-    }
-  }
+  const editsWrap = document.createElement('div');
+  editsWrap.className = 'object-edit-groups';
+  const editsTitle = document.createElement('h3');
+  editsTitle.className = 'object-edit-groups-title';
+  editsTitle.textContent = 'Opzioni di edit';
+  editsWrap.appendChild(editsTitle);
+
+  const filterRow = document.createElement('div');
+  filterRow.className = 'object-edit-filter';
+  const filterInput = document.createElement('input');
+  filterInput.type = 'search';
+  filterInput.placeholder = 'Filtra opzioni…';
+  filterInput.setAttribute('aria-label', 'Filtra opzioni di edit');
+  filterRow.appendChild(filterInput);
+  editsWrap.appendChild(filterRow);
+  const filterHint = document.createElement('p');
+  filterHint.className = 'object-edit-filter-hint';
+  filterHint.textContent =
+    'Sezioni chiuse di default: aprine una o usa il filtro. Slot affect / String / Massimali restano a sinistra.';
+  editsWrap.appendChild(filterHint);
 
   const grouped = new Map();
   entries.forEach((entry) => {
+    /* CON non e' nel listino ufficiale — non mostrare anche se myst vecchio lo manda. */
+    if (entry.id === 'con' || Number(entry.location) === 5) return;
     const section = objectEditSection(entry.id || '');
     if (!grouped.has(section)) grouped.set(section, []);
     grouped.get(section).push(entry);
@@ -1211,6 +2638,8 @@ function renderObjectEdits(entries, damBudget, spBudget) {
   const sectionNames = [...grouped.keys()].sort(
     (a, b) => objectEditSectionRank(a) - objectEditSectionRank(b) || a.localeCompare(b, 'it')
   );
+
+  const sectionEls = [];
 
   sectionNames.forEach((section) => {
     const list = grouped.get(section) || [];
@@ -1222,11 +2651,14 @@ function renderObjectEdits(entries, damBudget, spBudget) {
 
     const details = document.createElement('details');
     details.className = 'edit-section';
-    details.open = true;
+    const sectionHasPresent = list.some((e) => e.has_affect || Number(e.current) !== 0);
+    details.open = sectionHasPresent;
 
     const summary = document.createElement('summary');
     summary.className = 'edit-section-summary';
-    summary.textContent = `${section} (${list.length})`;
+    summary.innerHTML =
+      `<span class="edit-section-name">${escapeHtml(section)}</span>` +
+      `<span class="edit-section-count">${list.length}</span>`;
     details.appendChild(summary);
 
     const body = document.createElement('div');
@@ -1237,32 +2669,60 @@ function renderObjectEdits(entries, damBudget, spBudget) {
       const canEdit = entry.can_edit !== false;
       const row = document.createElement('div');
       row.className = canEdit ? 'edit-row' : 'edit-row edit-row-disabled';
+      row.dataset.cartKey = entry.id;
+      row.dataset.filterText = `${entry.label || ''} ${entry.id || ''} ${section}`.toLowerCase();
       const select = document.createElement('select');
       select.disabled = !canEdit || session.role === 'limited';
+      select.dataset.current = String(current);
 
-      if (entry.kind === 'immune' || entry.kind === 'flag') {
-        [
-          { v: 0, l: 'No' },
-          { v: 1, l: 'Sì' },
-        ].forEach(({ v, l }) => {
-          const opt = document.createElement('option');
-          opt.value = v;
-          opt.textContent = l;
-          if (v === current) opt.selected = true;
-          select.appendChild(opt);
-        });
-        if (entry.kind === 'immune' && current === 1) select.disabled = true;
-        if (entry.kind === 'flag' && entry.flag === 'artifact' && current === 1) {
-          select.disabled = true;
+      const canClearYesNo =
+        (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') &&
+        (entry.can_clear_slot || entry.has_affect) &&
+        current === 1 &&
+        canEdit &&
+        session.role !== 'limited';
+
+      if (isYesNoObjectEntry(entry)) {
+        if (canClearYesNo) {
+          const keep = document.createElement('option');
+          keep.value = '1';
+          keep.textContent = 'Sì';
+          keep.selected = true;
+          select.appendChild(keep);
+          const clearOpt = document.createElement('option');
+          clearOpt.value = '__clear__';
+          clearOpt.textContent = 'No, rimuovi dallo slot';
+          select.appendChild(clearOpt);
+        } else {
+          [
+            { v: 0, l: 'No' },
+            { v: 1, l: 'Sì' },
+          ].forEach(({ v, l }) => {
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = l;
+            if (v === current) opt.selected = true;
+            select.appendChild(opt);
+          });
+          if (entry.kind === 'flag' && entry.flag === 'artifact' && current === 1) {
+            select.disabled = true;
+          }
         }
       } else {
-        const values = buildObjectScalarOptions(entry);
+        let values = buildObjectScalarOptions(entry);
         if (!values.includes(current)) values.push(current);
+        values = filterObjectScalarOptions(entry, values, current);
         values.sort((a, b) => a - b);
+        if (entry.can_clear_slot && canEdit && session.role !== 'limited') {
+          const clearOpt = document.createElement('option');
+          clearOpt.value = '__clear__';
+          clearOpt.textContent = 'Rimuovi slot (gratis)';
+          select.appendChild(clearOpt);
+        }
         values.forEach((v) => {
           const opt = document.createElement('option');
           opt.value = v;
-          opt.textContent = v;
+          opt.textContent = formatScalarOptionLabel(entry, v);
           if (v === current) opt.selected = true;
           select.appendChild(opt);
         });
@@ -1272,19 +2732,54 @@ function renderObjectEdits(entries, damBudget, spBudget) {
         select.disabled = true;
       }
 
+      let mutexHint = '';
+      if (canEdit && damMutexActive && objectEntryAffectsSpellpower(entry)) {
+        select.disabled = true;
+        mutexHint =
+          'Su questo pezzo c\'è già dam editato: rimuovi prima quello slot per editare spellpower/hit-n-sp.';
+      } else if (canEdit && spMutexActive && objectEntryAffectsDam(entry)) {
+        select.disabled = true;
+        mutexHint =
+          'Su questo pezzo c\'è già spellpower editato: rimuovi prima quello slot per editare dam/hit-n-dam.';
+      }
+
+      const queuedObj = objectEditCart.get(entry.id);
+      if (queuedObj && queuedObj.targetModifier != null && !select.disabled) {
+        if (queuedObj.clearSlot) {
+          select.value = '__clear__';
+        } else if (isYesNoObjectEntry(entry)) {
+          select.value = Number(queuedObj.targetModifier) ? '1' : '0';
+        } else {
+          select.value = String(queuedObj.targetModifier);
+        }
+        queuedObj.selectEl = select;
+      }
+
       select.addEventListener('change', () => {
         if (!canEdit) return;
-        const newVal = Number(select.value);
-        if (entry.kind === 'immune') {
-          if (newVal === 0 && current === 1) {
-            select.value = '1';
+        if (select.value === '__clear__') {
+          if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') {
+            const bit =
+              entry.kind === 'spell'
+                ? Number(entry.spell_bit)
+                : Number(entry.immune_bit);
+            queueObjectQuote(entry, bit, select, { clearSlot: true });
             return;
           }
+          queueObjectQuote(entry, 0, select, { clearSlot: true });
+          return;
+        }
+        const newVal = Number(select.value);
+        if (entry.kind === 'immune' || entry.kind === 'm_immune' || entry.kind === 'spell') {
           if (newVal === current) {
             clearObjectPending(entry.id);
             return;
           }
-          queueObjectQuote(entry, newVal ? Number(entry.immune_bit) : 0, select);
+          const bit =
+            entry.kind === 'spell'
+              ? Number(entry.spell_bit)
+              : Number(entry.immune_bit);
+          queueObjectQuote(entry, newVal ? bit : 0, select);
         } else if (entry.kind === 'flag') {
           if (entry.flag === 'artifact' && newVal === 0 && current === 1) {
             select.value = '1';
@@ -1302,41 +2797,87 @@ function renderObjectEdits(entries, damBudget, spBudget) {
         }
       });
 
-      row.innerHTML = `
-      <div>
-        <label>${entry.label || entry.id}${objectEntryRangeLabel(entry)}</label>
+      const yesNoKind = isYesNoObjectEntry(entry);
+      const proto = Number(entry.proto);
+      const showProto =
+        entry.relative && Number.isFinite(proto) && entry.kind === 'scalar';
+      const meta = document.createElement('div');
+      meta.innerHTML = `
+        <label class="effect-name">${escapeHtml(entry.label || entry.id)}${escapeHtml(objectEntryRangeLabel(entry))}</label>
         <div class="current">Attuale: ${
-          entry.kind === 'immune' || entry.kind === 'flag'
+          yesNoKind
             ? current
               ? 'Sì'
               : 'No'
-            : current
-        }</div>
+            : entry.relative
+              ? formatScalarOptionLabel(entry, current)
+              : current
+        }${showProto ? ` · proto ${proto}` : ''}</div>
         <div class="slot-hint">${
-          entry.kind === 'flag' ? entry.hint || '' : objectEntrySlotHint(entry)
+          entry.kind === 'flag' ? escapeHtml(entry.hint || '') : escapeHtml(objectEntrySlotHint(entry))
         }</div>
-        ${entry.kind !== 'immune' && entry.kind !== 'flag' ? `<div class="slot-hint">${objectEntryCostHint(entry)}</div>` : ''}
-      </div>
-    `;
+        ${
+          entry.kind !== 'flag'
+            ? `<div class="cost-hint">${escapeHtml(objectEntryCostHint(entry))}</div>`
+            : ''
+        }
+        ${mutexHint ? `<div class="slot-hint massimale-note">${escapeHtml(mutexHint)}</div>` : ''}
+      `;
+      row.appendChild(meta);
       row.appendChild(select);
       body.appendChild(row);
     });
 
     details.appendChild(body);
-    box.appendChild(details);
+    editsWrap.appendChild(details);
+    sectionEls.push(details);
   });
+
+  filterInput.addEventListener('input', () => {
+    const q = filterInput.value.trim().toLowerCase();
+    sectionEls.forEach((details) => {
+      let visible = 0;
+      details.querySelectorAll('.edit-row').forEach((row) => {
+        const match = !q || (row.dataset.filterText || '').includes(q);
+        row.classList.toggle('hidden', !match);
+        if (match) visible += 1;
+      });
+      details.classList.toggle('hidden', visible === 0);
+      if (q && visible > 0) details.open = true;
+      const countEl = details.querySelector('.edit-section-count');
+      if (countEl) {
+        const total = details.querySelectorAll('.edit-row').length;
+        countEl.textContent = q ? `${visible}/${total}` : String(total);
+      }
+    });
+  });
+
+  box.appendChild(editsWrap);
+  setMainColumnSplit(true);
+  updateObjectCartUI();
 }
 
-async function queueObjectQuote(entry, targetModifier, selectEl) {
+async function queueObjectQuote(entry, targetModifier, selectEl, opts = {}) {
+  const clearSlot = !!opts.clearSlot;
   const payload = {
     targetToonId,
     inventoryId: selectedInventoryId,
     location: Number(entry.location || 0),
     targetModifier,
   };
+  if (clearSlot) payload.clearSlot = true;
   if (entry.kind === 'flag' && entry.flag) {
     payload.flag = entry.flag;
   }
+  const addingThisArtifact =
+    entry.kind === 'flag' &&
+    entry.flag === 'artifact' &&
+    Number(targetModifier) === 1;
+  /* +50% se pezzo gia' Artifact o Artifact gia' in coda (non sulla voce flag). */
+  if (!addingThisArtifact && (objectAlreadyArtifact() || cartAddsArtifact())) {
+    payload.pendingArtifact = true;
+  }
+
   const data = await api('/api/quote-object-edit', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -1344,27 +2885,48 @@ async function queueObjectQuote(entry, targetModifier, selectEl) {
   if (!data.ok) {
     alert(data.error || 'Quote oggetto fallita');
     if (selectEl) {
-      const cur = Number(entry.current || 0);
-      selectEl.value = String(cur);
+      selectEl.value = selectEl.dataset.current || String(Number(entry.current || 0));
     }
     clearObjectPending(entry.id);
     return;
   }
   const qd = data.data;
-  const yesNo = entry.kind === 'immune' || entry.kind === 'flag';
-  const curLabel = yesNo ? (qd.current ? 'Sì' : 'No') : qd.current;
-  const tgtLabel = yesNo ? (qd.target ? 'Sì' : 'No') : qd.target;
-  pendingEdit = {
-    type: 'object',
+  const yesNo = isYesNoObjectEntry(entry);
+  const curLabel = yesNo
+    ? qd.current
+      ? 'Sì'
+      : 'No'
+    : entry.relative
+      ? formatScalarOptionLabel(entry, Number(qd.current))
+      : qd.current;
+  const tgtLabel = clearSlot
+    ? 'slot libero'
+    : yesNo
+      ? qd.target
+        ? 'Sì'
+        : 'No'
+      : entry.relative
+        ? formatScalarOptionLabel(entry, Number(qd.target))
+        : qd.target;
+  ensureObjectCartExclusive();
+  const wasAddingArtifact = cartAddsArtifact();
+  objectEditCart.set(entry.id, {
     entryId: entry.id,
     location: Number(entry.location || 0),
     targetModifier,
+    clearSlot,
     flag: entry.kind === 'flag' ? entry.flag : undefined,
     label: `${entry.label}: ${curLabel} → ${tgtLabel}`,
     quote: qd,
     selectEl,
-  };
-  updatePaymentUI();
+    entry,
+  });
+  const nowAddingArtifact = cartAddsArtifact();
+  if (wasAddingArtifact !== nowAddingArtifact || nowAddingArtifact) {
+    await requoteObjectCartForArtifact();
+  } else {
+    rebuildObjectPendingFromCart();
+  }
 }
 
 async function confirmPayEdit() {
@@ -1374,7 +2936,7 @@ async function confirmPayEdit() {
   const isStaffOnOther =
     session.role === 'staff' && Number(targetToonId) !== Number(session.sessionToonId);
 
-  const msg1 = `Confermi il pagamento per:\n${pendingEdit.label}\n\nTotale: ${pendingEdit.plan.payXp.toLocaleString('it-IT')} XP (MXP) + ${pendingEdit.plan.payRune} Runes`;
+  const msg1 = `Confermi il pagamento per:\n${pendingEdit.label}\n\nTotale: ${pendingEdit.plan.payXp.toLocaleString('it-IT')} XP (MXP) + ${pendingEdit.plan.payRune} ${currencyLabel('rune')}`;
   if (!confirm(msg1)) return;
 
   if (isStaffOnOther) {
@@ -1388,8 +2950,43 @@ async function confirmPayEdit() {
     payRune: pendingEdit.plan.payRune,
   };
 
+  const mode = $('pay-mode').value;
+  const runePct = Number($('pay-rune-pct').value);
+
   let result;
-  if (pendingEdit.type === 'pool') {
+  if (pendingEdit.type === 'character-batch') {
+    const items = [...pendingEdit.items];
+    result = { ok: true };
+    for (const item of items) {
+      const itemPlan = buildPaymentPlan(item.quote, mode, runePct);
+      if (item.type === 'pool') {
+        result = await api('/api/apply-pool', {
+          method: 'POST',
+          body: JSON.stringify({
+            targetToonId,
+            field: item.field,
+            newValue: item.newValue,
+            payXp: itemPlan.payXp,
+            payRune: itemPlan.payRune,
+          }),
+        });
+      } else if (item.type === 'resistance') {
+        result = await api('/api/apply-resistance', {
+          method: 'POST',
+          body: JSON.stringify({
+            targetToonId,
+            damageType: item.damageType,
+            value: item.value,
+            payXp: itemPlan.payXp,
+            payRune: itemPlan.payRune,
+          }),
+        });
+      } else {
+        result = { ok: false, error: 'Voce carrello personaggio non valida' };
+      }
+      if (!result.ok) break;
+    }
+  } else if (pendingEdit.type === 'pool') {
     result = await api('/api/apply-pool', {
       method: 'POST',
       body: JSON.stringify({
@@ -1407,31 +3004,82 @@ async function confirmPayEdit() {
         value: pendingEdit.value,
       }),
     });
-  } else if (pendingEdit.type === 'object') {
-    const affectBody = {
-      ...body,
-      inventoryId: selectedInventoryId,
-      location: pendingEdit.location,
-      targetModifier: pendingEdit.targetModifier,
-    };
-    if (pendingEdit.flag) {
-      affectBody.flag = pendingEdit.flag;
+  } else if (pendingEdit.type === 'object-batch' || pendingEdit.type === 'object') {
+    /*
+     * Applica Artifact per primo (flag gratis), poi le voci pagate:
+     * cosi' AnalyzeObjEdit applica gia' il +50% listino sul pezzo.
+     * Name/short/long: solo insieme al primo affect pagato (stesso apply).
+     */
+    const items =
+      pendingEdit.type === 'object-batch'
+        ? [...pendingEdit.items]
+        : [pendingEdit];
+    items.sort((a, b) => {
+      const aa = a.flag === 'artifact' ? 1 : 0;
+      const bb = b.flag === 'artifact' ? 1 : 0;
+      return bb - aa;
+    });
+
+    const textDraft = getObjectTextDraft();
+    const textDirty = objectTextDraftIsDirty(textDraft);
+    if (textDirty) {
+      if (
+        textDraft.objName.length > textDraft.nameMax ||
+        textDraft.shortDesc.length > textDraft.shortMax ||
+        textDraft.description.length > textDraft.longMax
+      ) {
+        alert('Name/short/long troppo lunghi: correggi prima di pagare.');
+        return;
+      }
+      if (!objectCartHasPaidAffect(items)) {
+        alert(
+          'Name/short/long si salvano solo insieme al pagamento di un nuovo affect (non da soli, non con solo Artifact).'
+        );
+        return;
+      }
     }
-    result = await api('/api/apply-affect', {
-      method: 'POST',
-      body: JSON.stringify(affectBody),
-    });
-  } else if (pendingEdit.type === 'object-text') {
-    result = await api('/api/apply-object-text', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...body,
+
+    result = { ok: true };
+    let textAttached = false;
+    for (const item of items) {
+      const itemPlan = buildPaymentPlan(item.quote, mode, runePct);
+      const affectBody = {
+        targetToonId,
         inventoryId: selectedInventoryId,
-        objName: pendingEdit.objName,
-        shortDesc: pendingEdit.shortDesc,
-        description: pendingEdit.description,
-      }),
-    });
+        location: item.location,
+        targetModifier: item.targetModifier,
+        payXp: itemPlan.payXp,
+        payRune: itemPlan.payRune,
+      };
+      if (item.clearSlot) {
+        affectBody.clearSlot = true;
+      }
+      if (item.flag) {
+        affectBody.flag = item.flag;
+      }
+      const isPaidAffect =
+        item.flag !== 'artifact' &&
+        (Number(item.quote?.xp_raw || item.quote?.diff_xp_raw || 0) > 0 ||
+          Number(item.quote?.diff_rune || item.quote?.pq || 0) > 0);
+      if (textDirty && !textAttached && isPaidAffect) {
+        affectBody.objName = textDraft.objName;
+        affectBody.shortDesc = textDraft.shortDesc;
+        affectBody.description = textDraft.description;
+        textAttached = true;
+      }
+      result = await api('/api/apply-affect', {
+        method: 'POST',
+        body: JSON.stringify(affectBody),
+      });
+      if (!result.ok) {
+        break;
+      }
+    }
+  } else if (pendingEdit.type === 'object-text') {
+    alert(
+      'Name/short/long non si salvano da soli: metti in coda un affect pagato e conferma il pagamento.'
+    );
+    return;
   } else {
     return;
   }
@@ -1439,8 +3087,13 @@ async function confirmPayEdit() {
   if (result.ok) {
     $('apply-result').textContent = 'Edit applicato con successo.';
     const wasObject =
-      pendingEdit.type === 'object' || pendingEdit.type === 'object-text';
+      pendingEdit.type === 'object' ||
+      pendingEdit.type === 'object-batch' ||
+      pendingEdit.type === 'object-text';
+    const wasCharacter = isCharacterPendingType(pendingEdit.type);
     const invId = selectedInventoryId;
+    clearObjectEditCart();
+    clearCharacterEditCart();
     pendingEdit = null;
     updatePaymentUI();
     await loadCharacterState();
@@ -1448,6 +3101,12 @@ async function confirmPayEdit() {
       await loadInventory();
       const li = document.querySelector('#inventory-list .item.selected');
       if (li) await selectItem(invId, li);
+    } else if (wasCharacter) {
+      renderCharacterEdits();
+    }
+    /* Ricalcola riepilogo login per il PG appena editato (prossimo «Cambia personaggio»). */
+    if (targetToonId) {
+      api(`/api/toon-overview/${targetToonId}`).catch(() => {});
     }
   } else {
     const ver =
@@ -1478,20 +3137,86 @@ $('login-form').addEventListener('submit', async (e) => {
 
 $('btn-logout').onclick = async () => {
   await api('/api/logout', { method: 'POST' });
+  targetToonId = null;
+  const search = $('target-toon-search');
+  if (search) search.value = '';
+  const instSearch = $('inst-search');
+  if (instSearch) instSearch.value = '';
+  const instList = $('inst-list');
+  if (instList) instList.innerHTML = '';
+  clearTargetWorkspace('');
   await refreshMe();
 };
 
 $('btn-change-toon').onclick = async () => {
   await api('/api/deselect-toon', { method: 'POST' });
   pendingEdit = null;
+  targetToonId = null;
+  const search = $('target-toon-search');
+  if (search) search.value = '';
+  clearTargetWorkspace('');
   await refreshMe();
 };
 
 $('btn-refresh-inv').onclick = () => loadInventory();
 
+(function initInventorySort() {
+  const sel = $('inventory-sort');
+  if (!sel) return;
+  try {
+    const saved = localStorage.getItem(INVENTORY_SORT_KEY);
+    if (saved && [...sel.options].some((o) => o.value === saved)) {
+      sel.value = saved;
+    }
+  } catch {
+    /* ignore */
+  }
+  sel.onchange = () => {
+    persistInventorySortMode(sel.value);
+    if (inventoryItemsCache.length) {
+      renderInventoryList(inventoryItemsCache);
+    }
+  };
+})();
+
 $('pay-mode').onchange = updatePaymentUI;
 $('pay-rune-pct').oninput = updatePaymentUI;
 $('btn-pay-edit').onclick = () => confirmPayEdit();
+
+const btnResetChar = $('btn-reset-char-edits');
+if (btnResetChar) {
+  btnResetChar.onclick = () => {
+    clearCharacterEditCart({ resetSelectors: true });
+    if ($('apply-result')) $('apply-result').textContent = '';
+  };
+}
+function resetObjectEditsToSelection() {
+  clearObjectEditCart({ resetSelectors: true });
+  const t = selectedObjectOptions?.text_edit;
+  if (t) {
+    const nameEl = $('obj-text-name');
+    const shortEl = $('obj-text-short');
+    const longEl = $('obj-text-long');
+    if (nameEl) {
+      nameEl.value = t.name || '';
+      nameEl.dispatchEvent(new Event('input'));
+    }
+    if (shortEl) {
+      shortEl.value = t.short_desc || '';
+      shortEl.dispatchEvent(new Event('input'));
+    }
+    if (longEl) {
+      longEl.value = t.description || '';
+      longEl.dispatchEvent(new Event('input'));
+    }
+  }
+  if ($('apply-result')) $('apply-result').textContent = '';
+}
+
+const btnResetObj = $('btn-reset-object-edits');
+if (btnResetObj) {
+  btnResetObj.onclick = () => resetObjectEditsToSelection();
+}
 
 /** Slug ITEM_* — allineato a edit_system_config.cpp (fallback se myst vecchio). */
 const PORTAL_TYPE_DEFS = [
@@ -1551,7 +3276,7 @@ async function checkMystPortalVersion() {
   const warnEl = $('myst-version-warn');
   if (!warnEl) return;
   try {
-    const res = await fetch('/api/health');
+    const res = await fetch(portalUrl('/api/health'));
     const health = await res.json();
     const ver = health?.myst?.portal_api_version;
     const ui = health?.ui_build;
@@ -1583,7 +3308,228 @@ async function loadSystemConfig() {
   $('system-config-editor').value = JSON.stringify(cfg, null, 2);
   $('config-result').textContent = `path: ${data.data?.path || 'mudroot/lib/edit_system.json'}`;
   applyPortalCategoriesToUI(cfg?.object_portal || {});
+  applyCurrenciesToUI(cfg?.currencies || {});
   await checkMystPortalVersion();
+}
+
+function applyCurrenciesToUI(currencies) {
+  portalCurrencies = normalizeCurrencies(currencies);
+  const container = $('portal-currency-toggles');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const primary = portalCurrencies.filter((c) => c.slug === 'mxp' || c.slug === 'rune');
+  const extras = portalCurrencies.filter((c) => c.slug !== 'mxp' && c.slug !== 'rune');
+
+  const renderRow = (row, host) => {
+    const wrap = document.createElement('div');
+    wrap.className =
+      'currency-config-row' + (row.visible ? '' : ' currency-config-row--hidden');
+    wrap.dataset.slug = row.slug;
+
+    const title = document.createElement('div');
+    title.className = 'currency-config-title';
+    const name = document.createElement('strong');
+    name.textContent = row.label;
+    const slug = document.createElement('code');
+    slug.textContent = row.slug;
+    title.appendChild(name);
+    title.appendChild(document.createTextNode(' '));
+    title.appendChild(slug);
+    if (!row.visible) {
+      const badge = document.createElement('span');
+      badge.className = 'currency-badge';
+      badge.textContent = 'nascosta ai PG';
+      title.appendChild(badge);
+    }
+    wrap.appendChild(title);
+
+    const labelInput = document.createElement('label');
+    labelInput.className = 'field-label';
+    labelInput.textContent = 'Etichetta';
+    const inputName = document.createElement('input');
+    inputName.type = 'text';
+    inputName.dataset.field = 'label';
+    inputName.value = row.label;
+    labelInput.appendChild(inputName);
+    wrap.appendChild(labelInput);
+
+    const flags = document.createElement('div');
+    flags.className = 'currency-config-flags';
+    [
+      ['enabled', 'Abilitata'],
+      ['visible', 'Visibile ai giocatori'],
+      ['pays_listino', 'Paga listino'],
+    ].forEach(([field, lab]) => {
+      const labEl = document.createElement('label');
+      labEl.className = 'checkbox-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.dataset.field = field;
+      cb.checked = !!row[field];
+      if ((row.slug === 'mxp' || row.slug === 'rune') && field === 'pays_listino') {
+        cb.checked = true;
+      }
+      labEl.appendChild(cb);
+      labEl.appendChild(document.createTextNode(` ${lab}`));
+      flags.appendChild(labEl);
+    });
+    wrap.appendChild(flags);
+    host.appendChild(wrap);
+  };
+
+  primary.forEach((row) => renderRow(row, container));
+
+  const extrasWrap = document.createElement('details');
+  extrasWrap.className = 'currency-extras collapse-panel';
+  extrasWrap.open = false;
+  const sum = document.createElement('summary');
+  sum.className = 'collapse-summary';
+  sum.innerHTML =
+    '<span>Valute aggiuntive (nascoste ai giocatori)</span>' +
+    '<span class="collapse-hint">attiva «Visibile ai giocatori» per mostrarle</span>';
+  extrasWrap.appendChild(sum);
+  const body = document.createElement('div');
+  body.className = 'collapse-body';
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  hint.textContent =
+    'Gold / Token / Credito edit: predisposte per il futuro. Restano invisibili ai PG finché non le segni visibili e abilitate.';
+  body.appendChild(hint);
+  extras.forEach((row) => renderRow(row, body));
+
+  const addForm = document.createElement('div');
+  addForm.className = 'currency-add-form';
+  const addTitle = document.createElement('h4');
+  addTitle.textContent = 'Aggiungi valuta';
+  addForm.appendChild(addTitle);
+
+  const addFields = document.createElement('div');
+  addFields.className = 'currency-add-fields';
+
+  const slugLab = document.createElement('label');
+  slugLab.className = 'field-label';
+  slugLab.textContent = 'Slug (a-z, 0-9, _)';
+  const slugInput = document.createElement('input');
+  slugInput.type = 'text';
+  slugInput.autocomplete = 'off';
+  slugInput.placeholder = 'es. platinum';
+  slugLab.appendChild(slugInput);
+  addFields.appendChild(slugLab);
+
+  const newLabelLab = document.createElement('label');
+  newLabelLab.className = 'field-label';
+  newLabelLab.textContent = 'Etichetta';
+  const newLabelInput = document.createElement('input');
+  newLabelInput.type = 'text';
+  newLabelInput.autocomplete = 'off';
+  newLabelInput.placeholder = 'es. Platino';
+  newLabelLab.appendChild(newLabelInput);
+  addFields.appendChild(newLabelLab);
+  addForm.appendChild(addFields);
+
+  const addResult = document.createElement('p');
+  addResult.className = 'currency-add-result msg';
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn-secondary';
+  addBtn.textContent = 'Aggiungi valuta';
+  addBtn.onclick = () => {
+    addResult.textContent = '';
+    addResult.className = 'currency-add-result msg';
+    const slug = slugInput.value.trim().toLowerCase();
+    const label = newLabelInput.value.trim();
+    if (!/^[a-z0-9_]+$/.test(slug)) {
+      addResult.textContent =
+        'Slug non valido: usa solo lettere minuscole, cifre e underscore.';
+      addResult.classList.add('error');
+      return;
+    }
+    if (slug === 'mxp' || slug === 'rune') {
+      addResult.textContent = 'MXP e Rune sono già nella sezione principale.';
+      addResult.classList.add('error');
+      return;
+    }
+    if (portalCurrencies.some((c) => c.slug === slug)) {
+      addResult.textContent = 'Slug già presente.';
+      addResult.classList.add('error');
+      return;
+    }
+    if (!label) {
+      addResult.textContent = 'Inserisci un\'etichetta.';
+      addResult.classList.add('error');
+      return;
+    }
+    const row = {
+      slug,
+      label,
+      enabled: false,
+      visible: false,
+      pays_listino: false,
+    };
+    portalCurrencies.push(row);
+    renderRow(row, body);
+    extrasWrap.open = true;
+    slugInput.value = '';
+    newLabelInput.value = '';
+    addResult.textContent = `Valuta «${slug}» aggiunta (salva per persistere).`;
+    addResult.classList.add('ok');
+  };
+  addForm.appendChild(addBtn);
+  addForm.appendChild(addResult);
+  body.appendChild(addForm);
+
+  extrasWrap.appendChild(body);
+  container.appendChild(extrasWrap);
+
+  refreshPayModeLabels();
+}
+
+function currenciesFromUI() {
+  const catalog = [];
+  document.querySelectorAll('#portal-currency-toggles .currency-config-row').forEach((row) => {
+    const slug = row.dataset.slug;
+    if (!slug) return;
+    const labelEl = row.querySelector('input[data-field="label"]');
+    const enabledEl = row.querySelector('input[data-field="enabled"]');
+    const visibleEl = row.querySelector('input[data-field="visible"]');
+    const paysEl = row.querySelector('input[data-field="pays_listino"]');
+    catalog.push({
+      slug,
+      label: (labelEl?.value || slug).trim() || slug,
+      enabled: !!enabledEl?.checked,
+      visible: !!visibleEl?.checked,
+      pays_listino: !!paysEl?.checked,
+    });
+  });
+  return {
+    catalog,
+    comment:
+      'Valute portale. visible=false = nascosta ai player. pays_listino riservato a MXP/Rune per ora.',
+  };
+}
+
+function refreshPayModeLabels() {
+  const payMode = $('pay-mode');
+  if (!payMode) return;
+  const mxp = currencyLabel('mxp');
+  const rune = currencyLabel('rune');
+  const optMxp = payMode.querySelector('option[value="mxp"]');
+  const optRune = payMode.querySelector('option[value="runes"]');
+  const optMix = payMode.querySelector('option[value="mix"]');
+  if (optMxp) optMxp.textContent = `Solo ${mxp} (exp)`;
+  if (optRune) optRune.textContent = `Solo ${rune}`;
+  if (optMix) optMix.textContent = `Misto ${mxp} + ${rune}`;
+  const runePct = $('rune-pct-wrap');
+  if (runePct) {
+    const lab = runePct.querySelector('label, .field-label') || runePct;
+    /* Keep structure: first text node before input — update via data attribute on wrap. */
+  }
+  const hint = document.querySelector('.payment-dock-hint');
+  if (hint) {
+    hint.innerHTML = `Costo sul <strong>personaggio target</strong> (${mxp} / ${rune}).`;
+  }
 }
 
 function applyPortalCategoriesToUI(portal) {
@@ -1619,11 +3565,43 @@ function portalCategoriesFromUI() {
   return {
     types,
     comment:
-      'types: slug ITEM_* — spunta = visibile e editabile. Flag EDIT del PG = sempre incluso.',
+      'types: slug ITEM_* — spunta = primo edit. EDIT/DB edits (show db) restano per ri-edit (anche RARO). TAN mai.',
   };
 }
 
 $('btn-load-config').onclick = () => loadSystemConfig();
+
+$('btn-save-portal-currencies').onclick = async () => {
+  const resultEl = $('portal-currency-result');
+  if (resultEl) resultEl.textContent = '';
+  let config;
+  try {
+    config = JSON.parse($('system-config-editor').value);
+  } catch {
+    try {
+      const data = await api('/api/staff/system-config');
+      config = data.data?.config || data.data || { version: 1, entries: [] };
+    } catch {
+      config = { version: 1, entries: [] };
+    }
+  }
+  config.currencies = currenciesFromUI();
+  portalCurrencies = normalizeCurrencies(config.currencies);
+  $('system-config-editor').value = JSON.stringify(config, null, 2);
+  const data = await api('/api/staff/system-config', {
+    method: 'POST',
+    body: JSON.stringify({ config }),
+  });
+  if (!data.ok) {
+    if (resultEl) resultEl.textContent = data.error || 'salvataggio fallito';
+    return;
+  }
+  refreshPayModeLabels();
+  if (resultEl) {
+    resultEl.textContent =
+      'Valute salvate. Le voci non visibili restano nascoste ai player.';
+  }
+};
 
 $('btn-save-portal-cats').onclick = async () => {
   $('portal-cat-result').textContent = '';
@@ -1719,6 +3697,12 @@ $('btn-inst-search').onclick = async () => {
   });
 };
 
+const btnToggleTools = $('btn-toggle-tools');
+if (btnToggleTools) {
+  btnToggleTools.onclick = () => setToolsColumnOpen(!isToolsColumnOpen());
+}
+
 restoreSavedLogin();
+applyLoginUiMode();
 $('header-meta').textContent = `UI build ${EDIT_PORTAL_UI_BUILD}`;
 refreshMe();

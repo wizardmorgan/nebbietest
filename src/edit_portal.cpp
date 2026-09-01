@@ -27,6 +27,7 @@
 
 #include "../contrib/slacking/json.hpp"
 #include "autoenums.hpp"
+#include "clan_symbol.hpp"
 #include "constants.hpp"
 #include "db.hpp"
 #include "edit_pool.hpp"
@@ -38,6 +39,7 @@
 #include "obj_edit_catalog.hpp"
 #include "obj_value.hpp"
 #include "object_instance.hpp"
+#include "parser.hpp"
 #include "reception.hpp"
 #include "Sql.hpp"
 #include "structs.hpp"
@@ -443,7 +445,8 @@ std::atomic<bool> g_http_running {false};
 }
 
 [[nodiscard]] bool load_stats_for_toon(unsigned long long toon_id, int& exp,
-									   int& rune) {
+									   int& rune, int* gold = nullptr,
+									   int* bank_gold = nullptr) {
 	DB* db = Sql::getMysql();
 	if(!db || toon_id == 0) {
 		return false;
@@ -453,7 +456,7 @@ std::atomic<bool> g_http_running {false};
 		auto& mc = static_cast<odb::mysql::connection&>(*cp);
 		MYSQL* h = mc.handle();
 		const std::string sql =
-			"SELECT exp, p_rune_dei FROM character_stats WHERE toon_id = " +
+			"SELECT exp, p_rune_dei, gold, bank_gold FROM character_stats WHERE toon_id = " +
 			std::to_string(toon_id) + " LIMIT 1";
 		if(mysql_query(h, sql.c_str()) != 0) {
 			return false;
@@ -469,6 +472,12 @@ std::atomic<bool> g_http_running {false};
 		}
 		exp = row[0] ? std::atoi(row[0]) : 0;
 		rune = row[1] ? std::atoi(row[1]) : 0;
+		if(gold) {
+			*gold = row[2] ? std::atoi(row[2]) : 0;
+		}
+		if(bank_gold) {
+			*bank_gold = row[3] ? std::atoi(row[3]) : 0;
+		}
 		mysql_free_result(res);
 		return true;
 	}
@@ -509,6 +518,37 @@ std::atomic<bool> g_http_running {false};
 	return portal_mysql_exec(db, sql.str(), err, "portal:deduct");
 }
 
+/**
+ * Listino: la parte MXP (quote_xp) si paga in XP e/o Rune (1 MXP = 1 Rune =
+ * kObjEditRunePerMegaXp XP raw). quote_pq sono rune “rent” aggiuntive obbligatorie.
+ * Non forzare mai max(pay_xp, quote_xp): spezzerebbe il pagamento solo-rune.
+ */
+[[nodiscard]] bool resolve_object_edit_payment(int pay_xp, int pay_rune, long quote_xp,
+											  int quote_pq, int& xp_cost, int& rune_cost,
+											  std::string& err) {
+	if(pay_xp < 0 || pay_rune < 0) {
+		err = "[portal:pay] pagamento non valido";
+		return false;
+	}
+	const int quote_xp_i = static_cast<int>(std::max(0L, quote_xp));
+	const int pq = std::max(0, quote_pq);
+	if(pay_rune < pq) {
+		err = "[portal:pay] rune componente listino insufficienti";
+		return false;
+	}
+	const long long rune_cover_xp =
+		static_cast<long long>(pay_rune - pq) * kObjEditRunePerMegaXp;
+	const long long covered =
+		static_cast<long long>(pay_xp) + rune_cover_xp;
+	if(covered < static_cast<long long>(quote_xp_i)) {
+		err = "[portal:pay] copertura XP/Rune insufficiente rispetto al listino";
+		return false;
+	}
+	xp_cost = pay_xp;
+	rune_cost = pay_rune;
+	return true;
+}
+
 [[nodiscard]] bool inventory_row_has_affect_overlay(const inventory_mysql_row& row) {
 	for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
 		if(row.elem.affected[j].location != 0 || row.elem.affected[j].modifier != 0) {
@@ -528,7 +568,25 @@ std::atomic<bool> g_http_running {false};
 	if(!obj) {
 		return nullptr;
 	}
+	obj->db_inventory_id = row.id;
 	if(obj->db_instance_id != 0) {
+		/*
+		 * Instance e' la source of truth per stats/affects, ma la riga
+		 * character_inventory puo' ancora avere ITEM2_EDIT / ED* mentre
+		 * l'instance e' stata salvata senza flag o con ED gia' strippati.
+		 * Senza merge, pezzi EDIT "spariscono" dai filtri portale.
+		 */
+		if(IS_SET(row.elem.extra_flags2, ITEM2_EDIT)) {
+			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+		}
+		if(obj->personal_owner[0] == '\0' && row.elem.name[0] != '\0') {
+			const std::string ed = object_instance_extract_ed_owner(row.elem.name);
+			if(!ed.empty()) {
+				strncpy(obj->personal_owner, ed.c_str(),
+						sizeof(obj->personal_owner) - 1);
+				obj->personal_owner[sizeof(obj->personal_owner) - 1] = '\0';
+			}
+		}
 		return obj;
 	}
 	obj->obj_flags.value[0] = row.elem.value[0];
@@ -558,7 +616,6 @@ std::atomic<bool> g_http_running {false};
 			obj->affected[j] = row.elem.affected[j];
 		}
 	}
-	obj->db_inventory_id = row.id;
 	return obj;
 }
 
@@ -611,6 +668,26 @@ std::atomic<bool> g_http_running {false};
 		}
 		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
 			total += object_edit_spellpower_edited_delta(o);
+		}
+		extract_obj(o);
+	}
+	return total;
+}
+
+[[nodiscard]] int sum_owned_edited_spellfail_excluding(
+	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
+	const char* toon_name) {
+	int total = 0;
+	for(auto& r : rows) {
+		if(r.id == exclude_inventory_id) {
+			continue;
+		}
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
+			total += object_edit_spellfail_edited_delta(o);
 		}
 		extract_obj(o);
 	}
@@ -811,7 +888,7 @@ std::atomic<bool> g_http_running {false};
 	}
 
 	if(!portal_mysql_exec(db,
-						  "DELETE FROM object_instance_affect WHERE instance_id=" +
+						  "DELETE FROM object_instance_affect WHERE key_instance_id=" +
 							  std::to_string(id),
 						  err, "portal:persist_inst_del_aff")) {
 		return false;
@@ -819,11 +896,12 @@ std::atomic<bool> g_http_running {false};
 	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
 		const int loc = obj->affected[i].location;
 		const int mod = obj->affected[i].modifier;
-		if(loc == 0 && mod == 0) {
+		/* Non salvare APPLY_X By 0 (occupa slot senza effetto; vedi DAMROLL By 0). */
+		if(loc == APPLY_NONE || loc == APPLY_SKIP || mod == 0) {
 			continue;
 		}
 		std::ostringstream aff;
-		aff << "INSERT INTO object_instance_affect (instance_id, affect_slot, "
+		aff << "INSERT INTO object_instance_affect (key_instance_id, key_affect_slot, "
 			   "location, modifier) VALUES ("
 			<< id << ',' << i << ',' << loc << ',' << mod << ')';
 		if(!portal_mysql_exec(db, aff.str(), err, "portal:persist_inst_ins_aff")) {
@@ -941,18 +1019,65 @@ void portal_set_obj_string(char*& field, const std::string& value) {
 	field = strdup(value.c_str());
 }
 
-[[nodiscard]] long portal_text_edit_xp_raw(const struct obj_data* obj) {
-	long xp = kObjEditTextXpRaw;
-	const ObjEditAnalysis a =
-		AnalyzeObjEdit(const_cast<struct obj_data*>(obj));
-	if(a.class_mult != 1.0 && xp > 0) {
-		xp = static_cast<long>(
-			std::llround(static_cast<double>(xp) * a.class_mult));
+/**
+ * Opzionale: name/short/long dal body JSON.
+ * Restituisce true se almeno un campo e' presente nella richiesta.
+ * Se present e testo diverso dall'attuale, require_paid deve essere true
+ * (affect con costo listino > 0), altrimenti err.
+ */
+[[nodiscard]] bool portal_apply_optional_text_fields(
+	struct obj_data* obj, const Json& req, bool affect_is_paid, std::string& err,
+	bool& text_changed_out) {
+	text_changed_out = false;
+	if(!obj) {
+		err = "oggetto null";
+		return false;
 	}
-	if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp > 0) {
-		xp = (xp * 3) / 2;
+	const bool has_name = req.find("obj_name") != req.end() || req.find("name") != req.end();
+	const bool has_short =
+		req.find("short_desc") != req.end() || req.find("short") != req.end();
+	const bool has_long =
+		req.find("description") != req.end() || req.find("long_desc") != req.end();
+	if(!has_name && !has_short && !has_long) {
+		return true;
 	}
-	return xp;
+	const std::string new_name =
+		has_name ? std::string(req.value("obj_name", req.value("name", "")))
+				 : std::string(obj->name ? obj->name : "");
+	const std::string new_short =
+		has_short
+			? std::string(req.value("short_desc", req.value("short", "")))
+			: std::string(obj->short_description ? obj->short_description : "");
+	const std::string new_long =
+		has_long
+			? std::string(req.value("description", req.value("long_desc", "")))
+			: std::string(obj->description ? obj->description : "");
+
+	if(!portal_text_field_ok(new_name, kObjEditTextNameMax, "name", err) ||
+	   !portal_text_field_ok(new_short, kObjEditTextShortMax, "short", err) ||
+	   !portal_text_field_ok(new_long, kObjEditTextLongMax, "long", err)) {
+		return false;
+	}
+
+	const std::string cur_name = obj->name ? obj->name : "";
+	const std::string cur_short =
+		obj->short_description ? obj->short_description : "";
+	const std::string cur_long = obj->description ? obj->description : "";
+	const bool changed =
+		(new_name != cur_name) || (new_short != cur_short) || (new_long != cur_long);
+	if(!changed) {
+		return true;
+	}
+	if(!affect_is_paid) {
+		err = "name/short/long solo insieme al pagamento di un nuovo affect "
+			  "(non con Artifact gratis ne' da soli)";
+		return false;
+	}
+	portal_set_obj_string(obj->name, new_name);
+	portal_set_obj_string(obj->short_description, new_short);
+	portal_set_obj_string(obj->description, new_long);
+	text_changed_out = true;
+	return true;
 }
 
 inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
@@ -1035,7 +1160,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 		const std::string sql =
 			"SELECT edit_hp, edit_mana, edit_move, edit_hp_regen, edit_mana_regen, "
 			"edit_move_regen, overedit_hp, overedit_mana, overedit_move, "
-			"overedit_hp_regen, overedit_mana_regen, overedit_move_regen "
+			"overedit_hp_regen, overedit_mana_regen, overedit_move_regen, "
+			"edit_pool_migrated "
 			"FROM character_stats WHERE toon_id = " +
 			std::to_string(toon_id) + " LIMIT 1";
 		if(mysql_query(h, sql.c_str()) != 0) {
@@ -1064,6 +1190,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			static_cast<sh_int>(row[10] ? std::atoi(row[10]) : 0);
 		pool.overedit_move_regen =
 			static_cast<sh_int>(row[11] ? std::atoi(row[11]) : 0);
+		pool.migrated = static_cast<ubyte>(row[12] ? std::atoi(row[12]) : 0);
 		mysql_free_result(res);
 		return true;
 	}
@@ -1086,6 +1213,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 	j["over_hit_regen"] = pool.overedit_hp_regen;
 	j["over_mana_regen"] = pool.overedit_mana_regen;
 	j["over_move_regen"] = pool.overedit_move_regen;
+	j["migrated"] = pool.migrated ? 1 : 0;
 	Json caps = Json::object();
 	caps["hit"] = kEditPoolMaxHit;
 	caps["mana"] = kEditPoolMaxMana;
@@ -1095,6 +1223,332 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 	caps["move_regen"] = kEditPoolMaxMoveRegen;
 	j["caps"] = caps;
 	return j;
+}
+
+[[nodiscard]] const char* immortal_grade_label(int max_level) noexcept {
+	if(max_level >= IMMENSO) {
+		return "Immenso";
+	}
+	if(max_level >= MAESTRO_DEI_CREATORI) {
+		return "Maestro dei Creatori";
+	}
+	if(max_level >= MAESTRO_DEL_CREATO) {
+		return "Maestro del Creato";
+	}
+	if(max_level >= QUESTMASTER) {
+		return "Maestro del Fato";
+	}
+	if(max_level >= CREATORE) {
+		return "Creatore";
+	}
+	if(max_level >= MAESTRO_DEGLI_DEI) {
+		return "Maestro degli Dei";
+	}
+	if(max_level >= DIO) {
+		return "Dio";
+	}
+	if(max_level >= DIO_MINORE) {
+		return "Dio Minore";
+	}
+	if(max_level >= IMMORTALE) {
+		return "Immortale";
+	}
+	if(max_level >= PRINCIPE) {
+		return "Principe";
+	}
+	return "Mortale";
+}
+
+[[nodiscard]] Json commands_enabled_at_level(int max_level) {
+	Json arr = Json::array();
+	/* Solo comandi staff (min_level >= Immortale): non elenca i mortali. */
+	if(max_level < IMMORTALE) {
+		return arr;
+	}
+	struct CmdRow {
+		std::string name;
+		int min_level;
+	};
+	std::vector<CmdRow> rows;
+	for(int i = 0; i < 27; ++i) {
+		for(NODE* n = radix_head[i].next; n != nullptr; n = n->next) {
+			if(!n->name || !*n->name) {
+				continue;
+			}
+			const int ml = static_cast<int>(n->min_level);
+			if(ml >= IMMORTALE && ml <= max_level) {
+				rows.push_back({n->name, ml});
+			}
+		}
+	}
+	std::sort(rows.begin(), rows.end(), [](const CmdRow& a, const CmdRow& b) {
+		if(a.min_level != b.min_level) {
+			return a.min_level < b.min_level;
+		}
+		return a.name < b.name;
+	});
+	for(const auto& r : rows) {
+		Json c;
+		c["name"] = r.name;
+		c["min_level"] = r.min_level;
+		c["grade"] = immortal_grade_label(r.min_level);
+		arr.push_back(c);
+	}
+	return arr;
+}
+
+[[nodiscard]] bool pool_data_has_values(const char_edit_pool_data& p) noexcept {
+	return p.edit_hp != 0 || p.edit_mana != 0 || p.edit_move != 0 ||
+		   p.edit_hp_regen != 0 || p.edit_mana_regen != 0 || p.edit_move_regen != 0;
+}
+
+[[nodiscard]] Json resist_status_json(bool present, bool from_proto, bool from_edit) {
+	Json j;
+	j["present"] = present;
+	if(!present) {
+		j["origin"] = nullptr;
+		j["origin_label"] = "";
+		return j;
+	}
+	if(from_proto && from_edit) {
+		j["origin"] = "proto+edit";
+		j["origin_label"] = "sul proto e anche aggiunta in edit";
+	}
+	else if(from_proto) {
+		j["origin"] = "proto";
+		j["origin_label"] = "già sul proto";
+	}
+	else {
+		j["origin"] = "edit";
+		j["origin_label"] = "aggiunta in edit";
+	}
+	return j;
+}
+
+struct ToonInventoryEditScan {
+	int dam_total = 0;
+	int sp_total = 0;
+	int hr_total = 0;
+	int spellfail_total = 0;
+	bool res_slash = false;
+	bool res_pierce = false;
+	bool res_blunt = false;
+	bool slash_proto = false;
+	bool slash_edit = false;
+	bool pierce_proto = false;
+	bool pierce_edit = false;
+	bool blunt_proto = false;
+	bool blunt_edit = false;
+	bool has_clan_symbol = false;
+	char_edit_pool_data pool_from_eq {};
+	int edited_pieces = 0;
+};
+
+/**
+ * Analisi inventario completa: budget combat, resistenze (proto vs edit),
+ * delta pool vs proto sugli oggetti EDIT del toon.
+ */
+[[nodiscard]] ToonInventoryEditScan scan_toon_inventory_edits(
+	unsigned long long toon_id, const std::string& toon_name) {
+	ToonInventoryEditScan s;
+	if(toon_name.empty()) {
+		return s;
+	}
+	std::vector<inventory_mysql_row> rows;
+	(void)load_character_inventory_mysql(toon_id, rows);
+
+	for(auto& r : rows) {
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		const bool is_clan =
+			clan_symbol_is_obj(o) || o->obj_flags.type_flag == ITEM_CLAN_SYMBOL;
+		if(is_clan) {
+			s.has_clan_symbol = true;
+		}
+		if(object_edit_counts_toward_combat_budget(o, toon_name.c_str())) {
+			++s.edited_pieces;
+			s.dam_total += object_edit_damroll_edited_delta(o);
+			s.sp_total += object_edit_spellpower_edited_delta(o);
+			s.hr_total += object_edit_hitroll_edited_delta(o);
+			s.spellfail_total += object_edit_spellfail_edited_delta(o);
+
+			struct obj_data* proto = nullptr;
+			const int pv = object_edit_prototype_vnum(o);
+			if(pv > 0) {
+				const int rn = real_object(pv);
+				if(rn >= 0) {
+					proto = read_object(rn, REAL);
+				}
+			}
+			const int bits = object_immune_current_bits(o);
+			const int proto_bits = proto ? object_immune_current_bits(proto) : 0;
+			auto note_res = [&](int bit, bool& present, bool& from_p, bool& from_e) {
+				if((bits & bit) == 0) {
+					return;
+				}
+				present = true;
+				if(proto_bits & bit) {
+					from_p = true;
+				}
+				else {
+					from_e = true;
+				}
+			};
+			note_res(static_cast<int>(IMM_SLASH), s.res_slash, s.slash_proto,
+					 s.slash_edit);
+			note_res(static_cast<int>(IMM_PIERCE), s.res_pierce, s.pierce_proto,
+					 s.pierce_edit);
+			note_res(static_cast<int>(IMM_BLUNT), s.res_blunt, s.blunt_proto,
+					 s.blunt_edit);
+
+			edit_pool_accumulate_obj_delta(o, proto, &s.pool_from_eq);
+			if(proto) {
+				extract_obj(proto);
+			}
+		}
+		extract_obj(o);
+	}
+	return s;
+}
+
+/**
+ * Riepilogo edit principali + residui pool per un toon (login overview).
+ * Analisi inventario completa; simboli clan esclusi dai tetti.
+ */
+[[nodiscard]] Json build_toon_edit_summary(unsigned long long toon_id) {
+	Json out;
+	out["toon_id"] = toon_id;
+	const std::string toon_name = toon_name_by_id(toon_id);
+	out["name"] = toon_name;
+	const int max_level = max_level_for_toon(toon_id);
+	out["max_level"] = max_level;
+	out["grade"] = immortal_grade_label(max_level);
+	if(toon_name.empty()) {
+		out["ok"] = false;
+		out["error"] = "toon non trovato";
+		return out;
+	}
+
+	const ToonInventoryEditScan scan = scan_toon_inventory_edits(toon_id, toon_name);
+	const int dam_total = scan.dam_total;
+	const int sp_total = scan.sp_total;
+	const int hr_total = scan.hr_total;
+	const int spellfail_total = scan.spellfail_total;
+	const bool res_slash = scan.res_slash;
+	const bool res_pierce = scan.res_pierce;
+	const bool res_blunt = scan.res_blunt;
+	const bool slash_proto = scan.slash_proto;
+	const bool slash_edit = scan.slash_edit;
+	const bool pierce_proto = scan.pierce_proto;
+	const bool pierce_edit = scan.pierce_edit;
+	const bool blunt_proto = scan.blunt_proto;
+	const bool blunt_edit = scan.blunt_edit;
+	const bool has_clan_symbol = scan.has_clan_symbol;
+	const char_edit_pool_data& pool_from_eq = scan.pool_from_eq;
+	const int edited_pieces = scan.edited_pieces;
+
+	char_edit_pool_data pool_db {};
+	const bool has_pool_row = load_edit_pool_for_toon(toon_id, pool_db);
+	const bool pool_on_character = has_pool_row && pool_db.migrated != 0;
+	const bool residual_on_objects = pool_data_has_values(pool_from_eq);
+	const char_edit_pool_data& pool_used =
+		pool_on_character ? pool_db : pool_from_eq;
+
+	auto pool_field = [&](const char* key, int used, int cap) {
+		Json f;
+		f["key"] = key;
+		f["used"] = std::max(0, used);
+		f["cap"] = cap;
+		f["remaining"] = std::max(0, cap - std::max(0, used));
+		return f;
+	};
+	Json pool = Json::object();
+	pool["source"] = pool_on_character ? "character" : "objects";
+	pool["migrated"] = pool_on_character ? 1 : 0;
+	pool["residual_on_objects"] = residual_on_objects && pool_on_character;
+	if(pool_on_character && residual_on_objects) {
+		pool["warning"] =
+			"Pool migrato sul PG ma restano delta HIT/MANA/MOVE/regen su oggetti "
+			"EDIT: stato misto anomalo (migrazione incompleta).";
+	}
+	Json fields = Json::array();
+	fields.push_back(pool_field("hit", pool_used.edit_hp, kEditPoolMaxHit));
+	fields.push_back(pool_field("mana", pool_used.edit_mana, kEditPoolMaxMana));
+	fields.push_back(pool_field("move", pool_used.edit_move, kEditPoolMaxMove));
+	fields.push_back(
+		pool_field("hit_regen", pool_used.edit_hp_regen, kEditPoolMaxHitRegen));
+	fields.push_back(
+		pool_field("mana_regen", pool_used.edit_mana_regen, kEditPoolMaxManaRegen));
+	fields.push_back(
+		pool_field("move_regen", pool_used.edit_move_regen, kEditPoolMaxMoveRegen));
+	pool["fields"] = fields;
+
+	Json main = Json::object();
+	main["res_slash"] = resist_status_json(res_slash, slash_proto, slash_edit);
+	main["res_pierce"] = resist_status_json(res_pierce, pierce_proto, pierce_edit);
+	main["res_blunt"] = resist_status_json(res_blunt, blunt_proto, blunt_edit);
+	{
+		Json dam;
+		dam["used"] = dam_total;
+		dam["cap"] = kObjEditMaxDamrollEditableTotal;
+		dam["remaining"] = std::max(0, kObjEditMaxDamrollEditableTotal - dam_total);
+		dam["note"] = "Su ogni pezzo: dam/hit-n-dam oppure spellpower, non entrambi";
+		main["dam"] = dam;
+		Json sp;
+		sp["used"] = sp_total;
+		sp["cap"] = kObjEditMaxSpellpowerEditableTotal;
+		sp["remaining"] = std::max(0, kObjEditMaxSpellpowerEditableTotal - sp_total);
+		sp["note"] = "Su ogni pezzo: spellpower/hit-n-sp oppure dam, non entrambi";
+		main["spellpower"] = sp;
+		Json hr;
+		hr["used"] = hr_total;
+		hr["cap"] = kObjEditMaxHitrollEditableTotal;
+		hr["remaining"] = std::max(0, kObjEditMaxHitrollEditableTotal - hr_total);
+		hr["per_piece_max"] = kObjEditMaxHitrollPerPiece;
+		main["hitroll"] = hr;
+		Json sf;
+		sf["used"] = spellfail_total;
+		sf["cap"] = kObjEditMaxSpellfailEditableTotal;
+		sf["remaining"] =
+			std::max(0, kObjEditMaxSpellfailEditableTotal - spellfail_total);
+		sf["step"] = kObjEditSpellfailStep;
+		sf["mxp_per_step"] = 20;
+		main["spellfail"] = sf;
+	}
+
+	int exp = 0;
+	int rune = 0;
+	int gold = 0;
+	int bank_gold = 0;
+	const bool has_stats = load_stats_for_toon(toon_id, exp, rune, &gold, &bank_gold);
+	const long long prince_reserve =
+		(max_level >= PRINCIPE) ? static_cast<long long>(PRINCEEXP) : 0LL;
+	const long long available_xp =
+		has_stats ? (static_cast<long long>(exp) - prince_reserve) : 0LL;
+	const long long avail_clamped = std::max(0LL, available_xp);
+
+	out["ok"] = true;
+	out["edited_pieces"] = edited_pieces;
+	out["available_mxp"] = avail_clamped / 1000000L;
+	out["available_mxp_frac"] = (avail_clamped % 1000000L) / 10000L;
+	out["rune"] = rune;
+	out["gold"] = gold;
+	out["bank_gold"] = bank_gold;
+	{
+		Json clan;
+		clan["present"] = has_clan_symbol;
+		clan["owner_kind"] = "unknown"; /* proprio principe vs toon: TODO */
+		out["clan_symbol"] = clan;
+	}
+	out["main_edits"] = main;
+	out["pool"] = pool;
+	if(max_level >= IMMORTALE) {
+		out["commands"] = commands_enabled_at_level(max_level);
+		out["commands_count"] = out["commands"].size();
+	}
+	return out;
 }
 
 [[nodiscard]] std::string handle_internal(const std::string& path,
@@ -1115,6 +1569,43 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			Json d;
 			d["toon_id"] = toon_id;
 			d["online"] = is_toon_online_by_name(name);
+			return json_ok(d);
+		}
+
+		if(path == "/internal/toon-edit-summary") {
+			const unsigned long long toon_id = parse_json_toon_id(req);
+			if(toon_id == 0) {
+				return json_error("toon_id richiesto", 400);
+			}
+			return json_ok(build_toon_edit_summary(toon_id));
+		}
+
+		if(path == "/internal/toons-edit-summary") {
+			Json ids = Json::array();
+			if(req.find("toon_ids") != req.end() && req["toon_ids"].is_array()) {
+				ids = req["toon_ids"];
+			}
+			Json list = Json::array();
+			for(const auto& idv : ids) {
+				unsigned long long tid = 0;
+				if(idv.is_number_unsigned() || idv.is_number_integer()) {
+					tid = idv.get<unsigned long long>();
+				}
+				else if(idv.is_string()) {
+					try {
+						tid = std::stoull(idv.get<std::string>());
+					}
+					catch(...) {
+						tid = 0;
+					}
+				}
+				if(tid == 0) {
+					continue;
+				}
+				list.push_back(build_toon_edit_summary(tid));
+			}
+			Json d;
+			d["summaries"] = list;
 			return json_ok(d);
 		}
 
@@ -1176,18 +1667,16 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 			int exp = 0;
 			int rune = 0;
-			if(!load_stats_for_toon(toon_id, exp, rune)) {
-				return json_error("character_stats non trovato", 404);
-			}
+			const bool has_stats = load_stats_for_toon(toon_id, exp, rune);
 			const int max_level = max_level_for_toon(toon_id);
 			const long long prince_reserve =
 				(max_level >= PRINCIPE) ? static_cast<long long>(PRINCEEXP) : 0LL;
 			const long long available_xp =
-				static_cast<long long>(exp) - prince_reserve;
+				has_stats ? (static_cast<long long>(exp) - prince_reserve) : 0LL;
 
 			char_edit_pool_data pool {};
-			if(!load_edit_pool_for_toon(toon_id, pool)) {
-				return json_error("edit pool non trovato", 404);
+			if(has_stats) {
+				(void)load_edit_pool_for_toon(toon_id, pool);
 			}
 
 			Json resistances = Json::array();
@@ -1231,6 +1720,13 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["prince_reserve_mxp"] = prince_reserve / 1000000L;
 			d["pool"] = pool_to_json(pool);
 			d["resistances"] = resistances;
+			d["stats_missing"] = !has_stats;
+			if(!has_stats) {
+				d["warning"] =
+					"Nessuna riga in character_stats per questo toon (PG non migrato "
+					"o mai creato via login/import). Inventario consultabile; "
+					"pagamenti edit bloccati finche' non esiste character_stats.";
+			}
 			return json_ok(d);
 		}
 
@@ -1265,6 +1761,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				d["target"] = target;
 				d["delta"] = 0;
 				return json_ok(d);
+			}
+			if(delta < 0) {
+				return json_error(
+					"non puoi ridurre il pool edit (solo aumentare rispetto all'attuale)",
+					400);
 			}
 
 			const edit_pool_quote quote = edit_pool_quote_delta(pool_field, delta);
@@ -1342,10 +1843,29 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			}
 			Json items = Json::array();
 			int editable_count = 0;
+			int hidden_raro = 0;
+			int hidden_tan = 0;
+			int hidden_category = 0;
+			int hidden_other = 0;
 			const bool toon_name_ok = !toon_name.empty();
 			for(const auto& r : rows) {
 				struct obj_data* obj = materialize_inventory_row(r);
 				if(obj && !object_portal_show_in_inventory_list(obj, toon_name.c_str())) {
+					if(object_is_tanned(obj)) {
+						++hidden_tan;
+					}
+					else if(obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+						++hidden_raro;
+					}
+					else {
+						const char* slug = object_portal_item_type_slug(ITEM_TYPE(obj));
+						if(slug && !edit_system_portal_category_enabled(slug)) {
+							++hidden_category;
+						}
+						else {
+							++hidden_other;
+						}
+					}
 					extract_obj(obj);
 					continue;
 				}
@@ -1382,7 +1902,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				}
 				else if(inventory_row_is_worn(r.elem.wearpos) &&
 						!object_portal_allows_worn_edit(obj)) {
-					skip_reason = "indossato (primo edit: togli e metti in inventario)";
+					/* Difesa: allows_worn_edit e' sempre true per obj valido. */
+					skip_reason = "indossato (non editabile)";
 				}
 				else if(object_is_tanned(obj)) {
 					skip_reason = "conciato (skill tan)";
@@ -1421,9 +1942,19 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["total"] = items.size();
 			d["editable_count"] = editable_count;
 			d["loaded_rows"] = rows.size();
+			d["hidden_rows"] = static_cast<int>(rows.size()) - static_cast<int>(items.size());
+			{
+				Json filt;
+				filt["raro"] = hidden_raro;
+				filt["tan"] = hidden_tan;
+				filt["category"] = hidden_category;
+				filt["other"] = hidden_other;
+				d["hidden_breakdown"] = filt;
+			}
 			d["toon_id"] = toon_id;
 			d["toon_name"] = toon_name;
 			d["toon_name_ok"] = toon_name_ok;
+			d[kEditPortalApiVersionTag] = kEditPortalApiVersion;
 			return json_ok(d);
 		}
 
@@ -1449,10 +1980,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(inventory_row_is_worn(row->elem.wearpos) &&
 			   !object_portal_allows_worn_edit(obj)) {
 				extract_obj(obj);
-				return json_error(
-					"l'oggetto e indossato: per il primo edit rimuovilo e mettilo in inventario "
-					"(i pezzi gia editati si possono ri-editare anche indossati)",
-					400);
+				return json_error("oggetto indossato non editabile", 400);
 			}
 			if(!object_portal_editable(obj, toon_name.c_str())) {
 				extract_obj(obj);
@@ -1472,10 +2000,21 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					const int loc = e.value("location", 0);
 					e["current"] = object_edit_display_current(obj, loc);
 				}
-				else if(kind == "immune") {
+				else if(kind == "immune" || kind == "m_immune") {
 					const unsigned bit =
 						static_cast<unsigned>(e.value("immune_bit", 0U));
-					const int bits = object_immune_current_bits(obj);
+					const int loc = e.value("location", APPLY_IMMUNE);
+					const int bits = (loc == APPLY_M_IMMUNE)
+										 ? object_m_immune_current_bits(obj)
+										 : object_immune_current_bits(obj);
+					e["current"] = (bits & static_cast<int>(bit)) ? 1 : 0;
+				}
+				else if(kind == "spell") {
+					const int loc = e.value("location", APPLY_SPELL);
+					const unsigned long bit = e.value("spell_bit", 0UL);
+					const int bits =
+						(loc == APPLY_AFF2) ? object_aff2_current_bits(obj)
+											: object_spell_current_bits(obj);
 					e["current"] = (bits & static_cast<int>(bit)) ? 1 : 0;
 				}
 				else if(kind == "flag" && e.value("flag", "") == "artifact") {
@@ -1488,6 +2027,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["affect_slots"] = object_affect_slots_json(obj);
 			d["inventory_id"] = inventory_id;
 			d["short_desc"] = row->elem.sd;
+			d["clan_symbol"] =
+				clan_symbol_is_obj(obj) || obj->obj_flags.type_flag == ITEM_CLAN_SYMBOL;
 			{
 				const int piece_delta = object_edit_damroll_edited_delta(obj);
 				const bool piece_worn = inventory_row_is_worn(row->elem.wearpos);
@@ -1511,6 +2052,9 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				dam_budget["source"] = "owned_edit_delta_vs_proto";
 				dam_budget["contributors"] =
 					owned_dam_budget_contributors_json(rows, toon_name.c_str());
+				/* Mutex UI: presenza sul pezzo (proto o edit), non solo delta. */
+				dam_budget["piece_has_dam"] = object_edit_damroll_total(obj) > 0;
+				dam_budget["mutex_with_spellpower"] = true;
 				d["dam_budget"] = dam_budget;
 
 				const int piece_sp_delta = object_edit_spellpower_edited_delta(obj);
@@ -1525,13 +2069,34 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				sp_budget["char_total"] = other_sp + piece_sp_for_total;
 				sp_budget["char_max"] = kObjEditMaxSpellpowerEditableTotal;
 				sp_budget["source"] = "owned_edit_delta_vs_proto";
+				sp_budget["piece_has_spellpower"] =
+					object_edit_spellpower_total(obj) > 0;
+				sp_budget["mutex_with_dam"] = true;
 				d["sp_budget"] = sp_budget;
+
+				const int piece_sf_delta = object_edit_spellfail_edited_delta(obj);
+				const int other_sf = sum_owned_edited_spellfail_excluding(
+					rows, inventory_id, toon_name.c_str());
+				const int piece_sf_for_total = piece_edit ? piece_sf_delta : 0;
+				Json sf_budget;
+				sf_budget["piece"] = piece_sf_delta;
+				sf_budget["piece_current"] = object_edit_spellfail_total(obj);
+				sf_budget["piece_proto"] = object_edit_spellfail_prototype_total(obj);
+				sf_budget["piece_max"] = -kObjEditSpellfailMinTotal;
+				sf_budget["other"] = other_sf;
+				sf_budget["char_total"] = other_sf + piece_sf_for_total;
+				sf_budget["char_max"] = kObjEditMaxSpellfailEditableTotal;
+				sf_budget["step"] = kObjEditSpellfailStep;
+				sf_budget["mxp_per_step"] = 20;
+				sf_budget["source"] = "owned_edit_delta_vs_proto";
+				d["sf_budget"] = sf_budget;
 			}
 			{
-				const bool can_text =
-					obj->db_instance_id != 0 || IS_OBJ_STAT2(obj, ITEM2_EDIT);
+				/* Sempre editabile in UI: si salva solo insieme a un affect pagato
+				 * (stesso apply), mai come passo successivo gratuito. */
 				Json text;
-				text["can_edit"] = can_text;
+				text["can_edit"] = true;
+				text["requires_paid_affect"] = true;
 				text["name"] = obj->name ? obj->name : "";
 				text["short_desc"] =
 					obj->short_description ? obj->short_description : "";
@@ -1540,9 +2105,8 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				text["short_max"] = kObjEditTextShortMax;
 				text["long_max"] = kObjEditTextLongMax;
 				text["hint"] =
-					can_text
-						? "Name / short / long (codici $c); solo dopo un edit pagato"
-						: "Disponibile dopo il primo edit pagato sull'oggetto";
+					"Name / short / long: gratuiti ma solo insieme al pagamento "
+					"di un nuovo affect (stesso salvataggio). Non si salvano da soli.";
 				d["text_edit"] = text;
 			}
 			if(is_armor && is_weapon) {
@@ -1569,6 +2133,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				req.find("target_modifier") != req.end()
 					? parse_json_int(req, "target_modifier", 0)
 					: parse_json_int(req, "modifier", 0);
+			const bool clear_slot = parse_json_int(req, "clear_slot", 0) != 0;
 			const std::string flag = req.value("flag", "");
 
 			const std::string toon_name = toon_name_by_id(toon_id);
@@ -1590,10 +2155,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(inventory_row_is_worn(row->elem.wearpos) &&
 			   !object_portal_allows_worn_edit(obj)) {
 				extract_obj(obj);
-				return json_error(
-					"l'oggetto e indossato: per il primo edit rimuovilo e mettilo in inventario "
-					"(i pezzi gia editati si possono ri-editare anche indossati)",
-					400);
+				return json_error("oggetto indossato non editabile", 400);
 			}
 			if(!object_portal_editable(obj, toon_name.c_str())) {
 				extract_obj(obj);
@@ -1616,10 +2178,20 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				d["target"] = target;
 				d["inventory_id"] = inventory_id;
 				d["note"] =
-					target ? "Artifact ON (gratis): ogni edit successivo +50% listino"
-						   : "Artifact invariato";
+					target
+						? "Artifact: flag gratis; +50% sul costo finale di questo edit "
+						  "(gia' presente o aggiunto nello stesso pacchetto)"
+						: "Artifact invariato";
 				extract_obj(obj);
 				return json_ok(d);
+			}
+
+			/* Listino: +50% se pezzo gia' Artifact OPPURE Artifact e' in coda
+			 * nello stesso edit (pending_artifact dal carrello portal). */
+			const bool pending_artifact =
+				parse_json_int(req, "pending_artifact", 0) != 0;
+			if(pending_artifact || IS_OBJ_STAT(obj, ITEM_IMMUNE)) {
+				SET_BIT(obj->obj_flags.extra_flags, ITEM_IMMUNE);
 			}
 
 			long xp_raw = 0;
@@ -1635,8 +2207,14 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					? sum_owned_edited_spellpower_excluding(rows, inventory_id,
 														   toon_name.c_str())
 					: -1;
+			const int other_sf =
+				object_edit_location_affects_spellfail(location)
+					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
+														  toon_name.c_str())
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
-										   quote_err, other_dam, other_sp)) {
+										   quote_err, other_dam, other_sp, clear_slot,
+										   other_sf)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -1644,22 +2222,40 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			int current = 0;
 			int target = target_modifier;
 			if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE) {
-				const int bits = object_immune_current_bits(obj);
+				const int bits = (location == APPLY_M_IMMUNE)
+									 ? object_m_immune_current_bits(obj)
+									 : object_immune_current_bits(obj);
 				current = (bits & target_modifier) ? 1 : 0;
-				target = current ? 1 : (target_modifier != 0 ? 1 : 0);
+				target = clear_slot ? 0 : (current ? 1 : (target_modifier != 0 ? 1 : 0));
+			}
+			else if(location == APPLY_SPELL || location == APPLY_AFF2) {
+				const int bits = (location == APPLY_AFF2)
+									 ? object_aff2_current_bits(obj)
+									 : object_spell_current_bits(obj);
+				current = (bits & target_modifier) ? 1 : 0;
+				target = clear_slot ? 0 : (current ? 1 : (target_modifier != 0 ? 1 : 0));
 			}
 			else {
 				current = object_edit_display_current(obj, location);
+				if(clear_slot) {
+					target = 0;
+				}
 			}
 
 			Json d = quote_xp_json(xp_raw, pq);
 			d["location"] = location;
+			/* Su clear bit (resi/imm/spell) serve il bit in target_modifier. */
 			d["target_modifier"] = target_modifier;
+			d["clear_slot"] = clear_slot ? 1 : 0;
 			d["current"] = current;
 			d["target"] = target;
 			d["inventory_id"] = inventory_id;
 			d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
-			if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
+			d["pending_artifact"] = pending_artifact ? 1 : 0;
+			if(clear_slot) {
+				d["note"] = "Rimuovi slot: libera lo slot (gratis, listino)";
+			}
+			else if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
 				d["note"] = "Include maggiorazione Artifact +50% (listino)";
 			}
 			extract_obj(obj);
@@ -1692,6 +2288,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				req.find("target_modifier") != req.end()
 					? parse_json_int(req, "target_modifier", 0)
 					: parse_json_int(req, "modifier", 0);
+			const bool clear_slot = parse_json_int(req, "clear_slot", 0) != 0;
 			const int pay_xp = parse_json_int(req, "pay_xp", 0);
 			const int pay_rune = parse_json_int(req, "pay_rune", 0);
 			const std::string flag = req.value("flag", "");
@@ -1734,10 +2331,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			if(inventory_row_is_worn(row->elem.wearpos) &&
 			   !object_portal_allows_worn_edit(obj)) {
 				extract_obj(obj);
-				return json_error(
-					"l'oggetto e indossato: per il primo edit rimuovilo e mettilo in inventario "
-					"(i pezzi gia editati si possono ri-editare anche indossati)",
-					400);
+				return json_error("oggetto indossato non editabile", 400);
 			}
 			if(!object_portal_editable(obj, target_name.c_str())) {
 				extract_obj(obj);
@@ -1781,7 +2375,17 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
 					SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
 				}
-				/* Impostazione flag: gratis; +50% listino su ogni edit successivo. */
+				/* Artifact gratis: eventuale testo in body e' rifiutato
+				 * (serve un affect pagato nello stesso apply). */
+				bool text_changed = false;
+				std::string text_err;
+				if(!portal_apply_optional_text_fields(after, req, /*affect_is_paid=*/false,
+													  text_err, text_changed)) {
+					extract_obj(after);
+					return json_error(text_err.c_str(), 400);
+				}
+				/* Flag gratis; il +50% e' sul costo degli edit pagati (stesso
+				 * pacchetto o successivi) via AnalyzeObjEdit. */
 				std::string save_err;
 				const bool saved = portal_save_edited_inventory_item(
 					inventory_id, after, save_err, target_name.c_str());
@@ -1818,8 +2422,14 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 					? sum_owned_edited_spellpower_excluding(rows, inventory_id,
 														   target_name.c_str())
 					: -1;
+			const int other_sf =
+				object_edit_location_affects_spellfail(location)
+					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
+														  target_name.c_str())
+					: -1;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
-										   quote_pq, quote_err, other_dam, other_sp)) {
+										   quote_pq, quote_err, other_dam, other_sp,
+										   clear_slot, other_sf)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -1833,7 +2443,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 			std::string apply_err;
 			if(!object_apply_affect_target(after, location, target_modifier, apply_err,
-										   other_dam, other_sp)) {
+										   other_dam, other_sp, clear_slot, other_sf)) {
 				extract_obj(after);
 				return json_error(apply_err.c_str(), 400);
 			}
@@ -1841,10 +2451,26 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
 			}
 
-			const int xp_cost =
-				pay_xp > 0 ? pay_xp : static_cast<int>(std::max(0L, quote_xp));
-			const int rune_cost =
-				pay_rune > 0 ? pay_rune : std::max(0, quote_pq);
+			/* Pagamento: XP e/o Rune coprono il listino (1 MXP = 1 Rune). */
+			int xp_cost = 0;
+			int rune_cost = 0;
+			std::string pay_resolve_err;
+			if(!resolve_object_edit_payment(pay_xp, pay_rune, quote_xp, quote_pq, xp_cost,
+										   rune_cost, pay_resolve_err)) {
+				extract_obj(after);
+				return json_error(pay_resolve_err.c_str(), 402);
+			}
+			const int quote_xp_i = static_cast<int>(std::max(0L, quote_xp));
+			const bool affect_is_paid = (quote_xp_i > 0) || (quote_pq > 0) ||
+										(xp_cost > 0) || (rune_cost > 0);
+
+			bool text_changed = false;
+			std::string text_err;
+			if(!portal_apply_optional_text_fields(after, req, affect_is_paid, text_err,
+												  text_changed)) {
+				extract_obj(after);
+				return json_error(text_err.c_str(), 400);
+			}
 
 			const int max_level = max_level_for_toon(target_toon_id);
 			std::string pay_err;
@@ -1861,6 +2487,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["paid_xp"] = xp_cost;
 			d["paid_rune"] = rune_cost;
 			d["saved"] = saved;
+			d["text_changed"] = text_changed;
 			d["instance_id"] = after->db_instance_id;
 			d["base_vnum"] = object_instance_resolve_base_vnum(after);
 			if(!save_err.empty()) {
@@ -1879,126 +2506,10 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 
 		if(path == "/internal/quote-object-text" ||
 		   path == "/internal/apply-object-text") {
-			const bool is_apply = (path == "/internal/apply-object-text");
-			unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
-			if(target_toon_id == 0) {
-				target_toon_id = parse_json_ull(req, "toon_id");
-			}
-			const unsigned long long inventory_id = parse_json_ull(req, "inventory_id");
-			const std::string new_name = req.value("obj_name", req.value("name", ""));
-			const std::string new_short =
-				req.value("short_desc", req.value("short", ""));
-			const std::string new_long =
-				req.value("description", req.value("long_desc", ""));
-			const int pay_xp = parse_json_int(req, "pay_xp", 0);
-			const int pay_rune = parse_json_int(req, "pay_rune", 0);
-
-			const std::string target_name = toon_name_by_id(target_toon_id);
-			if(target_name.empty()) {
-				return json_error("toon target non trovato", 404);
-			}
-			if(is_apply && is_toon_online_by_name(target_name)) {
-				return json_error("il toon target e collegato al mud", 409);
-			}
-
-			std::vector<inventory_mysql_row> rows;
-			load_character_inventory_mysql(target_toon_id, rows);
-			inventory_mysql_row* row = find_inventory_row(rows, inventory_id);
-			if(!row) {
-				return json_error("oggetto non trovato nell'inventario", 404);
-			}
-			struct obj_data* obj = materialize_inventory_row(*row);
-			if(!obj) {
-				return json_error("impossibile materializzare oggetto", 500);
-			}
-			if(!object_portal_editable(obj, target_name.c_str())) {
-				extract_obj(obj);
-				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
-			}
-			if(obj->db_instance_id == 0 && !IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-				extract_obj(obj);
-				return json_error(
-					"name/short/long disponibili solo dopo un edit pagato sull'oggetto",
-					400);
-			}
-
-			std::string len_err;
-			if(!portal_text_field_ok(new_name, kObjEditTextNameMax, "name", len_err) ||
-			   !portal_text_field_ok(new_short, kObjEditTextShortMax, "short",
-									len_err) ||
-			   !portal_text_field_ok(new_long, kObjEditTextLongMax, "long", len_err)) {
-				extract_obj(obj);
-				return json_error(len_err.c_str(), 400);
-			}
-
-			const std::string cur_name = obj->name ? obj->name : "";
-			const std::string cur_short =
-				obj->short_description ? obj->short_description : "";
-			const std::string cur_long = obj->description ? obj->description : "";
-			const bool changed = (new_name != cur_name) || (new_short != cur_short) ||
-								 (new_long != cur_long);
-			if(!changed) {
-				extract_obj(obj);
-				return json_error("nessuna modifica a name/short/long", 400);
-			}
-
-			const long xp_raw = portal_text_edit_xp_raw(obj);
-			const int rune_cost = kObjEditTextRune;
-			if(!is_apply) {
-				Json d = quote_xp_json(xp_raw, rune_cost);
-				d["diff_rune"] = rune_cost;
-				d["inventory_id"] = inventory_id;
-				d["obj_name"] = new_name;
-				d["short_desc"] = new_short;
-				d["description"] = new_long;
-				d["name_len"] = static_cast<int>(new_name.size());
-				d["short_len"] = static_cast<int>(new_short.size());
-				d["long_len"] = static_cast<int>(new_long.size());
-				d["name_max"] = kObjEditTextNameMax;
-				d["short_max"] = kObjEditTextShortMax;
-				d["long_max"] = kObjEditTextLongMax;
-				d["note"] = IS_OBJ_STAT(obj, ITEM_IMMUNE)
-								? "Edit testo: include maggiorazione Artifact +50%"
-								: "Edit testo (name/short/long)";
-				d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
-				extract_obj(obj);
-				return json_ok(d);
-			}
-
-			portal_set_obj_string(obj->name, new_name);
-			portal_set_obj_string(obj->short_description, new_short);
-			portal_set_obj_string(obj->description, new_long);
-			if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
-				SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
-			}
-
-			const int xp_cost = pay_xp > 0 ? pay_xp : static_cast<int>(std::max(0L, xp_raw));
-			const int rune_pay = pay_rune > 0 ? pay_rune : rune_cost;
-			const int max_level = max_level_for_toon(target_toon_id);
-			std::string pay_err;
-			if(!deduct_payment(target_toon_id, xp_cost, rune_pay, max_level, pay_err)) {
-				extract_obj(obj);
-				return json_error(pay_err.c_str(), 402);
-			}
-			std::string save_err;
-			const bool saved = portal_save_edited_inventory_item(
-				inventory_id, obj, save_err, target_name.c_str());
-			Json d = analyze_to_json(obj);
-			d["paid_xp"] = xp_cost;
-			d["paid_rune"] = rune_pay;
-			d["saved"] = saved;
-			d["instance_id"] = obj->db_instance_id;
-			d["obj_name"] = obj->name ? obj->name : "";
-			d["short_desc"] = obj->short_description ? obj->short_description : "";
-			d["description"] = obj->description ? obj->description : "";
-			extract_obj(obj);
-			if(!saved) {
-				return json_error(save_err.empty()
-									  ? "[portal:save] pagamento eseguito ma salvataggio testo fallito"
-									  : save_err.c_str(),
-								  500);
-			}
-			return json_ok(d);
+			return json_error(
+				"name/short/long non si salvano da soli: includili nel pagamento "
+				"di un nuovo affect (apply-affect)",
+				400);
 		}
 
 		if(path == "/internal/apply-pool") {
@@ -2038,6 +2549,24 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 				return json_error("character_stats non trovato", 404);
 			}
 
+			/*
+			 * Invariante: niente pool misto. Se non migrato e restano delta
+			 * HIT/MANA/MOVE/regen sugli oggetti EDIT, non impostare
+			 * edit_pool_migrated=1 (nasconderebbe il residuo). Prima va
+			 * completata la migrazione login/boot (credit + strip).
+			 */
+			if(pool.migrated == 0) {
+				const ToonInventoryEditScan inv =
+					scan_toon_inventory_edits(target_toon_id, target_name);
+				if(pool_data_has_values(inv.pool_from_eq)) {
+					return json_error(
+						"Pool ancora sugli oggetti EDIT (migrazione incompleta). "
+						"Entra in gioco una volta: la migrazione sposta i valori "
+						"sul PG e li toglie dagli oggetti. Poi riprova dal portale.",
+						409);
+				}
+			}
+
 			const int current = pool_field_current(pool, pool_field);
 			const int target = req.find("new_value") != req.end()
 								   ? parse_json_int(req, "new_value", current)
@@ -2045,6 +2574,11 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			const int delta = target - current;
 			if(delta == 0) {
 				return json_error("nessuna modifica al pool", 400);
+			}
+			if(delta < 0) {
+				return json_error(
+					"non puoi ridurre il pool edit (solo aumentare rispetto all'attuale)",
+					400);
 			}
 
 			if(pay_xp == 0 && pay_rune == 0) {
@@ -2095,6 +2629,7 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 			d["edit_move_regen"] = pool.edit_move_regen;
 			d["paid_xp"] = pay_xp;
 			d["paid_rune"] = pay_rune;
+			d["edit_pool_migrated"] = 1;
 			return json_ok(d);
 		}
 

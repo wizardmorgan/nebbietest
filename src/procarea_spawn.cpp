@@ -2446,6 +2446,7 @@ static bool procarea_try_grant_treasure_item(char_data* roll_ch, ProcAreaInstanc
 		procarea_roll_reward_gear_item(inst, item, roll_ch, slot);
 	}
 	procarea_apply_reward_prince_flags(item, inst.group_max_level);
+	SET_BIT(item->obj_flags.extra_flags2, ITEM2_PROCAREA_REWARD);
 	if(!procarea_valid_instance_room(room_vnum)) {
 		mudlog(LOG_ERROR, "procarea: treasure item room %ld invalid after roll", room_vnum);
 		extract_obj(item);
@@ -2835,7 +2836,7 @@ static char_data* procarea_create_mob(int archetype_index, float eq_index, int t
 	mob->player.short_descr = strdup(short_desc.c_str());
 	mob->player.long_descr = procarea_dup_text(text.long_desc, true);
 	mob->player.description = procarea_dup_text(text.look, true);
-	mob->player.sounds = procarea_dup_text(text.agg, false);
+	mob->player.sounds = procarea_dup_text(text.agg, true);
 	mob->player.distant_snds = procarea_dup_text(text.sound, true);
 	mob->player.title = nullptr;
 

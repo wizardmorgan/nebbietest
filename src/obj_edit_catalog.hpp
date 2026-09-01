@@ -29,8 +29,8 @@ using Json = nlohmann::json;
 bool inventory_row_is_worn(int wearpos) noexcept;
 
 /**
- * true se l'oggetto può essere editato anche indossato (già personalizzato / ITEM2_EDIT).
- * I pezzi in object_instance sono quasi sempre equipaggiati: senza questo il ri-edit è inutilizzabile.
+ * true se l'oggetto può essere editato anche indossato.
+ * Path portale = MySQL offline: primo edit e ri-edit entrambi OK su wear_pos>0.
  */
 [[nodiscard]] bool object_portal_allows_worn_edit(const struct obj_data* obj) noexcept;
 
@@ -38,7 +38,9 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] bool object_portal_editable(const struct obj_data* obj,
 										  const char* toon_name) noexcept;
 
-/** false = non mostrare in inventario portale (categorie staff / tipi disabilitati). */
+/** false = non mostrare in inventario portale.
+ * TAN/HAS-GEMS/simbolo: mai. RARO: nascosto salvo pezzi in DB edits (show db)
+ * o ITEM2_EDIT + EDNomeToon. Categorie: EDIT/instance bypassano solo le categorie. */
 [[nodiscard]] bool object_portal_show_in_inventory_list(const struct obj_data* obj,
 														const char* toon_name) noexcept;
 
@@ -61,13 +63,18 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 											  int target_modifier, long& xp_raw,
 											  int& pq, std::string& err,
 											  int other_worn_edited_dam = -1,
-											  int other_worn_edited_sp = -1);
+											  int other_worn_edited_sp = -1,
+											  bool clear_slot = false,
+											  int other_owned_edited_spellfail = -1);
 
-/** Imposta affect target (stessa logica di quote). Restituisce false se invalido. */
+/** Imposta affect target (stessa logica di quote). Restituisce false se invalido.
+ *  clear_slot: libera lo slot (malus a 2× / effetto positivo gratis). */
 [[nodiscard]] bool object_apply_affect_target(struct obj_data* obj, int location,
 											  int target_modifier, std::string& err,
 											  int other_worn_edited_dam = -1,
-											  int other_worn_edited_sp = -1);
+											  int other_worn_edited_sp = -1,
+											  bool clear_slot = false,
+											  int other_owned_edited_spellfail = -1);
 
 [[nodiscard]] int object_affect_current_modifier(const struct obj_data* obj,
 												 int location) noexcept;
@@ -88,6 +95,18 @@ bool inventory_row_is_worn(int wearpos) noexcept;
  */
 [[nodiscard]] int object_edit_damroll_edited_delta(const struct obj_data* obj) noexcept;
 [[nodiscard]] int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept;
+[[nodiscard]] int object_edit_hitroll_edited_delta(const struct obj_data* obj) noexcept;
+
+/**
+ * Spellfail *editato* = max(0, proto − current) (piu' negativo = piu' edit).
+ * Conta verso il tetto personaggio kObjEditMaxSpellfailEditableTotal.
+ */
+[[nodiscard]] int object_edit_spellfail_edited_delta(const struct obj_data* obj) noexcept;
+[[nodiscard]] int object_edit_spellfail_total(const struct obj_data* obj) noexcept;
+[[nodiscard]] int object_edit_spellfail_prototype_total(const struct obj_data* obj) noexcept;
+
+/** Hitroll effettivo sul pezzo (HITROLL + HITNDAM + HITNSP). */
+[[nodiscard]] int object_edit_hitroll_total(const struct obj_data* obj) noexcept;
 
 /** Dam sul prototipo risolto (0 se proto assente). */
 [[nodiscard]] int object_edit_damroll_prototype_total(const struct obj_data* obj) noexcept;
@@ -109,7 +128,17 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 /** true se location può cambiare lo spellpower effettivo del pezzo. */
 [[nodiscard]] bool object_edit_location_affects_spellpower(int location) noexcept;
 
+/** true se location tocca APPLY_SPELLFAIL. */
+[[nodiscard]] bool object_edit_location_affects_spellfail(int location) noexcept;
+
 [[nodiscard]] int object_immune_current_bits(const struct obj_data* obj) noexcept;
+
+/** Bit APPLY_M_IMMUNE (immunità concesse listino: drain/charm/poison). */
+[[nodiscard]] int object_m_immune_current_bits(const struct obj_data* obj) noexcept;
+
+[[nodiscard]] int object_spell_current_bits(const struct obj_data* obj) noexcept;
+
+[[nodiscard]] int object_aff2_current_bits(const struct obj_data* obj) noexcept;
 
 /** Ottimizza slot combat (hit-n-dam, hit-n-sp). */
 void object_compact_edit_affects(struct obj_data* obj) noexcept;

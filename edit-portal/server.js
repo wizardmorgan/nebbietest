@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const express = require('express');
 const session = require('express-session');
 const mysql = require('mysql2/promise');
@@ -12,6 +13,43 @@ const PORT = parseInt(process.env.EDIT_WEB_PORT || '3080', 10);
 const SESSION_SECRET = process.env.EDIT_SESSION_SECRET || 'nebbie-edit-session-dev';
 const MYST_API_URL = process.env.MYST_EDIT_API_URL || 'http://mudcompiler:8090';
 const MYST_API_SECRET = process.env.EDIT_API_SECRET || 'nebbie-edit-dev-secret';
+
+/** Es. "/edit" dietro nginx; vuoto = root (dev locale :3080). */
+function normalizeBasePath(raw) {
+  if (raw == null || String(raw).trim() === '' || String(raw).trim() === '/') {
+    return '';
+  }
+  let s = String(raw).trim();
+  if (!s.startsWith('/')) s = `/${s}`;
+  return s.replace(/\/+$/, '');
+}
+const BASE_PATH = normalizeBasePath(process.env.EDIT_BASE_PATH || '');
+
+/** Shared secret con il mu-plugin WordPress (HMAC-SHA256). */
+const WP_SSO_SECRET = String(process.env.EDIT_WP_SSO_SECRET || '').trim();
+/**
+ * SSO obbligatorio: default ON se c'è il secret WP.
+ * Override: EDIT_SSO_REQUIRED=0|1
+ * Password login locale: EDIT_ALLOW_PASSWORD_LOGIN=1
+ */
+const SSO_REQUIRED =
+  process.env.EDIT_SSO_REQUIRED === '1' ||
+  (process.env.EDIT_SSO_REQUIRED !== '0' && WP_SSO_SECRET.length > 0);
+const ALLOW_PASSWORD_LOGIN =
+  process.env.EDIT_ALLOW_PASSWORD_LOGIN === '1' || !SSO_REQUIRED;
+const WP_SITE_URL = String(process.env.EDIT_WP_SITE_URL || '').replace(/\/+$/, '');
+const WP_LOGIN_URL =
+  String(process.env.EDIT_WP_LOGIN_URL || '').trim() ||
+  (WP_SITE_URL ? `${WP_SITE_URL}/wp-login.php` : '');
+/** Entry SSO sul sito WP (mu-plugin: ?nebbie_edit_sso=1). */
+const WP_SSO_ENTRY_URL =
+  String(process.env.EDIT_WP_SSO_ENTRY_URL || '').trim() ||
+  (WP_SITE_URL ? `${WP_SITE_URL}/?nebbie_edit_sso=1` : '');
+const COOKIE_SECURE =
+  process.env.EDIT_COOKIE_SECURE === '1' ||
+  process.env.NODE_ENV === 'production';
+const SSO_TOKEN_TTL_SEC = parseInt(process.env.EDIT_WP_SSO_TTL_SEC || '120', 10);
+
 /** Sorgente unica: public/app.js (ignora env stale nei compose). */
 function readUiBuildFromAppJs() {
   try {
@@ -109,8 +147,13 @@ function inventoryRowsToPortalItems(rows, skipReason) {
   return rows.map((r) => {
     const wearPos = Number(r.wear_pos || 0);
     const worn = wearPos > 0;
+    const hasInstance = Number(r.instance_id || 0) > 0;
     let reason = skipReason;
-    if (worn) reason = 'indossato';
+    if (worn && !reason) {
+      reason = hasInstance
+        ? 'indossato (dettagli non arricchiti da myst)'
+        : 'indossato (dettagli non arricchiti da myst)';
+    }
     const item = {
       inventory_id: r.id,
       list_index: r.list_index,
@@ -129,6 +172,20 @@ function inventoryRowsToPortalItems(rows, skipReason) {
   });
 }
 
+function formatHiddenBreakdown(breakdown) {
+  if (!breakdown || typeof breakdown !== 'object') return '';
+  const parts = [];
+  const raro = Number(breakdown.raro || 0);
+  const tan = Number(breakdown.tan || 0);
+  const cat = Number(breakdown.category || 0);
+  const other = Number(breakdown.other || 0);
+  if (raro) parts.push(`${raro} RARO (non in DB edits)`);
+  if (tan) parts.push(`${tan} tan`);
+  if (cat) parts.push(`${cat} categoria spenta`);
+  if (other) parts.push(`${other} altro`);
+  return parts.join(', ');
+}
+
 async function mystPost(pathSuffix, body) {
   const payload = { ...(body || {}) };
   if (payload.toon_id !== undefined && payload.toon_id !== null) {
@@ -138,25 +195,132 @@ async function mystPost(pathSuffix, body) {
     payload.target_toon_id = String(payload.target_toon_id);
   }
   const url = `${MYST_API_URL}${pathSuffix}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-edit-api-secret': MYST_API_SECRET,
-    },
-    body: JSON.stringify(payload),
-  });
-  const text = await res.text();
-  let data;
   try {
-    data = JSON.parse(text);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-edit-api-secret': MYST_API_SECRET,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(5000),
+    });
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { ok: false, error: `risposta non JSON da myst: ${text.slice(0, 200)}` };
+    }
+    if (data.ok === undefined) {
+      data.ok = res.ok;
+    }
+    return data;
+  } catch (err) {
+    return { ok: false, error: `myst unreachable: ${err.message || err}` };
+  }
+}
+
+function b64urlEncode(buf) {
+  return Buffer.from(buf)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function b64urlDecodeToString(s) {
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
+  const b64 = String(s).replace(/-/g, '+').replace(/_/g, '/') + pad;
+  return Buffer.from(b64, 'base64').toString('utf8');
+}
+
+function b64urlDecodeToBuffer(s) {
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
+  const b64 = String(s).replace(/-/g, '+').replace(/_/g, '/') + pad;
+  return Buffer.from(b64, 'base64');
+}
+
+/**
+ * Token WP: base64url(json).base64url(hmac-sha256)
+ * json: { email, iat, exp }
+ */
+function verifyWordpressSsoToken(token) {
+  if (!WP_SSO_SECRET) {
+    return { ok: false, error: 'SSO WordPress non configurato (EDIT_WP_SSO_SECRET)' };
+  }
+  const parts = String(token || '').split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return { ok: false, error: 'token SSO non valido' };
+  }
+  const [payloadB64, sigB64] = parts;
+  const expected = crypto.createHmac('sha256', WP_SSO_SECRET).update(payloadB64).digest();
+  let got;
+  try {
+    got = b64urlDecodeToBuffer(sigB64);
   } catch {
-    return { ok: false, error: `risposta non JSON da myst: ${text.slice(0, 200)}` };
+    return { ok: false, error: 'firma SSO non valida' };
   }
-  if (data.ok === undefined) {
-    data.ok = res.ok;
+  if (got.length !== expected.length || !crypto.timingSafeEqual(got, expected)) {
+    return { ok: false, error: 'firma SSO non valida' };
   }
-  return data;
+  let payload;
+  try {
+    payload = JSON.parse(b64urlDecodeToString(payloadB64));
+  } catch {
+    return { ok: false, error: 'payload SSO non valido' };
+  }
+  const email = String(payload.email || '')
+    .trim()
+    .toLowerCase();
+  if (!email || !email.includes('@')) {
+    return { ok: false, error: 'email SSO mancante' };
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const exp = Number(payload.exp || 0);
+  const iat = Number(payload.iat || 0);
+  if (!exp || exp < now) {
+    return { ok: false, error: 'token SSO scaduto' };
+  }
+  if (iat && iat > now + 60) {
+    return { ok: false, error: 'token SSO non ancora valido' };
+  }
+  if (iat && exp - iat > SSO_TOKEN_TTL_SEC + 30) {
+    return { ok: false, error: 'token SSO con TTL eccessivo' };
+  }
+  return { ok: true, email };
+}
+
+/** Solo per test/docs: genera token (non esporre in prod senza auth). */
+function mintWordpressSsoToken(email, ttlSec = SSO_TOKEN_TTL_SEC) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = JSON.stringify({
+    email: String(email).trim().toLowerCase(),
+    iat: now,
+    exp: now + ttlSec,
+  });
+  const payloadB64 = b64urlEncode(payload);
+  const sig = crypto.createHmac('sha256', WP_SSO_SECRET).update(payloadB64).digest();
+  return `${payloadB64}.${b64urlEncode(sig)}`;
+}
+
+async function establishSessionForEmail(req, email) {
+  const [rows] = await dbPool.query(
+    'SELECT id, email FROM user WHERE LOWER(email) = ? LIMIT 1',
+    [email],
+  );
+  if (!rows.length) {
+    return { ok: false, error: 'account Mud non trovato per questa email' };
+  }
+  const user = rows[0];
+  req.session.userId = user.id;
+  req.session.email = user.email;
+  req.session.authVia = 'wordpress_sso';
+  delete req.session.sessionToonId;
+  delete req.session.sessionToonName;
+  delete req.session.role;
+  delete req.session.maxLevel;
+  return { ok: true, email: user.email, userId: user.id };
 }
 
 function requireAuth(req, res, next) {
@@ -174,19 +338,103 @@ function requireSessionToon(req, res, next) {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json());
-app.use(
+
+const router = express.Router();
+router.use(
   session({
     name: 'nebbie_edit_sid',
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: 'lax' },
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: COOKIE_SECURE,
+      path: BASE_PATH || '/',
+    },
   }),
 );
-app.use(express.static(path.join(__dirname, 'public')));
+router.use(express.static(path.join(__dirname, 'public')));
 
-app.post('/api/login', async (req, res) => {
+router.get('/api/auth-config', (_req, res) => {
+  res.json({
+    ok: true,
+    basePath: BASE_PATH,
+    ssoRequired: SSO_REQUIRED,
+    allowPasswordLogin: ALLOW_PASSWORD_LOGIN,
+    wordpressSsoConfigured: WP_SSO_SECRET.length > 0,
+    wpSiteUrl: WP_SITE_URL || null,
+    wpLoginUrl: WP_LOGIN_URL || null,
+    wpSsoEntryUrl: WP_SSO_ENTRY_URL || null,
+    ui_build: UI_BUILD,
+  });
+});
+
+router.get('/config.js', (_req, res) => {
+  const cfg = {
+    basePath: BASE_PATH,
+    ssoRequired: SSO_REQUIRED,
+    allowPasswordLogin: ALLOW_PASSWORD_LOGIN,
+    wordpressSsoConfigured: WP_SSO_SECRET.length > 0,
+    wpSiteUrl: WP_SITE_URL || null,
+    wpLoginUrl: WP_LOGIN_URL || null,
+    wpSsoEntryUrl: WP_SSO_ENTRY_URL || null,
+    ui_build: UI_BUILD,
+  };
+  res
+    .type('application/javascript')
+    .send(`window.EDIT_PORTAL_CONFIG=${JSON.stringify(cfg)};`);
+});
+
+router.get('/api/sso/wordpress', async (req, res) => {
+  const token = String(req.query.token || '');
+  const verified = verifyWordpressSsoToken(token);
+  if (!verified.ok) {
+    return res.status(401).send(
+      `<!doctype html><meta charset="utf-8"><title>SSO fallito</title>` +
+        `<p>Accesso WordPress fallito: ${escapeHtml(verified.error)}</p>` +
+        (WP_LOGIN_URL
+          ? `<p><a href="${escapeHtml(WP_LOGIN_URL)}">Torna al login del sito</a></p>`
+          : ''),
+    );
+  }
+  try {
+    const established = await establishSessionForEmail(req, verified.email);
+    if (!established.ok) {
+      return res.status(403).send(
+        `<!doctype html><meta charset="utf-8"><title>Account assente</title>` +
+          `<p>${escapeHtml(established.error)}</p>` +
+          `<p>L'email WordPress deve coincidere con un account nella tabella <code>user</code> del Mud.</p>`,
+      );
+    }
+    return res.redirect(`${BASE_PATH}/`);
+  } catch (err) {
+    console.error('[sso/wordpress]', err);
+    return res.status(503).send(
+      `<!doctype html><meta charset="utf-8"><title>SSO errore</title>` +
+        `<p>Impossibile completare l'accesso (database non disponibile).</p>`,
+    );
+  }
+});
+
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+router.post('/api/login', async (req, res) => {
+  if (!ALLOW_PASSWORD_LOGIN) {
+    return res.status(403).json({
+      ok: false,
+      error: 'Login password disabilitato: accedi dal sito WordPress (SSO)',
+      ssoRequired: true,
+    });
+  }
   const email = String(req.body.email || '').trim().toLowerCase();
   const password = String(req.body.password || '');
   if (!email || !password) {
@@ -206,15 +454,16 @@ app.post('/api/login', async (req, res) => {
   }
   req.session.userId = user.id;
   req.session.email = user.email;
+  req.session.authVia = 'password';
   delete req.session.sessionToonId;
   res.json({ ok: true, email: user.email });
 });
 
-app.post('/api/logout', (req, res) => {
+router.post('/api/logout', (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
 });
 
-app.get('/api/me', requireAuth, (req, res) => {
+router.get('/api/me', requireAuth, (req, res) => {
   res.json({
     ok: true,
     email: req.session.email,
@@ -222,10 +471,12 @@ app.get('/api/me', requireAuth, (req, res) => {
     sessionToonName: req.session.sessionToonName || null,
     role: req.session.role || null,
     maxLevel: req.session.maxLevel || 0,
+    authVia: req.session.authVia || null,
+    basePath: BASE_PATH,
   });
 });
 
-app.get('/api/toons', requireAuth, async (req, res) => {
+router.get('/api/toons', requireAuth, async (req, res) => {
   const [rows] = await dbPool.query(
     `SELECT t.id, t.name, t.title, ${TOON_LEVEL_SQL}
      FROM toon t
@@ -245,7 +496,77 @@ app.get('/api/toons', requireAuth, async (req, res) => {
   res.json({ ok: true, toons });
 });
 
-app.post('/api/select-toon', requireAuth, async (req, res) => {
+/** Riepilogo edit (login): analisi inventario completa via myst. */
+router.get('/api/account-overview', requireAuth, async (req, res) => {
+  const [rows] = await dbPool.query(
+    `SELECT t.id, t.name, t.title, ${TOON_LEVEL_SQL}
+     FROM toon t
+     LEFT JOIN character_classes cc ON cc.toon_id = t.id
+     WHERE t.owner_id = ?
+     GROUP BY t.id, t.name, t.title, t.level
+     ORDER BY t.name`,
+    [req.session.userId],
+  );
+  const toons = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    title: r.title,
+    maxLevel: Number(r.max_level) || 0,
+    role: roleForLevel(r.max_level),
+  }));
+  const needSummary = toons.filter((t) => t.maxLevel >= PRINCE_LEVEL);
+  let summaries = [];
+  if (needSummary.length) {
+    const result = await mystPost('/internal/toons-edit-summary', {
+      toon_ids: needSummary.map((t) => t.id),
+    });
+    if (!result.ok) {
+      return res.status(502).json({
+        ok: false,
+        error: result.error || 'riepilogo edit non disponibile (myst)',
+        toons,
+      });
+    }
+    summaries = result.data?.summaries || [];
+  }
+  const byId = new Map(
+    summaries.map((s) => [String(s.toon_id || s.toonId || ''), s]),
+  );
+  const enriched = toons.map((t) => {
+    const summary = byId.get(String(t.id)) || null;
+    return { ...t, summary };
+  });
+  res.json({
+    ok: true,
+    toons: enriched,
+    princeLevel: PRINCE_LEVEL,
+    staffBandMin: PRINCE_LEVEL + 1,
+  });
+});
+
+/** Refresh riepilogo di un singolo toon (dopo apply edit). */
+router.get('/api/toon-overview/:toonId', requireAuth, async (req, res) => {
+  const toonId = parseToonId(req.params.toonId);
+  if (!toonId) {
+    return res.status(400).json({ ok: false, error: 'toonId richiesto' });
+  }
+  if (req.session.role !== 'staff') {
+    const [rows] = await dbPool.query(
+      `SELECT t.id FROM toon t WHERE t.id = ? AND t.owner_id = ? LIMIT 1`,
+      [toonId, req.session.userId],
+    );
+    if (!rows.length) {
+      return res.status(403).json({ ok: false, error: 'accesso negato' });
+    }
+  }
+  const result = await mystPost('/internal/toon-edit-summary', { toon_id: toonId });
+  if (!result.ok) {
+    return res.status(502).json(result);
+  }
+  res.json({ ok: true, summary: result.data });
+});
+
+router.post('/api/select-toon', requireAuth, async (req, res) => {
   const toonId = parseToonId(req.body.toonId);
   if (!toonId) {
     return res.status(400).json({ ok: false, error: 'toonId richiesto' });
@@ -272,7 +593,7 @@ app.post('/api/select-toon', requireAuth, async (req, res) => {
   });
 });
 
-app.post('/api/deselect-toon', requireAuth, (req, res) => {
+router.post('/api/deselect-toon', requireAuth, (req, res) => {
   delete req.session.sessionToonId;
   delete req.session.sessionToonName;
   delete req.session.role;
@@ -280,7 +601,7 @@ app.post('/api/deselect-toon', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/target-toons', requireAuth, requireSessionToon, async (req, res) => {
+router.get('/api/target-toons', requireAuth, requireSessionToon, async (req, res) => {
   if (req.session.role !== 'staff') {
     const [rows] = await dbPool.query(
       `SELECT t.id, t.name, ${TOON_LEVEL_SQL}
@@ -311,12 +632,12 @@ app.get('/api/target-toons', requireAuth, requireSessionToon, async (req, res) =
   res.json({ ok: true, toons: rows });
 });
 
-app.get('/api/edit-catalog', requireAuth, requireSessionToon, async (_req, res) => {
+router.get('/api/edit-catalog', requireAuth, requireSessionToon, async (_req, res) => {
   const result = await mystPost('/internal/get-edit-catalog', {});
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.get('/api/character-state/:toonId', requireAuth, requireSessionToon, async (req, res) => {
+router.get('/api/character-state/:toonId', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.params.toonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -325,7 +646,7 @@ app.get('/api/character-state/:toonId', requireAuth, requireSessionToon, async (
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/quote-pool', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/quote-pool', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -339,7 +660,7 @@ app.post('/api/quote-pool', requireAuth, requireSessionToon, async (req, res) =>
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/quote-resistance', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/quote-resistance', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -352,7 +673,7 @@ app.post('/api/quote-resistance', requireAuth, requireSessionToon, async (req, r
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, res) => {
+router.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.params.toonId);
   if (!targetToonId) {
     return res.status(400).json({ ok: false, error: 'toonId non valido' });
@@ -387,6 +708,16 @@ app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, r
     total = items.length;
     editableCount = 0;
     inventorySource = 'mysql_myst_empty';
+  } else if (list.ok && items.length === 0 && mysqlRows.length > 0 && mystLoadedRows > 0) {
+    /* Myst ha letto le righe ma le ha nascoste (RARO/tan/categorie prototipo). */
+    const br = formatHiddenBreakdown(list.data?.hidden_breakdown);
+    const reason = br
+      ? `nascosto da myst: ${br}`
+      : 'nascosto da myst (filtri RARO/tan/categorie su prototipi)';
+    items = inventoryRowsToPortalItems(mysqlRows, reason);
+    total = items.length;
+    editableCount = 0;
+    inventorySource = 'myst_filtered';
   }
 
   res.json({
@@ -397,8 +728,13 @@ app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, r
     editable_count: editableCount,
     mysql_count: mysqlRows.length,
     myst_loaded_rows: mystLoadedRows,
+    myst_hidden_rows: list.ok ? Number(list.data?.hidden_rows ?? 0) : 0,
+    myst_hidden_breakdown: list.ok ? list.data?.hidden_breakdown ?? null : null,
     myst_toon_name: list.ok ? list.data?.toon_name ?? null : null,
     myst_toon_name_ok: list.ok ? list.data?.toon_name_ok ?? null : null,
+    portal_api_version: list.ok
+      ? list.data?.portal_api_version ?? null
+      : null,
     inventory_source: inventorySource,
     mystErrors: [online.ok ? null : online.error, list.ok ? null : list.error].filter(Boolean),
     mystOnlineOk: online.ok,
@@ -406,7 +742,7 @@ app.get('/api/inventory/:toonId', requireAuth, requireSessionToon, async (req, r
   });
 });
 
-app.post('/api/quote', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/quote', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   const inventoryId = Number(req.body.inventoryId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
@@ -419,7 +755,7 @@ app.post('/api/quote', requireAuth, requireSessionToon, async (req, res) => {
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/object-edit-options', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/object-edit-options', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   const inventoryId = Number(req.body.inventoryId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
@@ -432,7 +768,7 @@ app.post('/api/object-edit-options', requireAuth, requireSessionToon, async (req
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   const inventoryId = Number(req.body.inventoryId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
@@ -443,12 +779,14 @@ app.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (req, 
     inventory_id: inventoryId,
     location: Number(req.body.location),
     target_modifier: Number(req.body.targetModifier),
+    clear_slot: req.body.clearSlot ? 1 : 0,
     flag: req.body.flag || '',
+    pending_artifact: req.body.pendingArtifact ? 1 : 0,
   });
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/quote-object-text', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/quote-object-text', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   const inventoryId = Number(req.body.inventoryId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
@@ -465,7 +803,7 @@ app.post('/api/quote-object-text', requireAuth, requireSessionToon, async (req, 
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -478,34 +816,27 @@ app.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, res) 
     inventory_id: Number(req.body.inventoryId),
     location: Number(req.body.location),
     target_modifier: Number(req.body.targetModifier ?? req.body.modifier),
+    clear_slot: req.body.clearSlot ? 1 : 0,
     pay_xp: Number(req.body.payXp || 0),
     pay_rune: Number(req.body.payRune || 0),
     flag: req.body.flag || '',
+    obj_name: req.body.objName != null ? String(req.body.objName) : undefined,
+    short_desc: req.body.shortDesc != null ? String(req.body.shortDesc) : undefined,
+    description:
+      req.body.description != null ? String(req.body.description) : undefined,
   });
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/apply-object-text', requireAuth, requireSessionToon, async (req, res) => {
-  const targetToonId = parseToonId(req.body.targetToonId);
-  if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
-    return res.status(403).json({ ok: false, error: 'accesso negato' });
-  }
-  if (req.session.role === 'limited') {
-    return res.status(403).json({ ok: false, error: 'tier limited: apply non consentito' });
-  }
-  const result = await mystPost('/internal/apply-object-text', {
-    target_toon_id: targetToonId,
-    inventory_id: Number(req.body.inventoryId),
-    obj_name: String(req.body.objName ?? req.body.name ?? ''),
-    short_desc: String(req.body.shortDesc ?? ''),
-    description: String(req.body.description ?? ''),
-    pay_xp: Number(req.body.payXp || 0),
-    pay_rune: Number(req.body.payRune || 0),
+router.post('/api/apply-object-text', requireAuth, requireSessionToon, async (req, res) => {
+  return res.status(400).json({
+    ok: false,
+    error:
+      'name/short/long non si salvano da soli: includili nel pagamento di un nuovo affect',
   });
-  res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/apply-pool', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/apply-pool', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -524,7 +855,7 @@ app.post('/api/apply-pool', requireAuth, requireSessionToon, async (req, res) =>
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/apply-resistance', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/apply-resistance', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.body.targetToonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -542,7 +873,7 @@ app.post('/api/apply-resistance', requireAuth, requireSessionToon, async (req, r
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.get('/api/resistances/:toonId', requireAuth, requireSessionToon, async (req, res) => {
+router.get('/api/resistances/:toonId', requireAuth, requireSessionToon, async (req, res) => {
   const targetToonId = parseToonId(req.params.toonId);
   if (req.session.role !== 'staff' && targetToonId !== req.session.sessionToonId) {
     return res.status(403).json({ ok: false, error: 'accesso negato' });
@@ -551,7 +882,7 @@ app.get('/api/resistances/:toonId', requireAuth, requireSessionToon, async (req,
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.get('/api/staff/system-config', requireAuth, requireSessionToon, async (req, res) => {
+router.get('/api/staff/system-config', requireAuth, requireSessionToon, async (req, res) => {
   if (req.session.role !== 'staff') {
     return res.status(403).json({ ok: false, error: 'solo staff' });
   }
@@ -559,7 +890,7 @@ app.get('/api/staff/system-config', requireAuth, requireSessionToon, async (req,
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.post('/api/staff/system-config', requireAuth, requireSessionToon, async (req, res) => {
+router.post('/api/staff/system-config', requireAuth, requireSessionToon, async (req, res) => {
   if (req.session.role !== 'staff') {
     return res.status(403).json({ ok: false, error: 'solo staff' });
   }
@@ -575,7 +906,7 @@ app.post('/api/staff/system-config', requireAuth, requireSessionToon, async (req
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-app.get('/api/staff/instances', requireAuth, requireSessionToon, async (req, res) => {
+router.get('/api/staff/instances', requireAuth, requireSessionToon, async (req, res) => {
   if (req.session.role !== 'staff') {
     return res.status(403).json({ ok: false, error: 'solo staff' });
   }
@@ -595,17 +926,50 @@ app.get('/api/staff/instances', requireAuth, requireSessionToon, async (req, res
   res.json({ ok: true, instances: rows });
 });
 
-app.get('/api/health', async (_req, res) => {
+router.get('/api/health', async (_req, res) => {
   const myst = await mystPost('/internal/ping', {});
   res.json({
     ok: true,
     web: 'up',
     ui_build: UI_BUILD,
+    basePath: BASE_PATH,
+    ssoRequired: SSO_REQUIRED,
+    allowPasswordLogin: ALLOW_PASSWORD_LOGIN,
+    wordpressSsoConfigured: WP_SSO_SECRET.length > 0,
     myst: myst.ok ? myst.data : null,
     mystError: myst.ok ? null : myst.error,
   });
 });
 
+/**
+ * Solo locale/dev: mint token SSO (mai in prod: richiede SSO_REQUIRED).
+ * Abilita con EDIT_DEV_MINT_SSO=1 e password login attivo.
+ */
+router.post('/api/dev/mint-sso', (req, res) => {
+  if (SSO_REQUIRED || process.env.EDIT_DEV_MINT_SSO !== '1' || !WP_SSO_SECRET) {
+    return res.status(404).json({ ok: false, error: 'not found' });
+  }
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!email.includes('@')) {
+    return res.status(400).json({ ok: false, error: 'email richiesta' });
+  }
+  const token = mintWordpressSsoToken(email);
+  res.json({
+    ok: true,
+    token,
+    redirect: `${BASE_PATH}/api/sso/wordpress?token=${encodeURIComponent(token)}`,
+  });
+});
+
+app.use(BASE_PATH || '/', router);
+
+if (BASE_PATH) {
+  app.get('/', (_req, res) => res.redirect(`${BASE_PATH}/`));
+}
+
 app.listen(PORT, () => {
-  console.log(`nebbie-edit-portal on http://0.0.0.0:${PORT}`);
+  console.log(
+    `nebbie-edit-portal on http://0.0.0.0:${PORT}${BASE_PATH || ''} ` +
+      `(ssoRequired=${SSO_REQUIRED}, passwordLogin=${ALLOW_PASSWORD_LOGIN})`,
+  );
 });

@@ -4,11 +4,11 @@ Obiettivo: liberare i vnum `34030–35999` (`LOW_EDITED_ITEMS`..`HIGH_EDITED_ITE
 
 ## Schema (ODB)
 
-Definizione in `src/odb/account.hpp` (model version **1.8**):
+Definizione in `src/odb/account.hpp` (model version **1.10**):
 
 - tabelle `object_instance`, `object_instance_affect`, `object_instance_event`
 - su `object_instance`: `owner_toon_id` / `owner_name`, `created_by_*`, `updated_by_*`,
-  **`deleted` / `deleted_on`** (soft-delete)
+  **`deleted` / `deleted_on`**, **`source`** (`procarea_loot`, `god_edit`, `clan_symbol`)
 - colonna `character_inventory.instance_id` (NULL = legacy)
 - su `character_stats` (**1.8**): `edit_hp/mana/move` + regen, `overedit_*`,
   `edit_pool_migrated` — pool listino sul PG (cap attivo + credito overedit)
@@ -21,6 +21,8 @@ DDL auto-commit di MySQL. A ogni nuovo model `1.N` aggiungere `heal_vN` in
 `odb_schema_heal.cpp`.
 
 Model **1.9**: tabella `procarea_balance` (densita'/premi Dimensione Effimera, WIZ).
+
+Model **1.10**: colonna `object_instance.source` (origine edit / premio procarea).
 
 Dopo aver toccato `account.hpp`: ricompila (CMake target `account` / `build.sh`) così ODB rigenera `account-*-mysql.*` e il changelog. In alternativa: container `nebbiearcane/mudcompiler` con ODB 2.5.
 
@@ -37,6 +39,10 @@ Dopo aver toccato `account.hpp`: ricompila (CMake target `account` / `build.sh`)
   con detail degli APPLY rimossi e delta accreditato.
 - Login: `edit_pool_migrate_char` strippa residui su inventorio/eq (event `edit_pool` /
   `edit_pool_login`); credit solo se `migrated=0`.
+- **Premi procarea (`65100–65325`)**: mai edit pool, anche con `db_instance_id`.
+  I bonus rolled al drop restano sull'oggetto; salvataggio staff con
+  `osave <obj> db procarea` (o `db <651xx>`). Non usare `osave <obj> 651xx` su file.
+  Al drop: flag runtime `ITEM2_PROCAREA_REWARD` (extra2 PROCAREA-REWARD).
 - EditMaster: rifiuta hp/mana/move/regen sull'eq.
 
 ## Simbolo di casata (`ITEM_CLAN_SYMBOL`)
@@ -46,14 +52,19 @@ Dopo aver toccato `account.hpp`: ricompila (CMake target `account` / `build.sh`)
 - Cap listino: ≤2 dam, ≤1 spell affect, no resistenze; no re-edit / no refund.
 - Tabella MySQL `clan_symbol` (CREATE IF NOT EXISTS a boot): `vnum` legacy 34k,
   `base_vnum`, `prince_name`, `prince_toon_id`, `instance_id` (template shared),
-  `active`, `updated_at`. Seed una tantum da lista in `clan_symbol.cpp` (non
-  sovrascrive righe esistenti). `prince_toon_id` risolto per nome su questo DB.
+  `slots_max` (default 5; god `clan quota`), `active`, `updated_at`. Seed una tantum
+  da lista in `clan_symbol.cpp` (non sovrascrive righe esistenti). `prince_toon_id`
+  risolto per nome su questo DB.
+- Quota: `slots_max` limita i **possessori** (online+inv+rent), non le righe
+  `object_instance`. Un clan non deve accumulare decine di template orfani.
 - Conversione: `clan_symbol_boot_migrate()` dopo `object_instance_boot_migrate`,
-  prima di `edit_pool_boot_migrate`. Crea/aggiorna `object_instance` (legacy_edit_vnum
-  = 34k), relink inventori (`item_number`→base, `instance_id`, V0, wear_pos),
-  legacyimport PG non migrati che ancora tengono il 34k, archivia `objects/<34k>`
-  quando non restano ref. Idempotente. I vnum in lista sono skippati da
-  `object_instance_boot_migrate` (non sono edit personali).
+  prima di `edit_pool_boot_migrate`. Preferisce `clan_symbol.instance_id` esistente,
+  poi `legacy_edit_vnum` (query ordinata, mai `query_one` se ci sono doppioni).
+  Relink inventori, legacyimport, archivia `objects/<34k>` quando possibile.
+  A fine passo soft-delete dei soli template legacy orfani (stesso
+  `legacy_edit_vnum`, non in `character_inventory`, id != template). Le copie
+  da `clan assegna` non hanno legacy_edit e non vengono toccate. I vnum in lista
+  sono skippati da `object_instance_boot_migrate` (non sono edit personali).
 - Wear: solo principe / vassalli di quel nome (imm ok).
 - Lista di riferimento staff: `tools/clan_symbol_vnums.txt` (non richiesta a runtime).
 
@@ -67,6 +78,7 @@ Dopo aver toccato `account.hpp`: ricompila (CMake target `account` / `build.sh`)
 - Numeri wiz = **lista densa** (`show db` / `show db deleted`), non il pk MySQL.
 - Schema 1.6: colonna `object_instance_event.detail` (TEXT).
 - Schema 1.7: soft-delete `object_instance.deleted` / `deleted_on`.
+- Schema 1.10: `object_instance.source` — `procarea_loot` | `god_edit` | `clan_symbol`.
 
 ## Fase 0
 

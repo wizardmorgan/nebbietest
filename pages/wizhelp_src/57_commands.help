@@ -31,28 +31,50 @@ $c0013Vedi anche$c0007: WIZHELP, 56, 58
 $c0014Livello minimo$c0007: 57 (Questmaster)
 
 Gestisce il $c0015listino edit$c0007 sul personaggio (hp/mana/move e regen),
-non sull'equipaggiamento. Cap: hp 100, mana 150, move 100, regen 50.
-Oltre il cap (solo con add) va in overedit (contabile, senza effetto).
+non sull'equipaggiamento. Cap listino: hp 100, mana 150, move 100, regen 50.
+L'overedit e' solo contabile (nessun bonus in gioco).
+
+Flusso: anteprima → conferma pagamento → applica. Paga il PG editato
+(listino ufficiale +50% artifact; XP=(x mult)/n_classi, rune=ceil(x mult)).
+Se il target e' liv >= 53 (Dio minore+), l'aumento listino e' gratis
+($c0015editpool ok$c0007).
 
 $c0015Uso$c0007:
   editpool <nome>
-  editpool <nome> <campo> <n>
-  editpool <nome> set <campo> <n>
-  editpool <nome> add <campo> <n>
+  editpool <nome> <campo> <n>          (n != 0, delta listino)
+  editpool <nome> over <campo> <n>     (+ inutile; - rimborso)
+  editpool ok xp|rune|misto <xp%> <rune%>
+  editpool ok                          (solo se edit gratis)
+  editpool no
 
 Campi: hp (hit), mana, move, hpregen, manaregen, moveregen.
 
-Senza campi: mostra pool + overedit + hit/mana/move attuali.
-set / <campo> <n>: valore assoluto del listino attivo (0..cap).
-add: somma (positivo o negativo); overflow → overedit.
+$c0015Listino$c0007:
+  +n: aumenta fino al cap; eccesso scartato (avviso), mai spill in over.
+  -n: toglie fino a 0; rimborso (stesse tariffe: artifact, mult, ceil rune).
+  0: rifiutato.
 
-Il target deve essere un PC online (poly: opera sul personaggio originale).
+$c0015Over$c0007:
+  +n: avviso (inutile) + costo teorico; nessuna modifica.
+  -n: toglie over, rimborso; chiede xp/rune/misto (%> sommano 100).
+
+$c0015Pagamento$c0007 (dopo anteprima):
+  editpool ok xp
+  editpool ok rune
+  editpool ok misto 40 60
+  editpool no
+
+Il target deve essere un PC non polato, presente nella stessa stanza
+dell'editor.
 
 $c0013Esempi$c0007:
   editpool Montero
-  editpool Montero hp 80
-  editpool Montero add mana 20
-  editpool Montero hpregen 10
+  editpool Montero hp 20
+  editpool ok xp
+  editpool Montero mana -4
+  editpool ok rune
+  editpool Montero over hp -10
+  editpool ok misto 50 50
 
 $c0013Vedi anche$c0007: STAT, OEDIT, PEDIT, SHOW
 
@@ -243,9 +265,17 @@ o aggiorna questo help dopo aver verificato il comportamento.
 
 $c0014Livello minimo$c0007: 57 (Questmaster)
 
-Comando wizard oedit.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
+Editor interattivo di un oggetto in inventario o in stanza.
+
+$c0015Uso$c0007:
+  oedit <oggetto>
+
+$c0015Premi Dimensione Effimera$c0007 (loot rolled, 65100-65325):
+  Prima di oedit salva con osave db procarea (o db <651xx>), altrimenti
+  perdi i bonus rolled generati al drop. Poi oedit, osave db, personalize.
+  Vedi: wizhelp OSAVE, wizhelp dimensione premi
+
+$c0013Vedi anche$c0007: OSAVE, STAT, PERSONALIZE, SHOW
 
 
 #
@@ -264,9 +294,12 @@ $c0015File mondo$c0007 (prototipo in objects/):
   - Usalo per oggetti di zona / database mondo.
   - Se <vnum> e' nel range edit 34030-35999 compare un WARNING:
     per gli edit preferisci il salvataggio db (sotto).
+  - $c0010Rifiutato$c0007 se <vnum> e' un prototipo premio procarea condiviso
+    (65100-65325): sovrascriveresti il template di boot per tutti i drop futuri.
+    Per il loot rolled con bonus usa osave db (sotto).
 
 $c0015Edit MySQL$c0007 (eq editato, senza occupare vnum 34k):
-  osave <oggetto> db [base_vnum]
+  osave <oggetto> db [base_vnum|procarea|premio]
 
   - Scrive/aggiorna object_instance (+ affect) e un event create/update.
   - Se l'oggetto ha gia' un instance_id, aggiorna quella riga.
@@ -277,12 +310,19 @@ $c0015Edit MySQL$c0007 (eq editato, senza occupare vnum 34k):
   - [base_vnum] = prototipo mondo di partenza (NON un 34k).
     Se omesso, il mud prova a dedurlo da char_vnum / vnum corrente.
     Se non ci riesce, va specificato a mano (es. osave spada db 25010).
+  - $c0015Premi Dimensione Effimera$c0007 (loot rolled, flag PROCAREA-REWARD):
+    osave <oggetto> db procarea   (alias: premio)
+    Salva subito dopo il drop con tutti i bonus rolled; source=procarea_loot.
+    Esclusi dall'edit pool (hp/mana/move/regen sul PG). Workflow:
+      osave db procarea -> oedit -> osave db -> personalize <pg>
+    Vedi anche: wizhelp dimensione premi
   - Dopo il salvataggio l'oggetto in mano resta editato e punta al base
     (char_vnum non resta un 34k).
   - Simboli del clan (ITEM_CLAN_SYMBOL): non sono edit personali 34k;
     a boot vengono migrati in object_instance e il file objects/<34k>
     viene archiviato. Non usarli per liberare slot edit del pool.
   - Elenco attivi: show db | cancellati: show db deleted
+    (colonna src: proc = procarea_loot, god, clan)
   - Storico: show db history <n> | show db history deleted <n>
   - Dove: where db <n>
   - Cancella (soft): odelete db <n>  poi  odelete db <n> yes
@@ -293,8 +333,9 @@ $c0013Esempi$c0007:
   osave spada 12345 12000
   osave spada db
   osave spada db 25010
+  osave spada db procarea
 
-$c0013Vedi anche$c0007: OEDIT, OLOAD, SHOW, STAT
+$c0013Vedi anche$c0007: OEDIT, OLOAD, SHOW, STAT, dimensione premi
 
 
 #

@@ -350,12 +350,21 @@ ExpValue CheckValueObj(const struct obj_data* obj) {
 			break;
 
 		case APPLY_AC:
-			valore -= static_cast<long>(mod) * kObjEditArmorUnitRaw;
+			/*
+			 * Negativo = bonus armor (1× listino). Positivo = malus:
+			 * listino «eliminare slot con malus = doppio del costo».
+			 */
+			valore -= SignedAffectCost(mod, kObjEditArmorUnitRaw * 2,
+									   kObjEditArmorUnitRaw);
 			break;
 
 		case APPLY_SPELLFAIL:
-			/* 2× armor per punto (più negativo = più costoso). */
-			valore -= static_cast<long>(mod) * kObjEditSpellfailUnitRaw;
+			/*
+			 * Spellfail: 2× armor per punto di bonus (più negativo = meglio).
+			 * Malus positivo: ancora 2× rispetto al bonus spellfail (= 4× armor).
+			 */
+			valore -= SignedAffectCost(mod, kObjEditSpellfailUnitRaw * 2,
+									   kObjEditSpellfailUnitRaw);
 			break;
 
 		case APPLY_HITROLL:
@@ -561,8 +570,8 @@ ObjEditAnalysis AnalyzeObjEdit(struct obj_data* obj) {
 										   report.class_mult));
 	}
 
-	/* Listino: Artifact +50% sul costo finale di ogni edit sul pezzo
-	 * (anche se il prototipo era gia' artifact). */
+	/* Listino: Artifact +50% sul costo finale (dopo class_mult), sia se il
+	 * pezzo era gia' Artifact sia se il flag viene aggiunto nello stesso edit. */
 	if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && report.diff.valore > 0) {
 		report.diff.valore = (report.diff.valore * 3) / 2;
 	}
@@ -589,14 +598,13 @@ struct ListinoRow {
 };
 
 /**
- * Listino portal oggetto — base https://www.nebbiearcane.it/listino-edits/
- * + CON (come altre stats), spellpower (come damroll), spellfail (2× armor),
- * hitndam / hitnsp = unione hit+dam / hit+sp.
+ * Listino portal oggetto — https://www.nebbiearcane.it/listino-edits/
+ * Stats: STR/DEX/WIS/INT/CHR (CON non e' nel listino ufficiale).
+ * Spellpower come damroll; spellfail step −5 a 20 MXP; hitndam/hitnsp = unioni.
  */
 constexpr ListinoRow kObjEditListino[] = {
 	{"str", "Forza (STR)", APPLY_STR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"dex", "Destrezza (DEX)", APPLY_DEX, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
-	{"con", "Costituzione (CON)", APPLY_CON, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"wis", "Saggezza (WIS)", APPLY_WIS, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"int", "Intelligenza (INT)", APPLY_INT, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
 	{"chr", "Carisma (CHR)", APPLY_CHR, 1, 0, kObjEditMaxStatPerPiece, 1500, 3000},
@@ -605,10 +613,10 @@ constexpr ListinoRow kObjEditListino[] = {
 	{"spellpower", "Spellpower", APPLY_SPELLPOWER, 1, 0, kObjEditMaxSpellpowerPerPiece, 10000,
 	 20000},
 	{"armor", "Armatura (AC)", APPLY_AC, kObjEditArmorStep, kObjEditArmorMinTotal,
-	 kObjEditArmorMaxTotal, kObjEditArmorUnitRaw, kObjEditArmorUnitRaw},
+	 kObjEditArmorMaxTotal, kObjEditArmorUnitRaw, kObjEditArmorUnitRaw * 2},
 	{"spellfail", "Spellfail", APPLY_SPELLFAIL, kObjEditSpellfailStep,
 	 kObjEditSpellfailMinTotal, kObjEditSpellfailMaxTotal, kObjEditSpellfailUnitRaw,
-	 kObjEditSpellfailUnitRaw},
+	 kObjEditSpellfailUnitRaw * 2},
 	{"hitndam", "Hit & damage", APPLY_HITNDAM, 1, 0, kObjEditMaxDamrollPerPiece, 14500,
 	 29000},
 	{"hitnsp", "Hit & spellpower", APPLY_HITNSP, 1, 0, kObjEditMaxSpellpowerPerPiece, 14500,
