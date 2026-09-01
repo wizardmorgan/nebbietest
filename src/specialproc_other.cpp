@@ -21,7 +21,7 @@
 #include "spec_procs3.hpp"
 #include "spec_procs4.hpp"
 #include "speciali.hpp"
-#include "incastonazione.hpp"
+#include "mob.editor.hpp"
 #include "lucertole.hpp"
 #include "nilmys.hpp"
 #include "rhyodin.hpp"

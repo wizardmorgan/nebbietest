@@ -33,7 +33,7 @@
 #include "act.off.hpp"
 #include "act.other.hpp"
 #include "act.wizard.hpp"
-#include "incastonazione.hpp"
+#include "mob.editor.hpp"
 #include "ansi_parser.hpp"
 #include "clan_symbol.hpp"
 #include "comm.hpp"

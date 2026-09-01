@@ -3,8 +3,8 @@
  * secondo il listino e la logica gia' usata da do_insert. Il PG tiene
  * oggetto e pietre con se'; il mob lavora sul banco.
  */
-#ifndef SRC_INCASTONAZIONE_HPP_
-#define SRC_INCASTONAZIONE_HPP_
+#ifndef SRC_MOB_EDITOR_HPP_
+#define SRC_MOB_EDITOR_HPP_
 
 #include "typedefs.hpp"
 
