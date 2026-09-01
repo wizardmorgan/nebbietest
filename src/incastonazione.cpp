@@ -993,6 +993,11 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 	consolidate_weapon_hnd(obj);
 	rename_mounted_item(obj, aff, val_orig, colore);
 	SET_BIT(obj->obj_flags.extra_flags2, ITEM2_INSERT);
+	/* Listino: ogni incastonatura rende l'oggetto raro (cost >= LIM_ITEM_COST_MIN).
+	 * insert somma solo il valore delle pietre; se non basta, si porta alla soglia. */
+	if(obj->obj_flags.cost < LIM_ITEM_COST_MIN) {
+		obj->obj_flags.cost = LIM_ITEM_COST_MIN;
+	}
 
 	if(!jeweler && wait > 0 && !IS_DIO_MINORE(ch)) {
 		WAIT_STATE(ch, wait);
