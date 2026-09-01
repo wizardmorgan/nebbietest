@@ -1,9 +1,9 @@
 /*ALARMUD*
  * Incastonazione: listino pietre da miniera + spec proc assegnabile a un mob.
  *
- * Meccanismo: oggetto e pietre restano nell'inventario del toon (non si danno
- * al mob). Il PG usa: incastona <oggetto> <pietra> [pietra ...]
- * Ask <mob> listino | aiuto  per il listino.
+ * Il PG tiene oggetto e pietre con se': il mob lavora sul banco, senza
+ * prenderli in consegna. Comando: incastona <oggetto> <pietra> [pietra ...]
+ * Ask <mob> aiuto | listino
  */
 #include <cstdio>
 #include <cstdlib>
@@ -86,7 +86,7 @@ const GemCatalogEntry kGems[] = {
 	{ 19513, "zircone", 1, 1500, false, true,
 	  APPLY_NONE, 0, GEM_EXTRA_RESISTANT,
 	  APPLY_NONE, 0, GEM_EXTRA_RESISTANT,
-	  "-", "resistent / artefact (x3)" },
+	  "-", "resistent / artifact (x3)" },
 	{ 19514, "lapislazzuli", 1, 1500, false, false,
 	  APPLY_MANA_REGEN, 5, GEM_EXTRA_NONE,
 	  APPLY_MANA_REGEN, 5, GEM_EXTRA_NONE,
@@ -178,7 +178,7 @@ const GemCatalogEntry kGems[] = {
 	{ 19537, "diamante", 1, 7500, true, false,
 	  APPLY_NONE, 0, GEM_EXTRA_ARTEFACT,
 	  APPLY_NONE, 0, GEM_EXTRA_ARTEFACT,
-	  "artefact", "artefact" },
+	  "artifact", "artifact" },
 };
 
 const GemCatalogEntry* find_gem(int vnum) {
@@ -421,28 +421,39 @@ void tell_from_jeweler(struct char_data* ch, struct char_data* jeweler, const ch
 }
 
 void show_usage(struct char_data* ch, struct char_data* jeweler) {
-	tell_from_jeweler(ch, jeweler,
-					  "Uso: incastona <oggetto> <pietra> [pietra ...]");
-	tell_from_jeweler(ch, jeweler,
-					  "Oggetto e pietre devono stare nel TUO inventario. Non me li dare.");
-	tell_from_jeweler(ch, jeweler,
-					  "Ogni nome di pietra occupa uno slot (max 5, meno gli effetti gia' presenti).");
-	tell_from_jeweler(ch, jeweler,
-					  "Pietre x2 o x3 (opale, ossidiana, zircone artefact, quarzo rosa) si prelevano da sole.");
-	tell_from_jeweler(ch, jeweler,
-					  "Chiedimi 'listino' per gli effetti. Ask <me> aiuto per questo messaggio.");
+	if(jeweler) {
+		act("$c0011$N$c0007 solleva lo sguardo dal banco, con polvere di gemme sulle dita.",
+			FALSE, ch, 0, jeweler, TO_CHAR);
+		act("$N parla a bassa voce con $n, indicando il banco da lavoro.",
+			FALSE, ch, 0, jeweler, TO_NOTVICT);
+		tell_from_jeweler(ch, jeweler,
+						  "$c0011Posa l'arma o il gioiello sul mio banco, ma non affidarmelo: ci lavoro io, mentre resta tuo.$c0007");
+		tell_from_jeweler(ch, jeweler,
+						  "$c0011Le pietre restano nella tua borsa. Le prendo io, una a una, quando mi dici quale intarsio vuoi.$c0007");
+		tell_from_jeweler(ch, jeweler,
+						  "$c0011Quando sei pronto, dimmi: $c0015incastona$c0011 seguito dal nome del pezzo e da quello delle pietre, una per ogni incavo.$c0007");
+		tell_from_jeweler(ch, jeweler,
+						  "$c0011Al piu' cinque incavi, meno quelli gia' sul pezzo. Opale e ossidiana ne chiedono due, il quarzo rosa tre.$c0007");
+		tell_from_jeweler(ch, jeweler,
+						  "$c0011Lo zircone: una sola pietra per la resistenza, tre per l'artifact.$c0007");
+		tell_from_jeweler(ch, jeweler,
+						  "$c0011Se vuoi vedere gli effetti, $c0015chiedimi listino$c0011. Per queste parole, $c0015chiedimi aiuto$c0011.$c0007");
+		return;
+	}
+	send_to_char("$c0015insert$c0007 / $c0015incastona$c0007 <oggetto> <pietra> [pietra ...]\n\r"
+				 "Oggetto e pietre nel tuo inventario. Max 5 incavi. Zircone: 1 resistent, 3 artifact.\n\r",
+				 ch);
 }
 
 void show_listino(struct char_data* ch, struct char_data* jeweler) {
 	if(jeweler) {
-		act("$N ti mostra il listino delle incastonazioni.", FALSE, ch, 0, jeweler, TO_CHAR);
-		act("$N mostra un listino a $n.", FALSE, ch, 0, jeweler, TO_NOTVICT);
+		act("$N srotola un foglio di pergamena ingiallita, pieno di segni e pietre disegnate.",
+			FALSE, ch, 0, jeweler, TO_CHAR);
+		act("$N mostra una pergamena a $n.", FALSE, ch, 0, jeweler, TO_NOTVICT);
 	}
-	send_to_char("$c0015Listino incastonazione$c0007 (pietre da miniera, vnum 19509-19537)\n\r", ch);
-	send_to_char("Oggetti NON rari, NON editati, NON gia' incastonati. Max 5 slot.\n\r", ch);
-	send_to_char("Niente cumulo nello stesso slot; max una weapon spell per arma.\n\r", ch);
-	send_to_char("qty  val   pietra                 armi                 altro\n\r", ch);
-	send_to_char("-------------------------------------------------------------\n\r", ch);
+	send_to_char("$c0015Listino incastonazione$c0007\n\r", ch);
+	send_to_char("$c0014qty  val   pietra                 armi                 altro$c0007\n\r", ch);
+	send_to_char("$c0008-------------------------------------------------------------$c0007\n\r", ch);
 	for(const auto& g : kGems) {
 		if(g.vnum == 19523) {
 			continue;
@@ -455,7 +466,7 @@ void show_listino(struct char_data* ch, struct char_data* jeweler) {
 			send_to_char(line, ch);
 			std::snprintf(line, sizeof(line),
 						  "  3  1500  %-22s %-20s %s\n\r",
-						  g.material, "-", "artefact");
+						  g.material, "-", "artifact");
 			send_to_char(line, ch);
 			continue;
 		}
@@ -736,7 +747,8 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 
 	struct obj_data* obj = get_obj_in_list_vis(ch, objname, ch->carrying);
 	if(!obj) {
-		tell_from_jeweler(ch, jeweler, "Non hai quell'oggetto in inventario.");
+		tell_from_jeweler(ch, jeweler,
+						  "Non vedo quel pezzo tra le tue cose. Deve essere con te, qui al banco.");
 		return;
 	}
 	if(!object_can_be_mounted(ch, jeweler, obj)) {
@@ -809,7 +821,7 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 			}
 			else {
 				tell_from_jeweler(ch, jeweler,
-								  "Per lo zircone serve 1 pietra (resistent) oppure 3 (artefact).");
+								  "Per lo zircone serve 1 pietra (resistent) oppure 3 (artifact).");
 				return;
 			}
 		}
@@ -852,7 +864,7 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 			reserved[nres++] = stone;
 		}
 
-		if(!IS_DIO_MINORE(ch)) {
+		if(!jeweler && !IS_DIO_MINORE(ch)) {
 			wait += PULSE_VIOLENCE + PULSE_VIOLENCE * i;
 			if(need >= 2) {
 				wait += PULSE_VIOLENCE;
@@ -862,6 +874,16 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 			}
 		}
 		nslots++;
+	}
+
+	char extra_gem[MAX_INPUT_LENGTH];
+	one_argument(arg, extra_gem);
+	if(*extra_gem && nslots > 0) {
+		char buf[256];
+		std::snprintf(buf, sizeof(buf),
+					  "Su questo pezzo restano solo %d incavi liberi: le altre pietre restano nella tua borsa.",
+					  nslots);
+		tell_from_jeweler(ch, jeweler, buf);
 	}
 
 	if(nslots <= 0) {
@@ -874,11 +896,41 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 		return;
 	}
 
+	const char* rand_reaction[] = {
+		"Studi meticolosamente $p, poi sorridi tra te e te.",
+		"Guardi entusiasta $p pensando 'Ma quanto sono brav$b!'",
+		"Esclami: '$c0009SI PUO' FARE!$c0007'",
+		"Sorridi compiaciut$b.",
+		"Pensi: 'Potevo fare di meglio, ma comunque va MOLTO bene :-)'",
+		"Guardi con adorazione $p poi, a voce alta, esclami: '$c0009Il mio tesssssoro!$c0007'",
+		"Ti sfreghi le mani con soddisfazione.",
+		"Osservi sognante $p, hai fatto un ottimo lavoro!",
+		"Molto bene, la gemma e' incastonata perfettamente.",
+		"Pensi tra te e te: 'E anche questa e' fatta!'",
+		"$n studia meticolosamente $p, poi sorride tra se e se.",
+		"$n guarda entusiasta $p.",
+		"$n esclama: '$c0009SI PUO' FARE!$c0007'",
+		"$n sorride compiaciut$b.",
+		"$n annuisce soddisfatto, valutando il taglio.",
+		"$n guarda con adorazione $p poi esclama: '$c0009Il mio tesssssoro!$c0007'",
+		"$n si sfrega le mani con soddisfazione.",
+		"$n osserva sognante $p.",
+		"Un ghigno compiaciuto compare sulle labbra di $n.",
+		"$n mormora: 'E anche questa e' fatta!'"
+	};
+	const int nRandReac = 9;
+
+	struct char_data* actor = jeweler ? jeweler : ch;
+
 	if(jeweler) {
-		act("$N esamina $p senza toglierlo dalle tue mani, poi prende le pietre dal tuo inventario.",
+		act("$n sistema gli attrezzi sul banco di legno: scalpelli, uncini, pinze, lime.",
+			TRUE, actor, obj, 0, TO_ROOM);
+		act("$N attira $c0015$p$c0007 sul banco davanti a te, senza sottrartelo, e pesca le pietre dalla tua borsa.",
 			FALSE, ch, obj, jeweler, TO_CHAR);
-		act("$N esamina $p di $n e ne preleva alcune pietre dall'inventario.",
+		act("$N attira $c0015$p$c0007 sul banco davanti a $n e pesca le pietre dalla borsa.",
 			FALSE, ch, obj, jeweler, TO_NOTVICT);
+		act("$n valuta $c0015$p$c0007 e, con mano ferma, si mette all'opera.\n\r",
+			TRUE, actor, obj, 0, TO_ROOM);
 	}
 	else {
 		send_to_char("Sistemi gli attrezzi di lavoro sul tuo banco di legno e li controlli con cura: scalpelli, uncini, pinze, lime.\n\r", ch);
@@ -894,18 +946,24 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 			if(!stone) {
 				continue;
 			}
+			char buf[256];
 			if(jeweler) {
-				if(s == 0) {
-					act("$N incastona $p.", FALSE, ch, stone, jeweler, TO_CHAR);
-					act("$N incastona $p per $n.", FALSE, ch, stone, jeweler, TO_NOTVICT);
-				}
+				std::snprintf(buf, sizeof(buf),
+							  "$n incastona $c0015%s$c0007 su $c0015$p$c0007.",
+							  stone->short_description ? stone->short_description : "una pietra");
+				act(buf, TRUE, actor, obj, 0, TO_ROOM);
+				act(rand_reaction[number(10, nRandReac + 10)], TRUE, actor, obj, 0, TO_ROOM);
 			}
 			else {
-				char buf[256];
 				std::snprintf(buf, sizeof(buf), "Incastoni $c0015%s$c0007 su $c0015%s$c0007.\n\r",
 							  stone->short_description ? stone->short_description : "una pietra",
 							  obj->short_description ? obj->short_description : "l'oggetto");
 				send_to_char(buf, ch);
+				act(rand_reaction[number(0, nRandReac)], TRUE, ch, obj, 0, TO_CHAR);
+				std::snprintf(buf, sizeof(buf), "$n incastona $c0015%s$c0007 su $c0015$p$c0007.",
+							  stone->short_description ? stone->short_description : "una pietra");
+				act(buf, TRUE, ch, obj, 0, TO_ROOM);
+				act(rand_reaction[number(10, nRandReac + 10)], TRUE, ch, obj, 0, TO_ROOM);
 			}
 			obj_from_char(stone);
 			extract_obj(stone);
@@ -935,14 +993,15 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 	rename_mounted_item(obj, aff, val_orig, colore);
 	SET_BIT(obj->obj_flags.extra_flags2, ITEM2_INSERT);
 
-	if(!IS_DIO_MINORE(ch)) {
+	if(!jeweler && wait > 0 && !IS_DIO_MINORE(ch)) {
 		WAIT_STATE(ch, wait);
 	}
 
 	if(jeweler) {
-		act("$N ha terminato il lavoro su $p. Resta nel tuo inventario, ora raro.",
-			FALSE, ch, obj, jeweler, TO_CHAR);
-		act("$N termina l'incastonatura di $p per $n.", FALSE, ch, obj, jeweler, TO_NOTVICT);
+		act("$n lascia $c0015$p$c0007 sul banco davanti a te e mette via gli attrezzi, soddisfatt$b.",
+			TRUE, actor, obj, ch, TO_VICT);
+		act("$n lascia $c0015$p$c0007 sul banco davanti a $N e mette via gli attrezzi, soddisfatt$b.",
+			TRUE, actor, obj, ch, TO_NOTVICT);
 	}
 	else {
 		act("\n\rHai terminato il tuo lavoro su $c0015$p$c0007.", TRUE, ch, obj, 0, TO_CHAR);
@@ -992,7 +1051,53 @@ void incastona_from_command(struct char_data* ch, const char* arg,
 }
 
 MOBSPECIAL_FUNC(Incastonatore) {
-	if(type != EVENT_COMMAND || !ch || !mob) {
+	if(!ch || !mob) {
+		return FALSE;
+	}
+
+	if(type == EVENT_TICK) {
+		if(!AWAKE(mob) || mob->specials.fighting) {
+			return FALSE;
+		}
+		if(number(0, 14) != 0) {
+			return FALSE;
+		}
+		struct room_data* rp = real_roomp(mob->in_room);
+		if(!rp) {
+			return FALSE;
+		}
+		bool saw_pc = false;
+		for(struct char_data* t = rp->people; t; t = t->next_in_room) {
+			if(IS_PC(t) && t != mob) {
+				saw_pc = true;
+				break;
+			}
+		}
+		if(!saw_pc) {
+			return FALSE;
+		}
+		switch(number(0, 3)) {
+		case 0:
+			act("$n dice '$c0010Se volete un intarsio, posate il pezzo sul mio banco e nominate pietra e foggia. Ci lavoro io: non serve affidarmelo.$c0007'",
+				FALSE, mob, 0, 0, TO_ROOM);
+			break;
+		case 1:
+			act("$n dice '$c0010Se non sapete da dove cominciare, chiedetemi $c0015aiuto$c0010.$c0007'",
+				FALSE, mob, 0, 0, TO_ROOM);
+			break;
+		case 2:
+			act("$n dice '$c0010Volete sapere che potere cela ciascuna pietra? Chiedetemi il $c0015listino$c0010.$c0007'",
+				FALSE, mob, 0, 0, TO_ROOM);
+			break;
+		default:
+			act("$n dice '$c0010Pronunciate $c0015incastona$c0010, poi il nome del pezzo e delle pietre. Opale e ossidiana ne vogliono due, il quarzo rosa tre.$c0007'",
+				FALSE, mob, 0, 0, TO_ROOM);
+			break;
+		}
+		return FALSE;
+	}
+
+	if(type != EVENT_COMMAND) {
 		return FALSE;
 	}
 	if(!AWAKE(mob)) {

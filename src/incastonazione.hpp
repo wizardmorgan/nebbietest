@@ -1,6 +1,7 @@
 /*ALARMUD*
  * Spec proc Incastonatore: incastona pietre da miniera (vnum 19509-19537)
- * secondo il listino e la logica gia' usata da do_insert.
+ * secondo il listino e la logica gia' usata da do_insert. Il PG tiene
+ * oggetto e pietre con se'; il mob lavora sul banco.
  */
 #ifndef SRC_INCASTONAZIONE_HPP_
 #define SRC_INCASTONAZIONE_HPP_
