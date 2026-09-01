@@ -224,6 +224,7 @@ bool item_type_allowed(const struct obj_data* obj, char* why, std::size_t why_sz
 	case ITEM_AUDIO:
 	case ITEM_ARMOR:
 	case ITEM_CONTAINER:
+	case ITEM_TREASURE:
 		return true;
 	case ITEM_SCROLL:
 		std::snprintf(why, why_sz, "Non si possono incastonare pergamene.");
@@ -1059,7 +1060,7 @@ MOBSPECIAL_FUNC(Incastonatore) {
 		if(!AWAKE(mob) || mob->specials.fighting) {
 			return FALSE;
 		}
-		if(number(0, 14) != 0) {
+		if(number(0, 2) != 0) {
 			return FALSE;
 		}
 		struct room_data* rp = real_roomp(mob->in_room);
@@ -1076,23 +1077,13 @@ MOBSPECIAL_FUNC(Incastonatore) {
 		if(!saw_pc) {
 			return FALSE;
 		}
-		switch(number(0, 3)) {
-		case 0:
+		if(number(0, 1) == 0) {
 			act("$n dice '$c0010Se volete un intarsio, posate il pezzo sul mio banco e nominate pietra e foggia. Ci lavoro io: non serve affidarmelo.$c0007'",
 				FALSE, mob, 0, 0, TO_ROOM);
-			break;
-		case 1:
-			act("$n dice '$c0010Se non sapete da dove cominciare, chiedetemi $c0015aiuto$c0010.$c0007'",
+		}
+		else {
+			act("$n dice '$c0010Se non sapete da dove cominciare, $c0015chiedetemi aiuto$c0010: vi spiego il mestiere.$c0007'",
 				FALSE, mob, 0, 0, TO_ROOM);
-			break;
-		case 2:
-			act("$n dice '$c0010Volete sapere che potere cela ciascuna pietra? Chiedetemi il $c0015listino$c0010.$c0007'",
-				FALSE, mob, 0, 0, TO_ROOM);
-			break;
-		default:
-			act("$n dice '$c0010Pronunciate $c0015incastona$c0010, poi il nome del pezzo e delle pietre. Opale e ossidiana ne vogliono due, il quarzo rosa tre.$c0007'",
-				FALSE, mob, 0, 0, TO_ROOM);
-			break;
 		}
 		return FALSE;
 	}
