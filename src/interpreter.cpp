@@ -45,6 +45,7 @@
 #include "act.off.hpp"
 #include "clan_symbol.hpp"
 #include "act.other.hpp"
+#include "mob.editor.hpp"
 #include "act.social.hpp"
 #include "act.wizard.hpp"
 #include "procarea.hpp"
@@ -1188,6 +1189,7 @@ void assign_command_pointers() {
 	AddCommand( "drain",                do_drainlevel,      CMD_DRAIN,                  POSITION_SLEEPING,  MAESTRO_DEI_CREATORI    );
 	AddCommand( "oedit",                do_oedit,           CMD_OEDIT,                  POSITION_DEAD,      QUESTMASTER             );
 	AddCommand( "editpool",             do_editpool,        CMD_EDITPOOL,               POSITION_DEAD,      QUESTMASTER             );
+	AddCommand( "odust",               do_odust,           CMD_ODUST,                 POSITION_DEAD,      QUESTMASTER             );
 	AddCommand( "report",               do_report,          CMD_REPORT,                 POSITION_RESTING,   1                       );
 	AddCommand( "interven",             do_god_interven,    CMD_INTERVEN,               POSITION_DEAD,      MAESTRO_DEI_CREATORI    );  /*  310 */
 	AddCommand( "gtell",                do_gtell,           CMD_GTELL,                  POSITION_SLEEPING,  1                       );
@@ -1357,7 +1359,7 @@ void assign_command_pointers() {
 	AddCommand( "destroy",              do_destroy,         CMD_DESTROY,                POSITION_RESTING,   TUTTI                   );  /*  470 */
 	AddCommand( "personalize",          do_personalize,     CMD_PERSONALIZE,            POSITION_DEAD,      MAESTRO_DEGLI_DEI       );
 	AddCommand( "insert",               do_insert,          CMD_INSERT_GEMS,            POSITION_STANDING,  IMMORTALE               );
-	AddCommand( "incastona",            do_not_here,        CMD_INCASTONA,              POSITION_STANDING,  TUTTI                   );
+	AddCommand( "incastona",            do_incastona,       CMD_INCASTONA,              POSITION_STANDING,  TUTTI                   );
 	AddCommand( "achievements",         do_achievements,    CMD_ACHIEVEMENTS,           POSITION_RESTING,   TUTTI                   );
 	AddCommand( "refund",				do_refund,			CMD_REFUND,					POSITION_DEAD,		MAESTRO_DEL_CREATO		);
 	AddCommand( "mercy",				do_mercy,			CMD_MERCY,					POSITION_DEAD,		QUESTMASTER				);	/*	475	*/

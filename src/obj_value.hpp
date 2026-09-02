@@ -144,6 +144,18 @@ struct ObjEditListinoSpec {
 [[nodiscard]] ObjEditAnalysis AnalyzeObjEdit(struct obj_data* obj);
 
 /**
+ * Diff vs baseline esplicito (non carica il prototipo boot).
+ * staff_incremental_absolute: valore = solo affect *aggiunti* vs baseline
+ * (togliere bonus gia' in create/proto non abbassa il listino).
+ */
+[[nodiscard]] ObjEditAnalysis AnalyzeObjEditAgainst(struct obj_data* obj,
+													const struct obj_data* baseline,
+													bool staff_incremental_absolute = false);
+
+/** Listino edit solo su modifiche staff dopo il primo osave db procarea. */
+[[nodiscard]] ObjEditAnalysis AnalyzeProcareaStaffEdit(struct obj_data* obj);
+
+/**
  * Applica la scala storage legacy a un ExpValue raw (valore/derent * scale).
  */
 [[nodiscard]] ExpValue ScaleObjExpValue(const ExpValue& raw,

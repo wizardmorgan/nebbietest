@@ -25,6 +25,7 @@ namespace Alarmud {
 inline constexpr const char* kObjInstSourceProcareaLoot = "procarea_loot";
 inline constexpr const char* kObjInstSourceGodEdit = "god_edit";
 inline constexpr const char* kObjInstSourceClanSymbol = "clan_symbol";
+inline constexpr const char* kObjInstEventPlayerDust = "player_dust";
 
 struct obj_data;
 struct char_data;
@@ -60,6 +61,12 @@ bool object_instance_sync(obj_data* obj, char_data* actor = nullptr);
 
 /** read_object(base) + apply; caller fa obj_to_char / extract. nullptr se manca/deleted. */
 obj_data* object_instance_materialize(unsigned long long instance_id);
+
+/**
+ * Ricostruisce lo stato al primo evento create (osave db procarea iniziale).
+ * Per stat procarea: baseline modifiche staff. Caller deve extract_obj().
+ */
+obj_data* object_instance_materialize_create_baseline(unsigned long long instance_id);
 
 /**
  * Elenco wiz. deleted_list=false: solo attivi con numeri densi 1..N.
@@ -176,6 +183,9 @@ inline bool object_instance_sync(obj_data*, char_data* = nullptr) {
 	return false;
 }
 inline obj_data* object_instance_materialize(unsigned long long) {
+	return nullptr;
+}
+inline obj_data* object_instance_materialize_create_baseline(unsigned long long) {
 	return nullptr;
 }
 inline void object_instance_show_list(char_data*, const char*, bool = false) {}

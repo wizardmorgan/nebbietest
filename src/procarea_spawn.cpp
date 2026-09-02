@@ -2075,11 +2075,6 @@ static constexpr ProcShieldBonusWeight kShieldWeightsGeneric[] = {
 	{ APPLY_SAVE_ALL, 10 },
 };
 
-/** Peso del modello principale in run solitaria (resto ripartito sugli altri). */
-static constexpr int kProcShieldSoloPrimaryWeight = 75;
-static constexpr int kProcShieldSoloSecondaryWeight = 8;
-static constexpr int kProcShieldSoloGenericWeight = 5;
-
 [[nodiscard]] static int procarea_weighted_pick_index(const int* weights, int count) {
 	int total = 0;
 	for(int i = 0; i < count; ++i) {
@@ -2179,33 +2174,57 @@ static void procarea_for_each_resolved_member(const ProcAreaInstance& inst, Fn&&
 
 [[nodiscard]] static ProcShieldRollModel
 procarea_pick_shield_roll_model_solo(char_data* solo_ch) {
-	const ProcShieldRollModel primary = procarea_shield_archetype_for_char(solo_ch);
-	int weights[4] = {
-		kProcShieldSoloSecondaryWeight,
-		kProcShieldSoloSecondaryWeight,
-		kProcShieldSoloSecondaryWeight,
-		kProcShieldSoloGenericWeight,
-	};
-	weights[procarea_shield_model_index(primary)] = kProcShieldSoloPrimaryWeight;
-
-	const int pick = procarea_weighted_pick_index(weights, 4);
-	if(pick < 0) {
-		return primary;
-	}
-	return procarea_shield_model_from_index(pick);
+	/* Solitaria: sempre l'archetype del PG (niente spill caster↔melee). */
+	return procarea_shield_archetype_for_char(solo_ch);
 }
 
 [[nodiscard]] static ProcShieldRollModel
 procarea_pick_shield_roll_model_group(const ProcAreaInstance& inst, char_data* fallback_ch) {
 	int weights[4] = { 0, 0, 0, 0 };
+	bool has_tank = false;
+	bool has_caster = false;
+	bool has_hybrid = false;
+	bool has_generic = false;
 
 	procarea_for_each_resolved_member(inst, [&](char_data* member) {
 		const ProcShieldRollModel archetype = procarea_shield_archetype_for_char(member);
 		++weights[procarea_shield_model_index(archetype)];
+		switch(archetype) {
+		case ProcShieldRollModel::Tank:
+			has_tank = true;
+			break;
+		case ProcShieldRollModel::Caster:
+			has_caster = true;
+			break;
+		case ProcShieldRollModel::Hybrid:
+			has_hybrid = true;
+			break;
+		case ProcShieldRollModel::Generic:
+			has_generic = true;
+			break;
+		}
 	});
 
-	if(weights[0] > 0 && weights[1] > 0) {
-		weights[2] += weights[0] + weights[1];
+	/* Hybrid ammesso se c'e' un multi o se party misto melee+caster. */
+	if(has_tank && has_caster) {
+		has_hybrid = true;
+		weights[procarea_shield_model_index(ProcShieldRollModel::Hybrid)] +=
+			weights[procarea_shield_model_index(ProcShieldRollModel::Tank)] +
+			weights[procarea_shield_model_index(ProcShieldRollModel::Caster)];
+	}
+
+	/* C: azzera modelli assenti nel party (niente loot caster a solo melee, ecc.). */
+	if(!has_tank) {
+		weights[procarea_shield_model_index(ProcShieldRollModel::Tank)] = 0;
+	}
+	if(!has_caster) {
+		weights[procarea_shield_model_index(ProcShieldRollModel::Caster)] = 0;
+	}
+	if(!has_hybrid) {
+		weights[procarea_shield_model_index(ProcShieldRollModel::Hybrid)] = 0;
+	}
+	if(!has_generic) {
+		weights[procarea_shield_model_index(ProcShieldRollModel::Generic)] = 0;
 	}
 
 	const int total = weights[0] + weights[1] + weights[2] + weights[3];
@@ -2392,16 +2411,56 @@ static void procarea_roll_reward_gear_item(const ProcAreaInstance& inst, struct 
 	}
 }
 
+[[nodiscard]] static bool procarea_pc_skips_weapon_loot(char_data* ch) {
+	ch = procarea_real_pc(ch);
+	return ch != nullptr && HasClass(ch, CLASS_MONK);
+}
+
+[[nodiscard]] static bool procarea_instance_thief_only(const ProcAreaInstance& inst) {
+	bool any = false;
+	bool all_thief = true;
+	procarea_for_each_resolved_member(inst, [&](char_data* member) {
+		any = true;
+		if(!HasClass(member, CLASS_THIEF)) {
+			all_thief = false;
+		}
+	});
+	return any && all_thief;
+}
+
+[[nodiscard]] static bool procarea_reward_prefers_pierce_weapon(const ProcAreaInstance& inst) {
+	return inst.solo_mode || procarea_instance_thief_only(inst);
+}
+
+/** sub_variant % 3: 0 slash, 1 pierce, 2 crush. */
+[[nodiscard]] static int procarea_pick_weapon_damage_sub_variant(const ProcAreaInstance& inst) {
+	if(procarea_reward_prefers_pierce_weapon(inst)) {
+		static constexpr int kPierceBiasWeights[] = { 20, 60, 20 };
+		return procarea_weighted_pick(kPierceBiasWeights, 3);
+	}
+	return number(0, 2);
+}
+
 /** true = scudo premio; false = slot gear in @p gear_slot. */
-static void procarea_pick_random_treasure_loot(bool& is_shield, ProcRewardGearSlot& gear_slot) {
-	const int pick = number(0, static_cast<int>(ProcRewardGearSlot::Count));
-	if(pick >= static_cast<int>(ProcRewardGearSlot::Count)) {
-		is_shield = true;
-		gear_slot = ProcRewardGearSlot::Light;
-		return;
+static void procarea_pick_random_treasure_loot(bool& is_shield, ProcRewardGearSlot& gear_slot,
+											   char_data* roll_ch) {
+	static constexpr int kMaxAttempts = 8;
+	for(int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+		const int pick = number(0, static_cast<int>(ProcRewardGearSlot::Count));
+		if(pick >= static_cast<int>(ProcRewardGearSlot::Count)) {
+			is_shield = true;
+			gear_slot = ProcRewardGearSlot::Light;
+			return;
+		}
+		gear_slot = static_cast<ProcRewardGearSlot>(pick);
+		if(gear_slot != ProcRewardGearSlot::Wield || !procarea_pc_skips_weapon_loot(roll_ch)) {
+			is_shield = false;
+			return;
+		}
 	}
 	is_shield = false;
-	gear_slot = static_cast<ProcRewardGearSlot>(pick);
+	gear_slot = static_cast<ProcRewardGearSlot>(
+		number(0, static_cast<int>(ProcRewardGearSlot::Wield) - 1));
 }
 
 static bool procarea_try_grant_treasure_item(char_data* roll_ch, ProcAreaInstance& inst,
@@ -2414,14 +2473,15 @@ static bool procarea_try_grant_treasure_item(char_data* roll_ch, ProcAreaInstanc
 
 	bool is_shield = false;
 	ProcRewardGearSlot slot = ProcRewardGearSlot::Light;
-	procarea_pick_random_treasure_loot(is_shield, slot);
+	procarea_pick_random_treasure_loot(is_shield, slot, roll_ch);
 
 	long vnum = -1;
 	if(is_shield) {
 		vnum = procarea_reward_shield_vnum(inst.effective_band);
 	} else {
-		const int sub_variant =
-			slot == ProcRewardGearSlot::Wield ? number(0, 2) : procarea_pick_gear_sub_variant(slot);
+		const int sub_variant = slot == ProcRewardGearSlot::Wield ?
+									procarea_pick_weapon_damage_sub_variant(inst) :
+									procarea_pick_gear_sub_variant(slot);
 		vnum = reward_gear_vnum(slot, inst.effective_band, sub_variant);
 	}
 	if(vnum < 0) {

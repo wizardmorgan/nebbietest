@@ -27,6 +27,8 @@
 #include "toon_migration.hpp"
 #include "reception.hpp"
 #include "modify.hpp"
+#include "edit_pool.hpp"
+#include "procarea_legacy_drop.hpp"
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <odb/mysql/database.hxx>
@@ -40,6 +42,7 @@
 #include <sys/stat.h>
 #include <sstream>
 #include <string>
+#include <vector>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -641,6 +644,13 @@ void fill_instance_from_obj(object_instance& row, const struct obj_data* obj, in
 	row.wear_flags = obj->obj_flags.wear_flags;
 	row.extra_flags = static_cast<int>(obj->obj_flags.extra_flags);
 	row.extra_flags2 = static_cast<int>(obj->obj_flags.extra_flags2);
+	row.dust_hp = obj->dust_hp;
+	row.dust_mana = obj->dust_mana;
+	row.dust_move = obj->dust_move;
+	row.dust_hp_regen = obj->dust_hp_regen;
+	row.dust_mana_regen = obj->dust_mana_regen;
+	row.dust_move_regen = obj->dust_move_regen;
+	row.dust_spellfail = obj->dust_spellfail;
 	/* Come obj_to_store: per i container il peso runtime include il contenuto.
 	 * In MySQL va il solo guscio, altrimenti al reload si "cuoce" peso pieno. */
 	{
@@ -814,6 +824,7 @@ unsigned long long persist_body_tx(DB* db, struct obj_data* obj, int base_vnum,
 			have_before = false;
 		}
 	}
+	edit_pool_maybe_capture_dust(obj);
 	fill_instance_from_obj(row, obj, base_vnum, actor, is_create, system_actor);
 	fill_actor_and_owner_ids_tx(db, row, actor, is_create);
 
@@ -1013,6 +1024,13 @@ bool object_instance_apply(struct obj_data* obj, unsigned long long instance_id)
 			obj->obj_flags.wear_flags = row.wear_flags;
 			obj->obj_flags.extra_flags = static_cast<unsigned int>(row.extra_flags);
 			obj->obj_flags.extra_flags2 = static_cast<unsigned int>(row.extra_flags2);
+			obj->dust_hp = row.dust_hp;
+			obj->dust_mana = row.dust_mana;
+			obj->dust_move = row.dust_move;
+			obj->dust_hp_regen = row.dust_hp_regen;
+			obj->dust_mana_regen = row.dust_mana_regen;
+			obj->dust_move_regen = row.dust_move_regen;
+			obj->dust_spellfail = row.dust_spellfail;
 			obj->obj_flags.weight = row.weight;
 			obj->obj_flags.cost = row.cost;
 			obj->obj_flags.cost_per_day = row.cost_per_day;
@@ -1072,6 +1090,298 @@ bool object_instance_apply(struct obj_data* obj, unsigned long long instance_id)
 	}
 	obj->db_instance_id = instance_id;
 	return true;
+}
+
+namespace {
+
+void trim_segment(std::string& s) {
+	while(!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
+		s.erase(s.begin());
+	}
+	while(!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+		s.pop_back();
+	}
+}
+
+[[nodiscard]] unsigned long flags_from_label_string(const std::string& label,
+													const char* names[]) {
+	if(label.empty() || label == "NONE" || label == "NOBITS") {
+		return 0;
+	}
+	unsigned long bits = 0;
+	long nr = 0;
+	for(; names[nr] && *names[nr] != '\n'; ++nr) {
+		const std::string flag = names[nr];
+		if(flag.empty()) {
+			continue;
+		}
+		size_t pos = 0;
+		while((pos = label.find(flag, pos)) != std::string::npos) {
+			const bool left_ok = (pos == 0) || label[pos - 1] == ' ';
+			const bool right_ok = (pos + flag.size() == label.size()) ||
+								  label[pos + flag.size()] == ' ';
+			if(left_ok && right_ok) {
+				SET_BIT(bits, 1UL << nr);
+				break;
+			}
+			pos += 1;
+		}
+	}
+	return bits;
+}
+
+[[nodiscard]] int parse_item_type_name(const std::string& name) {
+	int nr = 0;
+	for(; item_types[nr] && *item_types[nr] != '\n'; ++nr) {
+		if(name == item_types[nr]) {
+			return nr;
+		}
+	}
+	return -1;
+}
+
+[[nodiscard]] int resolve_apply_name(const std::string& name) {
+	for(int loc = 0; loc <= APPLY_SKIP; ++loc) {
+		if(apply_types[loc] && *apply_types[loc] != '\n' && name == apply_types[loc]) {
+			return loc;
+		}
+	}
+	return APPLY_NONE;
+}
+
+[[nodiscard]] bool parse_affect_segment(const std::string& seg, short& loc, int& mod) {
+	if(seg.size() < 2) {
+		return false;
+	}
+	const bool remove = seg[0] == '-';
+	const bool add = seg[0] == '+';
+	if(!remove && !add) {
+		return false;
+	}
+	std::string rest = seg.substr(1);
+	trim_segment(rest);
+	const size_t sp = rest.rfind(' ');
+	if(sp == std::string::npos || sp == 0) {
+		return false;
+	}
+	const std::string loc_name = rest.substr(0, sp);
+	mod = std::atoi(rest.substr(sp + 1).c_str());
+	if(remove) {
+		mod = -mod;
+	}
+	loc = static_cast<short>(resolve_apply_name(loc_name));
+	return loc != APPLY_NONE || mod == 0;
+}
+
+[[nodiscard]] bool parse_create_header(const std::string& seg, unsigned& base_vnum, int& cost,
+									   int& cost_per_day) {
+	if(seg.compare(0, 7, "create ") != 0) {
+		return false;
+	}
+	unsigned base = 0;
+	int c = 0;
+	int cpd = 0;
+	if(std::sscanf(seg.c_str(), "create base=%u cost=%d cost/day=%d", &base, &c, &cpd) < 1 ||
+	   base == 0) {
+		return false;
+	}
+	base_vnum = base;
+	cost = c;
+	cost_per_day = cpd;
+	return true;
+}
+
+[[nodiscard]] bool split_kv(const std::string& seg, std::string& key, std::string& val) {
+	const size_t eq = seg.find('=');
+	if(eq == std::string::npos) {
+		return false;
+	}
+	key = seg.substr(0, eq);
+	val = seg.substr(eq + 1);
+	trim_segment(key);
+	trim_segment(val);
+	return !key.empty();
+}
+
+bool apply_create_detail_to_obj(struct obj_data* obj, const std::string& detail) {
+	if(!obj || detail.empty()) {
+		return false;
+	}
+	std::vector<short> aff_loc(MAX_OBJ_AFFECT, 0);
+	std::vector<int> aff_mod(MAX_OBJ_AFFECT, 0);
+	int aff_slot = 0;
+
+	std::string rest = detail;
+	while(!rest.empty()) {
+		size_t cut = rest.find(';');
+		std::string seg = (cut == std::string::npos) ? rest : rest.substr(0, cut);
+		rest = (cut == std::string::npos) ? std::string() : rest.substr(cut + 1);
+		trim_segment(seg);
+		if(seg.empty()) {
+			continue;
+		}
+
+		if(seg[0] == '+' || seg[0] == '-') {
+			short loc = 0;
+			int mod = 0;
+			if(parse_affect_segment(seg, loc, mod) && aff_slot < MAX_OBJ_AFFECT) {
+				aff_loc[aff_slot] = loc;
+				aff_mod[aff_slot] = mod;
+				++aff_slot;
+			}
+			continue;
+		}
+
+		unsigned tmp_base = 0;
+		int cost = 0;
+		int cost_per_day = 0;
+		if(parse_create_header(seg, tmp_base, cost, cost_per_day)) {
+			obj->obj_flags.cost = cost;
+			obj->obj_flags.cost_per_day = cost_per_day;
+			continue;
+		}
+
+		std::string key;
+		std::string val;
+		if(!split_kv(seg, key, val)) {
+			continue;
+		}
+
+		if(key == "short") {
+			if(obj->short_description) {
+				free(obj->short_description);
+			}
+			obj->short_description = strdup(val.c_str());
+		}
+		else if(key == "name") {
+			if(obj->name) {
+				free(obj->name);
+			}
+			obj->name = strdup(val.c_str());
+		}
+		else if(key == "type") {
+			const int t = parse_item_type_name(val);
+			if(t >= 0) {
+				obj->obj_flags.type_flag = static_cast<unsigned char>(t);
+			}
+		}
+		else if(key == "wear") {
+			obj->obj_flags.wear_flags = flags_from_label_string(val, wear_bits);
+		}
+		else if(key == "extra") {
+			obj->obj_flags.extra_flags =
+				static_cast<unsigned int>(flags_from_label_string(val, extra_bits));
+		}
+		else if(key == "extra2") {
+			obj->obj_flags.extra_flags2 =
+				static_cast<unsigned int>(flags_from_label_string(val, extra_bits2));
+		}
+		else if(key == "AC") {
+			obj->obj_flags.value[0] = std::atoi(val.c_str());
+		}
+		else if(key == "full_str") {
+			obj->obj_flags.value[1] = std::atoi(val.c_str());
+		}
+		else if(key == "cost") {
+			obj->obj_flags.cost = std::atoi(val.c_str());
+		}
+		else if(key == "cost/day") {
+			obj->obj_flags.cost_per_day = std::atoi(val.c_str());
+		}
+		else if(key == "weight") {
+			obj->obj_flags.weight = std::atoi(val.c_str());
+		}
+	}
+
+	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+		obj->affected[i].location = 0;
+		obj->affected[i].modifier = 0;
+	}
+	for(int i = 0; i < aff_slot; ++i) {
+		obj->affected[i].location = aff_loc[i];
+		obj->affected[i].modifier = aff_mod[i];
+	}
+	return true;
+}
+
+} // namespace
+
+obj_data* object_instance_materialize_create_baseline(unsigned long long instance_id) {
+	if(instance_id == 0) {
+		return nullptr;
+	}
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return nullptr;
+	}
+
+	unsigned int base_vnum = 0;
+	std::string detail;
+	try {
+		const bool ok = with_odb_tx(db, [&]() {
+			using EvQ = odb::query<object_instance_event>;
+			object_instance_event create_ev {};
+			bool found = false;
+			for(const auto& ev :
+				db->query<object_instance_event>(EvQ::instance_id == instance_id)) {
+				if(ev.kind != "create") {
+					continue;
+				}
+				if(!found || ev.at < create_ev.at) {
+					create_ev = ev;
+					found = true;
+				}
+			}
+			if(!found) {
+				return false;
+			}
+			if(!create_ev.detail.null() && !create_ev.detail.get().empty()) {
+				detail = create_ev.detail.get();
+			}
+			else if(!create_ev.note.null() && !create_ev.note.get().empty()) {
+				detail = create_ev.note.get();
+			}
+			if(detail.empty()) {
+				return false;
+			}
+			unsigned base = 0;
+			int cost = 0;
+			int cpd = 0;
+			const size_t semi = detail.find(';');
+			const std::string header =
+				(semi == std::string::npos) ? detail : detail.substr(0, semi);
+			if(!parse_create_header(header, base, cost, cpd)) {
+				return false;
+			}
+			base_vnum = base;
+			return true;
+		});
+		if(!ok || base_vnum == 0) {
+			return nullptr;
+		}
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_materialize_create_baseline(%llu): %s",
+			   static_cast<unsigned long long>(instance_id), e.what());
+		return nullptr;
+	}
+
+	if(real_object(static_cast<int>(base_vnum)) < 0) {
+		return nullptr;
+	}
+	struct obj_data* obj = read_object(static_cast<int>(base_vnum), VIRTUAL);
+	if(obj == nullptr) {
+		return nullptr;
+	}
+	if(!apply_create_detail_to_obj(obj, detail)) {
+		extract_obj(obj);
+		return nullptr;
+	}
+	obj->char_vnum = static_cast<int>(base_vnum);
+	obj->personal_owner[0] = '\0';
+	REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+	REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_PERSONAL);
+	return obj;
 }
 
 bool object_instance_sync(struct obj_data* obj, char_data* actor) {
@@ -2187,6 +2497,112 @@ bool rewrite_rent_edit_to_base(const std::string& name, unsigned edit_vnum,
 	return true;
 }
 
+constexpr const char* kLegacyDropBaselineTag = "legacy_drop_baseline";
+
+/* Pezza transitoria: riscrive il create event con la foto drop (tabella
+ * procarea_legacy_drop.cpp). Eq live invariata. Togliere con la tabella. */
+bool create_event_has_legacy_drop_tag(DB* db, unsigned long long instance_id) {
+	return with_odb_tx(db, [&]() {
+		using EvQ = odb::query<object_instance_event>;
+		object_instance_event create_ev {};
+		bool found = false;
+		for(const auto& ev :
+			db->query<object_instance_event>(EvQ::instance_id == instance_id)) {
+			if(ev.kind != "create") {
+				continue;
+			}
+			if(!found || ev.at < create_ev.at) {
+				create_ev = ev;
+				found = true;
+			}
+		}
+		if(!found || create_ev.note.null()) {
+			return false;
+		}
+		return create_ev.note.get().find(kLegacyDropBaselineTag) != std::string::npos;
+	});
+}
+
+void patch_legacy_procarea_drop_create(DB* db, unsigned long long instance_id,
+										unsigned edit_vnum, int base_vnum) {
+	if(!db || instance_id == 0 || !procarea_legacy_drop_has(edit_vnum)) {
+		return;
+	}
+	try {
+		if(create_event_has_legacy_drop_tag(db, instance_id)) {
+			/* Gia' in MySQL: i boot successivi non riapplicano la tabella. */
+			return;
+		}
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "legacy_drop_baseline: tag check %llu: %s", instance_id,
+			   e.what());
+		return;
+	}
+	if(real_object(base_vnum) < 0) {
+		return;
+	}
+	struct obj_data* proto = read_object(base_vnum, VIRTUAL);
+	if(!proto) {
+		mudlog(LOG_SYSERR, "legacy_drop_baseline: cannot read proto %d for edit %u",
+			   base_vnum, edit_vnum);
+		return;
+	}
+	if(!procarea_legacy_drop_apply_to_proto(proto, edit_vnum)) {
+		extract_obj(proto);
+		return;
+	}
+	object_instance row {};
+	fill_instance_from_obj(row, proto, base_vnum, nullptr, true, nullptr);
+	const std::string detail = build_instance_diff(nullptr, row, nullptr, nullptr, proto);
+	extract_obj(proto);
+	if(detail.empty()) {
+		return;
+	}
+
+	try {
+		const bool patched = with_odb_tx(db, [&]() {
+			using EvQ = odb::query<object_instance_event>;
+			object_instance_event create_ev {};
+			bool found = false;
+			for(const auto& ev :
+				db->query<object_instance_event>(EvQ::instance_id == instance_id)) {
+				if(ev.kind != "create") {
+					continue;
+				}
+				if(!found || ev.at < create_ev.at) {
+					create_ev = ev;
+					found = true;
+				}
+			}
+			if(!found) {
+				return false;
+			}
+			if(!create_ev.note.null() &&
+			   create_ev.note.get().find(kLegacyDropBaselineTag) != std::string::npos) {
+				return false;
+			}
+			create_ev.detail = detail;
+			std::string note = create_ev.note.null() ? std::string() : create_ev.note.get();
+			if(!note.empty()) {
+				note += " ";
+			}
+			note += kLegacyDropBaselineTag;
+			create_ev.note = note;
+			db->update(create_ev);
+			return true;
+		});
+		if(patched) {
+			mudlog(LOG_CHECK,
+				   "legacy_drop_baseline: patched create of instance %llu (edit %u base %d)",
+				   instance_id, edit_vnum, base_vnum);
+		}
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "legacy_drop_baseline: instance %llu: %s", instance_id, e.what());
+	}
+}
+
 } // namespace
 
 void object_instance_boot_migrate() {
@@ -2271,6 +2687,8 @@ void object_instance_boot_migrate() {
 				   static_cast<unsigned long long>(instance_id), edit_vnum, base_vnum,
 				   ed_owner.c_str());
 		}
+		patch_legacy_procarea_drop_create(db, instance_id, static_cast<unsigned>(edit_vnum),
+										  base_vnum);
 		extract_obj(obj);
 		obj = nullptr;
 
