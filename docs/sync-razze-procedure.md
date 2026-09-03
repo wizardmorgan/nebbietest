@@ -30,7 +30,7 @@ EDIT_BRANCH=feature/edit-portal
 ```bash
 cd ~/NebbieArcane/Server
 git checkout feature/edit-portal
-git status synchro   # opzionale: working tree pulito
+git status           # opzionale: working tree pulito
 
 ./scripts/mud-dev.sh sync-razze
 # = fetch upstream/feature/Razze + merge su HEAD (feature/edit-portal)
