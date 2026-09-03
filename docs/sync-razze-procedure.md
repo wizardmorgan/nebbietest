@@ -25,21 +25,37 @@ EDIT_BRANCH=feature/edit-portal
 
 ---
 
-## A) Caso normale (nessun conflitto) — solo nucbuntu
+## A) Caso normale — sempre partendo dal fork aggiornato
+
+**Importante:** prima allinea il clone a `mine`, poi sync Razze. Se salti il `fetch`/`reset`, rischi un secondo merge locale e il push rifiutato (`fetch first`).
 
 ```bash
 cd ~/NebbieArcane/Server
 git checkout feature/edit-portal
-git status           # opzionale: working tree pulito
+git status                    # working tree pulito (niente merge a metà)
 
+# 1) prendi tutto ciò che è già sul fork (agent / altri sync)
+git fetch mine
+git reset --hard mine/feature/edit-portal
+
+# 2) porta dentro Montero
 ./scripts/mud-dev.sh sync-razze
-# = fetch upstream/feature/Razze + merge su HEAD (feature/edit-portal)
+# = fetch upstream/feature/Razze + merge su HEAD
 
+# 3) pubblica e builda
 git push mine feature/edit-portal
-./scripts/mud-dev.sh build          # o: rebuild-myst
+./scripts/mud-dev.sh build    # o: rebuild-myst
 ```
 
-Se `sync-razze` finisce con *merge ok* / *già aggiornato*, hai finito.
+Se `sync-razze` dice *già aggiornato*, il push può essere un no-op (già allineati) — ok.
+
+Controllo rapido “manca qualcosa di Montero?”:
+
+```bash
+git fetch upstream feature/Razze
+git log --oneline HEAD..upstream/feature/Razze
+# se non stampa nulla → Razze è già in edit-portal
+```
 
 ---
 
@@ -68,6 +84,7 @@ git reset --hard mine/feature/edit-portal
 ```bash
 cd ~/NebbieArcane/Server
 git checkout feature/edit-portal
+git fetch mine && git reset --hard mine/feature/edit-portal
 ./scripts/mud-dev.sh sync-razze
 # sistema i file in conflitto, poi:
 git add -A
@@ -78,9 +95,43 @@ git push mine feature/edit-portal
 
 ---
 
-## C) Solo aggiornare senza rebuild
+## C) Push rifiutato: `rejected … (fetch first)`
+
+Succede quando l’agent (o un altro sync) ha già pushato sul fork mentre sul nucbuntu hai fatto un merge locale parallelo.
+
+**Se non hai modifiche locali da tenere** (caso tipico dopo un `sync-razze` ridondante):
 
 ```bash
+cd ~/NebbieArcane/Server
+git fetch mine
+git reset --hard mine/feature/edit-portal
+./scripts/mud-dev.sh build
+```
+
+Poi, solo se serve ancora Montero più nuovo:
+
+```bash
+./scripts/mud-dev.sh sync-razze
+git push mine feature/edit-portal
+```
+
+**Se proprio vuoi tenere il merge locale** e unirlo al fork (raro):
+
+```bash
+git fetch mine
+git merge mine/feature/edit-portal
+# risolvi conflitti se ci sono
+git push mine feature/edit-portal
+```
+
+Non usare `git push --force` su `feature/edit-portal` a meno che non ti sia stato chiesto esplicitamente.
+
+---
+
+## D) Solo aggiornare senza rebuild
+
+```bash
+git fetch mine && git reset --hard mine/feature/edit-portal
 ./scripts/mud-dev.sh sync-razze
 git push mine feature/edit-portal
 ```
@@ -92,9 +143,11 @@ git push mine feature/edit-portal
 ```bash
 git remote -v
 git branch -vv
+git fetch mine
 git fetch upstream feature/Razze
-git log --oneline HEAD..upstream/feature/Razze   # cosa manca da Montero
-git log --oneline upstream/feature/Razze..HEAD | head   # cosa hai in più (edit-portal)
+git log --oneline HEAD..mine/feature/edit-portal          # cosa manca dal fork
+git log --oneline HEAD..upstream/feature/Razze            # cosa manca da Montero
+git log --oneline upstream/feature/Razze..HEAD | head     # cosa hai in più (edit-portal)
 ```
 
 ---
@@ -102,5 +155,6 @@ git log --oneline upstream/feature/Razze..HEAD | head   # cosa hai in più (edit
 ## Cosa non fare
 
 - Non `git pull origin …` se `origin` non esiste.
+- Non `sync-razze` **senza** prima `git fetch mine` + allineamento al fork (crea merge duplicati → push rejected).
 - Non `checkout feature/Razze` a merge incompleto (errore *needs merge*).
 - Non confondere **`NebbieArcane/edit-portal`** (solo UI Node) con questo sync mud: Razze/C++ stanno sempre in **Server / nebbietest**.
