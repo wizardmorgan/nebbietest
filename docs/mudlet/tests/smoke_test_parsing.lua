@@ -807,6 +807,19 @@ check("batch: isAnyPromptLine prompt immortale", NebbieDash.isAnyPromptLine("Sir
 check("batch: isAnyPromptLine non confonde riga narrativa",
   NebbieDash.isAnyPromptLine("Adesso hai Elmo della Citta d'Ottone.") == nil)
 
+check("batch: batchIsEnterCommand riconosce [enter]", NebbieDash.batchIsEnterCommand("[enter]"))
+check("batch: batchSetsMenuWait su oedit", NebbieDash.batchSetsMenuWait("oedit rock"))
+check("batch: batchOutputHasMenuReady su -->",
+  NebbieDash.batchOutputHasMenuReady({ "Menu:", "-->" }))
+local _, enterLabel, enterWait = NebbieDash.batchPrepareCommand("[enter]", row)
+check("batch: batchPrepareCommand [enter] invia vuoto e attende prompt",
+  enterLabel == "[enter]" and enterWait == "prompt")
+local _, oeditLabel, oeditWait = NebbieDash.batchPrepareCommand("oedit $2", row)
+check("batch: batchPrepareCommand oedit attende menu",
+  oeditLabel == "oedit egida-foresta-edgreenblade" and oeditWait == "menu")
+check("batch: batchSectionHasCommand trova [enter] nel log timestampato",
+  NebbieDash.batchSectionHasCommand("[10:30:02] >>> [enter]\n", "[enter]"))
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

@@ -37,6 +37,8 @@ BATCH_ERROR_PATTERNS = [
     "Mi dispiace ma non hai accesso a quella zona.",
     "Sorry, private items.",
     "When monkeys fly out of Ripper",
+    "Questo oggetto non e' qui!",
+    "Quale oggetto vuoi modificare?",
 ]
 
 ROW_HEADER_RE = re.compile(r"^--- riga (\d+) — (.+) ---$")
@@ -143,6 +145,16 @@ def substitute_vars(template: str, row: BatchRow) -> str:
     )
 
 
+def is_enter_command(template: str) -> bool:
+    return bool(re.match(r"^\s*\[enter\]\s*$", template or ""))
+
+
+def prepare_command_log_label(template: str, row: BatchRow) -> str:
+    if is_enter_command(template):
+        return "[enter]"
+    return substitute_vars(template, row)
+
+
 def parse_log_sections(content: str) -> list[LogSection]:
     lines = content.splitlines()
     sections: list[LogSection] = []
@@ -184,8 +196,13 @@ def row_from_csv_line(csv_line: str) -> BatchRow | None:
     )
 
 
-def section_has_command(block: str, cmd: str) -> bool:
-    return f">>> {cmd}" in block
+def section_has_command(block: str, log_label: str) -> bool:
+    if not log_label:
+        return False
+    if f">>> {log_label}" in block:
+        return True
+    escaped = re.escape(log_label)
+    return re.search(rf"\] >>> {escaped}", block) is not None
 
 
 def verify_section(section: LogSection, row: BatchRow, commands: list[str]) -> list[str]:
@@ -197,9 +214,9 @@ def verify_section(section: LogSection, row: BatchRow, commands: list[str]) -> l
                 issues.append(f"errore MUD: {line}")
                 break
     for tmpl in commands:
-        cmd = substitute_vars(tmpl, row)
-        if not section_has_command(block, cmd):
-            issues.append(f"comando mancante nel log: {cmd}")
+        log_label = prepare_command_log_label(tmpl, row)
+        if not section_has_command(block, log_label):
+            issues.append(f"comando mancante nel log: {log_label}")
     wants_osave = any("osave" in (c or "").lower() for c in commands)
     if wants_osave:
         expected = (

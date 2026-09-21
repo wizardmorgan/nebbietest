@@ -1,5 +1,15 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.11.2 — 2026-09-21
+
+- **Aggiunto (nbatch)**: supporto workflow `oedit $2` + riga speciale `[enter]` — dopo `oedit`
+  il batch attende la riga menu `-->`, poi `[enter]` invia invio vuoto e attende il prompt Sirio.
+  Posizionabili ovunque nella sequenza comandi; esempio e commenti in
+  `nebbie-batch-commands.txt` generato di default.
+- **Aggiornato**: `nbatchverify` e `verify_batch_log.py` riconoscono `[enter]` nel log
+  (`>>> [enter]`).
+- **Versione interna** alzata a 1.11.2.
+
 ## 1.11.1 — 2026-09-21
 
 - **Corretto (nbatch)**: timeout su Sirio con prompt immortale `Sirio R1000 [On//60]>>` — il

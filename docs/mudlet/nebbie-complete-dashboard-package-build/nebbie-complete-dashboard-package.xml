@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.11.1"
+local PKG_VER = "1.11.2"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -2168,7 +2168,12 @@ NebbieDash.BATCH_ERROR_PATTERNS = {
   "Mi dispiace ma non hai accesso a quella zona.",
   "Sorry, private items.",
   "When monkeys fly out of Ripper",
+  "Questo oggetto non e' qui!",
+  "Quale oggetto vuoi modificare?",
 }
+
+-- Segnale menu oedit (output reale utente 2026-09-21): riga "-->" dopo "Menu:".
+NebbieDash.BATCH_MENU_READY_PATTERN = "^%-%->%s*$"
 
 function NebbieDash.batchCommandsPath()
   local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
@@ -2200,10 +2205,15 @@ function NebbieDash.ensureBatchCommandsFile()
     "# Esempio workflow osave (Sirio):\n" ..
     "oload $3\n" ..
     "stat $2\n" ..
+    "oedit $2\n" ..
+    "[enter]\n" ..
     "cast 'identify' $2\n" ..
     "osave $2 $3 $4\n" ..
     "stat $2\n" ..
-    "cast 'identify' $2\n"
+    "cast 'identify' $2\n" ..
+    "#\n" ..
+    "# [enter] = invio vuoto (es. uscita menu oedit). Dopo 'oedit ...' il batch\n" ..
+    "# attende la riga '-->' nel log, poi [enter], poi il prompt Sirio.\n"
   )
   f:close()
 end
@@ -2394,6 +2404,32 @@ function NebbieDash.batchDisableLineCapture()
   end
 end
 
+function NebbieDash.batchIsEnterCommand(template)
+  return (template or ""):match("^%s*%[enter%]%s*$") ~= nil
+end
+
+function NebbieDash.batchSetsMenuWait(sentCmd)
+  return (sentCmd or ""):match("^oedit%s") ~= nil
+end
+
+function NebbieDash.batchOutputHasMenuReady(lines)
+  for _, text in ipairs(lines or {}) do
+    if text:match(NebbieDash.BATCH_MENU_READY_PATTERN) then
+      return true
+    end
+  end
+  return false
+end
+
+function NebbieDash.batchPrepareCommand(template, row)
+  if NebbieDash.batchIsEnterCommand(template) then
+    return "", "[enter]", "prompt"
+  end
+  local cmd = NebbieDash.substituteBatchVars(template, row)
+  local waitMode = NebbieDash.batchSetsMenuWait(cmd) and "menu" or "prompt"
+  return cmd, cmd, waitMode
+end
+
 function NebbieDash.onBatchLine()
   local b = NebbieDash._batch
   if not b or not b.active or not b.awaitingOutput then return end
@@ -2403,13 +2439,22 @@ function NebbieDash.onBatchLine()
   end
   text = text or ""
   table.insert(b.stepLines, text)
-  -- Il prompt Sirio non passa dal trigger " M:" — rileviamolo qui durante il batch.
-  if NebbieDash.isAnyPromptLine(text) then
-    NebbieDash.onBatchPrompt(text)
+  if b.waitMode == "menu" and NebbieDash.batchOutputHasMenuReady(b.stepLines) then
+    NebbieDash.onBatchStepComplete(nil)
+    return
+  end
+  if b.waitMode == "prompt" and NebbieDash.isAnyPromptLine(text) then
+    NebbieDash.onBatchStepComplete(text)
   end
 end
 
 function NebbieDash.onBatchPrompt(promptText)
+  local b = NebbieDash._batch
+  if not b or not b.active or not b.awaitingOutput or b.waitMode ~= "prompt" then return end
+  NebbieDash.onBatchStepComplete(promptText)
+end
+
+function NebbieDash.onBatchStepComplete(promptText)
   local b = NebbieDash._batch
   if not b or not b.active or not b.awaitingOutput then return end
   b.awaitingOutput = false
@@ -2437,6 +2482,7 @@ function NebbieDash.onBatchPrompt(promptText)
   end
 
   b.cmdIdx = b.cmdIdx + 1
+  b.waitMode = "prompt"
   NebbieDash.batchRunCurrentStep()
 end
 
@@ -2461,16 +2507,20 @@ function NebbieDash.batchRunCurrentStep()
     b.currentLogToon = row.nomeToon
   end
 
-  local cmd = NebbieDash.substituteBatchVars(b.commands[b.cmdIdx], row)
+  local template = b.commands[b.cmdIdx]
+  local sendCmd, logLabel, waitMode = NebbieDash.batchPrepareCommand(template, row)
   b.stepLines = {}
   b.awaitingOutput = true
-  NebbieDash.batchAppendToLog(row.nomeToon, string.format("[%s] >>> %s\n", os.date("%H:%M:%S"), cmd))
-  send(cmd, false)
+  b.waitMode = waitMode
+  NebbieDash.batchAppendToLog(row.nomeToon, string.format("[%s] >>> %s\n", os.date("%H:%M:%S"), logLabel))
+  send(sendCmd, false)
 
   if type(tempTimer) == "function" then
+    local timeoutLabel = logLabel
     b.timeoutId = tempTimer(NebbieDash.batchTimeoutSec, function()
       if b.awaitingOutput then
-        NebbieDash.batchStop("timeout in attesa del prompt dopo: " .. cmd)
+        local hint = (b.waitMode == "menu") and " (menu oedit, atteso '-->')" or " (atteso prompt Sirio)"
+        NebbieDash.batchStop("timeout dopo: " .. timeoutLabel .. hint)
       end
     end)
   end
@@ -2542,6 +2592,7 @@ function NebbieDash.cmdBatch(filterStr)
     logSectionStarted = false,
     filterLabel = (filterStr ~= "" and ("nbatch " .. filterStr)) or "nbatch",
     awaitingOutput = false,
+    waitMode = "prompt",
   }
 
   cecho("<cyan>[NebbieDash] Batch avviato: " .. #rows .. " righe, " ..
@@ -2602,10 +2653,11 @@ function NebbieDash.parseBatchLogSections(content)
   return sections
 end
 
-function NebbieDash.batchSectionHasCommand(blockText, cmd)
-  if not blockText or not cmd or cmd == "" then return false end
-  if blockText:find(">>> " .. cmd, 1, true) then return true end
-  return blockText:find("%] >>> " .. cmd:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1"), 1)
+function NebbieDash.batchSectionHasCommand(blockText, logLabel)
+  if not blockText or not logLabel or logLabel == "" then return false end
+  if blockText:find(">>> " .. logLabel, 1, true) then return true end
+  local escaped = logLabel:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1")
+  return blockText:find("%] >>> " .. escaped, 1) ~= nil
 end
 
 function NebbieDash.batchSectionFindOsaveSuccess(blockText, vnumAttuale, vnumOriginale)
@@ -2631,9 +2683,9 @@ function NebbieDash.verifyBatchSection(section, row, commands)
     end
   end
   for _, tmpl in ipairs(commands or {}) do
-    local cmd = NebbieDash.substituteBatchVars(tmpl, row)
-    if not NebbieDash.batchSectionHasCommand(blockText, cmd) then
-      table.insert(issues, "comando mancante nel log: " .. cmd)
+    local _, logLabel = NebbieDash.batchPrepareCommand(tmpl, row)
+    if not NebbieDash.batchSectionHasCommand(blockText, logLabel) then
+      table.insert(issues, "comando mancante nel log: " .. logLabel)
     end
   end
   local wantsOsave = false
