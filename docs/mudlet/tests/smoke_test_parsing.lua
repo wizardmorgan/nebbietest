@@ -785,6 +785,22 @@ NebbieDash.cmdBatch("greenblade")
 check("batch: cmdBatch avvia con Sirio e filtro", NebbieDash._batch ~= nil and NebbieDash._batch.active == true)
 if NebbieDash._batch then NebbieDash.batchStop("test cleanup") end
 
+-- Test 22: nbatchverify — parse log e verifica sezione osave.
+local sampleLog = [[
+--- riga 1 — 10:30:01 ---
+CSV: GreenBlade,equilibrio EDGreenBlade,34424,9030
+[10:30:01] >>> oload 34424
+[10:30:04] >>> osave equilibrio-edgreenblade 34424 9030
+Ho salvato equilibrio edgreenblade con il vnum 34424 (originale 9030).
+--- batch terminato: completato (1 righe) (10:30:07) ---
+]]
+local sections = NebbieDash.parseBatchLogSections(sampleLog)
+check("verify: parseBatchLogSections trova 1 sezione", #sections == 1)
+local vrow = NebbieDash.rowFromCsvLine(sections[1].csvLine)
+local vcmds = { "oload $3", "osave $2 $3 $4" }
+local vok, vissues = NebbieDash.verifyBatchSection(sections[1], vrow, vcmds)
+check("verify: sezione osave OK con messaggio server", vok and #vissues == 0)
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

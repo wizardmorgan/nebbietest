@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.11.0 — 2026-09-21
+
+- **Aggiunto**: `nbatchverify [toon] [YYYY-MM-DD]` — verifica log batch vs CSV/comandi;
+  report in `<Toon>-YYYY-MM-DD.verify.txt`.
+- **Aggiunto**: script offline `docs/mudlet/tests/verify_batch_log.py` (+ fixture di esempio)
+  per controllare i log copiati dal profilo Mudlet; opzione `--objects-dir` per i file
+  `objects/<vnum>` sul server.
+- **Versione interna** alzata a 1.11.0.
+
 ## 1.10.0 — 2026-09-21
 
 - **Aggiunto**: batch admin `nbatch` / `nbatchreload` (solo con **Sirio** connesso, rilevato dal

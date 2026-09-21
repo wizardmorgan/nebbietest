@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.10.0"
+local PKG_VER = "1.11.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1047,6 +1047,7 @@ NebbieDash.HELP_TEXT = {
   { "nforgetspell <nome>", "Rimuove una spell memorizzata per errore dall'elenco del personaggio attivo." },
   { "nbatch [nome-toon]", "Esegue comandi admin da CSV (solo PG Sirio connesso). Vedi nebbie-batch-*.txt/csv." },
   { "nbatchreload", "Ricarica nebbie-batch-commands.txt e nebbie-batch-items.csv." },
+  { "nbatchverify [toon] [data]", "Verifica log batch vs CSV (es. nbatchverify GreenBlade 2026-09-21)." },
   { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
   { "nhelp", "Mostra/nascondi questa finestra." },
@@ -2516,6 +2517,263 @@ function NebbieDash.cmdBatch(filterStr)
     #NebbieDash.batchCommands .. " comandi/riga. Log: <Toon>-YYYY-MM-DD.txt\n")
   NebbieDash.batchEnableLineCapture()
   NebbieDash.batchRunCurrentStep()
+end
+
+function NebbieDash.rowFromCsvLine(csvLine)
+  local fields = NebbieDash.parseCsvLine(csvLine or "")
+  if #fields < 4 then return nil end
+  return {
+    nomeToon = fields[1],
+    keyRaw = fields[2],
+    keyNorm = NebbieDash.normalizeBatchKey(fields[2]),
+    vnumAttuale = fields[3],
+    vnumOriginale = fields[4],
+    rawLine = csvLine,
+  }
+end
+
+function NebbieDash.parseBatchLogSections(content)
+  local sections = {}
+  if not content or content == "" then return sections end
+  local lines = {}
+  for line in content:gmatch("[^\r\n]+") do
+    table.insert(lines, line)
+  end
+  local i = 1
+  while i <= #lines do
+    local rowIdx, time = lines[i]:match("^--- riga (%d+) — (.+) ---$")
+    if rowIdx then
+      local csvLine = ""
+      if lines[i + 1] and lines[i + 1]:match("^CSV: ") then
+        csvLine = lines[i + 1]:sub(6)
+        i = i + 1
+      end
+      local block = {}
+      i = i + 1
+      while i <= #lines do
+        local l = lines[i]
+        if l:match("^--- riga %d+") or l:match("^========== batch ") or l:match("^--- batch terminato") then
+          break
+        end
+        table.insert(block, l)
+        i = i + 1
+      end
+      table.insert(sections, {
+        rowIdx = tonumber(rowIdx),
+        time = time,
+        csvLine = csvLine,
+        lines = block,
+      })
+    else
+      i = i + 1
+    end
+  end
+  return sections
+end
+
+function NebbieDash.batchSectionHasCommand(blockText, cmd)
+  if not blockText or not cmd or cmd == "" then return false end
+  if blockText:find(">>> " .. cmd, 1, true) then return true end
+  return blockText:find("%] >>> " .. cmd:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1"), 1)
+end
+
+function NebbieDash.batchSectionFindOsaveSuccess(blockText, vnumAttuale, vnumOriginale)
+  if not blockText then return false end
+  local va, vo = tostring(vnumAttuale or ""), tostring(vnumOriginale or "")
+  if va == "" then return false end
+  local pattern = "Ho salvato .+ con il vnum " .. va:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1")
+    .. " %(originale " .. vo:gsub("([%-%.%+%*%?%[%]%^%$%(%)%%])", "%%%1") .. "%)"
+  return blockText:find(pattern) ~= nil
+end
+
+function NebbieDash.verifyBatchSection(section, row, commands)
+  local issues = {}
+  if not section or not row then
+    table.insert(issues, "sezione o riga CSV non valida")
+    return false, issues
+  end
+  local blockText = table.concat(section.lines or {}, "\n")
+  for _, line in ipairs(section.lines or {}) do
+    local err, errLine = NebbieDash.batchDetectError({ line })
+    if err then
+      table.insert(issues, "errore MUD: " .. tostring(errLine))
+    end
+  end
+  for _, tmpl in ipairs(commands or {}) do
+    local cmd = NebbieDash.substituteBatchVars(tmpl, row)
+    if not NebbieDash.batchSectionHasCommand(blockText, cmd) then
+      table.insert(issues, "comando mancante nel log: " .. cmd)
+    end
+  end
+  local wantsOsave = false
+  for _, tmpl in ipairs(commands or {}) do
+    if (tmpl or ""):find("osave", 1, true) then
+      wantsOsave = true
+      break
+    end
+  end
+  if wantsOsave and not NebbieDash.batchSectionFindOsaveSuccess(blockText, row.vnumAttuale, row.vnumOriginale) then
+    local gotVa, gotVo = blockText:match("Ho salvato .+ con il vnum (%d+) %(originale (%d+)%)")
+    if gotVa then
+      table.insert(issues, string.format(
+        "osave: atteso vnum %s (orig %s), nel log %s (orig %s)",
+        tostring(row.vnumAttuale), tostring(row.vnumOriginale), gotVa, gotVo or "?"))
+    else
+      table.insert(issues, "messaggio osave di successo non trovato (Ho salvato ... con il vnum ...)")
+    end
+  end
+  return #issues == 0, issues
+end
+
+function NebbieDash.readTextFile(path)
+  local f = io.open(path, "r")
+  if not f then return nil end
+  local content = f:read("*a")
+  f:close()
+  return content
+end
+
+function NebbieDash.writeTextFile(path, content)
+  local f = io.open(path, "w")
+  if not f then return false end
+  f:write(content or "")
+  f:close()
+  return true
+end
+
+function NebbieDash.batchVerifyReportPath(nomeToon, dateStr)
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/" .. (nomeToon or "unknown") .. "-" .. (dateStr or os.date("%Y-%m-%d")) .. ".verify.txt"
+end
+
+function NebbieDash.verifyBatchLogFile(logPath, commands, filterRows)
+  local content = NebbieDash.readTextFile(logPath)
+  if not content then
+    return false, { "file log non leggibile: " .. tostring(logPath) }, {}
+  end
+  local sections = NebbieDash.parseBatchLogSections(content)
+  if #sections == 0 then
+    return false, { "nessuna sezione '--- riga N ---' nel log" }, {}
+  end
+  local expectedByCsv = {}
+  for _, row in ipairs(filterRows or {}) do
+    expectedByCsv[row.rawLine or ""] = row
+  end
+  local results = {}
+  local issues = {}
+  local okCount = 0
+  for _, section in ipairs(sections) do
+    local row = NebbieDash.rowFromCsvLine(section.csvLine)
+    if not row then
+      table.insert(issues, "riga " .. tostring(section.rowIdx) .. ": CSV non parsabile")
+      table.insert(results, { section = section, ok = false, issues = { "CSV non parsabile" } })
+    elseif expectedByCsv[row.rawLine] == nil and #filterRows > 0 then
+      table.insert(issues, "riga " .. tostring(section.rowIdx) .. ": non presente nel CSV filtrato")
+      table.insert(results, { section = section, row = row, ok = false, issues = { "non nel CSV atteso" } })
+    else
+      local ok, rowIssues = NebbieDash.verifyBatchSection(section, row, commands)
+      if ok then okCount = okCount + 1 else
+        for _, msg in ipairs(rowIssues) do
+          table.insert(issues, "riga " .. tostring(section.rowIdx) .. " (" .. (row.keyNorm or "?") .. "): " .. msg)
+        end
+      end
+      table.insert(results, { section = section, row = row, ok = ok, issues = rowIssues })
+    end
+  end
+  local expectedCount = #filterRows
+  if expectedCount > 0 and okCount < expectedCount then
+    local seen = {}
+    for _, r in ipairs(results) do
+      if r.row and r.row.rawLine then seen[r.row.rawLine] = true end
+    end
+    for _, row in ipairs(filterRows) do
+      if not seen[row.rawLine or ""] then
+        table.insert(issues, "riga CSV mai eseguita (assente dal log): " .. (row.rawLine or "?"))
+      end
+    end
+  end
+  if not content:find("batch terminato: completato") then
+    local reason = content:match("--- batch terminato: ([^\n]+) ---")
+    if reason then
+      table.insert(issues, "batch non completato: " .. reason)
+    end
+  end
+  return #issues == 0, issues, results
+end
+
+function NebbieDash.cmdVerifyBatch(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$")
+  NebbieDash.loadBatchCommands()
+  NebbieDash.loadBatchItems()
+
+  local toonFilter, dateStr = nil, os.date("%Y-%m-%d")
+  if argStr ~= "" then
+    local a, b = argStr:match("^(%S+)%s+(%d%d%d%d%-%d%d%-%d%d)$")
+    if a and b then
+      toonFilter, dateStr = a, b
+    else
+      toonFilter = argStr:match("^(%S+)$")
+    end
+  end
+
+  local rows = NebbieDash.filterBatchRows(NebbieDash.batchItems, toonFilter or "")
+  if toonFilter and #rows == 0 then
+    cecho("<orange>[NebbieDash] nbatchverify: nessuna riga CSV per '" .. toonFilter .. "'.\n")
+    return
+  end
+  if #rows == 0 then
+    rows = NebbieDash.batchItems
+  end
+
+  local toons = {}
+  local toonSet = {}
+  for _, row in ipairs(rows) do
+    if row.nomeToon and not toonSet[row.nomeToon] then
+      toonSet[row.nomeToon] = true
+      table.insert(toons, row.nomeToon)
+    end
+  end
+
+  local grandOk = true
+  local reportHeader = {
+    "NebbieDash nbatchverify — " .. os.date("%Y-%m-%d %H:%M:%S"),
+    "CSV: " .. NebbieDash.batchItemsPath(),
+    "Comandi: " .. NebbieDash.batchCommandsPath(),
+    "Data log: " .. dateStr,
+    "",
+  }
+
+  for _, toon in ipairs(toons) do
+    local toonRows = NebbieDash.filterBatchRows(rows, toon)
+    local logPath = (type(getMudletHomeDir) == "function" and getMudletHomeDir() or ".")
+      .. "/" .. toon .. "-" .. dateStr .. ".txt"
+    local reportLines = {}
+    for _, line in ipairs(reportHeader) do table.insert(reportLines, line) end
+    table.insert(reportLines, "=== " .. toon .. " ===")
+    table.insert(reportLines, "Log: " .. logPath)
+    local ok, issues, results = NebbieDash.verifyBatchLogFile(logPath, NebbieDash.batchCommands, toonRows)
+    if not ok then grandOk = false end
+    local okN, totN = 0, #results
+    for _, r in ipairs(results) do if r.ok then okN = okN + 1 end end
+    table.insert(reportLines, string.format("Esito: %d/%d righe OK", okN, totN))
+    for _, msg in ipairs(issues) do
+      table.insert(reportLines, "  FAIL: " .. msg)
+    end
+    if ok then
+      table.insert(reportLines, "  PASS")
+    end
+    table.insert(reportLines, "")
+    local reportPath = NebbieDash.batchVerifyReportPath(toon, dateStr)
+    NebbieDash.writeTextFile(reportPath, table.concat(reportLines, "\n") .. "\n")
+    cecho((ok and "<green>" or "<orange>") .. "[NebbieDash] " .. toon .. ": " .. okN .. "/" .. totN ..
+      " righe OK — report " .. reportPath .. "\n")
+  end
+
+  if grandOk then
+    cecho("<green>[NebbieDash] nbatchverify: tutti i log verificati OK.\n")
+  else
+    cecho("<orange>[NebbieDash] nbatchverify: errori trovati (vedi report .verify.txt).\n")
+  end
 end
 
 -- ---------------------------------------------------------------------------
