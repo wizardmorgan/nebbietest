@@ -181,9 +181,14 @@ python3 docs/mudlet/tests/verify_batch_log.py ... \
   --objects-dir /path/to/mudroot/lib/objects
 ```
 
-**Comportamento**: tra un comando e l'altro attende il **prompt** del gioco; cattura **tutto**
-l'output a schermo e lo appende al log. Se compare un messaggio di errore MUD noto, **ferma**
-l'intero batch.
+**Comportamento**: tra un comando e l'altro attende il **prompt** del gioco (o, dopo `oedit`,
+la riga menu `-->`); cattura **tutto** l'output a schermo e lo appende al log. Se compare un
+messaggio di errore MUD noto, **ferma** l'intero batch.
+
+**Flag EDIT (`oedit`)**: per marcare un oggetto come modificabile puoi inserire nel file comandi
+`oedit $2` (dopo `oload $3` o dove preferisci). Il batch attende la riga `-->` del menu
+interattivo, poi invia la riga speciale **`[enter]`** (invio vuoto) per uscire dal menu prima
+del comando successivo.
 
 **Log**: un file per ogni `nome-toon` e giorno, es. `GreenBlade-2026-09-21.txt` nella home del
 profilo. Più batch nello stesso giorno → nuova sezione con data/ora. Ogni riga CSV e ogni comando
@@ -194,6 +199,8 @@ Esempio sequenza comandi (file `nebbie-batch-commands.txt`, workflow osave):
 ```
 oload $3
 stat $2
+oedit $2
+[enter]
 cast 'identify' $2
 osave $2 $3 $4
 stat $2
