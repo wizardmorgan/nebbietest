@@ -1,12 +1,12 @@
--- NEBBIE_INSTALL_VER=2.2.33
-if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.33"
+-- NEBBIE_INSTALL_VER=2.2.34
+if Nebbie and Nebbie._mainLoaded and Nebbie.version == "2.2.34"
     and type(Nebbie.runFix) == "function" then return end
-Nebbie.version = "2.2.33"
+Nebbie.version = "2.2.34"
 -- Nebbie Arcane: spell & skill aliases/triggers (auto-generated)
 Nebbie = Nebbie or {}
 
 Nebbie.MAIN_SCRIPT_NAME = "Nebbie Play All"
-Nebbie._expectedPkgVer = "2.2.33"
+Nebbie._expectedPkgVer = "2.2.34"
 
 Nebbie.castSpells = {
   ['armor'] = true,
@@ -1041,7 +1041,9 @@ Nebbie.legacyPermTriggers = {
 }
 
 
-Nebbie.version = "2.2.33"
+Nebbie.version = "2.2.34"
+
+Nebbie.gmcp = Nebbie.gmcp or { enabled = false, handlers = {} }
 
 Nebbie.DEFAULT_EQ_KEYWORDS = {
   { match = "borsa inesauribile dei korred", key = "korred" },
@@ -1239,6 +1241,7 @@ function Nebbie.pollPromptFromBuffer()
         Nebbie.stats = parsed
         Nebbie.promptBuffs = Nebbie.parsePromptCodes(parsed.codes or "")
         Nebbie._lastPromptRaw = text
+        Nebbie.applyStats(parsed, "prompt")
         return true
       end
     end
@@ -1246,14 +1249,102 @@ function Nebbie.pollPromptFromBuffer()
   return false
 end
 
+function Nebbie.applyStats(stats, source)
+  if not stats then return end
+  Nebbie.stats = stats
+  Nebbie._statsSource = source or Nebbie._statsSource or "prompt"
+  Nebbie.updateGauges()
+  Nebbie.refreshGUI()
+end
+
+function Nebbie.mergeGmcpIntoStats()
+  if not gmcp or not gmcp.char then return false end
+  local v = gmcp.char.vitals
+  local b = gmcp.char.base
+  if not v and not b then return false end
+  local s = {}
+  if Nebbie.stats then
+    for k, val in pairs(Nebbie.stats) do s[k] = val end
+  end
+  if v then
+    s.hp = tonumber(v.hp) or s.hp
+    s.maxhp = tonumber(v.maxhp) or s.maxhp
+    s.mana = tonumber(v.mana) or s.mana
+    s.maxmana = tonumber(v.maxmana) or s.maxmana
+    s.move = tonumber(v.move) or tonumber(v.pow) or s.move
+    s.movemax = tonumber(v.maxmove) or tonumber(v.maxpow) or s.movemax
+  end
+  if b then
+    s.name = b.name or s.name
+    s.xp = tonumber(b.experience) or s.xp
+    s.gold = tonumber(b.gold) or s.gold
+  end
+  if not (s.hp and s.mana and s.move) then return false end
+  Nebbie.applyStats(s, "gmcp")
+  return true
+end
+
+function Nebbie.fUpdateGMCP(event, ...)
+  if event ~= "gmcp.char" and event ~= "gmcp.Client" then return end
+  Nebbie.gmcp.enabled = true
+  Nebbie.gmcp.lastEvent = event
+  Nebbie.gmcp.lastAt = Nebbie.now()
+  if event == "gmcp.char" then
+    Nebbie.mergeGmcpIntoStats()
+  end
+end
+
+function Nebbie.installGmcpHandlers()
+  if type(registerAnonymousEventHandler) ~= "function" then return end
+  Nebbie.gmcp.handlers = Nebbie.gmcp.handlers or {}
+  if Nebbie.gmcp.handlers.char and type(killAnonymousEventHandler) == "function" then
+    pcall(function() killAnonymousEventHandler(Nebbie.gmcp.handlers.char) end)
+  end
+  Nebbie.gmcp.handlers.char = registerAnonymousEventHandler("gmcp.char", "Nebbie.fUpdateGMCP")
+end
+
+function Nebbie.debugGmcp()
+  cecho("<cyan>Nebbie v" .. tostring(Nebbie.version) .. " — debug GMCP\n")
+  cecho("<grey>handler attivo: <white>" .. tostring(Nebbie.gmcp and Nebbie.gmcp.enabled) .. "\n")
+  cecho("<grey>ultimo evento: <white>" .. tostring(Nebbie.gmcp and Nebbie.gmcp.lastEvent or "(nessuno)") .. "\n")
+  cecho("<grey>fonte stats: <white>" .. tostring(Nebbie._statsSource or "?") .. "\n")
+  if gmcp then
+    if gmcp.char and gmcp.char.vitals then
+      local v = gmcp.char.vitals
+      cecho(string.format("<green>gmcp vitals: HP %s/%s MN %s/%s MV %s/%s\n",
+        tostring(v.hp), tostring(v.maxhp), tostring(v.mana), tostring(v.maxmana),
+        tostring(v.move or v.pow), tostring(v.maxmove or v.maxpow)))
+    else
+      cecho("<orange>gmcp.char.vitals assente — il server non invia ancora GMCP?\n")
+    end
+    if gmcp.Client and gmcp.Client.GUI then
+      cecho("<grey>Client.GUI url: <white>" .. tostring(gmcp.Client.GUI.url or "?") .. "\n")
+    end
+  else
+    cecho("<orange>tabella gmcp vuota — connetti a Nebbie con GMCP abilitato in Mudlet\n")
+  end
+  if Nebbie.mergeGmcpIntoStats() then
+    cecho("<green>merge GMCP → HUD ok\n")
+  end
+end
+
 function Nebbie.onPrompt(line)
   Nebbie._lastPromptRaw = line
   local parsed = Nebbie.parsePromptStats(line)
   if not parsed then return end
-  Nebbie.stats = parsed
+  if Nebbie.gmcp and Nebbie.gmcp.enabled and Nebbie.gmcp.lastAt and
+      (Nebbie.now() - Nebbie.gmcp.lastAt) < 3 then
+    parsed.name = parsed.name or (Nebbie.stats and Nebbie.stats.name)
+    parsed.xp = parsed.xp or (Nebbie.stats and Nebbie.stats.xp)
+    parsed.gold = parsed.gold or (Nebbie.stats and Nebbie.stats.gold)
+    if Nebbie.stats and Nebbie.stats.hp then
+      parsed.hp, parsed.hpmax = Nebbie.stats.hp, Nebbie.stats.hpmax
+      parsed.mana, parsed.manamax = Nebbie.stats.mana, Nebbie.stats.manamax
+      parsed.move, parsed.movemax = Nebbie.stats.move, Nebbie.stats.movemax
+    end
+  end
   Nebbie.promptBuffs = Nebbie.parsePromptCodes(parsed.codes or "")
-  Nebbie.updateGauges()
-  Nebbie.refreshGUI()
+  Nebbie.applyStats(parsed, "prompt")
 end
 
 function Nebbie.onPromptLine()
@@ -3631,8 +3722,8 @@ end
 function Nebbie.setupHUD()
   if Nebbie._setupRunning then return end
   Nebbie._setupRunning = true
-  cecho("<green>Nebbie HUD v" .. Nebbie.version .. ": parser prompt attivo.\n")
-  cecho("<grey>Comandi MUD liberi: <yellow>inv<grey>, <yellow>eq<grey>. Loot mob: <yellow>nloot<grey> | auto <yellow>nloot on<grey>\n")
+  cecho("<green>Nebbie HUD v" .. Nebbie.version .. ": GMCP + parser prompt (fallback).\n")
+  cecho("<grey>GMCP: <yellow>ngmcp<grey> | Prompt: <yellow>nprompt<grey> | Comandi MUD liberi: <yellow>inv<grey>, <yellow>eq<grey>\n")
   if not Nebbie.playerClass or Nebbie.playerClass == "" then Nebbie.setClass("+", true) end
   Nebbie.initGUI()
   Nebbie.pollPromptFromBuffer()
@@ -3650,6 +3741,11 @@ function Nebbie.refreshGUI()
     clearWindow(Nebbie.guiConsole)
     local s = Nebbie.stats or {}
     cecho("NebbieHUD", "<cyan><b>=== Nebbie HUD v" .. Nebbie.version .. " ===</b>\n")
+    if Nebbie.gmcp and Nebbie.gmcp.enabled then
+      cecho("NebbieHUD", "<grey>Stats: <green>GMCP<grey> (prompt fallback attivo)\n")
+    elseif Nebbie._statsSource then
+      cecho("NebbieHUD", "<grey>Stats: <yellow>" .. tostring(Nebbie._statsSource) .. "\n")
+    end
     if s.name then
       cecho("NebbieHUD", "<white>" .. s.name .. "  <grey>XP:<yellow>" .. tostring(s.xp or "?")
         .. " <grey>Oro:<yellow>" .. tostring(s.gold or "?") .. "\n")
@@ -3936,6 +4032,7 @@ function Nebbie.install()
   perm("reposition gui", [[^npos$]], [[Nebbie.resetGUIPosition()]])
   perm("setup hud", [[^nsetup$]], [[Nebbie.setupHUD()]])
   perm("prompt debug", [[^nprompt$]], [[Nebbie.debugPrompt()]])
+  perm("gmcp debug", [[^ngmcp$]], [[Nebbie.debugGmcp()]])
   perm("install diagnose", [[^ndiagnose$]], [[Nebbie.diagnoseInstall()]])
   perm("keypad refresh", [[^nkeys$]], [[
     Nebbie.killKeypadBindings()
@@ -4155,6 +4252,7 @@ function Nebbie.install()
   end
 
   Nebbie.installPromptHooks()
+  Nebbie.installGmcpHandlers()
   Nebbie.installEqSendHook()
   Nebbie.testPromptParse(true)
   Nebbie.testEqParse(true)
@@ -4197,6 +4295,7 @@ function Nebbie.boot()
     Nebbie.syncAttribTimer()
     Nebbie.syncEqCacheTimer()
     Nebbie.installEqSendHook()
+    Nebbie.installGmcpHandlers()
     Nebbie.maybeRefreshEqCacheOnBoot()
     Nebbie._mainLoaded = true
     Nebbie._bootInProgress = false

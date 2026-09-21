@@ -1017,6 +1017,8 @@ public:
 	bool justCreated=false;
 	bool impersonating=false;
 	bool AlreadyInGame = false;                  /* flag di presenza */
+	bool gmcp_enabled=false;                     /* Mudlet GMCP negotiated */
+	bool gmcp_sent_login=false;                  /* Client.GUI + initial char.* sent */
 	user AccountData;
 	std::vector<std::string> toons;
 	e_connection_types last_state;
