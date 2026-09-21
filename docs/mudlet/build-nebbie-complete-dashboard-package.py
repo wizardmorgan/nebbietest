@@ -22,7 +22,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.9.0"
+PKG_VER = "1.10.0"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -107,6 +107,10 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   problema era mascherato da tempo dal fatto che le versioni precedenti già
   caricate in memoria da Mudlet continuavano a funzionare fino al primo
   riavvio completo del programma.
+- **Batch admin (`nbatch`, solo Sirio connesso)**: esegue in sequenza comandi
+  definiti in `nebbie-batch-commands.txt` su righe CSV (`nebbie-batch-items.csv`),
+  attende il prompt tra un comando e l'altro, ferma tutto su errore MUD e
+  scrive un log completo per ogni nome-toon in `<Toon>-YYYY-MM-DD.txt`.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -156,6 +160,9 @@ ALIASES = [
     ("nebbie-dash-hungermacros", "^nhungermacros$", "NebbieDash.cmdReloadHungerMacros()"),
     ("nebbie-dash-itemkeywords", "^nitemkeywords$", "NebbieDash.cmdReloadItemKeywords()"),
     ("nebbie-dash-forgetspell", "^nforgetspell (.+)$", "NebbieDash.cmdForgetSpell(matches[2])"),
+    ("nebbie-dash-batch", "^nbatch$", "NebbieDash.cmdBatch()"),
+    ("nebbie-dash-batch-filter", "^nbatch (.+)$", "NebbieDash.cmdBatch(matches[2])"),
+    ("nebbie-dash-batch-reload", "^nbatchreload$", "NebbieDash.cmdReloadBatch()"),
 ]
 
 

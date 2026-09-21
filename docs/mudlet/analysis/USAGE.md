@@ -119,6 +119,58 @@ Scrivi `.` seguito da un numero e un comando per ripeterlo quella quantità di v
 pausa tra un invio e l'altro già usata per gli speedwalk (`nspeeddelay`). Esempi: `.4s` invia `s`
 quattro volte; `.3 kill goblin` invia `kill goblin` tre volte. Limite di sicurezza: 99 ripetizioni.
 
+## Batch admin (`nbatch`) — solo Sirio connesso
+
+Utility di amministrazione (non gameplay): esegue in sequenza comandi MUD definiti da te, su righe
+lette da un CSV. **Funziona solo se il personaggio attivo rilevato dal prompt è Sirio** (devi
+essere loggato con lui; `nchar Sirio` non basta se non sei realmente connesso come Sirio).
+
+Due file nella home del profilo Mudlet (`getMudletHomeDir()`):
+
+| File | Contenuto |
+|------|-----------|
+| `nebbie-batch-commands.txt` | Un comando per riga; placeholder `$1`..`$4` |
+| `nebbie-batch-items.csv` | Righe oggetto (CSV con intestazione) |
+
+**CSV — colonne** (prima riga obbligatoria):
+
+```
+nome-toon,key,vnum-attuale,vnum-originale
+GreenBlade,equilibrio EDGreenBlade,34424,9030
+GreenBlade,egida foresta EDGreenBlade,34512,15809
+```
+
+- `$1` = `nome-toon` (es. `GreenBlade`) — anche nome file log
+- `$2` = `key` normalizzata: **minuscolo**, spazi → **trattini** (es. `egida-foresta-edgreenblade`)
+- `$3` = `vnum-attuale`, `$4` = `vnum-originale`
+
+**Comandi Mudlet**:
+
+| Comando | Azione |
+|---------|--------|
+| `nbatch` | Esegue tutte le righe CSV |
+| `nbatch greenblade` | Solo righe il cui `nome-toon` matcha (case-insensitive) |
+| `nbatchreload` | Ricarica entrambi i file |
+
+**Comportamento**: tra un comando e l'altro attende il **prompt** del gioco; cattura **tutto**
+l'output a schermo e lo appende al log. Se compare un messaggio di errore MUD noto, **ferma**
+l'intero batch.
+
+**Log**: un file per ogni `nome-toon` e giorno, es. `GreenBlade-2026-09-21.txt` nella home del
+profilo. Più batch nello stesso giorno → nuova sezione con data/ora. Ogni riga CSV e ogni comando
+inviato sono tracciati con timestamp.
+
+Esempio sequenza comandi (file `nebbie-batch-commands.txt`, workflow osave):
+
+```
+oload $3
+stat $2
+cast 'identify' $2
+osave $2 $3 $4
+stat $2
+cast 'identify' $2
+```
+
 ## Fame/sete: macro configurabile per personaggio
 
 Quando il gioco mostra `Hai Fame.` o `Hai sete.`, se `nautofeed` è attivo (default sì) il pacchetto

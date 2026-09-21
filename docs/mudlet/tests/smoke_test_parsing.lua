@@ -747,6 +747,44 @@ check("scadenza spell: 5 pattern reali configurati (nessuno inventato oltre a qu
 local expiredOkUnknown = pcall(NebbieDash.onSpellExpiredLine, "spell mai vista")
 check("scadenza spell: nome non conosciuto non genera errori", expiredOkUnknown)
 
+-- Test 21: batch admin (nbatch) — parsing CSV, normalizzazione key, sostituzione placeholder.
+check("batch: normalizeBatchKey spazi -> trattini minuscolo",
+  NebbieDash.normalizeBatchKey("egida foresta EDGreenBlade") == "egida-foresta-edgreenblade")
+local csvFields = NebbieDash.parseCsvLine('GreenBlade,"egida foresta EDGreenBlade",34512,15809')
+check("batch: parseCsvLine legge 4 campi", #csvFields == 4)
+check("batch: parseCsvLine mantiene spazi nel key raw", csvFields[2] == "egida foresta EDGreenBlade")
+local row = {
+  nomeToon = "GreenBlade",
+  keyRaw = "egida foresta EDGreenBlade",
+  keyNorm = NebbieDash.normalizeBatchKey("egida foresta EDGreenBlade"),
+  vnumAttuale = "34512",
+  vnumOriginale = "15809",
+}
+check("batch: substituteBatchVars oload", NebbieDash.substituteBatchVars("oload $3", row) == "oload 34512")
+check("batch: substituteBatchVars stat key normalizzata",
+  NebbieDash.substituteBatchVars("stat $2", row) == "stat egida-foresta-edgreenblade")
+check("batch: substituteBatchVars osave completo",
+  NebbieDash.substituteBatchVars("osave $2 $3 $4", row) == "osave egida-foresta-edgreenblade 34512 15809")
+NebbieDash.batchItems = {
+  { nomeToon = "GreenBlade", keyRaw = "a", keyNorm = "a", vnumAttuale = "1", vnumOriginale = "2" },
+  { nomeToon = "NomiyaMaki", keyRaw = "b", keyNorm = "b", vnumAttuale = "3", vnumOriginale = "4" },
+}
+local filtered = NebbieDash.filterBatchRows(NebbieDash.batchItems, "greenblade")
+check("batch: filterBatchRows case-insensitive", #filtered == 1 and filtered[1].nomeToon == "GreenBlade")
+check("batch: batchDetectError su messaggio oload noto",
+  NebbieDash.batchDetectError({ "There is no such object." }))
+check("batch: batchDetectError ignora output ok",
+  not NebbieDash.batchDetectError({ "Oggetto creato.", "Sirio H: 100/100 M: 50/50 V: 30/30 x:0 *:* *:* [[TD]] G:0 >>" }))
+NebbieDash.currentChar = "Mirari"
+NebbieDash.cmdBatch("greenblade")
+check("batch: cmdBatch rifiuta PG diverso da Sirio", NebbieDash._batch == nil)
+NebbieDash.currentChar = "Sirio"
+NebbieDash.batchCommands = { "oload $3" }
+NebbieDash.batchItems = { row }
+NebbieDash.cmdBatch("greenblade")
+check("batch: cmdBatch avvia con Sirio e filtro", NebbieDash._batch ~= nil and NebbieDash._batch.active == true)
+if NebbieDash._batch then NebbieDash.batchStop("test cleanup") end
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")
