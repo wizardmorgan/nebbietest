@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.10.0)
+description = [[# Nebbie Dashboard (1.11.0)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -81,6 +81,9 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   definiti in `nebbie-batch-commands.txt` su righe CSV (`nebbie-batch-items.csv`),
   attende il prompt tra un comando e l'altro, ferma tutto su errore MUD e
   scrive un log completo per ogni nome-toon in `<Toon>-YYYY-MM-DD.txt`.
+- **`nbatchverify`**: controlla i log batch rispetto al CSV e ai comandi attesi;
+  report in `<Toon>-YYYY-MM-DD.verify.txt`. Script offline:
+  `docs/mudlet/tests/verify_batch_log.py`.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -90,4 +93,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.10.0]]
+version = [[1.11.0]]

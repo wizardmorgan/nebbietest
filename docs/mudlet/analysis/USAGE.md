@@ -152,6 +152,35 @@ GreenBlade,egida foresta EDGreenBlade,34512,15809
 | `nbatch greenblade` | Solo righe il cui `nome-toon` matcha (case-insensitive) |
 | `nbatchreload` | Ricarica entrambi i file |
 
+### Verifica log (`nbatchverify`)
+
+Dopo aver eseguito `nbatch`, controlla che ogni riga CSV abbia prodotto tutti i comandi
+attesi e (se previsto) il messaggio `Ho salvato ... con il vnum ... (originale ...)`.
+
+| Comando | Azione |
+|---------|--------|
+| `nbatchverify` | Verifica tutti i toon nel CSV (log di oggi) |
+| `nbatchverify GreenBlade` | Solo quel toon, log di oggi |
+| `nbatchverify GreenBlade 2026-09-21` | Toon + data esplicita |
+
+Scrive un report in `<Toon>-YYYY-MM-DD.verify.txt` nella home del profilo.
+
+**Verifica offline** (copia log + CSV dal profilo Mudlet sul PC):
+
+```bash
+python3 docs/mudlet/tests/verify_batch_log.py \
+  --csv nebbie-batch-items.csv \
+  --commands nebbie-batch-commands.txt \
+  --log GreenBlade-2026-09-21.txt
+```
+
+Opzionale, se hai anche i file oggetto salvati dal server (`objects/<vnum>`):
+
+```bash
+python3 docs/mudlet/tests/verify_batch_log.py ... \
+  --objects-dir /path/to/mudroot/lib/objects
+```
+
 **Comportamento**: tra un comando e l'altro attende il **prompt** del gioco; cattura **tutto**
 l'output a schermo e lo appende al log. Se compare un messaggio di errore MUD noto, **ferma**
 l'intero batch.
