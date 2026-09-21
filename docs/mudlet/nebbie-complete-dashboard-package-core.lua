@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.11.0"
+local PKG_VER = "1.11.1"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -197,12 +197,30 @@ function NebbieDash.parsePromptLine(text)
   }
 end
 
+-- Prompt immortale/builder (es. Sirio): "Sirio R1000 [On//60]>>" — confermato
+-- dall'utente 2026-09-21. Il trigger " M:" non matcha mai questo formato, quindi
+-- nbatch (che attendeva onPromptLine) andava in timeout anche con prompt visibile.
+function NebbieDash.parseImmortalPromptLine(text)
+  if not text or text == "" then return nil end
+  local name = text:match("^(%S+)%s+R%d+%s+%[[^%]]+%]%s*>>%s*$")
+  if not name then return nil end
+  return { name = name, immortal = true }
+end
+
+function NebbieDash.isAnyPromptLine(text)
+  return NebbieDash.parsePromptLine(text) or NebbieDash.parseImmortalPromptLine(text)
+      or (text and text:match("^>>%s*$") and { name = NebbieDash.currentChar or "?" })
+end
+
 function NebbieDash.onPromptLine()
   local text = line
   if (not text or text == "") and type(getCurrentLine) == "function" then
     text = getCurrentLine()
   end
   local parsed = NebbieDash.parsePromptLine(text or "")
+  if not parsed then
+    parsed = NebbieDash.parseImmortalPromptLine(text or "")
+  end
   if not parsed then return end
   NebbieDash.stats = parsed
   NebbieDash.setCurrentCharacter(parsed.name, false)
@@ -2379,6 +2397,10 @@ function NebbieDash.onBatchLine()
   end
   text = text or ""
   table.insert(b.stepLines, text)
+  -- Il prompt Sirio non passa dal trigger " M:" — rileviamolo qui durante il batch.
+  if NebbieDash.isAnyPromptLine(text) then
+    NebbieDash.onBatchPrompt(text)
+  end
 end
 
 function NebbieDash.onBatchPrompt(promptText)
@@ -2391,7 +2413,10 @@ function NebbieDash.onBatchPrompt(promptText)
   end
 
   if promptText and promptText ~= "" then
-    table.insert(b.stepLines, promptText)
+    local last = b.stepLines[#b.stepLines]
+    if last ~= promptText then
+      table.insert(b.stepLines, promptText)
+    end
   end
 
   local block = table.concat(b.stepLines, "\n")
@@ -2792,7 +2817,7 @@ end
 -- stesso di ri-registrare i trigger dopo il primo avvio della sessione.
 function NebbieDash.teardownTriggers()
   local ids = {
-    NebbieDash._promptTrig, NebbieDash._eqOpenTrig, NebbieDash._attribOpenTrig,
+    NebbieDash._promptTrig, NebbieDash._promptImmTrig, NebbieDash._eqOpenTrig, NebbieDash._attribOpenTrig,
     NebbieDash._eqLineTrig, NebbieDash._attribLineTrig, NebbieDash._lootLineTrig,
     NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
     NebbieDash._combatEndTrig2,
@@ -2822,6 +2847,9 @@ function NebbieDash.installTriggers()
   -- case-insensitive): il problema era solo nello shield del trigger, non
   -- nel parsing.
   NebbieDash._promptTrig = tempTrigger(" M:", [[NebbieDash.onPromptLine()]])
+  -- Prompt immortale (Sirio ecc.): "Nome R### [....]>>" — necessario per nbatch e
+  -- rilevamento PG senza dipendere da nchar.
+  NebbieDash._promptImmTrig = tempRegexTrigger("%]%s*>>%s*$", [[NebbieDash.onPromptLine()]])
   NebbieDash._eqOpenTrig = tempTrigger("Stai usando:", [[NebbieDash.startEqCapture()]])
   NebbieDash._attribOpenTrig = tempTrigger("Spells attivi", [[NebbieDash.startAttribCapture()]])
   NebbieDash._eqLineTrig = tempRegexTrigger("^", [[NebbieDash.onEqCaptureLine()]])

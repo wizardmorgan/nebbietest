@@ -801,6 +801,12 @@ local vcmds = { "oload $3", "osave $2 $3 $4" }
 local vok, vissues = NebbieDash.verifyBatchSection(sections[1], vrow, vcmds)
 check("verify: sezione osave OK con messaggio server", vok and #vissues == 0)
 
+local imm = NebbieDash.parseImmortalPromptLine("Sirio R1000 [On//60]>>")
+check("batch: parseImmortalPromptLine Sirio", imm and imm.name == "Sirio")
+check("batch: isAnyPromptLine prompt immortale", NebbieDash.isAnyPromptLine("Sirio R1000 [On//60]>>") ~= nil)
+check("batch: isAnyPromptLine non confonde riga narrativa",
+  NebbieDash.isAnyPromptLine("Adesso hai Elmo della Citta d'Ottone.") == nil)
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

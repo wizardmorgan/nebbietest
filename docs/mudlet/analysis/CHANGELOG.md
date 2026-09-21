@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.11.1 — 2026-09-21
+
+- **Corretto (nbatch)**: timeout su Sirio con prompt immortale `Sirio R1000 [On//60]>>` — il
+  batch attendeva solo prompt PG con `H:/M:/V:` (trigger ` M:`). Ora riconosce anche il
+  formato immortale nel capture batch e via trigger dedicato; `nbatch` avanza al prompt reale.
+- **Versione interna** alzata a 1.11.1.
+
 ## 1.11.0 — 2026-09-21
 
 - **Aggiunto**: `nbatchverify [toon] [YYYY-MM-DD]` — verifica log batch vs CSV/comandi;
