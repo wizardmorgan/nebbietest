@@ -1,5 +1,17 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.10.0 — 2026-09-21
+
+- **Aggiunto**: batch admin `nbatch` / `nbatchreload` (solo con **Sirio** connesso, rilevato dal
+  prompt). Due file di configurazione in `getMudletHomeDir()`:
+  - `nebbie-batch-commands.txt` — sequenza comandi con placeholder `$1`..`$4`
+  - `nebbie-batch-items.csv` — righe oggetto (`nome-toon,key,vnum-attuale,vnum-originale`)
+- **Aggiunto**: esecuzione sequenziale con **attesa del prompt** tra un comando e l'altro; stop
+  completo del batch al primo errore MUD riconosciuto.
+- **Aggiunto**: log sessione completo per ogni `nome-toon` in `<Toon>-YYYY-MM-DD.txt` (sezioni
+  orari per batch multipli nello stesso giorno).
+- **Versione interna** alzata a 1.10.0.
+
 ## 1.9.0 — 2026-08-10
 
 - **Aggiunto**: `nforgetspell <nome>` per rimuovere manualmente una spell erroneamente memorizzata

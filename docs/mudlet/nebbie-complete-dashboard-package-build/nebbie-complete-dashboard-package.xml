@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.9.0"
+local PKG_VER = "1.10.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -214,6 +214,9 @@ function NebbieDash.onPromptLine()
   NebbieDash.setCurrentCharacter(parsed.name, false)
   NebbieDash._awaitingPromptAfterConnect = false
   NebbieDash.updateVitalsDisplay()
+  if NebbieDash._batch and NebbieDash._batch.active and NebbieDash._batch.awaitingOutput then
+    NebbieDash.onBatchPrompt(text)
+  end
 end
 
 -- ---------------------------------------------------------------------------
@@ -1048,6 +1051,8 @@ NebbieDash.HELP_TEXT = {
   { "nhungermacros", "Ricarica le macro fame/sete dal file di configurazione." },
   { "nitemkeywords", "Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione." },
   { "nforgetspell <nome>", "Rimuove una spell memorizzata per errore dall'elenco del personaggio attivo." },
+  { "nbatch [nome-toon]", "Esegue comandi admin da CSV (solo PG Sirio connesso). Vedi nebbie-batch-*.txt/csv." },
+  { "nbatchreload", "Ricarica nebbie-batch-commands.txt e nebbie-batch-items.csv." },
   { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
   { "nhelp", "Mostra/nascondi questa finestra." },
@@ -2125,6 +2130,401 @@ function NebbieDash.cmdSplit(argStr)
 end
 
 -- ---------------------------------------------------------------------------
+-- Batch admin (nbatch) — utility Sirio, comandi da file di configurazione.
+-- Confermato dall'utente (2026-09-21): solo con Sirio connesso (non nchar),
+-- attesa prompt tra un comando e l'altro, stop su errore MUD, log completo
+-- per nome-toon in <Toon>-YYYY-MM-DD.txt sotto la home Mudlet.
+-- ---------------------------------------------------------------------------
+NebbieDash.BATCH_EXECUTOR = "Sirio"
+NebbieDash.batchTimeoutSec = 45
+NebbieDash.batchCommands = {}
+NebbieDash.batchItems = {}
+
+-- Pattern di errore noti (server Nebbie, act.wizard.cpp / do_oload / do_osave).
+NebbieDash.BATCH_ERROR_PATTERNS = {
+  "There is no such object.",
+  "Hum, non ho idea di dove sia!",
+  "Il v-number non e' valido.",
+  "Il secondo valore non e' corretto.",
+  "Mi dispiace ma non hai accesso a quella zona.",
+  "Sorry, private items.",
+  "When monkeys fly out of Ripper",
+}
+
+function NebbieDash.batchCommandsPath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-batch-commands.txt"
+end
+
+function NebbieDash.batchItemsPath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-batch-items.csv"
+end
+
+function NebbieDash.batchLogPath(nomeToon)
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  local date = os.date("%Y-%m-%d")
+  return home .. "/" .. (nomeToon or "unknown") .. "-" .. date .. ".txt"
+end
+
+function NebbieDash.ensureBatchCommandsFile()
+  local path = NebbieDash.batchCommandsPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# Sequenza comandi batch — una riga = un comando inviato al MUD.\n" ..
+    "# Placeholder: $1 nome-toon (CSV), $2 chiave normalizzata (minuscolo, trattini),\n" ..
+    "# $3 vnum-attuale, $4 vnum-originale.\n" ..
+    "# Dopo modifiche: nbatchreload (o riavvia Mudlet).\n" ..
+    "#\n" ..
+    "# Esempio workflow osave (Sirio):\n" ..
+    "oload $3\n" ..
+    "stat $2\n" ..
+    "cast 'identify' $2\n" ..
+    "osave $2 $3 $4\n" ..
+    "stat $2\n" ..
+    "cast 'identify' $2\n"
+  )
+  f:close()
+end
+
+function NebbieDash.ensureBatchItemsFile()
+  local path = NebbieDash.batchItemsPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# CSV oggetti batch — prima riga = intestazione obbligatoria.\n" ..
+    "# Colonne: nome-toon,key,vnum-attuale,vnum-originale\n" ..
+    "# key: testo libero; $2 nei comandi = minuscolo con spazi -> trattini.\n" ..
+    "# Righe # e vuote ignorate. Dopo modifiche: nbatchreload.\n" ..
+    "nome-toon,key,vnum-attuale,vnum-originale\n" ..
+    "GreenBlade,equilibrio EDGreenBlade,34424,9030\n" ..
+    "GreenBlade,egida foresta EDGreenBlade,34512,15809\n"
+  )
+  f:close()
+end
+
+function NebbieDash.parseCsvLine(rawLine)
+  local fields = {}
+  local field = {}
+  local inQuotes = false
+  local i = 1
+  while i <= #rawLine do
+    local ch = rawLine:sub(i, i)
+    if ch == '"' then
+      if inQuotes and rawLine:sub(i + 1, i + 1) == '"' then
+        table.insert(field, '"')
+        i = i + 1
+      else
+        inQuotes = not inQuotes
+      end
+    elseif ch == "," and not inQuotes then
+      table.insert(fields, table.concat(field))
+      field = {}
+    else
+      table.insert(field, ch)
+    end
+    i = i + 1
+  end
+  table.insert(fields, table.concat(field))
+  for idx, value in ipairs(fields) do
+    fields[idx] = value:match("^%s*(.-)%s*$")
+  end
+  return fields
+end
+
+function NebbieDash.normalizeBatchKey(raw)
+  local key = (raw or ""):lower()
+  key = key:gsub("%s+", "-")
+  key = key:gsub("-+", "-")
+  return key
+end
+
+function NebbieDash.substituteBatchVars(template, row)
+  local out = template or ""
+  out = out:gsub("%$(%d)", function(n)
+    n = tonumber(n)
+    if n == 1 then return row.nomeToon or "" end
+    if n == 2 then return row.keyNorm or "" end
+    if n == 3 then return tostring(row.vnumAttuale or "") end
+    if n == 4 then return tostring(row.vnumOriginale or "") end
+    return ""
+  end)
+  return out
+end
+
+function NebbieDash.loadBatchCommands()
+  NebbieDash.ensureBatchCommandsFile()
+  NebbieDash.batchCommands = {}
+  local path = NebbieDash.batchCommandsPath()
+  local f = io.open(path, "r")
+  if not f then return end
+  for rawLine in f:lines() do
+    local line2 = rawLine:match("^%s*(.-)%s*$")
+    if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+      table.insert(NebbieDash.batchCommands, line2)
+    end
+  end
+  f:close()
+end
+
+function NebbieDash.loadBatchItems()
+  NebbieDash.ensureBatchItemsFile()
+  NebbieDash.batchItems = {}
+  local path = NebbieDash.batchItemsPath()
+  local f = io.open(path, "r")
+  if not f then return end
+  local headerDone = false
+  for rawLine in f:lines() do
+    local line2 = rawLine:match("^%s*(.-)%s*$")
+    if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+      if not headerDone then
+        headerDone = true
+      else
+        local fields = NebbieDash.parseCsvLine(line2)
+        if #fields >= 4 then
+          table.insert(NebbieDash.batchItems, {
+            nomeToon = fields[1],
+            keyRaw = fields[2],
+            keyNorm = NebbieDash.normalizeBatchKey(fields[2]),
+            vnumAttuale = fields[3],
+            vnumOriginale = fields[4],
+            rawLine = line2,
+          })
+        end
+      end
+    end
+  end
+  f:close()
+end
+
+function NebbieDash.filterBatchRows(rows, filterStr)
+  filterStr = (filterStr or ""):match("^%s*(.-)%s*$")
+  if filterStr == "" then return rows end
+  local want = filterStr:lower()
+  local out = {}
+  for _, row in ipairs(rows or {}) do
+    if (row.nomeToon or ""):lower() == want then
+      table.insert(out, row)
+    end
+  end
+  return out
+end
+
+function NebbieDash.batchDetectError(lines)
+  for _, text in ipairs(lines or {}) do
+    for _, pattern in ipairs(NebbieDash.BATCH_ERROR_PATTERNS) do
+      if text:find(pattern, 1, true) then
+        return true, text
+      end
+    end
+  end
+  return false
+end
+
+function NebbieDash.batchAppendToLog(nomeToon, text)
+  local path = NebbieDash.batchLogPath(nomeToon)
+  local f = io.open(path, "a")
+  if not f then
+    cecho("<red>[NebbieDash] Impossibile scrivere log: " .. path .. "\n")
+    return false
+  end
+  f:write(text)
+  f:close()
+  return true
+end
+
+function NebbieDash.batchEnsureLogSection(b, row)
+  local header = string.format(
+    "\n========== batch %s (%s) ==========\n",
+    os.date("%Y-%m-%d %H:%M:%S"),
+    b.filterLabel or "tutte"
+  )
+  local rowHeader = string.format(
+    "\n--- riga %d — %s ---\nCSV: %s\n",
+    b.rowIdx,
+    os.date("%H:%M:%S"),
+    row.rawLine or ""
+  )
+  if b.currentLogToon ~= row.nomeToon then
+    b.currentLogToon = row.nomeToon
+    b.logSectionStarted = false
+  end
+  if not b.logSectionStarted then
+    NebbieDash.batchAppendToLog(row.nomeToon, header)
+    b.logSectionStarted = true
+  end
+  NebbieDash.batchAppendToLog(row.nomeToon, rowHeader)
+end
+
+function NebbieDash.batchEnableLineCapture()
+  if NebbieDash._batchLineTrig then
+    pcall(function() killTrigger(NebbieDash._batchLineTrig) end)
+  end
+  if type(tempRegexTrigger) == "function" then
+    NebbieDash._batchLineTrig = tempRegexTrigger("^", [[NebbieDash.onBatchLine()]])
+  end
+end
+
+function NebbieDash.batchDisableLineCapture()
+  if NebbieDash._batchLineTrig then
+    pcall(function() killTrigger(NebbieDash._batchLineTrig) end)
+    NebbieDash._batchLineTrig = nil
+  end
+end
+
+function NebbieDash.onBatchLine()
+  local b = NebbieDash._batch
+  if not b or not b.active or not b.awaitingOutput then return end
+  local text = line
+  if (not text or text == "") and type(getCurrentLine) == "function" then
+    text = getCurrentLine()
+  end
+  text = text or ""
+  table.insert(b.stepLines, text)
+end
+
+function NebbieDash.onBatchPrompt(promptText)
+  local b = NebbieDash._batch
+  if not b or not b.active or not b.awaitingOutput then return end
+  b.awaitingOutput = false
+  if b.timeoutId and type(killTimer) == "function" then
+    pcall(killTimer, b.timeoutId)
+    b.timeoutId = nil
+  end
+
+  if promptText and promptText ~= "" then
+    table.insert(b.stepLines, promptText)
+  end
+
+  local block = table.concat(b.stepLines, "\n")
+  if block ~= "" then
+    NebbieDash.batchAppendToLog(b.currentLogToon, block .. "\n")
+  end
+
+  local err, errLine = NebbieDash.batchDetectError(b.stepLines)
+  if err then
+    NebbieDash.batchStop("fermato — errore MUD: " .. tostring(errLine))
+    return
+  end
+
+  b.cmdIdx = b.cmdIdx + 1
+  NebbieDash.batchRunCurrentStep()
+end
+
+function NebbieDash.batchRunCurrentStep()
+  local b = NebbieDash._batch
+  if not b or not b.active then return end
+
+  if b.rowIdx > #b.rows then
+    NebbieDash.batchStop("completato (" .. #b.rows .. " righe)")
+    return
+  end
+
+  if b.cmdIdx > #b.commands then
+    b.rowIdx = b.rowIdx + 1
+    b.cmdIdx = 1
+    return NebbieDash.batchRunCurrentStep()
+  end
+
+  local row = b.rows[b.rowIdx]
+  if b.cmdIdx == 1 then
+    NebbieDash.batchEnsureLogSection(b, row)
+    b.currentLogToon = row.nomeToon
+  end
+
+  local cmd = NebbieDash.substituteBatchVars(b.commands[b.cmdIdx], row)
+  b.stepLines = {}
+  b.awaitingOutput = true
+  NebbieDash.batchAppendToLog(row.nomeToon, string.format("[%s] >>> %s\n", os.date("%H:%M:%S"), cmd))
+  send(cmd, false)
+
+  if type(tempTimer) == "function" then
+    b.timeoutId = tempTimer(NebbieDash.batchTimeoutSec, function()
+      if b.awaitingOutput then
+        NebbieDash.batchStop("timeout in attesa del prompt dopo: " .. cmd)
+      end
+    end)
+  end
+end
+
+function NebbieDash.batchStop(reason)
+  local b = NebbieDash._batch
+  if b and b.currentLogToon then
+    NebbieDash.batchAppendToLog(b.currentLogToon,
+      string.format("\n--- batch terminato: %s (%s) ---\n", reason or "?", os.date("%H:%M:%S")))
+  end
+  NebbieDash.batchDisableLineCapture()
+  if b and b.timeoutId and type(killTimer) == "function" then
+    pcall(killTimer, b.timeoutId)
+  end
+  NebbieDash._batch = nil
+  local tone = (reason and reason:find("completato")) and "green" or "orange"
+  cecho("<" .. tone .. ">[NebbieDash] Batch: " .. tostring(reason) .. "\n")
+end
+
+function NebbieDash.cmdReloadBatch()
+  NebbieDash.loadBatchCommands()
+  NebbieDash.loadBatchItems()
+  cecho("<green>[NebbieDash] Batch ricaricato: " .. #NebbieDash.batchCommands ..
+    " comandi, " .. #NebbieDash.batchItems .. " righe CSV.\n")
+  cecho("<grey>  " .. NebbieDash.batchCommandsPath() .. "\n")
+  cecho("<grey>  " .. NebbieDash.batchItemsPath() .. "\n")
+end
+
+function NebbieDash.cmdBatch(filterStr)
+  if NebbieDash.currentChar ~= NebbieDash.BATCH_EXECUTOR then
+    cecho("<orange>[NebbieDash] nbatch: serve " .. NebbieDash.BATCH_EXECUTOR ..
+      " connesso (attuale: " .. tostring(NebbieDash.currentChar or "nessuno") .. ").\n")
+    return
+  end
+  if NebbieDash._batch and NebbieDash._batch.active then
+    cecho("<orange>[NebbieDash] Batch gia' in esecuzione.\n")
+    return
+  end
+
+  NebbieDash.loadBatchCommands()
+  NebbieDash.loadBatchItems()
+
+  if #NebbieDash.batchCommands == 0 then
+    cecho("<orange>[NebbieDash] Nessun comando in " .. NebbieDash.batchCommandsPath() .. "\n")
+    return
+  end
+  if #NebbieDash.batchItems == 0 then
+    cecho("<orange>[NebbieDash] Nessuna riga in " .. NebbieDash.batchItemsPath() .. "\n")
+    return
+  end
+
+  filterStr = (filterStr or ""):match("^%s*(.-)%s*$")
+  local rows = NebbieDash.filterBatchRows(NebbieDash.batchItems, filterStr)
+  if #rows == 0 then
+    cecho("<orange>[NebbieDash] Nessuna riga CSV corrisponde al filtro" ..
+      (filterStr ~= "" and (" '" .. filterStr .. "'") or "") .. ".\n")
+    return
+  end
+
+  NebbieDash._batch = {
+    active = true,
+    rows = rows,
+    commands = NebbieDash.batchCommands,
+    rowIdx = 1,
+    cmdIdx = 1,
+    stepLines = {},
+    currentLogToon = nil,
+    logSectionStarted = false,
+    filterLabel = (filterStr ~= "" and ("nbatch " .. filterStr)) or "nbatch",
+    awaitingOutput = false,
+  }
+
+  cecho("<cyan>[NebbieDash] Batch avviato: " .. #rows .. " righe, " ..
+    #NebbieDash.batchCommands .. " comandi/riga. Log: <Toon>-YYYY-MM-DD.txt\n")
+  NebbieDash.batchEnableLineCapture()
+  NebbieDash.batchRunCurrentStep()
+end
+
+-- ---------------------------------------------------------------------------
 -- Installazione trigger — IDEMPOTENTE (2026-08-10): elimina prima eventuali
 -- trigger dinamici creati da un boot precedente, poi li ricrea. Prima di
 -- questo fix, un guard "una volta sola per sempre" (_triggersInstalled)
@@ -2257,6 +2657,8 @@ function NebbieDash.boot()
   NebbieDash.loadSpeedwalks()
   NebbieDash.loadHungerMacros()
   NebbieDash.loadItemKeywords()
+  NebbieDash.loadBatchCommands()
+  NebbieDash.loadBatchItems()
   NebbieDash.installTriggers()
   NebbieDash.initGUI()
   NebbieDash.initHelpButton()
@@ -2505,6 +2907,27 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nforgetspell (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-batch</name>
+   <script><![CDATA[NebbieDash.cmdBatch()]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nbatch$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-batch-filter</name>
+   <script><![CDATA[NebbieDash.cmdBatch(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nbatch (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-batch-reload</name>
+   <script><![CDATA[NebbieDash.cmdReloadBatch()]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nbatchreload$</regex>
   </Alias>
  </AliasPackage>
 </MudletPackage>
