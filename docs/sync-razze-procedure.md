@@ -95,7 +95,26 @@ git push mine feature/edit-portal
 
 ---
 
-## C) Push rifiutato: `rejected … (fetch first)`
+## C) Errori tipici sul nucbuntu
+
+### C1 — `Merging is not possible because you have unmerged files`
+
+Sei a metà di un merge precedente (conflitti non chiusi). **Non** rilanciare `sync-razze` così.
+
+```bash
+cd ~/NebbieArcane/Server
+git merge --abort 2>/dev/null || true
+git fetch mine
+git reset --hard mine/feature/edit-portal
+# poi solo se l'agent non ha già syncato:
+./scripts/mud-dev.sh sync-razze
+git push mine feature/edit-portal
+./scripts/mud-dev.sh build
+```
+
+Se `merge --abort` fallisce, il `reset --hard` a `mine/...` ripulisce comunque.
+
+### C2 — Push rifiutato: `rejected … (fetch first)`
 
 Succede quando l’agent (o un altro sync) ha già pushato sul fork mentre sul nucbuntu hai fatto un merge locale parallelo.
 

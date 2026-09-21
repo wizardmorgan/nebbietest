@@ -80,16 +80,21 @@ struct PoolTotals {
 
 [[nodiscard]] PoolTotals delta_affs(const struct obj_affected_type* edited,
 									const struct obj_affected_type* proto) {
+	/* Malus proto (es. MOVE -30) non diventano mai credit pool se spariscono.
+	 * ITEM2_PAID_MALUS influenza solo il listino (obj_value), non lo strip. */
 	PoolTotals d;
-	d.hit = sum_apply_arr(edited, APPLY_HIT) - sum_apply_arr(proto, APPLY_HIT);
-	d.mana = sum_apply_arr(edited, APPLY_MANA) - sum_apply_arr(proto, APPLY_MANA);
-	d.move = sum_apply_arr(edited, APPLY_MOVE) - sum_apply_arr(proto, APPLY_MOVE);
-	d.hit_regen =
-		sum_apply_arr(edited, APPLY_HIT_REGEN) - sum_apply_arr(proto, APPLY_HIT_REGEN);
+	d.hit = sum_apply_arr(edited, APPLY_HIT) -
+			std::max(0, sum_apply_arr(proto, APPLY_HIT));
+	d.mana = sum_apply_arr(edited, APPLY_MANA) -
+			 std::max(0, sum_apply_arr(proto, APPLY_MANA));
+	d.move = sum_apply_arr(edited, APPLY_MOVE) -
+			 std::max(0, sum_apply_arr(proto, APPLY_MOVE));
+	d.hit_regen = sum_apply_arr(edited, APPLY_HIT_REGEN) -
+				  std::max(0, sum_apply_arr(proto, APPLY_HIT_REGEN));
 	d.mana_regen = sum_apply_arr(edited, APPLY_MANA_REGEN) -
-				   sum_apply_arr(proto, APPLY_MANA_REGEN);
+				   std::max(0, sum_apply_arr(proto, APPLY_MANA_REGEN));
 	d.move_regen = sum_apply_arr(edited, APPLY_MOVE_REGEN) -
-				   sum_apply_arr(proto, APPLY_MOVE_REGEN);
+				   std::max(0, sum_apply_arr(proto, APPLY_MOVE_REGEN));
 	return d;
 }
 
@@ -613,30 +618,51 @@ void apply_totals_to_stats_sql(DB* db, unsigned long long toon_id,
 	}
 	MYSQL_RES* res = mysql_store_result(h);
 	if(!res) {
-		return;
-	}
-	MYSQL_ROW row = mysql_fetch_row(res);
-	if(!row) {
-		mysql_free_result(res);
+		mudlog(LOG_SYSERR, "edit_pool: store_result failed for toon %llu: %s",
+			   static_cast<unsigned long long>(toon_id), mysql_error(h));
 		return;
 	}
 
 	char_edit_pool_data pool {};
-	pool.edit_hp = static_cast<sh_int>(row[0] ? std::atoi(row[0]) : 0);
-	pool.edit_mana = static_cast<sh_int>(row[1] ? std::atoi(row[1]) : 0);
-	pool.edit_move = static_cast<sh_int>(row[2] ? std::atoi(row[2]) : 0);
-	pool.edit_hp_regen = static_cast<sh_int>(row[3] ? std::atoi(row[3]) : 0);
-	pool.edit_mana_regen = static_cast<sh_int>(row[4] ? std::atoi(row[4]) : 0);
-	pool.edit_move_regen = static_cast<sh_int>(row[5] ? std::atoi(row[5]) : 0);
-	pool.overedit_hp = static_cast<sh_int>(row[6] ? std::atoi(row[6]) : 0);
-	pool.overedit_mana = static_cast<sh_int>(row[7] ? std::atoi(row[7]) : 0);
-	pool.overedit_move = static_cast<sh_int>(row[8] ? std::atoi(row[8]) : 0);
-	pool.overedit_hp_regen = static_cast<sh_int>(row[9] ? std::atoi(row[9]) : 0);
-	pool.overedit_mana_regen =
-		static_cast<sh_int>(row[10] ? std::atoi(row[10]) : 0);
-	pool.overedit_move_regen =
-		static_cast<sh_int>(row[11] ? std::atoi(row[11]) : 0);
-	mysql_free_result(res);
+	bool created_stub = false;
+	MYSQL_ROW row = mysql_fetch_row(res);
+	if(row) {
+		pool.edit_hp = static_cast<sh_int>(row[0] ? std::atoi(row[0]) : 0);
+		pool.edit_mana = static_cast<sh_int>(row[1] ? std::atoi(row[1]) : 0);
+		pool.edit_move = static_cast<sh_int>(row[2] ? std::atoi(row[2]) : 0);
+		pool.edit_hp_regen = static_cast<sh_int>(row[3] ? std::atoi(row[3]) : 0);
+		pool.edit_mana_regen = static_cast<sh_int>(row[4] ? std::atoi(row[4]) : 0);
+		pool.edit_move_regen = static_cast<sh_int>(row[5] ? std::atoi(row[5]) : 0);
+		pool.overedit_hp = static_cast<sh_int>(row[6] ? std::atoi(row[6]) : 0);
+		pool.overedit_mana = static_cast<sh_int>(row[7] ? std::atoi(row[7]) : 0);
+		pool.overedit_move = static_cast<sh_int>(row[8] ? std::atoi(row[8]) : 0);
+		pool.overedit_hp_regen = static_cast<sh_int>(row[9] ? std::atoi(row[9]) : 0);
+		pool.overedit_mana_regen =
+			static_cast<sh_int>(row[10] ? std::atoi(row[10]) : 0);
+		pool.overedit_move_regen =
+			static_cast<sh_int>(row[11] ? std::atoi(row[11]) : 0);
+		mysql_free_result(res);
+	}
+	else {
+		mysql_free_result(res);
+		/* Toon in registry ma stats non ancora importate (lazy migrate dopo
+		 * edit_pool_boot): crea stub cosi' il credit non viene perso. */
+		std::ostringstream ins;
+		ins << "INSERT INTO character_stats (toon_id) VALUES (" << toon_id << ')';
+		try {
+			db->execute(ins.str().c_str());
+		}
+		catch(const odb::exception& e) {
+			mudlog(LOG_SYSERR,
+				   "edit_pool: INSERT character_stats stub failed for toon %llu: %s",
+				   static_cast<unsigned long long>(toon_id), e.what());
+			return;
+		}
+		created_stub = true;
+		mudlog(LOG_CHECK,
+			   "edit_pool: toon %llu missing character_stats, created stub for credit",
+			   static_cast<unsigned long long>(toon_id));
+	}
 
 	/* Credit anche se gia' migrated (strip boot puo' arrivare dopo un flag spurio). */
 	edit_pool_credit_raw(&pool, t.hit, t.mana, t.move, t.hit_regen, t.mana_regen,
@@ -668,6 +694,9 @@ void apply_totals_to_stats_sql(DB* db, unsigned long long toon_id,
 			<< pool.overedit_hp_regen << " mr=" << pool.edit_mana_regen << "/"
 			<< pool.overedit_mana_regen << " vr=" << pool.edit_move_regen << "/"
 			<< pool.overedit_move_regen << " (edit/over)";
+		if(created_stub) {
+			msg << " [stub]";
+		}
 		mudlog(LOG_CHECK, "%s", msg.str().c_str());
 	}
 }
