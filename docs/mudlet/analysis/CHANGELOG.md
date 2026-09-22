@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.2 — 2026-09-22
+
+- **nidentbatch**: sequenza default aggiornata per refresh campi **name** — usa chiave
+  **`ed$1`** (ed + nome-toon) invece di `$2`: `oload $3`, `stat ed$1`,
+  `cast 'identify' ed$1`, `junk ed$1`. Formato CSV output invariato.
+- **Versione interna** alzata a 1.12.2.
+
 ## 1.12.1 — 2026-09-22
 
 - **Batch (`nbatch`, `nidentbatch`)**: ogni sequenza inizia con **`nchar Sirio`**
