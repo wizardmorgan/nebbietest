@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.12.1"
+local PKG_VER = "1.12.2"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1072,7 +1072,7 @@ NebbieDash.HELP_TEXT = {
   { "nbatch [nome-toon]", "Esegue comandi admin da CSV (profilo Sirio; inizia con nchar Sirio)." },
   { "nbatchreload", "Ricarica nebbie-batch-commands.txt e nebbie-batch-items.csv." },
   { "nbatchverify [toon] [data]", "Verifica log batch vs CSV (es. nbatchverify GreenBlade 2026-09-21)." },
-  { "nidentbatch [nome-toon]", "Identify batch: oload/stat/identify da CSV → CSV risultati (profilo Sirio)." },
+  { "nidentbatch [nome-toon]", "Identify batch: oload/stat/identify/junk con chiave ed$1 → CSV (profilo Sirio)." },
   { "nidentbatchreload", "Ricarica nebbie-ident-batch-commands.txt e nebbie-batch-items.csv." },
   { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
@@ -2243,18 +2243,19 @@ function NebbieDash.ensureIdentBatchCommandsFile()
   if not f then return end
   f:write(
     "# Sequenza identify batch — una riga = un comando (MUD o Mudlet locale).\n" ..
-    "# Placeholder: $1 nome-toon, $2 chiave normalizzata, $3 vnum-attuale, $4 vnum-originale.\n" ..
+    "# Placeholder: $1 nome-toon, $2 key (CSV), $3 vnum-attuale, $4 vnum-originale.\n" ..
     "# Input righe: nebbie-batch-items.csv (stesso CSV di nbatch).\n" ..
     "# Output: nebbie-ident-results-YYYY-MM-DD.csv (un file per tutte le righe).\n" ..
     "# Dopo modifiche: nidentbatchreload (o riavvia Mudlet).\n" ..
     "#\n" ..
-    "# Prima riga obbligatoria: nchar Sirio (imposta PG attivo nel pacchetto).\n" ..
-    "# Se manca, viene aggiunta automaticamente all'avvio del batch.\n" ..
+    "# Workflow aggiornamento campi name: chiave oggetto = ed + nome-toon (ed$1).\n" ..
+    "# Prima riga: nchar Sirio (preposta automaticamente se manca).\n" ..
     "#\n" ..
     "nchar Sirio\n" ..
     "oload $3\n" ..
-    "stat $2\n" ..
-    "cast 'identify' $2\n"
+    "stat ed$1\n" ..
+    "cast 'identify' ed$1\n" ..
+    "junk ed$1\n"
   )
   f:close()
 end

@@ -163,13 +163,18 @@ Comandi in un file separato:
 
 | File | Contenuto |
 |------|-----------|
-| `nebbie-ident-batch-commands.txt` | Sequenza identify (default: oload, stat, cast identify) |
+| `nebbie-ident-batch-commands.txt` | Sequenza identify (default: oload, stat/cast/junk con **ed$1**) |
 
 | Comando | Azione |
 |---------|--------|
 | `nidentbatch` | Tutte le righe CSV → un file risultati |
 | `nidentbatch greenblade` | Solo quel toon |
 | `nidentbatchreload` | Ricarica comandi identify + CSV |
+
+**Scopo tipico**: aggiornare i campi **name** degli oggetti nel CSV/server. Gli oggetti
+in inventario Sirio usano chiave **`ed` + nome-toon** (placeholder **`ed$1`**, es. riga CSV
+`Echoes,...` → `edEchoes`). La colonna `key` del CSV resta disponibile per altri usi ma
+**non** è usata nella sequenza identify predefinita.
 
 **Output**: un solo file per giorno, es. `nebbie-ident-results-2026-09-22.csv`
 nella home del profilo. **Una riga per oggetto**, formato:
@@ -189,8 +194,9 @@ Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
 ```
 nchar Sirio
 oload $3
-stat $2
-cast 'identify' $2
+stat ed$1
+cast 'identify' ed$1
+junk ed$1
 ```
 
 ### Verifica log (`nbatchverify`)
@@ -252,13 +258,14 @@ cast 'identify' $2
 
 Comandi **locali Mudlet** (non inviati al MUD): `nchar Sirio`, `[enter]` (invio vuoto).
 
-Sequenza identify (`nebbie-ident-batch-commands.txt`) — stessa regola, prima riga `nchar Sirio`:
+Sequenza identify (`nebbie-ident-batch-commands.txt`) — stessa regola `nchar Sirio`, chiave **ed$1**:
 
 ```
 nchar Sirio
 oload $3
-stat $2
-cast 'identify' $2
+stat ed$1
+cast 'identify' ed$1
+junk ed$1
 ```
 
 ## Fame/sete: macro configurabile per personaggio
