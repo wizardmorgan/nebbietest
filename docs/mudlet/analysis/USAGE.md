@@ -121,9 +121,10 @@ quattro volte; `.3 kill goblin` invia `kill goblin` tre volte. Limite di sicurez
 
 ## Batch admin (`nbatch`) — solo Sirio connesso
 
-Utility di amministrazione (non gameplay): esegue in sequenza comandi MUD definiti da te, su righe
-lette da un CSV. **Funziona solo se il personaggio attivo rilevato dal prompt è Sirio** (devi
-essere loggato con lui; `nchar Sirio` non basta se non sei realmente connesso come Sirio).
+Utility di amministrazione (non gameplay): esegue in sequenza comandi definiti da te, su righe
+lette da un CSV. **Pensato per il profilo Mudlet di Sirio** (admin immortale). Ogni sequenza
+inizia automaticamente con **`nchar Sirio`** (comando Mudlet locale, non inviato al MUD) per
+impostare il personaggio attivo nel pacchetto.
 
 Due file nella home del profilo Mudlet (`getMudletHomeDir()`):
 
@@ -186,6 +187,7 @@ per toon (`<Toon>-YYYY-MM-DD.txt`) come per `nbatch`.
 Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
 
 ```
+nchar Sirio
 oload $3
 stat $2
 cast 'identify' $2
@@ -220,7 +222,8 @@ python3 docs/mudlet/tests/verify_batch_log.py ... \
   --objects-dir /path/to/mudroot/lib/objects
 ```
 
-**Comportamento**: tra un comando e l'altro attende il **prompt** del gioco (o, dopo `oedit`,
+**Comportamento**: ogni riga CSV inizia con `nchar Sirio` (se non già presente nel file
+comandi). Tra un comando MUD e l'altro attende il **prompt** del gioco (o, dopo `oedit`,
 la riga menu `-->`); cattura **tutto** l'output a schermo e lo appende al log. Se compare un
 messaggio di errore MUD noto, **ferma** l'intero batch.
 
@@ -236,12 +239,24 @@ inviato sono tracciati con timestamp.
 Esempio sequenza comandi (file `nebbie-batch-commands.txt`, workflow osave):
 
 ```
+nchar Sirio
 oload $3
 stat $2
 oedit $2
 [enter]
 cast 'identify' $2
 osave $2 $3 $4
+stat $2
+cast 'identify' $2
+```
+
+Comandi **locali Mudlet** (non inviati al MUD): `nchar Sirio`, `[enter]` (invio vuoto).
+
+Sequenza identify (`nebbie-ident-batch-commands.txt`) — stessa regola, prima riga `nchar Sirio`:
+
+```
+nchar Sirio
+oload $3
 stat $2
 cast 'identify' $2
 ```

@@ -776,14 +776,23 @@ check("batch: batchDetectError su messaggio oload noto",
 check("batch: batchDetectError ignora output ok",
   not NebbieDash.batchDetectError({ "Oggetto creato.", "Sirio H: 100/100 M: 50/50 V: 30/30 x:0 *:* *:* [[TD]] G:0 >>" }))
 NebbieDash.currentChar = "Mirari"
-NebbieDash.cmdBatch("greenblade")
-check("batch: cmdBatch rifiuta PG diverso da Sirio", NebbieDash._batch == nil)
-NebbieDash.currentChar = "Sirio"
 NebbieDash.batchCommands = { "oload $3" }
 NebbieDash.batchItems = { row }
 NebbieDash.cmdBatch("greenblade")
-check("batch: cmdBatch avvia con Sirio e filtro", NebbieDash._batch ~= nil and NebbieDash._batch.active == true)
+check("batch: cmdBatch avvia anche senza Sirio preimpostato (nchar preposto)",
+  NebbieDash._batch ~= nil and NebbieDash._batch.active == true
+  and NebbieDash._batch.commands[1] == "nchar Sirio")
 if NebbieDash._batch then NebbieDash.batchStop("test cleanup") end
+check("batch: batchCommandsWithNcharPrefix non duplica nchar",
+  NebbieDash.batchCommandsWithNcharPrefix({ "nchar Sirio", "oload $3" })[1] == "nchar Sirio"
+  and #NebbieDash.batchCommandsWithNcharPrefix({ "nchar Sirio", "oload $3" }) == 2)
+check("batch: batchIsNcharCommand", NebbieDash.batchIsNcharCommand("nchar Sirio"))
+NebbieDash.currentChar = nil
+NebbieDash._batch = { active = true, rowIdx = 1, cmdIdx = 1, rows = { row }, commands = { "nchar Sirio" },
+  stepLines = {}, awaitingOutput = true, waitMode = "local", mode = "admin" }
+NebbieDash.batchRunCurrentStep()
+check("batch: nchar Sirio locale imposta currentChar", NebbieDash.currentChar == "Sirio")
+NebbieDash._batch = nil
 
 -- Test 22: nbatchverify — parse log e verifica sezione osave.
 local sampleLog = [[

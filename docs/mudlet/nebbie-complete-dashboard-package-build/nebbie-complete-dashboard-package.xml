@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.12.0"
+local PKG_VER = "1.12.1"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1069,10 +1069,10 @@ NebbieDash.HELP_TEXT = {
   { "nhungermacros", "Ricarica le macro fame/sete dal file di configurazione." },
   { "nitemkeywords", "Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione." },
   { "nforgetspell <nome>", "Rimuove una spell memorizzata per errore dall'elenco del personaggio attivo." },
-  { "nbatch [nome-toon]", "Esegue comandi admin da CSV (solo PG Sirio connesso). Vedi nebbie-batch-*.txt/csv." },
+  { "nbatch [nome-toon]", "Esegue comandi admin da CSV (profilo Sirio; inizia con nchar Sirio)." },
   { "nbatchreload", "Ricarica nebbie-batch-commands.txt e nebbie-batch-items.csv." },
   { "nbatchverify [toon] [data]", "Verifica log batch vs CSV (es. nbatchverify GreenBlade 2026-09-21)." },
-  { "nidentbatch [nome-toon]", "Identify batch: oload/stat/identify da CSV → un CSV risultati (solo Sirio)." },
+  { "nidentbatch [nome-toon]", "Identify batch: oload/stat/identify da CSV → CSV risultati (profilo Sirio)." },
   { "nidentbatchreload", "Ricarica nebbie-ident-batch-commands.txt e nebbie-batch-items.csv." },
   { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
@@ -2152,9 +2152,10 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Batch admin (nbatch) — utility Sirio, comandi da file di configurazione.
--- Confermato dall'utente (2026-09-21): solo con Sirio connesso (non nchar),
+-- Confermato dall'utente (2026-09-21): solo con Sirio connesso al MUD,
 -- attesa prompt tra un comando e l'altro, stop su errore MUD, log completo
 -- per nome-toon in <Toon>-YYYY-MM-DD.txt sotto la home Mudlet.
+-- Ogni sequenza batch inizia con `nchar Sirio` (comando Mudlet locale, non MUD).
 -- ---------------------------------------------------------------------------
 NebbieDash.BATCH_EXECUTOR = "Sirio"
 NebbieDash.batchTimeoutSec = 45
@@ -2210,12 +2211,16 @@ function NebbieDash.ensureBatchCommandsFile()
   local f = io.open(path, "w")
   if not f then return end
   f:write(
-    "# Sequenza comandi batch — una riga = un comando inviato al MUD.\n" ..
+    "# Sequenza comandi batch — una riga = un comando (MUD o Mudlet locale).\n" ..
     "# Placeholder: $1 nome-toon (CSV), $2 chiave normalizzata (minuscolo, trattini),\n" ..
     "# $3 vnum-attuale, $4 vnum-originale.\n" ..
     "# Dopo modifiche: nbatchreload (o riavvia Mudlet).\n" ..
     "#\n" ..
+    "# Prima riga obbligatoria: nchar Sirio (imposta PG attivo nel pacchetto).\n" ..
+    "# Se manca, viene aggiunta automaticamente all'avvio del batch.\n" ..
+    "#\n" ..
     "# Esempio workflow osave (Sirio):\n" ..
+    "nchar Sirio\n" ..
     "oload $3\n" ..
     "stat $2\n" ..
     "oedit $2\n" ..
@@ -2237,12 +2242,16 @@ function NebbieDash.ensureIdentBatchCommandsFile()
   local f = io.open(path, "w")
   if not f then return end
   f:write(
-    "# Sequenza identify batch — una riga = un comando inviato al MUD.\n" ..
+    "# Sequenza identify batch — una riga = un comando (MUD o Mudlet locale).\n" ..
     "# Placeholder: $1 nome-toon, $2 chiave normalizzata, $3 vnum-attuale, $4 vnum-originale.\n" ..
     "# Input righe: nebbie-batch-items.csv (stesso CSV di nbatch).\n" ..
     "# Output: nebbie-ident-results-YYYY-MM-DD.csv (un file per tutte le righe).\n" ..
     "# Dopo modifiche: nidentbatchreload (o riavvia Mudlet).\n" ..
     "#\n" ..
+    "# Prima riga obbligatoria: nchar Sirio (imposta PG attivo nel pacchetto).\n" ..
+    "# Se manca, viene aggiunta automaticamente all'avvio del batch.\n" ..
+    "#\n" ..
+    "nchar Sirio\n" ..
     "oload $3\n" ..
     "stat $2\n" ..
     "cast 'identify' $2\n"
@@ -2498,6 +2507,37 @@ function NebbieDash.batchIsEnterCommand(template)
   return (template or ""):match("^%s*%[enter%]%s*$") ~= nil
 end
 
+function NebbieDash.batchIsNcharCommand(template)
+  return (template or ""):match("^%s*nchar%s+") ~= nil
+end
+
+function NebbieDash.batchCommandsWithNcharPrefix(commands)
+  local out = {}
+  if not commands or #commands == 0 then
+    return { "nchar Sirio" }
+  end
+  local first = (commands[1] or ""):match("^%s*(.-)%s*$")
+  if first:lower():match("^nchar%s+sirio%s*$") then
+    return commands
+  end
+  table.insert(out, "nchar Sirio")
+  for _, cmd in ipairs(commands) do
+    table.insert(out, cmd)
+  end
+  return out
+end
+
+function NebbieDash.batchRunNcharCommand(template, row)
+  local substituted = NebbieDash.substituteBatchVars(template, row)
+  local name = substituted:match("^%s*nchar%s+(.+)$")
+  if name then
+    name = name:match("^%s*(.-)%s*$")
+  end
+  if name and name ~= "" then
+    NebbieDash.cmdSetCharacter(name)
+  end
+end
+
 function NebbieDash.batchSetsMenuWait(sentCmd)
   return (sentCmd or ""):match("^oedit%s") ~= nil
 end
@@ -2514,6 +2554,10 @@ end
 function NebbieDash.batchPrepareCommand(template, row)
   if NebbieDash.batchIsEnterCommand(template) then
     return "", "[enter]", "prompt"
+  end
+  if NebbieDash.batchIsNcharCommand(template) then
+    local logLabel = NebbieDash.substituteBatchVars(template, row):match("^%s*(.-)%s*$")
+    return nil, logLabel, "local"
   end
   local cmd = NebbieDash.substituteBatchVars(template, row)
   local waitMode = NebbieDash.batchSetsMenuWait(cmd) and "menu" or "prompt"
@@ -2622,6 +2666,11 @@ function NebbieDash.batchRunCurrentStep()
   b.awaitingOutput = true
   b.waitMode = waitMode
   NebbieDash.batchAppendToLog(row.nomeToon, string.format("[%s] >>> %s\n", os.date("%H:%M:%S"), logLabel))
+  if waitMode == "local" then
+    NebbieDash.batchRunNcharCommand(template, row)
+    NebbieDash.onBatchStepComplete(nil)
+    return
+  end
   send(sendCmd, false)
 
   if type(tempTimer) == "function" then
@@ -2674,16 +2723,11 @@ function NebbieDash.cmdReloadIdentBatch()
 end
 
 function NebbieDash.startBatchJob(mode, filterStr, commands, filterLabel, startMsg)
-  if NebbieDash.currentChar ~= NebbieDash.BATCH_EXECUTOR then
-    local cmdName = (mode == "ident") and "nidentbatch" or "nbatch"
-    cecho("<orange>[NebbieDash] " .. cmdName .. ": serve " .. NebbieDash.BATCH_EXECUTOR ..
-      " connesso (attuale: " .. tostring(NebbieDash.currentChar or "nessuno") .. ").\n")
-    return false
-  end
   if NebbieDash._batch and NebbieDash._batch.active then
     cecho("<orange>[NebbieDash] Batch gia' in esecuzione.\n")
     return false
   end
+  commands = NebbieDash.batchCommandsWithNcharPrefix(commands)
   if #commands == 0 then
     cecho("<orange>[NebbieDash] Nessun comando configurato.\n")
     return false
@@ -3001,7 +3045,8 @@ function NebbieDash.cmdVerifyBatch(argStr)
     for _, line in ipairs(reportHeader) do table.insert(reportLines, line) end
     table.insert(reportLines, "=== " .. toon .. " ===")
     table.insert(reportLines, "Log: " .. logPath)
-    local ok, issues, results = NebbieDash.verifyBatchLogFile(logPath, NebbieDash.batchCommands, toonRows)
+    local ok, issues, results = NebbieDash.verifyBatchLogFile(
+      logPath, NebbieDash.batchCommandsWithNcharPrefix(NebbieDash.batchCommands), toonRows)
     if not ok then grandOk = false end
     local okN, totN = 0, #results
     for _, r in ipairs(results) do if r.ok then okN = okN + 1 end end

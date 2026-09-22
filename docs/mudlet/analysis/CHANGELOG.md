@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.1 — 2026-09-22
+
+- **Batch (`nbatch`, `nidentbatch`)**: ogni sequenza inizia con **`nchar Sirio`**
+  (comando Mudlet locale, non MUD). Se manca nel file comandi, viene preposto
+  automaticamente; template default e `nbatchverify` allineati.
+- **Versione interna** alzata a 1.12.1.
+
 ## 1.12.0 — 2026-09-22
 
 - **Aggiunto**: `nidentbatch [nome-toon]` — batch identify su righe

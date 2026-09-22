@@ -149,6 +149,15 @@ def is_enter_command(template: str) -> bool:
     return bool(re.match(r"^\s*\[enter\]\s*$", template or ""))
 
 
+def commands_with_nchar_prefix(commands: list[str]) -> list[str]:
+    if not commands:
+        return ["nchar Sirio"]
+    first = commands[0].strip()
+    if re.match(r"^nchar\s+sirio\s*$", first, re.IGNORECASE):
+        return commands
+    return ["nchar Sirio", *commands]
+
+
 def prepare_command_log_label(template: str, row: BatchRow) -> str:
     if is_enter_command(template):
         return "[enter]"
@@ -264,7 +273,7 @@ def main() -> int:
         return 1
 
     rows = load_csv(args.csv, args.toon)
-    commands = load_commands(args.commands)
+    commands = commands_with_nchar_prefix(load_commands(args.commands))
     content = args.log.read_text(encoding="utf-8", errors="replace")
     sections = parse_log_sections(content)
 
