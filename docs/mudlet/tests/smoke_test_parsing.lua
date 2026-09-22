@@ -841,11 +841,13 @@ check("ident batch: parseIdentifyBatchOutput flags contiene EDIT PERSONAL",
   iflags and iflags:find("EDIT PERSONAL", 1, true) ~= nil)
 check("ident batch: csvEscapeField lascia testo semplice",
   NebbieDash.csvEscapeField("ARMOR") == "ARMOR")
-check("ident batch: substituteBatchVars ed$1 usa nome-toon",
-  NebbieDash.substituteBatchVars("stat ed$1", { nomeToon = "Echoes" }) == "stat edEchoes")
-check("ident batch: substituteBatchVars cast identify ed$1",
-  NebbieDash.substituteBatchVars("cast 'identify' ed$1", { nomeToon = "Echoes" }) ==
-    "cast 'identify' edEchoes")
+check("ident batch: substituteBatchVars $ed usa nome-toon",
+  NebbieDash.substituteBatchVars("stat $ed", { nomeToon = "Montero" }) == "stat EDMontero")
+check("ident batch: substituteBatchVars ED$1 equivalente a $ed",
+  NebbieDash.substituteBatchVars("stat ED$1", { nomeToon = "Echoes" }) == "stat EDEchoes")
+check("ident batch: substituteBatchVars ed$1 case nel comando inviato",
+  NebbieDash.substituteBatchVars("cast 'identify' ed$1", { nomeToon = "Montero" }) ==
+    "cast 'identify' edMontero")
 
 print("")
 if failures == 0 then

@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.3 — 2026-09-22
+
+- **nidentbatch**: placeholder **`$ed`** = ED + nome-toon ($1), es. `Montero` →
+  `EDMontero`. Sequenza default: `oload $3`, `stat $ed`, `cast 'identify' $ed`,
+  `junk $ed`. In gioco la keyword **non è case-sensitive** (`EDMontero` = `edmontero`).
+  Restano validi anche `ED$1` / `ed$1` nel file comandi.
+- **Versione interna** alzata a 1.12.3.
+
 ## 1.12.2 — 2026-09-22
 
 - **nidentbatch**: sequenza default aggiornata per refresh campi **name** — usa chiave

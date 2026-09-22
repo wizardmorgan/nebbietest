@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.12.2"
+local PKG_VER = "1.12.3"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1066,7 +1066,7 @@ NebbieDash.HELP_TEXT = {
   { "nbatch [nome-toon]", "Esegue comandi admin da CSV (profilo Sirio; inizia con nchar Sirio)." },
   { "nbatchreload", "Ricarica nebbie-batch-commands.txt e nebbie-batch-items.csv." },
   { "nbatchverify [toon] [data]", "Verifica log batch vs CSV (es. nbatchverify GreenBlade 2026-09-21)." },
-  { "nidentbatch [nome-toon]", "Identify batch: oload/stat/identify/junk con chiave ed$1 → CSV (profilo Sirio)." },
+  { "nidentbatch [nome-toon]", "Identify batch: oload/stat/identify/junk con chiave $ed (ED+toon) → CSV." },
   { "nidentbatchreload", "Ricarica nebbie-ident-batch-commands.txt e nebbie-batch-items.csv." },
   { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
@@ -2242,14 +2242,16 @@ function NebbieDash.ensureIdentBatchCommandsFile()
     "# Output: nebbie-ident-results-YYYY-MM-DD.csv (un file per tutte le righe).\n" ..
     "# Dopo modifiche: nidentbatchreload (o riavvia Mudlet).\n" ..
     "#\n" ..
-    "# Workflow aggiornamento campi name: chiave oggetto = ed + nome-toon (ed$1).\n" ..
+    "# Workflow aggiornamento campi name: chiave edit = ED + nome-toon ($ed o ED$1).\n" ..
+    "# Es. CSV Montero,... -> EDMontero (in gioco la key non e' case-sensitive).\n" ..
+    "# Colonna key CSV puo' restare vuota.\n" ..
     "# Prima riga: nchar Sirio (preposta automaticamente se manca).\n" ..
     "#\n" ..
     "nchar Sirio\n" ..
     "oload $3\n" ..
-    "stat ed$1\n" ..
-    "cast 'identify' ed$1\n" ..
-    "junk ed$1\n"
+    "stat $ed\n" ..
+    "cast 'identify' $ed\n" ..
+    "junk $ed\n"
   )
   f:close()
 end
@@ -2307,8 +2309,15 @@ function NebbieDash.normalizeBatchKey(raw)
   return key
 end
 
+function NebbieDash.batchEdToonKey(nomeToon)
+  return "ED" .. (nomeToon or "")
+end
+
 function NebbieDash.substituteBatchVars(template, row)
   local out = template or ""
+  out = out:gsub("%$ed", function()
+    return NebbieDash.batchEdToonKey(row.nomeToon)
+  end)
   out = out:gsub("%$(%d)", function(n)
     n = tonumber(n)
     if n == 1 then return row.nomeToon or "" end
