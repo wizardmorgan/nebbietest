@@ -163,7 +163,7 @@ Comandi in un file separato:
 
 | File | Contenuto |
 |------|-----------|
-| `nebbie-ident-batch-commands.txt` | Sequenza identify (default: oload $3, poi **$ed**) |
+| `nebbie-ident-batch-commands.txt` | Sequenza identify (default: oload $3, poi **$o**) |
 
 | Comando | Azione |
 |---------|--------|
@@ -171,10 +171,16 @@ Comandi in un file separato:
 | `nidentbatch greenblade` | Solo quel toon |
 | `nidentbatchreload` | Ricarica comandi identify + CSV |
 
-**Scopo tipico**: aggiornare i campi **name** degli oggetti edit. Ogni oggetto ha chiave
-**ED + nome-toon** — placeholder **`$ed`** (equivale a `ED$1` / `ed$1` nel file comandi).
-Es. riga CSV `Montero,...` → `$ed` diventa `EDMontero`. In gioco la keyword **non è
-case-sensitive** (`EDMontero` = `edmontero`). La colonna `key` del CSV può restare vuota.
+**Scopo tipico**: aggiornare i campi **name** nel CSV/server. Sequenza:
+
+1. `oload $3` — carica l'oggetto in inventario Sirio
+2. **`$o`** — keyword ricavata da `Adesso hai <short desc>.` (es. `The Cross.` → `cross`;
+   `Your lips move.` → `lips`). Usata in `stat` / `cast 'identify'` / `junk`
+3. Il **CSV output** prende il **nome completo** da identify (es. `verse13 move lips EDEchoes`)
+
+**Nota importante**: `ED`+nome-toon (es. `EDEchoes`) compare nel **nome oggetto** restituito
+da identify, **non** è la keyword per puntare all'oggetto appena oloadato. Per quello serve **`$o`**.
+La colonna `key` del CSV può restare vuota.
 
 **Output**: un solo file per giorno, es. `nebbie-ident-results-2026-09-22.csv`
 nella home del profilo. **Una riga per oggetto**, formato:
@@ -194,9 +200,9 @@ Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
 ```
 nchar Sirio
 oload $3
-stat $ed
-cast 'identify' $ed
-junk $ed
+stat $o
+cast 'identify' $o
+junk $o
 ```
 
 ### Verifica log (`nbatchverify`)
@@ -258,14 +264,14 @@ cast 'identify' $2
 
 Comandi **locali Mudlet** (non inviati al MUD): `nchar Sirio`, `[enter]` (invio vuoto).
 
-Sequenza identify (`nebbie-ident-batch-commands.txt`) — stessa regola `nchar Sirio`, keyword **`$ed`**:
+Sequenza identify (`nebbie-ident-batch-commands.txt`) — `nchar Sirio`, poi **`$o`** dopo oload:
 
 ```
 nchar Sirio
 oload $3
-stat $ed
-cast 'identify' $ed
-junk $ed
+stat $o
+cast 'identify' $o
+junk $o
 ```
 
 ## Fame/sete: macro configurabile per personaggio
