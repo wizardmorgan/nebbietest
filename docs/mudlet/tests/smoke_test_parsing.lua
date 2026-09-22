@@ -820,6 +820,19 @@ check("batch: batchPrepareCommand oedit attende menu",
 check("batch: batchSectionHasCommand trova [enter] nel log timestampato",
   NebbieDash.batchSectionHasCommand("[10:30:02] >>> [enter]\n", "[enter]"))
 
+local identLines = {
+  "La conoscenza ti pervade:",
+  "Oggetto: 'verse13 move lips EDEchoes', Tipo di Oggetto ARMOR V-Number Originario: 8304",
+  "L'oggetto e': ORGANIC MAGIC ANTI-THIEF ANTI-WARRIOR RESISTANT ARTIFACT ANTI-BARBARIAN ANTI-RANGER ANTI-PALADIN ANTI-MONK EDIT PERSONAL ",
+}
+local iname, itype, iflags = NebbieDash.parseIdentifyBatchOutput(identLines)
+check("ident batch: parseIdentifyBatchOutput nome", iname == "verse13 move lips EDEchoes")
+check("ident batch: parseIdentifyBatchOutput tipo", itype == "ARMOR")
+check("ident batch: parseIdentifyBatchOutput flags contiene EDIT PERSONAL",
+  iflags and iflags:find("EDIT PERSONAL", 1, true) ~= nil)
+check("ident batch: csvEscapeField lascia testo semplice",
+  NebbieDash.csvEscapeField("ARMOR") == "ARMOR")
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

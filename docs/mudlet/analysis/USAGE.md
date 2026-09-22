@@ -151,6 +151,45 @@ GreenBlade,egida foresta EDGreenBlade,34512,15809
 | `nbatch` | Esegue tutte le righe CSV |
 | `nbatch greenblade` | Solo righe il cui `nome-toon` matcha (case-insensitive) |
 | `nbatchreload` | Ricarica entrambi i file |
+| `nidentbatch` | Identify batch: stesso CSV input, output unico CSV risultati |
+| `nidentbatch greenblade` | Solo righe del toon indicato |
+| `nidentbatchreload` | Ricarica `nebbie-ident-batch-commands.txt` e CSV input |
+
+### Identify batch (`nidentbatch`) — solo Sirio connesso
+
+Stesso **CSV input** di `nbatch` (`nebbie-batch-items.csv`, colonne `$1`..`$4`).
+Comandi in un file separato:
+
+| File | Contenuto |
+|------|-----------|
+| `nebbie-ident-batch-commands.txt` | Sequenza identify (default: oload, stat, cast identify) |
+
+| Comando | Azione |
+|---------|--------|
+| `nidentbatch` | Tutte le righe CSV → un file risultati |
+| `nidentbatch greenblade` | Solo quel toon |
+| `nidentbatchreload` | Ricarica comandi identify + CSV |
+
+**Output**: un solo file per giorno, es. `nebbie-ident-results-2026-09-22.csv`
+nella home del profilo. **Una riga per oggetto**, formato:
+
+```
+object-name,type,extra-flags,vnum-attuale
+verse13 move lips EDEchoes,ARMOR,ORGANIC MAGIC ... EDIT PERSONAL,34653
+```
+
+I campi vengono estratti dall'output di `cast 'identify'` (`Oggetto: '...'`,
+`Tipo di Oggetto ...`, `L'oggetto e': ...`); il vnum è `$3` del CSV input.
+Più batch nello stesso giorno **appendono** righe allo stesso file. Log testuale
+per toon (`<Toon>-YYYY-MM-DD.txt`) come per `nbatch`.
+
+Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
+
+```
+oload $3
+stat $2
+cast 'identify' $2
+```
 
 ### Verifica log (`nbatchverify`)
 
