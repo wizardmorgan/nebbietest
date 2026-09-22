@@ -839,13 +839,14 @@ check("ident batch: parseIdentifyBatchOutput nome", iname == "verse13 move lips 
 check("ident batch: parseIdentifyBatchOutput tipo", itype == "ARMOR")
 check("ident batch: parseIdentifyBatchOutput flags contiene EDIT PERSONAL",
   iflags and iflags:find("EDIT PERSONAL", 1, true) ~= nil)
+check("ident batch: batchParseOloadKeyword da The Cross", 
+  NebbieDash.batchParseOloadKeyword({ "Adesso hai The Cross." }) == "cross")
+check("ident batch: batchParseOloadKeyword da Your lips move",
+  NebbieDash.batchParseOloadKeyword({ "Adesso hai Your lips move." }) == "lips")
+check("ident batch: substituteBatchVars $o usa oloadKeyword",
+  NebbieDash.substituteBatchVars("stat $o", row, { oloadKeyword = "cross" }) == "stat cross")
 check("ident batch: csvEscapeField lascia testo semplice",
   NebbieDash.csvEscapeField("ARMOR") == "ARMOR")
-check("ident batch: substituteBatchVars ed$1 usa nome-toon",
-  NebbieDash.substituteBatchVars("stat ed$1", { nomeToon = "Echoes" }) == "stat edEchoes")
-check("ident batch: substituteBatchVars cast identify ed$1",
-  NebbieDash.substituteBatchVars("cast 'identify' ed$1", { nomeToon = "Echoes" }) ==
-    "cast 'identify' edEchoes")
 
 print("")
 if failures == 0 then

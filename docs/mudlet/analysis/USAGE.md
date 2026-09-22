@@ -163,7 +163,7 @@ Comandi in un file separato:
 
 | File | Contenuto |
 |------|-----------|
-| `nebbie-ident-batch-commands.txt` | Sequenza identify (default: oload, stat/cast/junk con **ed$1**) |
+| `nebbie-ident-batch-commands.txt` | Sequenza identify (default: oload $3, poi **$o** da «Adesso hai …») |
 
 | Comando | Azione |
 |---------|--------|
@@ -171,10 +171,10 @@ Comandi in un file separato:
 | `nidentbatch greenblade` | Solo quel toon |
 | `nidentbatchreload` | Ricarica comandi identify + CSV |
 
-**Scopo tipico**: aggiornare i campi **name** degli oggetti nel CSV/server. Gli oggetti
-in inventario Sirio usano chiave **`ed` + nome-toon** (placeholder **`ed$1`**, es. riga CSV
-`Echoes,...` → `edEchoes`). La colonna `key` del CSV resta disponibile per altri usi ma
-**non** è usata nella sequenza identify predefinita.
+**Scopo tipico**: aggiornare i campi **name** degli oggetti. Dopo `oload $3` il gioco risponde
+`Adesso hai <descrizione>.` — il placeholder **`$o`** diventa la keyword ricavata da quella riga
+(es. `The Cross.` → `cross`, `Your lips move.` → `lips`). La colonna `key` del CSV può restare
+vuota; `$1`/`$2` non servono in questa sequenza.
 
 **Output**: un solo file per giorno, es. `nebbie-ident-results-2026-09-22.csv`
 nella home del profilo. **Una riga per oggetto**, formato:
@@ -194,9 +194,9 @@ Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
 ```
 nchar Sirio
 oload $3
-stat ed$1
-cast 'identify' ed$1
-junk ed$1
+stat $o
+cast 'identify' $o
+junk $o
 ```
 
 ### Verifica log (`nbatchverify`)
@@ -258,14 +258,14 @@ cast 'identify' $2
 
 Comandi **locali Mudlet** (non inviati al MUD): `nchar Sirio`, `[enter]` (invio vuoto).
 
-Sequenza identify (`nebbie-ident-batch-commands.txt`) — stessa regola `nchar Sirio`, chiave **ed$1**:
+Sequenza identify (`nebbie-ident-batch-commands.txt`) — stessa regola `nchar Sirio`, keyword **`$o`** dopo oload:
 
 ```
 nchar Sirio
 oload $3
-stat ed$1
-cast 'identify' ed$1
-junk ed$1
+stat $o
+cast 'identify' $o
+junk $o
 ```
 
 ## Fame/sete: macro configurabile per personaggio
