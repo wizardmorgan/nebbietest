@@ -22,7 +22,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.11.2"
+PKG_VER = "1.12.1"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -114,6 +114,9 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 - **`nbatchverify`**: controlla i log batch rispetto al CSV e ai comandi attesi;
   report in `<Toon>-YYYY-MM-DD.verify.txt`. Script offline:
   `docs/mudlet/tests/verify_batch_log.py`.
+- **`nidentbatch`**: stesso CSV input di `nbatch`; esegue oload/stat/identify e
+  appende righe a `nebbie-ident-results-YYYY-MM-DD.csv` (nome oggetto, tipo,
+  extra flags, vnum-attuale).
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
@@ -168,6 +171,9 @@ ALIASES = [
     ("nebbie-dash-batch-reload", "^nbatchreload$", "NebbieDash.cmdReloadBatch()"),
     ("nebbie-dash-batch-verify", "^nbatchverify$", "NebbieDash.cmdVerifyBatch()"),
     ("nebbie-dash-batch-verify-args", "^nbatchverify (.+)$", "NebbieDash.cmdVerifyBatch(matches[2])"),
+    ("nebbie-dash-ident-batch", "^nidentbatch$", "NebbieDash.cmdIdentBatch()"),
+    ("nebbie-dash-ident-batch-filter", "^nidentbatch (.+)$", "NebbieDash.cmdIdentBatch(matches[2])"),
+    ("nebbie-dash-ident-batch-reload", "^nidentbatchreload$", "NebbieDash.cmdReloadIdentBatch()"),
 ]
 
 

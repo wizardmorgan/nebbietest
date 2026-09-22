@@ -121,9 +121,10 @@ quattro volte; `.3 kill goblin` invia `kill goblin` tre volte. Limite di sicurez
 
 ## Batch admin (`nbatch`) — solo Sirio connesso
 
-Utility di amministrazione (non gameplay): esegue in sequenza comandi MUD definiti da te, su righe
-lette da un CSV. **Funziona solo se il personaggio attivo rilevato dal prompt è Sirio** (devi
-essere loggato con lui; `nchar Sirio` non basta se non sei realmente connesso come Sirio).
+Utility di amministrazione (non gameplay): esegue in sequenza comandi definiti da te, su righe
+lette da un CSV. **Pensato per il profilo Mudlet di Sirio** (admin immortale). Ogni sequenza
+inizia automaticamente con **`nchar Sirio`** (comando Mudlet locale, non inviato al MUD) per
+impostare il personaggio attivo nel pacchetto.
 
 Due file nella home del profilo Mudlet (`getMudletHomeDir()`):
 
@@ -151,6 +152,46 @@ GreenBlade,egida foresta EDGreenBlade,34512,15809
 | `nbatch` | Esegue tutte le righe CSV |
 | `nbatch greenblade` | Solo righe il cui `nome-toon` matcha (case-insensitive) |
 | `nbatchreload` | Ricarica entrambi i file |
+| `nidentbatch` | Identify batch: stesso CSV input, output unico CSV risultati |
+| `nidentbatch greenblade` | Solo righe del toon indicato |
+| `nidentbatchreload` | Ricarica `nebbie-ident-batch-commands.txt` e CSV input |
+
+### Identify batch (`nidentbatch`) — solo Sirio connesso
+
+Stesso **CSV input** di `nbatch` (`nebbie-batch-items.csv`, colonne `$1`..`$4`).
+Comandi in un file separato:
+
+| File | Contenuto |
+|------|-----------|
+| `nebbie-ident-batch-commands.txt` | Sequenza identify (default: oload, stat, cast identify) |
+
+| Comando | Azione |
+|---------|--------|
+| `nidentbatch` | Tutte le righe CSV → un file risultati |
+| `nidentbatch greenblade` | Solo quel toon |
+| `nidentbatchreload` | Ricarica comandi identify + CSV |
+
+**Output**: un solo file per giorno, es. `nebbie-ident-results-2026-09-22.csv`
+nella home del profilo. **Una riga per oggetto**, formato:
+
+```
+object-name,type,extra-flags,vnum-attuale
+verse13 move lips EDEchoes,ARMOR,ORGANIC MAGIC ... EDIT PERSONAL,34653
+```
+
+I campi vengono estratti dall'output di `cast 'identify'` (`Oggetto: '...'`,
+`Tipo di Oggetto ...`, `L'oggetto e': ...`); il vnum è `$3` del CSV input.
+Più batch nello stesso giorno **appendono** righe allo stesso file. Log testuale
+per toon (`<Toon>-YYYY-MM-DD.txt`) come per `nbatch`.
+
+Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
+
+```
+nchar Sirio
+oload $3
+stat $2
+cast 'identify' $2
+```
 
 ### Verifica log (`nbatchverify`)
 
@@ -181,7 +222,8 @@ python3 docs/mudlet/tests/verify_batch_log.py ... \
   --objects-dir /path/to/mudroot/lib/objects
 ```
 
-**Comportamento**: tra un comando e l'altro attende il **prompt** del gioco (o, dopo `oedit`,
+**Comportamento**: ogni riga CSV inizia con `nchar Sirio` (se non già presente nel file
+comandi). Tra un comando MUD e l'altro attende il **prompt** del gioco (o, dopo `oedit`,
 la riga menu `-->`); cattura **tutto** l'output a schermo e lo appende al log. Se compare un
 messaggio di errore MUD noto, **ferma** l'intero batch.
 
@@ -197,12 +239,24 @@ inviato sono tracciati con timestamp.
 Esempio sequenza comandi (file `nebbie-batch-commands.txt`, workflow osave):
 
 ```
+nchar Sirio
 oload $3
 stat $2
 oedit $2
 [enter]
 cast 'identify' $2
 osave $2 $3 $4
+stat $2
+cast 'identify' $2
+```
+
+Comandi **locali Mudlet** (non inviati al MUD): `nchar Sirio`, `[enter]` (invio vuoto).
+
+Sequenza identify (`nebbie-ident-batch-commands.txt`) — stessa regola, prima riga `nchar Sirio`:
+
+```
+nchar Sirio
+oload $3
 stat $2
 cast 'identify' $2
 ```

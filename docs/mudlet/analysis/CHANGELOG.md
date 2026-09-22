@@ -1,5 +1,24 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.1 — 2026-09-22
+
+- **Batch (`nbatch`, `nidentbatch`)**: ogni sequenza inizia con **`nchar Sirio`**
+  (comando Mudlet locale, non MUD). Se manca nel file comandi, viene preposto
+  automaticamente; template default e `nbatchverify` allineati.
+- **Versione interna** alzata a 1.12.1.
+
+## 1.12.0 — 2026-09-22
+
+- **Aggiunto**: `nidentbatch [nome-toon]` — batch identify su righe
+  `nebbie-batch-items.csv` (stesso input di `nbatch`); comandi in
+  `nebbie-ident-batch-commands.txt` (default: `oload $3`, `stat $2`,
+  `cast 'identify' $2`). Scrive **un unico CSV** `nebbie-ident-results-YYYY-MM-DD.csv`
+  con colonne: object-name, type, extra-flags, vnum-attuale (parsati da output
+  `identify`).
+- **Aggiunto**: `nidentbatchreload` — ricarica comandi identify + CSV input.
+- **`nbatchreload`**: ricarica anche i comandi identify.
+- **Versione interna** alzata a 1.12.0.
+
 ## 1.11.2 — 2026-09-21
 
 - **Aggiunto (nbatch)**: supporto workflow `oedit $2` + riga speciale `[enter]` — dopo `oedit`
