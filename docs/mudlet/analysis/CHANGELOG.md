@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.3 — 2026-09-22
+
+- **Corretto (nidentbatch)**: dopo `oload $3` la keyword oggetto viene da `Adesso hai ...`
+  (placeholder **`$o`**), non da `ed$1` — es. `The Cross.` → `stat cross`. Risolve errori
+  «Nessun mobile od oggetto...» / «Non hai con te niente del genere» con colonna `key` vuota.
+- **Aggiunto**: `$o` in `substituteBatchVars`; nuovi pattern errore batch per stat/identify falliti.
+- **Versione interna** alzata a 1.12.3.
+
 ## 1.12.2 — 2026-09-22
 
 - **nidentbatch**: sequenza default aggiornata per refresh campi **name** — usa chiave

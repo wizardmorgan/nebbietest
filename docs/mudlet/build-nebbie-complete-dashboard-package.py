@@ -22,7 +22,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.12.2"
+PKG_VER = "1.12.3"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -114,8 +114,8 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 - **`nbatchverify`**: controlla i log batch rispetto al CSV e ai comandi attesi;
   report in `<Toon>-YYYY-MM-DD.verify.txt`. Script offline:
   `docs/mudlet/tests/verify_batch_log.py`.
-- **`nidentbatch`**: stesso CSV input di `nbatch`; workflow identify con chiave `ed$1`
-  (ed + nome-toon), output in `nebbie-ident-results-YYYY-MM-DD.csv`.
+- **`nidentbatch`**: stesso CSV input di `nbatch`; `oload $3` poi stat/identify/junk con **`$o`**
+  (keyword da «Adesso hai ...»); output in `nebbie-ident-results-YYYY-MM-DD.csv`.
 
 Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
 login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
