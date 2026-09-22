@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.4 — 2026-09-22
+
+- **Corretto (nidentbatch)**: dopo `oload $3`, stat/identify/junk devono usare **`$o`**
+  (keyword da `Adesso hai ...`, es. `The Cross.` → `cross`, `Your lips move.` → `lips`).
+  **`$ed` / ED+toon** resta nel **nome oggetto** (output identify → CSV), non punta
+  all'oggetto appena oloadato in inventario Sirio.
+- **Versione interna** alzata a 1.12.4.
+
 ## 1.12.3 — 2026-09-22
 
 - **nidentbatch**: placeholder **`$ed`** = ED + nome-toon ($1), es. `Montero` →
