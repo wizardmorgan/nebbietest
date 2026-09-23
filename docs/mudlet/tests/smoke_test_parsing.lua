@@ -841,12 +841,13 @@ check("ident batch: parseIdentifyBatchOutput flags contiene EDIT PERSONAL",
   iflags and iflags:find("EDIT PERSONAL", 1, true) ~= nil)
 check("ident batch: csvEscapeField lascia testo semplice",
   NebbieDash.csvEscapeField("ARMOR") == "ARMOR")
-check("ident batch: batchParseOloadKeyword The Cross -> cross",
-  NebbieDash.batchParseOloadKeyword({ "Adesso hai The Cross." }) == "cross")
-check("ident batch: batchParseOloadKeyword Your lips move -> lips",
-  NebbieDash.batchParseOloadKeyword({ "Adesso hai Your lips move." }) == "lips")
-check("ident batch: substituteBatchVars $o usa oloadKeyword",
-  NebbieDash.substituteBatchVars("stat $o", row, { oloadKeyword = "cross" }) == "stat cross")
+check("ident batch: batchEdToonKey Shelin -> EDShelin",
+  NebbieDash.batchEdToonKey("Shelin") == "EDShelin")
+check("ident batch: batchOloadSucceeded riconosce Adesso hai",
+  NebbieDash.batchOloadSucceeded({ "Adesso hai la Mistica Aura dell'Ascesi." }))
+check("ident batch: substituteBatchVars $o usa ED+nome-toon dal CSV",
+  NebbieDash.substituteBatchVars("stat $o", { nomeToon = "Shelin" }, { oloadDone = true })
+    == "stat EDShelin")
 check("ident batch: substituteBatchVars $ed resta ED+toon",
   NebbieDash.substituteBatchVars("stat $ed", { nomeToon = "Montero" }) == "stat EDMontero")
 
