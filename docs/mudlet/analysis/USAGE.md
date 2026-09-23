@@ -174,16 +174,12 @@ Comandi in un file separato:
 **Scopo tipico**: aggiornare i campi **name** nel CSV/server. Sequenza:
 
 1. `oload $3` — carica l'oggetto in inventario Sirio
-2. **`$o`** — keyword **ibrida** dopo `oload` (da `Adesso hai <short desc>.`):
-   - desc **breve** (≤2 parole significative): prima keyword parsata
-     (`The Cross.` → `cross`, `Your lips move.` → `lips`)
-   - desc **lunga** (≥3 parole): **`ED`+nome-toon** (`la Mistica Aura dell'Ascesi.` → `EDShelin`)
-   Usata in `stat` / `cast 'identify'` / `junk`. Il log batch mostra `$o -> ...`
-3. **`$ed`** — sempre **`ED`+nome-toon** (colonna `$1`), se serve esplicitamente
-4. Il **CSV output** prende il **nome completo** da identify (es. `verse13 move lips EDEchoes`)
+2. **`$o`** / **`$ed`** — sempre **`ED` + nome-toon** dalla colonna `$1` del CSV
+   (es. `Montero` → `EDMontero`, `Shelin` → `EDShelin`). **Non** si usa mai il testo
+   `Adesso hai ...` per la keyword — quella riga conferma solo che l'oload è riuscito.
+3. Il **CSV output** prende il **nome completo** da identify (es. `verse13 move lips EDEchoes`)
 
-**Nota**: oggetti con titolo corto puntano spesso a una parola naturale (`cross`);
-titoli lunghi richiedono la chiave **`ED`+toon** nell'inventario Sirio.
+La colonna `key` del CSV può restare vuota; per stat/identify/junk conta solo **`ED`+toon**.
 
 **Output**: un solo file per giorno, es. `nebbie-ident-results-2026-09-22.csv`
 nella home del profilo. **Una riga per oggetto**, formato:
