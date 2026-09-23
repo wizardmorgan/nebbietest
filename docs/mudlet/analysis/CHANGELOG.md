@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.9 — 2026-09-23
+
+- **nidentbatch CSV output**: aggiunta colonna **`vnum-originario`** (quinta colonna), parsata
+  da `V-Number Originario: N` nell'output di `identify` (es. `6809`). Header:
+  `object-name,type,extra-flags,vnum-attuale,vnum-originario`.
+- **nidentbatch**: nessun log testuale per-toon (`<Toon>-YYYY-MM-DD.txt`); resta solo il CSV
+  giornaliero. I log per-toon restano per **`nbatch`**.
+- **Versione interna** alzata a 1.12.9.
+
 ## 1.12.8 — 2026-09-23
 
 - **Corretto (nidentbatch)**: rimosso **`stat`** dal workflow identify — `stat` cerca oggetti
