@@ -169,6 +169,8 @@ Comandi in un file separato:
 |---------|--------|
 | `nidentbatch` | Tutte le righe CSV → un file risultati |
 | `nidentbatch greenblade` | Solo quel toon |
+| `nidentbatch resume` | Riprende saltando righe già nel CSV di oggi (append) |
+| `nidentbatch resume greenblade` | Resume solo per quel toon |
 | `nidentbatchreload` | Ricarica comandi identify + CSV |
 
 **Scopo tipico**: aggiornare i campi **name** nel CSV/server. Sequenza:
@@ -193,6 +195,12 @@ verse13 move lips EDEchoes,ARMOR,ORGANIC MAGIC ... EDIT PERSONAL,34653,8304
 Il quinto campo è il **`V-Number Originario`** dall'output di `identify` (es. `V-Number Originario: 8304` → `8304`).
 Più batch nello stesso giorno **appendono** righe allo stesso file. **Nessun** log testuale
 per-toon (`<Toon>-YYYY-MM-DD.txt`) per `nidentbatch` — solo il CSV (i log per-toon restano per `nbatch`).
+
+**Ripresa dopo errore**: se il batch si ferma (es. `Non hai con te niente del genere` su
+`cast 'identify'`), le righe già identifyate restano nel CSV. Correggi il problema (oggetto
+mancante, typo ED+toon, ecc.) e lancia **`nidentbatch resume`** — salta i `vnum-attuale` già
+presenti nel CSV di oggi e continua con le righe rimanenti in append. Opzionale filtro toon:
+`nidentbatch resume astaroth`.
 
 Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
 

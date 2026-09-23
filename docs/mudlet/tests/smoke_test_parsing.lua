@@ -872,6 +872,31 @@ check("ident batch: substituteBatchVars $ed per identify",
   NebbieDash.substituteBatchVars("cast 'identify' $ed", { nomeToon = "Montero" })
     == "cast 'identify' EDMontero")
 
+local resumeCsv = "/tmp/nebbie-ident-resume-test.csv"
+local rf = io.open(resumeCsv, "w")
+if rf then
+  rf:write("object-name,type,extra-flags,vnum-attuale,vnum-originario\n")
+  rf:write('"orecchino dragone EDArmageddon",ARMOR,GLOW,34356,4727\n')
+  rf:close()
+end
+local processed = NebbieDash.identBatchLoadProcessedVnums(resumeCsv)
+check("ident batch: identBatchLoadProcessedVnums legge vnum-attuale",
+  processed["34356"] == true and processed["34357"] == nil)
+local resumeRows = {
+  { nomeToon = "Armageddon", vnumAttuale = "34356" },
+  { nomeToon = "Astaroth", vnumAttuale = "34357" },
+}
+local remaining = NebbieDash.identBatchFilterUnprocessedRows(resumeRows, processed)
+check("ident batch: identBatchFilterUnprocessedRows salta completate",
+  #remaining == 1 and remaining[1].vnumAttuale == "34357")
+local r1, t1 = NebbieDash.identBatchParseFilter("resume")
+local r2, t2 = NebbieDash.identBatchParseFilter("resume Astaroth")
+local r3, t3 = NebbieDash.identBatchParseFilter("Montero")
+check("ident batch: identBatchParseFilter resume", r1 and t1 == "")
+check("ident batch: identBatchParseFilter resume toon", r2 and t2 == "Astaroth")
+check("ident batch: identBatchParseFilter toon normale", not r3 and t3 == "Montero")
+os.remove(resumeCsv)
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")
