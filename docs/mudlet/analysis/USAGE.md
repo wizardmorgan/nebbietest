@@ -169,8 +169,8 @@ Comandi in un file separato:
 |---------|--------|
 | `nidentbatch` | Tutte le righe CSV → un file risultati |
 | `nidentbatch greenblade` | Solo quel toon |
-| `nidentbatch resume` | Riprende saltando righe già nel CSV di oggi (append) |
-| `nidentbatch resume greenblade` | Resume solo per quel toon |
+| `nidentbatchresume` | Riprende saltando righe già nel CSV di oggi (append) |
+| `nidentbatchresume greenblade` | Resume solo per quel toon |
 | `nidentbatchreload` | Ricarica comandi identify + CSV |
 
 **Scopo tipico**: aggiornare i campi **name** nel CSV/server. Sequenza:
@@ -198,9 +198,12 @@ per-toon (`<Toon>-YYYY-MM-DD.txt`) per `nidentbatch` — solo il CSV (i log per-
 
 **Ripresa dopo errore**: se il batch si ferma (es. `Non hai con te niente del genere` su
 `cast 'identify'`), le righe già identifyate restano nel CSV. Correggi il problema (oggetto
-mancante, typo ED+toon, ecc.) e lancia **`nidentbatch resume`** — salta i `vnum-attuale` già
+mancante, typo ED+toon, ecc.) e lancia **`nidentbatchresume`** — salta i `vnum-attuale` già
 presenti nel CSV di oggi e continua con le righe rimanenti in append. Opzionale filtro toon:
-`nidentbatch resume astaroth`.
+`nidentbatchresume astaroth`. Funziona anche `nidentbatch resume` (con spazio).
+
+**Timing oload**: se compaiono sysmess o lag tra `oload` e `Adesso hai ...`, il batch attende
+entrambi (messaggio + prompt) prima di proseguire — non si ferma più al prompt intermedio.
 
 Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
 

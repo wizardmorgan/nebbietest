@@ -1,12 +1,20 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.13.1 — 2026-09-23
+
+- **Corretto (batch oload)**: non chiude più lo step `oload` al solo prompt se manca ancora
+  **`Adesso hai ...`**. Risolve falsi stop quando sysmess o lag fanno comparire il prompt
+  prima del messaggio oload (es. `oload 34633` → sysmess → prompt → poi `Adesso hai un Kusazuri.`).
+  Vale per **`nidentbatch`** e **`nbatch`**.
+- **`nidentbatchresume [nome-toon]`**: comando dedicato (come `nidentbatchreload`) per riprendere
+  il batch; compare in **`nhelp`**. Resta valido anche `nidentbatch resume` (con spazio).
+- **Versione interna** alzata a 1.13.1.
+
 ## 1.13.0 — 2026-09-23
 
-- **nidentbatch resume [nome-toon]**: riprende il batch saltando le righe il cui
+- **nidentbatchresume [nome-toon]**: riprende il batch saltando le righe il cui
   **`vnum-attuale`** ($3) è già presente nel CSV risultati del giorno
-  (`nebbie-ident-results-YYYY-MM-DD.csv`). Utile dopo un errore MUD (es. oggetto
-  mancante): correggi il problema e lancia `nidentbatch resume` invece di rifare
-  tutto da zero. Il CSV continua in **append**.
+  (`nebbie-ident-results-YYYY-MM-DD.csv`). Alias equivalente: `nidentbatch resume`.
 - **Versione interna** alzata a 1.13.0.
 
 ## 1.12.9 — 2026-09-23
