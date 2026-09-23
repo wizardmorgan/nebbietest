@@ -845,20 +845,11 @@ check("ident batch: batchEdToonKey Shelin -> EDShelin",
   NebbieDash.batchEdToonKey("Shelin") == "EDShelin")
 check("ident batch: batchOloadSucceeded riconosce Adesso hai",
   NebbieDash.batchOloadSucceeded({ "Adesso hai la Mistica Aura dell'Ascesi." }))
-check("ident batch: batchResolveOloadKeyword The Cross -> cross",
-  NebbieDash.batchResolveOloadKeyword({ "Adesso hai The Cross." }, { nomeToon = "Montero" })
-    == "cross")
-check("ident batch: batchResolveOloadKeyword Your lips move -> lips",
-  NebbieDash.batchResolveOloadKeyword({ "Adesso hai Your lips move." }, { nomeToon = "Echoes" })
-    == "lips")
-check("ident batch: batchResolveOloadKeyword desc lunga -> ED+toon",
-  NebbieDash.batchResolveOloadKeyword(
-    { "Adesso hai la Mistica Aura dell'Ascesi." },
-    { nomeToon = "Shelin" }
-  ) == "EDShelin")
-check("ident batch: substituteBatchVars $o usa oloadKeyword risolto",
-  NebbieDash.substituteBatchVars("stat $o", { nomeToon = "Montero" }, { oloadKeyword = "cross" })
-    == "stat cross")
+check("ident batch: substituteBatchVars $o sempre ED+nome-toon",
+  NebbieDash.substituteBatchVars("stat $o", { nomeToon = "Montero" }, { oloadDone = true })
+    == "stat EDMontero")
+check("ident batch: substituteBatchVars $o Shelin",
+  NebbieDash.substituteBatchVars("stat $o", { nomeToon = "Shelin" }) == "stat EDShelin")
 check("ident batch: substituteBatchVars $ed resta ED+toon",
   NebbieDash.substituteBatchVars("stat $ed", { nomeToon = "Montero" }) == "stat EDMontero")
 

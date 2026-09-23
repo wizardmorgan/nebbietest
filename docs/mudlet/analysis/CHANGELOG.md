@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.7 — 2026-09-23
+
+- **nidentbatch (definitivo)**: **`$o`** e **`$ed`** = sempre **`ED` + nome-toon** (colonna
+  `$1` del CSV). Rimosso ogni parsing del testo `Adesso hai ...` per la keyword
+  (niente più `cross`, `lips`, `mistica` ecc.). `Adesso hai ...` serve solo a
+  confermare l'oload riuscito.
+- **Versione interna** alzata a 1.12.7.
+
 ## 1.12.6 — 2026-09-23
 
 - **Corretto (nidentbatch)**: risoluzione **ibrida** di **`$o`** dopo `oload`:
