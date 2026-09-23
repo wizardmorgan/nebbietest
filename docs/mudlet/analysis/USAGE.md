@@ -208,6 +208,10 @@ presenti nel CSV di oggi e continua con le righe rimanenti in append. Opzionale 
 **Timing oload**: se compaiono sysmess o lag tra `oload` e `Adesso hai ...`, il batch attende
 entrambi (messaggio + prompt) prima di proseguire — non si ferma più al prompt intermedio.
 
+**Autosplit**: dopo `C'erano N monete.` (o `C'era una miserabile moneta.`) il pacchetto invia
+`group` e, se sei in gruppo, `split N`. Funziona anche con risposta **`Your group consists of:`**
+(senza nome gruppo) e con codici colore Nebbie (`$c0015...`).
+
 Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
 
 ```

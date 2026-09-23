@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.14.0"
+local PKG_VER = "1.14.1"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1484,6 +1484,39 @@ end
 NebbieDash.autoSplit = true
 NebbieDash.autoLoot = true
 
+function NebbieDash.stripColors(text)
+  if not text then return "" end
+  text = text:gsub("%$c%d%d%d%d", "")
+  text = text:gsub("\27%[[%d;]*m", "")
+  return text
+end
+
+function NebbieDash.parseLootCoinAmount(text)
+  text = NebbieDash.stripColors(text or "")
+  text = text:match("^%s*(.-)%s*$") or ""
+  if text:match("^%S+%s+C'erano") or text:match("^%S+%s+C'era") then
+    return nil
+  end
+  local amount = text:match("^C'erano%s+(%d+)%s+monete%.%s*$")
+  if amount then
+    return tonumber(amount)
+  end
+  if text:match("^C'era una miserabile moneta%.%s*$") then
+    return 1
+  end
+  return nil
+end
+
+function NebbieDash.isGroupSoloLine(text)
+  text = NebbieDash.stripColors(text or "")
+  return text:match("^But you are a member of no group") ~= nil
+end
+
+function NebbieDash.isGroupHeaderLine(text)
+  text = NebbieDash.stripColors(text or "")
+  return text:match("^Your group .-consists of:") ~= nil
+end
+
 -- Segnale di fine combattimento: due formati REALI confermati dall'utente —
 -- "La tua parte di esperienza e' di N punti." (quota di gruppo) e "La tua
 -- esperienza e' aumentata di N punti." (uccisione in solitaria, testo
@@ -2051,9 +2084,8 @@ end
 -- riga singola e autosufficiente, a differenza dei blocchi eq/attrib.
 function NebbieDash.onLootLine()
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
-  local amount = text:match("^C'erano%s+(%d+)%s+monete%.%s*$")
+  local amount = NebbieDash.parseLootCoinAmount(text)
   if not amount then return end
-  amount = tonumber(amount)
   cecho("<green>[NebbieDash] Bottino: " .. amount .. " monete.\n")
   if NebbieDash.autoSplit then
     NebbieDash.startSplitFlow(amount)
@@ -2115,16 +2147,21 @@ function NebbieDash.finishSplitFlow(grouped)
   NebbieDash._pendingSplitAmount = nil
   if grouped and amount then
     send("split " .. tostring(amount), false)
+    cecho("<green>[NebbieDash] Split automatico: " .. amount .. " monete.\n")
   end
 end
 
 function NebbieDash.onGroupSoloLine()
   if not NebbieDash._groupCheckActive then return end
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  if not NebbieDash.isGroupSoloLine(text) then return end
   NebbieDash.finishSplitFlow(false)
 end
 
 function NebbieDash.onGroupHeaderLine()
   if not NebbieDash._groupCheckActive then return end
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  if not NebbieDash.isGroupHeaderLine(text) then return end
   NebbieDash.finishSplitFlow(true)
 end
 
@@ -3365,7 +3402,7 @@ function NebbieDash.teardownTriggers()
   local ids = {
     NebbieDash._promptTrig, NebbieDash._promptImmTrig, NebbieDash._eqOpenTrig, NebbieDash._attribOpenTrig,
     NebbieDash._eqLineTrig, NebbieDash._attribLineTrig, NebbieDash._lootLineTrig,
-    NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
+    NebbieDash._lootLineTrig2, NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
     NebbieDash._combatEndTrig2,
     NebbieDash._fallTrig, NebbieDash._disarmTrig, NebbieDash._hungerTrig, NebbieDash._thirstTrig,
     NebbieDash._wieldTrig, NebbieDash._identifyObjTrig, NebbieDash._identifyDmgTrig,
@@ -3407,15 +3444,14 @@ function NebbieDash.installTriggers()
   -- del prompt); i due trigger di verifica gruppo restano disabilitati
   -- finche' non serve un controllo (dopo un loot riuscito).
   NebbieDash._lootLineTrig = tempTrigger("C'erano", [[NebbieDash.onLootLine()]])
-  -- Regex ancorate a inizio riga (non semplici substring) per i due trigger
-  -- di verifica gruppo: costo trascurabile perche' restano disabilitati
-  -- tranne il breve intervallo del controllo dopo un loot (vedi
-  -- startSplitFlow/finishSplitFlow), e riduce il rischio che una frase
-  -- qualunque nel testo di gioco contenga per caso "Your group " a meta'
-  -- riga (sospetta causa dello split scattato senza essere in gruppo,
-  -- segnalato dall'utente — vedi LOG.md Round 13).
-  NebbieDash._groupSoloTrig = tempRegexTrigger("^But you are a member of no group", [[NebbieDash.onGroupSoloLine()]])
-  NebbieDash._groupHeaderTrig = tempRegexTrigger("^Your group \"", [[NebbieDash.onGroupHeaderLine()]])
+  NebbieDash._lootLineTrig2 = tempTrigger("C'era una miserabile moneta", [[NebbieDash.onLootLine()]])
+  -- Trigger gruppo attivi solo durante startSplitFlow (vedi finishSplitFlow).
+  -- Substring + validazione in handler (stripColors, pattern server reale):
+  --   But you are a member of no group?!
+  --   $c0015Your group "nome" consists of:
+  --   $c0015Your group consists of:   (senza nome gruppo — prima non matchava)
+  NebbieDash._groupSoloTrig = tempTrigger("But you are a member of no group", [[NebbieDash.onGroupSoloLine()]])
+  NebbieDash._groupHeaderTrig = tempTrigger("Your group", [[NebbieDash.onGroupHeaderLine()]])
   NebbieDash._combatEndTrig = tempTrigger("La tua parte di esperienza", [[NebbieDash.onCombatEndLine()]])
   NebbieDash._combatEndTrig2 = tempTrigger("La tua esperienza e' aumentata di", [[NebbieDash.onCombatEndLine()]])
   NebbieDash._fallTrig = tempTrigger("Inciampi e cadi per terra.", [[NebbieDash.onFallLine()]])

@@ -1,5 +1,15 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.14.1 — 2026-09-23
+
+- **Corretto (autosplit)**: riconosce la risposta **`Your group consists of:`** (gruppo senza
+  nome custom) e le righe con codici colore **`$c0015`** — prima matchava solo
+  `Your group "nome" consists of:` e lo split non partiva pur con loot OK.
+- **Corretto (autosplit/autoloot)**: riconosce anche **`C'era una miserabile moneta.`** (1 moneta)
+  per avviare lo split; ignora echo tipo `Qualcuno C'erano ...`.
+- **Feedback**: messaggio a schermo quando lo split automatico viene inviato.
+- **Versione interna** alzata a 1.14.1.
+
 ## 1.14.0 — 2026-09-23
 
 - **nidentbatch CSV output**: aggiunte colonne **`affect-1` … `affect-5`** (decima colonna
