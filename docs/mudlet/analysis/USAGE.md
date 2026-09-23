@@ -185,14 +185,17 @@ Comandi in un file separato:
 La colonna `key` del CSV può restare vuota; per stat/identify/junk conta solo **`ED`+toon**.
 
 **Output**: un solo file per giorno, es. `nebbie-ident-results-2026-09-22.csv`
-nella home del profilo. **Una riga per oggetto**, formato:
+nella home del profilo. **Una riga per oggetto**, formato (10 colonne):
 
 ```
-object-name,type,extra-flags,vnum-attuale,vnum-originario
-verse13 move lips EDEchoes,ARMOR,ORGANIC MAGIC ... EDIT PERSONAL,34653,8304
+object-name,type,extra-flags,vnum-attuale,vnum-originario,affect-1,affect-2,affect-3,affect-4,affect-5
+eterea armatura Fouler EDFouler,ARMOR,GLOW MAGIC ... EDIT PERSONAL,34595,6618,RESISTANCE by SLASH,WIS by 2,SPELLFAIL by -15,SAVING_ALL by -1,MANA-REGEN by 50
 ```
 
-Il quinto campo è il **`V-Number Originario`** dall'output di `identify` (es. `V-Number Originario: 8304` → `8304`).
+Colonne **`affect-1` … `affect-5`**: testo dopo **`Ti puo' dare :`** in identify (max 5;
+se l'oggetto ne ha meno, le colonne restanti sono vuote).
+
+Il quinto campo base è il **`V-Number Originario`** dall'output di `identify` (es. `V-Number Originario: 8304` → `8304`).
 Più batch nello stesso giorno **appendono** righe allo stesso file. **Nessun** log testuale
 per-toon (`<Toon>-YYYY-MM-DD.txt`) per `nidentbatch` — solo il CSV (i log per-toon restano per `nbatch`).
 

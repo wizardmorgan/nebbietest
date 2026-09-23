@@ -847,9 +847,37 @@ check("ident batch: identBatchAppendRow scrive vnum-originario",
     "/tmp/nebbie-ident-test-out.csv"))
 local identOut = io.open("/tmp/nebbie-ident-test-out.csv", "r")
 check("ident batch: CSV contiene quinta colonna vnum-originario",
-  identOut and identOut:read("*a"):find(",8304%s*$", 1) ~= nil)
+  identOut and identOut:read("*a"):find(",8304,", 1) ~= nil)
 if identOut then identOut:close() end
 os.remove("/tmp/nebbie-ident-test-out.csv")
+
+local foulerLines = {
+  "Oggetto: 'eterea armatura Fouler EDFouler', Tipo di Oggetto ARMOR V-Number Originario: 6618",
+  "L'oggetto e': GLOW MAGIC BLESS ANTI-EVIL ANTI-NEUTRAL ANTI-MAGE ANTI-THIEF ANTI-WARRIOR ARTIFACT ANTI-BARBARIAN ANTI-RANGER ANTI-PALADIN ANTI-PSIONIST ANTI-MONK ANTI-DRUID EDIT PERSONAL ",
+  "Peso: 6, Valore: 20001, Costo di rent: 0 [RARO]",
+  "AC-apply di 6.",
+  "Caratteristiche: ",
+  "    Ti puo' dare : RESISTANCE by SLASH ",
+  "    Ti puo' dare : WIS by 2",
+  "    Ti puo' dare : SPELLFAIL by -15",
+  "    Ti puo' dare : SAVING_ALL by -1",
+  "    Ti puo' dare : MANA-REGEN by 50",
+}
+local foulerAffects = NebbieDash.parseIdentifyBatchAffects(foulerLines)
+check("ident batch: parseIdentifyBatchAffects legge 5 righe",
+  #foulerAffects == 5 and foulerAffects[1] == "RESISTANCE by SLASH"
+  and foulerAffects[3] == "SPELLFAIL by -15" and foulerAffects[5] == "MANA-REGEN by 50")
+check("ident batch: identBatchAppendRow scrive affect-1..5",
+  NebbieDash.identBatchAppendRow(
+    { vnumAttuale = "34595", rawLine = "test" },
+    foulerLines,
+    "/tmp/nebbie-ident-fouler-out.csv"))
+local foulerOut = io.open("/tmp/nebbie-ident-fouler-out.csv", "r")
+local foulerCsv = foulerOut and foulerOut:read("*a") or ""
+if foulerOut then foulerOut:close() end
+check("ident batch: CSV Fouler contiene affect in coda",
+  foulerCsv:find("6618,RESISTANCE by SLASH,WIS by 2,SPELLFAIL by %-15,SAVING_ALL by %-1,MANA%-REGEN by 50", 1) ~= nil)
+os.remove("/tmp/nebbie-ident-fouler-out.csv")
 check("ident batch: batchAppendToLog ident non scrive log per-toon",
   (function()
     NebbieDash._batch = { mode = "ident" }

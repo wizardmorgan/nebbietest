@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.13.2"
+local PKG_VER = "1.14.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -2244,8 +2244,8 @@ function NebbieDash.ensureIdentBatchCommandsFile()
     "# Placeholder: $1 nome-toon, $2 key (CSV), $3 vnum-attuale, $4 vnum-originale.\n" ..
     "# Input righe: nebbie-batch-items.csv (stesso CSV di nbatch).\n" ..
     "# Output: nebbie-ident-results-YYYY-MM-DD.csv (un file per tutte le righe).\n" ..
-    "# Colonne output: object-name,type,extra-flags,vnum-attuale,vnum-originario\n" ..
-    "# (vnum-originario = V-Number Originario da output identify). Nessun log per-toon.\n" ..
+    "# Colonne output: object-name,type,extra-flags,vnum-attuale,vnum-originario,affect-1..5\n" ..
+    "# (affect-N = testo dopo \"Ti puo' dare :\" in identify, max 5). Nessun log per-toon.\n" ..
     "# Dopo modifiche: nidentbatchreload (o riavvia Mudlet).\n" ..
     "#\n" ..
     "# Workflow aggiornamento campi name:\n" ..
@@ -2401,6 +2401,20 @@ end
 -- Output identify reale (2026-09-22):
 --   Oggetto: 'verse13 move lips EDEchoes', Tipo di Oggetto ARMOR V-Number Originario: 8304
 --   L'oggetto e': ORGANIC MAGIC ... EDIT PERSONAL
+--   Ti puo' dare : RESISTANCE by SLASH
+NebbieDash.IDENT_BATCH_AFFECT_COUNT = 5
+
+function NebbieDash.parseIdentifyBatchAffects(lines)
+  local affects = {}
+  for _, text in ipairs(lines or {}) do
+    local aff = text:match("Ti puo' dare%s*:%s*(.-)%s*$")
+    if aff and aff ~= "" then
+      table.insert(affects, aff)
+    end
+  end
+  return affects
+end
+
 function NebbieDash.parseIdentifyBatchOutput(lines)
   local objName, objType, flags, vnumOriginario
   for _, text in ipairs(lines or {}) do
@@ -2419,7 +2433,8 @@ function NebbieDash.parseIdentifyBatchOutput(lines)
 end
 
 NebbieDash.IDENT_BATCH_CSV_HEADER =
-  "object-name,type,extra-flags,vnum-attuale,vnum-originario"
+  "object-name,type,extra-flags,vnum-attuale,vnum-originario," ..
+  "affect-1,affect-2,affect-3,affect-4,affect-5"
 
 function NebbieDash.identBatchEnsureResultsHeader(resultsPath)
   if type(io.exists) == "function" and io.exists(resultsPath) then
@@ -2453,12 +2468,18 @@ function NebbieDash.identBatchAppendRow(row, rowLines, resultsPath)
   if not okHeader then
     return false, headerErr
   end
-  local line = string.format("%s,%s,%s,%s,%s",
+  local affects = NebbieDash.parseIdentifyBatchAffects(rowLines)
+  local cols = {
     NebbieDash.csvEscapeField(objName),
     NebbieDash.csvEscapeField(objType),
     NebbieDash.csvEscapeField(flags or ""),
     NebbieDash.csvEscapeField(row.vnumAttuale or ""),
-    NebbieDash.csvEscapeField(vnumOriginario))
+    NebbieDash.csvEscapeField(vnumOriginario),
+  }
+  for i = 1, NebbieDash.IDENT_BATCH_AFFECT_COUNT do
+    table.insert(cols, NebbieDash.csvEscapeField(affects[i] or ""))
+  end
+  local line = table.concat(cols, ",")
   local f = io.open(resultsPath, "a")
   if not f then
     return false, "impossibile scrivere CSV: " .. tostring(resultsPath)

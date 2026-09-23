@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.14.0 — 2026-09-23
+
+- **nidentbatch CSV output**: aggiunte colonne **`affect-1` … `affect-5`** (decima colonna
+  totale), con il testo dopo **`Ti puo' dare :`** nell'output di `identify` (es.
+  `RESISTANCE by SLASH`, `WIS by 2`). Meno di cinque caratteristiche → colonne vuote;
+  più di cinque → prime cinque only.
+- **Versione interna** alzata a 1.14.0.
+
 ## 1.13.2 — 2026-09-23
 
 - **nidentbatch resume**: ripristinato come unico modo documentato (argomento di
