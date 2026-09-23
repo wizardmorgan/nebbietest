@@ -182,7 +182,6 @@ Comandi in un file separato:
 
 **Nota**: tutti gli oggetti edit hanno la chiave **`ED`+toon** nell'inventario Sirio dopo `oload`.
 La colonna `key` del CSV può restare vuota.
-La colonna `key` del CSV può restare vuota.
 
 **Output**: un solo file per giorno, es. `nebbie-ident-results-2026-09-22.csv`
 nella home del profilo. **Una riga per oggetto**, formato:
