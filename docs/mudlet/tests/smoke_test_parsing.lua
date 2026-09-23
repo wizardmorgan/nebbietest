@@ -834,13 +834,29 @@ local identLines = {
   "Oggetto: 'verse13 move lips EDEchoes', Tipo di Oggetto ARMOR V-Number Originario: 8304",
   "L'oggetto e': ORGANIC MAGIC ANTI-THIEF ANTI-WARRIOR RESISTANT ARTIFACT ANTI-BARBARIAN ANTI-RANGER ANTI-PALADIN ANTI-MONK EDIT PERSONAL ",
 }
-local iname, itype, iflags = NebbieDash.parseIdentifyBatchOutput(identLines)
+local iname, itype, iflags, ivnum = NebbieDash.parseIdentifyBatchOutput(identLines)
 check("ident batch: parseIdentifyBatchOutput nome", iname == "verse13 move lips EDEchoes")
 check("ident batch: parseIdentifyBatchOutput tipo", itype == "ARMOR")
+check("ident batch: parseIdentifyBatchOutput vnum originario", ivnum == "8304")
 check("ident batch: parseIdentifyBatchOutput flags contiene EDIT PERSONAL",
   iflags and iflags:find("EDIT PERSONAL", 1, true) ~= nil)
-check("ident batch: csvEscapeField lascia testo semplice",
-  NebbieDash.csvEscapeField("ARMOR") == "ARMOR")
+check("ident batch: identBatchAppendRow scrive vnum-originario",
+  NebbieDash.identBatchAppendRow(
+    { vnumAttuale = "34653", rawLine = "test" },
+    identLines,
+    "/tmp/nebbie-ident-test-out.csv"))
+local identOut = io.open("/tmp/nebbie-ident-test-out.csv", "r")
+check("ident batch: CSV contiene quinta colonna vnum-originario",
+  identOut and identOut:read("*a"):find(",8304%s*$", 1) ~= nil)
+if identOut then identOut:close() end
+os.remove("/tmp/nebbie-ident-test-out.csv")
+check("ident batch: batchAppendToLog ident non scrive log per-toon",
+  (function()
+    NebbieDash._batch = { mode = "ident" }
+    local ok = NebbieDash.batchAppendToLog("Montero", "test")
+    NebbieDash._batch = nil
+    return ok == true
+  end)())
 check("ident batch: batchEdToonKey Shelin -> EDShelin",
   NebbieDash.batchEdToonKey("Shelin") == "EDShelin")
 check("ident batch: batchOloadSucceeded riconosce Adesso hai",

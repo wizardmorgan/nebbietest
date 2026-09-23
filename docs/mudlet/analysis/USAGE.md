@@ -186,14 +186,13 @@ La colonna `key` del CSV può restare vuota; per stat/identify/junk conta solo *
 nella home del profilo. **Una riga per oggetto**, formato:
 
 ```
-object-name,type,extra-flags,vnum-attuale
-verse13 move lips EDEchoes,ARMOR,ORGANIC MAGIC ... EDIT PERSONAL,34653
+object-name,type,extra-flags,vnum-attuale,vnum-originario
+verse13 move lips EDEchoes,ARMOR,ORGANIC MAGIC ... EDIT PERSONAL,34653,8304
 ```
 
-I campi vengono estratti dall'output di `cast 'identify'` (`Oggetto: '...'`,
-`Tipo di Oggetto ...`, `L'oggetto e': ...`); il vnum è `$3` del CSV input.
-Più batch nello stesso giorno **appendono** righe allo stesso file. Log testuale
-per toon (`<Toon>-YYYY-MM-DD.txt`) come per `nbatch`.
+Il quinto campo è il **`V-Number Originario`** dall'output di `identify` (es. `V-Number Originario: 8304` → `8304`).
+Più batch nello stesso giorno **appendono** righe allo stesso file. **Nessun** log testuale
+per-toon (`<Toon>-YYYY-MM-DD.txt`) per `nidentbatch` — solo il CSV (i log per-toon restano per `nbatch`).
 
 Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
 
