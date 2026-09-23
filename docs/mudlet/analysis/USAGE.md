@@ -174,12 +174,13 @@ Comandi in un file separato:
 **Scopo tipico**: aggiornare i campi **name** nel CSV/server. Sequenza:
 
 1. `oload $3` — carica l'oggetto in inventario Sirio
-2. **`$o`** — keyword ricavata da `Adesso hai <short desc>.` (es. `The Cross.` → `cross`;
-   `Your lips move.` → `lips`). Usata in `stat` / `cast 'identify'` / `junk`
+2. **`$o`** — keyword **`ED` + nome-toon** dalla colonna `$1` del CSV
+   (es. riga `Shelin,,34035,8177` → `stat EDShelin`). Equivalente a **`$ed`**.
+   Il testo `Adesso hai ...` serve solo a confermare che l'oload è riuscito;
+   **non** determina la keyword.
 3. Il **CSV output** prende il **nome completo** da identify (es. `verse13 move lips EDEchoes`)
 
-**Nota importante**: `ED`+nome-toon (es. `EDEchoes`) compare nel **nome oggetto** restituito
-da identify, **non** è la keyword per puntare all'oggetto appena oloadato. Per quello serve **`$o`**.
+**Nota**: tutti gli oggetti edit hanno la chiave **`ED`+toon** nell'inventario Sirio dopo `oload`.
 La colonna `key` del CSV può restare vuota.
 
 **Output**: un solo file per giorno, es. `nebbie-ident-results-2026-09-22.csv`
