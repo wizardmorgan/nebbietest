@@ -318,6 +318,15 @@ check("quickcast: virgola vince anche col proprio nome", lastSent == "cast 'heal
 -- "But you are a member of no group?!", 'Your group "..." consists of:'.
 NebbieDash.autoSplit = true
 
+check("loot: parseLootCoinAmount moneta singola",
+  NebbieDash.parseLootCoinAmount("C'era una miserabile moneta.") == 1)
+check("loot: parseLootCoinAmount ignora echo stanza",
+  NebbieDash.parseLootCoinAmount("Qualcuno C'erano 10 monete.") == nil)
+check("loot: isGroupHeaderLine con nome gruppo",
+  NebbieDash.isGroupHeaderLine('$c0015Your group "I cacciatori" consists of:'))
+check("loot: isGroupHeaderLine senza nome gruppo",
+  NebbieDash.isGroupHeaderLine("$c0015Your group consists of:"))
+
 -- 8a: la riga "Prendi gold coins da ..." da sola non fa scattare nulla (non
 -- contiene l'importo, solo il nome del cadavere, che varia per ogni mostro).
 local sentBefore8a = #sentLog
@@ -333,6 +342,7 @@ check("loot: importo riconosciuto correttamente", NebbieDash._pendingSplitAmount
 check("loot: dopo il loot invia 'group' per il controllo", lastSent == "group")
 
 -- 8c: risposta "da soli" -> nessuno split inviato, stato ripulito.
+line = "But you are a member of no group?!"
 NebbieDash.onGroupSoloLine()
 check("loot: da soli non invia alcuno split", lastSent == "group")
 check("loot: stato controllo gruppo ripulito (da soli)", NebbieDash._groupCheckActive == false)
@@ -340,9 +350,16 @@ check("loot: stato controllo gruppo ripulito (da soli)", NebbieDash._groupCheckA
 -- 8d: risposta "in gruppo" -> invia split con l'importo corretto.
 line = "C'erano 250 monete."
 NebbieDash.onLootLine()
-line = 'Your group "I cacciatori di Draghi" consists of:'
+line = '$c0015Your group "I cacciatori di Draghi" consists of:'
 NebbieDash.onGroupHeaderLine()
 check("loot: in gruppo invia split con l'importo corretto", lastSent == "split 250")
+
+-- 8d2: gruppo senza nome custom (output server reale act.other.cpp).
+line = "C'erano 99 monete."
+NebbieDash.onLootLine()
+line = "$c0015Your group consists of:"
+NebbieDash.onGroupHeaderLine()
+check("loot: gruppo senza nome invia split", lastSent == "split 99")
 
 -- 8e: con nautosplit off, il loot non deve avviare alcun controllo gruppo.
 NebbieDash.autoSplit = false
@@ -693,6 +710,7 @@ NebbieDash.startSplitFlow(50)
 check("split: secondo loot mentre il controllo e' attivo NON invia un secondo 'group'", #sentLog == 0)
 check("split: l'importo del secondo loot si accumula nel controllo in corso", NebbieDash._pendingSplitAmount == 150)
 sentLog = {}
+line = "But you are a member of no group?!"
 NebbieDash.onGroupSoloLine()
 check("split: risposta 'da solo' non invia alcuno split (importo combinato scartato)", #sentLog == 0)
 check("split: controllo gruppo chiuso dopo la risposta", NebbieDash._groupCheckActive == false)
