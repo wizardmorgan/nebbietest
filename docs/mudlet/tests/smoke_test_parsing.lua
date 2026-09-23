@@ -860,7 +860,21 @@ check("ident batch: batchAppendToLog ident non scrive log per-toon",
 check("ident batch: batchEdToonKey Shelin -> EDShelin",
   NebbieDash.batchEdToonKey("Shelin") == "EDShelin")
 check("ident batch: batchOloadSucceeded riconosce Adesso hai",
-  NebbieDash.batchOloadSucceeded({ "Adesso hai la Mistica Aura dell'Ascesi." }))
+  NebbieDash.batchOloadSucceeded({ "Adesso hai il Bracciale dell'Astio." }))
+check("ident batch: batchOloadStepReady prompt prima di Adesso hai",
+  not NebbieDash.batchOloadStepReady({ "Sysmess: foo", "Sirio R20 [On//58]>>" }, nil))
+check("ident batch: batchOloadStepReady Adesso hai dopo prompt",
+  NebbieDash.batchOloadStepReady({
+    "Sysmess: foo",
+    "Sirio R20 [On//58]>>",
+    "Adesso hai un Kusazuri.",
+  }, nil))
+check("ident batch: batchOloadStepReady ordine normale",
+  NebbieDash.batchOloadStepReady({
+    "Adesso hai un Kusazuri.",
+    "Sirio R20 [On//58]>>",
+  }, nil))
+check("ident batch: batchIsOloadCommand", NebbieDash.batchIsOloadCommand("oload $3"))
 check("ident batch: substituteBatchVars $o sempre ED+nome-toon",
   NebbieDash.substituteBatchVars("stat $o", { nomeToon = "Montero" }, { oloadDone = true })
     == "stat EDMontero")

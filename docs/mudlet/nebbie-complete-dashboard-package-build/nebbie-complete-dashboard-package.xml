@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.13.0"
+local PKG_VER = "1.13.1"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1073,7 +1073,7 @@ NebbieDash.HELP_TEXT = {
   { "nbatchreload", "Ricarica nebbie-batch-commands.txt e nebbie-batch-items.csv." },
   { "nbatchverify [toon] [data]", "Verifica log batch vs CSV (es. nbatchverify GreenBlade 2026-09-21)." },
   { "nidentbatch [nome-toon]", "Identify batch: oload $3, stat/identify/junk con $o (keyword oload)." },
-  { "nidentbatch resume [nome-toon]", "Riprende identify batch saltando righe gia' nel CSV di oggi." },
+  { "nidentbatchresume [nome-toon]", "Riprende identify batch saltando righe gia' nel CSV di oggi." },
   { "nidentbatchreload", "Ricarica nebbie-ident-batch-commands.txt e nebbie-batch-items.csv." },
   { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
@@ -2582,6 +2582,43 @@ function NebbieDash.batchOloadSucceeded(lines)
   return false
 end
 
+function NebbieDash.batchIsOloadCommand(template)
+  return (template or ""):match("^oload%s") ~= nil
+end
+
+function NebbieDash.batchStepHasPrompt(lines)
+  for _, text in ipairs(lines or {}) do
+    if NebbieDash.isAnyPromptLine(text) then
+      return true
+    end
+  end
+  return false
+end
+
+-- oload: attende sia "Adesso hai ..." sia un prompt (ordine variabile: sysmess puo'
+-- far comparire il prompt prima del messaggio oload).
+function NebbieDash.batchOloadStepReady(lines, promptText)
+  if not NebbieDash.batchOloadSucceeded(lines) then
+    return false
+  end
+  if promptText and NebbieDash.isAnyPromptLine(promptText) then
+    return true
+  end
+  return NebbieDash.batchStepHasPrompt(lines)
+end
+
+function NebbieDash.batchTryCompleteOloadStep(promptText)
+  local b = NebbieDash._batch
+  if not b or not b.active or not b.awaitingOutput or b.waitMode ~= "prompt" then
+    return false
+  end
+  if not NebbieDash.batchOloadStepReady(b.stepLines, promptText) then
+    return false
+  end
+  NebbieDash.onBatchStepComplete(promptText)
+  return true
+end
+
 function NebbieDash.batchTemplateUsesOloadKey(template)
   local t = template or ""
   return t:find("$o", 1, true) ~= nil or t:find("$ed", 1, true) ~= nil
@@ -2724,14 +2761,24 @@ function NebbieDash.onBatchLine()
     NebbieDash.onBatchStepComplete(nil)
     return
   end
-  if b.waitMode == "prompt" and NebbieDash.isAnyPromptLine(text) then
-    NebbieDash.onBatchStepComplete(text)
+  if b.waitMode == "prompt" then
+    local tmpl = b.commands[b.cmdIdx]
+    if NebbieDash.batchIsOloadCommand(tmpl) then
+      NebbieDash.batchTryCompleteOloadStep(text)
+    elseif NebbieDash.isAnyPromptLine(text) then
+      NebbieDash.onBatchStepComplete(text)
+    end
   end
 end
 
 function NebbieDash.onBatchPrompt(promptText)
   local b = NebbieDash._batch
   if not b or not b.active or not b.awaitingOutput or b.waitMode ~= "prompt" then return end
+  local tmpl = b.commands[b.cmdIdx]
+  if NebbieDash.batchIsOloadCommand(tmpl) then
+    NebbieDash.batchTryCompleteOloadStep(promptText)
+    return
+  end
   NebbieDash.onBatchStepComplete(promptText)
 end
 
@@ -2963,7 +3010,7 @@ function NebbieDash.cmdBatch(filterStr)
   )
 end
 
-function NebbieDash.cmdIdentBatch(filterStr)
+function NebbieDash.cmdIdentBatch(filterStr, forceResume)
   NebbieDash.loadIdentBatchCommands()
   NebbieDash.loadBatchItems()
   if #NebbieDash.identBatchCommands == 0 then
@@ -2971,9 +3018,12 @@ function NebbieDash.cmdIdentBatch(filterStr)
     return
   end
   local resume, toonFilter = NebbieDash.identBatchParseFilter(filterStr)
+  if forceResume then
+    resume = true
+  end
   local label
   if resume then
-    label = (toonFilter ~= "" and ("nidentbatch resume " .. toonFilter)) or "nidentbatch resume"
+    label = (toonFilter ~= "" and ("nidentbatchresume " .. toonFilter)) or "nidentbatchresume"
   else
     label = (toonFilter ~= "" and ("nidentbatch " .. toonFilter)) or "nidentbatch"
   end
@@ -3018,6 +3068,10 @@ function NebbieDash.cmdIdentBatch(filterStr)
     startMsg,
     rows
   )
+end
+
+function NebbieDash.cmdIdentBatchResume(filterStr)
+  NebbieDash.cmdIdentBatch(filterStr, true)
 end
 
 function NebbieDash.rowFromCsvLine(csvLine)
@@ -3714,6 +3768,20 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nidentbatch (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-ident-batch-resume</name>
+   <script><![CDATA[NebbieDash.cmdIdentBatchResume()]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nidentbatchresume$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-ident-batch-resume-filter</name>
+   <script><![CDATA[NebbieDash.cmdIdentBatchResume(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nidentbatchresume (.+)$</regex>
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-dash-ident-batch-reload</name>
