@@ -22,7 +22,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.12.5"
+PKG_VER = "1.12.6"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)

@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.12.5"
+local PKG_VER = "1.12.6"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -2247,8 +2247,9 @@ function NebbieDash.ensureIdentBatchCommandsFile()
     "#\n" ..
     "# Workflow aggiornamento campi name:\n" ..
     "# 1) oload $3 -> 'Adesso hai <short desc>.'\n" ..
-    "# 2) stat/identify/junk usano $o = ED + nome-toon ($1, es. Shelin -> EDShelin)\n" ..
-    "#    NON si usa il testo 'Adesso hai ...'; la keyword viene dal CSV.\n" ..
+    "# 2) stat/identify/junk usano $o (ibrido dopo oload):\n" ..
+    "#    desc breve (<=2 parole) -> keyword parsata (The Cross -> cross)\n" ..
+    "#    desc lunga (>=3 parole) -> ED+nome-toon (Mistica Aura -> EDShelin)\n" ..
     "# 3) il CSV output prende il nome completo da identify (es. ...EDEchoes)\n" ..
     "# Prima riga: nchar Sirio (preposta automaticamente se manca).\n" ..
     "#\n" ..
@@ -2321,6 +2322,9 @@ end
 function NebbieDash.substituteBatchVars(template, row, batch)
   local out = template or ""
   out = out:gsub("%$o", function()
+    if batch and batch.oloadKeyword and batch.oloadKeyword ~= "" then
+      return batch.oloadKeyword
+    end
     return NebbieDash.batchEdToonKey(row and row.nomeToon)
   end)
   out = out:gsub("%$ed", function()
@@ -2464,15 +2468,57 @@ function NebbieDash.batchDetectError(lines)
   return false
 end
 
--- Dopo oload: verifica solo che compaia "Adesso hai ..." (successo oload).
--- La keyword $o e' sempre ED+nome-toon dal CSV, non dal testo oggetto.
-function NebbieDash.batchOloadSucceeded(lines)
-  for _, text in ipairs(lines or {}) do
-    if text:match("^Adesso hai .+%.%s*$") then
-      return true
+NebbieDash.BATCH_OLOAD_SKIP_WORDS = {
+  ["the"] = true, ["your"] = true, ["a"] = true, ["an"] = true, ["of"] = true,
+}
+
+function NebbieDash.batchFirstOloadKeyword(itemName)
+  local keywords = NebbieDash.extractItemKeywords(itemName)
+  for word in keywords:gmatch("%S+") do
+    if not NebbieDash.BATCH_OLOAD_SKIP_WORDS[word] then
+      return word
     end
   end
-  return false
+  return NebbieDash.lastKeyword(itemName)
+end
+
+function NebbieDash.batchCountSignificantWords(itemName)
+  local keywords = NebbieDash.extractItemKeywords(itemName)
+  local count = 0
+  for word in keywords:gmatch("%S+") do
+    if not NebbieDash.BATCH_OLOAD_SKIP_WORDS[word] then
+      count = count + 1
+    end
+  end
+  return count
+end
+
+function NebbieDash.batchParseOloadItemName(lines)
+  for _, text in ipairs(lines or {}) do
+    local itemName = text:match("^Adesso hai (.+)%.%s*$")
+    if itemName then
+      return itemName:match("^%s*(.-)%s*$")
+    end
+  end
+  return nil
+end
+
+-- Dopo oload: desc breve (<=2 parole) -> prima keyword parsata (cross, lips);
+-- desc lunga (>=3) -> ED+nome-toon (EDShelin). $ed resta sempre ED+toon.
+function NebbieDash.batchResolveOloadKeyword(lines, row)
+  local itemName = NebbieDash.batchParseOloadItemName(lines)
+  if not itemName or itemName == "" then
+    return nil
+  end
+  if NebbieDash.batchCountSignificantWords(itemName) >= 3
+      and row and row.nomeToon and row.nomeToon ~= "" then
+    return NebbieDash.batchEdToonKey(row.nomeToon)
+  end
+  return NebbieDash.batchFirstOloadKeyword(itemName)
+end
+
+function NebbieDash.batchOloadSucceeded(lines)
+  return NebbieDash.batchParseOloadItemName(lines) ~= nil
 end
 
 function NebbieDash.batchTemplateUsesOloadKey(template)
@@ -2656,6 +2702,14 @@ function NebbieDash.onBatchStepComplete(promptText)
       NebbieDash.batchStop("fermato — oload non confermato ('Adesso hai ...' mancante)")
       return
     end
+    local row = b.rows[b.rowIdx]
+    b.oloadKeyword = NebbieDash.batchResolveOloadKeyword(b.stepLines, row)
+    if not b.oloadKeyword or b.oloadKeyword == "" then
+      NebbieDash.batchStop("fermato — keyword $o non ricavata da 'Adesso hai ...'")
+      return
+    end
+    NebbieDash.batchAppendToLog(row.nomeToon,
+      string.format("[NebbieDash] $o -> %s\n", b.oloadKeyword))
     b.oloadDone = true
   end
 
@@ -2700,6 +2754,7 @@ function NebbieDash.batchRunCurrentStep()
     NebbieDash.batchEnsureLogSection(b, row)
     b.currentLogToon = row.nomeToon
     b.oloadDone = false
+    b.oloadKeyword = nil
     if b.mode == "ident" then
       b.rowLines = {}
     end
@@ -2815,6 +2870,7 @@ function NebbieDash.startBatchJob(mode, filterStr, commands, filterLabel, startM
     waitMode = "prompt",
     identResultsPath = identResultsPath,
     oloadDone = false,
+    oloadKeyword = nil,
   }
 
   cecho("<cyan>[NebbieDash] " .. startMsg .. "\n")

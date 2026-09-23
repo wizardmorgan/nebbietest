@@ -1,5 +1,15 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.6 — 2026-09-23
+
+- **Corretto (nidentbatch)**: risoluzione **ibrida** di **`$o`** dopo `oload`:
+  desc breve (≤2 parole significative) → keyword parsata (`The Cross` → `cross`,
+  `Your lips move` → `lips`); desc lunga (≥3 parole) → **`ED`+nome-toon**
+  (`la Mistica Aura dell'Ascesi` → `EDShelin`). La v1.12.5 usava sempre ED+toon
+  e falliva su oggetti come The Cross / Montero. **`$ed`** resta sempre ED+toon.
+  Il log batch riporta la keyword scelta (`$o -> cross`).
+- **Versione interna** alzata a 1.12.6.
+
 ## 1.12.5 — 2026-09-23
 
 - **Corretto (nidentbatch)**: **`$o`** = **`ED` + nome-toon** (colonna `$1` del CSV),
