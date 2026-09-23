@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.13.1"
+local PKG_VER = "1.13.2"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1067,7 +1067,7 @@ NebbieDash.HELP_TEXT = {
   { "nbatchreload", "Ricarica nebbie-batch-commands.txt e nebbie-batch-items.csv." },
   { "nbatchverify [toon] [data]", "Verifica log batch vs CSV (es. nbatchverify GreenBlade 2026-09-21)." },
   { "nidentbatch [nome-toon]", "Identify batch: oload $3, stat/identify/junk con $o (keyword oload)." },
-  { "nidentbatchresume [nome-toon]", "Riprende identify batch saltando righe gia' nel CSV di oggi." },
+  { "nidentbatch resume [nome-toon]", "Riprende identify batch saltando righe gia' nel CSV di oggi." },
   { "nidentbatchreload", "Ricarica nebbie-ident-batch-commands.txt e nebbie-batch-items.csv." },
   { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
@@ -3004,7 +3004,7 @@ function NebbieDash.cmdBatch(filterStr)
   )
 end
 
-function NebbieDash.cmdIdentBatch(filterStr, forceResume)
+function NebbieDash.cmdIdentBatch(filterStr)
   NebbieDash.loadIdentBatchCommands()
   NebbieDash.loadBatchItems()
   if #NebbieDash.identBatchCommands == 0 then
@@ -3012,12 +3012,9 @@ function NebbieDash.cmdIdentBatch(filterStr, forceResume)
     return
   end
   local resume, toonFilter = NebbieDash.identBatchParseFilter(filterStr)
-  if forceResume then
-    resume = true
-  end
   local label
   if resume then
-    label = (toonFilter ~= "" and ("nidentbatchresume " .. toonFilter)) or "nidentbatchresume"
+    label = (toonFilter ~= "" and ("nidentbatch resume " .. toonFilter)) or "nidentbatch resume"
   else
     label = (toonFilter ~= "" and ("nidentbatch " .. toonFilter)) or "nidentbatch"
   end
@@ -3062,10 +3059,6 @@ function NebbieDash.cmdIdentBatch(filterStr, forceResume)
     startMsg,
     rows
   )
-end
-
-function NebbieDash.cmdIdentBatchResume(filterStr)
-  NebbieDash.cmdIdentBatch(filterStr, true)
 end
 
 function NebbieDash.rowFromCsvLine(csvLine)
