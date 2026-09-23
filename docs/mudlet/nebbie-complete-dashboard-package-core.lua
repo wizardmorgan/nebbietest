@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.12.7"
+local PKG_VER = "1.12.8"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -2247,16 +2247,15 @@ function NebbieDash.ensureIdentBatchCommandsFile()
     "#\n" ..
     "# Workflow aggiornamento campi name:\n" ..
     "# 1) oload $3 -> 'Adesso hai <short desc>.'\n" ..
-    "# 2) stat/identify/junk: $o = ED + nome-toon ($1). Mai dal testo oggetto.\n" ..
-    "#    Es. riga Montero -> EDMontero, Shelin -> EDShelin (case-insensitive in gioco).\n" ..
+    "# 2) cast identify / junk: $o o $ed = ED + nome-toon ($1). Mai $2 (key CSV).\n" ..
+    "#    NON usare 'stat': cerca nel MONDO, non l'oggetto oloadato in inventario Sirio.\n" ..
     "# 3) il CSV output prende il nome completo da identify (es. ...EDEchoes)\n" ..
     "# Prima riga: nchar Sirio (preposta automaticamente se manca).\n" ..
     "#\n" ..
     "nchar Sirio\n" ..
     "oload $3\n" ..
-    "stat $o\n" ..
-    "cast 'identify' $o\n" ..
-    "junk $o\n"
+    "cast 'identify' $ed\n" ..
+    "junk $ed\n"
   )
   f:close()
 end
@@ -2365,6 +2364,27 @@ function NebbieDash.loadIdentBatchCommands()
     end
   end
   f:close()
+  NebbieDash.validateIdentBatchCommands()
+end
+
+function NebbieDash.validateIdentBatchCommands()
+  local warnings = {}
+  for _, cmd in ipairs(NebbieDash.identBatchCommands or {}) do
+    if cmd:match("^stat%s") then
+      table.insert(warnings,
+        "riga 'stat ...' — stat cerca nel MONDO, non l'oggetto oloadato; usa solo identify/junk con $ed")
+    end
+    if cmd:find("%$2", 1, true) then
+      table.insert(warnings,
+        "placeholder $2 (key CSV) — usa $ed o $o (= ED+nome-toon da colonna $1)")
+    end
+  end
+  if #warnings > 0 then
+    cecho("<orange>[NebbieDash] Attenzione nebbie-ident-batch-commands.txt:\n")
+    for _, msg in ipairs(warnings) do
+      cecho("<orange>  - " .. msg .. "\n")
+    end
+  end
 end
 
 function NebbieDash.csvEscapeField(value)
@@ -2474,7 +2494,8 @@ function NebbieDash.batchOloadSucceeded(lines)
 end
 
 function NebbieDash.batchTemplateUsesOloadKey(template)
-  return (template or ""):find("%$o", 1, true) ~= nil
+  local t = template or ""
+  return t:find("$o", 1, true) ~= nil or t:find("$ed", 1, true) ~= nil
 end
 
 function NebbieDash.batchAppendToLog(nomeToon, text)
@@ -2643,12 +2664,18 @@ function NebbieDash.onBatchStepComplete(promptText)
   end
 
   local err, errLine = NebbieDash.batchDetectError(b.stepLines)
+  local tmpl = b.commands[b.cmdIdx]
   if err then
-    NebbieDash.batchStop("fermato — errore MUD: " .. tostring(errLine))
-    return
+    if b.mode == "ident" and tmpl and tmpl:match("^stat%s") then
+      NebbieDash.batchAppendToLog(b.currentLogToon,
+        string.format("[NebbieDash] stat ignorato (ident batch): %s\n", tostring(errLine)))
+      cecho("<orange>[NebbieDash] stat fallito (cerca nel mondo), continuo identify/junk con $ed...\n")
+    else
+      NebbieDash.batchStop("fermato — errore MUD: " .. tostring(errLine))
+      return
+    end
   end
 
-  local tmpl = b.commands[b.cmdIdx]
   if tmpl and tmpl:match("^oload%s") then
     if not NebbieDash.batchOloadSucceeded(b.stepLines) then
       NebbieDash.batchStop("fermato — oload non confermato ('Adesso hai ...' mancante)")
@@ -2713,6 +2740,9 @@ function NebbieDash.batchRunCurrentStep()
   b.awaitingOutput = true
   b.waitMode = waitMode
   NebbieDash.batchAppendToLog(row.nomeToon, string.format("[%s] >>> %s\n", os.date("%H:%M:%S"), logLabel))
+  if b.mode == "ident" and sendCmd and sendCmd ~= "" then
+    cecho("<grey>[NebbieDash ident] >>> " .. sendCmd .. "\n")
+  end
   if waitMode == "local" then
     NebbieDash.batchRunNcharCommand(template, row)
     NebbieDash.onBatchStepComplete(nil)

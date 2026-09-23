@@ -850,8 +850,11 @@ check("ident batch: substituteBatchVars $o sempre ED+nome-toon",
     == "stat EDMontero")
 check("ident batch: substituteBatchVars $o Shelin",
   NebbieDash.substituteBatchVars("stat $o", { nomeToon = "Shelin" }) == "stat EDShelin")
-check("ident batch: substituteBatchVars $ed resta ED+toon",
-  NebbieDash.substituteBatchVars("stat $ed", { nomeToon = "Montero" }) == "stat EDMontero")
+check("ident batch: batchTemplateUsesOloadKey riconosce $ed",
+  NebbieDash.batchTemplateUsesOloadKey("cast 'identify' $ed"))
+check("ident batch: substituteBatchVars $ed per identify",
+  NebbieDash.substituteBatchVars("cast 'identify' $ed", { nomeToon = "Montero" })
+    == "cast 'identify' EDMontero")
 
 print("")
 if failures == 0 then

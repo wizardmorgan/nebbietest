@@ -174,9 +174,10 @@ Comandi in un file separato:
 **Scopo tipico**: aggiornare i campi **name** nel CSV/server. Sequenza:
 
 1. `oload $3` — carica l'oggetto in inventario Sirio
-2. **`$o`** / **`$ed`** — sempre **`ED` + nome-toon** dalla colonna `$1` del CSV
-   (es. `Montero` → `EDMontero`, `Shelin` → `EDShelin`). **Non** si usa mai il testo
-   `Adesso hai ...` per la keyword — quella riga conferma solo che l'oload è riuscito.
+2. **`cast 'identify' $ed`** / **`junk $ed`** — keyword **`ED` + nome-toon** (colonna `$1`)
+   (es. `Montero` → `EDMontero`, `Shelin` → `EDShelin`). Anche **`$o`** = stesso valore.
+   **Non** usare `$2` (colonna key spesso vuota). **Non** usare `stat`: cerca nel mondo, non
+   l'oggetto oloadato.
 3. Il **CSV output** prende il **nome completo** da identify (es. `verse13 move lips EDEchoes`)
 
 La colonna `key` del CSV può restare vuota; per stat/identify/junk conta solo **`ED`+toon**.
@@ -199,9 +200,8 @@ Sequenza comandi di default (`nebbie-ident-batch-commands.txt`):
 ```
 nchar Sirio
 oload $3
-stat $o
-cast 'identify' $o
-junk $o
+cast 'identify' $ed
+junk $ed
 ```
 
 ### Verifica log (`nbatchverify`)
@@ -268,9 +268,8 @@ Sequenza identify (`nebbie-ident-batch-commands.txt`) — `nchar Sirio`, poi **`
 ```
 nchar Sirio
 oload $3
-stat $o
-cast 'identify' $o
-junk $o
+cast 'identify' $ed
+junk $ed
 ```
 
 ## Fame/sete: macro configurabile per personaggio

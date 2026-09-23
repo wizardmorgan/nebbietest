@@ -1,5 +1,16 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.12.8 — 2026-09-23
+
+- **Corretto (nidentbatch)**: rimosso **`stat`** dal workflow identify — `stat` cerca oggetti
+  **nel mondo**, non quelli appena `oload`ati in inventario Sirio (errore tipico su Montero/
+  The Cross con EDMontero). Sequenza default: `oload $3`, `cast 'identify' $ed`, `junk $ed`.
+  Se il file comandi contiene ancora `stat`, l'errore viene **ignorato** e il batch prosegue.
+- **Validazione** su `nidentbatchreload`: avviso se il file usa `$2` o `stat`.
+- **Log a schermo** dei comandi inviati (`[NebbieDash ident] >>> ...`).
+- **`$ed`** incluso nel gate post-oload (come `$o`).
+- **Versione interna** alzata a 1.12.8.
+
 ## 1.12.7 — 2026-09-23
 
 - **nidentbatch (definitivo)**: **`$o`** e **`$ed`** = sempre **`ED` + nome-toon** (colonna
