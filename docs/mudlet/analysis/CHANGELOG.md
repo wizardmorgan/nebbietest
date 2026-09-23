@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.13.2 — 2026-09-23
+
+- **nidentbatch resume**: ripristinato come unico modo documentato (argomento di
+  `nidentbatch`, es. `nidentbatch resume astaroth`); rimosso alias `nidentbatchresume`.
+  Voce **`nidentbatch resume [nome-toon]`** in **`nhelp`**.
+- **Versione interna** alzata a 1.13.2.
+
 ## 1.13.1 — 2026-09-23
 
 - **Corretto (batch oload)**: non chiude più lo step `oload` al solo prompt se manca ancora
@@ -12,9 +19,9 @@
 
 ## 1.13.0 — 2026-09-23
 
-- **nidentbatchresume [nome-toon]**: riprende il batch saltando le righe il cui
+- **nidentbatch resume [nome-toon]**: riprende il batch saltando le righe il cui
   **`vnum-attuale`** ($3) è già presente nel CSV risultati del giorno
-  (`nebbie-ident-results-YYYY-MM-DD.csv`). Alias equivalente: `nidentbatch resume`.
+  (`nebbie-ident-results-YYYY-MM-DD.csv`). Utile dopo un errore MUD; CSV in append.
 - **Versione interna** alzata a 1.13.0.
 
 ## 1.12.9 — 2026-09-23
