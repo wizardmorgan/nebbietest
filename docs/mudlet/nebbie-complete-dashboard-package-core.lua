@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.12.9"
+local PKG_VER = "1.13.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1067,6 +1067,7 @@ NebbieDash.HELP_TEXT = {
   { "nbatchreload", "Ricarica nebbie-batch-commands.txt e nebbie-batch-items.csv." },
   { "nbatchverify [toon] [data]", "Verifica log batch vs CSV (es. nbatchverify GreenBlade 2026-09-21)." },
   { "nidentbatch [nome-toon]", "Identify batch: oload $3, stat/identify/junk con $o (keyword oload)." },
+  { "nidentbatch resume [nome-toon]", "Riprende identify batch saltando righe gia' nel CSV di oggi." },
   { "nidentbatchreload", "Ricarica nebbie-ident-batch-commands.txt e nebbie-batch-items.csv." },
   { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
@@ -2467,6 +2468,51 @@ function NebbieDash.identBatchAppendRow(row, rowLines, resultsPath)
   return true
 end
 
+-- Righe gia' scritte nel CSV risultati (colonna vnum-attuale = campo 4).
+function NebbieDash.identBatchLoadProcessedVnums(resultsPath)
+  local done = {}
+  local f = io.open(resultsPath, "r")
+  if not f then return done end
+  local headerDone = false
+  for rawLine in f:lines() do
+    local line2 = rawLine:match("^%s*(.-)%s*$")
+    if line2 ~= "" then
+      if not headerDone then
+        headerDone = true
+      else
+        local fields = NebbieDash.parseCsvLine(line2)
+        local vnum = fields[4]
+        if vnum and vnum ~= "" then
+          done[vnum] = true
+        end
+      end
+    end
+  end
+  f:close()
+  return done
+end
+
+function NebbieDash.identBatchFilterUnprocessedRows(rows, processedVnums)
+  local out = {}
+  for _, row in ipairs(rows or {}) do
+    local vnum = row.vnumAttuale or ""
+    if vnum == "" or not processedVnums[vnum] then
+      table.insert(out, row)
+    end
+  end
+  return out
+end
+
+function NebbieDash.identBatchParseFilter(filterStr)
+  filterStr = (filterStr or ""):match("^%s*(.-)%s*$") or ""
+  if filterStr:lower():match("^resume$") or filterStr:lower():match("^resume%s+") then
+    local toon = filterStr:match("^[Rr]esume%s+(.*)$") or ""
+    toon = toon:match("^%s*(.-)%s*$") or ""
+    return true, toon
+  end
+  return false, filterStr
+end
+
 function NebbieDash.loadBatchItems()
   NebbieDash.ensureBatchItemsFile()
   NebbieDash.batchItems = {}
@@ -2840,7 +2886,7 @@ function NebbieDash.cmdReloadIdentBatch()
   cecho("<grey>  " .. NebbieDash.batchItemsPath() .. "\n")
 end
 
-function NebbieDash.startBatchJob(mode, filterStr, commands, filterLabel, startMsg)
+function NebbieDash.startBatchJob(mode, filterStr, commands, filterLabel, startMsg, rowsOverride)
   if NebbieDash._batch and NebbieDash._batch.active then
     cecho("<orange>[NebbieDash] Batch gia' in esecuzione.\n")
     return false
@@ -2856,7 +2902,7 @@ function NebbieDash.startBatchJob(mode, filterStr, commands, filterLabel, startM
   end
 
   filterStr = (filterStr or ""):match("^%s*(.-)%s*$")
-  local rows = NebbieDash.filterBatchRows(NebbieDash.batchItems, filterStr)
+  local rows = rowsOverride or NebbieDash.filterBatchRows(NebbieDash.batchItems, filterStr)
   if #rows == 0 then
     cecho("<orange>[NebbieDash] Nessuna riga CSV corrisponde al filtro" ..
       (filterStr ~= "" and (" '" .. filterStr .. "'") or "") .. ".\n")
@@ -2918,17 +2964,53 @@ function NebbieDash.cmdIdentBatch(filterStr)
     cecho("<orange>[NebbieDash] Nessun comando in " .. NebbieDash.identBatchCommandsPath() .. "\n")
     return
   end
-  filterStr = (filterStr or ""):match("^%s*(.-)%s*$")
-  local label = (filterStr ~= "" and ("nidentbatch " .. filterStr)) or "nidentbatch"
-  local rows = NebbieDash.filterBatchRows(NebbieDash.batchItems, filterStr)
+  local resume, toonFilter = NebbieDash.identBatchParseFilter(filterStr)
+  local label
+  if resume then
+    label = (toonFilter ~= "" and ("nidentbatch resume " .. toonFilter)) or "nidentbatch resume"
+  else
+    label = (toonFilter ~= "" and ("nidentbatch " .. toonFilter)) or "nidentbatch"
+  end
+
+  local rows = NebbieDash.filterBatchRows(NebbieDash.batchItems, toonFilter)
+  local skipped = 0
+  local resultsPath = NebbieDash.identBatchResultsPath()
+  if resume then
+    local processed = NebbieDash.identBatchLoadProcessedVnums(resultsPath)
+    local before = #rows
+    rows = NebbieDash.identBatchFilterUnprocessedRows(rows, processed)
+    skipped = before - #rows
+    if skipped > 0 then
+      cecho("<grey>[NebbieDash] Resume: " .. skipped ..
+        " righe gia' nel CSV di oggi, saltate.\n")
+      cecho("<grey>  " .. resultsPath .. "\n")
+    end
+    if #rows == 0 then
+      cecho("<green>[NebbieDash] Ident batch resume: nessuna riga rimanente" ..
+        (skipped > 0 and (" (" .. skipped .. " gia' completate).") or ".") .. "\n")
+      return
+    end
+  end
+
+  local startMsg
+  if resume then
+    startMsg = "Ident batch ripreso: " .. #rows .. " righe rimanenti" ..
+      (skipped > 0 and (", " .. skipped .. " saltate (gia' in CSV)") or "") ..
+      ", " .. #NebbieDash.identBatchCommands .. " comandi/riga. CSV: " ..
+      resultsPath .. " (append, nessun log <Toon>-YYYY-MM-DD.txt)"
+  else
+    startMsg = "Ident batch avviato: " .. #rows .. " righe, " .. #NebbieDash.identBatchCommands ..
+      " comandi/riga. CSV: " .. resultsPath ..
+      " (nessun log <Toon>-YYYY-MM-DD.txt)"
+  end
+
   NebbieDash.startBatchJob(
     "ident",
-    filterStr,
+    toonFilter,
     NebbieDash.identBatchCommands,
     label,
-    "Ident batch avviato: " .. #rows .. " righe, " .. #NebbieDash.identBatchCommands ..
-      " comandi/riga. CSV: " .. NebbieDash.identBatchResultsPath() ..
-      " (nessun log <Toon>-YYYY-MM-DD.txt)"
+    startMsg,
+    rows
   )
 end
 

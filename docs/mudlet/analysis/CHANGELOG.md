@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.13.0 — 2026-09-23
+
+- **nidentbatch resume [nome-toon]**: riprende il batch saltando le righe il cui
+  **`vnum-attuale`** ($3) è già presente nel CSV risultati del giorno
+  (`nebbie-ident-results-YYYY-MM-DD.csv`). Utile dopo un errore MUD (es. oggetto
+  mancante): correggi il problema e lancia `nidentbatch resume` invece di rifare
+  tutto da zero. Il CSV continua in **append**.
+- **Versione interna** alzata a 1.13.0.
+
 ## 1.12.9 — 2026-09-23
 
 - **nidentbatch CSV output**: aggiunta colonna **`vnum-originario`** (quinta colonna), parsata
