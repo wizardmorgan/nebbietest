@@ -22,7 +22,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.14.1"
+PKG_VER = "1.15.0"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -39,9 +39,11 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 
 - **Equip** (bordo sinistro): tutti gli slot indossati, con posizione ed
   oggetto letti da `eq`; segna anche gli slot liberi noti.
-- **Spell attivi** (bordo destro, in alto): spell/buff letti da `attrib`,
-  cliccabili per rilanciarli sul personaggio corrente (`cast`/`recall`/`mind`
-  a seconda della classe, vedi `nclass`).
+- **Spell attivi** (bordo destro, in alto): elenco **tuo** in
+  `nebbie-cast-spells.txt` (solo self-cast che puoi lanciare); colori/tick da
+  `attrib`; click rilancia con bersaglio = PG attivo (`nclass` per cast/recall/mind).
+- **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
+  **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
 - **Speedwalk** (bordo destro, in basso): percorsi rapidi definiti a mano in
   un file di testo, cliccabili per eseguirli in sequenza.
 - Layout ridimensionabile (larghezza automatica o manuale, altezza
@@ -82,10 +84,8 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   (re)installato una nuova versione del pacchetto — prima, i trigger e le
   funzionalità nuove non venivano attivati finché non si riavviava
   completamente Mudlet.
-- **Spell "conosciute" persistenti per personaggio**: le spell che lanci
-  restano visibili/cliccabili anche da spente (in rosso) invece di sparire
-  dal pannello; cambiando personaggio tornano tutte rosse finché non
-  rilanci `attrib` per confermare quali sono davvero attive.
+- **Cast 1.15.0**: `nspellaliases` / `nspellaliasesreload`; pannello e shortcut
+  da file di testo (non cumulo automatico da `attrib`).
 - **Gestione armi** (nuovo pannello "Armi", sotto l'Equip a sinistra):
   elenco persistente per personaggio delle armi impugnate almeno una volta,
   con tipo di danno (slash/blunt/pierce) letto dall'output di `identify`
@@ -147,6 +147,8 @@ ALIASES = [
     ("nebbie-dash-itemlen", "^nitemlen (.+)$", "NebbieDash.cmdSetItemLen(matches[2])"),
     ("nebbie-dash-quickcast", "^([crm]) (.+)$", "NebbieDash.cmdQuickCast(matches[2], matches[3])"),
     ("nebbie-dash-class", "^nclass (.+)$", "NebbieDash.cmdSetClass(matches[2])"),
+    ("nebbie-dash-spell-aliases", "^nspellaliases$", "NebbieDash.cmdListSpellAliases()"),
+    ("nebbie-dash-spell-aliases-reload", "^nspellaliasesreload$", "NebbieDash.cmdReloadSpellAliases()"),
     ("nebbie-dash-spellwarn", "^nspellwarn (.+)$", "NebbieDash.cmdSetSpellWarn(matches[2])"),
     ("nebbie-dash-speedwalks", "^nspeedwalks$", "NebbieDash.cmdReloadSpeedwalks()"),
     ("nebbie-dash-speeddelay", "^nspeeddelay (.+)$", "NebbieDash.cmdSetSpeedDelay(matches[2])"),

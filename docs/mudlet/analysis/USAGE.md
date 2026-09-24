@@ -43,12 +43,14 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nclanslot <on\|off>` | Mostra/nasconde il 22° slot equip placeholder "simbolo del clan" (nascosto di default, non ancora confermato in un `eq` reale). |
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
-| `c <nome>[, bersaglio]` | Invia `cast '<nome>'` (mago/chierico). Con `, bersaglio` esplicito o con l'ultima parola che abbrevia il tuo personaggio, aggiunge il bersaglio (vedi sotto). Es. `c word of r` → `cast 'word of r'`. |
-| `r <nome>[, bersaglio]` | Come sopra ma `recall` (sorcerer). |
-| `m <nome>[, bersaglio]` | Come sopra ma `mind` (psionico). |
-| `nclass <c\|r\|m>` | Imposta, per il personaggio attivo, quale dei tre comandi viene usato quando clicchi una spell nel pannello per rilanciarla (default `c`/cast). Impostalo una volta per personaggio in base alla sua classe. |
+| `c <spell> [bersaglio]` | Invia `cast '<spell>' <bersaglio>` — **sempre con bersaglio** (default: PG attivo). Es. `c heal` → `cast 'heal' NomiyaMaki`; `c heal bob` → `cast 'heal' bob`. |
+| `r <spell> [bersaglio]` | Come sopra con `recall` (sorcerer). |
+| `m <spell> [bersaglio]` | Come sopra con `mind` (psionico). |
+| `nclass <c\|r\|m>` | Imposta **per sempre** per il personaggio attivo quale comando usano pannello e shortcut (`cast`/`recall`/`mind`). Una volta per PG (es. mago → `nclass c`). |
+| `nspellaliases` | Elenco shortcut globali + spell nel pannello + `nclass` del PG attivo. |
+| `nspellaliasesreload` | Ricarica `nebbie-spell-shortcuts.txt` e `nebbie-cast-spells.txt` dopo modifiche manuali. |
 | `nspellwarn <n>` | Sotto quanti tick residui una spell attiva nel pannello viene mostrata in rosso invece che verde (default 5). |
-| `nforgetspell <nome>` | Rimuove una spell memorizzata per errore dall'elenco "conosciuto" del personaggio attivo (es. `nforgetspell mirror images`), utile se restano visibili spell che quel personaggio non può lanciare. |
+| `nforgetspell <nome>` | Toglie una riga dall'elenco pannello in memoria (e da vecchi dati `knownSpellOrder` se presente); aggiorna anche `nebbie-cast-spells.txt` a mano per renderlo permanente. |
 | `nspeedwalks` | Ricarica gli speedwalk dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nspeeddelay <secondi>` | Pausa tra un movimento e il successivo quando esegui uno speedwalk (default 0.35s). |
 | `nhelp` | Mostra/nasconde la finestra con l'elenco di tutti questi comandi (stessa finestra del tasto "? Comandi", vedi sotto). |
@@ -523,54 +525,63 @@ testo completo resta comunque disponibile digitando `eq` normalmente. Regolabile
 (vedi tabella comandi sopra); allargare il pannello con `nwidth` riduce ulteriormente il word-wrap
 residuo.
 
-## Motore generico di lancio spell/skill (`c`/`r`/`m`)
+## Motore di lancio spell/skill (`c`/`r`/`m`) — 1.15.0
 
-Aggiunto su richiesta esplicita (comando esatto specificato dall'utente): tre alias a una lettera,
-`c <nome>`, `r <nome>`, `m <nome>`, che inviano rispettivamente `cast '<nome>'`, `recall '<nome>'`,
-`mind '<nome>'`. Non facciamo nessun fuzzy-matching lato Mudlet: il motore di gioco stesso
-(`ACTION_FUNC(do_cast)` in `src/spell_parser.cpp` sul repo server) fa già il match per
-abbreviazione contro l'elenco completo dei nomi (`old_search_block`), quindi `c word of r` diventa
-`cast 'word of r'` e il gioco lo risolve da solo in "word of recall".
+Tre alias Mudlet: `c`, `r`, `m` + argomento. Inviano sempre **`cast`/`recall`/`mind` + apici + bersaglio
+esplicito** (il gioco fa l'abbreviazione del nome spell tra apici, vedi `src/spell_parser.cpp`).
 
-L'elenco completo di tutti i nomi conosciuti dal motore di gioco (spell, skill, poteri psionici —
-non filtrato per classe) è in `MUD-SPELL-SKILL-LIST.md`, estratto direttamente dal codice sorgente
-del server (non inventato). Serve come riferimento per scegliere quali nomi assegnare a eventuali
-alias dedicati più corti (feature non ancora implementata, in attesa che l'utente indichi quali
-voci gli servono e con quale sintassi — vedi `Q&A.md`).
+| Digitato (PG attivo NomiyaMaki) | Comando al MUD |
+|---|---|
+| `c heal` | `cast 'heal' NomiyaMaki` |
+| `c heal bob` | `cast 'heal' bob` |
+| `c word of r` | `cast 'word of r' NomiyaMaki` |
+| `r word of recall` | `recall 'word of recall' NomiyaMaki` (se `nclass r`) |
 
-**Bersaglio manuale — su un ALTRO personaggio (1.3.2)**: usa una virgola per separare nome spell e
-bersaglio in modo inequivocabile, qualunque sia il bersaglio: `c heal, bob` → `cast 'heal' bob`.
-Funziona anche con nomi spell multi-parola: `r word of recall, bob` → `recall 'word of recall' bob`.
-La virgola ha sempre la precedenza su tutto il resto.
+**Regole sintassi `c`/`r`/`m`**:
 
-**Bersaglio manuale — su se stessi (1.3.1)**: senza virgola, se l'ultima parola digitata è
-un'abbreviazione plausibile (almeno 2 lettere, prefisso case-insensitive) del personaggio attivo,
-viene staccata automaticamente e usata come bersaglio esplicito. Esempio con `NomiyaMaki` attivo:
-`c heal nom` → `cast 'heal' NomiyaMaki` (non `cast 'heal nom'`, che il gioco non riconosce). Senza
-questa parola finale il comportamento resta quello di sempre: tutto il testo è il nome spell (es.
-`c word of r` → `cast 'word of r'`, nessun bersaglio). **Limite noto**: se il nome del personaggio
-inizia con le stesse lettere dell'ultima parola di uno spell multi-parola che NON deve avere
-bersaglio, questa viene comunque staccata (falso positivo raro, accettato consapevolmente — usa la
-virgola per evitarlo del tutto, oppure segnalalo se capita spesso).
+- **Una parola** o **tre o più parole** (senza bersaglio separato): tutto è il nome spell, bersaglio = PG attivo.
+- **Esattamente due parole**: prima = spell, seconda = bersaglio (`c heal bob`).
+- **Spell multi-parola su altri**: definisci uno **shortcut** (sotto) e usa `wor bob`, oppure due token se la spell è una sola parola.
 
-**Attenzione — possibile collisione**: `c`, `r`, `m` seguiti da uno spazio e altro testo ora
-vengono intercettati SEMPRE da questo alias, anche se nel gioco esistessero altri comandi che
-iniziano per caso con la stessa lettera (es. abbreviazioni di comandi diversi da "cast"/"recall"/
-"mind" che prendono un argomento). Se noti che un comando che usavi prima con quella lettera ha
-smesso di funzionare come previsto, segnalalo: è il compromesso esplicitamente scelto con la
-sintassi richiesta.
+Non usiamo più virgola né stacco automatico dell'ultima parola sul nome del tuo PG. Senza PG attivo
+(dopo riconnessione, prima del prompt) **non viene inviato nulla** — attendi il prompt o `nchar`.
 
-## Spell attivi cliccabili (rilancio con un click)
+**`nclass c|r|m`**: salvato **per personaggio** in persistenza (`castPrefix`). Vale per click sul
+pannello e per shortcut globali (non per `c`/`r`/`m` digitati a mano, che fissano il prefisso).
 
-Ogni spell nel pannello "Spell attivi" è ora un link cliccabile: cliccandoci sopra la rilancia
-usando il comando impostato con `nclass` per quel personaggio (default `cast`, cioè come se
-avessi digitato `c <nome spell>`), **puntata sempre sul personaggio attivo** (quello mostrato nel
-titolo del pannello, es. "Spell attivi — NomiyaMaki"): il click su "true sight" invia
-`cast 'true sight' NomiyaMaki`, non solo `cast 'true sight'`. Il gioco interpreta tutto ciò che
-segue l'apice di chiusura come nome del bersaglio (`ACTION_FUNC(do_cast)`,
-`src/spell_parser.cpp`); per le spell "solo su se stessi" indicare comunque il proprio nome non ha
-alcun effetto negativo, il server lo ignora semplicemente. Imposta la classe giusta una volta per
-personaggio:
+Riferimento nomi spell/skill lato server: `MUD-SPELL-SKILL-LIST.md`.
+
+## Shortcut globali (`nebbie-spell-shortcuts.txt`)
+
+File nel profilo Mudlet (creato al primo avvio con esempi `he = heal`, `ts = true sight`):
+
+```
+getMudletHomeDir()/nebbie-spell-shortcuts.txt
+```
+
+Formato: `shortcut = nome spell` (o `shortcut nome spell`). Sono **globali al profilo**; il
+comando cast/recall/mind lo decide `nclass` del PG attivo. Esempi:
+
+- `he` → `cast 'heal' NomiyaMaki`
+- `he bob` → `cast 'heal' bob`
+
+Dopo modifiche: `nspellaliasesreload`. Elenco: `nspellaliases`. Non puoi usare come shortcut nomi
+riservati (`c`, `r`, `m`, comandi `n*`).
+
+## Pannello spell cliccabili (`nebbie-cast-spells.txt`)
+
+Il pannello **non** elenca più tutte le spell viste un giorno in `attrib`. Mostra solo le righe che
+**tu** metti in:
+
+```
+getMudletHomeDir()/nebbie-cast-spells.txt
+```
+
+Una riga = un nome spell. Metti **solo** ciò che quel personaggio può lanciare **su se stesso** con
+un click (es. niente `shield` nel file del mago solo perché un MU te l'ha messo — non potresti
+rilanciarla). `attrib`/`nresync` aggiornano solo i **colori/tick** delle spell già in elenco.
+
+Click su una riga → stesso comportamento di `c <spell>` con bersaglio = PG attivo (`cast 'true sight' NomiyaMaki`).
 
 ```
 nclass c   -- mago/chierico (cast)
@@ -578,35 +589,14 @@ nclass r   -- sorcerer (recall)
 nclass m   -- psionico (mind)
 ```
 
-**Colore verde/rosso**: sotto `nspellwarn` tick (default 5) il nome della spell diventa rosso,
-altrimenti resta verde. Nota importante: questo riflette il numero di tick letto **all'ultima
-sincronizzazione** (`nattrib`/`nresync`), non è un conto alla rovescia in tempo reale — il pannello
-non sa quanti secondi dura un tick sul server, quindi non può stimare da solo quanto manca alla
-scadenza tra un `nattrib` e l'altro. Se vuoi un conto alla rovescia live, serve sapere quanti
-secondi reali dura un tick lato server.
+**Colore verde/rosso**: sotto `nspellwarn` tick (default 5) il nome diventa rosso se ancora attiva
+con pochi tick; altrimenti verde se `attrib` la conferma attiva, rosso se in elenco ma non attiva.
 
-**Scadenza in tempo reale (senza aspettare `attrib`)**: per alcune spell il pacchetto riconosce il
-messaggio REALE di scadenza e la fa diventare rossa immediatamente, senza aspettare il prossimo
-`nattrib`/`nresync`: sanctuary ("Non ti senti più così invulnerabile."), armor ("Perdi la tua
-armatura Divina."), aid ("Perdi l'aiuto Divino."), true sight ("L'alone d'argento nei tuoi occhi
-scompare."), darkness ("Il globo di oscurità che ti avvolgeva scompare."). Altre spell restano
-soggette solo alla sincronizzazione manuale finché non vengono forniti i rispettivi testi di
-scadenza reali.
+**Scadenza in tempo reale**: messaggi server noti (sanctuary, armor, aid, true sight, darkness)
+spengono subito il verde senza aspettare `nattrib`.
 
-**Spell che non ti appartengono rimaste nel pannello**: se dopo un cambio di personaggio vedi ancora
-spell che quel personaggio non può lanciare (es. residuo di un vecchio bug ormai corretto, dati
-salvati da tempo fa), rimuovile con `nforgetspell <nome>` (es. `nforgetspell mirror images`).
-
-**Elenco "conosciuto", persistente per personaggio**: una volta che una spell è comparsa almeno una
-volta nell'output di `attrib` per un personaggio, resta **per sempre** visibile/cliccabile nel
-pannello di quel personaggio, anche quando scade e non è più attiva — invece di sparire, diventa
-semplicemente rossa (`- tick` al posto del numero), pronta per essere rilanciata con un click. Un
-nuovo `attrib` rimette in verde (con i tick aggiornati) solo le spell che il gioco conferma ancora
-attive; tutte le altre spell conosciute restano rosse. **Cambiando personaggio** (o tornando su uno
-già visitato), tutte le spell conosciute di quel personaggio tornano subito rosse — anche se erano
-verdi l'ultima volta che eri su quel personaggio — perché il pannello non si fida di una durata
-residua ormai vecchia: rilancia `attrib` per confermare quali sono davvero ancora attive in quel
-momento.
+**Rimuovere una voce**: `nforgetspell <nome>` + togli la riga dal file; oppure edita solo il file e
+`nspellaliasesreload`.
 
 ## Speedwalk (terzo pannello, in basso a destra)
 

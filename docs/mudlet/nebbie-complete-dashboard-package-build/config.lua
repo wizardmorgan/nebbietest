@@ -2,16 +2,18 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.14.1)
+description = [[# Nebbie Dashboard (1.15.0)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 
 - **Equip** (bordo sinistro): tutti gli slot indossati, con posizione ed
   oggetto letti da `eq`; segna anche gli slot liberi noti.
-- **Spell attivi** (bordo destro, in alto): spell/buff letti da `attrib`,
-  cliccabili per rilanciarli sul personaggio corrente (`cast`/`recall`/`mind`
-  a seconda della classe, vedi `nclass`).
+- **Spell attivi** (bordo destro, in alto): elenco **tuo** in
+  `nebbie-cast-spells.txt` (solo self-cast che puoi lanciare); colori/tick da
+  `attrib`; click rilancia con bersaglio = PG attivo (`nclass` per cast/recall/mind).
+- **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
+  **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
 - **Speedwalk** (bordo destro, in basso): percorsi rapidi definiti a mano in
   un file di testo, cliccabili per eseguirli in sequenza.
 - Layout ridimensionabile (larghezza automatica o manuale, altezza
@@ -52,10 +54,8 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   (re)installato una nuova versione del pacchetto — prima, i trigger e le
   funzionalità nuove non venivano attivati finché non si riavviava
   completamente Mudlet.
-- **Spell "conosciute" persistenti per personaggio**: le spell che lanci
-  restano visibili/cliccabili anche da spente (in rosso) invece di sparire
-  dal pannello; cambiando personaggio tornano tutte rosse finché non
-  rilanci `attrib` per confermare quali sono davvero attive.
+- **Cast 1.15.0**: `nspellaliases` / `nspellaliasesreload`; pannello e shortcut
+  da file di testo (non cumulo automatico da `attrib`).
 - **Gestione armi** (nuovo pannello "Armi", sotto l'Equip a sinistra):
   elenco persistente per personaggio delle armi impugnate almeno una volta,
   con tipo di danno (slash/blunt/pierce) letto dall'output di `identify`
@@ -95,4 +95,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.14.1]]
+version = [[1.15.0]]

@@ -1,5 +1,20 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.0 — 2026-09-24
+
+- **Cast/spell (rifacimento)**: il bersaglio e' **sempre esplicito** nel comando inviato al
+  MUD (`cast 'heal' NomiyaMaki` anche su se stessi). Bersaglio su altri PG: **spazio**
+  (`c heal bob`), non piu' la virgola ne' l'euristica sull'abbreviazione del proprio nome.
+- **Pannello spell**: elenco da file **`nebbie-cast-spells.txt`** (solo spell che tu puoi
+  lanciare su te stesso — es. niente shield altrui se non sei MU). Colori tick da `attrib`
+  restano per le spell in elenco.
+- **Shortcut globali** stile zMUD in **`nebbie-spell-shortcuts.txt`** (`he = heal`, poi
+  `he` / `he bob`); comando cast/recall/mind da **`nclass`** persistente per personaggio.
+- **Comandi**: `nspellaliases`, `nspellaliasesreload`; help aggiornato per `c/r/m`.
+- **Multi-parola + altri**: usa shortcut (`wor bob`) o `c` con esattamente due token
+  (`c heal bob`); tre+ parole senza terzo argomento = nome spell intero sul PG attivo.
+- **Versione interna** alzata a 1.15.0.
+
 ## 1.14.1 — 2026-09-23
 
 - **Corretto (autosplit)**: riconosce la risposta **`Your group consists of:`** (gruppo senza

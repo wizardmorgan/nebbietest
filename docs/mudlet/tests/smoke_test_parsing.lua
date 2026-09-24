@@ -274,44 +274,34 @@ if swEntry2 then
     table.concat({ "u", "n", "w", "w", "n", "u", "enter pool", "n", "n", "n", "n", "w", "w", "w", "s", "s", "s", "s", "s", "s" }, "|"))
 end
 
--- Test 7: cmdQuickCast — bersaglio automatico su se stessi quando l'ultima
--- parola digitata abbrevia il personaggio attivo (NomiyaMaki), riportato
--- dall'utente come non funzionante ("c heal nom", "c darkne nom", "c dar
--- nom" -> il gioco riceveva 'heal nom' come nome spell unico, invece di
--- 'heal' + bersaglio nom).
+-- Test 7: cmdQuickCast — bersaglio sempre esplicito; spazio per altri PG.
 NebbieDash.setCurrentCharacter("NomiyaMaki", true)
-NebbieDash.cmdQuickCast("c", "heal nom")
-check("quickcast: 'c heal nom' -> cast 'heal' NomiyaMaki", lastSent == "cast 'heal' NomiyaMaki")
+NebbieDash.cmdQuickCast("c", "heal")
+check("quickcast: 'c heal' -> cast 'heal' NomiyaMaki (PG attivo)",
+  lastSent == "cast 'heal' NomiyaMaki")
 
-NebbieDash.cmdQuickCast("c", "darkne nom")
-check("quickcast: 'c darkne nom' -> cast 'darkne' NomiyaMaki", lastSent == "cast 'darkne' NomiyaMaki")
+NebbieDash.cmdQuickCast("c", "heal bob")
+check("quickcast: 'c heal bob' -> cast 'heal' bob", lastSent == "cast 'heal' bob")
 
-NebbieDash.cmdQuickCast("c", "dar nom")
-check("quickcast: 'c dar nom' -> cast 'dar' NomiyaMaki", lastSent == "cast 'dar' NomiyaMaki")
-
--- Non deve rompere il caso storico senza bersaglio (ultima parola di 1 sola
--- lettera, ignorata apposta per questo motivo).
 NebbieDash.cmdQuickCast("c", "word of r")
-check("quickcast: 'c word of r' resta senza bersaglio", lastSent == "cast 'word of r'")
+check("quickcast: 'c word of r' -> cast con PG attivo",
+  lastSent == "cast 'word of r' NomiyaMaki")
 
--- Click dal pannello spell attivi: bersaglio esplicito passato come terzo
--- argomento, non deve attivare l'euristica (gia' corretto di suo).
 NebbieDash.cmdQuickCast("c", "true sight", "NomiyaMaki")
-check("quickcast: bersaglio esplicito dal pannello invariato", lastSent == "cast 'true sight' NomiyaMaki")
+check("quickcast: bersaglio esplicito dal pannello invariato",
+  lastSent == "cast 'true sight' NomiyaMaki")
 
--- Bersaglio esplicito su un ALTRO personaggio (non il proprio), richiesto
--- dall'utente dopo il fix precedente: sintassi con virgola, funziona anche se
--- il bersaglio non abbrevia in alcun modo il nome del personaggio attivo.
-NebbieDash.cmdQuickCast("c", "heal, bob")
-check("quickcast: 'c heal, bob' -> cast 'heal' bob", lastSent == "cast 'heal' bob")
+NebbieDash.getCharData("NomiyaMaki").castPrefix = "r"
+NebbieDash.cmdQuickCast("r", "word of recall")
+check("quickcast: nclass r usa recall", lastSent == "recall 'word of recall' NomiyaMaki")
+NebbieDash.getCharData("NomiyaMaki").castPrefix = "c"
 
-NebbieDash.cmdQuickCast("r", "word of recall, bob")
-check("quickcast: virgola con spell multi-parola", lastSent == "recall 'word of recall' bob")
-
--- La virgola ha precedenza sull'euristica automatica anche quando il
--- bersaglio scritto dopo la virgola e' proprio il personaggio attivo.
-NebbieDash.cmdQuickCast("c", "heal, NomiyaMaki")
-check("quickcast: virgola vince anche col proprio nome", lastSent == "cast 'heal' NomiyaMaki")
+NebbieDash.spellShortcuts = { he = { key = "he", spell = "heal" } }
+NebbieDash.cmdSpellShortcut("he", "bob")
+check("shortcut: he bob -> cast 'heal' bob", lastSent == "cast 'heal' bob")
+NebbieDash.cmdSpellShortcut("he")
+check("shortcut: he senza bersaglio -> PG attivo", lastSent == "cast 'heal' NomiyaMaki")
+NebbieDash.spellShortcuts = {}
 
 -- Test 8: loot + split automatico — testi REALI incollati dall'utente
 -- (2026-08-10): "Prendi gold coins da il corpo di ...", "C'erano N monete.",
@@ -409,13 +399,13 @@ check("connessione: personaggio attivo prima del reset", NebbieDash.currentChar 
 NebbieDash.onConnectionEvent()
 check("connessione: personaggio azzerato subito alla riconnessione", NebbieDash.currentChar == nil)
 check("connessione: in attesa di un nuovo prompt", NebbieDash._awaitingPromptAfterConnect == true)
--- Un self-cast prima che arrivi un nuovo prompt non deve piu' finire sul
--- vecchio personaggio: senza nome attivo, l'euristica sul proprio nome non
--- puo' scattare (nessun bersaglio aggiunto, comportamento sicuro).
+-- Un self-cast prima che arrivi un nuovo prompt non deve inviare nulla al MUD
+-- (nessun PG attivo = sendCastSpell rifiuta, niente bersaglio sul vecchio PG).
 sentLog = {}
+lastSent = nil
 NebbieDash.cmdQuickCast("c", "heal nom")
-check("connessione: quickcast senza personaggio attivo non aggiunge un bersaglio sbagliato",
-  lastSent == "cast 'heal nom'")
+check("connessione: quickcast senza personaggio attivo non invia comandi",
+  #sentLog == 0 and lastSent == nil)
 NebbieDash.setCurrentCharacter("NomiyaMaki", true)
 
 -- Test 11: rialzarsi automatico dopo una caduta — testo REALE fornito

@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.14.1"
+local PKG_VER = "1.15.0"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -478,74 +478,244 @@ end
 -- psionico "mind". Vedi docs/mudlet/analysis/MUD-SPELL-SKILL-LIST.md.
 -- ---------------------------------------------------------------------------
 NebbieDash.CAST_PREFIX = { c = "cast", r = "recall", m = "mind" }
+NebbieDash.spellShortcuts = {}
+NebbieDash.castSpellPanelList = {}
+NebbieDash._spellShortcutTrigs = {}
 
--- target opzionale: il gioco legge tutto cio' che segue l'apice di chiusura
--- come nome del bersaglio (vedi ACTION_FUNC(do_cast) in src/spell_parser.cpp,
--- riga ~1822, "argument = one_argument(argument, name)"). Usato dal click
--- sul pannello spell per forzare sempre il personaggio attivo come bersaglio
--- (richiesta esplicita: "devono avere tutti come target il personaggio con
--- cui sto giocando").
+-- Alias riservati (comandi Nebbie + prefissi c/r/m): non usabili come shortcut spell.
+NebbieDash.SHORTCUT_RESERVED = {
+  c = true, r = true, m = true,
+  nhelp = true, nfix = true, neq = true, nattrib = true, nresync = true, ngui = true,
+  nlayout = true, nchar = true, nclass = true, nfont = true, nwidth = true, nitemlen = true,
+  nspellwarn = true, nspeedwalks = true, nspeeddelay = true, nheights = true, nleftheights = true,
+  nclanslot = true, nloot = true, nautoloot = true, nautosplit = true, nsplit = true,
+  nautostand = true, nautodisarm = true, nautofeed = true, nhungermacros = true, nitemkeywords = true,
+  nforgetspell = true, nbatch = true, nbatchreload = true, nbatchverify = true,
+  nidentbatch = true, nidentbatchreload = true, nspellaliases = true, nspellaliasesreload = true,
+}
+
+function NebbieDash.spellShortcutsPath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-spell-shortcuts.txt"
+end
+
+function NebbieDash.castSpellsPath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-cast-spells.txt"
+end
+
+function NebbieDash.ensureSpellShortcutsFile()
+  local path = NebbieDash.spellShortcutsPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# Shortcut globali profilo — stile zMUD: digiti 'he bob' -> cast 'heal' bob\n" ..
+    "# Il comando (cast/recall/mind) viene da nclass del personaggio attivo.\n" ..
+    "# Formato: shortcut = nome spell completo (abbreviazione lato server ok nel gioco)\n" ..
+    "# Dopo modifiche: nspellaliasesreload\n" ..
+    "#\n" ..
+    "he = heal\n" ..
+    "ts = true sight\n"
+  )
+  f:close()
+end
+
+function NebbieDash.ensureCastSpellsFile()
+  local path = NebbieDash.castSpellsPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# Spell cliccabili nel pannello (solo quelle che TU puoi lanciare su te stesso).\n" ..
+    "# Una riga = un nome spell (come in identify/attrib). NON mettere buff altrui\n" ..
+    "# (es. shield da MU se non sei chierico). Dopo modifiche: nspellaliasesreload\n" ..
+    "#\n" ..
+    "heal\n" ..
+    "true sight\n"
+  )
+  f:close()
+end
+
+function NebbieDash.parseSpellShortcutLine(line2)
+  local key, spell = line2:match("^(%S+)%s*=%s*(.+)$")
+  if key and spell then
+    key = key:match("^%s*(.-)%s*$")
+    spell = spell:match("^%s*(.-)%s*$")
+    return key, spell
+  end
+  key, spell = line2:match("^(%S+)%s+(.+)$")
+  if key and spell then
+    return key:match("^%s*(.-)%s*$"), spell:match("^%s*(.-)%s*$")
+  end
+  return nil, nil
+end
+
+function NebbieDash.loadSpellCastConfig()
+  NebbieDash.ensureSpellShortcutsFile()
+  NebbieDash.ensureCastSpellsFile()
+  NebbieDash.spellShortcuts = {}
+  local path = NebbieDash.spellShortcutsPath()
+  local f = io.open(path, "r")
+  if f then
+    for rawLine in f:lines() do
+      local line2 = rawLine:match("^%s*(.-)%s*$")
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+        local key, spell = NebbieDash.parseSpellShortcutLine(line2)
+        if key and spell and key ~= "" and spell ~= "" then
+          local lk = key:lower()
+          if NebbieDash.SHORTCUT_RESERVED[lk] then
+            cecho("<orange>[NebbieDash] Shortcut ignorato (riservato): " .. key .. "\n")
+          else
+            NebbieDash.spellShortcuts[lk] = { key = key, spell = spell }
+          end
+        end
+      end
+    end
+    f:close()
+  end
+
+  NebbieDash.castSpellPanelList = {}
+  local panelPath = NebbieDash.castSpellsPath()
+  local pf = io.open(panelPath, "r")
+  if pf then
+    for rawLine in pf:lines() do
+      local line2 = rawLine:match("^%s*(.-)%s*$")
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" and not line2:find("=") then
+        table.insert(NebbieDash.castSpellPanelList, line2)
+      end
+    end
+    pf:close()
+  end
+end
+
+function NebbieDash.getCastPrefixForCharacter(charName)
+  if not charName then return "c" end
+  return NebbieDash.getCharData(charName).castPrefix or "c"
+end
+
+-- Invia sempre con bersaglio esplicito (PG attivo se omesso). cast/recall/mind
+-- da nclass del personaggio attivo (persistente per PG).
+function NebbieDash.sendCastSpell(spellName, target, prefixOverride)
+  spellName = (spellName or ""):match("^%s*(.-)%s*$")
+  if spellName == "" then return false end
+  local charName = NebbieDash.currentChar
+  if not charName then
+    cecho("<orange>[NebbieDash] Nessun personaggio attivo — attendi il prompt o usa nchar.\n")
+    return false
+  end
+  target = (target or ""):match("^%s*(.-)%s*$")
+  if target == "" then
+    target = charName
+  end
+  local prefix = prefixOverride or NebbieDash.getCastPrefixForCharacter(charName)
+  local cmdWord = NebbieDash.CAST_PREFIX[prefix]
+  if not cmdWord then return false end
+  send(cmdWord .. " '" .. spellName .. "' " .. target, false)
+  return true
+end
+
+-- c/r/m <spell> [bersaglio] — bersaglio con spazio; se omesso = PG attivo.
+-- Con esattamente DUE parole totali: prima=spell, seconda=bersaglio (es. c heal bob).
+-- Con una parola o tre+ parole: tutto il testo e' il nome spell, bersaglio=PG attivo
+-- (per multi-parola + altri usa shortcut: wor bob).
+function NebbieDash.parseQuickCastArgument(argument)
+  argument = (argument or ""):match("^%s*(.-)%s*$") or ""
+  if argument == "" then return nil, nil end
+  if argument:match("%S+%s+%S+%s+") then
+    return argument, nil
+  end
+  local w1, w2 = argument:match("^(%S+)%s+(%S+)$")
+  if w1 and w2 then
+    return w1, w2
+  end
+  return argument, nil
+end
+
 function NebbieDash.cmdQuickCast(prefix, argument, target)
   local cmdWord = NebbieDash.CAST_PREFIX[(prefix or ""):lower()]
   if not cmdWord then return end
   argument = (argument or ""):match("^%s*(.-)%s*$")
   if argument == "" then
-    cecho("<orange>[NebbieDash] Uso: " .. prefix .. " <nome spell/skill, anche abbreviato>\n")
+    cecho("<orange>[NebbieDash] Uso: " .. prefix .. " <spell> [bersaglio] — bersaglio default: PG attivo\n")
     return
   end
-
-  -- Lancio manuale (nessun target esplicito passato dal click sul pannello):
-  -- se l'ultima parola digitata e' un'abbreviazione plausibile (prefisso
-  -- case-insensitive, come abbrevia i nomi il gioco stesso) del personaggio
-  -- attivo, la trattiamo come bersaglio esplicito su se stessi e la
-  -- stacchiamo dal nome spell. Esempio: con NomiyaMaki attivo,
-  -- "c heal nom" -> cast 'heal' NomiyaMaki (non cast 'heal nom', che il gioco
-  -- non riconosce). Richiesto esplicitamente dall'utente dopo aver notato che
-  -- "c heal nom"/"c darkne nom" fallivano. Limite noto: se il nome del
-  -- personaggio inizia per le stesse lettere dell'ultima parola di uno spell
-  -- multi-parola che NON deve avere bersaglio, questo taglia comunque
-  -- l'ultima parola (falso positivo raro, accettato consapevolmente).
   if not target then
-    -- Bersaglio esplicito su QUALSIASI personaggio (non solo se stessi): una
-    -- virgola separa nome spell e bersaglio in modo inequivocabile, senza le
-    -- ambiguita' del taglio automatico sull'ultima parola (che sotto
-    -- funziona solo per il proprio personaggio). Richiesto esplicitamente
-    -- dall'utente ("se devo lanciare lo spell su un altro personaggio?").
-    -- Esempio: "c heal, bob" -> cast 'heal' bob. Controllata PRIMA
-    -- dell'euristica sul proprio nome cosi' una virgola scritta esplicitamente
-    -- vince sempre, anche se il bersaglio indicato e' il proprio personaggio.
-    local beforeComma, afterComma = argument:match("^(.-)%s*,%s*(.+)$")
-    if beforeComma and beforeComma ~= "" and afterComma and afterComma ~= "" then
-      argument = beforeComma
-      target = afterComma
+    local spellPart, targetPart = NebbieDash.parseQuickCastArgument(argument)
+    argument = spellPart
+    target = targetPart
+  end
+  NebbieDash.sendCastSpell(argument, target, (prefix or ""):lower())
+end
+
+function NebbieDash.cmdSpellShortcut(shortcutKey, targetArg)
+  local lk = (shortcutKey or ""):lower()
+  local entry = NebbieDash.spellShortcuts[lk]
+  if not entry then return end
+  NebbieDash.sendCastSpell(entry.spell, targetArg, nil)
+end
+
+function NebbieDash.regexEscapePattern(s)
+  return (s or ""):gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+end
+
+function NebbieDash.teardownSpellShortcutTriggers()
+  for _, id in ipairs(NebbieDash._spellShortcutTrigs or {}) do
+    if id then pcall(function() killTrigger(id) end) end
+  end
+  NebbieDash._spellShortcutTrigs = {}
+end
+
+function NebbieDash.installSpellShortcutTriggers()
+  NebbieDash.teardownSpellShortcutTriggers()
+  if type(tempRegexTrigger) ~= "function" then return end
+  for lk, entry in pairs(NebbieDash.spellShortcuts or {}) do
+    local esc = NebbieDash.regexEscapePattern(entry.key)
+    local id1 = tempRegexTrigger("^" .. esc .. "$",
+      string.format([[NebbieDash.cmdSpellShortcut(%q)]], lk))
+    local id2 = tempRegexTrigger("^" .. esc .. "%s+(.+)$",
+      string.format([[NebbieDash.cmdSpellShortcut(%q, matches[2])]], lk))
+    table.insert(NebbieDash._spellShortcutTrigs, id1)
+    table.insert(NebbieDash._spellShortcutTrigs, id2)
+  end
+end
+
+function NebbieDash.cmdListSpellAliases()
+  cecho("<cyan><b>Shortcut spell (globali)</b> — file: " .. NebbieDash.spellShortcutsPath() .. "\n")
+  local n = 0
+  for _, entry in pairs(NebbieDash.spellShortcuts or {}) do
+    n = n + 1
+    cecho(string.format("<yellow>%-12s<white> -> %s\n", entry.key, entry.spell))
+  end
+  if n == 0 then
+    cecho("<grey>(nessuno — aggiungi righe tipo 'he = heal' nel file)\n")
+  end
+  cecho("<cyan><b>Spell pannello (self-cast)</b> — file: " .. NebbieDash.castSpellsPath() .. "\n")
+  if #(NebbieDash.castSpellPanelList or {}) == 0 then
+    cecho("<grey>(nessuna — una spell per riga nel file)\n")
+  else
+    for _, spell in ipairs(NebbieDash.castSpellPanelList) do
+      cecho("<white>  " .. spell .. "\n")
     end
   end
-
-  -- Lancio manuale senza virgola: se l'ultima parola digitata e'
-  -- un'abbreviazione plausibile (prefisso case-insensitive, come abbrevia i
-  -- nomi il gioco stesso, almeno 2 lettere per evitare falsi positivi su
-  -- abbreviazioni di una sola lettera come "word of r") del personaggio
-  -- attivo, la trattiamo come bersaglio esplicito su se stessi e la
-  -- stacchiamo dal nome spell. Esempio: con NomiyaMaki attivo,
-  -- "c heal nom" -> cast 'heal' NomiyaMaki. Limite noto: se il nome del
-  -- personaggio inizia per le stesse lettere dell'ultima parola di uno spell
-  -- multi-parola che NON deve avere bersaglio, questo taglia comunque
-  -- l'ultima parola (falso positivo raro, accettato consapevolmente).
-  if not target then
-    local name = NebbieDash.currentChar
-    local rest, lastWord = argument:match("^(.-)%s+(%S+)$")
-    if name and rest and rest ~= "" and lastWord and #lastWord >= 2
-        and name:lower():sub(1, #lastWord) == lastWord:lower() then
-      argument = rest
-      target = name
-    end
+  local name = NebbieDash.currentChar
+  if name then
+    local p = NebbieDash.getCastPrefixForCharacter(name)
+    cecho("<grey>nclass per " .. name .. ": <yellow>" .. p ..
+      "<grey> (" .. NebbieDash.CAST_PREFIX[p] .. ")\n")
   end
+end
 
-  local cmd = cmdWord .. " '" .. argument .. "'"
-  if target and target ~= "" then
-    cmd = cmd .. " " .. target
-  end
-  send(cmd, false)
+function NebbieDash.cmdReloadSpellAliases()
+  NebbieDash.loadSpellCastConfig()
+  NebbieDash.installSpellShortcutTriggers()
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Shortcut/pannello spell ricaricati: " ..
+    tostring((function()
+      local c = 0
+      for _ in pairs(NebbieDash.spellShortcuts) do c = c + 1 end
+      return c
+    end)()) .. " shortcut, " .. #NebbieDash.castSpellPanelList .. " nel pannello.\n")
 end
 
 -- ---------------------------------------------------------------------------
@@ -911,7 +1081,7 @@ function NebbieDash.computeRightMaxChars(data)
     maxChars = math.max(maxChars, #("Spell attivi — " .. name))
   end
   if data then
-    for _, spellName in ipairs(data.knownSpellOrder or {}) do
+    for _, spellName in ipairs(NebbieDash.castSpellPanelList or {}) do
       maxChars = math.max(maxChars, #(spellName or "") + #(" -- tick"))
     end
   end
@@ -1033,8 +1203,10 @@ end
 -- aggiunge/rinomina un alias in build-nebbie-complete-dashboard-package.py
 -- (stessa regola gia' seguita per USAGE.md/CHANGELOG.md).
 NebbieDash.HELP_TEXT = {
-  { "c / r / m <spell>", "Lancia una spell/skill su te stesso (cast/recall/mind, vedi nclass)." },
-  { "c/r/m <spell>, <bersaglio>", "Lancia una spell/skill su un altro personaggio." },
+  { "c / r / m <spell> [bersaglio]", "Lancia spell (nclass PG); senza bersaglio = PG attivo." },
+  { "<shortcut> [bersaglio]", "Alias globali da nebbie-spell-shortcuts.txt (stile zMUD)." },
+  { "nspellaliases", "Elenco shortcut + spell nel pannello self-cast." },
+  { "nspellaliasesreload", "Ricarica nebbie-spell-shortcuts.txt e nebbie-cast-spells.txt." },
   { "neq", "Mostra l'equip corrente (dati salvati)." },
   { "nattrib", "Mostra le spell attive correnti (dati salvati)." },
   { "nresync", "Invia eq + attrib al gioco per risincronizzare i pannelli." },
@@ -1280,21 +1452,31 @@ function NebbieDash.cmdForgetSpell(argStr)
   end
   local data = NebbieDash.getCharData(name)
   local matched = nil
-  for i, s in ipairs(data.knownSpellOrder or {}) do
+  for i, s in ipairs(NebbieDash.castSpellPanelList or {}) do
     if s:lower() == query:lower() then
       matched = s
-      table.remove(data.knownSpellOrder, i)
+      table.remove(NebbieDash.castSpellPanelList, i)
       break
     end
   end
   if not matched then
-    cecho("<orange>[NebbieDash] '" .. query .. "' non e' nell'elenco di " .. name .. ".\n")
+    for i, s in ipairs(data.knownSpellOrder or {}) do
+      if s:lower() == query:lower() then
+        matched = s
+        table.remove(data.knownSpellOrder, i)
+        break
+      end
+    end
+  end
+  if not matched then
+    cecho("<orange>[NebbieDash] '" .. query .. "' non e' nel pannello spell ne nell'elenco di " .. name .. ".\n")
     return
   end
   if data.activeSpells then data.activeSpells[matched] = nil end
   NebbieDash.saveStore()
   NebbieDash.refreshDashboard()
-  cecho("<green>[NebbieDash] Rimossa '" .. matched .. "' dall'elenco di " .. name .. ".\n")
+  cecho("<green>[NebbieDash] Rimossa '" .. matched .. "' (pannello/elenco). "
+    .. "Aggiorna anche " .. NebbieDash.castSpellsPath() .. " se serve.\n")
 end
 
 -- ---------------------------------------------------------------------------
@@ -1404,28 +1586,24 @@ function NebbieDash.refreshDashboard()
   end
 
   cecho("NebbieDashSpells", "<cyan><b>Spell attivi — " .. name .. "</b>\n")
-  if data.knownSpellOrder and #data.knownSpellOrder > 0 then
-    local prefix = data.castPrefix or "c"
+  local panelSpells = NebbieDash.castSpellPanelList or {}
+  if #panelSpells > 0 then
+    local prefix = NebbieDash.getCastPrefixForCharacter(name)
     local activeSpells = data.activeSpells or {}
-    for _, spellName in ipairs(data.knownSpellOrder) do
-      -- Cliccabile per rilanciare: usa il comando (cast/recall/mind) impostato
-      -- per questo personaggio con `nclass` (default "cast"). Rosso finche'
-      -- `attrib` non la confermi attiva IN QUESTA sessione col personaggio
-      -- corrente (vedi setCurrentCharacter — activeSpells si azzera ad ogni
-      -- cambio personaggio); verde con i tick residui se attiva e non vicina
-      -- alla scadenza (spellWarnTicks).
+    for _, spellName in ipairs(panelSpells) do
       local activeTicks = activeSpells[spellName]
       local active = activeTicks ~= nil
       local ticks = active and (tonumber(activeTicks) or 0) or 0
       local color = (active and ticks > NebbieDash.spellWarnTicks) and "<green>" or "<red>"
       cechoLink("NebbieDashSpells", color .. spellName,
         string.format("NebbieDash.cmdQuickCast(%q, %q, %q)", prefix, spellName, name),
-        "Clicca per rilanciare su " .. name .. ": " .. spellName, true)
+        "Clicca per lanciare su " .. name .. ": " .. spellName, true)
       local ticksLabel = active and tostring(ticks) or "-"
       cecho("NebbieDashSpells", string.format(" %s%s tick\n", color, ticksLabel))
     end
   else
-    cecho("NebbieDashSpells", "<grey>(nessuno — esegui <yellow>nattrib<grey> o <yellow>nresync<grey>)\n")
+    cecho("NebbieDashSpells", "<grey>(nessuna — elenca spell in " .. NebbieDash.castSpellsPath() ..
+      " poi <yellow>nspellaliasesreload<grey>)\n")
   end
 end
 
@@ -3408,6 +3586,7 @@ function NebbieDash.teardownTriggers()
     if id then pcall(function() killTrigger(id) end) end
   end
   NebbieDash._spellExpiryTrigs = {}
+  NebbieDash.teardownSpellShortcutTriggers()
 end
 
 function NebbieDash.installTriggers()
@@ -3479,6 +3658,7 @@ function NebbieDash.installTriggers()
     registerAnonymousEventHandler("sysWindowResizeEvent", "NebbieDash.onWindowResize")
     NebbieDash._eventHandlersRegistered = true
   end
+  NebbieDash.installSpellShortcutTriggers()
 end
 
 -- Ridisegna il pannello quando la finestra principale (o i bordi) cambiano
@@ -3511,6 +3691,7 @@ function NebbieDash.boot()
   NebbieDash._lastBootTime = now
   NebbieDash.loadStore()
   NebbieDash.loadSpeedwalks()
+  NebbieDash.loadSpellCastConfig()
   NebbieDash.loadHungerMacros()
   NebbieDash.loadItemKeywords()
   NebbieDash.loadBatchCommands()
