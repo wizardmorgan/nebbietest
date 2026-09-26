@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.8 — 2026-09-26
+
+- **Corretto (critico)**: `config.lua` nel `.mpackage` era fermo a **1.15.4** mentre lo
+  script era 1.15.6+ — Package Manager e GitHub mostravano versione sbagliata. La build
+  legge ora `PKG_VER` da `nebbie-complete-dashboard-package-core.lua`.
+- **Aggiornamento**: comando **`npackageupdate`** (URL branch `mudlet`); GMCP `Client.GUI`
+  sul server allineato a **1.15.8** (auto-install/upgrade al login con GMCP attivo).
+- **Versione interna** alzata a 1.15.8.
+
 ## 1.15.7 — 2026-09-26
 
 - **Speedwalk**: sezioni collassabili nel pannello — riga `(titolo sezione)` poi i percorsi

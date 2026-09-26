@@ -14,6 +14,7 @@ Uso:
     python3 docs/mudlet/build-nebbie-complete-dashboard-package.py
 """
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -22,7 +23,24 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.15.4"
+CORE_LUA = os.path.join(HERE, "nebbie-complete-dashboard-package-core.lua")
+
+
+def read_pkg_ver_from_core():
+    with open(CORE_LUA, "r", encoding="utf-8") as f:
+        text = f.read()
+    m = re.search(r'local PKG_VER = "([^"]+)"', text)
+    if not m:
+        raise SystemExit(f"PKG_VER non trovato in {CORE_LUA}")
+    return m.group(1)
+
+
+PKG_VER = read_pkg_ver_from_core()
+PKG_URL = (
+    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/"
+    f"{PKG_NAME}.mpackage"
+)
+PKG_CREATED = "2026-09-26"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -84,8 +102,8 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   (re)installato una nuova versione del pacchetto — prima, i trigger e le
   funzionalità nuove non venivano attivati finché non si riavviava
   completamente Mudlet.
-- **Cast 1.15.0**: `nspellaliases` / `nspellaliasesreload`; pannello e shortcut
-  da file di testo (non cumulo automatico da `attrib`).
+- **Speedwalk**: sezioni collassabili; formati `(desc) dirs` e `dirs (desc)`; `nspeedwalks` diagnostico.
+- **Aggiornamento package**: `npackageupdate` o GMCP `Client.GUI` al login (versione allineata a config.lua).
 - **Gestione armi** (pannello "Armi"): click per cambiare — sequenza borsa
   come nebbie-play-all; keyword senza parentesi eq `(alone luminoso)`; `identify`
   fissa la parola chiave canonica.
@@ -121,13 +139,12 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 """
-CORE_LUA = os.path.join(HERE, "nebbie-complete-dashboard-package-core.lua")
 BUILD_DIR = os.path.join(HERE, "nebbie-complete-dashboard-package-build")
 XML_PATH = os.path.join(BUILD_DIR, f"{PKG_NAME}.xml")
 CONFIG_PATH = os.path.join(BUILD_DIR, "config.lua")
 MPACKAGE_PATH = os.path.join(HERE, f"{PKG_NAME}.mpackage")
 
-# Comandi manuali (Q&A.md Round 2/finale: nomi proposti, nessuna preferenza
+# Comandi manuali
 # diversa espressa dall'utente). Nessuno di questi invia comandi al MUD in
 # automatico al boot (vedi RECOMMENDATION.md / divieti confermati nel LOG.md).
 ALIASES = [
@@ -171,6 +188,7 @@ ALIASES = [
     ("nebbie-dash-ident-batch", "^nidentbatch$", "NebbieDash.cmdIdentBatch()"),
     ("nebbie-dash-ident-batch-filter", "^nidentbatch (.+)$", "NebbieDash.cmdIdentBatch(matches[2])"),
     ("nebbie-dash-ident-batch-reload", "^nidentbatchreload$", "NebbieDash.cmdReloadIdentBatch()"),
+    ("nebbie-dash-package-update", "^npackageupdate$", "NebbieDash.cmdPackageUpdate()"),
 ]
 
 
@@ -318,6 +336,8 @@ def main():
         f"title = {lua_long_string(PKG_TITLE)}",
         f"description = {lua_long_string(PKG_DESCRIPTION)}",
         f"version = {lua_long_string(PKG_VER)}",
+        f"created = {lua_long_string(PKG_CREATED)}",
+        f"website = {lua_long_string(PKG_URL)}",
     ]
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(config_lines) + "\n")

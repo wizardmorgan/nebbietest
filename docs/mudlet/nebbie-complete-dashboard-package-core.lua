@@ -9,7 +9,9 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.7"
+local PKG_VER = "1.15.8"
+local PKG_MPACKAGE_URL =
+  "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-complete-dashboard-package.mpackage"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
@@ -532,6 +534,7 @@ NebbieDash.SHORTCUT_RESERVED = {
   nautostand = true, nautodisarm = true, nautofeed = true, nhungermacros = true, nitemkeywords = true,
   nforgetspell = true, nbatch = true, nbatchreload = true, nbatchverify = true,
   nidentbatch = true, nidentbatchreload = true, nspellaliases = true, nspellaliasesreload = true,
+  npackageupdate = true,
 }
 
 function NebbieDash.spellShortcutsPath()
@@ -1003,6 +1006,25 @@ function NebbieDash.cmdReloadSpeedwalks()
   end
 end
 
+-- Reinstalla/aggiorna il package dal branch mudlet su GitHub (stesso URL usato da GMCP Client.GUI).
+-- Mudlet Package Manager mostra la versione da config.lua nel .mpackage: va rigenerato ad ogni release.
+function NebbieDash.cmdPackageUpdate()
+  local url = PKG_MPACKAGE_URL
+  cecho("<yellow>[NebbieDash] Aggiornamento package da GitHub (branch mudlet)...\n")
+  cecho("<grey>" .. url .. "\n")
+  if type(installPackage) ~= "function" then
+    cecho("<red>installPackage non disponibile — scarica il .mpackage a mano da GitHub.\n")
+    return
+  end
+  local ok, err = pcall(installPackage, url)
+  if not ok then
+    cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
+    return
+  end
+  cecho("<green>Download avviato. Al termine controlla Package Manager (versione = " ..
+    NebbieDash.version .. ") o digita <yellow>nfix<green>.\n")
+end
+
 -- Ripetizione generica di un comando digitato direttamente al prompt, es.
 -- ".4s" invia "s" quattro volte (equivalente a scrivere "s" e premere invio
 -- 4 volte), con la stessa pausa tra un invio e l'altro gia' usata per gli
@@ -1418,6 +1440,7 @@ NebbieDash.HELP_TEXT = {
   { "nspellwarn <tick>", "Sotto questa soglia di tick una spell appare rossa." },
   { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk." },
   { "nspeeddelay <secondi>", "Ritardo tra un comando e l'altro in uno speedwalk." },
+  { "npackageupdate", "Scarica e reinstalla il dashboard dal branch mudlet su GitHub (come GMCP Client.GUI)." },
   { "nclanslot <on|off>", "Mostra/nascondi lo slot 22 (simbolo del clan)." },
   { "nloot", "Prende le monete dal cadavere presente (normale o pile of bones)." },
   { "nautoloot <on|off>", "Attiva/disattiva il loot automatico alla fine di ogni combattimento." },

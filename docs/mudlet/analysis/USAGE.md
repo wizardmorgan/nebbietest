@@ -8,13 +8,28 @@ Guida rapida ai comandi (alias) del package, scritta dopo il primo test reale de
 Il file `.mpackage` aggiornato sta sul branch **`mudlet`** (non su `develop`):
 `docs/mudlet/nebbie-complete-dashboard-package.mpackage` nel repo GitHub.
 
+**Versione**: in Package Manager deve coincidere con `[NebbieDash] vX.Y.Z pronto` (es. **1.15.8**).
+Se vedi numeri diversi, il `.mpackage` era vecchio (bug risolto in 1.15.8: `config.lua` ora
+segue la stessa versione dello script).
+
+### Installazione / aggiornamento
+
+1. **Consigliato in gioco (GMCP)**: abilita GMCP nel profilo Nebbie, riconnettiti — il server
+   invia `Client.GUI` con URL e versione; Mudlet scarica/aggiorna il package se la versione
+   installata è più vecchia (richiede server con GMCP aggiornato).
+2. **Comando Mudlet**: **`npackageupdate`** — scarica e reinstalla dal branch `mudlet` (stesso URL).
+3. **Package Manager (Alt+O)**: Installa di nuovo il `.mpackage` scaricato da GitHub (stesso nome
+   package = upgrade). Mudlet **non** controlla GitHub da solo senza GMCP/`npackageupdate`/mpkg repo.
+
+Passi manuali classici:
+
 1. In Mudlet: `Package Manager` (icona valigetta, o `Giocatore → Gestione pacchetti`).
 2. Se `nebbie-complete-dashboard-package` è già installato, **disinstallalo** (bottone `-`).
 3. **Chiudi completamente Mudlet** e riaprilo (solo “riconnessione” non basta: altrimenti resta
    in memoria la vecchia versione, es. v1.14.1, anche dopo un install).
 4. Installa (bottone `+`) il `.mpackage` scaricato dal branch **`mudlet`**.
-5. In output deve comparire **`[NebbieDash] v1.15.2 pronto`** (numero allineato al CHANGELOG).
-   Se vedi ancora **1.14.x**, hai installato un file vecchio o non hai riavviato Mudlet: ripeti
+5. In output deve comparire **`[NebbieDash] v1.15.8 pronto`** (numero allineato al CHANGELOG e
+   alla versione in Package Manager). Se vedi numeri discordi, usa **`npackageupdate`** o
    disinstall → **quit Mudlet** → reinstall. Poi `nresync` dopo il login.
 
 ## Icona e descrizione nella "Gestione pacchetti"
@@ -55,6 +70,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nspellwarn <n>` | Sotto quanti tick residui una spell attiva nel pannello viene mostrata in rosso invece che verde (default 5). |
 | `nforgetspell <nome>` | Toglie una riga dall'elenco pannello in memoria (e da vecchi dati `knownSpellOrder` se presente); aggiorna anche `nebbie-cast-spells.txt` a mano per renderlo permanente. |
 | `nspeedwalks` | Ricarica gli speedwalk dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
+| `npackageupdate` | Scarica e reinstalla il dashboard dal branch `mudlet` su GitHub (come GMCP `Client.GUI`). |
 | `nspeeddelay <secondi>` | Pausa tra un movimento e il successivo quando esegui uno speedwalk (default 0.35s). |
 | `nhelp` | Mostra/nasconde la finestra con l'elenco di tutti questi comandi (stessa finestra del tasto "? Comandi", vedi sotto). |
 | `nloot` | Prende le monete dal cadavere presente (prova sia `get all.coin corp` che `get all.coin pile`, per cadaveri normali e "pile of bones"). Normalmente non serve digitarlo: scatta da solo, vedi sotto. |
