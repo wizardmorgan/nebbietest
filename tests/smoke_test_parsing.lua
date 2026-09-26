@@ -297,6 +297,16 @@ if hellParsed then
   check("speedwalk: hell dirs senza nota", hellParsed.dirString:find("medusa") == nil)
 end
 
+NebbieDash.guiWidthRight = 320
+NebbieDash.fontSize = 11
+if hellParsed and hellParsed.note then
+  local cols = NebbieDash.panelWrapCols("right", 4)
+  local wrapped = NebbieDash.wrapPanelText(hellParsed.note, cols)
+  check("wrap nota: piu' righe in colonna stretta", #wrapped >= 2)
+  local joined = table.concat(wrapped, " ")
+  check("wrap nota: nessun testo perso", joined:find("Balor") and joined:find("Slavalous"))
+end
+
 local hell = NebbieDash.parseSpeedwalkLine(
   "(hell, da fontana di myst) s,3e,d (w medusa, open secret)")
 check("speedwalk: nota finale inline", hell ~= nil and hell.note ~= nil)
