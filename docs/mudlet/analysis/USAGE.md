@@ -649,6 +649,9 @@ sezione fino alla prossima riga `(>> …)`.
 Lo stato aperto/chiuso si salva in `getMudletHomeDir()/nebbie-dash-ui.lua`. Altezza spell/speedwalk:
 **`nheights 70`** (più spell, meno speedwalk — default 62/38).
 
+**Note** (solo visualizzazione): parentesi **in coda** al percorso `… (testo nota)` oppure riga
+separata `(testo nota)` — **senza** `>>`.
+
 - La parte tra parentesi diventa il testo cliccabile nel pannello.
 - Le direzioni si scrivono come le invieresti tu in gioco (es. `n`, `s`, `e`, `w`, `u`, `d`, `ne`,
   `nw`...) — non vengono tradotte, vengono inviate esattamente come scritte.
