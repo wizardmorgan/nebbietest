@@ -9,9 +9,9 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.13"
+local PKG_VER = "1.15.14"
 local PKG_MPACKAGE_URL =
-  "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-complete-dashboard-package.mpackage"
+  "https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
@@ -1092,7 +1092,7 @@ function NebbieDash.cmdReloadSpeedwalks()
   if #NebbieDash.speedwalks == 0 and #skipped == 0 then
     cecho("<grey>Aggiungi righe attive (non commentate) tipo: (nome percorso) u,3w,n,s\n")
   end
-  cecho("<grey>Layout: <yellow>nheights 80<grey> = pannello Spell più alto (Speedwalk resta max ~25% finestra). Sezione: <yellow>(>> titolo)<grey>. Note manuali: <yellow>… (testo)<grey> in coda o riga <yellow>(nota)<grey> sotto il percorso.\n")
+  cecho("<grey>Layout: <yellow>nheights 30<grey> = più spazio speedwalk (sotto le spell). Colonna destra: <yellow>nwidth right auto<grey> / <yellow>nlayout<grey>. Sezione: <yellow>(>> titolo)<grey>. Note: <yellow>(testo)<grey> in coda riga o riga separata.\n")
 end
 
 -- Reinstalla/aggiorna il package dal branch mudlet su GitHub (stesso URL usato da GMCP Client.GUI).
@@ -1236,7 +1236,7 @@ end
 -- ciascuna con la propria modalita' auto/manuale — vedi autoWidthEquip /
 -- autoWidthRight piu' sotto.
 NebbieDash.guiWidthEquip = 260
-NebbieDash.guiWidthRight = 320
+NebbieDash.guiWidthRight = 380
 NebbieDash.fontSize = 11
 -- Le descrizioni oggetto sono spesso lunghe (es. "Un tubino rinforzato con
 -- una grossa Union Jack (in condizioni eccellenti)") e vanno quasi sempre a
@@ -1252,14 +1252,13 @@ NebbieDash.spellWarnTicks = 5
 -- Analogo a itemMaxLen ma per l'anteprima delle direzioni nel pannello
 -- speedwalk (il comando eseguito al click usa comunque la lista completa,
 -- solo l'anteprima a schermo viene troncata).
-NebbieDash.speedwalkPreviewMaxLen = 80
-NebbieDash.speedwalkNoteMaxLen = 80
--- Limite caratteri per l'auto-larghezza colonna destra (evita che liste speedwalk
--- lunghe mangino tutta la finestra principale).
-NebbieDash.autoWidthRightMaxChars = 38
--- Altezza massima del riquadro speedwalk (frazione della finestra Mudlet).
-NebbieDash.speedwalkMaxHeightRatio = 0.25
-NebbieDash.autoWidthRightMaxWindowPct = 0.32
+NebbieDash.speedwalkPreviewMaxLen = 96
+NebbieDash.speedwalkNoteMaxLen = 96
+-- Limite caratteri per l'auto-larghezza colonna destra.
+NebbieDash.autoWidthRightMaxChars = 58
+-- Altezza massima speedwalk quando la quota spell e' alta (nheights >= 50).
+NebbieDash.speedwalkMaxHeightRatio = 0.48
+NebbieDash.autoWidthRightMaxWindowPct = 0.42
 -- Larghezza automatica (default per entrambe le colonne): ogni pannello si
 -- allarga/restringe da solo in base al contenuto piu' lungo attualmente
 -- visibile, cosi' non "sparisce" niente oltre il bordo dello schermo.
@@ -1440,15 +1439,21 @@ function NebbieDash.computeRightMaxChars(data)
     if item.kind == "section" then
       maxChars = math.max(maxChars, #item.title + 3)
     elseif item.kind == "walk" then
-      maxChars = math.max(maxChars, math.min(#item.desc, 36) + 6)
+      maxChars = math.max(maxChars, #item.desc + 4)
+      if item.dirString and item.dirString ~= "" then
+        maxChars = math.max(maxChars, math.min(#item.dirString, 72) + 4)
+      end
     end
   end
   if not NebbieDash.speedwalkItems or #NebbieDash.speedwalkItems == 0 then
     for _, entry in ipairs(NebbieDash.speedwalks) do
-      maxChars = math.max(maxChars, math.min(#entry.desc, 36) + 6)
+      maxChars = math.max(maxChars, #entry.desc + 4)
+      if entry.dirString then
+        maxChars = math.max(maxChars, math.min(#entry.dirString, 72) + 4)
+      end
     end
   end
-  return math.min(maxChars, NebbieDash.autoWidthRightMaxChars or 38)
+  return math.min(maxChars, NebbieDash.autoWidthRightMaxChars or 58)
 end
 
 -- Applica la larghezza automatica (se attiva) ad ognuna delle due colonne
@@ -1503,8 +1508,9 @@ function NebbieDash.positionGUI()
   local usableH = math.max(0, h - NebbieDash.dividerPx)
   local spellsH = math.floor(usableH * NebbieDash.guiRatios.spells)
   local speedwalkH = usableH - spellsH
-  local maxSwH = math.floor(usableH * (NebbieDash.speedwalkMaxHeightRatio or 0.25))
-  if speedwalkH > maxSwH then
+  local maxSwH = math.floor(usableH * (NebbieDash.speedwalkMaxHeightRatio or 0.48))
+  -- Con nheights basso l'utente vuole piu' speedwalk: cap solo se spell >= 50%.
+  if (NebbieDash.guiRatios.spells or 0.78) >= 0.50 and speedwalkH > maxSwH then
     speedwalkH = maxSwH
   end
   moveWindow("NebbieDashSpells", x, 0)
@@ -1672,7 +1678,7 @@ end
 
 function NebbieDash.resetLayout()
   NebbieDash.guiWidthEquip = 260
-  NebbieDash.guiWidthRight = 320
+  NebbieDash.guiWidthRight = 380
   NebbieDash.fontSize = 11
   NebbieDash.autoWidthEquip = true
   NebbieDash.autoWidthRight = true
@@ -1688,7 +1694,7 @@ function NebbieDash.resetLayout()
     NebbieDash.positionGUI()
     NebbieDash.refreshDashboard()
   end
-  cecho("<green>[NebbieDash] Layout ripristinato: auto-larghezza, spell 78% / speedwalk max 25% colonna destra, font 11.\n")
+  cecho("<green>[NebbieDash] Layout ripristinato: auto-larghezza, spell 78%, speedwalk fino al 48% (se spell>=50%), font 11.\n")
 end
 
 function NebbieDash.cmdSetFont(sizeStr)
@@ -2021,16 +2027,17 @@ function NebbieDash.refreshSpeedwalkPanel()
         end
         if item.note and item.note ~= "" then
           local noteLines = NebbieDash.wrapPanelText(item.note, NebbieDash.speedwalkNoteMaxLen)
-          for ni, nline in ipairs(noteLines) do
-            if ni == 1 then
-              cecho("NebbieDashSpeedwalks", "<dark_grey>  (" .. nline)
-            else
-              cecho("NebbieDashSpeedwalks", "<dark_grey>  " .. nline)
-            end
-            if ni == #noteLines then
-              cecho("NebbieDashSpeedwalks", ")\n")
-            else
-              cecho("NebbieDashSpeedwalks", "\n")
+          if #noteLines == 1 then
+            cecho("NebbieDashSpeedwalks", "<grey>  (" .. noteLines[1] .. ")\n")
+          else
+            for ni, nline in ipairs(noteLines) do
+              if ni == 1 then
+                cecho("NebbieDashSpeedwalks", "<grey>  (" .. nline .. "\n")
+              elseif ni == #noteLines then
+                cecho("NebbieDashSpeedwalks", "<grey>    " .. nline .. ")\n")
+              else
+                cecho("NebbieDashSpeedwalks", "<grey>    " .. nline .. "\n")
+              end
             end
           end
         end
