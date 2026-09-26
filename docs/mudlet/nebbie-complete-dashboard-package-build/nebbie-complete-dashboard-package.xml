@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.2"
+local PKG_VER = "1.15.3"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
@@ -1948,6 +1948,7 @@ function NebbieDash.cmdSwapWeapon(idx)
     return
   end
   local data = NebbieDash.getCharData(name)
+  NebbieDash.loadItemKeywords()
   local target = data.weapons and data.weapons[idx]
   if not target or not target.keyword then return end
 
@@ -2133,7 +2134,8 @@ end
 function NebbieDash.buildWeaponSwapSteps(data, target)
   local backPhrase, backOverride = NebbieDash.findBackpackKeywords(data)
   if backPhrase == "" then return nil, "no_backpack" end
-  local weaponKw = (target.keyword or ""):match("^%s*(.-)%s*$")
+  local weaponKw = NebbieDash.resolveWeaponSwapKeyword(target)
+  weaponKw = (weaponKw or ""):match("^%s*(.-)%s*$")
   if weaponKw == "" then return nil, "no_weapon" end
   local wieldPhrase = NebbieDash.currentWieldedKeyword(data)
   local wieldConfirmed = wieldPhrase ~= "" and data.eqUpdated
@@ -2189,9 +2191,10 @@ function NebbieDash.ensureItemKeywordsFile()
     "#   Nome esatto dell'oggetto (come mostrato in eq): parola chiave da usare\n" ..
     "#\n" ..
     "# Vale per TUTTI i personaggi (un dato oggetto ha sempre le stesse parole\n" ..
-    "# chiave in game). Usata al posto dell'estrazione automatica per: il\n" ..
-    "# recupero arma dopo un disarmo, e il segnaposto {zaino} delle macro\n" ..
-    "# fame/sete. Se un oggetto non ha una riga qui, si usa comunque\n" ..
+    "# chiave in game). Usata per: recupero disarmo, {zaino} fame/sete,\n" ..
+    "# **cambio arma** (click pannello Armi), zaino sulla schiena.\n" ..
+    "# Nome a sinistra: testo come in `eq` (senza parentesi condizione/alone)\n" ..
+    "# oppure una parola distintiva contenuta nel nome (es. flamberga).\n" ..
     "# l'estrazione automatica (rimozione di articoli/preposizioni italiane)\n" ..
     "# come prima — questo file serve solo per i casi in cui NON funziona.\n" ..
     "#\n" ..
@@ -2201,7 +2204,10 @@ function NebbieDash.ensureItemKeywordsFile()
     "#\n" ..
     "# Esempi (rimuovi il # iniziale e adatta ai tuoi oggetti):\n" ..
     "# Borsa Inesauribile dei Korred: korred\n" ..
-    "# la Flamberga di Boris: flamberga boris\n"
+    "# la Flamberga di Boris: flamberga boris\n" ..
+    "# flamberga: flamberga boris\n" ..
+    "# It's a Beautiful Day: beautiful\n" ..
+    "# nordagh: nordagh\n"
   )
   f:close()
 end
@@ -2242,15 +2248,48 @@ end
 -- presente), altrimenti ricade sull'euristica automatica. Il secondo valore
 -- di ritorno indica se e' stato usato un override esplicito (utile per
 -- decidere se applicare ulteriori restrizioni euristiche, es. lastKeyword).
+function NebbieDash.findItemKeywordOverride(itemName)
+  local stripped = NebbieDash.stripItemParentheticals(itemName or ""):lower():match("^%s*(.-)%s*$")
+  if stripped == "" then return nil end
+  local overrides = NebbieDash.itemKeywordOverrides or {}
+  if overrides[stripped] then return overrides[stripped] end
+  local raw = (itemName or ""):lower():match("^%s*(.-)%s*$")
+  if overrides[raw] then return overrides[raw] end
+  -- Match parziale: es. riga "flamberga: flamberga boris" vale per "La Flamberga di Boris".
+  local bestKw, bestLen = nil, 0
+  for pat, kw in pairs(overrides) do
+    if #pat >= 3 and stripped:find(pat, 1, true) and #pat > bestLen then
+      bestKw, bestLen = kw, #pat
+    end
+  end
+  return bestKw
+end
+
 function NebbieDash.resolveItemKeywords(itemName)
   local stripped = NebbieDash.stripItemParentheticals(itemName)
-  local key = stripped:lower():match("^%s*(.-)%s*$")
-  local override = NebbieDash.itemKeywordOverrides[key]
-  if override then return override, true end
-  local rawKey = (itemName or ""):lower():match("^%s*(.-)%s*$")
-  override = NebbieDash.itemKeywordOverrides[rawKey]
+  local override = NebbieDash.findItemKeywordOverride(itemName)
   if override then return override, true end
   return NebbieDash.extractItemKeywords(stripped), false
+end
+
+function NebbieDash.resolveWeaponSwapKeyword(target)
+  if not target then return "" end
+  local disp = (target.displayName or target.keyword or ""):match("^%s*(.-)%s*$")
+  if disp ~= "" then
+    local fromDisp, isOverride = NebbieDash.resolveItemKeywords(disp)
+    if isOverride and fromDisp ~= "" then return fromDisp end
+  end
+  local idKw = (target.keyword or ""):match("^%s*(.-)%s*$")
+  if idKw ~= "" then
+    local fromId, isOverrideId = NebbieDash.resolveItemKeywords(idKw)
+    if isOverrideId and fromId ~= "" then return fromId end
+    if target.type then return idKw end
+  end
+  if disp ~= "" then
+    local fromDispHeur = select(1, NebbieDash.resolveItemKeywords(disp))
+    if fromDispHeur ~= "" then return fromDispHeur end
+  end
+  return idKw
 end
 
 function NebbieDash.runHungerMacro()

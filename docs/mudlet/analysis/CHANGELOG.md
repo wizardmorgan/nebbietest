@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.3 — 2026-09-26
+
+- **nebbie-item-keywords.txt**: match anche parziale sul nome eq (es. riga `flamberga:
+  flamberga boris` per "La Flamberga di Boris"); vale anche al **click armi** (prima solo
+  zaino/disarmo; l'arma usava solo keyword lista, spesso `boris`/`flamberga` tronche).
+- **Cambio arma**: ricarica keyword file a ogni click; risoluzione da `displayName` + override.
+- **Versione interna** alzata a 1.15.3.
+
 ## 1.15.2 — 2026-09-26
 
 - **Install/upgrade**: rilevamento cambio versione in sessione (`_upgradeFromVer`); messaggio

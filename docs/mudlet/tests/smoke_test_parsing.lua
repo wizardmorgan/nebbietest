@@ -670,6 +670,14 @@ check("armi: keywordsOverlap riconosce parole condivise",
 check("armi: keywordsOverlap nega quando non ci sono parole condivise",
   not NebbieDash.keywordsOverlap("ascia mannaia", "spada elf slayer"))
 
+NebbieDash.itemKeywordOverrides = { flamberga = "flamberga boris", beautiful = "beautiful" }
+check("armi: override parziale sul nome eq",
+  NebbieDash.findItemKeywordOverride("La Flamberga di Boris") == "flamberga boris")
+check("armi: resolveWeaponSwapKeyword preferisce override su displayName",
+  NebbieDash.resolveWeaponSwapKeyword({
+    displayName = "La Flamberga di Boris", keyword = "boris", type = "slash",
+  }) == "flamberga boris")
+
 line = "Impugni la Spada degli Elfi Assassina."
 NebbieDash.onWieldLine()
 check("armi: wield non sovrascrive keyword canonica da identify",
