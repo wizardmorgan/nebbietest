@@ -256,6 +256,12 @@ end
 check("speedwalk: riga commento ignorata", NebbieDash.parseSpeedwalkLine("# commento") == nil)
 check("speedwalk: riga vuota ignorata", NebbieDash.parseSpeedwalkLine("") == nil)
 check("speedwalk: riga senza parentesi ignorata", NebbieDash.parseSpeedwalkLine("u,3w,n,s,2d") == nil)
+check("speedwalk: skip reason senza parentesi",
+  NebbieDash.speedwalkLineSkipReason("u,3w,n,s,2d") ~= nil)
+check("speedwalk: skip reason commento nil",
+  NebbieDash.speedwalkLineSkipReason("# ok") == nil)
+check("speedwalk: BOM UTF-8",
+  NebbieDash.parseSpeedwalkLine("\239\187\191(dalla fontana) n,s") ~= nil)
 
 -- Test 6: speedwalk con descrizione contenente una virgola e un'istruzione a
 -- piu' parole tra le direzioni (es. "enter pool") — esempio esatto fornito

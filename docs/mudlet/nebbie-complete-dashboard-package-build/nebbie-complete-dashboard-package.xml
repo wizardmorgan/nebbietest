@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.4"
+local PKG_VER = "1.15.5"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
@@ -803,8 +803,16 @@ function NebbieDash.parseSpeedwalkDirs(dirString)
   return steps
 end
 
+function NebbieDash.stripUtf8Bom(s)
+  if not s or #s < 3 then return s end
+  if s:byte(1) == 0xEF and s:byte(2) == 0xBB and s:byte(3) == 0xBF then
+    return s:sub(4)
+  end
+  return s
+end
+
 function NebbieDash.parseSpeedwalkLine(rawLine)
-  local line2 = rawLine:match("^%s*(.-)%s*$")
+  local line2 = NebbieDash.stripUtf8Bom(rawLine):match("^%s*(.-)%s*$")
   if line2 == "" or line2:sub(1, 1) == "#" then return nil end
   local desc, dirString = line2:match("^%((.-)%)%s*(.+)$")
   if not desc then return nil end
@@ -813,23 +821,75 @@ function NebbieDash.parseSpeedwalkLine(rawLine)
   return { desc = desc, dirString = dirString:match("^%s*(.-)%s*$"), steps = steps }
 end
 
+-- Motivo umano se una riga non vuota/commento non e' diventata uno speedwalk (per nspeedwalks).
+function NebbieDash.speedwalkLineSkipReason(rawLine)
+  local line2 = NebbieDash.stripUtf8Bom(rawLine or ""):match("^%s*(.-)%s*$")
+  if line2 == "" or line2:sub(1, 1) == "#" then return nil end
+  local desc, dirString = line2:match("^%((.-)%)%s*(.+)$")
+  if not desc then
+    return "formato errato: serve (descrizione) dir1,dir2,... — non solo le direzioni"
+  end
+  if #NebbieDash.parseSpeedwalkDirs(dirString) == 0 then
+    return "mancano direzioni dopo la descrizione"
+  end
+  return nil
+end
+
 function NebbieDash.loadSpeedwalks()
   NebbieDash.ensureSpeedwalkFile()
   NebbieDash.speedwalks = {}
+  NebbieDash.speedwalkLoadSkipped = {}
   local path = NebbieDash.speedwalkPath()
   local f = io.open(path, "r")
-  if not f then return end
+  if not f then
+    NebbieDash.speedwalkLoadOpenFailed = true
+    return false
+  end
+  NebbieDash.speedwalkLoadOpenFailed = false
+  local lineNum = 0
   for rawLine in f:lines() do
+    lineNum = lineNum + 1
     local entry = NebbieDash.parseSpeedwalkLine(rawLine)
-    if entry then table.insert(NebbieDash.speedwalks, entry) end
+    if entry then
+      table.insert(NebbieDash.speedwalks, entry)
+    else
+      local reason = NebbieDash.speedwalkLineSkipReason(rawLine)
+      if reason then
+        table.insert(NebbieDash.speedwalkLoadSkipped, {
+          line = lineNum,
+          reason = reason,
+          preview = NebbieDash.truncate(rawLine:match("^%s*(.-)%s*$"), 72),
+        })
+      end
+    end
   end
   f:close()
+  return true
 end
 
 function NebbieDash.cmdReloadSpeedwalks()
-  NebbieDash.loadSpeedwalks()
+  local path = NebbieDash.speedwalkPath()
+  local ok = NebbieDash.loadSpeedwalks()
   NebbieDash.refreshDashboard()
-  cecho("<green>[NebbieDash] Speedwalk ricaricati (" .. #NebbieDash.speedwalks .. ") da " .. NebbieDash.speedwalkPath() .. "\n")
+  if not ok then
+    cecho("<red>[NebbieDash] Impossibile leggere " .. path .. " — controlla permessi o percorso.\n")
+    cecho("<grey>Il file va editato nel profilo Mudlet (getMudletHomeDir()), non nella cartella del repo.\n")
+    return
+  end
+  cecho("<green>[NebbieDash] Speedwalk ricaricati: " .. #NebbieDash.speedwalks .. " — " .. path .. "\n")
+  for i, entry in ipairs(NebbieDash.speedwalks) do
+    cecho("<grey>  " .. i .. ". <cyan>" .. entry.desc .. "<grey> (" .. #entry.steps .. " passi)\n")
+  end
+  local skipped = NebbieDash.speedwalkLoadSkipped or {}
+  if #skipped > 0 then
+    cecho("<orange>[NebbieDash] " .. #skipped .. " riga/e ignorata/e (non contano nel pannello):\n")
+    for _, item in ipairs(skipped) do
+      cecho("<orange>  riga " .. item.line .. ": " .. item.reason .. " — " .. item.preview .. "\n")
+    end
+  end
+  if #NebbieDash.speedwalks == 0 and #skipped == 0 then
+    cecho("<grey>Aggiungi righe attive (non commentate) tipo: (nome percorso) u,3w,n,s\n")
+  end
 end
 
 -- Ripetizione generica di un comando digitato direttamente al prompt, es.

@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.5 — 2026-09-26
+
+- **nspeedwalks**: elenco speedwalk caricati (descrizione + passi), avviso per righe
+  malformate (numero riga + motivo), errore se il file non si apre; strip BOM UTF-8.
+  Aiuta quando si edita il file sbagliato o si omettono le parentesi `(descrizione)`.
+- **Versione interna** alzata a 1.15.5.
+
 ## 1.15.4 — 2026-09-26
 
 - **Cache equip live**: aggiorna slot **impugnato** / **sulla schiena** dai messaggi MUD

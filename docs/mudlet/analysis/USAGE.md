@@ -630,8 +630,12 @@ commentato, se non esiste già).
 - Righe vuote e righe che iniziano con `#` vengono ignorate (puoi usarle come commenti).
 
 Dopo aver modificato il file, digita `nspeedwalks` in gioco per ricaricarlo senza riavviare
-Mudlet. La pausa tra un movimento e il successivo (default 0.35s, per evitare di perdere passi se
-il gioco impone un lag minimo tra movimenti) si regola con `nspeeddelay <secondi>`.
+Mudlet. Il comando stampa il **percorso completo** del file letto, l'elenco dei percorsi
+caricati e, se qualche riga non e' valida, il **numero di riga** e il motivo (righe senza
+`(descrizione)` iniziale vengono ignorate e prima non compariva alcun avviso). Modifica sempre
+il file sotto `getMudletHomeDir()`, non una copia nel repository Git. La pausa tra un movimento
+e il successivo (default 0.35s, per evitare di perdere passi se il gioco impone un lag minimo
+tra movimenti) si regola con `nspeeddelay <secondi>`.
 
 **Nota**: gli speedwalk sono globali (non per personaggio) — se ti serve una lista diversa per
 personaggio, fammelo sapere.
