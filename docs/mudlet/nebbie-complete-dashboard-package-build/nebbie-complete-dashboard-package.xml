@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.3"
+local PKG_VER = "1.15.4"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
@@ -1885,6 +1885,84 @@ function NebbieDash.currentWieldedKeyword(data)
   return ""
 end
 
+function NebbieDash.eqItemNamesMatch(cachedItem, gameName)
+  if not cachedItem or cachedItem == "" or not gameName or gameName == "" then return false end
+  local a = NebbieDash.stripItemParentheticals(cachedItem):lower():match("^%s*(.-)%s*$")
+  local b = NebbieDash.stripItemParentheticals(gameName):lower():match("^%s*(.-)%s*$")
+  if a == b then return true end
+  return NebbieDash.keywordsOverlap(a, b)
+end
+
+-- Aggiorna la cache equip (da `eq`) senza rifare neq: usato su messaggi MUD di
+-- rem/wield/wear durante il cambio arma automatico.
+function NebbieDash.patchCachedEqLocation(data, locationLabel, itemText)
+  if not data or not data.eqUpdated then return false end
+  data.eq = data.eq or {}
+  local canon = (locationLabel or ""):lower():match("^%s*(.-)%s*$")
+  if canon == "" then return false end
+  local slotIdx, canonLabel = nil, nil
+  for idx, label in ipairs(NebbieDash.EQ_SLOT_ORDER) do
+    if label:lower() == canon then
+      canonLabel = label
+      for slot, entry in pairs(data.eq) do
+        if entry and (entry.location or ""):lower():match("^%s*(.-)%s*$") == canon then
+          slotIdx = slot
+          break
+        end
+      end
+      if not slotIdx then slotIdx = idx end
+      break
+    end
+  end
+  if not slotIdx or not canonLabel then return false end
+  if itemText == nil or itemText == "" then
+    data.eq[slotIdx] = nil
+  else
+    data.eq[slotIdx] = { location = canonLabel, item = itemText:match("^%s*(.-)%s*$") }
+  end
+  data.eqUpdated = os.time()
+  NebbieDash.saveStore()
+  NebbieDash.refreshDashboard()
+  return true
+end
+
+function NebbieDash.onStopUsingLine()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local itemName = text:match("^Smetti di usare (.+)%.%s*$")
+  if not itemName then return end
+  local name = NebbieDash.currentChar
+  if not name then return end
+  local data = NebbieDash.getCharData(name)
+  if not data.eqUpdated then return end
+  for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+    if not row.empty and row.location == "impugnato" then
+      if NebbieDash.eqItemNamesMatch(row.item, itemName) then
+        NebbieDash.patchCachedEqLocation(data, "impugnato", nil)
+        return
+      end
+    end
+  end
+  for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+    if not row.empty and row.location == "sulla schiena" then
+      if NebbieDash.eqItemNamesMatch(row.item, itemName) then
+        NebbieDash.patchCachedEqLocation(data, "sulla schiena", nil)
+        return
+      end
+    end
+  end
+end
+
+function NebbieDash.onWearBackLine()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local itemName = text:match("^Ti metti (.+) sulle spalle%.%s*$")
+  if not itemName then return end
+  local name = NebbieDash.currentChar
+  if not name then return end
+  local data = NebbieDash.getCharData(name)
+  if not data.eqUpdated then return end
+  NebbieDash.patchCachedEqLocation(data, "sulla schiena", itemName)
+end
+
 function NebbieDash.onWieldLine()
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
   local weaponName = text:match("^Impugni (.+)%.%s*$")
@@ -1904,6 +1982,7 @@ function NebbieDash.onWieldLine()
     NebbieDash.saveStore()
     NebbieDash.refreshDashboard()
   end
+  NebbieDash.patchCachedEqLocation(data, "impugnato", weaponName)
 end
 
 -- Vedi nota sopra: aggiornata/creata solo quando l'utente esegue `identify`
@@ -3692,6 +3771,7 @@ function NebbieDash.teardownTriggers()
     NebbieDash._combatEndTrig2,
     NebbieDash._fallTrig, NebbieDash._disarmTrig, NebbieDash._hungerTrig, NebbieDash._thirstTrig,
     NebbieDash._wieldTrig, NebbieDash._identifyObjTrig, NebbieDash._identifyDmgTrig,
+    NebbieDash._stopUsingTrig, NebbieDash._wearBackTrig,
   }
   for _, id in ipairs(ids) do
     if id then pcall(function() killTrigger(id) end) end
@@ -3749,6 +3829,8 @@ function NebbieDash.installTriggers()
   -- lista da solo ad ogni wield; le due righe di `identify` per rilevarne il
   -- tipo di danno SOLO quando l'utente esegue quel comando di sua iniziativa.
   NebbieDash._wieldTrig = tempTrigger("Impugni ", [[NebbieDash.onWieldLine()]])
+  NebbieDash._stopUsingTrig = tempTrigger("Smetti di usare ", [[NebbieDash.onStopUsingLine()]])
+  NebbieDash._wearBackTrig = tempRegexTrigger("^Ti metti .+ sulle spalle%.%s*$", [[NebbieDash.onWearBackLine()]])
   NebbieDash._identifyObjTrig = tempTrigger("Tipo di Oggetto", [[NebbieDash.onIdentifyObjectLine()]])
   NebbieDash._identifyDmgTrig = tempTrigger("Tipo di danno:", [[NebbieDash.onIdentifyDamageLine()]])
   -- Scadenza spell (vedi SPELL_EXPIRY_PATTERNS sopra): un trigger per riga,

@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.4 — 2026-09-26
+
+- **Cache equip live**: aggiorna slot **impugnato** / **sulla schiena** dai messaggi MUD
+  (`Impugni`, `Smetti di usare`, `Ti metti … sulle spalle`) — niente `neq` obbligatorio
+  dopo ogni click cambio arma.
+- **Versione interna** alzata a 1.15.4.
+
 ## 1.15.3 — 2026-09-26
 
 - **nebbie-item-keywords.txt**: match anche parziale sul nome eq (es. riga `flamberga:

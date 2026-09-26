@@ -693,13 +693,26 @@ wdata.eq = {
 }
 wdata.eqUpdated = os.time()
 wdata.weapons = {
-  { displayName = "La Flamberga di Boris", keyword = "flamberga boris", type = "slash" },
+  { displayName = "La Flamberga di Boris", keyword = "boris", type = "slash" },
 }
 local swapSteps = NebbieDash.buildWeaponSwapSteps(wdata, wdata.weapons[1])
 check("armi: buildWeaponSwapSteps non nil", swapSteps ~= nil)
 check("armi: swap inizia con rem zaino (korred)", swapSteps[1] == "rem korred")
-check("armi: swap get usa keyword identify completa",
+check("armi: swap get usa override flamberga boris",
   swapSteps[2] == "get flamberga boris korred")
+
+NebbieDash.itemKeywordOverrides = {}
+wdata.eq = { [16] = { location = "impugnato", item = "Nordagh, La rosa spinosa dei Noor" } }
+wdata.eqUpdated = os.time()
+NebbieDash.patchCachedEqLocation(wdata, "impugnato", "La Flamberga di Boris")
+local impRow = nil
+for _, row in ipairs(NebbieDash.buildEquipRows(wdata)) do
+  if row.location == "impugnato" then impRow = row; break end
+end
+check("armi: patchCachedEqLocation aggiorna impugnato",
+  impRow and not impRow.empty and impRow.item == "La Flamberga di Boris")
+check("armi: currentWieldedKeyword segue cache impugnato",
+  NebbieDash.keywordsOverlap(NebbieDash.currentWieldedKeyword(wdata), "flamberga boris"))
 check("armi: swap termina con wear zaino", swapSteps[#swapSteps] == "wear korred")
 
 -- cmdSwapWeapon non deve generare errori sui casi limite (nessun personaggio
