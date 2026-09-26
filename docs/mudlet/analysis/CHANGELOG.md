@@ -1,5 +1,17 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.10 — 2026-09-26
+
+- **Speedwalk sezioni**: solo righe `(>> titolo)` aprono un gruppo collassabile (prefisso
+  **`>>`** obbligatorio). Parentesi finali o righe `(nota)` restano note, non sezioni.
+- **Layout pannello**: default più spazio al gioco (spell 62% / speedwalk 38%), scroll speedwalk,
+  auto-larghezza destra limitata, anteprima a capo ~80 caratteri.
+- **Versione interna** alzata a 1.15.10.
+
+## 1.15.9 — 2026-09-26
+
+- (non pubblicata separatamente — incorporata in 1.15.10)
+
 ## 1.15.8 — 2026-09-26
 
 - **Corretto (critico)**: `config.lua` nel `.mpackage` era fermo a **1.15.4** mentre lo

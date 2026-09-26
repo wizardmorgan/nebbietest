@@ -276,10 +276,21 @@ if swSpaces then
   check("speedwalk: spazi normalizzati", swSpaces.dirString == "u,n,2w,n")
 end
 
-check("speedwalk: intestazione sezione",
-  NebbieDash.parseSpeedwalkSectionLine("(Pool di astral, da astral walk)") ~= nil)
-check("speedwalk: sezione no skip reason",
-  NebbieDash.speedwalkLineSkipReason("(Pool di astral, da astral walk)") == nil)
+check("speedwalk: sezione richiede >>",
+  NebbieDash.parseSpeedwalkSectionLine("(>> Pool di astral, da astral walk)") ~= nil)
+check("speedwalk: senza >> non e' sezione",
+  NebbieDash.parseSpeedwalkSectionLine("(Pool di astral, da astral walk)") == nil)
+check("speedwalk: sezione >> no skip reason",
+  NebbieDash.speedwalkLineSkipReason("(>> Pool di astral, da astral walk)") == nil)
+check("speedwalk: nota tra parentesi",
+  NebbieDash.parseSpeedwalkParenNoteLine("(Dwaen by transport via plants)") ~= nil)
+
+local hell = NebbieDash.parseSpeedwalkLine(
+  "(hell, da fontana di myst) s,3e,d (w medusa, open secret)")
+check("speedwalk: nota finale inline", hell ~= nil and hell.note ~= nil)
+if hell then
+  check("speedwalk: dirs senza nota", hell.dirString:find("medusa") == nil)
+end
 
 -- Test 6: speedwalk con descrizione contenente una virgola e un'istruzione a
 -- piu' parole tra le direzioni (es. "enter pool") — esempio esatto fornito

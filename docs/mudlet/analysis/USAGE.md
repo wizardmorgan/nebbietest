@@ -642,9 +642,12 @@ oppure, equivalente:
 direzioni separate da virgola (descrizione cliccabile)
 ```
 
-Una riga che contiene **solo** `(titolo di sezione)` apre un **gruppo collassabile** nel pannello
-Speedwalk (clic su ▼/▶). Le righe percorso sotto restano nella sezione fino al prossimo titolo.
-Lo stato aperto/chiuso si salva in `getMudletHomeDir()/nebbie-dash-ui.lua`.
+Una riga **`(>> titolo di sezione)`** (prefisso **`>>`** obbligatorio dentro le parentesi) apre un
+**gruppo collassabile** nel pannello Speedwalk (clic su ▼/▶). I percorsi sotto restano in quella
+sezione fino alla prossima riga `(>> …)`.
+
+Lo stato aperto/chiuso si salva in `getMudletHomeDir()/nebbie-dash-ui.lua`. Altezza spell/speedwalk:
+**`nheights 70`** (più spell, meno speedwalk — default 62/38).
 
 - La parte tra parentesi diventa il testo cliccabile nel pannello.
 - Le direzioni si scrivono come le invieresti tu in gioco (es. `n`, `s`, `e`, `w`, `u`, `d`, `ne`,
