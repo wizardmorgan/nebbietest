@@ -232,6 +232,8 @@ utilities/convert
 /build/
 /release.h
 mudroot/log.txt
+# Repo Mudlet dashboard (git separato in nebbie-mudlet-dashboard/)
+/nebbie-mudlet-dashboard/
 src/info
 /check/
 /check.xml
