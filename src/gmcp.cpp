@@ -20,7 +20,7 @@ namespace {
 
 constexpr const char* kNebbiePackageUrl =
     "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage";
-constexpr const char* kNebbiePackageVersion = "1.15.17";
+constexpr const char* kNebbiePackageVersion = "1.15.18";
 
 int gmcp_write_raw(int desc, const void* data, size_t len) {
 	if(desc < 0 || data == nullptr || len == 0) {
