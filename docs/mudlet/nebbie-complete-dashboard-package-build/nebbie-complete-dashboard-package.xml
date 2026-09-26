@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.11"
+local PKG_VER = "1.15.12"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-complete-dashboard-package.mpackage"
 
@@ -150,7 +150,15 @@ function NebbieDash.loadUiStore()
   local gr = NebbieDash.uiState.guiRatios
   if type(gr) == "table" and type(gr.spells) == "number" then
     NebbieDash.guiRatios = NebbieDash.guiRatios or {}
-    NebbieDash.guiRatios.spells = math.max(0.1, math.min(0.9, gr.spells))
+    local s = math.max(0.1, math.min(0.9, gr.spells))
+    -- Migrazione: versioni <=1.15.9 salvavano 0.4 (speedwalk = 60% colonna destra).
+    if s < 0.55 then
+      s = 0.78
+      NebbieDash.guiRatios.spells = s
+      NebbieDash.persistGuiRatios()
+    else
+      NebbieDash.guiRatios.spells = s
+    end
   end
   if type(gr) == "table" and type(gr.equip) == "number" then
     NebbieDash.guiRatios = NebbieDash.guiRatios or {}
@@ -1245,7 +1253,10 @@ NebbieDash.speedwalkPreviewMaxLen = 80
 NebbieDash.speedwalkNoteMaxLen = 80
 -- Limite caratteri per l'auto-larghezza colonna destra (evita che liste speedwalk
 -- lunghe mangino tutta la finestra principale).
-NebbieDash.autoWidthRightMaxChars = 44
+NebbieDash.autoWidthRightMaxChars = 38
+-- Altezza massima del riquadro speedwalk (frazione della finestra Mudlet).
+NebbieDash.speedwalkMaxHeightRatio = 0.25
+NebbieDash.autoWidthRightMaxWindowPct = 0.32
 -- Larghezza automatica (default per entrambe le colonne): ogni pannello si
 -- allarga/restringe da solo in base al contenuto piu' lungo attualmente
 -- visibile, cosi' non "sparisce" niente oltre il bordo dello schermo.
@@ -1326,7 +1337,7 @@ end
 -- della colonna sinistra tra Equip (in alto) e Armi (in basso, il resto) —
 -- richiesta esplicita dell'utente (2026-08-10): "devo avere sotto l'equip
 -- una lista di armi".
-NebbieDash.guiRatios = { spells = 0.62, equip = 0.6 }
+NebbieDash.guiRatios = { spells = 0.78, equip = 0.6 }
 -- Altezza (px) delle barre divisorie visibili tra Spell attivi/Speedwalk e
 -- tra Equip/Armi.
 NebbieDash.dividerPx = 4
@@ -1349,6 +1360,9 @@ function NebbieDash.initGUI()
   createMiniConsole("NebbieDashSpeedwalks", 0, 0, NebbieDash.guiWidthRight, 0)
   if type(enableScrollBar) == "function" then
     enableScrollBar("NebbieDashSpeedwalks", true)
+  end
+  if type(setMaxLines) == "function" then
+    setMaxLines("NebbieDashSpeedwalks", 500)
   end
   -- Barre divisorie (richiesta esplicita: "manca una barra tra gli spell
   -- attivi e gli speedwalk", stesso principio applicato ora anche tra Equip
@@ -1423,17 +1437,15 @@ function NebbieDash.computeRightMaxChars(data)
     if item.kind == "section" then
       maxChars = math.max(maxChars, #item.title + 3)
     elseif item.kind == "walk" then
-      local preview = NebbieDash.truncate(item.dirString, NebbieDash.speedwalkPreviewMaxLen)
-      maxChars = math.max(maxChars, #item.desc + 1 + #preview)
+      maxChars = math.max(maxChars, math.min(#item.desc, 36) + 6)
     end
   end
   if not NebbieDash.speedwalkItems or #NebbieDash.speedwalkItems == 0 then
     for _, entry in ipairs(NebbieDash.speedwalks) do
-      local preview = NebbieDash.truncate(entry.dirString, NebbieDash.speedwalkPreviewMaxLen)
-      maxChars = math.max(maxChars, #entry.desc + 1 + #preview)
+      maxChars = math.max(maxChars, math.min(#entry.desc, 36) + 6)
     end
   end
-  return maxChars
+  return math.min(maxChars, NebbieDash.autoWidthRightMaxChars or 38)
 end
 
 -- Applica la larghezza automatica (se attiva) ad ognuna delle due colonne
@@ -1457,9 +1469,10 @@ function NebbieDash.applyAutoWidth()
   end
   if NebbieDash.autoWidthRight then
     local chars = NebbieDash.computeRightMaxChars(data) + 3
-    local cap = NebbieDash.autoWidthRightMaxChars or 44
+    local cap = NebbieDash.autoWidthRightMaxChars or 38
+    local maxRight = math.floor(mainW * (NebbieDash.autoWidthRightMaxWindowPct or 0.32))
     local w = math.floor(charW * math.min(chars, cap))
-    w = math.max(NebbieDash.autoWidthMin, math.min(w, maxTotal))
+    w = math.max(NebbieDash.autoWidthMin, math.min(w, maxRight))
     if w ~= NebbieDash.guiWidthRight then
       NebbieDash.guiWidthRight = w
       setBorderRight(w)
@@ -1487,6 +1500,11 @@ function NebbieDash.positionGUI()
   local usableH = math.max(0, h - NebbieDash.dividerPx)
   local spellsH = math.floor(usableH * NebbieDash.guiRatios.spells)
   local speedwalkH = usableH - spellsH
+  local maxSwH = math.floor(usableH * (NebbieDash.speedwalkMaxHeightRatio or 0.25))
+  if speedwalkH > maxSwH then
+    speedwalkH = maxSwH
+    spellsH = usableH - speedwalkH
+  end
   moveWindow("NebbieDashSpells", x, 0)
   resizeWindow("NebbieDashSpells", NebbieDash.guiWidthRight, spellsH)
   moveWindow("NebbieDashDivider", x, spellsH)
@@ -1656,7 +1674,7 @@ function NebbieDash.resetLayout()
   NebbieDash.fontSize = 11
   NebbieDash.autoWidthEquip = true
   NebbieDash.autoWidthRight = true
-  NebbieDash.guiRatios = { spells = 0.62, equip = 0.6 }
+  NebbieDash.guiRatios = { spells = 0.78, equip = 0.6 }
   if NebbieDash._guiCreated then
     for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
       setMiniConsoleFontSize(win, NebbieDash.fontSize)
@@ -1980,18 +1998,18 @@ function NebbieDash.refreshSpeedwalkPanel()
       else
         local preview = item.dirString or ""
         local dirLines = NebbieDash.wrapPanelText(preview, NebbieDash.speedwalkPreviewMaxLen)
-        cechoLink("NebbieDashSpeedwalks", "<cyan>" .. item.desc,
-          string.format("NebbieDash.runSpeedwalk(%d)", item.walkIndex),
-          "Clicca per andare: " .. item.desc .. " (" .. preview .. ")", true)
-        if #dirLines == 0 then
-          cecho("NebbieDashSpeedwalks", "\n")
-        elseif #dirLines == 1 then
-          cecho("NebbieDashSpeedwalks", " <grey>" .. dirLines[1] .. "\n")
-        else
-          cecho("NebbieDashSpeedwalks", " <grey>" .. dirLines[1] .. "\n")
-          for i = 2, #dirLines do
-            cecho("NebbieDashSpeedwalks", "<grey>  " .. dirLines[i] .. "\n")
+        for _, dline in ipairs(NebbieDash.wrapPanelText(item.desc, NebbieDash.speedwalkPreviewMaxLen)) do
+          if _ == 1 then
+            cechoLink("NebbieDashSpeedwalks", "<cyan>" .. dline,
+              string.format("NebbieDash.runSpeedwalk(%d)", item.walkIndex),
+              "Clicca per andare: " .. item.desc .. " (" .. preview .. ")", true)
+            cecho("NebbieDashSpeedwalks", "\n")
+          else
+            cecho("NebbieDashSpeedwalks", "<cyan>  " .. dline .. "\n")
           end
+        end
+        for _, dline in ipairs(dirLines) do
+          cecho("NebbieDashSpeedwalks", "<grey>  " .. dline .. "\n")
         end
         if item.note and item.note ~= "" then
           for _, nline in ipairs(NebbieDash.wrapPanelText(item.note, NebbieDash.speedwalkNoteMaxLen)) do

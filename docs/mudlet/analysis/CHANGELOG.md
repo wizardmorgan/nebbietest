@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.12 — 2026-09-26
+
+- **Layout speedwalk**: altezza massima ~25% finestra, default spell 78%/speedwalk 22%;
+  migrazione automatica se era salvato 40/60; bordo destro max ~32% larghezza; percorsi lunghi
+  (hell) non allargano più la colonna; scroll + a capo 80 col.
+- **Note/sezioni** (da 1.15.10): `(>> …)` sezione; `(nota)` in coda o riga separata; hell/Korred non
+  sono più falsi gruppi collassabili.
+- **Versione interna** alzata a 1.15.12.
+
 ## 1.15.11 — 2026-09-26
 
 - **npackageupdate**: disinstalla il package esistente prima di `installPackage` (Mudlet
