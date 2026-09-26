@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.13 — 2026-09-26
+
+- **Speedwalk hell/Korred**: righe `(desc) dirs … (nota)` non vengono più scambiate per note
+  standalone; note mostrate come `(testo)` indentate, non `//`; righe `(nota)` extra unite con a capo.
+- **nheights / layout**: il cap altezza speedwalk (~25%) non gonfia più il pannello spell
+  (es. `nheights 10` lascia spell al 10%); `nlayout` persiste i ratio default e riposiziona i bordi.
+- **Versione interna** alzata a 1.15.13.
+
 ## 1.15.12 — 2026-09-26
 
 - **Layout speedwalk**: altezza massima ~25% finestra, default spell 78%/speedwalk 22%;

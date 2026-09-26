@@ -285,6 +285,18 @@ check("speedwalk: sezione >> no skip reason",
 check("speedwalk: nota tra parentesi",
   NebbieDash.parseSpeedwalkParenNoteLine("(Dwaen by transport via plants)") ~= nil)
 
+local hellFull =
+  "(hell, da fontana di myst) s,3e,run s,2n,2s,open trapdoor,d,3n,d,5s,w,3n,d (w medusa, open secret, s,w,s,w,n ghost, w lich,3s,e dogretch,w,n,e mahat,w,n,w rilke,e,s,w Balor,e,s,w Vampire,w hellhoundx2, n Slavalous:w)"
+check("speedwalk: hell non e' nota standalone",
+  NebbieDash.parseSpeedwalkParenNoteLine(hellFull) == nil)
+local hellParsed = NebbieDash.parseSpeedwalkLine(hellFull)
+check("speedwalk: hell riga valida", hellParsed ~= nil)
+if hellParsed then
+  check("speedwalk: hell desc", hellParsed.desc == "hell, da fontana di myst")
+  check("speedwalk: hell nota trailing", hellParsed.note and hellParsed.note:find("medusa") ~= nil)
+  check("speedwalk: hell dirs senza nota", hellParsed.dirString:find("medusa") == nil)
+end
+
 local hell = NebbieDash.parseSpeedwalkLine(
   "(hell, da fontana di myst) s,3e,d (w medusa, open secret)")
 check("speedwalk: nota finale inline", hell ~= nil and hell.note ~= nil)

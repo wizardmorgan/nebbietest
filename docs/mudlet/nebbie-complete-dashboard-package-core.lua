@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.12"
+local PKG_VER = "1.15.13"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-complete-dashboard-package.mpackage"
 
@@ -904,6 +904,11 @@ function NebbieDash.parseSpeedwalkParenNoteLine(rawLine)
   local line2 = NebbieDash.stripUtf8Bom(rawLine):match("^%s*(.-)%s*$")
   if line2 == "" or line2:sub(1, 1) == "#" then return nil end
   if NebbieDash.isSpeedwalkSectionMarkerLine(line2) then return nil end
+  -- Righe (desc) dirs … o dirs (desc) hanno testo fuori da un'unica coppia di
+  -- parentesi: non sono note standalone (es. hell … (w medusa…) finisce con )
+  -- ma contiene ) desc) dirs (nota)).
+  if NebbieDash.parseSpeedwalkLine(rawLine) then return nil end
+  if not line2:match("^%([^)]*%)%s*$") then return nil end
   local note = line2:match("^%((.-)%)$")
   if not note then return nil end
   note = note:match("^%s*(.-)%s*$")
@@ -914,7 +919,7 @@ end
 function NebbieDash.splitSpeedwalkTrailingNote(dirPart)
   dirPart = (dirPart or ""):match("^%s*(.-)%s*$")
   if dirPart == "" then return dirPart, nil end
-  local body, note = dirPart:match("^(.-)%s+%(([^)]*)%)$")
+  local body, note = dirPart:match("^(.-)%s+%((.-)%)$")
   if not body or not note then return dirPart, nil end
   body = body:match("^%s*(.-)%s*$")
   local norm = NebbieDash.normalizeSpeedwalkDirString(body)
@@ -983,6 +988,7 @@ function NebbieDash.speedwalkLineSkipReason(rawLine)
   local line2 = NebbieDash.stripUtf8Bom(rawLine or ""):match("^%s*(.-)%s*$")
   if line2 == "" or line2:sub(1, 1) == "#" then return nil end
   if NebbieDash.parseSpeedwalkSectionLine(rawLine) then return nil end
+  if NebbieDash.parseSpeedwalkLine(rawLine) then return nil end
   if NebbieDash.parseSpeedwalkParenNoteLine(rawLine) then return nil end
   local desc, dirString = line2:match("^%((.-)%)%s+(.+)$")
   if desc then
@@ -1016,30 +1022,32 @@ function NebbieDash.loadSpeedwalks()
   local currentSectionKey = nil
   for rawLine in f:lines() do
     lineNum = lineNum + 1
-    local parenNote = NebbieDash.parseSpeedwalkParenNoteLine(rawLine)
-    if parenNote then
-      local last = NebbieDash.speedwalkItems[#NebbieDash.speedwalkItems]
-      if last and last.kind == "walk" then
-        last.note = last.note and (last.note .. " " .. parenNote) or parenNote
-      end
+    local section = NebbieDash.parseSpeedwalkSectionLine(rawLine)
+    if section then
+      currentSectionKey = section.key
+      table.insert(NebbieDash.speedwalkItems, section)
     else
-      local section = NebbieDash.parseSpeedwalkSectionLine(rawLine)
-      if section then
-        currentSectionKey = section.key
-        table.insert(NebbieDash.speedwalkItems, section)
+      local entry = NebbieDash.parseSpeedwalkLine(rawLine)
+      if entry then
+        entry.kind = "walk"
+        entry.walkIndex = #NebbieDash.speedwalks + 1
+        entry.sectionKey = currentSectionKey
+        table.insert(NebbieDash.speedwalks, {
+          desc = entry.desc,
+          dirString = entry.dirString,
+          steps = entry.steps,
+          note = entry.note,
+        })
+        table.insert(NebbieDash.speedwalkItems, entry)
       else
-        local entry = NebbieDash.parseSpeedwalkLine(rawLine)
-        if entry then
-          entry.kind = "walk"
-          entry.walkIndex = #NebbieDash.speedwalks + 1
-          entry.sectionKey = currentSectionKey
-          table.insert(NebbieDash.speedwalks, {
-            desc = entry.desc,
-            dirString = entry.dirString,
-            steps = entry.steps,
-            note = entry.note,
-          })
-          table.insert(NebbieDash.speedwalkItems, entry)
+        local parenNote = NebbieDash.parseSpeedwalkParenNoteLine(rawLine)
+        if parenNote then
+          local last = NebbieDash.speedwalkItems[#NebbieDash.speedwalkItems]
+          if last and last.kind == "walk" then
+            last.note = last.note and (last.note .. "\n" .. parenNote) or parenNote
+            local sw = NebbieDash.speedwalks[last.walkIndex]
+            if sw then sw.note = last.note end
+          end
         else
           local reason = NebbieDash.speedwalkLineSkipReason(rawLine)
           if reason then
@@ -1084,7 +1092,7 @@ function NebbieDash.cmdReloadSpeedwalks()
   if #NebbieDash.speedwalks == 0 and #skipped == 0 then
     cecho("<grey>Aggiungi righe attive (non commentate) tipo: (nome percorso) u,3w,n,s\n")
   end
-  cecho("<grey>Layout: <yellow>nheights 80<grey> = più spazio al gioco (meno speedwalk). Sezione collassabile: <yellow>(>> titolo)<grey>. Note: <yellow>… (testo)<grey> in coda riga.\n")
+  cecho("<grey>Layout: <yellow>nheights 80<grey> = pannello Spell più alto (Speedwalk resta max ~25% finestra). Sezione: <yellow>(>> titolo)<grey>. Note manuali: <yellow>… (testo)<grey> in coda o riga <yellow>(nota)<grey> sotto il percorso.\n")
 end
 
 -- Reinstalla/aggiorna il package dal branch mudlet su GitHub (stesso URL usato da GMCP Client.GUI).
@@ -1498,7 +1506,6 @@ function NebbieDash.positionGUI()
   local maxSwH = math.floor(usableH * (NebbieDash.speedwalkMaxHeightRatio or 0.25))
   if speedwalkH > maxSwH then
     speedwalkH = maxSwH
-    spellsH = usableH - speedwalkH
   end
   moveWindow("NebbieDashSpells", x, 0)
   resizeWindow("NebbieDashSpells", NebbieDash.guiWidthRight, spellsH)
@@ -1670,12 +1677,18 @@ function NebbieDash.resetLayout()
   NebbieDash.autoWidthEquip = true
   NebbieDash.autoWidthRight = true
   NebbieDash.guiRatios = { spells = 0.78, equip = 0.6 }
+  NebbieDash.persistGuiRatios()
   if NebbieDash._guiCreated then
     for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
       setMiniConsoleFontSize(win, NebbieDash.fontSize)
     end
+    setBorderLeft(NebbieDash.guiWidthEquip)
+    setBorderRight(NebbieDash.guiWidthRight)
+    NebbieDash.applyAutoWidth()
+    NebbieDash.positionGUI()
     NebbieDash.refreshDashboard()
   end
+  cecho("<green>[NebbieDash] Layout ripristinato: auto-larghezza, spell 78% / speedwalk max 25% colonna destra, font 11.\n")
 end
 
 function NebbieDash.cmdSetFont(sizeStr)
@@ -1993,8 +2006,8 @@ function NebbieDash.refreshSpeedwalkPanel()
       else
         local preview = item.dirString or ""
         local dirLines = NebbieDash.wrapPanelText(preview, NebbieDash.speedwalkPreviewMaxLen)
-        for _, dline in ipairs(NebbieDash.wrapPanelText(item.desc, NebbieDash.speedwalkPreviewMaxLen)) do
-          if _ == 1 then
+        for idx, dline in ipairs(NebbieDash.wrapPanelText(item.desc, NebbieDash.speedwalkPreviewMaxLen)) do
+          if idx == 1 then
             cechoLink("NebbieDashSpeedwalks", "<cyan>" .. dline,
               string.format("NebbieDash.runSpeedwalk(%d)", item.walkIndex),
               "Clicca per andare: " .. item.desc .. " (" .. preview .. ")", true)
@@ -2007,8 +2020,18 @@ function NebbieDash.refreshSpeedwalkPanel()
           cecho("NebbieDashSpeedwalks", "<grey>  " .. dline .. "\n")
         end
         if item.note and item.note ~= "" then
-          for _, nline in ipairs(NebbieDash.wrapPanelText(item.note, NebbieDash.speedwalkNoteMaxLen)) do
-            cecho("NebbieDashSpeedwalks", "<dark_grey>  // " .. nline .. "\n")
+          local noteLines = NebbieDash.wrapPanelText(item.note, NebbieDash.speedwalkNoteMaxLen)
+          for ni, nline in ipairs(noteLines) do
+            if ni == 1 then
+              cecho("NebbieDashSpeedwalks", "<dark_grey>  (" .. nline)
+            else
+              cecho("NebbieDashSpeedwalks", "<dark_grey>  " .. nline)
+            end
+            if ni == #noteLines then
+              cecho("NebbieDashSpeedwalks", ")\n")
+            else
+              cecho("NebbieDashSpeedwalks", "\n")
+            end
           end
         end
       end
