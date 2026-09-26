@@ -620,6 +620,16 @@ commentato, se non esiste già).
 (descrizione cliccabile) direzioni separate da virgola
 ```
 
+oppure, equivalente:
+
+```
+direzioni separate da virgola (descrizione cliccabile)
+```
+
+Una riga che contiene **solo** `(titolo di sezione)` apre un **gruppo collassabile** nel pannello
+Speedwalk (clic su ▼/▶). Le righe percorso sotto restano nella sezione fino al prossimo titolo.
+Lo stato aperto/chiuso si salva in `getMudletHomeDir()/nebbie-dash-ui.lua`.
+
 - La parte tra parentesi diventa il testo cliccabile nel pannello.
 - Le direzioni si scrivono come le invieresti tu in gioco (es. `n`, `s`, `e`, `w`, `u`, `d`, `ne`,
   `nw`...) — non vengono tradotte, vengono inviate esattamente come scritte.

@@ -1,5 +1,20 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.7 — 2026-09-26
+
+- **Speedwalk**: sezioni collassabili nel pannello — riga `(titolo sezione)` poi i percorsi
+  sotto; click su ▼/▶ (stato salvato in `nebbie-dash-ui.lua`). Entrambi i formati riga restano
+  validi: `(desc) dirs` e `dirs (desc)`.
+- **Corretto**: normalizzazione spazi→virgole per token tipo `2w` (pattern direzioni Lua).
+- **Versione interna** alzata a 1.15.7.
+
+## 1.15.6 — 2026-09-26
+
+- **Speedwalk file**: accettate anche righe `dir1,dir2,... (descrizione)` (descrizione in
+  coda); righe con solo `(titolo sezione)` come intestazione; normalizzazione spazi → virgole
+  nelle direzioni (`u,n 2w,n`).
+- **Versione interna** alzata a 1.15.6.
+
 ## 1.15.5 — 2026-09-26
 
 - **nspeedwalks**: elenco speedwalk caricati (descrizione + passi), avviso per righe

@@ -263,6 +263,24 @@ check("speedwalk: skip reason commento nil",
 check("speedwalk: BOM UTF-8",
   NebbieDash.parseSpeedwalkLine("\239\187\191(dalla fontana) n,s") ~= nil)
 
+local swSuffix = NebbieDash.parseSpeedwalkLine("n (bianco latte, Myst)")
+check("speedwalk: formato suffisso valido", swSuffix ~= nil)
+if swSuffix then
+  check("speedwalk: suffisso descrizione", swSuffix.desc == "bianco latte, Myst")
+  check("speedwalk: suffisso passi", #swSuffix.steps == 1 and swSuffix.steps[1] == "n")
+end
+
+local swSpaces = NebbieDash.parseSpeedwalkLine("u,n 2w,n (grigio fumo, Drow City)")
+check("speedwalk: spazi al posto virgole", swSpaces ~= nil)
+if swSpaces then
+  check("speedwalk: spazi normalizzati", swSpaces.dirString == "u,n,2w,n")
+end
+
+check("speedwalk: intestazione sezione",
+  NebbieDash.parseSpeedwalkSectionLine("(Pool di astral, da astral walk)") ~= nil)
+check("speedwalk: sezione no skip reason",
+  NebbieDash.speedwalkLineSkipReason("(Pool di astral, da astral walk)") == nil)
+
 -- Test 6: speedwalk con descrizione contenente una virgola e un'istruzione a
 -- piu' parole tra le direzioni (es. "enter pool") — esempio esatto fornito
 -- dall'utente. La descrizione tra parentesi puo' contenere virgole (il match

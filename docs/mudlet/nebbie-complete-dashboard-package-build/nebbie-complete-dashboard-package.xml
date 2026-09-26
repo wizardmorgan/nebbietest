@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.5"
+local PKG_VER = "1.15.6"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
@@ -764,8 +764,10 @@ function NebbieDash.ensureSpeedwalkFile()
   f:write(
     "# File di configurazione speedwalk — nebbie-complete-dashboard-package\n" ..
     "#\n" ..
-    "# Una riga per speedwalk, formato:\n" ..
+    "# Una riga per speedwalk, formato (due varianti):\n" ..
     "#   (descrizione cliccabile) direzioni separate da virgola\n" ..
+    "#   direzioni separate da virgola (descrizione cliccabile)\n" ..
+    "# Una riga con solo (titolo sezione) e' un'intestazione (ignorata nel pannello).\n" ..
     "#\n" ..
     "# Le direzioni si scrivono come le invieresti tu in gioco (es. n, s, e, w,\n" ..
     "# u, d, ne, nw, se, sw...). Se vuoi ripetere la stessa direzione piu' volte\n" ..
@@ -811,26 +813,48 @@ function NebbieDash.stripUtf8Bom(s)
   return s
 end
 
+function NebbieDash.normalizeSpeedwalkDirString(dirString)
+  local s = (dirString or ""):match("^%s*(.-)%s*$")
+  if s == "" then return s end
+  -- Spazi al posto delle virgole (es. "u,n 2w,n" -> "u,n,2w,n")
+  s = s:gsub("%s+", ",")
+  s = s:gsub(",+", ",")
+  s = s:gsub("^,", "")
+  s = s:gsub(",$", "")
+  return s
+end
+
 function NebbieDash.parseSpeedwalkLine(rawLine)
   local line2 = NebbieDash.stripUtf8Bom(rawLine):match("^%s*(.-)%s*$")
   if line2 == "" or line2:sub(1, 1) == "#" then return nil end
-  local desc, dirString = line2:match("^%((.-)%)%s*(.+)$")
-  if not desc then return nil end
+  -- Intestazione di sezione: solo "(titolo)" senza direzioni (non compare nel pannello)
+  if line2:match("^%(.+%)$") then return nil end
+  local desc, dirString = line2:match("^%((.-)%)%s+(.+)$")
+  if not desc then
+    dirString, desc = line2:match("^(.+)%s+%((.-)%)$")
+  end
+  if not desc or not dirString then return nil end
+  dirString = NebbieDash.normalizeSpeedwalkDirString(dirString)
   local steps = NebbieDash.parseSpeedwalkDirs(dirString)
   if #steps == 0 then return nil end
-  return { desc = desc, dirString = dirString:match("^%s*(.-)%s*$"), steps = steps }
+  return { desc = desc:match("^%s*(.-)%s*$"), dirString = dirString, steps = steps }
 end
 
 -- Motivo umano se una riga non vuota/commento non e' diventata uno speedwalk (per nspeedwalks).
 function NebbieDash.speedwalkLineSkipReason(rawLine)
   local line2 = NebbieDash.stripUtf8Bom(rawLine or ""):match("^%s*(.-)%s*$")
   if line2 == "" or line2:sub(1, 1) == "#" then return nil end
-  local desc, dirString = line2:match("^%((.-)%)%s*(.+)$")
+  if line2:match("^%(.+%)$") then return nil end
+  local desc, dirString = line2:match("^%((.-)%)%s+(.+)$")
   if not desc then
-    return "formato errato: serve (descrizione) dir1,dir2,... — non solo le direzioni"
+    dirString, desc = line2:match("^(.+)%s+%((.-)%)$")
   end
+  if not desc or not dirString then
+    return "formato: (descrizione) dir1,dir2,... oppure dir1,dir2,... (descrizione)"
+  end
+  dirString = NebbieDash.normalizeSpeedwalkDirString(dirString)
   if #NebbieDash.parseSpeedwalkDirs(dirString) == 0 then
-    return "mancano direzioni dopo la descrizione"
+    return "nessuna direzione valida (usa virgole tra i passi, es. u,n,2w,n)"
   end
   return nil
 end

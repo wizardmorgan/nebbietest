@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.5"
+local PKG_VER = "1.15.7"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
@@ -125,6 +125,40 @@ end
 function NebbieDash.saveStore()
   if not NebbieDash.persistEnabled then return end
   pcall(function() table.save(NebbieDash.storePath(), NebbieDash.chars) end)
+end
+
+function NebbieDash.uiStorePath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-dash-ui.lua"
+end
+
+function NebbieDash.loadUiStore()
+  NebbieDash.uiState = NebbieDash.uiState or { speedwalkSectionCollapsed = {} }
+  local path = NebbieDash.uiStorePath()
+  if type(io.exists) == "function" and io.exists(path) then
+    pcall(function() table.load(path, NebbieDash.uiState) end)
+  end
+  NebbieDash.uiState.speedwalkSectionCollapsed = NebbieDash.uiState.speedwalkSectionCollapsed or {}
+end
+
+function NebbieDash.saveUiStore()
+  if not NebbieDash.persistEnabled then return end
+  pcall(function() table.save(NebbieDash.uiStorePath(), NebbieDash.uiState or {}) end)
+end
+
+function NebbieDash.isSpeedwalkSectionCollapsed(sectionKey)
+  local t = (NebbieDash.uiState and NebbieDash.uiState.speedwalkSectionCollapsed) or {}
+  return t[sectionKey] == true
+end
+
+function NebbieDash.toggleSpeedwalkSection(itemIndex)
+  local item = (NebbieDash.speedwalkItems or {})[itemIndex]
+  if not item or item.kind ~= "section" then return end
+  NebbieDash.uiState = NebbieDash.uiState or { speedwalkSectionCollapsed = {} }
+  NebbieDash.uiState.speedwalkSectionCollapsed[item.key] =
+    not NebbieDash.isSpeedwalkSectionCollapsed(item.key)
+  NebbieDash.saveUiStore()
+  NebbieDash.refreshSpeedwalkPanel()
 end
 
 function NebbieDash.getCharData(name)
@@ -736,7 +770,7 @@ end
 -- movimento.
 -- ---------------------------------------------------------------------------
 NebbieDash.speedwalks = {}
--- Pausa (in secondi) tra un movimento e il successivo quando si esegue uno
+NebbieDash.speedwalkItems = {}
 -- speedwalk: un invio istantaneo di tutte le direzioni una via l'altra
 -- rischia di perdere passi se il gioco impone un tempo minimo (\"lag\") tra
 -- un movimento e l'altro. Regolabile con nspeeddelay se serve un valore
@@ -758,8 +792,11 @@ function NebbieDash.ensureSpeedwalkFile()
   f:write(
     "# File di configurazione speedwalk — nebbie-complete-dashboard-package\n" ..
     "#\n" ..
-    "# Una riga per speedwalk, formato:\n" ..
+    "# Una riga per speedwalk, formato (due varianti):\n" ..
     "#   (descrizione cliccabile) direzioni separate da virgola\n" ..
+    "#   direzioni separate da virgola (descrizione cliccabile)\n" ..
+    "# Una riga con solo (titolo sezione) apre una sezione collassabile nel pannello.\n" ..
+    "# Le righe sotto appartengono a quella sezione fino alla prossima sezione.\n" ..
     "#\n" ..
     "# Le direzioni si scrivono come le invieresti tu in gioco (es. n, s, e, w,\n" ..
     "# u, d, ne, nw, se, sw...). Se vuoi ripetere la stessa direzione piu' volte\n" ..
@@ -805,26 +842,86 @@ function NebbieDash.stripUtf8Bom(s)
   return s
 end
 
+function NebbieDash.isSpeedwalkDirToken(part)
+  part = (part or ""):match("^%s*(.-)%s*$"):lower()
+  if part == "" then return false end
+  local dirs = {
+    n = true, ne = true, nw = true, s = true, se = true, sw = true,
+    e = true, w = true, u = true, d = true,
+  }
+  local _, rest = part:match("^(%d+)(.+)$")
+  if rest then part = rest end
+  return dirs[part] == true
+end
+
+function NebbieDash.parseSpeedwalkSectionLine(rawLine)
+  local line2 = NebbieDash.stripUtf8Bom(rawLine):match("^%s*(.-)%s*$")
+  if line2 == "" or line2:sub(1, 1) == "#" then return nil end
+  local title = line2:match("^%((.-)%)$")
+  if not title then return nil end
+  title = title:match("^%s*(.-)%s*$")
+  if title == "" then return nil end
+  return { kind = "section", title = title, key = title }
+end
+
+function NebbieDash.normalizeSpeedwalkDirString(dirString)
+  local tokens = {}
+  for rawChunk in (dirString or ""):gmatch("[^,]+") do
+    local chunk = rawChunk:match("^%s*(.-)%s*$")
+    if chunk ~= "" then
+      if chunk:find("%s") then
+        local parts = {}
+        for part in chunk:gmatch("%S+") do table.insert(parts, part) end
+        local allShortDirs = #parts > 1
+        for _, part in ipairs(parts) do
+          if not NebbieDash.isSpeedwalkDirToken(part) then
+            allShortDirs = false
+            break
+          end
+        end
+        if allShortDirs then
+          for _, part in ipairs(parts) do table.insert(tokens, part) end
+        else
+          table.insert(tokens, chunk)
+        end
+      else
+        table.insert(tokens, chunk)
+      end
+    end
+  end
+  return table.concat(tokens, ",")
+end
+
 function NebbieDash.parseSpeedwalkLine(rawLine)
   local line2 = NebbieDash.stripUtf8Bom(rawLine):match("^%s*(.-)%s*$")
   if line2 == "" or line2:sub(1, 1) == "#" then return nil end
-  local desc, dirString = line2:match("^%((.-)%)%s*(.+)$")
-  if not desc then return nil end
+  if line2:match("^%(.+%)$") then return nil end
+  local desc, dirString = line2:match("^%((.-)%)%s+(.+)$")
+  if not desc then
+    dirString, desc = line2:match("^(.+)%s+%((.-)%)$")
+  end
+  if not desc or not dirString then return nil end
+  dirString = NebbieDash.normalizeSpeedwalkDirString(dirString)
   local steps = NebbieDash.parseSpeedwalkDirs(dirString)
   if #steps == 0 then return nil end
-  return { desc = desc, dirString = dirString:match("^%s*(.-)%s*$"), steps = steps }
+  return { desc = desc:match("^%s*(.-)%s*$"), dirString = dirString, steps = steps }
 end
 
 -- Motivo umano se una riga non vuota/commento non e' diventata uno speedwalk (per nspeedwalks).
 function NebbieDash.speedwalkLineSkipReason(rawLine)
   local line2 = NebbieDash.stripUtf8Bom(rawLine or ""):match("^%s*(.-)%s*$")
   if line2 == "" or line2:sub(1, 1) == "#" then return nil end
-  local desc, dirString = line2:match("^%((.-)%)%s*(.+)$")
+  if NebbieDash.parseSpeedwalkSectionLine(rawLine) then return nil end
+  local desc, dirString = line2:match("^%((.-)%)%s+(.+)$")
   if not desc then
-    return "formato errato: serve (descrizione) dir1,dir2,... — non solo le direzioni"
+    dirString, desc = line2:match("^(.+)%s+%((.-)%)$")
   end
+  if not desc or not dirString then
+    return "formato: (descrizione) dir1,dir2,... oppure dir1,dir2,... (descrizione)"
+  end
+  dirString = NebbieDash.normalizeSpeedwalkDirString(dirString)
   if #NebbieDash.parseSpeedwalkDirs(dirString) == 0 then
-    return "mancano direzioni dopo la descrizione"
+    return "nessuna direzione valida (usa virgole tra i passi, es. u,n,2w,n)"
   end
   return nil
 end
@@ -832,6 +929,7 @@ end
 function NebbieDash.loadSpeedwalks()
   NebbieDash.ensureSpeedwalkFile()
   NebbieDash.speedwalks = {}
+  NebbieDash.speedwalkItems = {}
   NebbieDash.speedwalkLoadSkipped = {}
   local path = NebbieDash.speedwalkPath()
   local f = io.open(path, "r")
@@ -841,19 +939,34 @@ function NebbieDash.loadSpeedwalks()
   end
   NebbieDash.speedwalkLoadOpenFailed = false
   local lineNum = 0
+  local currentSectionKey = nil
   for rawLine in f:lines() do
     lineNum = lineNum + 1
-    local entry = NebbieDash.parseSpeedwalkLine(rawLine)
-    if entry then
-      table.insert(NebbieDash.speedwalks, entry)
+    local section = NebbieDash.parseSpeedwalkSectionLine(rawLine)
+    if section then
+      currentSectionKey = section.key
+      table.insert(NebbieDash.speedwalkItems, section)
     else
-      local reason = NebbieDash.speedwalkLineSkipReason(rawLine)
-      if reason then
-        table.insert(NebbieDash.speedwalkLoadSkipped, {
-          line = lineNum,
-          reason = reason,
-          preview = NebbieDash.truncate(rawLine:match("^%s*(.-)%s*$"), 72),
+      local entry = NebbieDash.parseSpeedwalkLine(rawLine)
+      if entry then
+        entry.kind = "walk"
+        entry.walkIndex = #NebbieDash.speedwalks + 1
+        entry.sectionKey = currentSectionKey
+        table.insert(NebbieDash.speedwalks, {
+          desc = entry.desc,
+          dirString = entry.dirString,
+          steps = entry.steps,
         })
+        table.insert(NebbieDash.speedwalkItems, entry)
+      else
+        local reason = NebbieDash.speedwalkLineSkipReason(rawLine)
+        if reason then
+          table.insert(NebbieDash.speedwalkLoadSkipped, {
+            line = lineNum,
+            reason = reason,
+            preview = NebbieDash.truncate(rawLine:match("^%s*(.-)%s*$"), 72),
+          })
+        end
       end
     end
   end
@@ -871,8 +984,12 @@ function NebbieDash.cmdReloadSpeedwalks()
     return
   end
   cecho("<green>[NebbieDash] Speedwalk ricaricati: " .. #NebbieDash.speedwalks .. " — " .. path .. "\n")
-  for i, entry in ipairs(NebbieDash.speedwalks) do
-    cecho("<grey>  " .. i .. ". <cyan>" .. entry.desc .. "<grey> (" .. #entry.steps .. " passi)\n")
+  for _, item in ipairs(NebbieDash.speedwalkItems or {}) do
+    if item.kind == "section" then
+      cecho("<grey>  [sezione] <yellow>" .. item.title .. "\n")
+    elseif item.kind == "walk" then
+      cecho("<grey>    <cyan>" .. item.desc .. "<grey> (" .. #item.steps .. " passi)\n")
+    end
   end
   local skipped = NebbieDash.speedwalkLoadSkipped or {}
   if #skipped > 0 then
@@ -1153,9 +1270,19 @@ function NebbieDash.computeRightMaxChars(data)
       maxChars = math.max(maxChars, #(spellName or "") + #(" -- tick"))
     end
   end
-  for _, entry in ipairs(NebbieDash.speedwalks) do
-    local preview = NebbieDash.truncate(entry.dirString, NebbieDash.speedwalkPreviewMaxLen)
-    maxChars = math.max(maxChars, #entry.desc + 1 + #preview)
+  for _, item in ipairs(NebbieDash.speedwalkItems or {}) do
+    if item.kind == "section" then
+      maxChars = math.max(maxChars, #item.title + 3)
+    elseif item.kind == "walk" then
+      local preview = NebbieDash.truncate(item.dirString, NebbieDash.speedwalkPreviewMaxLen)
+      maxChars = math.max(maxChars, #item.desc + 1 + #preview)
+    end
+  end
+  if not NebbieDash.speedwalkItems or #NebbieDash.speedwalkItems == 0 then
+    for _, entry in ipairs(NebbieDash.speedwalks) do
+      local preview = NebbieDash.truncate(entry.dirString, NebbieDash.speedwalkPreviewMaxLen)
+      maxChars = math.max(maxChars, #entry.desc + 1 + #preview)
+    end
   end
   return maxChars
 end
@@ -1679,17 +1806,30 @@ function NebbieDash.refreshSpeedwalkPanel()
   if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
   clearWindow("NebbieDashSpeedwalks")
   cecho("NebbieDashSpeedwalks", "<cyan><b>Speedwalk</b>\n")
-  if #NebbieDash.speedwalks == 0 then
+  if #(NebbieDash.speedwalkItems or {}) == 0 and #NebbieDash.speedwalks == 0 then
     cecho("NebbieDashSpeedwalks",
       "<grey>(nessuno — scrivili in " .. NebbieDash.speedwalkPath() .. " poi digita <yellow>nspeedwalks<grey>)\n")
     return
   end
-  for i, entry in ipairs(NebbieDash.speedwalks) do
-    local preview = NebbieDash.truncate(entry.dirString, NebbieDash.speedwalkPreviewMaxLen)
-    cechoLink("NebbieDashSpeedwalks", "<cyan>" .. entry.desc,
-      string.format("NebbieDash.runSpeedwalk(%d)", i),
-      "Clicca per andare: " .. entry.desc .. " (" .. entry.dirString .. ")", true)
-    cecho("NebbieDashSpeedwalks", string.format(" <grey>%s\n", preview))
+  for i, item in ipairs(NebbieDash.speedwalkItems or {}) do
+    if item.kind == "section" then
+      local collapsed = NebbieDash.isSpeedwalkSectionCollapsed(item.key)
+      local icon = collapsed and "▶" or "▼"
+      cechoLink("NebbieDashSpeedwalks", "<yellow><b>" .. icon .. " " .. item.title .. "</b>",
+        string.format("NebbieDash.toggleSpeedwalkSection(%d)", i),
+        collapsed and "Espandi sezione" or "Collassa sezione", true)
+      cecho("NebbieDashSpeedwalks", "\n")
+    elseif item.kind == "walk" then
+      if item.sectionKey and NebbieDash.isSpeedwalkSectionCollapsed(item.sectionKey) then
+        -- nascosto finche' la sezione e' collassata
+      else
+        local preview = NebbieDash.truncate(item.dirString, NebbieDash.speedwalkPreviewMaxLen)
+        cechoLink("NebbieDashSpeedwalks", "<cyan>" .. item.desc,
+          string.format("NebbieDash.runSpeedwalk(%d)", item.walkIndex),
+          "Clicca per andare: " .. item.desc .. " (" .. item.dirString .. ")", true)
+        cecho("NebbieDashSpeedwalks", string.format(" <grey>%s\n", preview))
+      end
+    end
   end
 end
 
@@ -3940,6 +4080,7 @@ function NebbieDash.boot()
   end
   NebbieDash._lastBootTime = now
   NebbieDash.loadStore()
+  NebbieDash.loadUiStore()
   NebbieDash.loadSpeedwalks()
   NebbieDash.loadSpellCastConfig()
   NebbieDash.loadHungerMacros()
