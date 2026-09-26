@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.11 — 2026-09-26
+
+- **npackageupdate**: disinstalla il package esistente prima di `installPackage` (Mudlet
+  altrimenti rifiuta con "already installed").
+- **Versione interna** alzata a 1.15.11.
+
 ## 1.15.10 — 2026-09-26
 
 - **Speedwalk sezioni**: solo righe `(>> titolo)` aprono un gruppo collassabile (prefisso

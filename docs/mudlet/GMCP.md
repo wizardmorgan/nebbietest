@@ -50,7 +50,7 @@ integrazioni future nel package.
 ```json
 {
   "url": "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-complete-dashboard-package.mpackage",
-  "version": "1.15.10"
+  "version": "1.15.11"
 }
 ```
 

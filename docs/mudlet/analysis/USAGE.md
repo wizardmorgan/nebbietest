@@ -17,7 +17,8 @@ segue la stessa versione dello script).
 1. **Consigliato in gioco (GMCP)**: abilita GMCP nel profilo Nebbie, riconnettiti — il server
    invia `Client.GUI` con URL e versione; Mudlet scarica/aggiorna il package se la versione
    installata è più vecchia (richiede server con GMCP aggiornato).
-2. **Comando Mudlet**: **`npackageupdate`** — scarica e reinstalla dal branch `mudlet` (stesso URL).
+2. **Comando Mudlet**: **`npackageupdate`** — disinstalla la versione corrente e scarica di nuovo
+   dal branch `mudlet` (Mudlet non permette `installPackage` sopra un package gia' installato).
 3. **Package Manager (Alt+O)**: Installa di nuovo il `.mpackage` scaricato da GitHub (stesso nome
    package = upgrade). Mudlet **non** controlla GitHub da solo senza GMCP/`npackageupdate`/mpkg repo.
 
