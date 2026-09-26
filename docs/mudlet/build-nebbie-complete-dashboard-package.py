@@ -22,7 +22,7 @@ import xml.sax.saxutils as sax
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PKG_NAME = "nebbie-complete-dashboard-package"
-PKG_VER = "1.15.0"
+PKG_VER = "1.15.1"
 PKG_AUTHOR = "Nebbie Arcane"
 PKG_ICON_FILE = "nebbie-dash-icon.png"
 PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
@@ -86,13 +86,9 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   completamente Mudlet.
 - **Cast 1.15.0**: `nspellaliases` / `nspellaliasesreload`; pannello e shortcut
   da file di testo (non cumulo automatico da `attrib`).
-- **Gestione armi** (nuovo pannello "Armi", sotto l'Equip a sinistra):
-  elenco persistente per personaggio delle armi impugnate almeno una volta,
-  con tipo di danno (slash/blunt/pierce) letto dall'output di `identify`
-  quando lo esegui tu (non è automatico, costa una "ondata di stanchezza").
-  Clicca un'arma in elenco per cambiare arma con un solo click (`rem`+`put`
-  di quella attuale, poi `get`+`wield` di quella scelta, usando lo zaino
-  già rilevato). Altezza Equip/Armi regolabile con `nleftheights`.
+- **Gestione armi** (pannello "Armi"): click per cambiare — sequenza borsa
+  come nebbie-play-all; keyword senza parentesi eq `(alone luminoso)`; `identify`
+  fissa la parola chiave canonica.
 - **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
   comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
   perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello

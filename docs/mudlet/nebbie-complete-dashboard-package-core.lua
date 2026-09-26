@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.0"
+local PKG_VER = "1.15.1"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -736,6 +736,8 @@ NebbieDash.speedwalks = {}
 -- un movimento e l'altro. Regolabile con nspeeddelay se serve un valore
 -- diverso.
 NebbieDash.speedwalkDelay = 0.35
+NebbieDash.weaponSwapDelay = 0.5
+NebbieDash._weaponSwapBusy = false
 
 function NebbieDash.speedwalkPath()
   local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
@@ -1241,7 +1243,7 @@ NebbieDash.HELP_TEXT = {
   { "nidentbatch [nome-toon]", "Identify batch: oload $3, stat/identify/junk con $o (keyword oload)." },
   { "nidentbatch resume [nome-toon]", "Riprende identify batch saltando righe gia' nel CSV di oggi." },
   { "nidentbatchreload", "Ricarica nebbie-ident-batch-commands.txt e nebbie-batch-items.csv." },
-  { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
+  { "(pannello Armi)", "Clicca un'arma: rem borsa, get, rem vecchia, wield, put, wear (come nebbie-play-all)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
   { "nhelp", "Mostra/nascondi questa finestra." },
 }
@@ -1744,11 +1746,21 @@ NebbieDash.ITEM_STOPWORDS = {
   ["l"] = true, ["d"] = true, ["dell"] = true, ["nell"] = true, ["sull"] = true, ["dall"] = true, ["all"] = true,
 }
 
+-- Rimuove suffissi tra parentesi dall'eq (condizioni, alone luminoso, ecc.):
+-- non fanno parte delle keyword MUD per get/rem/wield.
+function NebbieDash.stripItemParentheticals(name)
+  name = name or ""
+  name = name:gsub("%s*%b()", "")
+  name = name:gsub("%s+", " ")
+  return name:match("^%s*(.-)%s*$") or ""
+end
+
 -- Estrae le parole chiave "significative" da un nome oggetto descrittivo,
 -- scartando gli articoli/preposizioni sopra (anche nella forma con
 -- apostrofo, es. "l'Infinito" → "infinito"). Restituisce una stringa
 -- minuscola pronta per essere usata come argomento di `get`/`wield`.
 function NebbieDash.extractItemKeywords(name)
+  name = NebbieDash.stripItemParentheticals(name)
   name = (name or ""):lower():gsub("'", " "):gsub("[%.,!]", "")
   local words = {}
   for word in name:gmatch("%S+") do
@@ -1877,7 +1889,6 @@ function NebbieDash.onWieldLine()
     NebbieDash.refreshDashboard()
   elseif existing.displayName ~= weaponName then
     existing.displayName = weaponName
-    existing.keyword = keyword
     NebbieDash.saveStore()
     NebbieDash.refreshDashboard()
   end
@@ -1920,6 +1931,10 @@ end
 function NebbieDash.cmdSwapWeapon(idx)
   local name = NebbieDash.currentChar
   if not name then return end
+  if NebbieDash._weaponSwapBusy then
+    cecho("<orange>[NebbieDash] Cambio arma gia' in corso.\n")
+    return
+  end
   local data = NebbieDash.getCharData(name)
   local target = data.weapons and data.weapons[idx]
   if not target or not target.keyword then return end
@@ -1930,23 +1945,19 @@ function NebbieDash.cmdSwapWeapon(idx)
     return
   end
 
-  local backpackKeywords, isOverride = NebbieDash.findBackpackKeywords(data)
-  local backpackKeyword = isOverride and backpackKeywords or NebbieDash.lastKeyword(backpackKeywords)
-  if backpackKeyword == "" then
-    cecho("<orange>[NebbieDash] Nessuno zaino rilevato (slot 'sulla schiena') — esegui <yellow>neq<orange> prima.\n")
+  local steps, err = NebbieDash.buildWeaponSwapSteps(data, target)
+  if not steps then
+    if err == "no_backpack" then
+      cecho("<orange>[NebbieDash] Nessuno zaino rilevato (slot 'sulla schiena') — esegui <yellow>neq<orange> prima.\n")
+    end
     return
   end
 
-  local steps = {}
-  if currentKeyword ~= "" then
-    table.insert(steps, "rem " .. currentKeyword)
-    table.insert(steps, "put " .. currentKeyword .. " " .. backpackKeyword)
-  end
-  table.insert(steps, "get " .. target.keyword .. " " .. backpackKeyword)
-  table.insert(steps, "wield " .. target.keyword)
-  for i, cmd in ipairs(steps) do
-    tempTimer(NebbieDash.speedwalkDelay * (i - 1), function() send(cmd, false) end)
-  end
+  NebbieDash._weaponSwapBusy = true
+  NebbieDash.runCommandSequence(steps, NebbieDash.weaponSwapDelay)
+  tempTimer(NebbieDash.weaponSwapDelay * #steps + 0.25, function()
+    NebbieDash._weaponSwapBusy = false
+  end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -2086,6 +2097,54 @@ function NebbieDash.lastKeyword(phrase)
   return last or ""
 end
 
+function NebbieDash.pickItemCommandKeyword(phrase, isOverride, avoidPhrases)
+  phrase = (phrase or ""):match("^%s*(.-)%s*$") or ""
+  if phrase == "" then return "" end
+  if isOverride then return phrase end
+  local last = NebbieDash.lastKeyword(phrase)
+  for _, avoid in ipairs(avoidPhrases or {}) do
+    if avoid and avoid ~= "" and NebbieDash.keywordsOverlap(last, avoid) then
+      return phrase
+    end
+  end
+  if last ~= "" then return last end
+  return phrase
+end
+
+function NebbieDash.runCommandSequence(steps, delaySec)
+  delaySec = delaySec or NebbieDash.weaponSwapDelay or 0.5
+  for i, cmd in ipairs(steps or {}) do
+    tempTimer(delaySec * (i - 1), function() send(cmd, false) end)
+  end
+end
+
+function NebbieDash.buildWeaponSwapSteps(data, target)
+  local backPhrase, backOverride = NebbieDash.findBackpackKeywords(data)
+  if backPhrase == "" then return nil, "no_backpack" end
+  local weaponKw = (target.keyword or ""):match("^%s*(.-)%s*$")
+  if weaponKw == "" then return nil, "no_weapon" end
+  local wieldPhrase = NebbieDash.currentWieldedKeyword(data)
+  local wieldConfirmed = wieldPhrase ~= "" and data.eqUpdated
+  local backKw = NebbieDash.pickItemCommandKeyword(backPhrase, backOverride, { wieldPhrase, weaponKw })
+  local wieldKw = ""
+  if wieldConfirmed then
+    wieldKw = NebbieDash.pickItemCommandKeyword(wieldPhrase, false, { backPhrase, weaponKw })
+  end
+
+  local steps = {}
+  table.insert(steps, "rem " .. backKw)
+  table.insert(steps, "get " .. weaponKw .. " " .. backKw)
+  if wieldConfirmed and wieldKw ~= "" and not NebbieDash.keywordsOverlap(wieldKw, weaponKw) then
+    table.insert(steps, "rem " .. wieldKw)
+  end
+  table.insert(steps, "wield " .. weaponKw)
+  if wieldConfirmed and wieldKw ~= "" and not NebbieDash.keywordsOverlap(wieldKw, weaponKw) then
+    table.insert(steps, "put " .. wieldKw .. " " .. backKw)
+  end
+  table.insert(steps, "wear " .. backKw)
+  return steps, nil
+end
+
 -- ---------------------------------------------------------------------------
 -- Parole chiave per oggetto, condivise tra TUTTI i personaggi (2026-08-10).
 -- L'euristica automatica (extractItemKeywords, sopra) funziona per alcuni
@@ -2172,10 +2231,14 @@ end
 -- di ritorno indica se e' stato usato un override esplicito (utile per
 -- decidere se applicare ulteriori restrizioni euristiche, es. lastKeyword).
 function NebbieDash.resolveItemKeywords(itemName)
-  local key = (itemName or ""):lower():match("^%s*(.-)%s*$")
+  local stripped = NebbieDash.stripItemParentheticals(itemName)
+  local key = stripped:lower():match("^%s*(.-)%s*$")
   local override = NebbieDash.itemKeywordOverrides[key]
   if override then return override, true end
-  return NebbieDash.extractItemKeywords(itemName), false
+  local rawKey = (itemName or ""):lower():match("^%s*(.-)%s*$")
+  override = NebbieDash.itemKeywordOverrides[rawKey]
+  if override then return override, true end
+  return NebbieDash.extractItemKeywords(stripped), false
 end
 
 function NebbieDash.runHungerMacro()

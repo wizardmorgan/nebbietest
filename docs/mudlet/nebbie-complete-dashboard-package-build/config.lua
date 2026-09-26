@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.15.0)
+description = [[# Nebbie Dashboard (1.15.1)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -56,13 +56,9 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   completamente Mudlet.
 - **Cast 1.15.0**: `nspellaliases` / `nspellaliasesreload`; pannello e shortcut
   da file di testo (non cumulo automatico da `attrib`).
-- **Gestione armi** (nuovo pannello "Armi", sotto l'Equip a sinistra):
-  elenco persistente per personaggio delle armi impugnate almeno una volta,
-  con tipo di danno (slash/blunt/pierce) letto dall'output di `identify`
-  quando lo esegui tu (non è automatico, costa una "ondata di stanchezza").
-  Clicca un'arma in elenco per cambiare arma con un solo click (`rem`+`put`
-  di quella attuale, poi `get`+`wield` di quella scelta, usando lo zaino
-  già rilevato). Altezza Equip/Armi regolabile con `nleftheights`.
+- **Gestione armi** (pannello "Armi"): click per cambiare — sequenza borsa
+  come nebbie-play-all; keyword senza parentesi eq `(alone luminoso)`; `identify`
+  fissa la parola chiave canonica.
 - **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
   comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
   perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
@@ -95,4 +91,4 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.15.0]]
+version = [[1.15.1]]

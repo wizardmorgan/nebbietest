@@ -1,5 +1,15 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.1 — 2026-09-26
+
+- **Corretto (cambio arma da pannello)**: sequenza come **nebbie-play-all**
+  (`rem` borsa → `get` → `rem` vecchia → `wield` → `put` → `wear`); pausa 0.5s;
+  keyword contenitore senza collisioni (es. **noor** / Nordagh).
+- **Corretto**: `Impugni` non sovrascrive la keyword fissata da **`identify`**.
+- **Parole chiave oggetto**: rimosse parentesi eq `(alone luminoso)`, `(in condizioni …)`
+  prima di `get`/`rem`/`wield` e lookup in **`nebbie-item-keywords.txt`**.
+- **Versione interna** alzata a 1.15.1.
+
 ## 1.15.0 — 2026-09-24
 
 - **Cast/spell (rifacimento)**: il bersaglio e' **sempre esplicito** nel comando inviato al
