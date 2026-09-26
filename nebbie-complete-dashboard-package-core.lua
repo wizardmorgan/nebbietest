@@ -9,9 +9,11 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.17"
+local PKG_VER = "1.15.18"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
+local PKG_CORE_RAW_URL =
+  "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package-core.lua"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
@@ -1088,9 +1090,22 @@ function NebbieDash.cmdReloadSpeedwalks()
   cecho("<grey>Layout: <yellow>nheights 30<grey> = più spazio speedwalk (sotto le spell). Colonna destra: <yellow>nwidth right auto<grey> / <yellow>nlayout<grey>. Sezione: <yellow>(>> titolo)<grey>. Note: <yellow>(testo)<grey> in coda riga o riga separata.\n")
 end
 
--- Reinstalla/aggiorna il package dal branch mudlet su GitHub (stesso URL usato da GMCP Client.GUI).
--- Mudlet rifiuta installPackage(URL) se il package e' gia' presente: disinstalliamo prima
--- (pattern ufficiale forum Mudlet / self-update).
+function NebbieDash.parsePkgVerFromCoreLua(text)
+  if not text then return nil end
+  return text:match('local%s+PKG_VER%s*=%s*"([^"]+)"')
+end
+
+function NebbieDash.fetchRemotePackageVersionSync()
+  if type(getHttp) == "function" then
+    local ok, body = pcall(getHttp, PKG_CORE_RAW_URL .. "?cb=" .. tostring(os.time()))
+    if ok and type(body) == "string" then
+      return NebbieDash.parsePkgVerFromCoreLua(body)
+    end
+  end
+  return nil
+end
+
+-- Reinstalla/aggiorna il package (branch nebbie-mudlet-dashboard su nebbietest).
 function NebbieDash.cmdPackageUpdate()
   local url = PKG_MPACKAGE_URL
   local pkg = NebbieDash.package or "nebbie-complete-dashboard-package"
@@ -1098,10 +1113,19 @@ function NebbieDash.cmdPackageUpdate()
   if type(getPackageInfo) == "function" then
     installedVer = getPackageInfo(pkg, "version") or ""
   end
-  cecho("<yellow>[NebbieDash] Aggiornamento package (branch mudlet)...\n")
-  cecho("<grey>Package Manager: <white>" .. (installedVer ~= "" and installedVer or "non installato") ..
-    "<grey> — .mpackage sul server: <white>" .. NebbieDash.version .. "\n")
+  local remoteVer = NebbieDash.fetchRemotePackageVersionSync()
+  cecho("<yellow>[NebbieDash] Aggiornamento package (nebbietest / nebbie-mudlet-dashboard)...\n")
+  cecho("<grey>Package Manager (installato): <white>" .. (installedVer ~= "" and installedVer or "—") ..
+    "<grey> — in esecuzione ora: <white>" .. NebbieDash.version .. "\n")
+  if remoteVer then
+    cecho("<grey>Ultima versione su GitHub (core.lua): <white>" .. remoteVer .. "\n")
+  else
+    cecho("<grey>Ultima versione su GitHub: <white>(non letta — scarico .mpackage con cache-bust)\n")
+  end
   cecho("<grey>" .. url .. "\n")
+  if remoteVer and installedVer ~= "" and remoteVer == installedVer and remoteVer == NebbieDash.version then
+    cecho("<green>Sei gia' alla " .. remoteVer .. ". Se Mudlet non si aggiorna, ripeti comunque o usa Package Manager.\n")
+  end
   if type(installPackage) ~= "function" then
     cecho("<red>installPackage non disponibile — scarica il .mpackage a mano da GitHub.\n")
     return
@@ -1118,14 +1142,16 @@ function NebbieDash.cmdPackageUpdate()
     cecho("<orange>uninstallPackage non disponibile — disinstalla da Package Manager e reinstalla il .mpackage.\n")
     return
   end
-  local ok, err = pcall(installPackage, url)
+  local installUrl = url .. "?cb=" .. tostring(os.time())
+  local ok, err = pcall(installPackage, installUrl)
   if not ok then
     cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
-    cecho("<orange>Prova: Package Manager → rimuovi il package → Installa il .mpackage da GitHub (branch mudlet).\n")
+    cecho("<orange>Prova: Package Manager → rimuovi il package → Installa il .mpackage da GitHub.\n")
     return
   end
-  cecho("<green>Download/install avviato. Controlla Package Manager (versione attesa: " ..
-    NebbieDash.version .. "). Poi <yellow>nfix<green> se serve.\n")
+  local expect = remoteVer or "vedi Package Manager"
+  cecho("<green>Download/install avviato (atteso: <white>" .. expect ..
+    "<green>). Dopo l'install: messaggio <white>v… pronto<green> e <yellow>nfix<green> se serve.\n")
 end
 
 -- Ripetizione generica di un comando digitato direttamente al prompt, es.
