@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.14.3 — 2026-09-26
+
+- **Parole chiave oggetto**: rimosse le parentesi dell'eq (`(in condizioni eccellenti)`,
+  `(ha/hanno un alone luminoso)`, ecc.) prima di calcolare le keyword per
+  `get`/`rem`/`wield`, zaino e cambio arma; lookup in `nebbie-item-keywords.txt`
+  usa il nome normalizzato.
+- **Versione interna** alzata a 1.14.3.
+
 ## 1.14.2 — 2026-09-26
 
 - **Corretto (cambio arma da pannello)**: sequenza allineata a `nebbie-play-all`

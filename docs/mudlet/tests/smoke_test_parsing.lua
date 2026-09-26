@@ -440,6 +440,12 @@ check("parole chiave: 'la Flamberga di Boris' -> 'flamberga boris'",
   NebbieDash.extractItemKeywords("la Flamberga di Boris") == "flamberga boris")
 check("parole chiave: apostrofo gestito (\"dell'Infinito\" -> \"infinito\")",
   NebbieDash.extractItemKeywords("Il Guanto dell'Infinito") == "guanto infinito")
+check("parole chiave: parentesi condizione/alone ignorate",
+  NebbieDash.extractItemKeywords("Il Guanto dell'Infinito (hanno un alone luminoso) (in condizioni eccellenti)")
+    == "guanto infinito")
+check("parole chiave: rosa metallica senza 'alone'/'eccellenti'",
+  NebbieDash.extractItemKeywords("Una rosa metallica (ha un alone luminoso) (in condizioni eccellenti)")
+    == "rosa metallica")
 
 NebbieDash.autoDisarmRecover = true
 sentLog = {}

@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.14.2"
+local PKG_VER = "1.14.3"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -1569,11 +1569,21 @@ NebbieDash.ITEM_STOPWORDS = {
   ["l"] = true, ["d"] = true, ["dell"] = true, ["nell"] = true, ["sull"] = true, ["dall"] = true, ["all"] = true,
 }
 
+-- Rimuove suffissi tra parentesi dall'eq (condizioni, alone luminoso, ecc.):
+-- non fanno parte delle keyword MUD per get/rem/wield.
+function NebbieDash.stripItemParentheticals(name)
+  name = name or ""
+  name = name:gsub("%s*%b()", "")
+  name = name:gsub("%s+", " ")
+  return name:match("^%s*(.-)%s*$") or ""
+end
+
 -- Estrae le parole chiave "significative" da un nome oggetto descrittivo,
 -- scartando gli articoli/preposizioni sopra (anche nella forma con
 -- apostrofo, es. "l'Infinito" → "infinito"). Restituisce una stringa
 -- minuscola pronta per essere usata come argomento di `get`/`wield`.
 function NebbieDash.extractItemKeywords(name)
+  name = NebbieDash.stripItemParentheticals(name)
   name = (name or ""):lower():gsub("'", " "):gsub("[%.,!]", "")
   local words = {}
   for word in name:gmatch("%S+") do
@@ -2052,10 +2062,15 @@ end
 -- di ritorno indica se e' stato usato un override esplicito (utile per
 -- decidere se applicare ulteriori restrizioni euristiche, es. lastKeyword).
 function NebbieDash.resolveItemKeywords(itemName)
-  local key = (itemName or ""):lower():match("^%s*(.-)%s*$")
+  local stripped = NebbieDash.stripItemParentheticals(itemName)
+  local key = stripped:lower():match("^%s*(.-)%s*$")
   local override = NebbieDash.itemKeywordOverrides[key]
   if override then return override, true end
-  return NebbieDash.extractItemKeywords(itemName), false
+  -- Retrocompat: override salvato con nome eq completo (con parentesi).
+  local rawKey = (itemName or ""):lower():match("^%s*(.-)%s*$")
+  override = NebbieDash.itemKeywordOverrides[rawKey]
+  if override then return override, true end
+  return NebbieDash.extractItemKeywords(stripped), false
 end
 
 function NebbieDash.runHungerMacro()
