@@ -9,9 +9,9 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.14"
+local PKG_VER = "1.15.15"
 local PKG_MPACKAGE_URL =
-  "https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage"
+  "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then

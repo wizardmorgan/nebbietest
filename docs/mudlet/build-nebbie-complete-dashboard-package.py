@@ -11,7 +11,7 @@ genera centinaia di alias/trigger dal sorgente MUD, solo un piccolo set di
 comandi statici (vedi ALIASES sotto).
 
 Uso:
-    python3 docs/mudlet/build-nebbie-complete-dashboard-package.py
+    python3 build-nebbie-complete-dashboard-package.py
 """
 import os
 import re
@@ -37,7 +37,7 @@ def read_pkg_ver_from_core():
 
 PKG_VER = read_pkg_ver_from_core()
 PKG_URL = (
-    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/"
+    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/"
     f"{PKG_NAME}.mpackage"
 )
 PKG_CREATED = "2026-09-26"
