@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.16"
+local PKG_VER = "1.15.17"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 
@@ -151,14 +151,7 @@ function NebbieDash.loadUiStore()
   if type(gr) == "table" and type(gr.spells) == "number" then
     NebbieDash.guiRatios = NebbieDash.guiRatios or {}
     local s = math.max(0.1, math.min(0.9, gr.spells))
-    -- Migrazione: versioni <=1.15.9 salvavano 0.4 (speedwalk = 60% colonna destra).
-    if s < 0.55 then
-      s = 0.78
-      NebbieDash.guiRatios.spells = s
-      NebbieDash.persistGuiRatios()
-    else
-      NebbieDash.guiRatios.spells = s
-    end
+    NebbieDash.guiRatios.spells = s
   end
   if type(gr) == "table" and type(gr.equip) == "number" then
     NebbieDash.guiRatios = NebbieDash.guiRatios or {}
@@ -1366,7 +1359,7 @@ end
 -- della colonna sinistra tra Equip (in alto) e Armi (in basso, il resto) —
 -- richiesta esplicita dell'utente (2026-08-10): "devo avere sotto l'equip
 -- una lista di armi".
-NebbieDash.guiRatios = { spells = 0.78, equip = 0.6 }
+NebbieDash.guiRatios = { spells = 0.20, equip = 0.6 }
 -- Altezza (px) delle barre divisorie visibili tra Spell attivi/Speedwalk e
 -- tra Equip/Armi.
 NebbieDash.dividerPx = 4
@@ -1537,7 +1530,7 @@ function NebbieDash.positionGUI()
   local speedwalkH = usableH - spellsH
   local maxSwH = math.floor(usableH * (NebbieDash.speedwalkMaxHeightRatio or 0.48))
   -- Con nheights basso l'utente vuole piu' speedwalk: cap solo se spell >= 50%.
-  if (NebbieDash.guiRatios.spells or 0.78) >= 0.50 and speedwalkH > maxSwH then
+  if (NebbieDash.guiRatios.spells or 0.20) >= 0.50 and speedwalkH > maxSwH then
     speedwalkH = maxSwH
   end
   moveWindow("NebbieDashSpells", x, 0)
@@ -1709,7 +1702,7 @@ function NebbieDash.resetLayout()
   NebbieDash.fontSize = 11
   NebbieDash.autoWidthEquip = true
   NebbieDash.autoWidthRight = true
-  NebbieDash.guiRatios = { spells = 0.78, equip = 0.6 }
+  NebbieDash.guiRatios = { spells = 0.20, equip = 0.6 }
   NebbieDash.persistGuiRatios()
   if NebbieDash._guiCreated then
     for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
@@ -1721,7 +1714,7 @@ function NebbieDash.resetLayout()
     NebbieDash.positionGUI()
     NebbieDash.refreshDashboard()
   end
-  cecho("<green>[NebbieDash] Layout ripristinato: auto-larghezza, spell 78%, speedwalk fino al 48% (se spell>=50%), font 11.\n")
+  cecho("<green>[NebbieDash] Layout ripristinato: auto-larghezza, spell 20% (default), font 11.\n")
 end
 
 function NebbieDash.cmdSetFont(sizeStr)
