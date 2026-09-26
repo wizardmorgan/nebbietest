@@ -95,3 +95,9 @@ Runs `./getworldlocal` only. System packages and ODB are installed once via `scr
 - **`cc`/`c++` → Clang**: Cloud images may default to LLVM. Provision script forces `gcc-12`/`g++-12` for all four commands; CMake fails with `cannot find -lstdc++` if `c++` is still Clang.
 - **Port 4000 conflict**: Stop Docker `nebbieserver` before running native `./myst`.
 - **S1 DDL**: `./scripts/apply-schema-s1.sh` after ODB creates `toon`; entrypoint skips migration when `toon` is absent (native provision matches Vagrant).
+
+### Mudlet dashboard (`nebbie-complete-dashboard-package`)
+
+- **Codice e release**: branch **`nebbie-mudlet-dashboard`** su [`wizardmorgan/nebbietest`](https://github.com/wizardmorgan/nebbietest/tree/nebbie-mudlet-dashboard) (push cloud agent). `.mpackage` raw: `…/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage`.
+- **Repo personale** [`wizardmorgan/nebbie-mudlet-dashboard`](https://github.com/wizardmorgan/nebbie-mudlet-dashboard): resta vuoto finché l’utente non fa push dal Mac con **`gh auth login`** + **`gh auth setup-git`** (mai password GitHub su HTTPS). Vedi `PUBLISH.md` sul branch sopra.
+- **Non** dare istruzioni `git push` al Mac senza il blocco `gh auth` (regola permanente per wizmorgan).
