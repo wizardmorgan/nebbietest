@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.10"
+local PKG_VER = "1.15.11"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-complete-dashboard-package.mpackage"
 
@@ -1079,22 +1079,43 @@ function NebbieDash.cmdReloadSpeedwalks()
 end
 
 -- Reinstalla/aggiorna il package dal branch mudlet su GitHub (stesso URL usato da GMCP Client.GUI).
--- Mudlet Package Manager mostra la versione da config.lua nel .mpackage: va rigenerato ad ogni release.
+-- Mudlet rifiuta installPackage(URL) se il package e' gia' presente: disinstalliamo prima
+-- (pattern ufficiale forum Mudlet / self-update).
 function NebbieDash.cmdPackageUpdate()
   local url = PKG_MPACKAGE_URL
-  cecho("<yellow>[NebbieDash] Aggiornamento package da GitHub (branch mudlet)...\n")
+  local pkg = NebbieDash.package or "nebbie-complete-dashboard-package"
+  local installedVer = ""
+  if type(getPackageInfo) == "function" then
+    installedVer = getPackageInfo(pkg, "version") or ""
+  end
+  cecho("<yellow>[NebbieDash] Aggiornamento package (branch mudlet)...\n")
+  cecho("<grey>Package Manager: <white>" .. (installedVer ~= "" and installedVer or "non installato") ..
+    "<grey> — .mpackage sul server: <white>" .. NebbieDash.version .. "\n")
   cecho("<grey>" .. url .. "\n")
   if type(installPackage) ~= "function" then
     cecho("<red>installPackage non disponibile — scarica il .mpackage a mano da GitHub.\n")
     return
   end
+  if installedVer ~= "" and type(uninstallPackage) == "function" then
+    cecho("<grey>Disinstallo '" .. pkg .. "' (Mudlet non sovrascrive un package gia' installato)...\n")
+    local uok, uerr = pcall(uninstallPackage, pkg)
+    if not uok then
+      cecho("<red>uninstallPackage fallito: " .. tostring(uerr) .. "\n")
+      cecho("<orange>Disinstalla manualmente da Package Manager (Alt+O) poi ripeti <yellow>npackageupdate<orange>.\n")
+      return
+    end
+  elseif installedVer ~= "" then
+    cecho("<orange>uninstallPackage non disponibile — disinstalla da Package Manager e reinstalla il .mpackage.\n")
+    return
+  end
   local ok, err = pcall(installPackage, url)
   if not ok then
     cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
+    cecho("<orange>Prova: Package Manager → rimuovi il package → Installa il .mpackage da GitHub (branch mudlet).\n")
     return
   end
-  cecho("<green>Download avviato. Al termine controlla Package Manager (versione = " ..
-    NebbieDash.version .. ") o digita <yellow>nfix<green>.\n")
+  cecho("<green>Download/install avviato. Controlla Package Manager (versione attesa: " ..
+    NebbieDash.version .. "). Poi <yellow>nfix<green> se serve.\n")
 end
 
 -- Ripetizione generica di un comando digitato direttamente al prompt, es.
