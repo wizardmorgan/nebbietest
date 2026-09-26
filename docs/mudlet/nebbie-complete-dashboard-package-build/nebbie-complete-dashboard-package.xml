@@ -15,15 +15,21 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.1"
+local PKG_VER = "1.15.2"
 
-if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
+local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
+if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
   return
+end
+if NebbieDash and _prevPkgVer and _prevPkgVer ~= PKG_VER then
+  NebbieDash._mainLoaded = false
+  NebbieDash._lastBootTime = nil
 end
 
 NebbieDash = NebbieDash or {}
 NebbieDash.version = PKG_VER
 NebbieDash._loadedVer = PKG_VER
+NebbieDash._upgradeFromVer = (_prevPkgVer and _prevPkgVer ~= PKG_VER) and _prevPkgVer or nil
 NebbieDash.package = "nebbie-complete-dashboard-package"
 
 -- ---------------------------------------------------------------------------
@@ -3769,6 +3775,11 @@ function NebbieDash.boot()
   NebbieDash.initGUI()
   NebbieDash.initHelpButton()
   NebbieDash._mainLoaded = true
+  if NebbieDash._upgradeFromVer then
+    cecho("<yellow>[NebbieDash] Aggiornamento v" .. NebbieDash._upgradeFromVer ..
+      " → v" .. NebbieDash.version .. ".\n")
+    NebbieDash._upgradeFromVer = nil
+  end
   cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto. Usa <yellow>nresync<green> dopo il login.\n")
 end
 

@@ -5,14 +5,17 @@ Guida rapida ai comandi (alias) del package, scritta dopo il primo test reale de
 
 ## Come installare/aggiornare
 
+Il file `.mpackage` aggiornato sta sul branch **`mudlet`** (non su `develop`):
+`docs/mudlet/nebbie-complete-dashboard-package.mpackage` nel repo GitHub.
+
 1. In Mudlet: `Package Manager` (icona valigetta, o `Giocatore → Gestione pacchetti`).
-2. Se `nebbie-complete-dashboard-package` è già installato, disinstallalo prima (bottone `-`),
-   poi chiudi e riapri il profilo (i widget grafici creati a runtime — miniconsole/bordo — non
-   vengono sempre ripuliti immediatamente dalla sola disinstallazione).
-3. Installa (bottone `+`) il file `docs/mudlet/nebbie-complete-dashboard-package.mpackage`
-   aggiornato.
-4. Riconnetti/ricarica il profilo. Deve comparire in output:
-   `[NebbieDash] v1.3.0 pronto. Usa nresync dopo il login.`
+2. Se `nebbie-complete-dashboard-package` è già installato, **disinstallalo** (bottone `-`).
+3. **Chiudi completamente Mudlet** e riaprilo (solo “riconnessione” non basta: altrimenti resta
+   in memoria la vecchia versione, es. v1.14.1, anche dopo un install).
+4. Installa (bottone `+`) il `.mpackage` scaricato dal branch **`mudlet`**.
+5. In output deve comparire **`[NebbieDash] v1.15.2 pronto`** (numero allineato al CHANGELOG).
+   Se vedi ancora **1.14.x**, hai installato un file vecchio o non hai riavviato Mudlet: ripeti
+   disinstall → **quit Mudlet** → reinstall. Poi `nresync` dopo il login.
 
 ## Icona e descrizione nella "Gestione pacchetti"
 

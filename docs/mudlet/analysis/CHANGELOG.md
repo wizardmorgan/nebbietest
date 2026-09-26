@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.2 — 2026-09-26
+
+- **Install/upgrade**: rilevamento cambio versione in sessione (`_upgradeFromVer`); messaggio
+  esplicito in boot. Documentato: disinstall + **quit Mudlet** + reinstall dal branch **`mudlet`**
+  (il `.mpackage` non è su `develop`).
+- **Versione interna** alzata a 1.15.2.
+
 ## 1.15.1 — 2026-09-26
 
 - **Corretto (cambio arma da pannello)**: sequenza come **nebbie-play-all**
