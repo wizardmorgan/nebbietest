@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.15"
+local PKG_VER = "1.15.16"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 
@@ -1279,25 +1279,46 @@ function NebbieDash.truncate(s, maxLen)
   return s:sub(1, math.max(1, maxLen - 1)) .. "…"
 end
 
--- A capo morbido per miniconsole (prefere spazi prima del limite).
+-- A capo morbido per miniconsole (Mudlet non fa wrap da solo: righe troppo
+-- lunghe vengono tagliate/nascoste). Preferisce virgola o spazio prima del limite.
 function NebbieDash.wrapPanelText(s, maxLen)
   maxLen = maxLen or 80
+  if maxLen < 8 then maxLen = 8 end
   local lines = {}
   local rest = (s or ""):match("^%s*(.-)%s*$")
   while rest and #rest > maxLen do
-    local chunk = rest:sub(1, maxLen)
-    local breakAt = chunk:reverse():find(" ", 1, true)
-    if breakAt and breakAt <= 24 then
-      local cut = maxLen - breakAt + 1
-      table.insert(lines, rest:sub(1, cut):match("^%s*(.-)%s*$"))
-      rest = rest:sub(cut + 1):match("^%s*(.-)%s*$")
-    else
-      table.insert(lines, chunk)
-      rest = rest:sub(maxLen + 1):match("^%s*(.-)%s*$")
+    local cut = maxLen
+    local searchFrom = math.min(#rest, maxLen)
+    local searchTo = math.max(1, searchFrom - 48)
+    for i = searchFrom, searchTo, -1 do
+      local c = rest:sub(i, i)
+      if c == "," or c == " " then
+        cut = i
+        break
+      end
     end
+    local piece = rest:sub(1, cut):match("^%s*(.-)%s*$")
+    if piece == "" then
+      piece = rest:sub(1, maxLen)
+      cut = maxLen
+    end
+    table.insert(lines, piece)
+    rest = rest:sub(cut + 1):match("^%s*(.-)%s*$")
   end
   if rest and rest ~= "" then table.insert(lines, rest) end
   return lines
+end
+
+-- Colonne utili per il wrap (larghezza bordo / font meno indentazione "  " / "    ").
+function NebbieDash.panelWrapCols(side, indentCols)
+  indentCols = indentCols or 0
+  local w = (side == "left") and NebbieDash.guiWidthEquip or NebbieDash.guiWidthRight
+  w = w or 320
+  local charW = (type(calcFontSize) == "function" and calcFontSize(NebbieDash.fontSize)) or 8
+  if type(charW) == "table" then charW = charW[1] or 8 end
+  charW = charW or 8
+  if charW <= 0 then charW = 8 end
+  return math.max(16, math.floor(w / charW) - indentCols - 1)
 end
 
 -- Costruisce l'elenco di righe da mostrare nel pannello equip: una riga per
@@ -2017,8 +2038,11 @@ function NebbieDash.refreshSpeedwalkPanel()
         -- nascosto finche' la sezione e' collassata
       else
         local preview = item.dirString or ""
-        local dirLines = NebbieDash.wrapPanelText(preview, NebbieDash.speedwalkPreviewMaxLen)
-        for idx, dline in ipairs(NebbieDash.wrapPanelText(item.desc, NebbieDash.speedwalkPreviewMaxLen)) do
+        local descCols = NebbieDash.panelWrapCols("right", 0)
+        local lineCols = NebbieDash.panelWrapCols("right", 2)
+        local noteCols = NebbieDash.panelWrapCols("right", 4)
+        local dirLines = NebbieDash.wrapPanelText(preview, lineCols)
+        for idx, dline in ipairs(NebbieDash.wrapPanelText(item.desc, descCols)) do
           if idx == 1 then
             cechoLink("NebbieDashSpeedwalks", "<cyan>" .. dline,
               string.format("NebbieDash.runSpeedwalk(%d)", item.walkIndex),
@@ -2032,7 +2056,7 @@ function NebbieDash.refreshSpeedwalkPanel()
           cecho("NebbieDashSpeedwalks", "<grey>  " .. dline .. "\n")
         end
         if item.note and item.note ~= "" then
-          local noteLines = NebbieDash.wrapPanelText(item.note, NebbieDash.speedwalkNoteMaxLen)
+          local noteLines = NebbieDash.wrapPanelText(item.note, noteCols)
           if #noteLines == 1 then
             cecho("NebbieDashSpeedwalks", "<grey>  (" .. noteLines[1] .. ")\n")
           else
