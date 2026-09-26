@@ -37,7 +37,7 @@ def read_pkg_ver_from_core():
 
 PKG_VER = read_pkg_ver_from_core()
 PKG_URL = (
-    "https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/"
+    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/"
     f"{PKG_NAME}.mpackage"
 )
 PKG_CREATED = "2026-09-26"

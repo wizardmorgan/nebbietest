@@ -9,9 +9,9 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.14"
+local PKG_VER = "1.15.15"
 local PKG_MPACKAGE_URL =
-  "https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage"
+  "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
@@ -1092,7 +1092,7 @@ function NebbieDash.cmdReloadSpeedwalks()
   if #NebbieDash.speedwalks == 0 and #skipped == 0 then
     cecho("<grey>Aggiungi righe attive (non commentate) tipo: (nome percorso) u,3w,n,s\n")
   end
-  cecho("<grey>Layout: <yellow>nheights 80<grey> = pannello Spell più alto (Speedwalk resta max ~25% finestra). Sezione: <yellow>(>> titolo)<grey>. Note manuali: <yellow>… (testo)<grey> in coda o riga <yellow>(nota)<grey> sotto il percorso.\n")
+  cecho("<grey>Layout: <yellow>nheights 30<grey> = più spazio speedwalk (sotto le spell). Colonna destra: <yellow>nwidth right auto<grey> / <yellow>nlayout<grey>. Sezione: <yellow>(>> titolo)<grey>. Note: <yellow>(testo)<grey> in coda riga o riga separata.\n")
 end
 
 -- Reinstalla/aggiorna il package dal branch mudlet su GitHub (stesso URL usato da GMCP Client.GUI).
