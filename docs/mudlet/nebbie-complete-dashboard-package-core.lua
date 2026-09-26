@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.14.1"
+local PKG_VER = "1.14.2"
 
 if NebbieDash and NebbieDash._loadedVer == PKG_VER and NebbieDash._mainLoaded then
   return
@@ -566,6 +566,9 @@ NebbieDash.speedwalks = {}
 -- un movimento e l'altro. Regolabile con nspeeddelay se serve un valore
 -- diverso.
 NebbieDash.speedwalkDelay = 0.35
+-- Pausa tra comandi del cambio arma (sequenza piu' lunga dello speedwalk).
+NebbieDash.weaponSwapDelay = 0.5
+NebbieDash._weaponSwapBusy = false
 
 function NebbieDash.speedwalkPath()
   local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
@@ -1069,7 +1072,7 @@ NebbieDash.HELP_TEXT = {
   { "nidentbatch [nome-toon]", "Identify batch: oload $3, stat/identify/junk con $o (keyword oload)." },
   { "nidentbatch resume [nome-toon]", "Riprende identify batch saltando righe gia' nel CSV di oggi." },
   { "nidentbatchreload", "Ricarica nebbie-ident-batch-commands.txt e nebbie-batch-items.csv." },
-  { "(pannello Armi)", "Clicca un'arma nota per impugnarla (rem+put attuale, get+wield scelta)." },
+  { "(pannello Armi)", "Clicca un'arma: rem borsa, get, rem vecchia, wield, put, wear (come nebbie-play-all)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) dell'arma per il pannello." },
   { "nhelp", "Mostra/nascondi questa finestra." },
 }
@@ -1699,7 +1702,8 @@ function NebbieDash.onWieldLine()
     NebbieDash.refreshDashboard()
   elseif existing.displayName ~= weaponName then
     existing.displayName = weaponName
-    existing.keyword = keyword
+    -- Non sovrascrivere keyword gia' fissata (es. da identify): l'euristica del
+    -- messaggio "Impugni ..." puo' essere piu' corta e rompere get/wield.
     NebbieDash.saveStore()
     NebbieDash.refreshDashboard()
   end
@@ -1742,6 +1746,10 @@ end
 function NebbieDash.cmdSwapWeapon(idx)
   local name = NebbieDash.currentChar
   if not name then return end
+  if NebbieDash._weaponSwapBusy then
+    cecho("<orange>[NebbieDash] Cambio arma gia' in corso.\n")
+    return
+  end
   local data = NebbieDash.getCharData(name)
   local target = data.weapons and data.weapons[idx]
   if not target or not target.keyword then return end
@@ -1752,23 +1760,19 @@ function NebbieDash.cmdSwapWeapon(idx)
     return
   end
 
-  local backpackKeywords, isOverride = NebbieDash.findBackpackKeywords(data)
-  local backpackKeyword = isOverride and backpackKeywords or NebbieDash.lastKeyword(backpackKeywords)
-  if backpackKeyword == "" then
-    cecho("<orange>[NebbieDash] Nessuno zaino rilevato (slot 'sulla schiena') — esegui <yellow>neq<orange> prima.\n")
+  local steps, err = NebbieDash.buildWeaponSwapSteps(data, target)
+  if not steps then
+    if err == "no_backpack" then
+      cecho("<orange>[NebbieDash] Nessuno zaino rilevato (slot 'sulla schiena') — esegui <yellow>neq<orange> prima.\n")
+    end
     return
   end
 
-  local steps = {}
-  if currentKeyword ~= "" then
-    table.insert(steps, "rem " .. currentKeyword)
-    table.insert(steps, "put " .. currentKeyword .. " " .. backpackKeyword)
-  end
-  table.insert(steps, "get " .. target.keyword .. " " .. backpackKeyword)
-  table.insert(steps, "wield " .. target.keyword)
-  for i, cmd in ipairs(steps) do
-    tempTimer(NebbieDash.speedwalkDelay * (i - 1), function() send(cmd, false) end)
-  end
+  NebbieDash._weaponSwapBusy = true
+  NebbieDash.runCommandSequence(steps, NebbieDash.weaponSwapDelay)
+  tempTimer(NebbieDash.weaponSwapDelay * #steps + 0.25, function()
+    NebbieDash._weaponSwapBusy = false
+  end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -1906,6 +1910,60 @@ function NebbieDash.lastKeyword(phrase)
   local last = nil
   for word in (phrase or ""):gmatch("%S+") do last = word end
   return last or ""
+end
+
+-- Evita che l'ultima parola euristica (es. "noor" da Nordagh) venga usata come
+-- contenitore e matchi l'arma invece dello zaino in put/get.
+function NebbieDash.pickItemCommandKeyword(phrase, isOverride, avoidPhrases)
+  phrase = (phrase or ""):match("^%s*(.-)%s*$") or ""
+  if phrase == "" then return "" end
+  if isOverride then return phrase end
+  local last = NebbieDash.lastKeyword(phrase)
+  for _, avoid in ipairs(avoidPhrases or {}) do
+    if avoid and avoid ~= "" and NebbieDash.keywordsOverlap(last, avoid) then
+      return phrase
+    end
+  end
+  if last ~= "" then return last end
+  return phrase
+end
+
+function NebbieDash.runCommandSequence(steps, delaySec)
+  delaySec = delaySec or NebbieDash.weaponSwapDelay or 0.5
+  for i, cmd in ipairs(steps or {}) do
+    tempTimer(delaySec * (i - 1), function() send(cmd, false) end)
+  end
+end
+
+-- Sequenza allineata a nebbie-play-all: togli borsa, prendi arma, rem vecchia,
+-- impugna, ripone vecchia in borsa, re-indossa borsa (put diretto nello zaino
+-- indossato falliva con keyword ambigue).
+function NebbieDash.buildWeaponSwapSteps(data, target)
+  local backPhrase, backOverride = NebbieDash.findBackpackKeywords(data)
+  if backPhrase == "" then return nil, "no_backpack" end
+  local weaponKw = (target.keyword or ""):match("^%s*(.-)%s*$")
+  if weaponKw == "" then return nil, "no_weapon" end
+  local wieldPhrase = NebbieDash.currentWieldedKeyword(data)
+  local wieldConfirmed = wieldPhrase ~= "" and data.eqUpdated
+  local avoidForBack = { wieldPhrase, weaponKw }
+  local backKw = NebbieDash.pickItemCommandKeyword(backPhrase, backOverride, avoidForBack)
+  local wieldKw = ""
+  if wieldConfirmed then
+    wieldKw = NebbieDash.pickItemCommandKeyword(wieldPhrase, false, { backPhrase, weaponKw })
+  end
+
+  local steps = {}
+  table.insert(steps, "rem " .. backKw)
+  table.insert(steps, "get " .. weaponKw .. " " .. backKw)
+  if wieldConfirmed and wieldKw ~= "" and not NebbieDash.keywordsOverlap(wieldKw, weaponKw) then
+    table.insert(steps, "rem " .. wieldKw)
+  end
+  table.insert(steps, "wield " .. weaponKw)
+  if wieldConfirmed and wieldKw ~= "" and not NebbieDash.keywordsOverlap(wieldKw, weaponKw) then
+    table.insert(steps, "put " .. wieldKw .. " " .. backKw)
+  end
+  table.insert(steps, "wear " .. backKw)
+  return steps, nil
 end
 
 -- ---------------------------------------------------------------------------

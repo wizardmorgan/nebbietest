@@ -1,5 +1,16 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.14.2 — 2026-09-26
+
+- **Corretto (cambio arma da pannello)**: sequenza allineata a `nebbie-play-all`
+  (`rem` borsa → `get` → `rem` vecchia → `wield` → `put` → `wear`), pausa 0.5s
+  tra comandi; evita `put` nello zaino indossato quando l'ultima parola euristica
+  (es. **noor** su Nordagh) matchava l'arma invece del contenitore
+  (`$p non e' un contenitore`).
+- **Corretto**: `Impugni` non sovrascrive piu' la keyword gia' fissata da `identify`
+  (evita `get boris` / `wield flamberga` con parole troncate).
+- **Versione interna** alzata a 1.14.2.
+
 ## 1.14.1 — 2026-09-23
 
 - **Corretto (autosplit)**: riconosce la risposta **`Your group consists of:`** (gruppo senza

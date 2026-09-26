@@ -674,6 +674,37 @@ check("armi: keywordsOverlap riconosce parole condivise",
 check("armi: keywordsOverlap nega quando non ci sono parole condivise",
   not NebbieDash.keywordsOverlap("ascia mannaia", "spada elf slayer"))
 
+line = "Impugni la Spada degli Elfi Assassina."
+NebbieDash.onWieldLine()
+check("armi: wield non sovrascrive keyword canonica da identify",
+  wdata.weapons[1].keyword == "spada elf slayer")
+
+check("armi: pickItemCommandKeyword usa frase intera se ultima parola collide col bersaglio da evitare",
+  NebbieDash.pickItemCommandKeyword("nordagh rosa spinosa noor", false, { "nordagh rosa spinosa noor" })
+    == "nordagh rosa spinosa noor")
+check("armi: lastKeyword euristica su Nordagh termina in noor",
+  NebbieDash.lastKeyword("nordagh rosa spinosa noor") == "noor")
+
+wdata.eq = {
+  { location = "impugnato", item = "Nordagh, La rosa spinosa dei Noor" },
+  { location = "sulla schiena", item = "Borsa Inesauribile dei Korred" },
+}
+wdata.eqUpdated = os.time()
+wdata.weapons = {
+  { displayName = "La Flamberga di Boris", keyword = "flamberga boris", type = "slash" },
+}
+local swapSteps = NebbieDash.buildWeaponSwapSteps(wdata, wdata.weapons[1])
+check("armi: buildWeaponSwapSteps non nil", swapSteps ~= nil)
+check("armi: swap inizia con rem zaino (korred)", swapSteps[1] == "rem korred")
+check("armi: swap get usa keyword identify completa",
+  swapSteps[2] == "get flamberga boris korred")
+check("armi: swap termina con wear zaino", swapSteps[#swapSteps] == "wear korred")
+local badPutNoor = false
+for _, c in ipairs(swapSteps) do
+  if c:match("^put .- noor$") then badPutNoor = true end
+end
+check("armi: swap nessun put con contenitore 'noor'", not badPutNoor)
+
 -- cmdSwapWeapon non deve generare errori sui casi limite (nessun personaggio
 -- attivo, indice inesistente, nessuno zaino rilevato).
 NebbieDash.currentChar = nil
