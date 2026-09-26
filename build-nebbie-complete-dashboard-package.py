@@ -1,0 +1,364 @@
+#!/usr/bin/env python3
+"""Build script for the "nebbie-complete-dashboard-package" Mudlet package.
+
+Genera un .mpackage minimo (config.lua + XML root, formato documentato in
+docs/mudlet/analysis/MUDLET-WIKI-NOTES.md §7) a partire da:
+  - docs/mudlet/nebbie-complete-dashboard-package-core.lua (logica principale)
+
+A differenza di build-nebbie-package.py (legacy, ~2000 righe, generazione da
+sorgente C++), questo script e' intenzionalmente piccolo: il package nuovo non
+genera centinaia di alias/trigger dal sorgente MUD, solo un piccolo set di
+comandi statici (vedi ALIASES sotto).
+
+Uso:
+    python3 build-nebbie-complete-dashboard-package.py
+"""
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+import zipfile
+import xml.sax.saxutils as sax
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PKG_NAME = "nebbie-complete-dashboard-package"
+CORE_LUA = os.path.join(HERE, "nebbie-complete-dashboard-package-core.lua")
+
+
+def read_pkg_ver_from_core():
+    with open(CORE_LUA, "r", encoding="utf-8") as f:
+        text = f.read()
+    m = re.search(r'local PKG_VER = "([^"]+)"', text)
+    if not m:
+        raise SystemExit(f"PKG_VER non trovato in {CORE_LUA}")
+    return m.group(1)
+
+
+PKG_VER = read_pkg_ver_from_core()
+PKG_URL = (
+    "https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/"
+    f"{PKG_NAME}.mpackage"
+)
+PKG_CREATED = "2026-09-26"
+PKG_AUTHOR = "Nebbie Arcane"
+PKG_ICON_FILE = "nebbie-dash-icon.png"
+PKG_ICON_SRC = os.path.join(HERE, "assets", PKG_ICON_FILE)
+PKG_TITLE = "Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane"
+# IMPORTANTE: aggiornare questa descrizione ad ogni release (vedi CHANGELOG.md
+# per il changelog completo) — e' quello che l'utente legge nella schermata
+# "Gestione pacchetti" di Mudlet PRIMA di installare/aggiornare, quindi deve
+# riassumere cosa fa il package alla versione corrente, non solo all'ultima
+# feature aggiunta.
+PKG_DESCRIPTION = f"""# Nebbie Dashboard ({PKG_VER})
+
+Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
+profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
+
+- **Equip** (bordo sinistro): tutti gli slot indossati, con posizione ed
+  oggetto letti da `eq`; segna anche gli slot liberi noti.
+- **Spell attivi** (bordo destro, in alto): elenco **tuo** in
+  `nebbie-cast-spells.txt` (solo self-cast che puoi lanciare); colori/tick da
+  `attrib`; click rilancia con bersaglio = PG attivo (`nclass` per cast/recall/mind).
+- **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
+  **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
+- **Speedwalk** (bordo destro, in basso): percorsi rapidi definiti a mano in
+  un file di testo, cliccabili per eseguirli in sequenza.
+- Layout ridimensionabile (larghezza automatica o manuale, altezza
+  spell/speedwalk regolabile) e persistente tra sessioni.
+- Tasto **"? Comandi"** in cima allo schermo: apre/chiude un elenco di tutti
+  i comandi disponibili (anche `nhelp`).
+- Numero di riga tra parentesi quadre nel pannello equip, come nel testo di
+  `eq` sul gioco (non e' pero' il numero di slot del gioco, solo la
+  posizione nella nostra lista — vedi `nhelp`/`neq`).
+- **Loot + split automatico**: alla fine di ogni combattimento a cui hai
+  partecipato, prende da solo le monete dal cadavere (normale o "pile of
+  bones", `nloot` anche a mano) e, se sei in gruppo, divide l'importo con
+  `split` (disattivabili singolarmente con `nautoloot off`/`nautosplit off`).
+- **Rialzarsi e recupero arma automatici**: `stand` da solo dopo una caduta;
+  `get`/`wield` da soli dell'arma persa dopo un disarmo (disattivabili con
+  `nautostand off`/`nautodisarm off`).
+- **Ripetizione comandi**: digita `.4s` per inviare `s` quattro volte (vale
+  per qualunque comando, non solo i movimenti).
+- **Corretto**: il personaggio attivo si azzera subito alla (ri)connessione,
+  invece di restare agganciato al personaggio precedente finché non arriva
+  un nuovo prompt — evita di lanciare comandi/spell sul personaggio sbagliato
+  appena dopo un cambio personaggio.
+- **Corretto**: rilevato un secondo formato di prompt reale (senza spazio
+  dopo i due punti, "X:" maiuscolo) che il pacchetto non riconosceva affatto
+  — con quel formato la dashboard non rilevava nessun personaggio.
+- **Macro fame/sete configurabile** (`nautofeed`, file `nebbie-hunger-
+  macros.txt`): alla fame/sete, esegue la sequenza di comandi configurata
+  per il personaggio attivo, con la parola chiave dello zaino ("sulla
+  schiena") derivata automaticamente (una sola parola, per non confondere
+  comandi come `wear`) e un cooldown di 3s per evitare doppie esecuzioni
+  quando fame e sete arrivano insieme.
+- **Parole chiave per oggetto condivise tra personaggi** (`nitemkeywords`,
+  file `nebbie-item-keywords.txt`): puoi fissare tu la parola chiave esatta
+  per un dato oggetto (per nome), usata al posto dell'euristica automatica
+  per il recupero arma dopo un disarmo e per lo zaino delle macro fame/sete
+  — vale per tutti i personaggi, non serve ripeterla.
+- **Corretto (importante)**: non serve più riavviare Mudlet dopo aver
+  (re)installato una nuova versione del pacchetto — prima, i trigger e le
+  funzionalità nuove non venivano attivati finché non si riavviava
+  completamente Mudlet.
+- **Speedwalk**: sezioni collassabili; formati `(desc) dirs` e `dirs (desc)`; `nspeedwalks` diagnostico.
+- **Aggiornamento package**: `npackageupdate` o GMCP `Client.GUI` al login (versione allineata a config.lua).
+- **Gestione armi** (pannello "Armi"): click per cambiare — sequenza borsa
+  come nebbie-play-all; keyword senza parentesi eq `(alone luminoso)`; `identify`
+  fissa la parola chiave canonica.
+- **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
+  comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
+  perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
+  script principale (ordine non garantito da Mudlet tra i due), chiamando
+  `NebbieDash.boot()` quando `NebbieDash` non esisteva ancora.
+- **Corretto (bug più grave, causa reale del pannello completamente vuoto
+  dopo un riavvio completo di Mudlet)**: lo script principale del pacchetto
+  aveva un errore di sintassi Lua nel punto di unione tra il codice e la
+  chiamata a `boot()` finale (un a-capo mancante), che ne impediva la
+  compilazione: NESSUNA funzione del pacchetto veniva definita, quindi
+  nessun comando (incluso `nresync`, `nhelp`, ecc.) funzionava più. Il
+  problema era mascherato da tempo dal fatto che le versioni precedenti già
+  caricate in memoria da Mudlet continuavano a funzionare fino al primo
+  riavvio completo del programma.
+- **Batch admin (`nbatch`, solo Sirio connesso)**: esegue in sequenza comandi
+  definiti in `nebbie-batch-commands.txt` su righe CSV (`nebbie-batch-items.csv`),
+  attende il prompt tra un comando e l'altro, ferma tutto su errore MUD e
+  scrive un log completo per ogni nome-toon in `<Toon>-YYYY-MM-DD.txt`.
+- **`nbatchverify`**: controlla i log batch rispetto al CSV e ai comandi attesi;
+  report in `<Toon>-YYYY-MM-DD.verify.txt`. Script offline:
+  `docs/mudlet/tests/verify_batch_log.py`.
+- **`nidentbatch`**: `oload $3` poi identify/junk con **`$ed`** = **`ED`+nome-toon** ($1);
+  output CSV giornaliero. **`nidentbatch resume`**: salta righe gia' nel CSV di oggi.
+
+Nessun comando viene inviato al MUD in automatico: usa `nresync` dopo il
+login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
+bloccato dopo un aggiornamento.
+
+Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
+`docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
+repository del progetto.
+"""
+BUILD_DIR = os.path.join(HERE, "nebbie-complete-dashboard-package-build")
+XML_PATH = os.path.join(BUILD_DIR, f"{PKG_NAME}.xml")
+CONFIG_PATH = os.path.join(BUILD_DIR, "config.lua")
+MPACKAGE_PATH = os.path.join(HERE, f"{PKG_NAME}.mpackage")
+
+# Comandi manuali
+# diversa espressa dall'utente). Nessuno di questi invia comandi al MUD in
+# automatico al boot (vedi RECOMMENDATION.md / divieti confermati nel LOG.md).
+ALIASES = [
+    ("nebbie-dash-fix", "^nfix$", "NebbieDash.runFix()"),
+    ("nebbie-dash-eq", "^neq$", "NebbieDash.cmdShowEq()"),
+    ("nebbie-dash-attrib", "^nattrib$", "NebbieDash.cmdShowAttrib()"),
+    ("nebbie-dash-resync", "^nresync$", "NebbieDash.cmdResyncAll()"),
+    ("nebbie-dash-gui", "^ngui$", "NebbieDash.toggleGUI()"),
+    ("nebbie-dash-layout", "^nlayout$", "NebbieDash.resetLayout()"),
+    ("nebbie-dash-char", "^nchar (.+)$", "NebbieDash.cmdSetCharacter(matches[2])"),
+    ("nebbie-dash-font", "^nfont (.+)$", "NebbieDash.cmdSetFont(matches[2])"),
+    ("nebbie-dash-width", "^nwidth (.+)$", "NebbieDash.cmdSetWidth(matches[2])"),
+    ("nebbie-dash-itemlen", "^nitemlen (.+)$", "NebbieDash.cmdSetItemLen(matches[2])"),
+    ("nebbie-dash-quickcast", "^([crm]) (.+)$", "NebbieDash.cmdQuickCast(matches[2], matches[3])"),
+    ("nebbie-dash-class", "^nclass (.+)$", "NebbieDash.cmdSetClass(matches[2])"),
+    ("nebbie-dash-spell-aliases", "^nspellaliases$", "NebbieDash.cmdListSpellAliases()"),
+    ("nebbie-dash-spell-aliases-reload", "^nspellaliasesreload$", "NebbieDash.cmdReloadSpellAliases()"),
+    ("nebbie-dash-spellwarn", "^nspellwarn (.+)$", "NebbieDash.cmdSetSpellWarn(matches[2])"),
+    ("nebbie-dash-speedwalks", "^nspeedwalks$", "NebbieDash.cmdReloadSpeedwalks()"),
+    ("nebbie-dash-speeddelay", "^nspeeddelay (.+)$", "NebbieDash.cmdSetSpeedDelay(matches[2])"),
+    ("nebbie-dash-heights", "^nheights (.+)$", "NebbieDash.cmdSetHeights(matches[2])"),
+    ("nebbie-dash-leftheights", "^nleftheights (.+)$", "NebbieDash.cmdSetLeftHeights(matches[2])"),
+    ("nebbie-dash-clanslot", "^nclanslot (.+)$", "NebbieDash.cmdSetClanSlot(matches[2])"),
+    ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
+    ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
+    ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),
+    ("nebbie-dash-split", "^nsplit (.+)$", "NebbieDash.cmdSplit(matches[2])"),
+    ("nebbie-dash-autoloot", "^nautoloot (.+)$", "NebbieDash.cmdSetAutoLoot(matches[2])"),
+    ("nebbie-dash-autostand", "^nautostand (.+)$", "NebbieDash.cmdSetAutoStand(matches[2])"),
+    ("nebbie-dash-autodisarm", "^nautodisarm (.+)$", "NebbieDash.cmdSetAutoDisarmRecover(matches[2])"),
+    ("nebbie-dash-repeat", r"^\.(\d+)\s*(.+)$", "NebbieDash.cmdRepeat(matches[2], matches[3])"),
+    ("nebbie-dash-autofeed", "^nautofeed (.+)$", "NebbieDash.cmdSetAutoFeed(matches[2])"),
+    ("nebbie-dash-hungermacros", "^nhungermacros$", "NebbieDash.cmdReloadHungerMacros()"),
+    ("nebbie-dash-itemkeywords", "^nitemkeywords$", "NebbieDash.cmdReloadItemKeywords()"),
+    ("nebbie-dash-forgetspell", "^nforgetspell (.+)$", "NebbieDash.cmdForgetSpell(matches[2])"),
+    ("nebbie-dash-batch", "^nbatch$", "NebbieDash.cmdBatch()"),
+    ("nebbie-dash-batch-filter", "^nbatch (.+)$", "NebbieDash.cmdBatch(matches[2])"),
+    ("nebbie-dash-batch-reload", "^nbatchreload$", "NebbieDash.cmdReloadBatch()"),
+    ("nebbie-dash-batch-verify", "^nbatchverify$", "NebbieDash.cmdVerifyBatch()"),
+    ("nebbie-dash-batch-verify-args", "^nbatchverify (.+)$", "NebbieDash.cmdVerifyBatch(matches[2])"),
+    ("nebbie-dash-ident-batch", "^nidentbatch$", "NebbieDash.cmdIdentBatch()"),
+    ("nebbie-dash-ident-batch-filter", "^nidentbatch (.+)$", "NebbieDash.cmdIdentBatch(matches[2])"),
+    ("nebbie-dash-ident-batch-reload", "^nidentbatchreload$", "NebbieDash.cmdReloadIdentBatch()"),
+    ("nebbie-dash-package-update", "^npackageupdate$", "NebbieDash.cmdPackageUpdate()"),
+]
+
+
+def validate_lua_syntax(code, label):
+    """Verifica con `luac -p` che 'code' sia Lua sintatticamente valido PRIMA
+    di scriverlo nel pacchetto. Bug reale osservato (2026-08-10, v1.8.1): un
+    a-capo mancante nella concatenazione tra core_code e boot_call produceva
+    uno script "core" che non compilava affatto — nessuna funzione del
+    pacchetto veniva definita, ma l'errore passava INOSSERVATO da questo
+    script di build (che validava solo core.lua da solo, mai il testo
+    REALMENTE spedito dentro l'XML) ed era mascherato in Mudlet dal codice
+    di una versione precedente ancora in memoria, finche' l'utente non ha
+    fatto un riavvio completo del programma. Questo controllo interrompe la
+    build (nessun file scritto/aggiornato) se il testo esatto che finira'
+    nel pacchetto non e' Lua valido, cosi' il problema si scopre qui e non
+    in produzione.
+    """
+    luac = shutil.which("luac")
+    if not luac:
+        print(f"ATTENZIONE: 'luac' non trovato nel PATH, salto la validazione sintattica di '{label}'.")
+        return
+    with tempfile.NamedTemporaryFile("w", suffix=".lua", delete=False, encoding="utf-8") as tmp:
+        tmp.write(code)
+        tmp_path = tmp.name
+    try:
+        result = subprocess.run([luac, "-p", tmp_path], capture_output=True, text=True)
+        if result.returncode != 0:
+            raise SystemExit(
+                f"BUILD INTERROTTA: errore di sintassi Lua in '{label}' (nessun file scritto).\n"
+                f"{result.stderr.strip()}"
+            )
+    finally:
+        os.remove(tmp_path)
+
+
+def lua_long_string(text):
+    """Racchiude 'text' in una stringa Lua a parentesi lunghe ([[...]]),
+    scegliendo un livello di '=' abbastanza alto da non collidere mai con
+    eventuali sequenze di chiusura gia' presenti nel testo."""
+    level = 0
+    marker = "]]"
+    while marker in text:
+        level += 1
+        marker = "]" + ("=" * level) + "]"
+    eq = "=" * level
+    return f"[{eq}[{text}]{eq}]"
+
+
+def cdata(text):
+    # CDATA non puo' contenere la sequenza "]]>" letteralmente.
+    return "<![CDATA[" + text.replace("]]>", "]]]]><![CDATA[>") + "]]>"
+
+
+def build_xml(core_code):
+    # Chiamata a boot() sia nello script "core" (che si esegue SUBITO ad ogni
+    # (re)installazione a caldo del package — vedi nota in installTriggers()/
+    # boot() nel core.lua per il perche') sia nello script "boot" agganciato
+    # a sysLoadEvent (ridondanza difensiva per il normale avvio di Mudlet).
+    # Nessun controllo di versione qui: boot() e' idempotente e si occupa da
+    # solo di evitare doppie esecuzioni troppo vicine nel tempo.
+    #
+    # Guardia "if type(NebbieDash) ~= 'table' then return end": Mudlet NON
+    # garantisce che i due <Script> (questo, "boot", e "core") vengano
+    # eseguiti nell'ordine in cui appaiono in questo file XML — in pratica si
+    # e' osservato che "boot" (nome che viene prima alfabeticamente di
+    # "core") puo' essere eseguito PRIMA che il chunk di "core" abbia anche
+    # solo definito la tabella globale NebbieDash, con errore risultante
+    # "attempt to index global 'NebbieDash' (a nil value)" (segnalato
+    # dall'utente al primo avvio dopo un'installazione pulita, 2026-08-10).
+    # Senza questa guardia lo script "boot" andava in errore silenziosamente
+    # ignorato dall'utente ma visibile in output; CON la guardia si limita a
+    # non fare nulla in quel caso (va bene: il boot() vero e proprio arriva
+    # comunque dalla chiamata identica appesa in fondo allo script "core",
+    # che a quel punto ha gia' definito NebbieDash nello stesso chunk). Per i
+    # successivi VERI eventi sysLoadEvent (riconnessioni durante la sessione,
+    # non il caricamento iniziale), NebbieDash esiste sempre gia' a quel
+    # punto, quindi la ridondanza difensiva resta intatta.
+    boot_call = '''if type(NebbieDash) ~= "table" then
+  return
+end
+local ok, err = pcall(function() NebbieDash.boot() end)
+if not ok then
+  cecho("<red>[NebbieDash] errore boot: " .. tostring(err) .. "\\n")
+end'''
+
+    # Valida ESATTAMENTE il testo che finira' in ciascuno dei due <script> del
+    # pacchetto (non solo core.lua da solo, vedi nota in validate_lua_syntax).
+    core_script_text = core_code + "\n\n" + boot_call
+    validate_lua_syntax(core_script_text, f"{PKG_NAME} - core")
+    validate_lua_syntax(boot_call, f"{PKG_NAME} - boot")
+
+    parts = []
+    parts.append('<?xml version="1.0" encoding="UTF-8"?>')
+    parts.append('<!DOCTYPE MudletPackage>')
+    parts.append('<MudletPackage version="1.001">')
+    parts.append(' <ScriptPackage>')
+
+    parts.append('  <Script isActive="yes" isFolder="no">')
+    parts.append(f'   <name>{PKG_NAME} - core</name>')
+    parts.append(f'   <script>{cdata(core_script_text)}</script>')
+    parts.append(f'   <packageName>{PKG_NAME}</packageName>')
+    parts.append('  </Script>')
+
+    parts.append('  <Script isActive="yes" isFolder="no">')
+    parts.append(f'   <name>{PKG_NAME} - boot</name>')
+    parts.append(f'   <script>{cdata(boot_call)}</script>')
+    parts.append('   <eventHandlerList>')
+    parts.append('    <string>sysLoadEvent</string>')
+    parts.append('   </eventHandlerList>')
+    parts.append(f'   <packageName>{PKG_NAME}</packageName>')
+    parts.append('  </Script>')
+
+    parts.append(' </ScriptPackage>')
+    parts.append(' <AliasPackage>')
+    for name, regex, call in ALIASES:
+        parts.append('  <Alias isActive="yes" isFolder="no">')
+        parts.append(f'   <name>{sax.escape(name)}</name>')
+        parts.append(f'   <script>{cdata(call)}</script>')
+        parts.append('   <command></command>')
+        parts.append(f'   <packageName>{PKG_NAME}</packageName>')
+        parts.append(f'   <regex>{sax.escape(regex)}</regex>')
+        parts.append('  </Alias>')
+    parts.append(' </AliasPackage>')
+    parts.append('</MudletPackage>')
+    return "\n".join(parts) + "\n"
+
+
+def main():
+    with open(CORE_LUA, "r", encoding="utf-8") as f:
+        core_code = f.read()
+
+    os.makedirs(BUILD_DIR, exist_ok=True)
+
+    xml_content = build_xml(core_code)
+    with open(XML_PATH, "w", encoding="utf-8") as f:
+        f.write(xml_content)
+
+    if not os.path.exists(PKG_ICON_SRC):
+        raise SystemExit(f"Icona mancante: {PKG_ICON_SRC}")
+
+    config_lines = [
+        f"mpackage = {lua_long_string(PKG_NAME)}",
+        f"author = {lua_long_string(PKG_AUTHOR)}",
+        f"icon = {lua_long_string(PKG_ICON_FILE)}",
+        f"title = {lua_long_string(PKG_TITLE)}",
+        f"description = {lua_long_string(PKG_DESCRIPTION)}",
+        f"version = {lua_long_string(PKG_VER)}",
+        f"created = {lua_long_string(PKG_CREATED)}",
+        f"website = {lua_long_string(PKG_URL)}",
+    ]
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        f.write("\n".join(config_lines) + "\n")
+
+    if os.path.exists(MPACKAGE_PATH):
+        os.remove(MPACKAGE_PATH)
+    with zipfile.ZipFile(MPACKAGE_PATH, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(CONFIG_PATH, "config.lua")
+        z.write(XML_PATH, f"{PKG_NAME}.xml")
+        # Percorso richiesto da Mudlet per l'icona nella schermata "Gestione
+        # pacchetti" (verificato in src/dlgPackageManager.cpp del repo Mudlet:
+        # cerca <nomePackage>/.mudlet/Icon/<icon> dentro la cartella in cui il
+        # pacchetto viene scompattato, cioe' la radice dello zip stesso).
+        z.write(PKG_ICON_SRC, f".mudlet/Icon/{PKG_ICON_FILE}")
+
+    size = os.path.getsize(MPACKAGE_PATH)
+    print(f"Scritto {MPACKAGE_PATH} ({size} bytes)")
+    print(f"Scritto {XML_PATH}")
+    print(f"Scritto {CONFIG_PATH}")
+    print(f"Icona inclusa: {PKG_ICON_SRC} -> .mudlet/Icon/{PKG_ICON_FILE}")
+
+
+if __name__ == "__main__":
+    main()

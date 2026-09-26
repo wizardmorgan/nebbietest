@@ -1,0 +1,1055 @@
+-- Smoke test offline (fuori da Mudlet) per la logica pura di parsing.
+-- Non testa trigger/GUI (richiedono l'API Mudlet reale), solo le funzioni Lua
+-- pure che analizzano prompt ed eq con i dati reali forniti dall'utente.
+
+-- Mock minimale delle API Mudlet usate al top-level dello script (side-effect free)
+function getMudletHomeDir() return "/tmp" end
+io = io or {}
+io.exists = function() return false end
+table.save = function() end
+table.load = function() end
+function cecho() end
+function tempTrigger() return nil end
+function tempRegexTrigger() return nil end
+function disableTrigger() end
+function enableTrigger() end
+function killTrigger() end
+local lastSent = nil
+local sentLog = {}
+function send(cmd) lastSent = cmd; table.insert(sentLog, cmd) end
+function tempTimer() end
+function setBorderRight() end
+function setBorderLeft() end
+function createMiniConsole() end
+function createLabel() end
+function setBackgroundColor() end
+function setMiniConsoleFontSize() end
+function calcFontSize() return 8, 14 end
+function getMainWindowSize() return 1024, 768 end
+function moveWindow() end
+function resizeWindow() end
+function clearWindow() end
+function hideWindow() end
+function showWindow() end
+function setLabelClickCallback() end
+function setLabelToolTip() end
+function moveLabel() end
+function resizeLabel() end
+function setLabelStyleSheet() end
+function echo() end
+function cechoLink() end
+registerAnonymousEventHandler = function() end
+
+local scriptDir = arg and arg[0] and arg[0]:match("^(.*)[/\\][^/\\]+$") or "."
+dofile(scriptDir .. "/../nebbie-complete-dashboard-package-core.lua")
+
+local failures = 0
+local function check(name, cond)
+  if cond then
+    print("OK   " .. name)
+  else
+    print("FAIL " .. name)
+    failures = failures + 1
+  end
+end
+
+-- Test 1: parsing prompt reale (Q&A.md Round 3)
+local promptLine = "NomiyaMaki H: 747/747 M: 532/532 V: 158/158 x:-238860738 *:* *:* [[D]] G:3449502 >>"
+local parsed = NebbieDash.parsePromptLine(promptLine)
+check("prompt: parsed non-nil", parsed ~= nil)
+if parsed then
+  check("prompt: name == NomiyaMaki", parsed.name == "NomiyaMaki")
+  check("prompt: hp == 747", parsed.hp == 747)
+  check("prompt: hpmax == 747", parsed.hpmax == 747)
+  check("prompt: mana == 532", parsed.mana == 532)
+  check("prompt: move == 158", parsed.move == 158)
+  check("prompt: xfield == -238860738", parsed.xfield == -238860738)
+  check("prompt: gold == 3449502", parsed.gold == 3449502)
+  check("prompt: codes == D", parsed.codes == "D")
+end
+
+-- Test 1b: il pattern del CODICE LEGACY (per confronto) NON deve matchare -- lo verifichiamo
+-- non richiamando codice legacy (non importato qui), il punto è già dimostrato in LOG.md/Q&A.md
+-- leggendo il codice; qui verifichiamo solo che il NOSTRO pattern funzioni sul dato reale.
+
+-- Test 2: rilevamento personaggio da riga prompt
+NebbieDash.onPromptLine_test = function(text)
+  line = text
+  NebbieDash.onPromptLine()
+end
+NebbieDash.onPromptLine_test(promptLine)
+check("character: currentChar == NomiyaMaki", NebbieDash.currentChar == "NomiyaMaki")
+
+-- Test 3: capture eq completa sui 21 slot reali forniti dall'utente
+local eqLines = {
+  "Stai usando:",
+  "[ 1] <sul dito destro>       Il sigillo delle ombre",
+  "[ 2] <sul dito sinistro>     La bandiera britannica",
+  "[ 3] <intorno al collo>      Il Ciondolo con la Testa di Jeeg Robot",
+  "[ 4] <intorno al collo>      Una collana di perline",
+  "[ 5] <sul corpo>             Un tubino rinforzato con una grossa Union Jack (in condizioni",
+  "eccellenti)",
+  "[ 6] <in testa>              Un cerchietto tempestato di Diamanti Rossi (in condizioni eccellenti)",
+  "[ 7] <sulle gambe>           Dei gambali di piastra scintillanti (hanno un alone luminoso) (in",
+  "ottime condizioni)",
+  "[ 8] <ai piedi>              Gli stivali del lungo viaggio (in condizioni eccellenti)",
+  "[ 9] <sulle mani>            Il Guanto dell'Infinito (hanno un alone luminoso) (in condizioni",
+  "eccellenti)",
+  "[10] <sulle braccia>         Una manica dell'abito di Twiggy (emettono un forte ronzio) (in",
+  "condizioni eccellenti)",
+  "[11] <come scudo>            The Cross (in condizioni eccellenti)",
+  "[12] <intorno al corpo>      Una giacca di carapace d'insetto opera di NomiyaMaki (in condizioni",
+  "eccellenti)",
+  "[13] <intorno alla vita>     A feathered belt (in condizioni eccellenti)",
+  "[14] <al polso destro>       Un bracciale a pois bianchi e rossi (in condizioni eccellenti)",
+  "[15] <al polso sinistro>     Un bracciale di plastica rosa (in condizioni eccellenti)",
+  "[16] <impugnato>             La Flamberga di Boris",
+  "[17] <tenuto>                Happy End of the World",
+  "[18] <sulla schiena>         It's a Beautiful Day",
+  "[19] <all'orecchio destro>   Un orecchino tigrato made in Tokio (invisibile) (in condizioni",
+  "eccellenti)",
+  "[20] <all'orecchio sinistro> Una rosa metallica (ha un alone luminoso) (in condizioni eccellenti)",
+  "[21] <davanti agli occhi>    Glass no Kamen",
+  "",
+}
+
+NebbieDash.startEqCapture()
+for _, l in ipairs(eqLines) do
+  line = l
+  NebbieDash.onEqCaptureLine()
+end
+
+local data = NebbieDash.getCharData("NomiyaMaki")
+check("eq: 21 slot popolati", NebbieDash.countSlots(data.eq) == 21)
+check("eq: slot 16 impugnato (item)", data.eq[16].item == "La Flamberga di Boris")
+check("eq: slot 16 impugnato (location)", data.eq[16].location == "impugnato")
+check("eq: slot 5 con word-wrap concatenato", data.eq[5].item == "Un tubino rinforzato con una grossa Union Jack (in condizioni eccellenti)")
+check("eq: slot 5 location", data.eq[5].location == "sul corpo")
+check("eq: slot 9 con word-wrap concatenato", data.eq[9].item == "Il Guanto dell'Infinito (hanno un alone luminoso) (in condizioni eccellenti)")
+check("eq: slot 21 ultimo (item)", data.eq[21].item == "Glass no Kamen")
+check("eq: slot 21 ultimo (location)", data.eq[21].location == "davanti agli occhi")
+check("eq: capture chiusa (nessuna capture attiva)", NebbieDash._eqCapture == nil)
+
+-- Test 3b: la posizione viene sempre letta dalla riga stessa, non da una
+-- tabella statica per indice — verifica esplicita che un ordine "anomalo"
+-- (slot non contiguo, posizione diversa da quella che una tabella statica
+-- indicizzata per numero avrebbe assunto) venga comunque letto correttamente.
+NebbieDash.setCurrentCharacter("TestAnomalo", true)
+NebbieDash.startEqCapture()
+local anomalLines = {
+  "Stai usando:",
+  "[ 1] <ai piedi>              Un paio di guanti (anomalia apposta per il test)",
+  "[ 8] <davanti agli occhi>    Degli occhiali",
+  "",
+}
+for _, l in ipairs(anomalLines) do
+  line = l
+  NebbieDash.onEqCaptureLine()
+end
+local dataAnomalo = NebbieDash.getCharData("TestAnomalo")
+check("eq anomalo: slot 1 usa la location dalla riga (non la tabella statica 'sul dito destro')",
+  dataAnomalo.eq[1].location == "ai piedi")
+check("eq anomalo: slot 8 usa la location dalla riga (non la tabella statica 'ai piedi')",
+  dataAnomalo.eq[8].location == "davanti agli occhi")
+
+-- Test 3c: buildEquipRows segna correttamente gli slot vuoti (richiesta:
+-- "adesso si leggono tutti gli slot ma non mi segna cosa è vuoto"). Su
+-- TestAnomalo sono occupati solo 2 dei 21 slot canonici.
+local rowsAnomalo = NebbieDash.buildEquipRows(dataAnomalo)
+check("equip rows: 21 righe (nessuno slot clan, disattivato di default)", #rowsAnomalo == 21)
+local occupied, empty = 0, 0
+for _, row in ipairs(rowsAnomalo) do
+  if row.empty then empty = empty + 1 else occupied = occupied + 1 end
+end
+check("equip rows: 2 occupati", occupied == 2)
+check("equip rows: 19 vuoti", empty == 19)
+for _, row in ipairs(rowsAnomalo) do
+  if row.location == "ai piedi" then
+    check("equip rows: 'ai piedi' occupato con l'oggetto giusto",
+      not row.empty and row.item == "Un paio di guanti (anomalia apposta per il test)")
+  end
+  if row.location == "sul dito destro" then
+    check("equip rows: 'sul dito destro' marcato vuoto", row.empty == true)
+  end
+end
+
+-- Test 3d: con tutti i 21 slot occupati (NomiyaMaki), nessuna riga deve
+-- risultare vuota.
+local rowsFull = NebbieDash.buildEquipRows(data)
+local emptyFull = 0
+for _, row in ipairs(rowsFull) do
+  if row.empty then emptyFull = emptyFull + 1 end
+end
+check("equip rows: eq completo -> zero slot vuoti", emptyFull == 0)
+
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+
+-- Test 4: capture attrib con esempio da AGENT-PROMPT-ANALISI-ZERO.txt
+local attribLines = {
+  "Spells attivi:",
+  "--------------",
+  "Spell : 'true sight' - 74",
+  "Spell : 'darkness' - 9",
+  "",
+}
+NebbieDash.startAttribCapture()
+for _, l in ipairs(attribLines) do
+  line = l
+  NebbieDash.onAttribCaptureLine()
+end
+local data2 = NebbieDash.getCharData("NomiyaMaki")
+check("attrib: 2 spell conosciute dopo il primo attrib", #data2.knownSpellOrder == 2)
+check("attrib: 'true sight' attiva a 74 tick",
+  data2.knownSpellOrder[1] == "true sight" and data2.activeSpells["true sight"] == 74)
+check("attrib: 'darkness' attiva a 9 tick",
+  data2.knownSpellOrder[2] == "darkness" and data2.activeSpells["darkness"] == 9)
+
+-- Test 4b: un secondo `attrib` con solo "darkness" (es. "true sight" e'
+-- scaduta) NON deve far sparire "true sight" dal pannello — deve restare
+-- visibile/cliccabile ma diventare rossa (inattiva), richiesta esplicita
+-- dell'utente (2026-08-10): le spell "rimangono in rosso" invece di
+-- sparire, cosi' resta comodo rilanciarle con un click.
+local attribLines2 = {
+  "Spells attivi:",
+  "--------------",
+  "Spell : 'darkness' - 80",
+  "",
+}
+NebbieDash.startAttribCapture()
+for _, l in ipairs(attribLines2) do
+  line = l
+  NebbieDash.onAttribCaptureLine()
+end
+local data2b = NebbieDash.getCharData("NomiyaMaki")
+check("attrib: l'elenco conosciuto resta cumulativo (2, non sostituito)", #data2b.knownSpellOrder == 2)
+check("attrib: 'darkness' aggiornata a 80 tick dopo il rilancio", data2b.activeSpells["darkness"] == 80)
+check("attrib: colore darkness verde dopo il rilancio (80 > soglia 5)",
+  (tonumber(data2b.activeSpells["darkness"]) or 0) > NebbieDash.spellWarnTicks)
+check("attrib: 'true sight' non più nell'output diventa inattiva (nil in activeSpells)",
+  data2b.activeSpells["true sight"] == nil)
+
+-- Test 4c: bug segnalato (2026-08-10) — cambiando personaggio e tornando su
+-- NomiyaMaki, le spell conosciute devono restare (non vanno perse) ma lo
+-- stato "attivo" deve azzerarsi (tutte rosse finche' non si rilancia
+-- attrib), per non fidarsi di una durata residua ormai vecchia.
+NebbieDash.setCurrentCharacter("Mirari", true)
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+local data2c = NebbieDash.getCharData("NomiyaMaki")
+check("cambio personaggio: le spell conosciute restano (non sparite)", #data2c.knownSpellOrder == 2)
+check("cambio personaggio: lo stato attivo si azzera (tutte rosse finche' non riattribuisci)",
+  next(data2c.activeSpells) == nil)
+
+-- Test 5: parsing speedwalk (Q&A.md Round 5) — esempio esatto fornito
+-- dall'utente: "u,3w,n,s,2d" = up, west, west, west, north, south, down, down.
+local steps = NebbieDash.parseSpeedwalkDirs("u,3w,n,s,2d")
+check("speedwalk: 8 passi totali", #steps == 8)
+check("speedwalk: sequenza esatta",
+  table.concat(steps, ",") == "u,w,w,w,n,s,d,d")
+
+local swEntry = NebbieDash.parseSpeedwalkLine("(dalla fontana) u,3w,n,s,2d")
+check("speedwalk: riga valida non nil", swEntry ~= nil)
+if swEntry then
+  check("speedwalk: descrizione estratta", swEntry.desc == "dalla fontana")
+  check("speedwalk: 8 passi dalla riga completa", #swEntry.steps == 8)
+end
+
+check("speedwalk: riga commento ignorata", NebbieDash.parseSpeedwalkLine("# commento") == nil)
+check("speedwalk: riga vuota ignorata", NebbieDash.parseSpeedwalkLine("") == nil)
+check("speedwalk: riga senza parentesi ignorata", NebbieDash.parseSpeedwalkLine("u,3w,n,s,2d") == nil)
+check("speedwalk: skip reason senza parentesi",
+  NebbieDash.speedwalkLineSkipReason("u,3w,n,s,2d") ~= nil)
+check("speedwalk: skip reason commento nil",
+  NebbieDash.speedwalkLineSkipReason("# ok") == nil)
+check("speedwalk: BOM UTF-8",
+  NebbieDash.parseSpeedwalkLine("\239\187\191(dalla fontana) n,s") ~= nil)
+
+local swSuffix = NebbieDash.parseSpeedwalkLine("n (bianco latte, Myst)")
+check("speedwalk: formato suffisso valido", swSuffix ~= nil)
+if swSuffix then
+  check("speedwalk: suffisso descrizione", swSuffix.desc == "bianco latte, Myst")
+  check("speedwalk: suffisso passi", #swSuffix.steps == 1 and swSuffix.steps[1] == "n")
+end
+
+local swSpaces = NebbieDash.parseSpeedwalkLine("u,n 2w,n (grigio fumo, Drow City)")
+check("speedwalk: spazi al posto virgole", swSpaces ~= nil)
+if swSpaces then
+  check("speedwalk: spazi normalizzati", swSpaces.dirString == "u,n,2w,n")
+end
+
+check("speedwalk: sezione richiede >>",
+  NebbieDash.parseSpeedwalkSectionLine("(>> Pool di astral, da astral walk)") ~= nil)
+check("speedwalk: senza >> non e' sezione",
+  NebbieDash.parseSpeedwalkSectionLine("(Pool di astral, da astral walk)") == nil)
+check("speedwalk: sezione >> no skip reason",
+  NebbieDash.speedwalkLineSkipReason("(>> Pool di astral, da astral walk)") == nil)
+check("speedwalk: nota tra parentesi",
+  NebbieDash.parseSpeedwalkParenNoteLine("(Dwaen by transport via plants)") ~= nil)
+
+local hellFull =
+  "(hell, da fontana di myst) s,3e,run s,2n,2s,open trapdoor,d,3n,d,5s,w,3n,d (w medusa, open secret, s,w,s,w,n ghost, w lich,3s,e dogretch,w,n,e mahat,w,n,w rilke,e,s,w Balor,e,s,w Vampire,w hellhoundx2, n Slavalous:w)"
+check("speedwalk: hell non e' nota standalone",
+  NebbieDash.parseSpeedwalkParenNoteLine(hellFull) == nil)
+local hellParsed = NebbieDash.parseSpeedwalkLine(hellFull)
+check("speedwalk: hell riga valida", hellParsed ~= nil)
+if hellParsed then
+  check("speedwalk: hell desc", hellParsed.desc == "hell, da fontana di myst")
+  check("speedwalk: hell nota trailing", hellParsed.note and hellParsed.note:find("medusa") ~= nil)
+  check("speedwalk: hell dirs senza nota", hellParsed.dirString:find("medusa") == nil)
+end
+
+local hell = NebbieDash.parseSpeedwalkLine(
+  "(hell, da fontana di myst) s,3e,d (w medusa, open secret)")
+check("speedwalk: nota finale inline", hell ~= nil and hell.note ~= nil)
+if hell then
+  check("speedwalk: dirs senza nota", hell.dirString:find("medusa") == nil)
+end
+
+-- Test 6: speedwalk con descrizione contenente una virgola e un'istruzione a
+-- piu' parole tra le direzioni (es. "enter pool") — esempio esatto fornito
+-- dall'utente. La descrizione tra parentesi puo' contenere virgole (il match
+-- e' su "fino alla prima parentesi chiusa", non sulla virgola), e ogni token
+-- senza un numero davanti viene inviato cosi' com'e', anche se contiene piu'
+-- parole.
+local swEntry2 = NebbieDash.parseSpeedwalkLine("(paul, da astral) u,n,2w,n,u,enter pool,4n,3w,6s")
+check("speedwalk complesso: riga valida non nil", swEntry2 ~= nil)
+if swEntry2 then
+  check("speedwalk complesso: descrizione con virgola interna", swEntry2.desc == "paul, da astral")
+  check("speedwalk complesso: 20 passi totali",
+    #swEntry2.steps == 20)
+  check("speedwalk complesso: sequenza esatta",
+    table.concat(swEntry2.steps, "|") ==
+    table.concat({ "u", "n", "w", "w", "n", "u", "enter pool", "n", "n", "n", "n", "w", "w", "w", "s", "s", "s", "s", "s", "s" }, "|"))
+end
+
+-- Test 7: cmdQuickCast — bersaglio sempre esplicito; spazio per altri PG.
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+NebbieDash.cmdQuickCast("c", "heal")
+check("quickcast: 'c heal' -> cast 'heal' NomiyaMaki (PG attivo)",
+  lastSent == "cast 'heal' NomiyaMaki")
+
+NebbieDash.cmdQuickCast("c", "heal bob")
+check("quickcast: 'c heal bob' -> cast 'heal' bob", lastSent == "cast 'heal' bob")
+
+NebbieDash.cmdQuickCast("c", "word of r")
+check("quickcast: 'c word of r' -> cast con PG attivo",
+  lastSent == "cast 'word of r' NomiyaMaki")
+
+NebbieDash.cmdQuickCast("c", "true sight", "NomiyaMaki")
+check("quickcast: bersaglio esplicito dal pannello invariato",
+  lastSent == "cast 'true sight' NomiyaMaki")
+
+NebbieDash.getCharData("NomiyaMaki").castPrefix = "r"
+NebbieDash.cmdQuickCast("r", "word of recall")
+check("quickcast: nclass r usa recall", lastSent == "recall 'word of recall' NomiyaMaki")
+NebbieDash.getCharData("NomiyaMaki").castPrefix = "c"
+
+NebbieDash.spellShortcuts = { he = { key = "he", spell = "heal" } }
+NebbieDash.cmdSpellShortcut("he", "bob")
+check("shortcut: he bob -> cast 'heal' bob", lastSent == "cast 'heal' bob")
+NebbieDash.cmdSpellShortcut("he")
+check("shortcut: he senza bersaglio -> PG attivo", lastSent == "cast 'heal' NomiyaMaki")
+NebbieDash.spellShortcuts = {}
+
+-- Test 8: loot + split automatico — testi REALI incollati dall'utente
+-- (2026-08-10): "Prendi gold coins da il corpo di ...", "C'erano N monete.",
+-- "But you are a member of no group?!", 'Your group "..." consists of:'.
+NebbieDash.autoSplit = true
+
+check("loot: parseLootCoinAmount moneta singola",
+  NebbieDash.parseLootCoinAmount("C'era una miserabile moneta.") == 1)
+check("loot: parseLootCoinAmount ignora echo stanza",
+  NebbieDash.parseLootCoinAmount("Qualcuno C'erano 10 monete.") == nil)
+check("loot: isGroupHeaderLine con nome gruppo",
+  NebbieDash.isGroupHeaderLine('$c0015Your group "I cacciatori" consists of:'))
+check("loot: isGroupHeaderLine senza nome gruppo",
+  NebbieDash.isGroupHeaderLine("$c0015Your group consists of:"))
+
+-- 8a: la riga "Prendi gold coins da ..." da sola non fa scattare nulla (non
+-- contiene l'importo, solo il nome del cadavere, che varia per ogni mostro).
+local sentBefore8a = #sentLog
+line = "Prendi gold coins da il corpo di Il grande drago verde delle foreste."
+NebbieDash.onLootLine()
+check("loot: riga 'Prendi...' da sola non genera comandi",
+  #sentLog == sentBefore8a)
+
+-- 8b: la riga con l'importo avvia il controllo gruppo (invio di "group").
+line = "C'erano 100000 monete."
+NebbieDash.onLootLine()
+check("loot: importo riconosciuto correttamente", NebbieDash._pendingSplitAmount == 100000)
+check("loot: dopo il loot invia 'group' per il controllo", lastSent == "group")
+
+-- 8c: risposta "da soli" -> nessuno split inviato, stato ripulito.
+line = "But you are a member of no group?!"
+NebbieDash.onGroupSoloLine()
+check("loot: da soli non invia alcuno split", lastSent == "group")
+check("loot: stato controllo gruppo ripulito (da soli)", NebbieDash._groupCheckActive == false)
+
+-- 8d: risposta "in gruppo" -> invia split con l'importo corretto.
+line = "C'erano 250 monete."
+NebbieDash.onLootLine()
+line = '$c0015Your group "I cacciatori di Draghi" consists of:'
+NebbieDash.onGroupHeaderLine()
+check("loot: in gruppo invia split con l'importo corretto", lastSent == "split 250")
+
+-- 8d2: gruppo senza nome custom (output server reale act.other.cpp).
+line = "C'erano 99 monete."
+NebbieDash.onLootLine()
+line = "$c0015Your group consists of:"
+NebbieDash.onGroupHeaderLine()
+check("loot: gruppo senza nome invia split", lastSent == "split 99")
+
+-- 8e: con nautosplit off, il loot non deve avviare alcun controllo gruppo.
+NebbieDash.autoSplit = false
+sentLog = {}
+line = "C'erano 42 monete."
+NebbieDash.onLootLine()
+check("loot: con autosplit off non invia 'group'", #sentLog == 0)
+NebbieDash.autoSplit = true
+
+-- 8f: nsplit manuale invia l'importo indicato senza passare dal loot.
+NebbieDash.cmdSplit("777")
+check("split manuale: 'nsplit 777' -> invia split 777", lastSent == "split 777")
+
+-- Test 9: loot automatico alla fine del combattimento — testi REALI
+-- incollati dall'utente (2026-08-10): "Uno Spazzino is dead! R.I.P." seguito
+-- da "La tua parte di esperienza e' di N punti." (anche con N=0/1).
+NebbieDash.autoLoot = true
+sentLog = {}
+line = "Uno Spazzino is dead! R.I.P."
+-- La riga "is dead!" da sola NON deve avviare il loot (potrebbe non essere
+-- una uccisione a cui hai partecipato tu): serve la riga "La tua parte...".
+check("combattimento: riga 'is dead!' da sola non genera comandi", #sentLog == 0)
+
+line = "La tua parte di esperienza e' di 1047 punti."
+NebbieDash.onCombatEndLine()
+check("combattimento: fine combattimento avvia il loot automatico", sentLog[1] == "get all.coin corp")
+
+-- Anche con 0 punti di esperienza (uccisione minima) deve comunque scattare.
+sentLog = {}
+line = "La tua parte di esperienza e' di 0 punti."
+NebbieDash.onCombatEndLine()
+check("combattimento: scatta anche con 0 punti esperienza", sentLog[1] == "get all.coin corp")
+
+-- Con nautoloot off non deve inviare nulla.
+NebbieDash.autoLoot = false
+sentLog = {}
+NebbieDash.onCombatEndLine()
+check("combattimento: con nautoloot off non invia nulla", #sentLog == 0)
+NebbieDash.autoLoot = true
+
+-- Test 10: bug segnalato (2026-08-10) — cambio personaggio non aggiornava
+-- la dashboard (self-cast finiva sul personaggio precedente). Fix: alla
+-- (ri)connessione il personaggio attivo viene azzerato subito, invece di
+-- restare quello vecchio finche' non arriva un nuovo prompt.
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+check("connessione: personaggio attivo prima del reset", NebbieDash.currentChar == "NomiyaMaki")
+NebbieDash.onConnectionEvent()
+check("connessione: personaggio azzerato subito alla riconnessione", NebbieDash.currentChar == nil)
+check("connessione: in attesa di un nuovo prompt", NebbieDash._awaitingPromptAfterConnect == true)
+-- Un self-cast prima che arrivi un nuovo prompt non deve inviare nulla al MUD
+-- (nessun PG attivo = sendCastSpell rifiuta, niente bersaglio sul vecchio PG).
+sentLog = {}
+lastSent = nil
+NebbieDash.cmdQuickCast("c", "heal nom")
+check("connessione: quickcast senza personaggio attivo non invia comandi",
+  #sentLog == 0 and lastSent == nil)
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+
+-- Test 11: rialzarsi automatico dopo una caduta — testo REALE fornito
+-- dall'utente (2026-08-10): "Illyari schiva il tuo urto. Inciampi e cadi
+-- per terra." (la parte fissa e' "Inciampi e cadi per terra.").
+NebbieDash.autoStand = true
+sentLog = {}
+NebbieDash.onFallLine()
+check("caduta: 'stand' inviato automaticamente", lastSent == "stand")
+
+NebbieDash.autoStand = false
+sentLog = {}
+NebbieDash.onFallLine()
+check("caduta: con nautostand off non invia nulla", #sentLog == 0)
+NebbieDash.autoStand = true
+
+-- Test 12: recupero automatico dell'arma dopo un disarmo — testo REALE
+-- fornito dall'utente: "Ti disarmano e la Flamberga di Boris vola dalla tua
+-- presa." Le parole chiave attese ("flamberga boris") sono confermate
+-- dall'utente come quelle che funzionano davvero in gioco per quest'arma.
+check("parole chiave: 'la Flamberga di Boris' -> 'flamberga boris'",
+  NebbieDash.extractItemKeywords("la Flamberga di Boris") == "flamberga boris")
+check("parole chiave: apostrofo gestito (\"dell'Infinito\" -> \"infinito\")",
+  NebbieDash.extractItemKeywords("Il Guanto dell'Infinito") == "guanto infinito")
+check("parole chiave: parentesi condizione/alone ignorate",
+  NebbieDash.extractItemKeywords("Il Guanto dell'Infinito (hanno un alone luminoso) (in condizioni eccellenti)")
+    == "guanto infinito")
+check("parole chiave: rosa metallica senza 'alone'/'eccellenti'",
+  NebbieDash.extractItemKeywords("Una rosa metallica (ha un alone luminoso) (in condizioni eccellenti)")
+    == "rosa metallica")
+
+NebbieDash.autoDisarmRecover = true
+sentLog = {}
+line = "Ti disarmano e la Flamberga di Boris vola dalla tua presa."
+NebbieDash.onDisarmLine()
+check("disarmo: 'get flamberga boris' inviato automaticamente", sentLog[1] == "get flamberga boris")
+
+NebbieDash.autoDisarmRecover = false
+sentLog = {}
+NebbieDash.onDisarmLine()
+check("disarmo: con nautodisarm off non invia nulla", #sentLog == 0)
+NebbieDash.autoDisarmRecover = true
+
+-- Test 13: ripetizione comandi generica (".4s" -> s,s,s,s), richiesta
+-- esplicitamente dall'utente. tempTimer e' un mock no-op in questo test
+-- (non esegue MAI i callback, nemmeno con delay 0 — stesso limite gia'
+-- presente per gli altri invii differiti di questo file, es. il secondo
+-- comando di nloot), quindi qui verifichiamo solo la validazione dei
+-- parametri: nessun errore e nessun invio "a sorpresa" per input non validi.
+local repeatOk = pcall(NebbieDash.cmdRepeat, "4", "s")
+check("ripetizione: 'cmdRepeat(4, s)' non genera errori", repeatOk)
+
+sentLog = {}
+NebbieDash.cmdRepeat("0", "s")
+check("ripetizione: conteggio zero non invia nulla", #sentLog == 0)
+
+sentLog = {}
+NebbieDash.cmdRepeat("abc", "s")
+check("ripetizione: conteggio non numerico non invia nulla", #sentLog == 0)
+
+sentLog = {}
+NebbieDash.cmdRepeat("4", "")
+check("ripetizione: comando vuoto non invia nulla", #sentLog == 0)
+
+-- Test 14: bug segnalato (2026-08-10) — "la dashboard non sta rilevando
+-- alcun personaggio". Testo REALE del prompt incollato dall'utente, formato
+-- MAI visto prima (nessuno spazio dopo i due punti, "X:" maiuscolo, "- */*
+-- - *-* -" tra i campi): personaggio "Mirari". Il parsing (parsePromptLine)
+-- gestiva gia' questo formato, ma lo SHIELD del trigger (" M: ", con lo
+-- spazio finale) non matchava mai "M:533/533" (nessuno spazio dopo i due
+-- punti) -> onPromptLine() non veniva mai chiamata -> nessun personaggio
+-- rilevato per l'intera sessione con questo formato di prompt.
+local mirariPrompt = "Mirari H:655/655 M:533/533 V:271/271 X:284016936 - */* - *-* - [[------T----]] - G:38267520 >>"
+local parsedMirari = NebbieDash.parsePromptLine(mirariPrompt)
+check("prompt (formato 2): parsed non-nil", parsedMirari ~= nil)
+if parsedMirari then
+  check("prompt (formato 2): name == Mirari", parsedMirari.name == "Mirari")
+  check("prompt (formato 2): hp == 655", parsedMirari.hp == 655)
+  check("prompt (formato 2): mana == 533", parsedMirari.mana == 533)
+  check("prompt (formato 2): move == 271", parsedMirari.move == 271)
+  check("prompt (formato 2): xfield == 284016936", parsedMirari.xfield == 284016936)
+  check("prompt (formato 2): gold == 38267520", parsedMirari.gold == 38267520)
+  check("prompt (formato 2): codes == ------T----", parsedMirari.codes == "------T----")
+end
+NebbieDash.currentChar = nil
+NebbieDash.onPromptLine_test(mirariPrompt)
+check("prompt (formato 2): personaggio rilevato correttamente (Mirari)", NebbieDash.currentChar == "Mirari")
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+
+-- Test 15: macro fame/sete configurabile per personaggio — richiesta
+-- esplicita dell'utente (2026-08-10), con esempio REALE fornito:
+-- "rem korred, get cornucopia korred, .5 drink cornu, put cornu korred,
+-- wear korred", derivando "korred" dallo zaino nello slot "sulla schiena"
+-- ("[18] <sulla schiena> Borsa Inesauribile dei Korred").
+check("fame/sete: parole chiave zaino ('Borsa Inesauribile dei Korred' -> 'borsa inesauribile korred')",
+  NebbieDash.extractItemKeywords("Borsa Inesauribile dei Korred") == "borsa inesauribile korred")
+
+local hungerData = NebbieDash.getCharData("NomiyaMaki")
+hungerData.eq = { { location = "sulla schiena", item = "Borsa Inesauribile dei Korred" } }
+hungerData.eqUpdated = os.time()
+check("fame/sete: parola chiave zaino derivata dal pannello equip",
+  NebbieDash.findBackpackKeywords(hungerData) == "borsa inesauribile korred")
+
+-- expandMacroSteps deve espandere ".5 drink cornu" in 5 passi identici,
+-- lasciando invariati i passi normali (stessa sintassi ".Ncomando"
+-- dell'alias di ripetizione generica, ma interpretata qui via script,
+-- senza passare dall'input dell'utente).
+local expanded = NebbieDash.expandMacroSteps("rem {zaino}, get cornucopia {zaino}, .5 drink cornu, put cornu {zaino}, wear {zaino}")
+check("fame/sete: la macro si espande in 9 passi (4 fissi + 5 drink)", #expanded == 9)
+check("fame/sete: primo passo invariato", expanded[1] == "rem {zaino}")
+check("fame/sete: passi 'drink cornu' espansi correttamente (5 volte)",
+  expanded[3] == "drink cornu" and expanded[4] == "drink cornu" and expanded[7] == "drink cornu")
+check("fame/sete: ultimo passo invariato", expanded[9] == "wear {zaino}")
+
+-- lastKeyword(): usata per il segnaposto {zaino}, prende SOLO l'ultima
+-- parola (non tutta la frase) — bug reale osservato in gioco (2026-08-10):
+-- passare la frase intera ("borsa inesauribile korred") a `wear` confondeva
+-- il parser del gioco, che trattava "inesauribile" come una posizione del
+-- corpo ("Non puoi indossare nulla su un inesauribile.").
+check("fame/sete: lastKeyword estrae solo l'ultima parola",
+  NebbieDash.lastKeyword(NebbieDash.findBackpackKeywords(hungerData)) == "korred")
+
+-- Sostituzione del segnaposto {zaino} con la sola ultima parola chiave.
+NebbieDash.hungerMacros["NomiyaMaki"] = "rem {zaino}, get cornucopia {zaino}, .5 drink cornu, put cornu {zaino}, wear {zaino}"
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+local substitutedTest = NebbieDash.hungerMacros["NomiyaMaki"]:gsub("{zaino}", NebbieDash.lastKeyword(NebbieDash.findBackpackKeywords(hungerData)))
+check("fame/sete: segnaposto {zaino} sostituito con una sola parola chiave",
+  substitutedTest == "rem korred, get cornucopia korred, .5 drink cornu, put cornu korred, wear korred")
+
+-- Senza macro configurata per il personaggio, non deve generare errori (solo un avviso).
+NebbieDash._lastHungerMacroRun = 0
+local noMacroOk = pcall(NebbieDash.runHungerMacro)
+check("fame/sete: nessuna macro configurata non genera errori", noMacroOk)
+
+-- Con nautofeed off, il trigger non deve fare nulla (verificato tramite pcall,
+-- dato che tempTimer e' un mock no-op e non possiamo osservare i send differiti).
+NebbieDash.autoFeed = false
+local offOk = pcall(NebbieDash.onHungerThirstLine)
+check("fame/sete: con nautofeed off non genera errori", offOk)
+NebbieDash.autoFeed = true
+
+-- Test 17: parole chiave per oggetto condivise tra personaggi — richiesta
+-- esplicita dell'utente (2026-08-10): "l'oggetto da cui prendere la
+-- cornucopia potrà cambiare... e se assegnassimo delle key predefinite per
+-- oggetto in modo da condividerle con tutti i personaggi?". Un override nel
+-- file nebbie-item-keywords.txt ha SEMPRE la precedenza sull'euristica
+-- automatica, e viene usato per intero (senza il taglio a singola parola)
+-- perche' l'utente lo ha scritto sapendo che funziona davvero in gioco.
+check("keyword oggetto: senza override si usa l'euristica automatica",
+  select(1, NebbieDash.resolveItemKeywords("Borsa Inesauribile dei Korred")) == "borsa inesauribile korred")
+check("keyword oggetto: senza override, isOverride == false",
+  select(2, NebbieDash.resolveItemKeywords("Borsa Inesauribile dei Korred")) == false)
+
+NebbieDash.itemKeywordOverrides["borsa inesauribile dei korred"] = "korred"
+check("keyword oggetto: con override (case-insensitive) si usa la parola scritta dall'utente",
+  select(1, NebbieDash.resolveItemKeywords("Borsa Inesauribile dei Korred")) == "korred")
+check("keyword oggetto: con override, isOverride == true",
+  select(2, NebbieDash.resolveItemKeywords("Borsa Inesauribile dei Korred")) == true)
+
+-- Con l'override attivo, la macro fame/sete deve usare la parola intera
+-- scritta dall'utente (non tagliata a una sola parola dall'euristica).
+NebbieDash._lastHungerMacroRun = 0
+local resolvedWithOverride, isOverrideWithOverride = NebbieDash.findBackpackKeywords(hungerData)
+check("fame/sete: con override lo zaino usa esattamente la parola configurata",
+  resolvedWithOverride == "korred" and isOverrideWithOverride == true)
+NebbieDash.itemKeywordOverrides = {}
+
+-- Il file di override e' usato anche dal recupero arma dopo un disarmo.
+NebbieDash.itemKeywordOverrides["la flamberga di boris"] = "flamberga boris"
+check("keyword oggetto: usata anche per il recupero arma dopo disarmo",
+  select(1, NebbieDash.resolveItemKeywords("la Flamberga di Boris")) == "flamberga boris")
+NebbieDash.itemKeywordOverrides = {}
+
+-- Parsing di una riga del file (formato "Nome oggetto: parole chiave").
+local parsedName, parsedKeywords = NebbieDash.parseItemKeywordLine("Borsa Inesauribile dei Korred: korred")
+check("keyword oggetto: parsing riga file (nome)", parsedName == "borsa inesauribile dei korred")
+check("keyword oggetto: parsing riga file (parole chiave)", parsedKeywords == "korred")
+check("keyword oggetto: riga commento ignorata", NebbieDash.parseItemKeywordLine("# commento") == nil)
+check("keyword oggetto: riga vuota ignorata", NebbieDash.parseItemKeywordLine("   ") == nil)
+check("keyword oggetto: riga senza ':' ignorata", NebbieDash.parseItemKeywordLine("qualcosa senza due punti") == nil)
+
+-- Test 18: bug segnalato (2026-08-10) — "serve rilanciare Mudlet ogni volta
+-- che carico un nuovo package". Causa reale: installTriggers() aveva un
+-- guard "una volta sola per sempre" che impediva la ri-registrazione dei
+-- trigger dopo il primo avvio della sessione Lua — qualunque trigger NUOVO
+-- introdotto da una versione aggiornata non veniva mai creato senza un
+-- riavvio completo di Mudlet. Fix: installTriggers()/teardownTriggers() ora
+-- sono idempotenti (si possono richiamare quante volte serve, es. ad ogni
+-- reinstallazione a caldo del package).
+local install1Ok = pcall(NebbieDash.installTriggers)
+check("trigger: prima installazione non genera errori", install1Ok)
+local install2Ok = pcall(NebbieDash.installTriggers)
+check("trigger: una seconda installazione (simula un reinstall a caldo) non genera errori", install2Ok)
+local teardownOk = pcall(NebbieDash.teardownTriggers)
+check("trigger: teardown chiamabile piu' volte senza errori", teardownOk)
+
+-- boot() deve essere richiamabile piu' volte senza errori (idempotente),
+-- simulando esattamente cio' che succede reinstallando il package a caldo.
+local boot1Ok = pcall(NebbieDash.boot)
+check("boot: prima chiamata non genera errori", boot1Ok)
+NebbieDash._lastBootTime = nil -- forza una vera riesecuzione (non solo il dedupe temporale)
+local boot2Ok = pcall(NebbieDash.boot)
+check("boot: una seconda chiamata (simula reinstall) non genera errori", boot2Ok)
+
+-- Test 16: bug segnalato in gioco (2026-08-10) — "Hai Fame." e "Hai sete."
+-- arrivano spesso INSIEME, facendo scattare entrambi i trigger e avviando
+-- la macro DUE VOLTE in parallelo (le due sequenze si accavallano: il
+-- secondo "rem" fallisce perche' il primo ha gia' tolto lo zaino un
+-- istante prima — confermato dai messaggi doppi osservati in gioco). Fix:
+-- cooldown tra un'esecuzione e la successiva.
+NebbieDash._lastHungerMacroRun = 0
+check("fame/sete: prima chiamata entro il cooldown NON e' bloccata",
+  os.time() - NebbieDash._lastHungerMacroRun >= NebbieDash.hungerMacroCooldownSec)
+NebbieDash._lastHungerMacroRun = os.time()
+check("fame/sete: una seconda chiamata immediata sarebbe bloccata dal cooldown",
+  os.time() - NebbieDash._lastHungerMacroRun < NebbieDash.hungerMacroCooldownSec)
+-- onHungerThirstLine non deve generare errori indipendentemente dal cooldown.
+local secondCallOk = pcall(NebbieDash.onHungerThirstLine)
+check("fame/sete: chiamata bloccata dal cooldown non genera errori", secondCallOk)
+NebbieDash._lastHungerMacroRun = 0
+
+-- Test 19: gestione armi — testi REALI fornito dall'utente (2026-08-10):
+-- l'output di `identify` su "spada elf slayer" (WEAPON, Tipo di danno
+-- 'SLASH'). Il wield ("Impugni <arma>.") popola la lista con tipo
+-- sconosciuto; il successivo identify aggiorna il tipo sull'entry esistente
+-- (matching per parola in comune tra la keyword euristica del wield e
+-- quella "canonica" riportata da identify).
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+local wdata = NebbieDash.getCharData("NomiyaMaki")
+wdata.weapons = {}
+
+line = "Impugni la Spada degli Elfi Assassina."
+NebbieDash.onWieldLine()
+check("armi: wield popola la lista (1 arma)", #wdata.weapons == 1)
+check("armi: tipo iniziale sconosciuto (nil)", wdata.weapons[1] and wdata.weapons[1].type == nil)
+
+line = "Oggetto: 'spada elf slayer', Tipo di Oggetto WEAPON"
+NebbieDash.onIdentifyObjectLine()
+line = "Tipo di danno: 'SLASH'"
+NebbieDash.onIdentifyDamageLine()
+check("armi: identify aggiorna il tipo sull'arma esistente (non ne crea una seconda)", #wdata.weapons == 1)
+check("armi: tipo aggiornato a 'slash' (minuscolo)", wdata.weapons[1].type == "slash")
+
+-- Un identify su un oggetto non-WEAPON non deve toccare la lista armi.
+local weaponsCountBefore = #wdata.weapons
+line = "Oggetto: 'anello dei venti', Tipo di Oggetto ARMOR"
+NebbieDash.onIdentifyObjectLine()
+line = "Tipo di danno: 'BLUNT'"
+NebbieDash.onIdentifyDamageLine()
+check("armi: identify su oggetto non-WEAPON viene ignorato", #wdata.weapons == weaponsCountBefore)
+
+-- Un identify il cui esito arriva senza un'arma corrispondente in elenco
+-- crea comunque una nuova entry (per non perdere l'informazione).
+line = "Oggetto: 'ascia mannaia', Tipo di Oggetto WEAPON"
+NebbieDash.onIdentifyObjectLine()
+line = "Tipo di danno: 'BLUNT'"
+NebbieDash.onIdentifyDamageLine()
+check("armi: identify su arma non ancora in lista ne crea una nuova", #wdata.weapons == 2)
+
+check("armi: keywordsOverlap riconosce parole condivise",
+  NebbieDash.keywordsOverlap("spada elfi assassina", "spada elf slayer"))
+check("armi: keywordsOverlap nega quando non ci sono parole condivise",
+  not NebbieDash.keywordsOverlap("ascia mannaia", "spada elf slayer"))
+
+NebbieDash.itemKeywordOverrides = { flamberga = "flamberga boris", beautiful = "beautiful" }
+check("armi: override parziale sul nome eq",
+  NebbieDash.findItemKeywordOverride("La Flamberga di Boris") == "flamberga boris")
+check("armi: resolveWeaponSwapKeyword preferisce override su displayName",
+  NebbieDash.resolveWeaponSwapKeyword({
+    displayName = "La Flamberga di Boris", keyword = "boris", type = "slash",
+  }) == "flamberga boris")
+
+line = "Impugni la Spada degli Elfi Assassina."
+NebbieDash.onWieldLine()
+check("armi: wield non sovrascrive keyword canonica da identify",
+  wdata.weapons[1].keyword == "spada elf slayer")
+
+check("armi: pickItemCommandKeyword usa frase intera se ultima parola collide col bersaglio da evitare",
+  NebbieDash.pickItemCommandKeyword("nordagh rosa spinosa noor", false, { "nordagh rosa spinosa noor" })
+    == "nordagh rosa spinosa noor")
+
+wdata.eq = {
+  { location = "impugnato", item = "Nordagh, La rosa spinosa dei Noor" },
+  { location = "sulla schiena", item = "Borsa Inesauribile dei Korred" },
+}
+wdata.eqUpdated = os.time()
+wdata.weapons = {
+  { displayName = "La Flamberga di Boris", keyword = "boris", type = "slash" },
+}
+local swapSteps = NebbieDash.buildWeaponSwapSteps(wdata, wdata.weapons[1])
+check("armi: buildWeaponSwapSteps non nil", swapSteps ~= nil)
+check("armi: swap inizia con rem zaino (korred)", swapSteps[1] == "rem korred")
+check("armi: swap get usa override flamberga boris",
+  swapSteps[2] == "get flamberga boris korred")
+
+NebbieDash.itemKeywordOverrides = {}
+wdata.eq = { [16] = { location = "impugnato", item = "Nordagh, La rosa spinosa dei Noor" } }
+wdata.eqUpdated = os.time()
+NebbieDash.patchCachedEqLocation(wdata, "impugnato", "La Flamberga di Boris")
+local impRow = nil
+for _, row in ipairs(NebbieDash.buildEquipRows(wdata)) do
+  if row.location == "impugnato" then impRow = row; break end
+end
+check("armi: patchCachedEqLocation aggiorna impugnato",
+  impRow and not impRow.empty and impRow.item == "La Flamberga di Boris")
+check("armi: currentWieldedKeyword segue cache impugnato",
+  NebbieDash.keywordsOverlap(NebbieDash.currentWieldedKeyword(wdata), "flamberga boris"))
+check("armi: swap termina con wear zaino", swapSteps[#swapSteps] == "wear korred")
+
+-- cmdSwapWeapon non deve generare errori sui casi limite (nessun personaggio
+-- attivo, indice inesistente, nessuno zaino rilevato).
+NebbieDash.currentChar = nil
+local swapOkNoChar = pcall(NebbieDash.cmdSwapWeapon, 1)
+check("armi: cmdSwapWeapon senza personaggio attivo non genera errori", swapOkNoChar)
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+
+local swapOkBadIdx = pcall(NebbieDash.cmdSwapWeapon, 99)
+check("armi: cmdSwapWeapon con indice inesistente non genera errori", swapOkBadIdx)
+
+sentLog = {}
+wdata.eqUpdated = false
+NebbieDash.cmdSwapWeapon(1)
+check("armi: cmdSwapWeapon senza equip sincronizzato non invia nulla (nessuno zaino noto)", #sentLog == 0)
+
+-- Test 20: bug segnalato (2026-08-10) — "lo split è di nuovo partito mentre
+-- ero solo". Analisi: loot quasi simultanei (es. piu' uccisioni ravvicinate
+-- da un incantesimo ad area) potevano avviare DUE controlli gruppo in
+-- parallelo, e la risposta "group" del primo (magari da solo) poteva
+-- chiudere anche il controllo del secondo (magari in gruppo) senza
+-- verificare a quale generazione appartenesse davvero. Fix: se un
+-- controllo e' gia' attivo, il nuovo importo si accumula in quello in
+-- corso invece di avviarne un secondo.
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+NebbieDash.autoSplit = true
+NebbieDash._groupCheckActive = false
+NebbieDash._pendingSplitAmount = nil
+sentLog = {}
+NebbieDash.startSplitFlow(100)
+check("split: primo loot avvia il controllo gruppo ('group' inviato)", sentLog[#sentLog] == "group")
+check("split: importo in sospeso registrato", NebbieDash._pendingSplitAmount == 100)
+sentLog = {}
+NebbieDash.startSplitFlow(50)
+check("split: secondo loot mentre il controllo e' attivo NON invia un secondo 'group'", #sentLog == 0)
+check("split: l'importo del secondo loot si accumula nel controllo in corso", NebbieDash._pendingSplitAmount == 150)
+sentLog = {}
+line = "But you are a member of no group?!"
+NebbieDash.onGroupSoloLine()
+check("split: risposta 'da solo' non invia alcuno split (importo combinato scartato)", #sentLog == 0)
+check("split: controllo gruppo chiuso dopo la risposta", NebbieDash._groupCheckActive == false)
+
+-- Test 21: secondo formato REALE di fine combattimento (uccisione in
+-- solitaria): "La tua esperienza e' aumentata di N punti." — testo fornito
+-- dall'utente il 2026-08-10 insieme a "Gwynyar is dead!"/"A mindflayer is
+-- dead!" ecc. Prima di questo fix l'autoloot non scattava affatto con
+-- questa frase (solo con "La tua parte di esperienza e' di N punti.").
+NebbieDash.autoLoot = true
+sentLog = {}
+line = "La tua esperienza e' aumentata di 225000 punti."
+NebbieDash.onCombatEndLine()
+check("combattimento (solitaria): 'La tua esperienza e' aumentata di' avvia il loot automatico",
+  sentLog[1] == "get all.coin corp")
+
+-- Test 22: nforgetspell — richiesto esplicitamente dopo che l'utente ha
+-- segnalato spell non appartenenti al personaggio attivo rimaste visibili
+-- (probabile dato residuo da prima del fix del cambio-personaggio).
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+local fdata = NebbieDash.getCharData("NomiyaMaki")
+fdata.knownSpellOrder = { "mirror images", "shield", "darkness" }
+fdata.activeSpells = { ["mirror images"] = 5 }
+NebbieDash.cmdForgetSpell("Mirror Images")
+check("nforgetspell: rimossa dall'elenco conosciuto (case-insensitive)", #fdata.knownSpellOrder == 2)
+check("nforgetspell: rimossa anche da activeSpells", fdata.activeSpells["mirror images"] == nil)
+check("nforgetspell: le altre spell restano intatte", fdata.knownSpellOrder[1] == "shield" and fdata.knownSpellOrder[2] == "darkness")
+local forgetOkMissing = pcall(NebbieDash.cmdForgetSpell, "spell inesistente")
+check("nforgetspell: nome non presente non genera errori", forgetOkMissing)
+local forgetOkEmpty = pcall(NebbieDash.cmdForgetSpell, "")
+check("nforgetspell: argomento vuoto non genera errori", forgetOkEmpty)
+
+-- Test 23: scadenza spell in tempo reale — richiesto esplicitamente
+-- (2026-08-10), testi REALI forniti dall'utente. Diventano rosse SUBITO al
+-- messaggio di scadenza, senza aspettare il prossimo 'attrib'.
+fdata.knownSpellOrder = { "sanctuary", "armor", "aid", "true sight", "darkness" }
+fdata.activeSpells = { sanctuary = 10, armor = 20, aid = 30, ["true sight"] = 40, darkness = 50 }
+line = "Non ti senti piu' cosi' invulnerabile."
+NebbieDash.onSpellExpiredLine("sanctuary")
+check("scadenza spell: 'sanctuary' disattivata (rossa) dopo il messaggio di scadenza reale",
+  fdata.activeSpells["sanctuary"] == nil)
+NebbieDash.onSpellExpiredLine("armor")
+check("scadenza spell: 'armor' disattivata", fdata.activeSpells["armor"] == nil)
+NebbieDash.onSpellExpiredLine("aid")
+check("scadenza spell: 'aid' disattivata", fdata.activeSpells["aid"] == nil)
+NebbieDash.onSpellExpiredLine("true sight")
+check("scadenza spell: 'true sight' disattivata", fdata.activeSpells["true sight"] == nil)
+NebbieDash.onSpellExpiredLine("darkness")
+check("scadenza spell: 'darkness' disattivata", fdata.activeSpells["darkness"] == nil)
+check("scadenza spell: 5 pattern reali configurati (nessuno inventato oltre a quelli forniti)",
+  #NebbieDash.SPELL_EXPIRY_PATTERNS == 5)
+local expiredOkUnknown = pcall(NebbieDash.onSpellExpiredLine, "spell mai vista")
+check("scadenza spell: nome non conosciuto non genera errori", expiredOkUnknown)
+
+-- Test 21: batch admin (nbatch) — parsing CSV, normalizzazione key, sostituzione placeholder.
+check("batch: normalizeBatchKey spazi -> trattini minuscolo",
+  NebbieDash.normalizeBatchKey("egida foresta EDGreenBlade") == "egida-foresta-edgreenblade")
+local csvFields = NebbieDash.parseCsvLine('GreenBlade,"egida foresta EDGreenBlade",34512,15809')
+check("batch: parseCsvLine legge 4 campi", #csvFields == 4)
+check("batch: parseCsvLine mantiene spazi nel key raw", csvFields[2] == "egida foresta EDGreenBlade")
+local row = {
+  nomeToon = "GreenBlade",
+  keyRaw = "egida foresta EDGreenBlade",
+  keyNorm = NebbieDash.normalizeBatchKey("egida foresta EDGreenBlade"),
+  vnumAttuale = "34512",
+  vnumOriginale = "15809",
+}
+check("batch: substituteBatchVars oload", NebbieDash.substituteBatchVars("oload $3", row) == "oload 34512")
+check("batch: substituteBatchVars stat key normalizzata",
+  NebbieDash.substituteBatchVars("stat $2", row) == "stat egida-foresta-edgreenblade")
+check("batch: substituteBatchVars osave completo",
+  NebbieDash.substituteBatchVars("osave $2 $3 $4", row) == "osave egida-foresta-edgreenblade 34512 15809")
+NebbieDash.batchItems = {
+  { nomeToon = "GreenBlade", keyRaw = "a", keyNorm = "a", vnumAttuale = "1", vnumOriginale = "2" },
+  { nomeToon = "NomiyaMaki", keyRaw = "b", keyNorm = "b", vnumAttuale = "3", vnumOriginale = "4" },
+}
+local filtered = NebbieDash.filterBatchRows(NebbieDash.batchItems, "greenblade")
+check("batch: filterBatchRows case-insensitive", #filtered == 1 and filtered[1].nomeToon == "GreenBlade")
+check("batch: batchDetectError su messaggio oload noto",
+  NebbieDash.batchDetectError({ "There is no such object." }))
+check("batch: batchDetectError ignora output ok",
+  not NebbieDash.batchDetectError({ "Oggetto creato.", "Sirio H: 100/100 M: 50/50 V: 30/30 x:0 *:* *:* [[TD]] G:0 >>" }))
+NebbieDash.currentChar = "Mirari"
+NebbieDash.batchCommands = { "oload $3" }
+NebbieDash.batchItems = { row }
+NebbieDash.cmdBatch("greenblade")
+check("batch: cmdBatch avvia anche senza Sirio preimpostato (nchar preposto)",
+  NebbieDash._batch ~= nil and NebbieDash._batch.active == true
+  and NebbieDash._batch.commands[1] == "nchar Sirio")
+if NebbieDash._batch then NebbieDash.batchStop("test cleanup") end
+check("batch: batchCommandsWithNcharPrefix non duplica nchar",
+  NebbieDash.batchCommandsWithNcharPrefix({ "nchar Sirio", "oload $3" })[1] == "nchar Sirio"
+  and #NebbieDash.batchCommandsWithNcharPrefix({ "nchar Sirio", "oload $3" }) == 2)
+check("batch: batchIsNcharCommand", NebbieDash.batchIsNcharCommand("nchar Sirio"))
+NebbieDash.currentChar = nil
+NebbieDash._batch = { active = true, rowIdx = 1, cmdIdx = 1, rows = { row }, commands = { "nchar Sirio" },
+  stepLines = {}, awaitingOutput = true, waitMode = "local", mode = "admin" }
+NebbieDash.batchRunCurrentStep()
+check("batch: nchar Sirio locale imposta currentChar", NebbieDash.currentChar == "Sirio")
+NebbieDash._batch = nil
+
+-- Test 22: nbatchverify — parse log e verifica sezione osave.
+local sampleLog = [[
+--- riga 1 — 10:30:01 ---
+CSV: GreenBlade,equilibrio EDGreenBlade,34424,9030
+[10:30:01] >>> oload 34424
+[10:30:04] >>> osave equilibrio-edgreenblade 34424 9030
+Ho salvato equilibrio edgreenblade con il vnum 34424 (originale 9030).
+--- batch terminato: completato (1 righe) (10:30:07) ---
+]]
+local sections = NebbieDash.parseBatchLogSections(sampleLog)
+check("verify: parseBatchLogSections trova 1 sezione", #sections == 1)
+local vrow = NebbieDash.rowFromCsvLine(sections[1].csvLine)
+local vcmds = { "oload $3", "osave $2 $3 $4" }
+local vok, vissues = NebbieDash.verifyBatchSection(sections[1], vrow, vcmds)
+check("verify: sezione osave OK con messaggio server", vok and #vissues == 0)
+
+local imm = NebbieDash.parseImmortalPromptLine("Sirio R1000 [On//60]>>")
+check("batch: parseImmortalPromptLine Sirio", imm and imm.name == "Sirio")
+check("batch: isAnyPromptLine prompt immortale", NebbieDash.isAnyPromptLine("Sirio R1000 [On//60]>>") ~= nil)
+check("batch: isAnyPromptLine non confonde riga narrativa",
+  NebbieDash.isAnyPromptLine("Adesso hai Elmo della Citta d'Ottone.") == nil)
+
+check("batch: batchIsEnterCommand riconosce [enter]", NebbieDash.batchIsEnterCommand("[enter]"))
+check("batch: batchSetsMenuWait su oedit", NebbieDash.batchSetsMenuWait("oedit rock"))
+check("batch: batchOutputHasMenuReady su -->",
+  NebbieDash.batchOutputHasMenuReady({ "Menu:", "-->" }))
+local _, enterLabel, enterWait = NebbieDash.batchPrepareCommand("[enter]", row)
+check("batch: batchPrepareCommand [enter] invia vuoto e attende prompt",
+  enterLabel == "[enter]" and enterWait == "prompt")
+local _, oeditLabel, oeditWait = NebbieDash.batchPrepareCommand("oedit $2", row)
+check("batch: batchPrepareCommand oedit attende menu",
+  oeditLabel == "oedit egida-foresta-edgreenblade" and oeditWait == "menu")
+check("batch: batchSectionHasCommand trova [enter] nel log timestampato",
+  NebbieDash.batchSectionHasCommand("[10:30:02] >>> [enter]\n", "[enter]"))
+
+local identLines = {
+  "La conoscenza ti pervade:",
+  "Oggetto: 'verse13 move lips EDEchoes', Tipo di Oggetto ARMOR V-Number Originario: 8304",
+  "L'oggetto e': ORGANIC MAGIC ANTI-THIEF ANTI-WARRIOR RESISTANT ARTIFACT ANTI-BARBARIAN ANTI-RANGER ANTI-PALADIN ANTI-MONK EDIT PERSONAL ",
+}
+local iname, itype, iflags, ivnum = NebbieDash.parseIdentifyBatchOutput(identLines)
+check("ident batch: parseIdentifyBatchOutput nome", iname == "verse13 move lips EDEchoes")
+check("ident batch: parseIdentifyBatchOutput tipo", itype == "ARMOR")
+check("ident batch: parseIdentifyBatchOutput vnum originario", ivnum == "8304")
+check("ident batch: parseIdentifyBatchOutput flags contiene EDIT PERSONAL",
+  iflags and iflags:find("EDIT PERSONAL", 1, true) ~= nil)
+check("ident batch: identBatchAppendRow scrive vnum-originario",
+  NebbieDash.identBatchAppendRow(
+    { vnumAttuale = "34653", rawLine = "test" },
+    identLines,
+    "/tmp/nebbie-ident-test-out.csv"))
+local identOut = io.open("/tmp/nebbie-ident-test-out.csv", "r")
+check("ident batch: CSV contiene quinta colonna vnum-originario",
+  identOut and identOut:read("*a"):find(",8304,", 1) ~= nil)
+if identOut then identOut:close() end
+os.remove("/tmp/nebbie-ident-test-out.csv")
+
+local foulerLines = {
+  "Oggetto: 'eterea armatura Fouler EDFouler', Tipo di Oggetto ARMOR V-Number Originario: 6618",
+  "L'oggetto e': GLOW MAGIC BLESS ANTI-EVIL ANTI-NEUTRAL ANTI-MAGE ANTI-THIEF ANTI-WARRIOR ARTIFACT ANTI-BARBARIAN ANTI-RANGER ANTI-PALADIN ANTI-PSIONIST ANTI-MONK ANTI-DRUID EDIT PERSONAL ",
+  "Peso: 6, Valore: 20001, Costo di rent: 0 [RARO]",
+  "AC-apply di 6.",
+  "Caratteristiche: ",
+  "    Ti puo' dare : RESISTANCE by SLASH ",
+  "    Ti puo' dare : WIS by 2",
+  "    Ti puo' dare : SPELLFAIL by -15",
+  "    Ti puo' dare : SAVING_ALL by -1",
+  "    Ti puo' dare : MANA-REGEN by 50",
+}
+local foulerAffects = NebbieDash.parseIdentifyBatchAffects(foulerLines)
+check("ident batch: parseIdentifyBatchAffects legge 5 righe",
+  #foulerAffects == 5 and foulerAffects[1] == "RESISTANCE by SLASH"
+  and foulerAffects[3] == "SPELLFAIL by -15" and foulerAffects[5] == "MANA-REGEN by 50")
+check("ident batch: identBatchAppendRow scrive affect-1..5",
+  NebbieDash.identBatchAppendRow(
+    { vnumAttuale = "34595", rawLine = "test" },
+    foulerLines,
+    "/tmp/nebbie-ident-fouler-out.csv"))
+local foulerOut = io.open("/tmp/nebbie-ident-fouler-out.csv", "r")
+local foulerCsv = foulerOut and foulerOut:read("*a") or ""
+if foulerOut then foulerOut:close() end
+check("ident batch: CSV Fouler contiene affect in coda",
+  foulerCsv:find("6618,RESISTANCE by SLASH,WIS by 2,SPELLFAIL by %-15,SAVING_ALL by %-1,MANA%-REGEN by 50", 1) ~= nil)
+os.remove("/tmp/nebbie-ident-fouler-out.csv")
+check("ident batch: batchAppendToLog ident non scrive log per-toon",
+  (function()
+    NebbieDash._batch = { mode = "ident" }
+    local ok = NebbieDash.batchAppendToLog("Montero", "test")
+    NebbieDash._batch = nil
+    return ok == true
+  end)())
+check("ident batch: batchEdToonKey Shelin -> EDShelin",
+  NebbieDash.batchEdToonKey("Shelin") == "EDShelin")
+check("ident batch: batchOloadSucceeded riconosce Adesso hai",
+  NebbieDash.batchOloadSucceeded({ "Adesso hai il Bracciale dell'Astio." }))
+check("ident batch: batchOloadStepReady prompt prima di Adesso hai",
+  not NebbieDash.batchOloadStepReady({ "Sysmess: foo", "Sirio R20 [On//58]>>" }, nil))
+check("ident batch: batchOloadStepReady Adesso hai dopo prompt",
+  NebbieDash.batchOloadStepReady({
+    "Sysmess: foo",
+    "Sirio R20 [On//58]>>",
+    "Adesso hai un Kusazuri.",
+  }, nil))
+check("ident batch: batchOloadStepReady ordine normale",
+  NebbieDash.batchOloadStepReady({
+    "Adesso hai un Kusazuri.",
+    "Sirio R20 [On//58]>>",
+  }, nil))
+check("ident batch: batchIsOloadCommand", NebbieDash.batchIsOloadCommand("oload $3"))
+check("ident batch: substituteBatchVars $o sempre ED+nome-toon",
+  NebbieDash.substituteBatchVars("stat $o", { nomeToon = "Montero" }, { oloadDone = true })
+    == "stat EDMontero")
+check("ident batch: substituteBatchVars $o Shelin",
+  NebbieDash.substituteBatchVars("stat $o", { nomeToon = "Shelin" }) == "stat EDShelin")
+check("ident batch: batchTemplateUsesOloadKey riconosce $ed",
+  NebbieDash.batchTemplateUsesOloadKey("cast 'identify' $ed"))
+check("ident batch: substituteBatchVars $ed per identify",
+  NebbieDash.substituteBatchVars("cast 'identify' $ed", { nomeToon = "Montero" })
+    == "cast 'identify' EDMontero")
+
+local resumeCsv = "/tmp/nebbie-ident-resume-test.csv"
+local rf = io.open(resumeCsv, "w")
+if rf then
+  rf:write("object-name,type,extra-flags,vnum-attuale,vnum-originario\n")
+  rf:write('"orecchino dragone EDArmageddon",ARMOR,GLOW,34356,4727\n')
+  rf:close()
+end
+local processed = NebbieDash.identBatchLoadProcessedVnums(resumeCsv)
+check("ident batch: identBatchLoadProcessedVnums legge vnum-attuale",
+  processed["34356"] == true and processed["34357"] == nil)
+local resumeRows = {
+  { nomeToon = "Armageddon", vnumAttuale = "34356" },
+  { nomeToon = "Astaroth", vnumAttuale = "34357" },
+}
+local remaining = NebbieDash.identBatchFilterUnprocessedRows(resumeRows, processed)
+check("ident batch: identBatchFilterUnprocessedRows salta completate",
+  #remaining == 1 and remaining[1].vnumAttuale == "34357")
+local r1, t1 = NebbieDash.identBatchParseFilter("resume")
+local r2, t2 = NebbieDash.identBatchParseFilter("resume Astaroth")
+local r3, t3 = NebbieDash.identBatchParseFilter("Montero")
+check("ident batch: identBatchParseFilter resume", r1 and t1 == "")
+check("ident batch: identBatchParseFilter resume toon", r2 and t2 == "Astaroth")
+check("ident batch: identBatchParseFilter toon normale", not r3 and t3 == "Montero")
+os.remove(resumeCsv)
+
+print("")
+if failures == 0 then
+  print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")
+  os.exit(0)
+else
+  print(failures .. " TEST FALLITI")
+  os.exit(1)
+end

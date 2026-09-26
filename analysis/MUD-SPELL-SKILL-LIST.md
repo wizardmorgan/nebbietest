@@ -1,0 +1,333 @@
+# Elenco completo spell/skill dal codice sorgente del MUD
+
+Estratto da `src/spell_parser.cpp` (repo server, array `const char* spells[]`,
+righe 57-362), unica fonte di verità usata dal server per far corrispondere
+il nome digitato tra apici (es. `cast 'word of recall'`) al numero di spell
+interno — vedi `ACTION_FUNC(do_cast)` nello stesso file, che usa
+`old_search_block(argument, 1, qend-1, spells, 0)` per il match. Questo è
+anche il motivo per cui puoi digitare abbreviazioni come `cast 'word of r'`:
+il motore del gioco fa già da solo il match per prefisso/parola contro
+questo stesso elenco — l'engine generico del pannello (comandi `c`/`r`/`m`,
+vedi `USAGE.md`) si limita a inoltrare l'argomento così com'è, non serve
+nessun fuzzy-matching lato Mudlet.
+
+**Importante**: questo è l'elenco di TUTTI i nomi conosciuti dal motore di
+gioco, non l'elenco delle spell/skill che un personaggio specifico conosce
+o può lanciare (quello dipende da classe/livello/allineamento, vedi
+`spell_list.cpp`/`skills.cpp`/`mindskills1.cpp` se servirà in futuro un
+filtro per classe). Uso previsto: l'utente sceglie da qui quali voci
+vuole come alias rapidi nel pannello (vedi `Q&A.md`).
+
+I comandi in game che usano questo stesso elenco, secondo classe (comunicato
+dall'utente): `cast <nome>` (mago, chierico), `recall '<nome>'` (sorcerer),
+`mind '<nome>'` (psionico).
+
+
+## Spell base (curabili/offensive, indice 1)
+
+1. `armor`
+2. `teleport`
+3. `bless`
+4. `blindness`
+5. `burning hands`
+6. `call lightning`
+7. `charm person`
+8. `chill touch`
+9. `clone`
+10. `colour spray`
+11. `control weather`
+12. `create food`
+13. `create water`
+14. `cure blind`
+15. `cure critic`
+16. `cure light`
+17. `curse`
+18. `detect evil`
+19. `detect invisibility`
+20. `detect magic`
+21. `detect poison`
+22. `dispel evil`
+23. `earthquake`
+24. `enchant weapon`
+25. `energy drain`
+26. `fireball`
+27. `harm`
+28. `heal`
+29. `invisibility`
+30. `lightning bolt`
+31. `locate object`
+32. `magic missile`
+33. `poison`
+34. `protection from evil`
+35. `remove curse`
+36. `sanctuary`
+37. `shocking grasp`
+38. `sleep`
+39. `strength`
+40. `summon`
+41. `ventriloquate`
+42. `word of recall`
+43. `remove poison`
+44. `sense life`
+
+## Skill (non-magiche)
+
+45. `sneak`
+46. `hide`
+47. `steal`
+48. `backstab`
+49. `pick`
+50. `kick`
+51. `bash`
+52. `rescue`
+
+## Spell da pergamena/pozione/bacchetta/verga (non lanciabili direttamente)
+
+53. `identify`
+54. `infravision`
+55. `cause light`
+56. `cause critical`
+57. `flamestrike`
+58. `dispel good`
+59. `weakness`
+60. `dispel magic`
+61. `knock`
+62. `know alignment`
+63. `animate dead`
+64. `paralyze`
+65. `remove paralysis`
+66. `fear`
+67. `acid blast`
+68. `water breath`
+69. `fly`
+70. `cone of cold`
+71. `meteor swarm`
+72. `ice storm`
+73. `shield`
+74. `monsum one`
+75. `monsum two`
+76. `monsum three`
+77. `monsum four`
+78. `monsum five`
+79. `monsum six`
+80. `monsum seven`
+81. `fireshield`
+82. `charm monster`
+83. `cure serious`
+84. `cause serious`
+85. `refresh`
+86. `second wind`
+87. `turn`
+88. `succor`
+89. `create light`
+90. `continual light`
+91. `calm`
+92. `stone skin`
+93. `conjure elemental`
+94. `true sight`
+95. `minor creation`
+96. `faerie fire`
+97. `faerie fog`
+98. `cacaodemon`
+99. `polymorph self`
+100. `mana`
+101. `astral walk`
+102. `resurrection`
+103. `heroes feast`
+104. `group fly`
+105. `breath`
+106. `web`
+107. `minor track`
+108. `major track`
+109. `golem`
+110. `find familiar`
+111. `changestaff`
+112. `holy word`
+113. `unholy word`
+114. `power word kill`
+115. `power word blind`
+116. `chain lightning`
+117. `scare`
+118. `aid`
+119. `command`
+120. `change form`
+121. `feeblemind`
+122. `shillelagh`
+123. `goodberry`
+124. `elemental blade`
+125. `animal growth`
+126. `insect growth`
+127. `creeping death`
+128. `commune`
+129. `animal summon one`
+130. `animal summon two`
+131. `animal summon three`
+132. `fire servant`
+133. `earth servant`
+134. `water servant`
+135. `wind servant`
+136. `reincarnate`
+137. `charm vegetable`
+138. `vegetable growth`
+139. `tree`
+140. `animate rock`
+141. `tree travel`
+142. `travelling`
+143. `animal friendship`
+144. `invis to animals`
+145. `slow poison`
+146. `entangle`
+147. `snare`
+148. `gust of wind`
+149. `barkskin`
+150. `sunray`
+151. `warp weapon`
+152. `heat stuff`
+153. `find traps`
+154. `firestorm`
+155. `haste`
+156. `slowness`
+157. `dust devil`
+158. `know monster`
+159. `transport via plant`
+160. `speak with plants`
+161. `silence`
+162. `sending`
+163. `teleport without error`
+164. `portal`
+165. `dragon ride`
+166. `mount`
+167. `` (SPELL_NO_MESSAGE, placeholder interno)
+168. `minor heal`
+169. `mantra`
+170. `first aid`
+171. `sign language`
+172. `riding`
+173. `switch opponents`
+174. `dodge`
+175. `remove trap`
+176. `retreat`
+177. `quivering palm`
+178. `safe fall`
+179. `feign death`
+180. `hunt`
+181. `find trap`
+182. `spring leap`
+183. `disarm`
+184. `read magic`
+185. `evaluate`
+186. `spy`
+187. `doorbash`
+188. `swim`
+189. `necromancy`
+190. `vegetable lore`
+191. `demonology`
+192. `animal lore`
+193. `reptile lore`
+194. `people lore`
+195. `giant lore`
+196. `other lore`
+197. `disguise`
+198. `climb`
+199. `finger`
+200. `geyser`
+201. `mirror images`
+202. `tspy`
+203. `eavesdrop`
+204. `Parry`
+205. `miner`
+206. `green slime`
+207. `berserk`
+208. `tan`
+209. `avoid back attack`
+210. `find food`
+211. `find water`
+212. `pray`
+213. `memorizing`
+214. `bellow`
+215. `darkness`
+216. `minor invulnerability`
+217. `major invulnerability`
+218. `protection from drain`
+219. `protection from breath`
+220. `anti magic shell`
+221. `doorway`
+222. `psi portal`
+223. `psi summon`
+224. `psi invisibility`
+225. `canibalize`
+226. `flame shroud`
+227. `aura sight`
+228. `great sight`
+229. `psionic blast`
+230. `hypnosis`
+231. `meditate`
+232. `scry`
+233. `adrenalize`
+234. `brew`
+235. `ration`
+236. `warcry`
+237. `blessing`
+238. `lay on hands`
+239. `heroic rescue`
+240. `dual wield`
+241. `psi shield`
+242. `protection from evil group`
+243. `prismatic spray`
+244. `incendiary cloud`
+245. `disintegrate`
+246. `language common`
+247. `language elvish`
+248. `language halfling`
+249. `language dwarvish`
+250. `language orcish`
+251. `language giantish`
+252. `language ogre`
+253. `language gnomish`
+254. `esp`
+255. `comprehend languages`
+256. `protection from fire`
+257. `protection from cold`
+258. `protection from energy`
+259. `protection from electricity`
+260. `enchant armor`
+261. `messenger`
+262. `protection fire breath`
+263. `protection frost breath`
+264. `protection electric breath`
+265. `protection acid breath`
+266. `protection gas breath`
+267. `wizardeye`
+268. `mind burn`
+269. `clairvoyance`
+270. `psionic danger sense`
+271. `psionic disintegrate`
+272. `telekinesis`
+273. `levitation`
+274. `cell adjustment`
+275. `chameleon`
+276. `psionic strength`
+277. `mind over body`
+278. `probability travel`
+279. `psionic teleport`
+280. `domination`
+281. `mind wipe`
+282. `psychic crush`
+283. `tower of iron will`
+284. `mindblank`
+285. `psychic impersonation`
+286. `ultra blast`
+287. `intensify`
+288. `spot`
+289. `immolation`
+290. `quest`
+291. `daimoku`
+292. `forge`
+293. `determine`
+294. `equilibrium`
+295. `!innate fly!` (nome interno/marcatore, non selezionabile da un giocatore)
+296. `!innate waterbreath!` (nome interno/marcatore, non selezionabile da un giocatore)
+297. `!innate infravision!` (nome interno/marcatore, non selezionabile da un giocatore)
+298. `!innate detect evil!` (nome interno/marcatore, non selezionabile da un giocatore)
+299. `!innate prot evil!` (nome interno/marcatore, non selezionabile da un giocatore)
+300. `minor harm`
