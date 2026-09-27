@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.19"
+local PKG_VER = "1.15.20"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -315,6 +315,7 @@ function NebbieDash.onPromptLine()
   NebbieDash.setCurrentCharacter(parsed.name, false)
   NebbieDash._awaitingPromptAfterConnect = false
   NebbieDash.updateVitalsDisplay()
+  NebbieDash.enforceTriggerHygiene()
   if NebbieDash._batch and NebbieDash._batch.active and NebbieDash._batch.awaitingOutput then
     NebbieDash.onBatchPrompt(text)
   end
@@ -357,6 +358,7 @@ function NebbieDash.startEqCapture()
   NebbieDash._eqCaptureGen = (NebbieDash._eqCaptureGen or 0) + 1
   local gen = NebbieDash._eqCaptureGen
   NebbieDash._eqCapture = { slots = {}, lastSlot = nil, activity = 0, watchedActivity = 0 }
+  NebbieDash._eqCaptureStartedAt = os.time()
   if NebbieDash._eqLineTrig then
     pcall(enableTrigger, NebbieDash._eqLineTrig)
   end
@@ -366,6 +368,7 @@ end
 function NebbieDash.finishEqCapture()
   local cap = NebbieDash._eqCapture
   NebbieDash._eqCapture = nil
+  NebbieDash._eqCaptureStartedAt = nil
   if NebbieDash._eqLineTrig then
     pcall(disableTrigger, NebbieDash._eqLineTrig)
   end
@@ -462,6 +465,7 @@ function NebbieDash.startAttribCapture()
   NebbieDash._attribCaptureGen = (NebbieDash._attribCaptureGen or 0) + 1
   local gen = NebbieDash._attribCaptureGen
   NebbieDash._attribCapture = { spells = {}, activity = 0, watchedActivity = 0 }
+  NebbieDash._attribCaptureStartedAt = os.time()
   if NebbieDash._attribLineTrig then
     pcall(enableTrigger, NebbieDash._attribLineTrig)
   end
@@ -481,6 +485,7 @@ end
 function NebbieDash.finishAttribCapture()
   local cap = NebbieDash._attribCapture
   NebbieDash._attribCapture = nil
+  NebbieDash._attribCaptureStartedAt = nil
   if NebbieDash._attribLineTrig then
     pcall(disableTrigger, NebbieDash._attribLineTrig)
   end
@@ -2871,12 +2876,14 @@ function NebbieDash.runHungerMacro()
   local steps = NebbieDash.expandMacroSteps(substituted)
   if #steps == 0 then return end
   NebbieDash._hungerMacroBusy = true
+  NebbieDash._hungerMacroBusySince = os.time()
   local delay = NebbieDash.speedwalkDelay or 0.5
   for i, cmd in ipairs(steps) do
     tempTimer(delay * (i - 1), function() send(cmd, false) end)
   end
   tempTimer(delay * (#steps - 1) + 1.0, function()
     NebbieDash._hungerMacroBusy = false
+    NebbieDash._hungerMacroBusySince = nil
   end)
 end
 
@@ -2893,11 +2900,44 @@ NebbieDash._lastHungerMacroRun = 0
 
 function NebbieDash.onHungerThirstLine()
   if not NebbieDash.autoFeed then return end
-  if NebbieDash._hungerMacroBusy then return end
+  if NebbieDash._hungerMacroBusy then
+    local since = NebbieDash._hungerMacroBusySince or 0
+    if since > 0 and os.time() - since < 25 then return end
+    NebbieDash._hungerMacroBusy = false
+    NebbieDash._hungerMacroBusySince = nil
+  end
   local now = os.time()
   if now - NebbieDash._lastHungerMacroRun < NebbieDash.hungerMacroCooldownSec then return end
   NebbieDash._lastHungerMacroRun = now
   NebbieDash.runHungerMacro()
+end
+
+function NebbieDash.enforceTriggerHygiene()
+  -- Stesso sessione, nessun update: a volte restano attivi trigger "catch-all" (^)
+  -- (eq/attrib/batch) o il lock fame bloccato — tappa il resto o sembra tutto morto.
+  if not NebbieDash._eqCapture and NebbieDash._eqLineTrig then
+    pcall(disableTrigger, NebbieDash._eqLineTrig)
+  end
+  if not NebbieDash._attribCapture and NebbieDash._attribLineTrig then
+    pcall(disableTrigger, NebbieDash._attribLineTrig)
+  end
+  if not NebbieDash._batch or not NebbieDash._batch.active then
+    NebbieDash.batchDisableLineCapture()
+  end
+  if not NebbieDash._groupCheckActive then
+    if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
+    if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
+  end
+  if NebbieDash._eqCapture and NebbieDash._eqCaptureStartedAt then
+    if os.time() - NebbieDash._eqCaptureStartedAt > 12 then
+      NebbieDash.finishEqCapture()
+    end
+  end
+  if NebbieDash._attribCapture and NebbieDash._attribCaptureStartedAt then
+    if os.time() - NebbieDash._attribCaptureStartedAt > 12 then
+      NebbieDash.finishAttribCapture()
+    end
+  end
 end
 
 function NebbieDash.cmdReinstallTriggers()
