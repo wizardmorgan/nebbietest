@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.18"
+local PKG_VER = "1.15.19"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -17,6 +17,11 @@ local PKG_CORE_RAW_URL =
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
+  -- Reinstall a caldo / npackageupdate: Mudlet smonta i trigger del package ma
+  -- questo script puo' uscire qui — reinstalliamo almeno i trigger (funzioni gia' in memoria).
+  if type(NebbieDash.installTriggers) == "function" then
+    NebbieDash.installTriggers()
+  end
   return
 end
 if NebbieDash and _prevPkgVer and _prevPkgVer ~= PKG_VER then
@@ -217,6 +222,21 @@ function NebbieDash.setCurrentCharacter(name, manual)
     pcall(raiseEvent, "nebbieDashCharacterChanged", name, manual and true or false)
   end
   cecho("<cyan>[NebbieDash] Personaggio attivo: <yellow>" .. name .. "\n")
+end
+
+function NebbieDash.onInstallPackageEvent(event, packageName)
+  if packageName and packageName ~= NebbieDash.package then return end
+  NebbieDash._mainLoaded = false
+  NebbieDash._lastBootTime = nil
+  tempTimer(0, function()
+    if type(NebbieDash.boot) == "function" then NebbieDash.boot() end
+  end)
+end
+
+function NebbieDash.onUninstallPackageEvent(event, packageName)
+  if packageName and packageName ~= NebbieDash.package then return end
+  NebbieDash._mainLoaded = false
+  if type(NebbieDash.teardownTriggers) == "function" then NebbieDash.teardownTriggers() end
 end
 
 function NebbieDash.onConnectionEvent()
@@ -1143,6 +1163,8 @@ function NebbieDash.cmdPackageUpdate()
     return
   end
   local installUrl = url .. "?cb=" .. tostring(os.time())
+  NebbieDash._mainLoaded = false
+  NebbieDash._lastBootTime = nil
   local ok, err = pcall(installPackage, installUrl)
   if not ok then
     cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
@@ -1623,6 +1645,7 @@ NebbieDash.HELP_TEXT = {
   { "nattrib", "Mostra le spell attive correnti (dati salvati)." },
   { "nresync", "Invia eq + attrib al gioco per risincronizzare i pannelli." },
   { "nfix", "Ricrea la GUI da zero in caso di problemi visivi." },
+  { "ntriggers", "Reinstalla i trigger NebbieDash (fame/sete, prompt, loot, …) senza riavviare Mudlet." },
   { "ngui", "Mostra/nascondi tutti i pannelli." },
   { "nlayout", "Ripristina larghezze/font/proporzioni di default." },
   { "nchar <nome>", "Forza manualmente il personaggio attivo." },
@@ -2824,6 +2847,7 @@ end
 function NebbieDash.runHungerMacro()
   local name = NebbieDash.currentChar
   if not name then return end
+  if NebbieDash._hungerMacroBusy then return end
   local macro = NebbieDash.hungerMacros[name]
   if not macro then
     cecho("<orange>[NebbieDash] Nessuna macro fame/sete configurata per " .. name ..
@@ -2839,9 +2863,15 @@ function NebbieDash.runHungerMacro()
   local backpackKeyword = isOverride and backpackKeywords or NebbieDash.lastKeyword(backpackKeywords)
   local substituted = macro:gsub("{zaino}", backpackKeyword)
   local steps = NebbieDash.expandMacroSteps(substituted)
+  if #steps == 0 then return end
+  NebbieDash._hungerMacroBusy = true
+  local delay = NebbieDash.speedwalkDelay or 0.5
   for i, cmd in ipairs(steps) do
-    tempTimer(NebbieDash.speedwalkDelay * (i - 1), function() send(cmd, false) end)
+    tempTimer(delay * (i - 1), function() send(cmd, false) end)
   end
+  tempTimer(delay * (#steps - 1) + 1.0, function()
+    NebbieDash._hungerMacroBusy = false
+  end)
 end
 
 -- Shield su substring fisse (sempre attivo, riga singola). Due trigger
@@ -2857,10 +2887,16 @@ NebbieDash._lastHungerMacroRun = 0
 
 function NebbieDash.onHungerThirstLine()
   if not NebbieDash.autoFeed then return end
+  if NebbieDash._hungerMacroBusy then return end
   local now = os.time()
   if now - NebbieDash._lastHungerMacroRun < NebbieDash.hungerMacroCooldownSec then return end
   NebbieDash._lastHungerMacroRun = now
   NebbieDash.runHungerMacro()
+end
+
+function NebbieDash.cmdReinstallTriggers()
+  NebbieDash.installTriggers()
+  cecho("<green>[NebbieDash] Trigger reinstallati (" .. (NebbieDash.version or "?") .. ").\n")
 end
 
 function NebbieDash.cmdSetAutoFeed(argStr)
@@ -4302,6 +4338,8 @@ function NebbieDash.installTriggers()
   if type(registerAnonymousEventHandler) == "function" and not NebbieDash._eventHandlersRegistered then
     registerAnonymousEventHandler("sysConnectionEvent", "NebbieDash.onConnectionEvent")
     registerAnonymousEventHandler("sysWindowResizeEvent", "NebbieDash.onWindowResize")
+    registerAnonymousEventHandler("sysInstallPackage", "NebbieDash.onInstallPackageEvent")
+    registerAnonymousEventHandler("sysUninstallPackage", "NebbieDash.onUninstallPackageEvent")
     NebbieDash._eventHandlersRegistered = true
   end
   NebbieDash.installSpellShortcutTriggers()

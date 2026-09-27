@@ -149,6 +149,7 @@ MPACKAGE_PATH = os.path.join(HERE, f"{PKG_NAME}.mpackage")
 # automatico al boot (vedi RECOMMENDATION.md / divieti confermati nel LOG.md).
 ALIASES = [
     ("nebbie-dash-fix", "^nfix$", "NebbieDash.runFix()"),
+    ("nebbie-dash-triggers", "^ntriggers$", "NebbieDash.cmdReinstallTriggers()"),
     ("nebbie-dash-eq", "^neq$", "NebbieDash.cmdShowEq()"),
     ("nebbie-dash-attrib", "^nattrib$", "NebbieDash.cmdShowAttrib()"),
     ("nebbie-dash-resync", "^nresync$", "NebbieDash.cmdResyncAll()"),
