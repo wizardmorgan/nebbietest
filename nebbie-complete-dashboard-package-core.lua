@@ -9,21 +9,15 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.22"
+local PKG_VER = "1.15.23"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package-core.lua"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
-if NebbieDash and _prevPkgVer == PKG_VER and NebbieDash._mainLoaded then
-  -- Reinstall a caldo / npackageupdate: Mudlet smonta i trigger del package ma
-  -- questo script puo' uscire qui — reinstalliamo almeno i trigger (funzioni gia' in memoria).
-  if type(NebbieDash.installTriggers) == "function" then
-    NebbieDash.installTriggers()
-  end
-  return
-end
+-- Non uscire in anticipo dal chunk core (alias/trigger del package possono essere
+-- appena stati rimontati da installPackage): serve sempre rieseguire boot() in coda.
 if NebbieDash and _prevPkgVer and _prevPkgVer ~= PKG_VER then
   NebbieDash._mainLoaded = false
   NebbieDash._lastBootTime = nil
@@ -1156,37 +1150,54 @@ function NebbieDash.cmdPackageUpdate()
     cecho("<red>installPackage non disponibile — scarica il .mpackage a mano da GitHub.\n")
     return
   end
-  if installedVer ~= "" and type(uninstallPackage) == "function" then
-    cecho("<grey>Disinstallo '" .. pkg .. "' (Mudlet non sovrascrive un package gia' installato)...\n")
-    local uok, uerr = pcall(uninstallPackage, pkg)
-    if not uok then
-      cecho("<red>uninstallPackage fallito: " .. tostring(uerr) .. "\n")
-      cecho("<orange>Disinstalla manualmente da Package Manager (Alt+O) poi ripeti <yellow>npackageupdate<orange>.\n")
-      return
-    end
-  elseif installedVer ~= "" then
+  if installedVer ~= "" and type(uninstallPackage) ~= "function" then
     cecho("<orange>uninstallPackage non disponibile — disinstalla da Package Manager e reinstalla il .mpackage.\n")
     return
   end
   local installUrl = url .. "?cb=" .. tostring(os.time())
-  NebbieDash._mainLoaded = false
-  NebbieDash._lastBootTime = nil
-  local ok, err = pcall(installPackage, installUrl)
-  if not ok then
-    cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
-    cecho("<orange>Prova: Package Manager → rimuovi il package → Installa il .mpackage da GitHub.\n")
-    return
-  end
-  tempTimer(0.4, function()
+  local expect = remoteVer or "vedi Package Manager"
+  cecho("<green>Avvio aggiornamento (atteso: <white>" .. expect ..
+    "<green>) — attendi messaggio <white>v… pronto<green>.\n")
+  -- BUG Mudlet: uninstallPackage() chiamato DENTRO l'alias npackageupdate rimuove
+  -- subito alias/trigger del package e puo' interrompere questo script PRIMA di
+  -- installPackage → profilo senza comandi "n". Esegui uninstall+install al tick
+  -- successivo, quando l'alias e' terminato.
+  tempTimer(0, function()
     NebbieDash._mainLoaded = false
     NebbieDash._lastBootTime = nil
-    if type(NebbieDash.boot) == "function" then
-      NebbieDash.boot()
+    if installedVer ~= "" and type(uninstallPackage) == "function" then
+      cecho("<grey>Disinstallo '" .. pkg .. "' (Mudlet non sovrascrive un package gia' installato)...\n")
+      local uok, uerr = pcall(uninstallPackage, pkg)
+      if not uok then
+        cecho("<red>uninstallPackage fallito: " .. tostring(uerr) .. "\n")
+        cecho("<orange>Package Manager (Alt+O) → Installa da URL:\n<white>" .. url .. "\n")
+        return
+      end
     end
+    local ok, err = pcall(installPackage, installUrl)
+    if not ok then
+      cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
+      cecho("<orange>Package Manager → Installa da URL:\n<white>" .. url .. "\n")
+      return
+    end
+    tempTimer(0.5, function()
+      NebbieDash._mainLoaded = false
+      NebbieDash._lastBootTime = nil
+      if type(NebbieDash.boot) == "function" then
+        local bok, berr = pcall(NebbieDash.boot)
+        if not bok then
+          cecho("<red>[NebbieDash] boot dopo update fallito: " .. tostring(berr) .. "\n")
+        end
+      end
+      if type(getPackageInfo) == "function" then
+        local v = getPackageInfo(pkg, "version") or ""
+        if v == "" then
+          cecho("<red>Package non risulta installato — usa Package Manager → Installa da URL:\n<white>" ..
+            url .. "\n")
+        end
+      end
+    end)
   end)
-  local expect = remoteVer or "vedi Package Manager"
-  cecho("<green>Download/install avviato (atteso: <white>" .. expect ..
-    "<green>). Dopo l'install: messaggio <white>v… pronto<green> e <yellow>nfix<green> se serve.\n")
 end
 
 -- Ripetizione generica di un comando digitato direttamente al prompt, es.

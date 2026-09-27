@@ -1,5 +1,20 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.23 — 2026-09-27
+
+- **npackageupdate (critico)**: `uninstallPackage` dentro l'alias `npackageupdate` poteva rimuovere
+  alias/trigger del package **prima** di `installPackage`, lasciando Mudlet senza comandi `n*`.
+  Disinstallazione + installazione ora avvengono al tick successivo (`tempTimer(0, …)`).
+- Rimosso l'early-return del chunk core sulla stessa versione (saltava `boot()` in coda allo script).
+
+## 1.15.22 — 2026-09-27
+
+- **Macro fame/sete (critico)**: il trigger `Hai Fame.` / `Hai sete.` continuava a scattare ma al
+  secondo giro i comandi fallivano (`Cosa vuoi rimuovere?`, tazza assente, ecc.) perché `{zaino}`
+  veniva ricalcolato male dopo il primo ciclo (`onStopUsingLine` + testo zaino post-`wear` senza
+  match override). Ora la parola chiave zaino resta in cache per personaggio (`hungerBackKeyword`)
+  e durante la macro non si svuota lo slot «sulla schiena» nella cache equip.
+
 ## 1.15.13 — 2026-09-26
 
 - **Speedwalk hell/Korred**: righe `(desc) dirs … (nota)` non vengono più scambiate per note
