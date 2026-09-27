@@ -17,7 +17,9 @@ function killTrigger() end
 local lastSent = nil
 local sentLog = {}
 function send(cmd) lastSent = cmd; table.insert(sentLog, cmd) end
-function tempTimer() end
+function tempTimer(_delay, arg)
+  if type(arg) == "function" then arg() end
+end
 function setBorderRight() end
 function setBorderLeft() end
 function createMiniConsole() end
@@ -363,6 +365,10 @@ check("loot: isGroupHeaderLine con nome gruppo",
   NebbieDash.isGroupHeaderLine('$c0015Your group "I cacciatori" consists of:'))
 check("loot: isGroupHeaderLine senza nome gruppo",
   NebbieDash.isGroupHeaderLine("$c0015Your group consists of:"))
+check("loot: riga split monete NON e' fine combattimento",
+  not NebbieDash.isCombatExpLine("La tua parte e' di 4000 monete."))
+check("loot: riga exp gruppo riconosciuta",
+  NebbieDash.isCombatExpLine("La tua parte di esperienza e' di 168085 punti."))
 
 -- 8a: la riga "Prendi gold coins da ..." da sola non fa scattare nulla (non
 -- contiene l'importo, solo il nome del cadavere, che varia per ogni mostro).
@@ -421,12 +427,23 @@ line = "Uno Spazzino is dead! R.I.P."
 check("combattimento: riga 'is dead!' da sola non genera comandi", #sentLog == 0)
 
 line = "La tua parte di esperienza e' di 1047 punti."
+NebbieDash._lastAutoLootClock = nil
+NebbieDash._lootFlowActive = false
 NebbieDash.onCombatEndLine()
 check("combattimento: fine combattimento avvia il loot automatico", sentLog[1] == "get all.coin corp")
+
+sentLog = {}
+NebbieDash._lastAutoLootClock = nil
+NebbieDash._lootFlowActive = false
+line = "La tua parte di esperienza e' di 1047 punti."
+for _ = 1, 3 do NebbieDash.onCombatEndLine() end
+check("combattimento: piu' trigger sulla stessa exp -> un solo get corp", #sentLog == 1)
 
 -- Anche con 0 punti di esperienza (uccisione minima) deve comunque scattare.
 sentLog = {}
 line = "La tua parte di esperienza e' di 0 punti."
+NebbieDash._lastAutoLootClock = nil
+NebbieDash._lootFlowActive = false
 NebbieDash.onCombatEndLine()
 check("combattimento: scatta anche con 0 punti esperienza", sentLog[1] == "get all.coin corp")
 

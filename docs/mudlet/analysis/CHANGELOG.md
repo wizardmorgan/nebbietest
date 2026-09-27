@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.25 — 2026-09-27
+
+- **Autoloot**: validazione rigida delle righe exp (non confonde lo split `La tua parte e' di N
+  monete`); debounce anti-triplo invio; attesa ~0,35 s prima del get; un solo flusso corp→pile
+  alla volta (niente pile di `tempTimer` che sparano get dopo un cambio stanza).
+- **Autosplit**: invariato — parte solo dopo **`C'erano N monete.`** tuo (se un compagno loota
+  prima, non parte il tuo `split`).
+
 ## 1.15.24 — 2026-09-27
 
 - **Disarmo (critico)**: riga con colori `$c…` non matchava il pattern; nomi inglesi tipo

@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.24"
+local PKG_VER = "1.15.25"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -2200,6 +2200,15 @@ function NebbieDash.isGroupHeaderLine(text)
   return text:match("^Your group .-consists of:") ~= nil
 end
 
+-- Solo le due righe di fine combattimento reali (non "La tua parte e' di N monete"
+-- dello split altrui, achievement, ecc.).
+function NebbieDash.isCombatExpLine(text)
+  text = NebbieDash.stripColors(text or ""):match("^%s*(.-)%s*$") or ""
+  if text:match("^La tua parte di esperienza e' di %d+ punti%.%s*$") then return true end
+  if text:match("^La tua esperienza e' aumentata di %d+ punti%.%s*$") then return true end
+  return false
+end
+
 -- Segnale di fine combattimento: due formati REALI confermati dall'utente —
 -- "La tua parte di esperienza e' di N punti." (quota di gruppo) e "La tua
 -- esperienza e' aumentata di N punti." (uccisione in solitaria, testo
@@ -2210,9 +2219,27 @@ end
 -- solo se `nautoloot` e' attivo, cosi' non serve piu' digitarlo manualmente
 -- dopo ogni uccisione.
 function NebbieDash.onCombatEndLine()
-  if NebbieDash.autoLoot then
-    NebbieDash.cmdLoot()
+  if not NebbieDash.autoLoot then return end
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  if not NebbieDash.isCombatExpLine(text) then return end
+  NebbieDash.scheduleAutoLoot()
+end
+
+function NebbieDash.scheduleAutoLoot()
+  local now = os.clock()
+  if NebbieDash._lastAutoLootClock and (now - NebbieDash._lastAutoLootClock) < 0.6 then
+    return
   end
+  NebbieDash._lastAutoLootClock = now
+  if NebbieDash._autoLootDelayTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._autoLootDelayTimer)
+  end
+  -- Breve attesa: il cadavere compare spesso un attimo dopo la riga exp; evita
+  -- get a vuoto e riduce i doppi invii se piu' trigger scattano sulla stessa riga.
+  NebbieDash._autoLootDelayTimer = tempTimer(0.35, function()
+    NebbieDash._autoLootDelayTimer = nil
+    NebbieDash.cmdLoot()
+  end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -3061,8 +3088,25 @@ end
 -- uno dei due potra' avere successo per singolo cadavere, l'altro risponde
 -- con un semplice "Non vedi nessun ..." innocuo che non fa scattare nulla.
 function NebbieDash.cmdLoot()
+  if NebbieDash._lootFlowActive then return end
+  NebbieDash._lootFlowActive = true
+  NebbieDash._lootFlowGen = (NebbieDash._lootFlowGen or 0) + 1
+  local gen = NebbieDash._lootFlowGen
+  if NebbieDash._lootPileTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._lootPileTimer)
+    NebbieDash._lootPileTimer = nil
+  end
   send("get all.coin corp", false)
-  tempTimer(0.5, [[send("get all.coin pile", false)]])
+  NebbieDash._lootPileTimer = tempTimer(0.5, function()
+    if NebbieDash._lootFlowGen ~= gen then return end
+    NebbieDash._lootPileTimer = nil
+    send("get all.coin pile", false)
+    tempTimer(0.15, function()
+      if NebbieDash._lootFlowGen == gen then
+        NebbieDash._lootFlowActive = false
+      end
+    end)
+  end)
 end
 
 -- Stesso watchdog "a inattivita'" gia' usato per le catture eq/attrib (vedi
