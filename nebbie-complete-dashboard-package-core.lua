@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.20"
+local PKG_VER = "1.15.21"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -362,6 +362,7 @@ end
 function NebbieDash.finishEqCapture()
   local cap = NebbieDash._eqCapture
   NebbieDash._eqCapture = nil
+  NebbieDash._eqCaptureStartedAt = nil
   if NebbieDash._eqLineTrig then
     pcall(disableTrigger, NebbieDash._eqLineTrig)
   end
@@ -478,6 +479,7 @@ end
 function NebbieDash.finishAttribCapture()
   local cap = NebbieDash._attribCapture
   NebbieDash._attribCapture = nil
+  NebbieDash._attribCaptureStartedAt = nil
   if NebbieDash._attribLineTrig then
     pcall(disableTrigger, NebbieDash._attribLineTrig)
   end
@@ -1174,6 +1176,13 @@ function NebbieDash.cmdPackageUpdate()
     cecho("<orange>Prova: Package Manager → rimuovi il package → Installa il .mpackage da GitHub.\n")
     return
   end
+  tempTimer(0.4, function()
+    NebbieDash._mainLoaded = false
+    NebbieDash._lastBootTime = nil
+    if type(NebbieDash.boot) == "function" then
+      NebbieDash.boot()
+    end
+  end)
   local expect = remoteVer or "vedi Package Manager"
   cecho("<green>Download/install avviato (atteso: <white>" .. expect ..
     "<green>). Dopo l'install: messaggio <white>v… pronto<green> e <yellow>nfix<green> se serve.\n")
@@ -2850,7 +2859,10 @@ end
 function NebbieDash.runHungerMacro()
   local name = NebbieDash.currentChar
   if not name then return end
-  if NebbieDash._hungerMacroBusy then return end
+  if NebbieDash._hungerMacroBusy then
+    NebbieDash._hungerMacroPending = true
+    return
+  end
   local macro = NebbieDash.hungerMacros[name]
   if not macro then
     cecho("<orange>[NebbieDash] Nessuna macro fame/sete configurata per " .. name ..
@@ -2859,11 +2871,11 @@ function NebbieDash.runHungerMacro()
   end
   local data = NebbieDash.getCharData(name)
   local backpackKeywords, isOverride = NebbieDash.findBackpackKeywords(data)
-  -- Con un override esplicito ci si fida della parola/e scritte dall'utente
-  -- (potrebbero essere piu' di una, se serve); senza override si ricade
-  -- sull'euristica E si prende solo l'ultima parola per non confondere
-  -- comandi come `wear` (vedi nota su lastKeyword sopra).
   local backpackKeyword = isOverride and backpackKeywords or NebbieDash.lastKeyword(backpackKeywords)
+  if backpackKeyword == "" then
+    cecho("<orange>[NebbieDash] Fame/sete: slot «sulla schiena» vuoto o equip non sincronizzato — <yellow>neq<orange> poi riprova.\n")
+    return
+  end
   local substituted = macro:gsub("{zaino}", backpackKeyword)
   local steps = NebbieDash.expandMacroSteps(substituted)
   if #steps == 0 then return end
@@ -2876,32 +2888,24 @@ function NebbieDash.runHungerMacro()
   tempTimer(delay * (#steps - 1) + 1.0, function()
     NebbieDash._hungerMacroBusy = false
     NebbieDash._hungerMacroBusySince = nil
+    if NebbieDash._hungerMacroPending then
+      NebbieDash._hungerMacroPending = false
+      tempTimer(0.35, function() NebbieDash.runHungerMacro() end)
+    end
   end)
 end
 
--- Shield su substring fisse (sempre attivo, riga singola). Due trigger
--- distinti perche' le due frasi non condividono un prefisso comune utile
--- come shield unico ("Hai Fame." / "Hai sete."). Il gioco spesso manda
--- ENTRAMBE le righe insieme (fame E sete allo stesso momento): senza un
--- "cooldown" i due trigger fanno partire la macro DUE VOLTE in parallelo,
--- con le due sequenze di comandi che si accavallano e si intralciano a
--- vicenda (bug osservato in gioco: il secondo "rem" fallisce con "Non lo
--- stai usando." perche' il primo ha gia' tolto lo zaino un istante prima).
-NebbieDash.hungerMacroCooldownSec = 3
-NebbieDash._lastHungerMacroRun = 0
-
+-- Fame e sete arrivano spesso su due righe consecutive: un solo avvio macro (debounce
+-- breve), non un cooldown di secondi che blocca la fame successiva nella stessa sessione.
 function NebbieDash.onHungerThirstLine()
   if not NebbieDash.autoFeed then return end
-  if NebbieDash._hungerMacroBusy then
-    local since = NebbieDash._hungerMacroBusySince or 0
-    if since > 0 and os.time() - since < 25 then return end
-    NebbieDash._hungerMacroBusy = false
-    NebbieDash._hungerMacroBusySince = nil
+  if NebbieDash._hungerDebounceTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._hungerDebounceTimer)
   end
-  local now = os.time()
-  if now - NebbieDash._lastHungerMacroRun < NebbieDash.hungerMacroCooldownSec then return end
-  NebbieDash._lastHungerMacroRun = now
-  NebbieDash.runHungerMacro()
+  NebbieDash._hungerDebounceTimer = tempTimer(0.1, function()
+    NebbieDash._hungerDebounceTimer = nil
+    NebbieDash.runHungerMacro()
+  end)
 end
 
 function NebbieDash.enforceTriggerHygiene()
@@ -2928,6 +2932,12 @@ function NebbieDash.enforceTriggerHygiene()
   if NebbieDash._attribCapture and NebbieDash._attribCaptureStartedAt then
     if os.time() - NebbieDash._attribCaptureStartedAt > 12 then
       NebbieDash.finishAttribCapture()
+    end
+  end
+  if NebbieDash._hungerMacroBusy and NebbieDash._hungerMacroBusySince then
+    if os.time() - NebbieDash._hungerMacroBusySince > 30 then
+      NebbieDash._hungerMacroBusy = false
+      NebbieDash._hungerMacroBusySince = nil
     end
   end
 end
@@ -4347,8 +4357,8 @@ function NebbieDash.installTriggers()
   NebbieDash._combatEndTrig2 = tempTrigger("La tua esperienza e' aumentata di", [[NebbieDash.onCombatEndLine()]])
   NebbieDash._fallTrig = tempTrigger("Inciampi e cadi per terra.", [[NebbieDash.onFallLine()]])
   NebbieDash._disarmTrig = tempTrigger("vola dalla tua presa", [[NebbieDash.onDisarmLine()]])
-  NebbieDash._hungerTrig = tempTrigger("Hai Fame.", [[NebbieDash.onHungerThirstLine()]])
-  NebbieDash._thirstTrig = tempTrigger("Hai sete.", [[NebbieDash.onHungerThirstLine()]])
+  NebbieDash._hungerTrig = tempRegexTrigger("^Hai Fame\\.", [[NebbieDash.onHungerThirstLine()]])
+  NebbieDash._thirstTrig = tempRegexTrigger("^Hai sete\\.", [[NebbieDash.onHungerThirstLine()]])
   -- Elenco armi (vedi sezione dedicata sopra): "Impugni " per popolare la
   -- lista da solo ad ogni wield; le due righe di `identify` per rilevarne il
   -- tipo di danno SOLO quando l'utente esegue quel comando di sua iniziativa.
