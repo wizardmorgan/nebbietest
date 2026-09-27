@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.22 — 2026-09-27
+
+- **Macro fame/sete (critico)**: il trigger `Hai Fame.` / `Hai sete.` continuava a scattare ma al
+  secondo giro i comandi fallivano (`Cosa vuoi rimuovere?`, tazza assente, ecc.) perché `{zaino}`
+  veniva ricalcolato male dopo il primo ciclo (`onStopUsingLine` + testo zaino post-`wear` senza
+  match override). Ora la parola chiave zaino resta in cache per personaggio (`hungerBackKeyword`)
+  e durante la macro non si svuota lo slot «sulla schiena» nella cache equip.
+
 ## 1.15.13 — 2026-09-26
 
 - **Speedwalk hell/Korred**: righe `(desc) dirs … (nota)` non vengono più scambiate per note
