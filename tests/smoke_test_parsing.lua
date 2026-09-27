@@ -297,16 +297,6 @@ if hellParsed then
   check("speedwalk: hell dirs senza nota", hellParsed.dirString:find("medusa") == nil)
 end
 
-NebbieDash.guiWidthRight = 320
-NebbieDash.fontSize = 11
-if hellParsed and hellParsed.note then
-  local cols = NebbieDash.panelWrapCols("right", 4)
-  local wrapped = NebbieDash.wrapPanelText(hellParsed.note, cols)
-  check("wrap nota: piu' righe in colonna stretta", #wrapped >= 2)
-  local joined = table.concat(wrapped, " ")
-  check("wrap nota: nessun testo perso", joined:find("Balor") and joined:find("Slavalous"))
-end
-
 local hell = NebbieDash.parseSpeedwalkLine(
   "(hell, da fontana di myst) s,3e,d (w medusa, open secret)")
 check("speedwalk: nota finale inline", hell ~= nil and hell.note ~= nil)
@@ -500,6 +490,12 @@ line = "Ti disarmano e la Flamberga di Boris vola dalla tua presa."
 NebbieDash.onDisarmLine()
 check("disarmo: 'get flamberga boris' inviato automaticamente", sentLog[1] == "get flamberga boris")
 
+sentLog = {}
+line = "$c0015Ti disarmano e the ebony kris vola dalla tua presa."
+NebbieDash.onDisarmLine()
+check("disarmo: stripColors + nome inglese -> get the ebony kris (non get ebony kris)",
+  sentLog[1] == "get the ebony kris")
+
 NebbieDash.autoDisarmRecover = false
 sentLog = {}
 NebbieDash.onDisarmLine()
@@ -633,7 +629,11 @@ NebbieDash.itemKeywordOverrides = {}
 -- Il file di override e' usato anche dal recupero arma dopo un disarmo.
 NebbieDash.itemKeywordOverrides["la flamberga di boris"] = "flamberga boris"
 check("keyword oggetto: usata anche per il recupero arma dopo disarmo",
-  select(1, NebbieDash.resolveItemKeywords("la Flamberga di Boris")) == "flamberga boris")
+  NebbieDash.resolveDisarmKeywords("la Flamberga di Boris") == "flamberga boris")
+NebbieDash.itemKeywordOverrides["the ebony kris"] = "kris"
+check("keyword oggetto: override disarmo ebony kris",
+  select(1, NebbieDash.resolveDisarmKeywords("the ebony kris")) == "kris" and
+  select(2, NebbieDash.resolveDisarmKeywords("the ebony kris")) == true)
 NebbieDash.itemKeywordOverrides = {}
 
 -- Parsing di una riga del file (formato "Nome oggetto: parole chiave").

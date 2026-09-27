@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.24 — 2026-09-27
+
+- **Disarmo (critico)**: riga con colori `$c…` non matchava il pattern; nomi inglesi tipo
+  `the ebony kris` generavano `get ebony kris` (interpretato come prendi *ebony* dal contenitore
+  *kris*). Ora `stripColors`, nome intero con articolo inglese, override da
+  `nebbie-item-keywords.txt` invariato.
+
 ## 1.15.23 — 2026-09-27
 
 - **npackageupdate (critico)**: `uninstallPackage` dentro l'alias `npackageupdate` poteva rimuovere
