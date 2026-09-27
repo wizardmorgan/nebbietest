@@ -1,13 +1,5 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
-## 1.15.14 — 2026-09-26
-
-- **Repo dedicato** `wizardmorgan/nebbie-mudlet-dashboard` — URL `npackageupdate` / GMCP aggiornati.
-- **Note speedwalk**: colore `<grey>` a righe complete (niente tag `<dark_grey>` visibili a schermo).
-- **Layout destra**: colonna più larga (auto fino ~58 caratteri / 42% finestra); speedwalk più alto
-  (cap 48% se spell ≥50%; con `nheights` basso lo speedwalk usa tutto lo spazio sotto le spell).
-- **Versione interna** alzata a 1.15.14.
-
 ## 1.15.13 — 2026-09-26
 
 - **Speedwalk hell/Korred**: righe `(desc) dirs … (nota)` non vengono più scambiate per note
