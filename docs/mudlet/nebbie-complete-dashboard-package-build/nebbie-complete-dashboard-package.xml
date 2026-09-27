@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.23"
+local PKG_VER = "1.15.24"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -2293,12 +2293,28 @@ function NebbieDash.onFallLine()
   send("stand", false)
 end
 
+-- Parole chiave per get/wield dopo disarmo (nome preso dalla riga di gioco).
+function NebbieDash.resolveDisarmKeywords(weaponName)
+  local override = NebbieDash.findItemKeywordOverride(weaponName)
+  if override and override ~= "" then return override, true end
+  local stripped = NebbieDash.stripItemParentheticals(weaponName):lower():match("^%s*(.-)%s*$") or ""
+  if stripped == "" then return "", false end
+  -- Oggetti con articolo inglese (es. "the ebony kris"): tenere il nome intero.
+  -- `get ebony kris` altrimenti e' interpretato come "prendi ebony dal contenitore kris".
+  if stripped:match("^the ") or stripped:match("^a ") or stripped:match("^an ") then
+    return stripped, false
+  end
+  return NebbieDash.extractItemKeywords(weaponName), false
+end
+
 function NebbieDash.onDisarmLine()
   if not NebbieDash.autoDisarmRecover then return end
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
-  local weaponName = text:match("^Ti disarmano e (.+) vola dalla tua presa%.%s*$")
+  text = NebbieDash.stripColors(text):match("^%s*(.-)%s*$") or ""
+  local weaponName = text:match("Ti disarmano e (.+) vola dalla tua presa%.?%s*$")
   if not weaponName then return end
-  local keywords = NebbieDash.resolveItemKeywords(weaponName)
+  weaponName = weaponName:match("^%s*(.-)%s*$")
+  local keywords = NebbieDash.resolveDisarmKeywords(weaponName)
   if keywords == "" then return end
   send("get " .. keywords, false)
   tempTimer(0.5, function() send("wield " .. keywords, false) end)
