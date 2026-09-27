@@ -188,7 +188,7 @@ ALIASES = [
     ("nebbie-dash-ident-batch", "^nidentbatch$", "NebbieDash.cmdIdentBatch()"),
     ("nebbie-dash-ident-batch-filter", "^nidentbatch (.+)$", "NebbieDash.cmdIdentBatch(matches[2])"),
     ("nebbie-dash-ident-batch-reload", "^nidentbatchreload$", "NebbieDash.cmdReloadIdentBatch()"),
-    ("nebbie-dash-package-update", "^npackageupdate$", "NebbieDash.cmdPackageUpdate()"),
+    ("nebbie-dash-package-update", "^npackageupdate(?: (force|forza))?$", "NebbieDash.cmdPackageUpdate(matches[2])"),
 ]
 
 

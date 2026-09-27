@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.26 — 2026-09-27
+
+- **npackageupdate**: install in `NebbieDash.runPackageUpdateInstall` (sopravvive alla disinstallazione);
+  messaggio finale con versione Package Manager vs `v… pronto`; alias `npackageupdate force|forza`;
+  testo chiaro quando sei gia' all'ultima versione ma reinstalla comunque.
+
 ## 1.15.25 — 2026-09-27
 
 - **Autoloot**: validazione rigida delle righe exp (non confonde lo split `La tua parte e' di N
