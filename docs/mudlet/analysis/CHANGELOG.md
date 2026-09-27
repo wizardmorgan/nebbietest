@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.23 — 2026-09-27
+
+- **npackageupdate (critico)**: `uninstallPackage` dentro l'alias `npackageupdate` poteva rimuovere
+  alias/trigger del package **prima** di `installPackage`, lasciando Mudlet senza comandi `n*`.
+  Disinstallazione + installazione ora avvengono al tick successivo (`tempTimer(0, …)`).
+- Rimosso l'early-return del chunk core sulla stessa versione (saltava `boot()` in coda allo script).
+
 ## 1.15.22 — 2026-09-27
 
 - **Macro fame/sete (critico)**: il trigger `Hai Fame.` / `Hai sete.` continuava a scattare ma al
