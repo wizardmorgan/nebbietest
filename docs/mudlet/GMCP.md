@@ -1,13 +1,25 @@
 # Nebbie Arcane — GMCP (Mudlet)
 
+<<<<<<< HEAD
 Nebbie `myst` invia pacchetti **GMCP** (telnet option 201) in stile LEU/Clessidra. Il package `nebbie-play-all` v2.2.34+ li consuma con fallback al parser del prompt.
+=======
+Nebbie `myst` invia pacchetti **GMCP** (telnet option 201) in stile LEU/Clessidra.
+
+**Package Mudlet consigliato:** `nebbie-complete-dashboard-package` (branch `mudlet`).
+Il server espone GMCP indipendentemente dal client; il dashboard attuale usa il parser del
+prompt per HUD/vitali — GMCP resta disponibile in Mudlet (`lua display(gmcp.char)`) e per
+integrazioni future nel package.
+>>>>>>> origin/mudlet
 
 ## Abilitare GMCP in Mudlet
 
 1. **Impostazioni → Server → GMCP** — abilita GMCP per il profilo Nebbie.
 2. Connetti al server.
 3. In gioco: `lua display(gmcp.char)` — dovresti vedere `vitals` e `base`.
+<<<<<<< HEAD
 4. Nel package Nebbie: `ngmcp` per diagnostica, `nprompt` per il parser testuale.
+=======
+>>>>>>> origin/mudlet
 
 ## Pacchetti inviati dal server
 
@@ -45,8 +57,13 @@ Nebbie `myst` invia pacchetti **GMCP** (telnet option 201) in stile LEU/Clessidr
 
 ```json
 {
+<<<<<<< HEAD
   "url": "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-play-all.mpackage",
   "version": "2.2.34"
+=======
+  "url": "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-complete-dashboard-package.mpackage",
+  "version": "1.15.11"
+>>>>>>> origin/mudlet
 }
 ```
 
@@ -57,6 +74,7 @@ Mudlet può offrire il download automatico del package (come ClessidraLet).
 - **Login / riconnessione:** `char.base` + `char.vitals` (+ `Client.GUI` una volta).
 - **Ogni prompt in gioco:** `char.vitals` + `char.base` (se GMCP negoziato).
 
+<<<<<<< HEAD
 ## Client `nebbie-play-all`
 
 | Comando | Azione |
@@ -69,6 +87,8 @@ Handler: `registerAnonymousEventHandler("gmcp.char", "Nebbie.fUpdateGMCP")`.
 
 Se GMCP è attivo negli ultimi 3 secondi, il parser prompt non sovrascrive HP/MN/MV (ma aggiorna ancora fight line e buff codes).
 
+=======
+>>>>>>> origin/mudlet
 ## File sorgente server
 
 | File | Ruolo |
@@ -81,6 +101,10 @@ Se GMCP è attivo negli ultimi 3 secondi, il parser prompt non sovrascrive HP/MN
 
 ## Roadmap
 
+<<<<<<< HEAD
+=======
+- Handler GMCP opzionale in `nebbie-complete-dashboard-package` (oggi: solo prompt)
+>>>>>>> origin/mudlet
 - `char.affects` (buff/debuff strutturati)
 - `room.info` (stanza, uscite)
 - Richieste client `char.vitals.Get {}` on-demand

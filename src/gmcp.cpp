@@ -19,8 +19,8 @@ namespace Alarmud {
 namespace {
 
 constexpr const char* kNebbiePackageUrl =
-    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/nebbie-play-all.mpackage";
-constexpr const char* kNebbiePackageVersion = "2.2.34";
+    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage";
+constexpr const char* kNebbiePackageVersion = "1.15.26";
 
 int gmcp_write_raw(int desc, const void* data, size_t len) {
 	if(desc < 0 || data == nullptr || len == 0) {

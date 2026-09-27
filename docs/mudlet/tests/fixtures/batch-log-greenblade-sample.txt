@@ -1,0 +1,25 @@
+
+========== batch 2026-09-21 10:30:00 (nbatch greenblade) ==========
+
+--- riga 1 — 10:30:01 ---
+CSV: GreenBlade,equilibrio EDGreenBlade,34424,9030
+[10:30:01] >>> oload 34424
+You create equilibrio edgreenblade.
+Sirio H: 100/100 M: 50/50 V: 30/30 x:0 *:* *:* [[TD]] G:0 >>
+[10:30:02] >>> stat equilibrio-edgreenblade
+Name: equilibrio edgreenblade
+Sirio H: 100/100 M: 50/50 V: 30/30 x:0 *:* *:* [[TD]] G:0 >>
+[10:30:03] >>> cast 'identify' equilibrio-edgreenblade
+Pronunci le parole, 'identify'.
+Sirio H: 100/100 M: 50/50 V: 30/30 x:0 *:* *:* [[TD]] G:0 >>
+[10:30:04] >>> osave equilibrio-edgreenblade 34424 9030
+Ho salvato equilibrio edgreenblade con il vnum 34424 (originale 9030).
+Sirio H: 100/100 M: 50/50 V: 30/30 x:0 *:* *:* [[TD]] G:0 >>
+[10:30:05] >>> stat equilibrio-edgreenblade
+Name: equilibrio edgreenblade
+Sirio H: 100/100 M: 50/50 V: 30/30 x:0 *:* *:* [[TD]] G:0 >>
+[10:30:06] >>> cast 'identify' equilibrio-edgreenblade
+Pronunci le parole, 'identify'.
+Sirio H: 100/100 M: 50/50 V: 30/30 x:0 *:* *:* [[TD]] G:0 >>
+
+--- batch terminato: completato (1 righe) (10:30:07) ---
