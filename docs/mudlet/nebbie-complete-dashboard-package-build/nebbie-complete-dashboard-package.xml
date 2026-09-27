@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.21"
+local PKG_VER = "1.15.22"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -378,6 +378,7 @@ function NebbieDash.finishEqCapture()
   local data = NebbieDash.getCharData(name)
   data.eq = cap.slots
   data.eqUpdated = os.time()
+  NebbieDash.refreshHungerBackKeywordFromEq(data, true)
   NebbieDash.saveStore()
   NebbieDash.refreshDashboard()
   cecho("<green>[NebbieDash] Equip aggiornato (" .. tostring(NebbieDash.countSlots(cap.slots)) .. "/21 slot).\n")
@@ -2436,7 +2437,12 @@ function NebbieDash.onStopUsingLine()
   for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
     if not row.empty and row.location == "sulla schiena" then
       if NebbieDash.eqItemNamesMatch(row.item, itemName) then
-        NebbieDash.patchCachedEqLocation(data, "sulla schiena", nil)
+        -- Durante la macro fame/sete il gioco manda "Smetti di usare …" per `rem`
+        -- zaino: svuotare la cache qui fa perdere {zaino} al giro successivo se
+        -- il testo sulle spalle dopo `wear` non matcha piu' l'override keyword.
+        if not NebbieDash._hungerMacroBusy then
+          NebbieDash.patchCachedEqLocation(data, "sulla schiena", nil)
+        end
         return
       end
     end
@@ -2664,6 +2670,40 @@ function NebbieDash.findBackpackKeywords(data)
   return "", false
 end
 
+-- Parola chiave stabile per {zaino} nelle macro fame/sete (rem/get/put/wear).
+function NebbieDash.macroBackpackKeywordFromPhrase(phrase, isOverride)
+  if not phrase or phrase == "" then return "" end
+  if isOverride then return phrase end
+  local kw = NebbieDash.pickItemCommandKeyword(phrase, false, {})
+  if kw and kw ~= "" then return kw end
+  return NebbieDash.lastKeyword(phrase)
+end
+
+function NebbieDash.refreshHungerBackKeywordFromEq(data, force)
+  if not data or not data.eqUpdated then return end
+  if not force and data.hungerBackKeyword and data.hungerBackKeyword ~= "" then return end
+  local phrase, isOverride = NebbieDash.findBackpackKeywords(data)
+  local kw = NebbieDash.macroBackpackKeywordFromPhrase(phrase, isOverride)
+  if kw ~= "" then
+    data.hungerBackKeyword = kw
+  end
+end
+
+function NebbieDash.resolveMacroBackpackKeyword(data)
+  if not data then return "" end
+  if data.hungerBackKeyword and data.hungerBackKeyword ~= "" then
+    return data.hungerBackKeyword
+  end
+  local phrase, isOverride = NebbieDash.findBackpackKeywords(data)
+  if phrase == "" then return "" end
+  local kw = NebbieDash.macroBackpackKeywordFromPhrase(phrase, isOverride)
+  if kw ~= "" then
+    data.hungerBackKeyword = kw
+    NebbieDash.saveStore()
+  end
+  return kw
+end
+
 -- Il "{zaino}" sostituito e' l'ULTIMA parola chiave estratta (tipicamente il
 -- nome proprio dell'oggetto, es. "Korred"), non tutta la frase multi-parola:
 -- test in gioco (2026-08-10) hanno mostrato che passare la frase intera
@@ -2876,8 +2916,7 @@ function NebbieDash.runHungerMacro()
     return
   end
   local data = NebbieDash.getCharData(name)
-  local backpackKeywords, isOverride = NebbieDash.findBackpackKeywords(data)
-  local backpackKeyword = isOverride and backpackKeywords or NebbieDash.lastKeyword(backpackKeywords)
+  local backpackKeyword = NebbieDash.resolveMacroBackpackKeyword(data)
   if backpackKeyword == "" then
     cecho("<orange>[NebbieDash] Fame/sete: slot «sulla schiena» vuoto o equip non sincronizzato — <yellow>neq<orange> poi riprova.\n")
     return
