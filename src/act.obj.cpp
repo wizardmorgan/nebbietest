@@ -42,6 +42,7 @@
 #include "trap.hpp"
 #include "utility.hpp"
 #include "procarea.hpp"
+#include "character_item_loss.hpp"
 
 namespace Alarmud {
 
@@ -179,6 +180,7 @@ ACTION_FUNC(do_drop) {
 						act("Non hai la forza di posare $p.",false, ch, tmp_object, nullptr, TO_CHAR);
 						return ;
 					}
+					character_item_loss_log(ch, tmp_object, kItemLossDropAll);
 					obj_from_char(tmp_object);
 					obj_to_room(tmp_object,ch->in_room);
 					check_falling_obj(tmp_object, ch->in_room);
@@ -240,6 +242,7 @@ ACTION_FUNC(do_drop) {
 						}
 						act("Posi $p.", false, ch, tmp_object, nullptr, TO_CHAR);
 						act("$n posa $p.", true, ch, tmp_object, nullptr, TO_ROOM);
+						character_item_loss_log(ch, tmp_object, kItemLossDrop);
 						obj_from_char(tmp_object);
 						obj_to_room(tmp_object,ch->in_room);
 
@@ -662,6 +665,8 @@ ACTION_FUNC(do_give) {
 					act("$n da' $p a $N.", true, ch, obj, vict, TO_NOTVICT);
 					act("$n ti da' $p.", false, ch, obj, vict, TO_VICT);
 					act("Dai $p a $N.", false, ch, obj, vict, TO_CHAR);
+					character_item_loss_log(ch, obj, kItemLossGive,
+											"to " + item_loss_pc_name(vict));
 					obj_from_char(obj);
 					obj_to_char(obj, vict);
 					clan_symbol_try_auto_wear(vict, obj);
@@ -1416,7 +1421,7 @@ ACTION_FUNC(do_remove) {
 	std::array<char, MAX_INPUT_LENGTH> arg1{};
 	char* T = nullptr;
 	char* P = nullptr;
-	std::array<int, 20> Rem_List{};
+	std::array<int, MAX_WEAR> Rem_List{};
 	int Num_Equip = 0;
 	struct obj_data* obj_object;
 	struct obj_data* loaded_object = nullptr;    /* Gaia 2001 */
@@ -1478,7 +1483,7 @@ ACTION_FUNC(do_remove) {
 
 			for(Num_Equip = j = 0; j< MAX_WEAR; j++) {
 				if(CAN_CARRY_N(ch) != IS_CARRYING_N(ch)) {
-					if(ch->equipment[ j ]) {
+					if(ch->equipment[ j ] && Num_Equip < MAX_WEAR) {
 						Rem_List[Num_Equip++] = j;
 					}
 				}

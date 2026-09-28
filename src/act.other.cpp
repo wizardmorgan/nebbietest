@@ -36,6 +36,7 @@
 #include "mob.editor.hpp"
 #include "ansi_parser.hpp"
 #include "clan_symbol.hpp"
+#include "character_item_loss.hpp"
 #include "comm.hpp"
 #include "db.hpp"
 #include "edit_pool.hpp"
@@ -258,6 +259,7 @@ ACTION_FUNC(do_junk) {
 			value+=(MIN(1000,MAX(tmp_object->obj_flags.cost/4,1)));
 			value2+=(tmp_object->obj_flags.cost>=(LIM_ITEM_COST_MIN+10000)?
 					 tmp_object->obj_flags.cost:0);
+			character_item_loss_log(ch, tmp_object, kItemLossJunk);
 			obj_from_char(tmp_object);
 			extract_obj(tmp_object);
 			if(num > 0) {
@@ -355,23 +357,18 @@ ACTION_FUNC(do_destroy)
 
         if(tmp_object)
         {
-            char name[25];
             int val = 0;
             bool check = TRUE;
 
             if(ch->lastpkill)
             {
-                strcpy(name, "ED");
-                strcat(name,ch->lastpkill);
                 val = 1;
-                if(isname(name, tmp_object->name))
+                if(obj_owned_by(tmp_object, ch->lastpkill))
                 {
                     val = 2;
                 }
             }
-            strcpy(name, "ED");
-            strcat(name, GET_NAME(ch));
-            if(isname(name, tmp_object->name))
+            if(pers_on(ch, tmp_object))
             {
                 val = 3;
             }
@@ -419,6 +416,7 @@ ACTION_FUNC(do_destroy)
             value+=(MIN(100000,MAX(tmp_object->obj_flags.cost/4,1)));
             value2+=(tmp_object->obj_flags.cost>=LIM_ITEM_COST_MIN ? tmp_object->obj_flags.cost : 0);
             mudlog(LOG_PLAYERS,"%s destroy %s [owner was %s]",GET_NAME(ch), tmp_object->short_description, (ch->lastpkill ? ch->lastpkill : "no one"));
+            character_item_loss_log(ch, tmp_object, kItemLossDestroy);
             obj_from_char(tmp_object);
             extract_obj(tmp_object);
         }
@@ -1399,6 +1397,8 @@ ACTION_FUNC(do_steal) {
 				else {
 					act("You unequip $p and steal it.",FALSE, ch, obj,0, TO_CHAR);
 					act("$n steals $p from $N.",TRUE,ch,obj,victim,TO_NOTVICT);
+					character_item_loss_log(victim, obj, kItemLossSteal,
+											"by " + item_loss_pc_name(ch));
 					obj_to_char(unequip_char(victim, eq_pos), ch);
 #if NODUPLICATES
 					save_inventory_transfer(ch, victim);
@@ -1472,6 +1472,8 @@ ACTION_FUNC(do_steal) {
 				/* Steal the item */
 				if((IS_CARRYING_N(ch) + 1 < CAN_CARRY_N(ch))) {
 					if((IS_CARRYING_W(ch) + GET_OBJ_WEIGHT(obj)) < CAN_CARRY_W(ch)) {
+						character_item_loss_log(victim, obj, kItemLossSteal,
+												"by " + item_loss_pc_name(ch));
 						obj_from_char(obj);
 						obj_to_char(obj, ch);
 						send_to_char("Preso!\n\r", ch);
@@ -2719,7 +2721,7 @@ ACTION_FUNC(do_use) {
     else if(stick->obj_flags.type_flag == ITEM_TREASURE && (vnum = (stick->item_number >= 0) ? obj_index[stick->item_number].iVNum : 0) == OBJ_REWARD)
     {
         string sbch, sbroom;
-        char name[25], risultato[255];
+        char risultato[255];
         int percent, bonus = 1, i;
         bool found = FALSE;
 
@@ -2733,9 +2735,7 @@ ACTION_FUNC(do_use) {
                 return;
             }
 
-            strcpy(name, "ED");
-            strcat(name, GET_NAME(ch));
-            if(!isname(name, stick->name))
+            if(!pers_on(ch, stick))
             {
                 act("Non puoi spargere $p da nessuna parte, non e' tua!", FALSE, ch, stick, 0, TO_CHAR);
                 return;

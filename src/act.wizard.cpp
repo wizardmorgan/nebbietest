@@ -90,6 +90,7 @@
 #include "spec_procs2.hpp"
 #include "obj_value.hpp"
 #include "object_instance.hpp"
+#include "character_item_loss.hpp"
 namespace Alarmud {
 
 char EasySummon = true;
@@ -7822,7 +7823,8 @@ ACTION_FUNC(do_show) {
 							   "  show db [n|name|owner]\n\r"
 							   "  show db deleted [n|name|owner]\n\r"
 							   "  show db history <n>\n\r"
-							   "  show db history deleted <n>\n\r");
+							   "  show db history deleted <n>\n\r"
+							   "  show loss <name> [detail|death] [days|time]\n\r");
 		page_string_block(&sb, ch);
 		destroy_string_block(&sb);
 		return;
@@ -8075,6 +8077,47 @@ ACTION_FUNC(do_show) {
 		mudlog(LOG_SYSERR, "Terminato do_show rare.");
 		return;
 	}
+	else if(is_abbrev(buf, "loss") || is_abbrev(buf, "losses") ||
+			is_abbrev(buf, "perdite")) {
+#if USE_MYSQL
+		char who[MAX_INPUT_LENGTH];
+		char tok[MAX_INPUT_LENGTH];
+		arg = one_argument(arg, who);
+		ItemLossShowOpts loss_opts;
+		while(arg && *arg) {
+			arg = one_argument(arg, tok);
+			if(!*tok) {
+				break;
+			}
+			if(is_abbrev(tok, "detail") || is_abbrev(tok, "dettaglio") ||
+			   is_abbrev(tok, "det")) {
+				loss_opts.view = ItemLossShowView::Detail;
+			}
+			else if(is_abbrev(tok, "death") || is_abbrev(tok, "deaths") ||
+					is_abbrev(tok, "morte") || is_abbrev(tok, "corpse")) {
+				loss_opts.view = ItemLossShowView::Death;
+			}
+			else if(isdigit(static_cast<unsigned char>(*tok)) &&
+					strchr(tok, ':') == nullptr && strchr(tok, '-') == nullptr) {
+				loss_opts.days = atoi(tok);
+			}
+			else {
+				loss_opts.at_filter = tok;
+			}
+		}
+		if(!*who) {
+			send_to_char(
+				"Uso: show loss <nome> [detail|death] [giorni|orario]\n\r", ch);
+		}
+		else {
+			character_item_loss_show(ch, who, loss_opts);
+		}
+#else
+		send_to_char("MySQL non abilitato.\n\r", ch);
+#endif
+		destroy_string_block(&sb);
+		return;
+	}
 	else if(is_abbrev(buf, "db") || is_abbrev(buf, "edits") || is_abbrev(buf, "edit") ||
 			is_abbrev(buf, "instances") || is_abbrev(buf, "instance")) {
 #if USE_MYSQL
@@ -8135,7 +8178,8 @@ ACTION_FUNC(do_show) {
 							   "  show db [n|name|owner]\n\r"
 							   "  show db deleted [n|name|owner]\n\r"
 							   "  show db history <n>\n\r"
-							   "  show db history deleted <n>\n\r");
+							   "  show db history deleted <n>\n\r"
+							   "  show loss <name> [detail|death] [days|time]\n\r");
 	}
 	page_string_block(&sb, ch);
 	destroy_string_block(&sb);
