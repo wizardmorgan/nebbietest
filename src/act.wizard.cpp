@@ -4450,6 +4450,7 @@ ACTION_FUNC(do_oload) {
 	}
 	if(obj_index[number].iVNum >= 150 && obj_index[number].iVNum < 200
 			&& !isname("Alar", GET_NAME(ch))
+			&& !isname("Sirio", GET_NAME(ch))
 			&& !isname("Croneh", GET_NAME(ch))) { /*GGPATCH*/
 		send_to_char("Mi dispiace, ma e' un oggetto riservato.\n\r", ch); // Gaia 2001
 		return;
