@@ -8,6 +8,7 @@
 #ifndef SRC_SQL_HPP_
 #define SRC_SQL_HPP_
 #include <vector>
+#include <typeinfo>
 #include <boost/make_shared.hpp>
 #include "odb/odb.hpp"
 #include "autoenums.hpp"
@@ -78,11 +79,23 @@ public:
 			DB* db = Sql::getMysql();
 			odb::transaction t(db->begin());
 			t.tracer(logTracer);
-			auto datum(db->query_one<T>(key));
+			odb::result<T> r(db->query<T>(key));
+			if(r.empty()) {
+				t.commit();
+				return boost::make_shared<T>();
+			}
+			auto i = r.begin();
+			T row = *i;
+			if(++i != r.end()) {
+				mudlog(LOG_SYSERR,
+					   "Sql::getOne: query returned multiple rows for %s, using first match",
+					   typeid(T).name());
+			}
 			t.commit();
-			return toSharedPtr(datum);
+			return boost::make_shared<T>(std::move(row));
 		}
 		catch (odb::exception &e) {
+			mudlog(LOG_SYSERR, "Sql::getOne: %s", e.what());
 			return boost::make_shared<T>();
 		}
 	}
@@ -122,7 +135,7 @@ public:
 			return true;
 		}
 		catch(odb::exception &e) {
-			if(upsert) {
+			if(upsert && data.id != 0) {
 				try {
 					db->update<T>(data);
 					t.commit();
@@ -131,6 +144,12 @@ public:
 				catch(odb::exception &e) {
 					mudlog(LOG_SYSERR,"Db exception: %s",e.what());
 				}
+			}
+			else if(upsert) {
+				mudlog(LOG_SYSERR,"Db save upsert skipped for new object: %s", e.what());
+			}
+			else {
+				mudlog(LOG_SYSERR,"Db exception: %s",e.what());
 			}
 		}
 		return false;
@@ -147,7 +166,7 @@ public:
 			return true;
 		}
 		catch(odb::exception &e) {
-			if(upsert) {
+			if(upsert && data.id == 0) {
 				try {
 					db->persist<T>(data);
 					t.commit();
@@ -156,6 +175,13 @@ public:
 				catch(odb::exception &e) {
 					mudlog(LOG_SYSERR,"Db exception: %s",e.what());
 				}
+			}
+			else if(upsert) {
+				mudlog(LOG_SYSERR,"Db update upsert skipped for existing id=%llu: %s",
+					   static_cast<unsigned long long>(data.id), e.what());
+			}
+			else {
+				mudlog(LOG_SYSERR,"Db exception: %s",e.what());
 			}
 		}
 		return false;

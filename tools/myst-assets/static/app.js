@@ -1,0 +1,328 @@
+const state = {
+  tab: "objects",
+  page: 0,
+  pageSize: 100,
+  total: 0,
+  meta: null,
+  selected: null,
+};
+
+const TAB_CONFIG = {
+  objects: {
+    endpoint: "/api/objects",
+    columns: [
+      ["vnum", "VNUM"],
+      ["short_desc", "Nome"],
+      ["type_name", "Tipo"],
+      ["cost", "Costo"],
+      ["weight", "Peso"],
+      ["flags_text", "Flag"],
+    ],
+    detailEndpoint: (vnum) => `/api/objects/${vnum}`,
+    filters: [
+      { id: "q", label: "Ricerca testo (FTS)", type: "text", placeholder: "spada, elmo, corona..." },
+      { id: "vnum_min", label: "VNUM min", type: "number" },
+      { id: "vnum_max", label: "VNUM max", type: "number" },
+      { id: "zone_index", label: "Zona", type: "zone" },
+      { id: "type_flag", label: "Tipo oggetto", type: "item_type" },
+      { id: "extra_flag", label: "Extra flag (bit)", type: "number", placeholder: "es. 64" },
+      { id: "wear_flag", label: "Wear flag (bit)", type: "number", placeholder: "es. 8192" },
+    ],
+  },
+  mobiles: {
+    endpoint: "/api/mobiles",
+    columns: [
+      ["vnum", "VNUM"],
+      ["short_desc", "Nome"],
+      ["level", "Liv"],
+      ["race_name", "Razza"],
+      ["mobtype", "Tipo"],
+      ["dam_dice", "Danni"],
+      ["exp", "EXP"],
+      ["act_text", "ACT"],
+    ],
+    detailEndpoint: (vnum) => `/api/mobiles/${vnum}`,
+    filters: [
+      { id: "q", label: "Ricerca testo (FTS)", type: "text" },
+      { id: "vnum_min", label: "VNUM min", type: "number" },
+      { id: "vnum_max", label: "VNUM max", type: "number" },
+      { id: "zone_index", label: "Zona", type: "zone" },
+      { id: "level_min", label: "Livello min", type: "number" },
+      { id: "level_max", label: "Livello max", type: "number" },
+      { id: "race", label: "Razza", type: "race" },
+      { id: "mobtype", label: "Tipo mob", type: "text", placeholder: "S, A, L..." },
+      { id: "act_flag", label: "ACT flag (bit)", type: "number" },
+      { id: "aff_flag", label: "AFF flag (bit)", type: "number" },
+    ],
+  },
+  rooms: {
+    endpoint: "/api/rooms",
+    columns: [
+      ["vnum", "VNUM"],
+      ["name", "Nome"],
+      ["sector_name", "Settore"],
+      ["flags_text", "Flag"],
+      ["moblim", "Mob lim"],
+    ],
+    detailEndpoint: (vnum) => `/api/rooms/${vnum}`,
+    filters: [
+      { id: "q", label: "Ricerca testo (FTS)", type: "text" },
+      { id: "vnum_min", label: "VNUM min", type: "number" },
+      { id: "vnum_max", label: "VNUM max", type: "number" },
+      { id: "zone_index", label: "Zona", type: "zone" },
+      { id: "sector_type", label: "Settore", type: "sector" },
+      { id: "room_flag", label: "Room flag (bit)", type: "number" },
+    ],
+  },
+  zones: {
+    endpoint: "/api/zones",
+    columns: [
+      ["zone_num", "Num"],
+      ["name", "Nome"],
+      ["bottom", "Da"],
+      ["top", "A"],
+      ["lifespan", "Life"],
+      ["reset_mode", "Reset"],
+    ],
+    filters: [
+      { id: "q", label: "Nome zona", type: "text" },
+      { id: "zone_num", label: "Numero zona", type: "number" },
+    ],
+  },
+  resets: {
+    endpoint: "/api/resets",
+    columns: [
+      ["zone_num", "Zona"],
+      ["command", "Cmd"],
+      ["arg1", "Arg1"],
+      ["arg2", "Arg2"],
+      ["arg3", "Arg3"],
+      ["raw_line", "Riga"],
+    ],
+    filters: [
+      { id: "command", label: "Comando", type: "text", placeholder: "M,O,G,E,P,D" },
+      { id: "arg_vnum", label: "VNUM mob/obj/stanza", type: "number" },
+      { id: "zone_index", label: "Zona", type: "zone" },
+      { id: "q", label: "Testo riga", type: "text" },
+    ],
+  },
+  shops: {
+    endpoint: "/api/shops",
+    columns: [
+      ["vnum", "Shop"],
+      ["keeper", "Keeper"],
+      ["in_room", "Stanza"],
+      ["profit_buy", "Buy"],
+      ["profit_sell", "Sell"],
+    ],
+    filters: [
+      { id: "q", label: "Ricerca", type: "text" },
+      { id: "keeper", label: "Keeper mob vnum", type: "number" },
+      { id: "in_room", label: "Stanza vnum", type: "number" },
+    ],
+  },
+  specials: {
+    endpoint: "/api/specials",
+    columns: [
+      ["kind", "Tipo"],
+      ["vnum", "VNUM"],
+      ["proc_name", "Proc"],
+      ["args", "Argomenti"],
+    ],
+    filters: [
+      { id: "q", label: "Ricerca", type: "text" },
+      { id: "kind", label: "Tipo", type: "text", placeholder: "M,O,R" },
+      { id: "vnum", label: "VNUM", type: "number" },
+      { id: "proc_name", label: "Nome proc", type: "text" },
+    ],
+  },
+};
+
+function $(sel) { return document.querySelector(sel); }
+
+async function api(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function renderStats() {
+  const counts = state.meta?.counts || {};
+  $("#stats").innerHTML = Object.entries(counts).map(([k, v]) =>
+    `<span class="stat-pill"><strong>${v}</strong> ${k}</span>`
+  ).join("");
+}
+
+function optionList(items, emptyLabel = "Tutti") {
+  const opts = [`<option value="">${emptyLabel}</option>`];
+  for (const [name, value] of items || []) {
+    opts.push(`<option value="${value}">${name} (${value})</option>`);
+  }
+  return opts.join("");
+}
+
+function renderFilters() {
+  const cfg = TAB_CONFIG[state.tab];
+  const enums = state.meta?.enums || {};
+  const zones = state.meta?.zones || [];
+  const zoneOptions = [`<option value="">Tutte</option>`]
+    .concat(zones.map(z => `<option value="${z.zone_index}">#${z.zone_num} ${z.name} [${z.bottom}-${z.top}]</option>`))
+    .join("");
+
+  const fields = cfg.filters.map((f) => {
+    if (f.type === "zone") {
+      return `<label>${f.label}<select data-filter="${f.id}">${zoneOptions}</select></label>`;
+    }
+    if (f.type === "item_type") {
+      return `<label>${f.label}<select data-filter="${f.id}">${optionList(enums.item_types)}</select></label>`;
+    }
+    if (f.type === "race") {
+      return `<label>${f.label}<select data-filter="${f.id}">${optionList(enums.races)}</select></label>`;
+    }
+    if (f.type === "sector") {
+      return `<label>${f.label}<select data-filter="${f.id}">${optionList(enums.sectors)}</select></label>`;
+    }
+    return `<label>${f.label}<input data-filter="${f.id}" type="${f.type}" placeholder="${f.placeholder || ""}"></label>`;
+  }).join("");
+
+  $("#filters").innerHTML = `${fields}
+    <div class="filter-actions">
+      <button id="searchBtn">Cerca</button>
+      <button id="resetBtn" class="ghost">Reset</button>
+    </div>`;
+
+  $("#searchBtn").onclick = () => { state.page = 0; loadResults(); };
+  $("#resetBtn").onclick = () => {
+    $("#filters").querySelectorAll("[data-filter]").forEach((el) => { el.value = ""; });
+    state.page = 0;
+    loadResults();
+  };
+}
+
+function currentFilterParams() {
+  const params = new URLSearchParams();
+  $("#filters").querySelectorAll("[data-filter]").forEach((el) => {
+    if (el.value !== "") params.set(el.dataset.filter, el.value);
+  });
+  params.set("limit", state.pageSize);
+  params.set("offset", state.page * state.pageSize);
+  return params;
+}
+
+function renderTable(items) {
+  const cfg = TAB_CONFIG[state.tab];
+  const thead = $("#resultsTable thead");
+  const tbody = $("#resultsTable tbody");
+  thead.innerHTML = `<tr>${cfg.columns.map(([, label]) => `<th>${label}</th>`).join("")}</tr>`;
+  tbody.innerHTML = items.map((row, idx) => {
+    const cells = cfg.columns.map(([key]) => `<td>${escapeHtml(String(row[key] ?? ""))}</td>`).join("");
+    return `<tr data-idx="${idx}">${cells}</tr>`;
+  }).join("");
+
+  tbody.querySelectorAll("tr").forEach((tr) => {
+    tr.onclick = () => {
+      tbody.querySelectorAll("tr").forEach(r => r.classList.remove("selected"));
+      tr.classList.add("selected");
+      const row = items[Number(tr.dataset.idx)];
+      state.selected = row;
+      renderDetail(row);
+    };
+  });
+}
+
+function escapeHtml(text) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function renderDetail(row) {
+  const cfg = TAB_CONFIG[state.tab];
+  const body = $("#detailBody");
+
+  if (cfg.detailEndpoint && row.vnum !== undefined) {
+    api(cfg.detailEndpoint(row.vnum)).then((data) => {
+      if (data.error) {
+        body.innerHTML = `<div class="muted">${data.error}</div>`;
+        return;
+      }
+      body.innerHTML = renderDetailObject(data);
+    });
+    return;
+  }
+
+  body.innerHTML = renderDetailObject(row);
+}
+
+function renderDetailObject(data) {
+  const skip = new Set(["affects_json", "extra_json", "exits_json", "producing_json", "trade_types_json", "messages_json", "search_text"]);
+  const parts = ["<dl class='kv'>"];
+  for (const [key, value] of Object.entries(data)) {
+    if (skip.has(key)) continue;
+    if (value === null || value === "" || value === 0) continue;
+    if (Array.isArray(value)) {
+      parts.push(`<dt>${key}</dt><dd>${value.map(v => typeof v === "object" ? `<pre>${escapeHtml(JSON.stringify(v, null, 2))}</pre>` : escapeHtml(String(v))).join("<br>")}</dd>`);
+      continue;
+    }
+    if (typeof value === "object") {
+      parts.push(`<dt>${key}</dt><dd><pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre></dd>`);
+      continue;
+    }
+    parts.push(`<dt>${key}</dt><dd>${escapeHtml(String(value))}</dd>`);
+  }
+  parts.push("</dl>");
+  return parts.join("");
+}
+
+async function loadResults() {
+  const cfg = TAB_CONFIG[state.tab];
+  const params = currentFilterParams();
+  const data = await api(`${cfg.endpoint}?${params}`);
+  state.total = data.total;
+  renderTable(data.items || []);
+  $("#resultCount").textContent = `${data.total} risultati`;
+  const pages = Math.max(1, Math.ceil(data.total / state.pageSize));
+  $("#pageInfo").textContent = `${state.page + 1} / ${pages}`;
+  $("#prevPage").disabled = state.page <= 0;
+  $("#nextPage").disabled = state.page + 1 >= pages;
+  $("#detailBody").innerHTML = `<div class="muted">Seleziona una riga per vedere il dettaglio completo.</div>`;
+}
+
+function switchTab(tab) {
+  state.tab = tab;
+  state.page = 0;
+  state.selected = null;
+  document.querySelectorAll(".tabs button").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === tab);
+  });
+  renderFilters();
+  loadResults();
+}
+
+async function init() {
+  state.meta = await api("/api/meta");
+  renderStats();
+  renderFilters();
+  await loadResults();
+
+  document.querySelectorAll(".tabs button").forEach((btn) => {
+    btn.onclick = () => switchTab(btn.dataset.tab);
+  });
+  $("#prevPage").onclick = () => { if (state.page > 0) { state.page -= 1; loadResults(); } };
+  $("#nextPage").onclick = () => { state.page += 1; loadResults(); };
+  $("#reimportBtn").onclick = async () => {
+    $("#reimportBtn").disabled = true;
+    const res = await fetch("/api/reimport", { method: "POST" });
+    const data = await res.json();
+    state.meta = await api("/api/meta");
+    renderStats();
+    await loadResults();
+    $("#reimportBtn").disabled = false;
+    alert(`Reimport completato: ${JSON.stringify(data.counts)}`);
+  };
+}
+
+init().catch((err) => {
+  $("#detailBody").innerHTML = `<div class="muted">Errore avvio: ${escapeHtml(err.message)}</div>`;
+});

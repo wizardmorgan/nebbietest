@@ -1016,6 +1016,10 @@ void set_title(struct char_data* ch) {
 
 	char buf[256];
 
+	if(IS_PC(ch) && title_looks_custom(GET_TITLE(ch))) {
+		return;
+	}
+
 	if(IS_SET(ch->player.user_flags,SHOW_CLASSES)) {
 		sprintf(buf,
 				"the %s %s", RaceName[ch->race], ClassTitles(ch));

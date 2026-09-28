@@ -271,6 +271,14 @@ bool death_snapshot_sync_exp_mysql(const char* name, long saved_exp);
 bool save_rent_mysql(const char* name, const struct obj_file_u& rent);
 void store_to_char(struct char_file_u* st, struct char_data* ch);
 void char_to_store(struct char_data* ch, struct char_file_u* st);
+/** Sostituisce ch->player.title (libera il buffer precedente). */
+void replace_player_title(struct char_data* ch, const char* title);
+/** Titolo impostato dal giocatore (colori ANSI o non prefissato con "the "). */
+bool title_looks_custom(const char* title);
+#if USE_MYSQL
+bool load_toon_title_mysql(unsigned long long toon_id, char* buf, size_t buflen);
+bool load_toon_title_mysql(const char* name, char* buf, size_t buflen);
+#endif
 int create_entry(char* name);
 void save_char(struct char_data* ch, sh_int load_room, int bonus);
 /* void save_char(struct char_data *ch, sh_int load_room); */

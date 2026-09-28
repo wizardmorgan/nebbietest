@@ -2224,13 +2224,97 @@ sono immuni all'acido.
 #
 "CACAODEMON"
 
-Questo spell e' circondata di mistero. L'unica cosa sicura e' che
-puo' essere usata cosi':
+Sintassi    : cast 'cacaodemon' <one|two|three|four|five|six>
+              (accettati anche uno, due, tre, quattro, cinque, sei, o 1-6)
+Accumulazione: -
+Durata      : Varia, dipende dal carisma del caster
+Livello     : Level 30 mage, level 29 cleric, level 30 sorcerer.
+Save        : Nessuno
+Costo di lancio: da 50 mana in su (cresce con il grado del patto e con
+                la ricchezza d'equipaggiamento in gioco)
+
+Cacaodemon e' un rituale di evocazione: vincola per breve tempo un servitore
+che prende forma al momento del rito. La potenza del patto va indicata da
+uno a sei; ogni grado richiede un'offerta diversa e piu' imponente.
 
 	cast 'cacaodemon' one
-		"
-		"
+	cast 'cacaodemon' two
+	...
 	cast 'cacaodemon' six
+
+L'offerta giusta per il grado invocato deve essere impugnata o tenuta in
+mano al momento del lancio. Se manca una delle due condizioni, il rituale
+non produce alcuna creatura.
+Le offerte sono reliquie legate al rito: piume impregnate di pece, lingue
+essiccate di rospo, chele d'ossidiana, maschere bestiali d'avorio,
+monili serpentini, frammenti di frusta infuocata e simili.
+
+Costo del rituale
+-----------------
+Il mana non e' fisso: parte da circa cinquanta punti e aumenta se invochi
+un patto piu' alto o se in quel momento molti avventurieri indossano
+equipaggiamento pregiato. Anche il tuo equip conta, sebbene in misura
+minore rispetto al resto del mondo. Gli immortali non influenzano questo
+calcolo. In ogni caso il rituale ha un tetto oltre il quale non diventa
+ancora piu' costoso, per quanto l'equip in gioco sia eccezionale.
+
+L'offerta rituale
+-----------------
+Quando il rito riesce, l'offerta viene di norma consumata del tutto. Un
+chierico malvagio molto esperto puo' invece logorarla gradualmente e
+riutilizzarla finche' conserva sufficiente valore rituale; piu' il mondo
+e' ricco di equip pregiato, piu' in fretta l'offerta si consuma e piu'
+alto deve essere il valore che le resta per essere riusata.
+
+Chi non e' gia' al di fuori delle regole comuni rischia di macchiare
+ulteriormente il proprio allineamento.
+
+La creatura evocata
+-------------------
+Ogni evocazione e' unica: al momento dell'apparizione il servitore assume
+forma e potenza in base al patto scelto, al livello effettivo del lancio
+e alla qualita' media dell'equip indossato dagli avventurieri presenti
+in gioco (e, in parte, dal tuo). Un mondo in cui molti indossano buon
+equip tende a produrre servitori piu' resistenti e pericolosi; un mondo
+piu' povero produce evocazioni piu' modeste, senza eccessi improvvisi.
+
+Il grado del patto (da uno a sei) incide sulla potenza complessiva e sulla
+forma assunta. Descrizioni, aspetto e nome cambiano a ogni evocazione
+entro categorie diverse per ogni grado. L'allineamento di chi lancia
+orienta la natura del servitore:
+  - animo benevolo  -> forme celesti o luminose;
+  - animo malvagio  -> forme demoniache o corrupte;
+  - animo neutro    -> constructi, golem o spiriti dell'equilibrio.
+
+Le forme piu' potenti possono manifestare protezioni divine o barriere
+infuocate. In combattimento il servitore reagisce secondo la sua natura:
+cura e protegge il padrone se evocato da un'anima buona, colpisce l'area
+se evocato da un'anima neutrale, drena e avvelina se evocato da un'anima
+malvagia.
+
+Dopo l'evocazione
+-----------------
+La creatura compare nella stanza, smette di essere aggressiva verso
+l'ambiente e resta generalmente ferma finche' non riceve ordini. Se non
+hai gia' troppi seguaci soggiogati, ti segue come un alleato ammaliato
+per un periodo legato al tuo carisma.
+
+All'atto dell'evocazione giura di proteggerti come guardia del corpo,
+indipendentemente dalla sua potenza. Se il servitore e' ancora relativamente
+contenuto in forza, estende la stessa protezione a tutti i membri del
+gruppo (serve il gruppo attivo). In combattimento puo' interporre tra te
+o un compagno e l'aggressore, come una guardia del corpo ordinaria.
+
+Per verificare o ripristinare la protezione del gruppo:
+
+	order <servitore> vigila
+	order followers vigila
+
+(Accettati anche guardia, proteggi, o bodyguard da solo.)
+
+Il rituale non funziona dove le evocazioni sono interdette.
+
+Vedi anche: bodyguard, order, group
 
 #
 "CONE OF COLD"
