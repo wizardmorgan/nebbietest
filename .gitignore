@@ -236,6 +236,8 @@ utilities/convert
 mudroot/log.txt
 myst.pid
 mudroot/lib/myst.pid
+mudroot/lib/helptbl
+mudroot/lib/wizhelptbl
 src/info
 /check/
 /check.xml

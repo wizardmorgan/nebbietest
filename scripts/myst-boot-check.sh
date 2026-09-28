@@ -121,6 +121,15 @@ else
   echo "WARN patch crafting ladro incompleta — ./scripts/apply-production-world-patch.sh"
 fi
 
+if [ -x ./scripts/validate-helptbl.sh ]; then
+  if ./scripts/validate-helptbl.sh "./${DATA_DIR}"; then
+    :
+  else
+    echo "FAIL helptbl corrotto — git checkout -- pages/helptbl && ./scripts/apply-production-world-patch.sh"
+    fail=1
+  fi
+fi
+
 if [ -f "./${DATA_DIR}/myst.pid" ]; then
   pid="$(tr -d ' \n' < "./${DATA_DIR}/myst.pid" 2>/dev/null || true)"
   echo "INFO myst.pid in lib = '${pid}' (solo informativo, non letto al boot)"

@@ -100,6 +100,10 @@ if ! mudlib_present; then
 fi
 
 if [ "$DO_PATCH" -eq 1 ]; then
+  if [ ! -x "$PATCH_SCRIPT" ]; then
+    echo "prepare-mudlib: manca $PATCH_SCRIPT" >&2
+    exit 1
+  fi
   patch_args=(--dir "$DEST")
   if [ "$DO_FLAVOR" -eq 1 ]; then
     patch_args+=(--flavor)
