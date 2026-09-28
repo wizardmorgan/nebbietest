@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Myst Asset Browser</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Myst Asset Browser</h1>
+      <p class="subtitle">Database interattivo per oggetti, mob, zone, stanze, reset, shop e special proc</p>
+    </div>
+    <div class="stats" id="stats"></div>
+    <button id="reimportBtn" class="ghost">Reimporta da mudroot/lib</button>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="objects" class="active">Oggetti</button>
+    <button data-tab="mobiles">Mob</button>
+    <button data-tab="rooms">Stanze</button>
+    <button data-tab="zones">Zone</button>
+    <button data-tab="resets">Reset zone</button>
+    <button data-tab="shops">Shop</button>
+    <button data-tab="specials">Special proc</button>
+  </nav>
+
+  <section class="filters" id="filters"></section>
+
+  <main class="layout">
+    <div class="table-wrap">
+      <div class="table-meta">
+        <span id="resultCount">0 risultati</span>
+        <div class="pager">
+          <button id="prevPage" class="ghost">Prec</button>
+          <span id="pageInfo">1</span>
+          <button id="nextPage" class="ghost">Succ</button>
+        </div>
+      </div>
+      <table id="resultsTable">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <aside class="detail" id="detail">
+      <h2>Dettaglio</h2>
+      <div id="detailBody" class="detail-body muted">Seleziona una riga per vedere il dettaglio completo.</div>
+    </aside>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
