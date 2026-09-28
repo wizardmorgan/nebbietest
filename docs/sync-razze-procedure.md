@@ -27,25 +27,36 @@ EDIT_BRANCH=feature/edit-portal
 
 ## A) Caso normale — sempre partendo dal fork aggiornato
 
-**Importante:** prima allinea il clone a `mine`, poi sync Razze. Se salti il `fetch`/`reset`, rischi un secondo merge locale e il push rifiutato (`fetch first`).
+**Importante:** working tree **pulito**, poi allinea a `mine`, poi sync Razze.  
+Se hai modifiche locali (`utility.cpp`, `act.wizard.cpp`, …) Git blocca il merge con *local changes would be overwritten*.
 
 ```bash
 cd ~/NebbieArcane/Server
 git checkout feature/edit-portal
-git status                    # working tree pulito (niente merge a metà)
+git status                    # deve essere pulito (niente M / unmerged)
+
+# 0) se hai WIP locali da tenere:
+git stash push -u -m "wip before sync"
+# (se NON ti servono: git restore src/utility.cpp src/act.wizard.cpp …)
 
 # 1) prendi tutto ciò che è già sul fork (agent / altri sync)
 git fetch mine
 git reset --hard mine/feature/edit-portal
 
-# 2) porta dentro Montero
-./scripts/mud-dev.sh sync-razze
-# = fetch upstream/feature/Razze + merge su HEAD
+# 2) porta dentro Montero (solo se manca ancora qualcosa)
+git fetch upstream feature/Razze
+git log --oneline HEAD..upstream/feature/Razze   # vuoto = già allineato
+./scripts/mud-dev.sh sync-razze                  # salta se la riga sopra è vuota
 
 # 3) pubblica e builda
 git push mine feature/edit-portal
 ./scripts/mud-dev.sh build    # o: rebuild-myst
+
+# 4) ripristina WIP (se avevi fatto stash)
+git stash pop                 # risolvi conflitti se compaiono
 ```
+
+`sync-all` fa la stessa cosa di `sync-razze` sul clone unico + altri passi: **stesse regole** (tree pulito / stash prima).
 
 Se `sync-razze` dice *già aggiornato*, il push può essere un no-op (già allineati) — ok.
 
@@ -113,6 +124,31 @@ git push mine feature/edit-portal
 ```
 
 Se `merge --abort` fallisce, il `reset --hard` a `mine/...` ripulisce comunque.
+
+### C1b — `Your local changes … would be overwritten by merge`
+
+Hai file modificati e non committati (es. `src/utility.cpp`, `src/act.wizard.cpp`). Il merge di Razze non parte finché il tree non è pulito.
+
+**Tieni le modifiche:**
+
+```bash
+cd ~/NebbieArcane/Server
+git status
+git stash push -u -m "wip before sync"
+git fetch mine
+git reset --hard mine/feature/edit-portal
+# se l'agent ha già syncato Razze, NON serve sync-razze di nuovo:
+git log --oneline HEAD..upstream/feature/Razze   # deve essere vuoto
+./scripts/mud-dev.sh build
+git stash pop
+```
+
+**Scarta le modifiche** (irreversibile su quei file):
+
+```bash
+git restore src/act.wizard.cpp src/utility.cpp   # adatta i path
+# oppure: git reset --hard HEAD
+```
 
 ### C2 — Push rifiutato: `rejected … (fetch first)`
 
