@@ -87,7 +87,7 @@ https://raw.githubusercontent.com/wizardmorgan/nebbietest/mudlet/docs/mudlet/neb
   ```
    Nebbie v2.2.31: ...
    Tastierino: 8=north 2=south 4=west 6=east 9=up 3=down 5=look (Num Lock ON o OFF)
-   Pronto: nclass +, q1, ngui | nfix nprompt | nlist
+   Pronto: nclass +, q1, ngui | nfix nprompt ngmcp | nlist
   ```
 5. Setup iniziale:
   ```
