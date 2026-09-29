@@ -1087,6 +1087,15 @@ check("ident batch: identBatchParseFilter resume toon", r2 and t2 == "Astaroth")
 check("ident batch: identBatchParseFilter toon normale", not r3 and t3 == "Montero")
 os.remove(resumeCsv)
 
+check("groupcmd: parseGroupSaySpeaker", (function()
+  local s, p = NebbieDash.parseGroupSaySpeaker("[Chunli] dice al gruppo 'dro'")
+  return s == "Chunli" and p == "dro"
+end)())
+check("groupcmd: expandGroupCmdTemplate",
+  NebbieDash.expandGroupCmdTemplate("adrenalize {name}", "Chunli") == "adrenalize chunli")
+check("groupcmd: normalizeGroupCmdTemplate aggiunge {name}",
+  NebbieDash.normalizeGroupCmdTemplate("adrenalize") == "adrenalize {name}")
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

@@ -171,6 +171,8 @@ ALIASES = [
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
     ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
     ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),
+    ("nebbie-dash-groupcmd", "^ngroupcmd$", "NebbieDash.cmdGroupCmd(\"\")"),
+    ("nebbie-dash-groupcmd-args", "^ngroupcmd (.+)$", "NebbieDash.cmdGroupCmd(matches[2])"),
     ("nebbie-dash-split", "^nsplit (.+)$", "NebbieDash.cmdSplit(matches[2])"),
     ("nebbie-dash-autoloot", "^nautoloot (.+)$", "NebbieDash.cmdSetAutoLoot(matches[2])"),
     ("nebbie-dash-autostand", "^nautostand (.+)$", "NebbieDash.cmdSetAutoStand(matches[2])"),
