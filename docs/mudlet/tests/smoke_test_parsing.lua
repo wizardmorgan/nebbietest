@@ -1096,6 +1096,12 @@ check("groupcmd: expandGroupCmdTemplate",
 check("groupcmd: normalizeGroupCmdTemplate aggiunge {name}",
   NebbieDash.normalizeGroupCmdTemplate("adrenalize") == "adrenalize {name}")
 
+check("package update: isValidMpackageInstallUrl",
+  NebbieDash.isValidMpackageInstallUrl(PKG_MPACKAGE_URL or
+    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage")
+  and not NebbieDash.isValidMpackageInstallUrl(
+    "https://example.com/foo.mpackage?cb=1"))
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

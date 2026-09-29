@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.28"
+local PKG_VER = "1.15.29"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -24,6 +24,41 @@ if NebbieDash and _prevPkgVer and _prevPkgVer ~= PKG_VER then
 end
 
 NebbieDash = NebbieDash or {}
+-- Install post-uninstall: vive in _G cosi' tempTimer(0) puo' chiamare installPackage
+-- dopo che uninstallPackage ha rimosso gli script del package (alias n* inclusi).
+function _G.NebbieDashRunPendingPackageInstall()
+  local pending = _G.__nebbie_dash_pkg_install
+  _G.__nebbie_dash_pkg_install = nil
+  if not pending or not pending.url then return end
+  if type(installPackage) ~= "function" then
+    cecho("<red>[NebbieDash] installPackage non disponibile.\n")
+    return
+  end
+  cecho("<grey>[NebbieDash] Scarico e installo da GitHub...\n")
+  local ret, msg = installPackage(pending.url)
+  local pkg = pending.pkg or "nebbie-complete-dashboard-package"
+  if ret == false or (ret == nil and type(msg) == "string" and msg ~= "") then
+    cecho("<red>[NebbieDash] installPackage fallito" ..
+      (msg and (": " .. tostring(msg)) or "") .. "\n")
+    cecho("<orange>Package Manager (Alt+O) → Installa da URL:\n<white>" .. pending.url .. "\n")
+    return
+  end
+  tempTimer(0.8, function()
+    local vPkg = ""
+    if type(getPackageInfo) == "function" then
+      vPkg = getPackageInfo(pkg, "version") or ""
+    end
+    local vRun = (NebbieDash and NebbieDash.version) or "?"
+    if vPkg == "" then
+      cecho("<red>[NebbieDash] Package non risulta installato — Installa da URL:\n<white>" ..
+        pending.url .. "\n")
+    else
+      cecho("<green>[NebbieDash] Package Manager: <white>" .. vPkg ..
+        "<green> — in esecuzione: <white>v" .. vRun .. "<green>.\n")
+    end
+  end)
+end
+
 NebbieDash.version = PKG_VER
 NebbieDash._loadedVer = PKG_VER
 NebbieDash._upgradeFromVer = (_prevPkgVer and _prevPkgVer ~= PKG_VER) and _prevPkgVer or nil
@@ -1116,60 +1151,43 @@ function NebbieDash.parsePkgVerFromCoreLua(text)
   return text:match('local%s+PKG_VER%s*=%s*"([^"]+)"')
 end
 
+function NebbieDash.isValidMpackageInstallUrl(url)
+  return type(url) == "string" and url:match("^https?://") ~= nil and url:match("%.mpackage$") ~= nil
+end
+
 function NebbieDash.fetchRemotePackageVersionSync()
-  if type(getHttp) == "function" then
-    local ok, body = pcall(getHttp, PKG_CORE_RAW_URL .. "?cb=" .. tostring(os.time()))
-    if ok and type(body) == "string" then
-      return NebbieDash.parsePkgVerFromCoreLua(body)
-    end
-  end
+  -- getHTTP/getHttp sono asincroni in Mudlet: non c'e' una versione remota affidabile qui.
   return nil
 end
 
--- Chiamata dopo tempTimer(0): sopravvive alla disinstallazione del package in corso.
+-- Chiamata dopo tempTimer: install differito in _G.NebbieDashRunPendingPackageInstall.
 function NebbieDash.runPackageUpdateInstall(installUrl, pkg, hadInstalledVer)
   pkg = pkg or NebbieDash.package or "nebbie-complete-dashboard-package"
-  installUrl = installUrl or (PKG_MPACKAGE_URL .. "?cb=" .. tostring(os.time()))
+  installUrl = installUrl or PKG_MPACKAGE_URL
+  if not NebbieDash.isValidMpackageInstallUrl(installUrl) then
+    cecho("<red>[NebbieDash] URL install non valido per Mudlet (deve finire con .mpackage, senza ?query).\n")
+    cecho("<orange>Corretto: <white>" .. PKG_MPACKAGE_URL .. "\n")
+    return false
+  end
   NebbieDash._mainLoaded = false
   NebbieDash._lastBootTime = nil
+  _G.__nebbie_dash_pkg_install = { url = installUrl, pkg = pkg }
+  -- Timer PRIMA di uninstall: sopravvive alla rimozione del package al tick successivo.
+  tempTimer(0, function()
+    if type(_G.NebbieDashRunPendingPackageInstall) == "function" then
+      _G.NebbieDashRunPendingPackageInstall()
+    end
+  end)
   if hadInstalledVer and type(uninstallPackage) == "function" then
     cecho("<grey>Disinstallo '" .. pkg .. "'...\n")
     local uok, uerr = pcall(uninstallPackage, pkg)
     if not uok then
+      _G.__nebbie_dash_pkg_install = nil
       cecho("<red>uninstallPackage fallito: " .. tostring(uerr) .. "\n")
       cecho("<orange>Package Manager (Alt+O) → Installa da URL:\n<white>" .. PKG_MPACKAGE_URL .. "\n")
       return false
     end
   end
-  cecho("<grey>Scarico e installo da GitHub...\n")
-  local ok, err = pcall(installPackage, installUrl)
-  if not ok then
-    cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
-    cecho("<orange>Package Manager → Installa da URL:\n<white>" .. PKG_MPACKAGE_URL .. "\n")
-    return false
-  end
-  tempTimer(0.6, function()
-    NebbieDash._mainLoaded = false
-    NebbieDash._lastBootTime = nil
-    if type(NebbieDash.boot) == "function" then
-      local bok, berr = pcall(NebbieDash.boot)
-      if not bok then
-        cecho("<red>[NebbieDash] boot dopo update fallito: " .. tostring(berr) .. "\n")
-      end
-    end
-    local vRun = NebbieDash.version or "?"
-    local vPkg = ""
-    if type(getPackageInfo) == "function" then
-      vPkg = getPackageInfo(pkg, "version") or ""
-    end
-    if vPkg == "" then
-      cecho("<red>Package non risulta installato — usa Package Manager → Installa da URL:\n<white>" ..
-        PKG_MPACKAGE_URL .. "\n")
-    else
-      cecho("<green>[NebbieDash] Package Manager: <white>" .. vPkg ..
-        "<green> — in esecuzione: <white>v" .. vRun .. "<green>.\n")
-    end
-  end)
   return true
 end
 
@@ -1190,7 +1208,7 @@ function NebbieDash.cmdPackageUpdate(argStr)
   if remoteVer then
     cecho("<grey>Ultima versione su GitHub (core.lua): <white>" .. remoteVer .. "\n")
   else
-    cecho("<grey>Ultima versione su GitHub: <white>(non letta — scarico .mpackage con cache-bust)\n")
+    cecho("<grey>Ultima versione su GitHub: <white>(non disponibile in sync — reinstallo da .mpackage)\n")
   end
   cecho("<grey>" .. url .. "\n")
   if not force and remoteVer and installedVer ~= "" and remoteVer == installedVer and remoteVer == NebbieDash.version then
@@ -1205,7 +1223,8 @@ function NebbieDash.cmdPackageUpdate(argStr)
     cecho("<orange>uninstallPackage non disponibile — disinstalla da Package Manager e reinstalla il .mpackage.\n")
     return
   end
-  local installUrl = url .. "?cb=" .. tostring(os.time())
+  -- Mudlet installPackage(url) richiede URL che finisca con .mpackage — ?cb= rompe l'install.
+  local installUrl = url
   local expect = remoteVer or "vedi Package Manager"
   cecho("<green>Avvio aggiornamento (atteso: <white>" .. expect ..
     "<green>) — attendi <white>[NebbieDash] Package Manager: …<green> e <white>v… pronto<green>.\n")
