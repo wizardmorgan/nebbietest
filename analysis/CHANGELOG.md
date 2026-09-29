@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.27 — 2026-09-29
+
+- **Autosplit (critico)**: due trigger sulla stessa riga `C'erano N monete.` (duplicati Mudlet)
+  chiamavano `onLootLine` due volte; il secondo importo si sommava al controllo gruppo gia' attivo
+  → `split` doppio (es. 150000 loot, split 300000). Dedupe 2 s per riga/importo.
+
 ## 1.15.26 — 2026-09-27
 
 - **npackageupdate**: install in `NebbieDash.runPackageUpdateInstall` (sopravvive alla disinstallazione);
