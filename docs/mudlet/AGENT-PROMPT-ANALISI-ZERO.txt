@@ -1,0 +1,246 @@
+================================================================================
+PROMPT PER NUOVO AGENTE — Nebbie Play All (Mudlet)
+Analisi da zero — wiki Mudlet prima del codice legacy
+================================================================================
+Repo: wizardmorgan/nebbietest
+Branch di contesto (solo storico, NON obbligo di patch): cursor/nebbie-unified-dashboard-55b4
+Base PR: mudlet
+Package esistente: docs/mudlet/nebbie-play-all.mpackage
+Data: 2026-08-08
+
+================================================================================
+MESSAGGIO INIZIALE (copia per avviare l'agente)
+================================================================================
+
+Leggi per intero:
+  1) docs/mudlet/AGENT-RULES.txt          (regole obbligatorie)
+  2) questo file (AGENT-PROMPT-ANALISI-ZERO.txt)
+
+Parti con analisi NUOVA da zero. Consulta la wiki Mudlet PRIMA del codice in
+docs/mudlet/. Il lavoro precedente (install.lua, trigger, scrollback, live
+capture, versioni ~2.2.48–2.2.55) è solo contesto e possibile anti-pattern:
+NON aggiustarlo per default. Riprendilo SOLO se, dopo analisi documentata,
+risulta oggettivamente la soluzione migliore rispetto alle alternative.
+
+Non inventa nulla. Chiedi all'utente le informazioni mancanti. Documenta tutto
+in docs/mudlet/analysis/ (vedi AGENT-RULES.txt).
+
+Prima di codificare in massa: domande all'utente + design approvato.
+
+================================================================================
+REGOLE OBBLIGATORIE
+================================================================================
+
+Vedi file dedicato (leggere per intero):
+
+  docs/mudlet/AGENT-RULES.txt
+
+In sintesi:
+  - NON INVENTARE (MUD, Mudlet, requisiti utente)
+  - CHIEDERE all'utente ciò che manca
+  - DOCUMENTARE ogni fase con fonti (wiki URL, repo, test)
+
+================================================================================
+OBIETTIVO FUNZIONALE (confermare con utente)
+================================================================================
+
+Client Mudlet per MUD Nebbie Arcane (italiano), profilo utente di riferimento:
+  - Profilo Mudlet: "nebbie vero"
+  - Personaggio test: NomiyaMaki
+
+Funzionalità attese (scope da confermare):
+
+  A) HUD — vitali H/M/V da prompt, buff/debuff, info combattimento da prompt
+  B) Dashboard laterale (margini L/R sul main console):
+     - Equip (21 slot o subset — chiedere)
+     - Spell attivi (da attrib)
+     - Percorsi speedwalk (opzionale)
+     - Config armi/utility per PG (opzionale)
+  C) Comandi utente (nomi da confermare): neq, nattrib, nresync, ngui, nlayout, nfix
+  D) Cache per personaggio (eq, armi, paths — scope da confermare)
+
+Server: comandi MUD eq e attrib (non inventare output).
+
+================================================================================
+ESEMPI OUTPUT MUD REALI (utente — per test, non generalizzare)
+================================================================================
+
+Prompt:
+  NomiyaMaki H: 747/747 M: 532/532 V: 158/158 x:-238860738 *:* *:* [[TD]] G:3449613 >>
+
+Eq (estratto):
+  Stai usando:
+  [ 16] <impugnato>             La Flamberga di Boris
+  [ 17] <tenuto>                Happy End of the World
+  [ 18] <sulla schiena>         It's a Beautiful Day
+
+Attrib (estratto):
+  Spells attivi:
+  --------------
+  Spell : 'true sight' - 74
+  Spell : 'darkness' - 9
+
+Comando MUD corretto: attrib (non "attribute").
+
+================================================================================
+METODO: ANALISI DA ZERO (non "fix del package")
+================================================================================
+
+FASE 0 — Setup
+  [ ] Leggere AGENT-RULES.txt e questo prompt
+  [ ] Leggere AGENTS.md (build server — separato dal package Mudlet)
+  [ ] Creare docs/mudlet/analysis/LOG.md
+  [ ] Porre domande iniziali all'utente (template sotto) → Q&A.md
+  [ ] NON modificare codice finché Fase 1 non è documentata
+
+FASE 1 — Wiki Mudlet (read-only, obbligatoria)
+  Base: https://wiki.mudlet.org/
+
+  Documentare in MUDLET-WIKI-NOTES.md con URL e data:
+  - Trigger: line, multiline, prompt, regex — costo performance
+  - getLines / getLineCount / scrollback — indexing, limiti buffer
+  - sysPromptLine, tempPromptTrigger, event handlers
+  - Mini console: createMiniConsole, cecho/echo, clearWindow, bordi L/R
+  - Package lifecycle, downloadFile, install.lua nel profilo
+  - Pattern ufficiali per: parse prompt, capture output comando, update UI
+
+  Output: docs/mudlet/analysis/MUDLET-WIKI-NOTES.md
+
+FASE 2 — Requisiti e gap
+  [ ] REQUIREMENTS.md: requisiti utente | vincoli Mudlet | vincoli MUD
+  [ ] Elencare informazioni mancanti → CHIEDERE utente prima del design
+  [ ] Definire criteri di successo misurabili (acceptance tests)
+
+FASE 3 — Design (almeno 2–3 alternative, tabella comparativa)
+  Valutare senza pregiudizi (verificare con wiki prima di scartare):
+  - Trigger mirati + state machine (no catch-all per riga)
+  - Multiline / prompt-delimited capture
+  - sysPromptLine + send eq/attrib con fine sessione su prompt
+  - Package minimo nuovo vs monolite esistente
+  - GMCP (solo se utente/server confermano — branch separato nel repo)
+
+  Per ogni opzione: pro, contro, rischio hang, complessità, fonte wiki.
+  Output: docs/mudlet/analysis/DESIGN-OPTIONS.md
+
+FASE 4 — Raccomandazione (prima dell'implementazione massiccia)
+  [ ] RECOMMENDATION.md: scelta motivata
+  [ ] Se riusa codice legacy: perché batte alternative documentate
+  [ ] Se scarta tutto il vecchio: perché
+  [ ] Presentare all'utente per approvazione
+
+FASE 5 — Implementazione (solo dopo approvazione)
+  [ ] Una sola versione (un punto di truth per PKG_VER / Nebbie.version)
+  [ ] build-nebbie-package.py se rigeneri install.lua
+  [ ] TEST-PLAN.md + test manuali documentati
+  [ ] Nessun trigger catch-all (.+) senza analisi performance documentata
+
+================================================================================
+CODICE ESISTENTE — MATERIALE DI STUDIO, NON MANDATO DI PATCH
+================================================================================
+
+Leggere per contesto DOPO la wiki, non prima:
+
+  docs/mudlet/nebbie-installer-core.lua
+  docs/mudlet/nebbie-dashboard.lua
+  docs/mudlet/build-nebbie-package.py
+  docs/mudlet/nebbie-play-all-build/nebbie-install.lua
+  docs/mudlet/nebbie-play-all-build/nebbie-play-all.xml
+  docs/mudlet/PACKAGE-GUIDE.md
+  docs/mudlet/HELP.md
+
+Problemi osservati nell'iterazione precedente (da RIVVALIDARE con wiki + test;
+non ripetere senza analisi):
+
+  - Pannelli laterali vuoti con ~89 trigger installati
+  - nbuffer: righe eq in scrollback ma sync/pannelli falliscono
+  - Hang Mudlet 10s / profilo lento dopo upgrade
+  - nfix: mismatch versione (memoria vs loader install.lua)
+  - getLines: indici relativi 1..n, filtri assoluti errati
+  - Trigger substring " H:", " M:", " V:", " X:" su tutto l'output
+  - Trigger regex .+ su ogni riga
+  - refreshDashboard + layout su timer aggressivo
+  - auto eq/attrib e auto download/upgrade al boot
+  - Doppia Nebbie.version nello stesso install.lua
+  - eqCache vs eqWornByLabel (due store)
+  - gag/deleteLine su eq → scrollback senza eq per scan tardiva
+
+Il nuovo agente NON assume che patch incrementale su questo codice sia la strada
+giusta. La conclusione può essere: package nuovo minimo, GMCP server-side, o
+altro — da documentare con pro/contro.
+
+================================================================================
+CRITERI DI SUCCESSO (da confermare con utente)
+================================================================================
+
+  1. Profilo Mudlet fluido al login (no hang multi-secondo con traffico normale)
+  2. nfix (o equivalente): setup senza errore versione; versione coerente
+  3. neq / eq: pannello equip popolato (slot documentati)
+  4. nattrib / attrib: spell attivi visibili
+  5. nresync: completa senza freeze
+  6. Documentazione completa per manutenzione futura
+
+================================================================================
+DIVIETI (sospetti da iterazione precedente — confermare con wiki)
+================================================================================
+
+  - Trigger regex .+ / catch-all su ogni riga
+  - Substring " H:", " M:", " V:", " X:" per il prompt
+  - Filtrare getLines con indici assoluti senza verifica wiki
+  - refresh UI completo più di ~1 volta / 2–3 secondi
+  - send eq/attrib automatico al boot del profilo
+  - forceUpgrade/download automatico al login senza consenso
+  - Due versioni diverse nello stesso install.lua
+  - Inventare API Mudlet o formati server
+
+================================================================================
+DOMANDE INIZIALI DA PORRE ALL'UTENTE (compilare in Q&A.md)
+================================================================================
+
+  1. Versione Mudlet esatta (Help → About)?
+  2. OS e profilo Mudlet (es. nebbie vero)?
+  3. Package installati ora (nebbie-play-all versione? altri Nebbie)?
+  4. Mudlet lento al login o solo dopo connessione MUD?
+  5. Output completo incollato: eq, attrib, nprompt (o equivalente)?
+  6. Pannelli: vuoti / grigi / non visibili? ngui cambia qualcosa?
+  7. Server: GMCP disponibile? (se non sai, indicarlo)
+  8. eq/attrib in console visibile o gag ammesso?
+  9. Priorità: stabilità, equip, spell, tutto — ordine?
+  10. Accetti package NUOVO con nome diverso se più semplice?
+  11. Must-have vs nice-to-have per la prima release approvata?
+
+================================================================================
+DELIVERABLE ATTESI
+================================================================================
+
+Minimo (anche senza implementazione):
+  docs/mudlet/analysis/LOG.md
+  docs/mudlet/analysis/MUDLET-WIKI-NOTES.md
+  docs/mudlet/analysis/REQUIREMENTS.md
+  docs/mudlet/analysis/Q&A.md
+  docs/mudlet/analysis/DESIGN-OPTIONS.md
+  docs/mudlet/analysis/RECOMMENDATION.md
+
+Se implementazione approvata:
+  codice + .mpackage + TEST-PLAN.md + CHANGELOG
+  PR: separare "nuova soluzione" da "fix iterazione precedente"
+
+================================================================================
+GIT (se implementi)
+================================================================================
+
+  Branch: cursor/<descrizione>-55b4
+  Base: mudlet
+  Commit chiari; bump versione monotonica (es. 2.3.0 se redesign)
+
+================================================================================
+NOTA FINALE
+================================================================================
+
+L'utente ha già investito molte ore in iterazioni fallite. Il valore del nuovo
+agente è: wiki Mudlet + domande esplicite + documentazione trasparente — non
+velocità di patch sul codice esistente.
+
+Se la conclusione è "serve package minimo nuovo" o "serve GMCP sul server",
+dirlo esplicitamente con pro/contro.
+
+Fine — AGENT-PROMPT-ANALISI-ZERO.txt — v1.0 — 2026-08-08
