@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.30 — 2026-09-29
+
+- **ngroupcmd (critico)**: trigger regex `^\[Nome\]` non scattava sulle righe gtell con
+  colori `$c0012[$c0015Martin$…]` (formato server). Un solo trigger substring
+  `dice al gruppo '` + parsing con `stripColors` (come autoloot/gruppo).
+
 ## 1.15.29 — 2026-09-29
 
 - **npackageupdate (critico)**: l'URL con `?cb=` non finiva in `.mpackage` → Mudlet rifiutava

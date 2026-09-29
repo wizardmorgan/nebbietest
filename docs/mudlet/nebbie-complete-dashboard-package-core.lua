@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.29"
+local PKG_VER = "1.15.30"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -3287,8 +3287,14 @@ function NebbieDash.normalizeGroupCmdTemplate(tmpl)
 end
 
 function NebbieDash.expandGroupCmdTemplate(tmpl, speakerName)
-  local nameLower = (speakerName or ""):lower():match("^%s*(.-)%s*$") or ""
+  local nameLower = NebbieDash.groupCmdSpeakerKey(speakerName)
   return (tmpl or ""):gsub("{name}", nameLower)
+end
+
+function NebbieDash.groupCmdSpeakerKey(speaker)
+  local s = (speaker or ""):match("^%s*(.-)%s*$") or ""
+  local first = s:match("^(%S+)")
+  return (first or s):lower()
 end
 
 function NebbieDash.parseGroupSaySpeaker(text)
@@ -3436,19 +3442,23 @@ function NebbieDash.cmdGroupCmd(argStr)
   cecho("<orange>[NebbieDash] Uso: ngroupcmd <frase> <comando> (es. ngroupcmd dro adrenalize)\n")
 end
 
-function NebbieDash.onGroupCmdLine(phraseKey)
-  local entry = NebbieDash.groupCmds and NebbieDash.groupCmds[phraseKey]
-  if not entry then return end
+function NebbieDash.onGroupCmdLine()
+  if not NebbieDash.groupCmds or next(NebbieDash.groupCmds) == nil then return end
   local text = (type(getCurrentLine) == "function" and getCurrentLine()) or ""
   local speaker, phrase = NebbieDash.parseGroupSaySpeaker(text)
-  if not speaker or not phrase then return end
-  if phrase:lower() ~= phraseKey then return end
+  if not speaker or not phrase or phrase == "" then return end
+  local entry = NebbieDash.groupCmds[phrase:lower()]
+  if not entry then return end
   local cmd = NebbieDash.expandGroupCmdTemplate(entry.template, speaker)
   if cmd == "" then return end
   send(cmd, false)
 end
 
 function NebbieDash.teardownGroupCmdTriggers()
+  if NebbieDash._groupCmdTrig then
+    pcall(function() killTrigger(NebbieDash._groupCmdTrig) end)
+    NebbieDash._groupCmdTrig = nil
+  end
   for _, id in ipairs(NebbieDash._groupCmdTrigs or {}) do
     if id then pcall(function() killTrigger(id) end) end
   end
@@ -3457,14 +3467,10 @@ end
 
 function NebbieDash.installGroupCmdTriggers()
   NebbieDash.teardownGroupCmdTriggers()
-  if type(tempRegexTrigger) ~= "function" then return end
-  NebbieDash._groupCmdTrigs = {}
-  for lk, entry in pairs(NebbieDash.groupCmds or {}) do
-    local escPhrase = NebbieDash.regexEscapePattern(entry.phrase)
-    local pattern = "^%[([^%]]+)%] dice al gruppo '" .. escPhrase .. "'"
-    local id = tempRegexTrigger(pattern,
-      string.format([[NebbieDash.onGroupCmdLine(%q)]], lk))
-    if id then table.insert(NebbieDash._groupCmdTrigs, id) end
+  if next(NebbieDash.groupCmds or {}) == nil then return end
+  -- Substring (non regex ^[): le righe gtell hanno colori $c… prima di "[" — vedi act.comm.cpp gtell_format_line.
+  if type(tempTrigger) == "function" then
+    NebbieDash._groupCmdTrig = tempTrigger("dice al gruppo '", [[NebbieDash.onGroupCmdLine()]])
   end
 end
 
