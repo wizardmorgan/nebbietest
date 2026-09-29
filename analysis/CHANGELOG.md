@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.29 — 2026-09-29
+
+- **npackageupdate (critico)**: l'URL con `?cb=` non finiva in `.mpackage` → Mudlet rifiutava
+  `installPackage` dopo `uninstallPackage` (profilo senza dashboard e senza `n*`). URL pulito;
+  install al tick successivo via `_G.NebbieDashRunPendingPackageInstall` (sopravvive alla disinstallazione).
+
 ## 1.15.28 — 2026-09-29
 
 - **ngroupcmd**: trigger rapido su `[Nome] dice al gruppo 'frase'` (gtell). Comando
