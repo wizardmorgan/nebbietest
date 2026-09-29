@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.26"
+local PKG_VER = "1.15.27"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -3095,8 +3095,16 @@ end
 -- riga singola e autosufficiente, a differenza dei blocchi eq/attrib.
 function NebbieDash.onLootLine()
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  text = NebbieDash.stripColors(text):match("^%s*(.-)%s*$") or ""
   local amount = NebbieDash.parseLootCoinAmount(text)
   if not amount then return end
+  local fp = tostring(amount) .. "|" .. text:lower()
+  local now = os.clock()
+  if NebbieDash._lastLootFp == fp and NebbieDash._lastLootFpAt and (now - NebbieDash._lastLootFpAt) < 2.0 then
+    return
+  end
+  NebbieDash._lastLootFp = fp
+  NebbieDash._lastLootFpAt = now
   cecho("<green>[NebbieDash] Bottino: " .. amount .. " monete.\n")
   if NebbieDash.autoSplit then
     NebbieDash.startSplitFlow(amount)
