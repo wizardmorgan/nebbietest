@@ -149,7 +149,6 @@ MPACKAGE_PATH = os.path.join(HERE, f"{PKG_NAME}.mpackage")
 # automatico al boot (vedi RECOMMENDATION.md / divieti confermati nel LOG.md).
 ALIASES = [
     ("nebbie-dash-fix", "^nfix$", "NebbieDash.runFix()"),
-    ("nebbie-dash-triggers", "^ntriggers$", "NebbieDash.cmdReinstallTriggers()"),
     ("nebbie-dash-eq", "^neq$", "NebbieDash.cmdShowEq()"),
     ("nebbie-dash-attrib", "^nattrib$", "NebbieDash.cmdShowAttrib()"),
     ("nebbie-dash-resync", "^nresync$", "NebbieDash.cmdResyncAll()"),
@@ -172,6 +171,8 @@ ALIASES = [
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
     ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
     ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),
+    ("nebbie-dash-groupcmd", "^ngroupcmd$", "NebbieDash.cmdGroupCmd(\"\")"),
+    ("nebbie-dash-groupcmd-args", "^ngroupcmd (.+)$", "NebbieDash.cmdGroupCmd(matches[2])"),
     ("nebbie-dash-split", "^nsplit (.+)$", "NebbieDash.cmdSplit(matches[2])"),
     ("nebbie-dash-autoloot", "^nautoloot (.+)$", "NebbieDash.cmdSetAutoLoot(matches[2])"),
     ("nebbie-dash-autostand", "^nautostand (.+)$", "NebbieDash.cmdSetAutoStand(matches[2])"),
@@ -189,7 +190,7 @@ ALIASES = [
     ("nebbie-dash-ident-batch", "^nidentbatch$", "NebbieDash.cmdIdentBatch()"),
     ("nebbie-dash-ident-batch-filter", "^nidentbatch (.+)$", "NebbieDash.cmdIdentBatch(matches[2])"),
     ("nebbie-dash-ident-batch-reload", "^nidentbatchreload$", "NebbieDash.cmdReloadIdentBatch()"),
-    ("nebbie-dash-package-update", "^npackageupdate$", "NebbieDash.cmdPackageUpdate()"),
+    ("nebbie-dash-package-update", "^npackageupdate(?: (force|forza))?$", "NebbieDash.cmdPackageUpdate(matches[2])"),
 ]
 
 

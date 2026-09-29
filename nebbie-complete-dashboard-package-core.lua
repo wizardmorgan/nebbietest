@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.27"
+local PKG_VER = "1.15.28"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -576,6 +576,7 @@ NebbieDash.SHORTCUT_RESERVED = {
   nforgetspell = true, nbatch = true, nbatchreload = true, nbatchverify = true,
   nidentbatch = true, nidentbatchreload = true, nspellaliases = true, nspellaliasesreload = true,
   npackageupdate = true,
+  ngroupcmd = true,
 }
 
 function NebbieDash.spellShortcutsPath()
@@ -1696,6 +1697,8 @@ NebbieDash.HELP_TEXT = {
   { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk." },
   { "nspeeddelay <secondi>", "Ritardo tra un comando e l'altro in uno speedwalk." },
   { "npackageupdate", "Scarica/reinstalla il dashboard (branch nebbie-mudlet-dashboard su GitHub). Opzionale: force" },
+  { "ngroupcmd [list|reload|del <frase>|add <frase> <cmd>]", "Trigger rapido su [Nome] dice al gruppo 'frase' → cmd con {name}." },
+  { "ngroupcmd <frase> <cmd>", "Scorciatoia: aggiunge regola (es. ngroupcmd dro adrenalize)." },
   { "nclanslot <on|off>", "Mostra/nascondi lo slot 22 (simbolo del clan)." },
   { "nloot", "Prende le monete dal cadavere presente (normale o pile of bones)." },
   { "nautoloot <on|off>", "Attiva/disattiva il loot automatico alla fine di ogni combattimento." },
@@ -3219,6 +3222,234 @@ function NebbieDash.cmdSplit(argStr)
 end
 
 -- ---------------------------------------------------------------------------
+-- Comandi rapidi su messaggio di gruppo: [Nome] dice al gruppo 'frase'
+-- (formato server: act.comm.cpp gtell_format_line). Es. frase dro → adrenalize chunli.
+-- File ~/nebbie-group-cmds.txt; scorciatoia: ngroupcmd dro adrenalize
+-- ---------------------------------------------------------------------------
+NebbieDash.groupCmds = NebbieDash.groupCmds or {}
+
+function NebbieDash.groupCmdsPath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+  return home .. "/nebbie-group-cmds.txt"
+end
+
+function NebbieDash.ensureGroupCmdsFile()
+  local path = NebbieDash.groupCmdsPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# Trigger su [Chi] dice al gruppo 'frase' → comando MUD (Mudlet invia la riga).\n" ..
+    "# {name} = chi ha parlato, minuscolo (es. Chunli → chunli).\n" ..
+    "# Formato file: frase = comando   — oppure: ngroupcmd frase comando\n" ..
+    "# Se ometti {name}, viene aggiunto in coda (es. adrenalize → adrenalize {name}).\n" ..
+    "# Dopo edit manuali: ngroupcmd reload\n" ..
+    "#\n" ..
+    "# dro = adrenalize {name}\n"
+  )
+  f:close()
+end
+
+function NebbieDash.parseGroupCmdLine(line2)
+  local phrase, tmpl = line2:match("^(%S+)%s*=%s*(.+)$")
+  if phrase and tmpl then
+    return phrase:match("^%s*(.-)%s*$"), tmpl:match("^%s*(.-)%s*$")
+  end
+  return nil, nil
+end
+
+function NebbieDash.normalizeGroupCmdTemplate(tmpl)
+  tmpl = (tmpl or ""):match("^%s*(.-)%s*$") or ""
+  if tmpl == "" then return "" end
+  if not tmpl:find("{name}", 1, true) then
+    tmpl = tmpl .. " {name}"
+  end
+  return tmpl
+end
+
+function NebbieDash.expandGroupCmdTemplate(tmpl, speakerName)
+  local nameLower = (speakerName or ""):lower():match("^%s*(.-)%s*$") or ""
+  return (tmpl or ""):gsub("{name}", nameLower)
+end
+
+function NebbieDash.parseGroupSaySpeaker(text)
+  text = NebbieDash.stripColors(text or ""):match("^%s*(.-)%s*$") or ""
+  local speaker, phrase = text:match("^%[([^%]]+)%] dice al gruppo '([^']*)'")
+  if not speaker then return nil, nil end
+  return speaker:match("^%s*(.-)%s*$"), phrase:match("^%s*(.-)%s*$")
+end
+
+function NebbieDash.saveGroupCmdsFile()
+  local keys = {}
+  for lk in pairs(NebbieDash.groupCmds or {}) do
+    table.insert(keys, lk)
+  end
+  table.sort(keys)
+  local lines = {
+    "# Trigger su [Chi] dice al gruppo 'frase' — ngroupcmd list | reload | del | add",
+    "# {name} = speaker minuscolo. Esempio rapido: ngroupcmd dro adrenalize",
+    "",
+  }
+  for _, lk in ipairs(keys) do
+    local entry = NebbieDash.groupCmds[lk]
+    if entry and entry.phrase and entry.template then
+      table.insert(lines, entry.phrase .. " = " .. entry.template)
+    end
+  end
+  table.insert(lines, "")
+  NebbieDash.writeTextFile(NebbieDash.groupCmdsPath(), table.concat(lines, "\n"))
+end
+
+function NebbieDash.loadGroupCmds()
+  NebbieDash.ensureGroupCmdsFile()
+  NebbieDash.groupCmds = {}
+  local path = NebbieDash.groupCmdsPath()
+  local f = io.open(path, "r")
+  if not f then return end
+  for rawLine in f:lines() do
+    local line2 = rawLine:match("^%s*(.-)%s*$")
+    if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+      local phrase, tmpl = NebbieDash.parseGroupCmdLine(line2)
+      if phrase and tmpl and phrase ~= "" then
+        tmpl = NebbieDash.normalizeGroupCmdTemplate(tmpl)
+        local lk = phrase:lower()
+        NebbieDash.groupCmds[lk] = { phrase = phrase, template = tmpl }
+      end
+    end
+  end
+  f:close()
+end
+
+function NebbieDash.setGroupCmdRule(phrase, tmpl, silent)
+  phrase = (phrase or ""):match("^%s*(.-)%s*$")
+  tmpl = NebbieDash.normalizeGroupCmdTemplate(tmpl)
+  if phrase == "" or tmpl == "" then
+    if not silent then
+      cecho("<orange>[NebbieDash] Uso: ngroupcmd <frase> <comando> oppure ngroupcmd add <frase> <comando>\n")
+    end
+    return false
+  end
+  local lk = phrase:lower()
+  NebbieDash.groupCmds = NebbieDash.groupCmds or {}
+  NebbieDash.groupCmds[lk] = { phrase = phrase, template = tmpl }
+  NebbieDash.saveGroupCmdsFile()
+  NebbieDash.installGroupCmdTriggers()
+  if not silent then
+    cecho("<green>[NebbieDash] Gruppo '" .. phrase .. "' → " .. tmpl .. " (file aggiornato).\n")
+  end
+  return true
+end
+
+function NebbieDash.deleteGroupCmdRule(phrase)
+  phrase = (phrase or ""):match("^%s*(.-)%s*$")
+  if phrase == "" then
+    cecho("<orange>[NebbieDash] Uso: ngroupcmd del <frase>\n")
+    return
+  end
+  local lk = phrase:lower()
+  if not NebbieDash.groupCmds or not NebbieDash.groupCmds[lk] then
+    cecho("<orange>[NebbieDash] Nessuna regola per frase '" .. phrase .. "'.\n")
+    return
+  end
+  NebbieDash.groupCmds[lk] = nil
+  NebbieDash.saveGroupCmdsFile()
+  NebbieDash.installGroupCmdTriggers()
+  cecho("<green>[NebbieDash] Rimossa regola gruppo '" .. phrase .. "'.\n")
+end
+
+function NebbieDash.cmdGroupCmdList()
+  cecho("<cyan><b>Comandi gruppo (gtell)</b> — " .. NebbieDash.groupCmdsPath() .. "\n")
+  local keys = {}
+  for lk in pairs(NebbieDash.groupCmds or {}) do table.insert(keys, lk) end
+  table.sort(keys)
+  if #keys == 0 then
+    cecho("<grey>(nessuna — es. ngroupcmd dro adrenalize)\n")
+    return
+  end
+  for _, lk in ipairs(keys) do
+    local e = NebbieDash.groupCmds[lk]
+    cecho(string.format("<yellow>'%-12s<white> → %s\n", e.phrase .. "'", e.template))
+  end
+end
+
+function NebbieDash.cmdGroupCmd(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$") or ""
+  if argStr == "" then
+    cecho("<cyan>[NebbieDash] ngroupcmd <frase> <cmd> | list | reload | del <frase> | add <frase> <cmd>\n")
+    cecho("<cyan>  Esempio: ngroupcmd dro adrenalize  →  [Chunli] dice al gruppo 'dro'  →  adrenalize chunli\n")
+    NebbieDash.cmdGroupCmdList()
+    return
+  end
+  local head = argStr:lower()
+  if head == "list" then
+    NebbieDash.cmdGroupCmdList()
+    return
+  end
+  if head == "reload" then
+    NebbieDash.loadGroupCmds()
+    NebbieDash.installGroupCmdTriggers()
+    cecho("<green>[NebbieDash] Regole gruppo ricaricate (" ..
+      tostring((function()
+        local n = 0
+        for _ in pairs(NebbieDash.groupCmds or {}) do n = n + 1 end
+        return n
+      end)()) .. ").\n")
+    return
+  end
+  local delPhrase = argStr:match("^[Dd][Ee][Ll]%s+(%S+)%s*$")
+  if delPhrase or head:match("^del%s+") then
+    NebbieDash.deleteGroupCmdRule(delPhrase or argStr:match("^del%s+(%S+)"))
+    return
+  end
+  local addPhrase, addRest = argStr:match("^[Aa][Dd][Dd]%s+(%S+)%s+(.+)$")
+  if not addPhrase and head:match("^add%s+") then
+    addPhrase, addRest = argStr:match("^add%s+(%S+)%s+(.+)$")
+  end
+  if addPhrase and addRest then
+    NebbieDash.setGroupCmdRule(addPhrase, addRest)
+    return
+  end
+  local phrase, rest = argStr:match("^(%S+)%s+(.+)$")
+  if phrase and rest then
+    NebbieDash.setGroupCmdRule(phrase, rest)
+    return
+  end
+  cecho("<orange>[NebbieDash] Uso: ngroupcmd <frase> <comando> (es. ngroupcmd dro adrenalize)\n")
+end
+
+function NebbieDash.onGroupCmdLine(phraseKey)
+  local entry = NebbieDash.groupCmds and NebbieDash.groupCmds[phraseKey]
+  if not entry then return end
+  local text = (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local speaker, phrase = NebbieDash.parseGroupSaySpeaker(text)
+  if not speaker or not phrase then return end
+  if phrase:lower() ~= phraseKey then return end
+  local cmd = NebbieDash.expandGroupCmdTemplate(entry.template, speaker)
+  if cmd == "" then return end
+  send(cmd, false)
+end
+
+function NebbieDash.teardownGroupCmdTriggers()
+  for _, id in ipairs(NebbieDash._groupCmdTrigs or {}) do
+    if id then pcall(function() killTrigger(id) end) end
+  end
+  NebbieDash._groupCmdTrigs = {}
+end
+
+function NebbieDash.installGroupCmdTriggers()
+  NebbieDash.teardownGroupCmdTriggers()
+  if type(tempRegexTrigger) ~= "function" then return end
+  NebbieDash._groupCmdTrigs = {}
+  for lk, entry in pairs(NebbieDash.groupCmds or {}) do
+    local escPhrase = NebbieDash.regexEscapePattern(entry.phrase)
+    local pattern = "^%[([^%]]+)%] dice al gruppo '" .. escPhrase .. "'"
+    local id = tempRegexTrigger(pattern,
+      string.format([[NebbieDash.onGroupCmdLine(%q)]], lk))
+    if id then table.insert(NebbieDash._groupCmdTrigs, id) end
+  end
+end
+
+-- ---------------------------------------------------------------------------
 -- Batch admin (nbatch) — utility Sirio, comandi da file di configurazione.
 -- Confermato dall'utente (2026-09-21): solo con Sirio connesso al MUD,
 -- attesa prompt tra un comando e l'altro, stop su errore MUD, log completo
@@ -4446,6 +4677,7 @@ function NebbieDash.teardownTriggers()
   end
   NebbieDash._spellExpiryTrigs = {}
   NebbieDash.teardownSpellShortcutTriggers()
+  NebbieDash.teardownGroupCmdTriggers()
 end
 
 function NebbieDash.installTriggers()
@@ -4522,6 +4754,7 @@ function NebbieDash.installTriggers()
     NebbieDash._eventHandlersRegistered = true
   end
   NebbieDash.installSpellShortcutTriggers()
+  NebbieDash.installGroupCmdTriggers()
 end
 
 -- Ridisegna il pannello quando la finestra principale (o i bordi) cambiano
@@ -4560,6 +4793,7 @@ function NebbieDash.boot()
   NebbieDash.loadItemKeywords()
   NebbieDash.loadBatchCommands()
   NebbieDash.loadBatchItems()
+  NebbieDash.loadGroupCmds()
   NebbieDash.installTriggers()
   NebbieDash.initGUI()
   NebbieDash.initHelpButton()

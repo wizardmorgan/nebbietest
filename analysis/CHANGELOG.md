@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.28 — 2026-09-29
+
+- **ngroupcmd**: trigger rapido su `[Nome] dice al gruppo 'frase'` (gtell). Comando
+  `ngroupcmd dro adrenalize` salva in `~/nebbie-group-cmds.txt` e invia `adrenalize chunli`
+  quando qualcuno dice `dro` in gruppo (`{name}` = speaker minuscolo). Anche `list`, `reload`,
+  `del`, `add`.
+
 ## 1.15.27 — 2026-09-29
 
 - **Autosplit (critico)**: due trigger sulla stessa riga `C'erano N monete.` (duplicati Mudlet)
