@@ -1087,10 +1087,14 @@ check("ident batch: identBatchParseFilter resume toon", r2 and t2 == "Astaroth")
 check("ident batch: identBatchParseFilter toon normale", not r3 and t3 == "Montero")
 os.remove(resumeCsv)
 
-check("groupcmd: parseGroupSaySpeaker", (function()
-  local s, p = NebbieDash.parseGroupSaySpeaker("[Chunli] dice al gruppo 'dro'")
-  return s == "Chunli" and p == "dro"
-end)())
+check("groupcmd: parseGroupSaySpeaker con colori server",
+  (function()
+    local s, p = NebbieDash.parseGroupSaySpeaker(
+      "$c0012[$c0015Martin$c0012] dice al gruppo 'dro'")
+    return s == "Martin" and p == "dro"
+  end)())
+check("groupcmd: groupCmdSpeakerKey primo token",
+  NebbieDash.groupCmdSpeakerKey("Martin") == "martin")
 check("groupcmd: expandGroupCmdTemplate",
   NebbieDash.expandGroupCmdTemplate("adrenalize {name}", "Chunli") == "adrenalize chunli")
 check("groupcmd: normalizeGroupCmdTemplate aggiunge {name}",
