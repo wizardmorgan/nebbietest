@@ -1649,18 +1649,26 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 	}
 	const ObjEditAnalysis after = AnalyzeObjEdit(clone);
 	const bool artifact = IS_OBJ_STAT(clone, ITEM_IMMUNE);
+	const double class_mult = after.class_mult > 0.0 ? after.class_mult : before.class_mult;
 	extract_obj(clone);
 	/*
-	 * Costo = incremento di CheckValueObj assoluto (scalato), non la diff
-	 * clampata vs proto. La clamp a ≥0 azzerava (o sottostimava) la rimozione
-	 * di malus sotto il prototipo — es. armor +10→0 o spellfail malus→0 a 0 MXP.
-	 * class_mult / Artifact come in AnalyzeObjEdit, applicati al delta pagato.
+	 * Costo portal = delta di CheckValueObj assoluto (scalato).
+	 * Per i malus (es. INT -3→0) SignedAffectCost usa tariffa 2× → 3 punti
+	 * tolti = 6 unita' INT positive (90 MXP base). Poi class_mult e Artifact
+	 * +50% come listino: biclasse+artifact → 90×1.5×1.5 = 202.5 MXP.
+	 *
+	 * Non usare AnalyzeObjEdit.diff qui: senza ITEM2_PAID_MALUS la NonNeg
+	 * azzera il recupero malus (0 MXP), ma il portale addebita sempre il 2×
+	 * (testo UI: «il costo e' il doppio del listino»).
+	 *
+	 * class_mult richiede personal_owner risolto (ensure_portal_listino_owner);
+	 * Artifact richiede ITEM_IMMUNE sul pezzo/pending (merge inventorio + flag).
 	 */
 	const long delta_raw = after.absolute.valore - before.absolute.valore;
 	xp_raw = std::max(0L, delta_raw * kObjValueStorageScale);
-	if(after.class_mult != 1.0 && xp_raw > 0) {
-		xp_raw = static_cast<long>(std::llround(
-			static_cast<double>(xp_raw) * after.class_mult));
+	if(class_mult != 1.0 && xp_raw > 0) {
+		xp_raw = static_cast<long>(
+			std::llround(static_cast<double>(xp_raw) * class_mult));
 	}
 	if(artifact && xp_raw > 0) {
 		xp_raw = (xp_raw * 3) / 2;

@@ -6,7 +6,7 @@ const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 const TOOLS_OPEN_KEY = 'nebbie-edit-tools-open';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 50;
+const EDIT_PORTAL_UI_BUILD = 51;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -3056,6 +3056,10 @@ async function confirmPayEdit() {
       }
       if (item.flag) {
         affectBody.flag = item.flag;
+      }
+      /* Stesso +50% Artifact del quote (pezzo gia' Artifact o in coda). */
+      if (item.flag !== 'artifact' && objectPricingUsesArtifact()) {
+        affectBody.pendingArtifact = true;
       }
       const isPaidAffect =
         item.flag !== 'artifact' &&

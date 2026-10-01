@@ -820,6 +820,7 @@ router.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, re
     pay_xp: Number(req.body.payXp || 0),
     pay_rune: Number(req.body.payRune || 0),
     flag: req.body.flag || '',
+    pending_artifact: req.body.pendingArtifact ? 1 : 0,
     obj_name: req.body.objName != null ? String(req.body.objName) : undefined,
     short_desc: req.body.shortDesc != null ? String(req.body.shortDesc) : undefined,
     description:
