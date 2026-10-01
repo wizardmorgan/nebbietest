@@ -713,7 +713,7 @@ bool object_edit_recovers_listino_malus(const struct obj_data* obj, int location
 	return target_modifier > cur;
 }
 
-[[nodiscard]] static void portal_force_paid_malus(struct obj_data* obj) noexcept {
+static void portal_force_paid_malus(struct obj_data* obj) noexcept {
 	if(obj) {
 		SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PAID_MALUS);
 	}
