@@ -12,6 +12,12 @@ non si toglie. Il **+50%** sul costo finale listino vale sia se il pezzo
 era già Artifact sia se il flag viene aggiunto nello stesso pacchetto
 (ordine: listino base → class_mult bi/tri → Artifact +50%).
 
+**`ITEM2_PAID_MALUS`:** se paghi il recupero di un malus listino (es. INT −3→0
+a tariffa 2×), il portale setta questo flag sul pezzo. Serve a Montero/
+`AnalyzeObjEdit` per contare quel recupero nel listino (non nel credit pool).
+Senza flag, togliere un malus proto non gonfia il diff “staff”; il portale
+lo forza in quote/apply quando l’edit migliora un malus.
+
 **Resistenze vs Immunità (listino):**
 - **Resistenze** → `APPLY_IMMUNE` (Acid/Fire/…/Slash/Pierce/Blunt)
 - **Immunità concesse** → `APPLY_M_IMMUNE` (Drain/Charm/Poison)

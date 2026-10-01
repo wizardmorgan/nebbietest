@@ -1012,6 +1012,7 @@ void portal_apply_personalize(struct obj_data* obj, const char* owner_name) {
 	j["diff_derent_mega"] = static_cast<long long>(a.diff.derent / 1000000L);
 	j["changes"] = a.changes;
 	j["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
+	j["paid_malus"] = IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS) ? 1 : 0;
 	return j;
 }
 
@@ -2268,8 +2269,18 @@ struct ToonInventoryEditScan {
 			d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
 			d["pending_artifact"] = pending_artifact ? 1 : 0;
 			d["paid_malus"] = IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS) ? 1 : 0;
+			d["will_set_paid_malus"] =
+				object_edit_recovers_listino_malus(obj, location, target_modifier,
+												   clear_slot)
+					? 1
+					: 0;
 			if(clear_slot) {
 				d["note"] = "Rimuovi slot: libera lo slot (gratis, listino)";
+			}
+			else if(d["will_set_paid_malus"] == 1 && xp_raw > 0) {
+				d["note"] =
+					"Recupero malus a tariffa 2× (ITEM2_PAID_MALUS); include class_mult "
+					"e Artifact se presenti";
 			}
 			else if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
 				d["note"] = "Include maggiorazione Artifact +50% (listino)";

@@ -684,6 +684,38 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 	return current < 0;
 }
 
+bool object_edit_recovers_listino_malus(const struct obj_data* obj, int location,
+									   int target_modifier, bool clear_slot) noexcept {
+	if(!obj || clear_slot) {
+		return false;
+	}
+	/* Bitfield: rimozione gratis via clear_slot, non "recupero malus" listino. */
+	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE || location == APPLY_SPELL
+	   || location == APPLY_AFF2) {
+		return false;
+	}
+	ObjEditListinoSpec spec;
+	if(!obj_edit_listino_spec(location, spec)) {
+		return false;
+	}
+	const int cur = object_edit_display_current(obj, location);
+	if(!listino_current_is_malus(location, cur)) {
+		return false;
+	}
+	if(location == APPLY_AC || location == APPLY_SPELLFAIL) {
+		/* Piu' basso = meglio (meno malus AC/spellfail). */
+		return target_modifier < cur;
+	}
+	/* Stats/combat: -3 → 0 / +1 migliora. */
+	return target_modifier > cur;
+}
+
+[[nodiscard]] static void portal_force_paid_malus(struct obj_data* obj) noexcept {
+	if(obj) {
+		SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PAID_MALUS);
+	}
+}
+
 [[nodiscard]] static bool listino_current_is_positive_effect(int location,
 															int current) noexcept {
 	if(location == APPLY_AC || location == APPLY_SPELLFAIL) {
@@ -1622,12 +1654,35 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 	if(!enforce_dam_spellpower_mutex(obj, location, clear_slot, err)) {
 		return false;
 	}
+	/*
+	 * ITEM2_PAID_MALUS: senza flag AnalyzeObjEdit ignora i malus (NonNeg) e il
+	 * recupero costerebbe 0. Se l'edit recupera un malus (o il pezzo ha gia' il
+	 * flag), forziamo PAID_MALUS sui clone di analisi cosi' diff.valore include
+	 * la tariffa 2× e, in un solo posto, class_mult + Artifact +50%.
+	 */
+	const bool use_paid_malus =
+		IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS)
+		|| object_edit_recovers_listino_malus(obj, location, target_modifier, clear_slot);
+
+	struct obj_data* before_obj = portal_clone_obj_state(obj);
+	if(!before_obj) {
+		err = "impossibile clonare oggetto";
+		return false;
+	}
+	if(use_paid_malus) {
+		portal_force_paid_malus(before_obj);
+	}
+	const ObjEditAnalysis before = AnalyzeObjEdit(before_obj);
+	extract_obj(before_obj);
+
 	struct obj_data* clone = portal_clone_obj_state(obj);
 	if(!clone) {
 		err = "impossibile clonare oggetto";
 		return false;
 	}
-	const ObjEditAnalysis before = AnalyzeObjEdit(obj);
+	if(use_paid_malus) {
+		portal_force_paid_malus(clone);
+	}
 	if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot)) {
 		extract_obj(clone);
 		return false;
@@ -1648,31 +1703,10 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		return false;
 	}
 	const ObjEditAnalysis after = AnalyzeObjEdit(clone);
-	const bool artifact = IS_OBJ_STAT(clone, ITEM_IMMUNE);
-	const double class_mult = after.class_mult > 0.0 ? after.class_mult : before.class_mult;
 	extract_obj(clone);
-	/*
-	 * Costo portal = delta di CheckValueObj assoluto (scalato).
-	 * Per i malus (es. INT -3→0) SignedAffectCost usa tariffa 2× → 3 punti
-	 * tolti = 6 unita' INT positive (90 MXP base). Poi class_mult e Artifact
-	 * +50% come listino: biclasse+artifact → 90×1.5×1.5 = 202.5 MXP.
-	 *
-	 * Non usare AnalyzeObjEdit.diff qui: senza ITEM2_PAID_MALUS la NonNeg
-	 * azzera il recupero malus (0 MXP), ma il portale addebita sempre il 2×
-	 * (testo UI: «il costo e' il doppio del listino»).
-	 *
-	 * class_mult richiede personal_owner risolto (ensure_portal_listino_owner);
-	 * Artifact richiede ITEM_IMMUNE sul pezzo/pending (merge inventorio + flag).
-	 */
-	const long delta_raw = after.absolute.valore - before.absolute.valore;
-	xp_raw = std::max(0L, delta_raw * kObjValueStorageScale);
-	if(class_mult != 1.0 && xp_raw > 0) {
-		xp_raw = static_cast<long>(
-			std::llround(static_cast<double>(xp_raw) * class_mult));
-	}
-	if(artifact && xp_raw > 0) {
-		xp_raw = (xp_raw * 3) / 2;
-	}
+
+	/* diff.valore e' gia' scalato e include class_mult + Artifact. */
+	xp_raw = std::max(0L, after.diff.valore - before.diff.valore);
 	pq = std::max(0, after.diff.rune - before.diff.rune);
 	return true;
 }
@@ -1688,6 +1722,8 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 	if(!enforce_dam_spellpower_mutex(obj, location, clear_slot, err)) {
 		return false;
 	}
+	const bool recovers_malus =
+		object_edit_recovers_listino_malus(obj, location, target_modifier, clear_slot);
 	const bool need_budget = (object_edit_location_affects_dam(location)
 							  && other_worn_edited_dam >= 0)
 							 || (object_edit_location_affects_spellpower(location)
@@ -1712,7 +1748,15 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 		}
 		extract_obj(clone);
 	}
-	return apply_target_modifier(obj, location, target_modifier, err, clear_slot);
+	if(!apply_target_modifier(obj, location, target_modifier, err, clear_slot)) {
+		return false;
+	}
+	/* Persistenza: dopo aver pagato il recupero malus a 2×, il pezzo deve avere
+	 * ITEM2_PAID_MALUS (Montero: listino si, edit pool no). */
+	if(recovers_malus) {
+		portal_force_paid_malus(obj);
+	}
+	return true;
 }
 
 } // namespace Alarmud

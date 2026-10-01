@@ -85,6 +85,10 @@ ok(
   String(mxpFromUnit(intMalus3Raw) * 1.5 * 1.5),
 );
 
+// Bonus +1 INT: stessi moltiplicatori (ordine base → class → artifact)
+ok('int-plus1-base', mxpFromUnit(1500) === 15, String(mxpFromUnit(1500)));
+ok('int-plus1-bi-art', mxpFromUnit(1500) * 1.5 * 1.5 === 33.75, String(mxpFromUnit(1500) * 1.5 * 1.5));
+
 if (fails.length) {
   console.error('FAILS\n' + fails.join('\n'));
   process.exit(1);
