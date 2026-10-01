@@ -436,13 +436,15 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 
 /**
  * Riscrive i totali combat preservando gli altri affect.
- * Compatta HITNDAM/HITNSP PRIMA di ripristinare non-combat: con MAX_OBJ_AFFECT=5
+ * Accorpamento HITNDAM/HITNSP solo se allow_merge (conferma esplicita UI):
+ * altrimenti lascia HITROLL/DAMROLL/SPELLPOWER separati anche se uguali.
+ * Compatta PRIMA di ripristinare non-combat: con MAX_OBJ_AFFECT=5
  * piazzare HITROLL+DAMROLL separati mangia uno slot di troppo e droppava
  * IMMUNE/SPELL in silenzio (es. hit-n-dam dopo resi+spy).
  */
 [[nodiscard]] static bool rewrite_combat_totals(struct obj_data* obj, int hitroll,
 												int damroll, int spellpower,
-												std::string& err) {
+												std::string& err, bool allow_merge) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -494,14 +496,14 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 		return true;
 	};
 
-	if(hr > 0 && hr == dr && dr > 0) {
+	if(allow_merge && hr > 0 && hr == dr && dr > 0) {
 		if(!place_or_fail(APPLY_HITNDAM, hr)) {
 			return false;
 		}
 		hr = 0;
 		dr = 0;
 	}
-	if(hr > 0 && hr == sp && dr == 0) {
+	if(allow_merge && hr > 0 && hr == sp && dr == 0) {
 		if(!place_or_fail(APPLY_HITNSP, hr)) {
 			return false;
 		}
@@ -665,7 +667,8 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 			err = "nessuno slot da rimuovere";
 			return false;
 		}
-		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err);
+		/* Clear: mai accorpare d'ufficio i restanti combat. */
+		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err, false);
 	}
 
 	const int slot = find_affect_slot_for_location(obj, location);
@@ -739,7 +742,8 @@ bool object_edit_recovers_listino_malus(const struct obj_data* obj, int location
 
 [[nodiscard]] bool apply_target_modifier(struct obj_data* obj, int location,
 										 int target_modifier, std::string& err,
-										 bool clear_slot = false) {
+										 bool clear_slot = false,
+										 bool allow_combat_merge = false) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -881,7 +885,13 @@ bool object_edit_recovers_listino_malus(const struct obj_data* obj, int location
 		default:
 			break;
 		}
-		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err);
+		/* Hit-n-dam / Hit-n-sp scelti esplicitamente = merge voluto.
+		 * Hit/dam/sp separati: merge solo con conferma UI (allow_combat_merge). */
+		const bool merge =
+			!clear_slot
+			&& (allow_combat_merge || location == APPLY_HITNDAM
+				|| location == APPLY_HITNSP);
+		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err, merge);
 	}
 
 	int slot = find_affect_slot_for_location(obj, location);
@@ -1351,31 +1361,12 @@ int object_edit_display_current(const struct obj_data* obj, int location) noexce
 		return combat_damroll_total(obj);
 	case APPLY_SPELLPOWER:
 		return combat_spellpower_total(obj);
-	case APPLY_HITNDAM: {
-		const int combined = sum_location_mod(obj, APPLY_HITNDAM);
-		if(combined != 0) {
-			return combined;
-		}
-		/* Se hit e dam sono separati ma uguali, tratta come hitndam effettivo. */
-		const int hr = combat_hitroll_total(obj);
-		const int dr = combat_damroll_total(obj);
-		if(hr > 0 && hr == dr) {
-			return hr;
-		}
-		return 0;
-	}
-	case APPLY_HITNSP: {
-		const int combined = sum_location_mod(obj, APPLY_HITNSP);
-		if(combined != 0) {
-			return combined;
-		}
-		const int hr = combat_hitroll_total(obj);
-		const int sp = combat_spellpower_total(obj);
-		if(hr > 0 && hr == sp) {
-			return hr;
-		}
-		return 0;
-	}
+	case APPLY_HITNDAM:
+		/* Solo lo slot combinato reale: hit/dam separati uguali restano distinti
+		 * finché il giocatore non conferma l'accorpamento. */
+		return sum_location_mod(obj, APPLY_HITNDAM);
+	case APPLY_HITNSP:
+		return sum_location_mod(obj, APPLY_HITNSP);
 	default:
 		return sum_location_mod(obj, location);
 	}
@@ -1646,7 +1637,8 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 bool object_quote_affect_target(struct obj_data* obj, int location, int target_modifier,
 								long& xp_raw, int& pq, std::string& err,
 								int other_worn_edited_dam, int other_worn_edited_sp,
-								bool clear_slot, int other_owned_edited_spellfail) {
+								bool clear_slot, int other_owned_edited_spellfail,
+								bool allow_combat_merge) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -1683,7 +1675,8 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 	if(use_paid_malus) {
 		portal_force_paid_malus(clone);
 	}
-	if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot)) {
+	if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot,
+							  allow_combat_merge)) {
 		extract_obj(clone);
 		return false;
 	}
@@ -1714,7 +1707,8 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 bool object_apply_affect_target(struct obj_data* obj, int location, int target_modifier,
 								std::string& err, int other_worn_edited_dam,
 								int other_worn_edited_sp, bool clear_slot,
-								int other_owned_edited_spellfail) {
+								int other_owned_edited_spellfail,
+								bool allow_combat_merge) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -1736,7 +1730,8 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 			err = "impossibile clonare oggetto";
 			return false;
 		}
-		if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot)) {
+		if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot,
+								  allow_combat_merge)) {
 			extract_obj(clone);
 			return false;
 		}
@@ -1748,7 +1743,8 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 		}
 		extract_obj(clone);
 	}
-	if(!apply_target_modifier(obj, location, target_modifier, err, clear_slot)) {
+	if(!apply_target_modifier(obj, location, target_modifier, err, clear_slot,
+							  allow_combat_merge)) {
 		return false;
 	}
 	/* Persistenza: dopo aver pagato il recupero malus a 2×, il pezzo deve avere

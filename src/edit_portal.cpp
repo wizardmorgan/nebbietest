@@ -2231,9 +2231,11 @@ struct ToonInventoryEditScan {
 					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
 														  toon_name.c_str())
 					: -1;
+			const bool allow_combat_merge =
+				parse_json_int(req, "allow_combat_merge", 0) != 0;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
 										   quote_err, other_dam, other_sp, clear_slot,
-										   other_sf)) {
+										   other_sf, allow_combat_merge)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -2272,6 +2274,7 @@ struct ToonInventoryEditScan {
 			d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
 			d["pending_artifact"] = pending_artifact ? 1 : 0;
 			d["paid_malus"] = IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS) ? 1 : 0;
+			d["allow_combat_merge"] = allow_combat_merge ? 1 : 0;
 			d["will_set_paid_malus"] =
 				object_edit_recovers_listino_malus(obj, location, target_modifier,
 												   clear_slot)
@@ -2465,9 +2468,11 @@ struct ToonInventoryEditScan {
 					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
 														  target_name.c_str())
 					: -1;
+			const bool allow_combat_merge =
+				parse_json_int(req, "allow_combat_merge", 0) != 0;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
 										   quote_pq, quote_err, other_dam, other_sp,
-										   clear_slot, other_sf)) {
+										   clear_slot, other_sf, allow_combat_merge)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -2481,7 +2486,8 @@ struct ToonInventoryEditScan {
 
 			std::string apply_err;
 			if(!object_apply_affect_target(after, location, target_modifier, apply_err,
-										   other_dam, other_sp, clear_slot, other_sf)) {
+										   other_dam, other_sp, clear_slot, other_sf,
+										   allow_combat_merge)) {
 				extract_obj(after);
 				return json_error(apply_err.c_str(), 400);
 			}

@@ -64,6 +64,8 @@ bool inventory_row_is_worn(int wearpos) noexcept;
  * class_mult e Artifact +50% sono applicati dentro AnalyzeObjEdit (una sola volta).
  * Se other_worn_edited_dam >= 0 e l'edit tocca il dam → tetto 30
  * (somma delta vs proto su pezzi ITEM2_EDIT *indossati*, escluso questo).
+ * allow_combat_merge: se true e hr==dr (o hr==sp), accorpa in HITNDAM/HITNSP;
+ * altrimenti lascia gli slot combat separati (scelta giocatore via UI).
  */
 [[nodiscard]] bool object_quote_affect_target(struct obj_data* obj, int location,
 											  int target_modifier, long& xp_raw,
@@ -71,17 +73,20 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 											  int other_worn_edited_dam = -1,
 											  int other_worn_edited_sp = -1,
 											  bool clear_slot = false,
-											  int other_owned_edited_spellfail = -1);
+											  int other_owned_edited_spellfail = -1,
+											  bool allow_combat_merge = false);
 
 /** Imposta affect target (stessa logica di quote). Restituisce false se invalido.
  *  clear_slot: libera lo slot (bonus positivo gratis).
- *  Se recupera un malus listino: setta ITEM2_PAID_MALUS sul pezzo. */
+ *  Se recupera un malus listino: setta ITEM2_PAID_MALUS sul pezzo.
+ *  allow_combat_merge: vedi object_quote_affect_target. */
 [[nodiscard]] bool object_apply_affect_target(struct obj_data* obj, int location,
 											  int target_modifier, std::string& err,
 											  int other_worn_edited_dam = -1,
 											  int other_worn_edited_sp = -1,
 											  bool clear_slot = false,
-											  int other_owned_edited_spellfail = -1);
+											  int other_owned_edited_spellfail = -1,
+											  bool allow_combat_merge = false);
 
 [[nodiscard]] int object_affect_current_modifier(const struct obj_data* obj,
 												 int location) noexcept;
