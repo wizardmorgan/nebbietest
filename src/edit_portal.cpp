@@ -588,6 +588,9 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 		if(IS_SET(row.elem.extra_flags2, ITEM2_EDIT)) {
 			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
 		}
+		if(IS_SET(row.elem.extra_flags2, ITEM2_PAID_MALUS)) {
+			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PAID_MALUS);
+		}
 		/* Artifact: se l'inventario ha ancora ITEM_IMMUNE e l'instance no,
 		 * il listino perderebbe il +50% (es. quote 135 invece di 202). */
 		if(IS_SET(row.elem.extra_flags, ITEM_IMMUNE)) {
