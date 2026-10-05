@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.34 — 2026-10-05
+
+- **GUI**: rimosso pannello **Spell attivi**; niente bordo destro — solo colonna sinistra
+  **Equip** (sopra) + **Speedwalk** (sotto). Altezze **proporzionali al testo** (righe stimate);
+  override manuale con **`nheights <10-90>`** o **`nheights auto`**. Larghezza unica **`nwidth`**.
+- **Equip**: slot vuoti evidenziati (**`▢ VUOTO ▢`** giallo/rosso).
+
 ## 1.15.33 — 2026-10-05
 
 - **Config (semplificata)**: dati in **`.config/mudlet/profiles/ndashboard/`** (Windows:
