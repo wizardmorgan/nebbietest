@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.15.32)
+description = [[# Nebbie Dashboard (1.15.33)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -59,9 +59,11 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 - **Cambio arma**: alias **`usa <parola-chiave>`** (sequenza borsa come
   nebbie-play-all; keyword da equip/`identify`/`nebbie-item-keywords.txt`).
   Il vecchio pannello "Armi" è stato rimosso (equip a tutta altezza).
-- **Config condivisa**: file `nebbie-*` e cache PG in **`~/NebbieDash/`**
-  (tutti i profili Mudlet); **`nconfigdir`**; migrazione automatica dalla
-  home del profilo.
+- **Config condivisa**: tutti i file `nebbie-*` e cache PG in **`profiles/ndashboard/`**
+  sotto la cartella Mudlet (es. Windows:
+  `C:/Users/<tu>/.config/mudlet/profiles/ndashboard`). Indice:
+  **`profiles/nebbie-dash-config-root.txt`**. Comando **`nconfigdir`**; scheletri
+  creati al primo avvio; migrazione da profilo singolo o da `~/NebbieDash`.
 - **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
   comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
   perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
@@ -94,6 +96,6 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.15.32]]
+version = [[1.15.33]]
 created = [[2026-09-26]]
 website = [[https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage]]

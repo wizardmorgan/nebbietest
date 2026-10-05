@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.33 — 2026-10-05
+
+- **Config (semplificata)**: dati in **`.config/mudlet/profiles/ndashboard/`** (Windows:
+  `C:\Users\<utente>\.config\mudlet\profiles\ndashboard`), condivisa tra profili Mudlet.
+  File indice **`profiles/nebbie-dash-config-root.txt`** (percorso assoluto). Rimossi override
+  env/`~/NebbieDash`. Al boot: crea `ndashboard` + scheletri file testo vuoti/commentati.
+  Migrazione automatica da home profilo o da `~/NebbieDash`.
+
 ## 1.15.32 — 2026-10-05
 
 - **npackageupdate (critico)**: dopo `uninstallPackage` lo script del package non arrivava mai a

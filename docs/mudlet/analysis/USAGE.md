@@ -61,7 +61,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nheights <percentuale>` | Regola quanta altezza della colonna destra va a "Spell attivi" (10–90, il resto va a "Speedwalk"; default 40). |
 | `nleftheights <percentuale>` | *(Legacy, da 1.15.31)* non fa più nulla: il pannello Armi è stato rimosso; la colonna equip usa tutta l'altezza. |
 | `usa <parola-chiave>` | Cambio arma da zaino (`rem`/`put`/`get`/`wield` come nebbie-play-all). Es. `usa redentore`. |
-| `nconfigdir` | Mostra la cartella condivisa dei file di config (default **`~/NebbieDash/`**, uguale per tutti i profili Mudlet). |
+| `nconfigdir` | Mostra **`profiles/ndashboard`** e il file **`profiles/nebbie-dash-config-root.txt`** (percorso da aprire in Explorer). |
 | `nclanslot <on\|off>` | Mostra/nasconde il 22° slot equip placeholder "simbolo del clan" (nascosto di default, non ancora confermato in un `eq` reale). |
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
@@ -101,13 +101,26 @@ override in `nebbie-item-keywords.txt` se presente, altrimenti euristica (stessa
 dopo disarmo). Se non impugni nulla, salta a `get`+`wield`. Se l'arma richiesta è già quella
 impugnata, non invia nulla.
 
-## Cartella config condivisa (`~/NebbieDash/`)
+## Cartella config (`profiles/ndashboard`)
 
-Da **1.15.31** i file `nebbie-*.txt`, `nebbie-dash-ui.lua`, cache personaggi, log batch, ecc. stanno
-in **`~/NebbieDash/`** (non più nella home del singolo profilo Mudlet), così più profili condividono
-la stessa configurazione. Comando **`nconfigdir`** per vedere il percorso effettivo. Override:
-variabile d'ambiente `NEBBIE_DASH_CONFIG` o prima riga di `~/NebbieDash/config-root.txt`. All'aggiornamento
-il pacchetto copia automaticamente i file dalla vecchia home del profilo se mancano nella cartella nuova.
+Tutti i file `nebbie-*.txt`, cache personaggi (`nebbie-complete-dashboard-package-chars.lua`),
+layout UI, log batch, ecc. stanno in:
+
+**`<cartella Mudlet>/profiles/ndashboard/`**
+
+Su Windows, con profilo tipico Mudlet:
+
+**`C:\Users\<nome>\.config\mudlet\profiles\ndashboard`**
+
+Il package crea la cartella al primo avvio e scrive anche un file indice (facile da trovare):
+
+**`C:\Users\<nome>\.config\mudlet\profiles\nebbie-dash-config-root.txt`**
+
+(apre quella cartella: contiene una riga con il percorso assoluto di `ndashboard`).
+
+Comando **`nconfigdir`** in gioco stampa gli stessi percorsi. I file `.txt` partono con scheletri
+commentati (speedwalk, spell shortcut, macro fame, …). All'aggiornamento da versioni precedenti,
+i file vengono copiati automaticamente dalla home del profilo Mudlet o da `~/NebbieDash` se presenti.
 
 ## Loot e split automatico
 
