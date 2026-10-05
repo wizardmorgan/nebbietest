@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.32"
+local PKG_VER = "1.15.33"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -149,35 +149,86 @@ NebbieDash.showClanSlot = false
 -- ---------------------------------------------------------------------------
 NebbieDash.persistEnabled = true
 
--- Cartella condivisa tra tutti i profili Mudlet (non getMudletHomeDir() per profilo).
--- Override: variabile d'ambiente NEBBIE_DASH_CONFIG o prima riga di
--- ~/NebbieDash/config-root.txt (percorso assoluto).
+-- Cartella dati condivisa: <mudlet>/profiles/ndashboard/ (Windows es.
+-- C:/Users/.../.config/mudlet/profiles/ndashboard). Indice in
+-- profiles/nebbie-dash-config-root.txt (percorso assoluto scritto al boot).
 function NebbieDash.mudletProfileHome()
   return (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
 end
 
+function NebbieDash.normalizePathSlashes(path)
+  return (path or ""):gsub("\\", "/")
+end
+
+function NebbieDash.mudletProfilesDir()
+  local home = NebbieDash.normalizePathSlashes(NebbieDash.mudletProfileHome())
+  if not home or home == "" or home == "." then return home end
+  local profiles = home:match("^(.+/profiles)/[^/]+$")
+  if profiles then return profiles end
+  if home:match("/profiles$") then return home end
+  return home
+end
+
+function NebbieDash.configRootPointerPath()
+  return NebbieDash.mudletProfilesDir() .. "/nebbie-dash-config-root.txt"
+end
+
 function NebbieDash.configRoot()
-  local env = os.getenv("NEBBIE_DASH_CONFIG")
-  if env and env:match("%S") then
-    return env:match("^%s*(.-)%s*$")
+  return NebbieDash.mudletProfilesDir() .. "/ndashboard"
+end
+
+function NebbieDash.ensureDirectory(path)
+  path = NebbieDash.normalizePathSlashes(path)
+  if type(io.exists) == "function" and io.exists(path) then return true end
+  if type(lfs) == "table" and type(lfs.mkdir) == "function" then
+    pcall(lfs.mkdir, path)
+    if type(io.exists) == "function" and io.exists(path) then return true end
   end
+  local win = package.config:sub(1, 1) == "\\"
+  if win then
+    os.execute('mkdir "' .. path:gsub("/", "\\") .. '" 2>nul')
+  else
+    os.execute('mkdir -p "' .. path .. '" 2>/dev/null')
+  end
+  return type(io.exists) == "function" and io.exists(path)
+end
+
+function NebbieDash.writeConfigRootPointer()
+  local profiles = NebbieDash.mudletProfilesDir()
+  local root = NebbieDash.configRoot()
+  if not profiles or profiles == "" then return end
+  NebbieDash.ensureDirectory(root)
+  local pointer = NebbieDash.configRootPointerPath()
+  local f = io.open(pointer, "w")
+  if not f then return end
+  f:write(
+    "# Cartella dati NebbieDash (condivisa tra tutti i profili Mudlet)\n" ..
+    "# Percorso assoluto — apri questa cartella in Explorer/Finder:\n" ..
+    root .. "\n"
+  )
+  f:close()
+end
+
+function NebbieDash.ensureConfigDir()
+  NebbieDash.ensureDirectory(NebbieDash.configRoot())
+  NebbieDash.writeConfigRootPointer()
+end
+
+function NebbieDash.ensureDefaultConfigFiles()
+  NebbieDash.ensureSpellShortcutsFile()
+  NebbieDash.ensureCastSpellsFile()
+  NebbieDash.ensureSpeedwalkFile()
+  NebbieDash.ensureHungerMacrosFile()
+  NebbieDash.ensureItemKeywordsFile()
+  NebbieDash.ensureBatchCommandsFile()
+  NebbieDash.ensureIdentBatchCommandsFile()
+  NebbieDash.ensureBatchItemsFile()
+end
+
+function NebbieDash.legacyNebbieDashHomePath(filename)
   local home = os.getenv("HOME") or os.getenv("USERPROFILE")
-  if not home or home == "" then
-    home = NebbieDash.mudletProfileHome()
-  end
-  local root = home .. "/NebbieDash"
-  local hint = root .. "/config-root.txt"
-  if type(io.exists) == "function" and io.exists(hint) then
-    local f = io.open(hint, "r")
-    if f then
-      local line = f:read("*l")
-      f:close()
-      if line and line:match("%S") and not line:match("^#") then
-        return line:match("^%s*(.-)%s*$")
-      end
-    end
-  end
-  return root
+  if not home or home == "" then return nil end
+  return NebbieDash.normalizePathSlashes(home) .. "/NebbieDash/" .. filename
 end
 
 function NebbieDash.configPath(filename)
@@ -190,19 +241,29 @@ end
 
 function NebbieDash.migrateConfigFileIfNeeded(filename)
   if type(io.exists) ~= "function" then return end
+  NebbieDash.ensureConfigDir()
   local newPath = NebbieDash.configPath(filename)
   if io.exists(newPath) then return end
-  local oldPath = NebbieDash.legacyProfilePath(filename)
-  if not io.exists(oldPath) then return end
-  local rf = io.open(oldPath, "rb")
-  if not rf then return end
-  local content = rf:read("*a")
-  rf:close()
-  local wf = io.open(newPath, "wb")
-  if not wf then return end
-  wf:write(content or "")
-  wf:close()
-  cecho("<yellow>[NebbieDash] Copiato in cartella condivisa: <white>" .. newPath .. "\n")
+  local tryPaths = {
+    NebbieDash.legacyProfilePath(filename),
+    NebbieDash.legacyNebbieDashHomePath(filename),
+  }
+  for _, oldPath in ipairs(tryPaths) do
+    if oldPath and io.exists(oldPath) then
+      local rf = io.open(oldPath, "rb")
+      if rf then
+        local content = rf:read("*a")
+        rf:close()
+        local wf = io.open(newPath, "wb")
+        if wf then
+          wf:write(content or "")
+          wf:close()
+          cecho("<yellow>[NebbieDash] Copiato in ndashboard: <white>" .. newPath .. "\n")
+        end
+      end
+      return
+    end
+  end
 end
 
 function NebbieDash.storePath()
@@ -1780,7 +1841,7 @@ NebbieDash.HELP_TEXT = {
   { "nwidth [equip|right] <n|auto>", "Imposta/auto la larghezza di una colonna." },
   { "nheights <percentuale spell>", "Imposta la proporzione verticale spell/speedwalk (destra)." },
   { "usa <parola-chiave>", "Cambio arma da zaino (rem/get/wield — come nebbie-play-all)." },
-  { "nconfigdir", "Mostra la cartella condivisa ~/NebbieDash (file n* e config)." },
+  { "nconfigdir", "Mostra cartella profiles/ndashboard e file indice nebbie-dash-config-root.txt." },
   { "nitemlen <n>", "Lunghezza massima delle descrizioni oggetti in equip." },
   { "nspellwarn <tick>", "Sotto questa soglia di tick una spell appare rossa." },
   { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk." },
@@ -1966,11 +2027,14 @@ function NebbieDash.cmdSetLeftHeights(_pctStr)
 end
 
 function NebbieDash.cmdConfigDir(_arg)
-  cecho("<cyan><b>Cartella config condivisa NebbieDash</b>\n")
-  cecho("<white>" .. NebbieDash.configRoot() .. "\n")
-  cecho("<grey>Override: env <yellow>NEBBIE_DASH_CONFIG<grey> o prima riga non commentata in\n")
-  cecho("<grey>  ~/NebbieDash/config-root.txt\n")
-  cecho("<grey>File: spell, speedwalk, hunger, item-keywords, batch, chars, ui, …\n")
+  NebbieDash.ensureConfigDir()
+  NebbieDash.ensureDefaultConfigFiles()
+  cecho("<cyan><b>Config NebbieDash</b>\n")
+  cecho("<grey>Cartella dati (modifica speedwalk, spell, macro, …):\n<white>" ..
+    NebbieDash.configRoot() .. "\n")
+  cecho("<grey>File indice in profiles (percorso scritto qui):\n<white>" ..
+    NebbieDash.configRootPointerPath() .. "\n")
+  cecho("<grey>Profilo Mudlet attivo: <white>" .. NebbieDash.mudletProfileHome() .. "\n")
 end
 
 function NebbieDash.cmdSetItemLen(lenStr)
@@ -4633,6 +4697,7 @@ end
 -- stesso istante (es. al primo avvio di Mudlet, se sia lo script "core" sia
 -- l'evento sysLoadEvent scattano nello stesso momento).
 function NebbieDash.migrateSharedConfigFiles()
+  NebbieDash.ensureConfigDir()
   local files = {
     "nebbie-complete-dashboard-package-chars.lua",
     "nebbie-dash-ui.lua",
@@ -4648,6 +4713,7 @@ function NebbieDash.migrateSharedConfigFiles()
   for _, f in ipairs(files) do
     NebbieDash.migrateConfigFileIfNeeded(f)
   end
+  NebbieDash.ensureDefaultConfigFiles()
 end
 
 function NebbieDash.boot()
