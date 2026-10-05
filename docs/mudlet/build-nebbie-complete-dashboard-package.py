@@ -104,9 +104,12 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   completamente Mudlet.
 - **Speedwalk**: sezioni collassabili; formati `(desc) dirs` e `dirs (desc)`; `nspeedwalks` diagnostico.
 - **Aggiornamento package**: `npackageupdate` o GMCP `Client.GUI` al login (versione allineata a config.lua).
-- **Gestione armi** (pannello "Armi"): click per cambiare — sequenza borsa
-  come nebbie-play-all; keyword senza parentesi eq `(alone luminoso)`; `identify`
-  fissa la parola chiave canonica.
+- **Cambio arma**: alias **`usa <parola-chiave>`** (sequenza borsa come
+  nebbie-play-all; keyword da equip/`identify`/`nebbie-item-keywords.txt`).
+  Il vecchio pannello "Armi" è stato rimosso (equip a tutta altezza).
+- **Config condivisa**: file `nebbie-*` e cache PG in **`~/NebbieDash/`**
+  (tutti i profili Mudlet); **`nconfigdir`**; migrazione automatica dalla
+  home del profilo.
 - **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
   comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
   perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
@@ -168,6 +171,8 @@ ALIASES = [
     ("nebbie-dash-heights", "^nheights (.+)$", "NebbieDash.cmdSetHeights(matches[2])"),
     ("nebbie-dash-leftheights", "^nleftheights (.+)$", "NebbieDash.cmdSetLeftHeights(matches[2])"),
     ("nebbie-dash-clanslot", "^nclanslot (.+)$", "NebbieDash.cmdSetClanSlot(matches[2])"),
+    ("nebbie-dash-usa", "^usa (.+)$", "NebbieDash.cmdUsa(matches[2])"),
+    ("nebbie-dash-configdir", "^nconfigdir$", "NebbieDash.cmdConfigDir(\"\")"),
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
     ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
     ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),

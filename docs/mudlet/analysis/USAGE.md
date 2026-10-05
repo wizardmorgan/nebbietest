@@ -58,7 +58,9 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nwidth <equip\|right> <numero>` | Fissa una larghezza manuale (150–900px) per la colonna equip (sinistra) o spell/speedwalk (destra), **disattivando** l'adattamento automatico per quella colonna. Senza indicare `equip`/`right` agisce sulla destra (retrocompatibilità). |
 | `nwidth <equip\|right> auto` | Riattiva la larghezza automatica per quella colonna (default per entrambe): si allarga/restringe da sola in base al contenuto più lungo visibile, senza mai superare il 60% della finestra di Mudlet. |
 | `nheights <percentuale>` | Regola quanta altezza della colonna destra va a "Spell attivi" (10–90, il resto va a "Speedwalk"; default 40). |
-| `nleftheights <percentuale>` | Regola quanta altezza della colonna sinistra va a "Equip" (10–90, il resto va a "Armi"; default 60). |
+| `nleftheights <percentuale>` | *(Legacy, da 1.15.31)* non fa più nulla: il pannello Armi è stato rimosso; la colonna equip usa tutta l'altezza. |
+| `usa <parola-chiave>` | Cambio arma da zaino (`rem`/`put`/`get`/`wield` come nebbie-play-all). Es. `usa redentore`. |
+| `nconfigdir` | Mostra la cartella condivisa dei file di config (default **`~/NebbieDash/`**, uguale per tutti i profili Mudlet). |
 | `nclanslot <on\|off>` | Mostra/nasconde il 22° slot equip placeholder "simbolo del clan" (nascosto di default, non ancora confermato in un `eq` reale). |
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
@@ -85,26 +87,26 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nhungermacros` | Ricarica le macro fame/sete dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nitemkeywords` | Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 
-## Pannello Armi (sotto l'Equip, colonna sinistra)
+## Cambio arma (`usa`)
 
-Elenco persistente per personaggio di tutte le armi che hai impugnato almeno una volta, con il tipo
-di danno (slash/blunt/pierce) quando noto. Si popola da solo:
+Dalla **1.15.31** non c'è più il pannello "Armi" sotto l'Equip: la colonna sinistra mostra solo
+l'equip a tutta altezza. Il pacchetto continua a ricordare per personaggio le armi che hai impugnato
+(almeno una volta) e il tipo di danno quando lo scopri con `identify` — ma il cambio arma si fa con
+**`usa <parola-chiave>`** (es. `usa redentore`), non con un click.
 
-1. Impugni un'arma (`wield <qualcosa>`) → l'arma compare nell'elenco con tipo "?" (ancora sconosciuto).
-2. Esegui tu, quando vuoi, `identify` su quell'arma → il pacchetto legge l'output e aggiorna il tipo
-   di danno mostrato (slash/blunt/pierce). **`identify` non viene mai inviato in automatico** dal
-   pacchetto: è un comando/spell che costa una "ondata di stanchezza", quindi resta sempre una tua
-   scelta quando eseguirlo.
+Sequenza automatica (come nebbie-play-all): `rem`+`put` dell'arma attuale (slot "impugnato" nel
+pannello Equip) nello zaino "sulla schiena", poi `get`+`wield` dell'arma richiesta. Parole chiave:
+override in `nebbie-item-keywords.txt` se presente, altrimenti euristica (stessa logica del recupero
+dopo disarmo). Se non impugni nulla, salta a `get`+`wield`. Se l'arma richiesta è già quella
+impugnata, non invia nulla.
 
-Clicca il nome di un'arma in elenco per **cambiare arma con un solo click**: il pacchetto invia da
-solo, in sequenza, `rem`+`put` dell'arma che stai impugnando adesso (letta dal pannello Equip, slot
-"impugnato") nello zaino, poi `get`+`wield` dell'arma che hai scelto — usando lo stesso zaino (slot
-"sulla schiena") e lo stesso criterio di parole chiave (override da `nebbie-item-keywords.txt` se
-presente, altrimenti euristica automatica) già usato per il recupero arma dopo un disarmo e per le
-macro fame/sete. Se non stai impugnando nulla, salta direttamente a `get`+`wield`. Se clicchi l'arma
-che hai già impugnata, non invia nulla.
+## Cartella config condivisa (`~/NebbieDash/`)
 
-L'altezza di questo pannello rispetto all'Equip si regola con `nleftheights` (vedi tabella sopra).
+Da **1.15.31** i file `nebbie-*.txt`, `nebbie-dash-ui.lua`, cache personaggi, log batch, ecc. stanno
+in **`~/NebbieDash/`** (non più nella home del singolo profilo Mudlet), così più profili condividono
+la stessa configurazione. Comando **`nconfigdir`** per vedere il percorso effettivo. Override:
+variabile d'ambiente `NEBBIE_DASH_CONFIG` o prima riga di `~/NebbieDash/config-root.txt`. All'aggiornamento
+il pacchetto copia automaticamente i file dalla vecchia home del profilo se mancano nella cartella nuova.
 
 ## Loot e split automatico
 

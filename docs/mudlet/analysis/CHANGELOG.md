@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.31 — 2026-10-05
+
+- **GUI**: rimosso pannello **Armi** (colonna equip a tutta altezza).
+- **usa**: alias `usa <keyword>` per cambio arma (stessa logica di prima, senza click).
+- **Config centralizzata**: tutti i file `nebbie-*` e dati PG in **`~/NebbieDash/`**
+  (condiviso tra profili Mudlet); migrazione automatica dalla home del profilo.
+  Comando **`nconfigdir`**; override con `NEBBIE_DASH_CONFIG` o `~/NebbieDash/config-root.txt`.
+
 ## 1.15.26 — 2026-09-27
 
 - **npackageupdate**: install in `NebbieDash.runPackageUpdateInstall` (sopravvive alla disinstallazione);
