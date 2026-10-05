@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.35"
+local PKG_VER = "1.15.36"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -1426,7 +1426,7 @@ function NebbieDash.cmdPackageUpdate(argStr)
   if remoteVer then
     cecho("<grey>Ultima versione su GitHub (core.lua): <white>" .. remoteVer .. "\n")
   else
-    cecho("<grey>Ultima versione su GitHub: <white>(non letta — scarico .mpackage con cache-bust)\n")
+    cecho("<grey>Ultima versione su GitHub: <white>(getHttp non disponibile — lo scarico usera' cache-bust sul .mpackage)\n")
   end
   cecho("<grey>" .. url .. "\n")
   if not force and remoteVer and installedVer ~= "" and remoteVer == installedVer and remoteVer == NebbieDash.version then
@@ -2764,8 +2764,11 @@ function NebbieDash.resolveWeaponTargetFromArg(data, argStr)
       if #kw > bestLen then best, bestLen = w, #kw end
     end
   end
-  if best then return best end
-  return { keyword = argStr, displayName = argStr }
+  if best then
+    best.userKeyword = argStr
+    return best
+  end
+  return { keyword = argStr, displayName = argStr, userKeyword = argStr }
 end
 
 function NebbieDash.runWeaponSwap(target)
@@ -2811,6 +2814,7 @@ function NebbieDash.cmdUsa(argStr)
   end
   local data = NebbieDash.getCharData(name)
   local target = NebbieDash.resolveWeaponTargetFromArg(data, argStr)
+  target.userKeyword = argStr
   NebbieDash.runWeaponSwap(target)
 end
 
@@ -3022,10 +3026,22 @@ function NebbieDash.buildWeaponSwapSteps(data, target)
   if weaponKw == "" then return nil, "no_weapon" end
   local wieldPhrase = NebbieDash.currentWieldedKeyword(data)
   local wieldConfirmed = wieldPhrase ~= "" and data.eqUpdated
-  local backKw = NebbieDash.pickItemCommandKeyword(backPhrase, backOverride, { wieldPhrase, weaponKw })
+  local backKw = NebbieDash.macroBackpackKeywordFromPhrase(backPhrase, backOverride)
   local wieldKw = ""
   if wieldConfirmed then
-    wieldKw = NebbieDash.pickItemCommandKeyword(wieldPhrase, false, { backPhrase, weaponKw })
+    local wieldItem = nil
+    for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+      if not row.empty and row.location == "impugnato" then
+        wieldItem = row.item
+        break
+      end
+    end
+    if wieldItem then
+      local resolved, isOv = NebbieDash.resolveItemKeywords(wieldItem)
+      wieldKw = NebbieDash.macroBackpackKeywordFromPhrase(resolved, isOv)
+    else
+      wieldKw = NebbieDash.macroBackpackKeywordFromPhrase(wieldPhrase, false)
+    end
   end
 
   local steps = {}
@@ -3156,20 +3172,30 @@ end
 
 function NebbieDash.resolveWeaponSwapKeyword(target)
   if not target then return "" end
+  local userKw = (target.userKeyword or ""):match("^%s*(.-)%s*$")
+  if userKw ~= "" then
+    local ov = NebbieDash.findItemKeywordOverride(userKw)
+    if ov and ov ~= "" then return ov end
+    local disp = (target.displayName or ""):match("^%s*(.-)%s*$")
+    if disp ~= "" and disp:lower():find(userKw:lower(), 1, true) then
+      local fromDisp = select(1, NebbieDash.resolveItemKeywords(disp))
+      if fromDisp ~= "" then return fromDisp end
+    end
+    if userKw:find("%s") then return userKw end
+    local fromUserHeur = NebbieDash.findItemKeywordOverride(userKw)
+    if fromUserHeur then return fromUserHeur end
+    return userKw
+  end
   local disp = (target.displayName or target.keyword or ""):match("^%s*(.-)%s*$")
   if disp ~= "" then
     local fromDisp, isOverride = NebbieDash.resolveItemKeywords(disp)
-    if isOverride and fromDisp ~= "" then return fromDisp end
+    if fromDisp ~= "" then return fromDisp end
   end
   local idKw = (target.keyword or ""):match("^%s*(.-)%s*$")
   if idKw ~= "" then
     local fromId, isOverrideId = NebbieDash.resolveItemKeywords(idKw)
     if isOverrideId and fromId ~= "" then return fromId end
     if target.type then return idKw end
-  end
-  if disp ~= "" then
-    local fromDispHeur = select(1, NebbieDash.resolveItemKeywords(disp))
-    if fromDispHeur ~= "" then return fromDispHeur end
   end
   return idKw
 end
