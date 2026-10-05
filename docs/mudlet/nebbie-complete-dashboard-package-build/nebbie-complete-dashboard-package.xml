@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.33"
+local PKG_VER = "1.15.34"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -338,22 +338,18 @@ function NebbieDash.loadUiStore()
   end
   NebbieDash.uiState.speedwalkSectionCollapsed = NebbieDash.uiState.speedwalkSectionCollapsed or {}
   local gr = NebbieDash.uiState.guiRatios
-  if type(gr) == "table" and type(gr.spells) == "number" then
-    NebbieDash.guiRatios = NebbieDash.guiRatios or {}
-    local s = math.max(0.1, math.min(0.9, gr.spells))
-    NebbieDash.guiRatios.spells = s
-  end
   if type(gr) == "table" and type(gr.equip) == "number" then
     NebbieDash.guiRatios = NebbieDash.guiRatios or {}
     NebbieDash.guiRatios.equip = math.max(0.1, math.min(0.9, gr.equip))
+    NebbieDash.guiRatios.manualEquip = gr.manualEquip == true
   end
 end
 
 function NebbieDash.persistGuiRatios()
   NebbieDash.uiState = NebbieDash.uiState or {}
   NebbieDash.uiState.guiRatios = {
-    spells = NebbieDash.guiRatios and NebbieDash.guiRatios.spells,
     equip = NebbieDash.guiRatios and NebbieDash.guiRatios.equip,
+    manualEquip = NebbieDash.guiRatios and NebbieDash.guiRatios.manualEquip,
   }
   NebbieDash.saveUiStore()
 end
@@ -1301,7 +1297,7 @@ function NebbieDash.cmdReloadSpeedwalks()
   if #NebbieDash.speedwalks == 0 and #skipped == 0 then
     cecho("<grey>Aggiungi righe attive (non commentate) tipo: (nome percorso) u,3w,n,s\n")
   end
-  cecho("<grey>Layout: <yellow>nheights 30<grey> = più spazio speedwalk (sotto le spell). Colonna destra: <yellow>nwidth right auto<grey> / <yellow>nlayout<grey>. Sezione: <yellow>(>> titolo)<grey>. Note: <yellow>(testo)<grey> in coda riga o riga separata.\n")
+  cecho("<grey>Layout: altezza Equip/Speedwalk auto (testo) — <yellow>nheights 40<grey> / <yellow>nheights auto<grey>; larghezza <yellow>nwidth auto<grey> / <yellow>nlayout<grey>. Sezione: <yellow>(>> titolo)<grey>.\n")
 end
 
 function NebbieDash.parsePkgVerFromCoreLua(text)
@@ -1494,11 +1490,10 @@ end
 -- ---------------------------------------------------------------------------
 -- Dashboard (miniconsole su bordo destro — MUDLET-WIKI-NOTES.md §6)
 -- ---------------------------------------------------------------------------
--- Larghezza dei due bordi (equip a sinistra, spell+speedwalk a destra),
--- ciascuna con la propria modalita' auto/manuale — vedi autoWidthEquip /
--- autoWidthRight piu' sotto.
+-- Dashboard: un solo bordo sinistro — Equip sopra, Speedwalk sotto (niente pannello spell).
+-- Larghezza e ripartizione verticale si adattano al testo visibile.
 NebbieDash.guiWidthEquip = 260
-NebbieDash.guiWidthRight = 380
+NebbieDash.guiWidthRight = 0
 NebbieDash.fontSize = 11
 -- Le descrizioni oggetto sono spesso lunghe (es. "Un tubino rinforzato con
 -- una grossa Union Jack (in condizioni eccellenti)") e vanno quasi sempre a
@@ -1518,14 +1513,7 @@ NebbieDash.speedwalkPreviewMaxLen = 96
 NebbieDash.speedwalkNoteMaxLen = 96
 -- Limite caratteri per l'auto-larghezza colonna destra.
 NebbieDash.autoWidthRightMaxChars = 58
--- Altezza massima speedwalk quando la quota spell e' alta (nheights >= 50).
-NebbieDash.speedwalkMaxHeightRatio = 0.48
-NebbieDash.autoWidthRightMaxWindowPct = 0.42
--- Larghezza automatica (default per entrambe le colonne): ogni pannello si
--- allarga/restringe da solo in base al contenuto piu' lungo attualmente
--- visibile, cosi' non "sparisce" niente oltre il bordo dello schermo.
--- `nwidth equip|right <numero>` disattiva l'automatismo per quella colonna
--- e fissa una larghezza manuale; `nwidth equip|right auto` lo riattiva.
+NebbieDash.autoWidthSidebarMaxWindowPct = 0.38
 NebbieDash.autoWidthEquip = true
 NebbieDash.autoWidthRight = true
 NebbieDash.autoWidthMin = 180
@@ -1566,10 +1554,9 @@ function NebbieDash.wrapPanelText(s, maxLen)
 end
 
 -- Colonne utili per il wrap (larghezza bordo / font meno indentazione "  " / "    ").
-function NebbieDash.panelWrapCols(side, indentCols)
+function NebbieDash.panelWrapCols(_side, indentCols)
   indentCols = indentCols or 0
-  local w = (side == "left") and NebbieDash.guiWidthEquip or NebbieDash.guiWidthRight
-  w = w or 320
+  local w = NebbieDash.guiWidthEquip or 260
   local charW = (type(calcFontSize) == "function" and calcFontSize(NebbieDash.fontSize)) or 8
   if type(charW) == "table" then charW = charW[1] or 8 end
   charW = charW or 8
@@ -1617,29 +1604,86 @@ function NebbieDash.guiVisible()
   return NebbieDash._guiCreated == true and NebbieDash._guiHidden ~= true
 end
 
--- Proporzione verticale colonna destra: Spell attivi / Speedwalk.
-NebbieDash.guiRatios = { spells = 0.20 }
+-- Ripartizione verticale Equip / Speedwalk (bordo sinistro).
+NebbieDash.guiRatios = { equip = 0.5, manualEquip = false }
 NebbieDash.dividerPx = 4
-NebbieDash.GUI_WINDOWS = { "NebbieDashEquip", "NebbieDashSpells", "NebbieDashSpeedwalks" }
+NebbieDash.GUI_WINDOWS = { "NebbieDashEquip", "NebbieDashSpeedwalks" }
 NebbieDash.ALL_GUI_ELEMENTS = {
-  "NebbieDashEquip", "NebbieDashSpells", "NebbieDashSpeedwalks",
+  "NebbieDashEquip", "NebbieDashSpeedwalks",
   "NebbieDashDivider",
 }
+
+function NebbieDash.estimateEquipContentLines(data)
+  local lines = 1
+  if not data or not data.eqUpdated then
+    return lines + 1
+  end
+  for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+    if row.empty then
+      lines = lines + 1
+    else
+      lines = lines + 2
+    end
+  end
+  return lines
+end
+
+function NebbieDash.estimateSpeedwalkContentLines()
+  local lines = 1
+  if #(NebbieDash.speedwalkItems or {}) == 0 and #(NebbieDash.speedwalks or {}) == 0 then
+    return lines + 1
+  end
+  local descCols = NebbieDash.panelWrapCols("left", 0)
+  local lineCols = NebbieDash.panelWrapCols("left", 2)
+  local noteCols = NebbieDash.panelWrapCols("left", 4)
+  for _, item in ipairs(NebbieDash.speedwalkItems or {}) do
+    if item.kind == "section" then
+      lines = lines + 1
+    elseif item.kind == "walk" then
+      if item.sectionKey and NebbieDash.isSpeedwalkSectionCollapsed(item.sectionKey) then
+        -- nascosto
+      else
+        lines = lines + #NebbieDash.wrapPanelText(item.desc or "", descCols)
+        lines = lines + #NebbieDash.wrapPanelText(item.dirString or "", lineCols)
+        if item.note and item.note ~= "" then
+          lines = lines + #NebbieDash.wrapPanelText(item.note, noteCols)
+        end
+      end
+    end
+  end
+  if lines <= 1 and #(NebbieDash.speedwalks or {}) > 0 then
+    for _, entry in ipairs(NebbieDash.speedwalks) do
+      lines = lines + 1 + (entry.dirString and 1 or 0)
+    end
+  end
+  return math.max(lines, 2)
+end
+
+function NebbieDash.computeSidebarEquipRatio(data)
+  if NebbieDash.guiRatios and NebbieDash.guiRatios.manualEquip and NebbieDash.guiRatios.equip then
+    return math.max(0.1, math.min(0.9, NebbieDash.guiRatios.equip))
+  end
+  local eqLines = NebbieDash.estimateEquipContentLines(data)
+  local swLines = NebbieDash.estimateSpeedwalkContentLines()
+  local total = math.max(1, eqLines + swLines)
+  return math.max(0.12, math.min(0.88, eqLines / total))
+end
 
 function NebbieDash.initGUI()
   if NebbieDash._guiCreated then return end
   setBorderLeft(NebbieDash.guiWidthEquip)
-  setBorderRight(NebbieDash.guiWidthRight)
+  setBorderRight(0)
   createMiniConsole("NebbieDashEquip", 0, 0, NebbieDash.guiWidthEquip, 0)
-  createMiniConsole("NebbieDashSpells", 0, 0, NebbieDash.guiWidthRight, 0)
-  createMiniConsole("NebbieDashSpeedwalks", 0, 0, NebbieDash.guiWidthRight, 0)
+  createMiniConsole("NebbieDashSpeedwalks", 0, 0, NebbieDash.guiWidthEquip, 0)
   if type(enableScrollBar) == "function" then
+    enableScrollBar("NebbieDashEquip", true)
     enableScrollBar("NebbieDashSpeedwalks", true)
   end
   if type(setMaxLines) == "function" then
+    setMaxLines("NebbieDashEquip", 400)
     setMaxLines("NebbieDashSpeedwalks", 500)
   end
-  createLabel("NebbieDashDivider", 0, 0, NebbieDash.guiWidthRight, NebbieDash.dividerPx, 1)
+  createLabel("NebbieDashDivider", 0, 0, NebbieDash.guiWidthEquip, NebbieDash.dividerPx, 1)
   for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
     setMiniConsoleFontSize(win, NebbieDash.fontSize)
     -- Una miniconsole appena creata ha uno sfondo di default (grigio, widget
@@ -1655,6 +1699,7 @@ function NebbieDash.initGUI()
   if type(hideWindow) == "function" then
     pcall(hideWindow, "NebbieDashWeapons")
     pcall(hideWindow, "NebbieDashDividerLeft")
+    pcall(hideWindow, "NebbieDashSpells")
   end
   NebbieDash.refreshDashboard()
   -- getMainWindowSize() puo' non essere ancora affidabile nello stesso istante
@@ -1686,19 +1731,9 @@ function NebbieDash.computeEquipMaxChars(data)
   return maxChars
 end
 
--- Come sopra ma per la colonna destra (Spell attivi + Speedwalk insieme,
--- condividono la stessa larghezza di bordo).
-function NebbieDash.computeRightMaxChars(data)
-  local maxChars = 20
-  local name = NebbieDash.currentChar
-  if name then
-    maxChars = math.max(maxChars, #("Spell attivi — " .. name))
-  end
-  if data then
-    for _, spellName in ipairs(NebbieDash.castSpellPanelList or {}) do
-      maxChars = math.max(maxChars, #(spellName or "") + #(" -- tick"))
-    end
-  end
+-- Larghezza bordo sinistro da contenuto Equip + Speedwalk.
+function NebbieDash.computeSidebarMaxChars(data)
+  local maxChars = NebbieDash.computeEquipMaxChars(data)
   for _, item in ipairs(NebbieDash.speedwalkItems or {}) do
     if item.kind == "section" then
       maxChars = math.max(maxChars, #item.title + 3)
@@ -1710,70 +1745,55 @@ function NebbieDash.computeRightMaxChars(data)
     end
   end
   if not NebbieDash.speedwalkItems or #NebbieDash.speedwalkItems == 0 then
-    for _, entry in ipairs(NebbieDash.speedwalks) do
+    for _, entry in ipairs(NebbieDash.speedwalks or {}) do
       maxChars = math.max(maxChars, #entry.desc + 4)
       if entry.dirString then
         maxChars = math.max(maxChars, math.min(#entry.dirString, 72) + 4)
       end
     end
   end
+  maxChars = math.max(maxChars, #("Speedwalk") + 2)
   return math.min(maxChars, NebbieDash.autoWidthRightMaxChars or 58)
 end
 
--- Applica la larghezza automatica (se attiva) ad ognuna delle due colonne
--- indipendentemente, senza mai superare il 60% della larghezza reale della
--- finestra di Mudlet — cosi' nessun pannello puo' mai "uscire" dallo schermo.
 function NebbieDash.applyAutoWidth()
   if not NebbieDash._guiCreated then return end
   local name = NebbieDash.currentChar
   local data = name and NebbieDash.getCharData(name) or nil
   local charW = calcFontSize(NebbieDash.fontSize) or 8
   local mainW = select(1, getMainWindowSize()) or 1024
-  local maxTotal = math.floor(mainW * 0.6)
+  local maxSidebar = math.floor(mainW * (NebbieDash.autoWidthSidebarMaxWindowPct or 0.38))
 
-  if NebbieDash.autoWidthEquip then
-    local w = math.floor(charW * (NebbieDash.computeEquipMaxChars(data) + 3))
-    w = math.max(NebbieDash.autoWidthMin, math.min(w, maxTotal))
+  if NebbieDash.autoWidthEquip or NebbieDash.autoWidthRight then
+    local chars = NebbieDash.computeSidebarMaxChars(data) + 3
+    local cap = NebbieDash.autoWidthRightMaxChars or 58
+    local w = math.floor(charW * math.min(chars, cap))
+    w = math.max(NebbieDash.autoWidthMin, math.min(w, maxSidebar))
     if w ~= NebbieDash.guiWidthEquip then
       NebbieDash.guiWidthEquip = w
       setBorderLeft(w)
     end
   end
-  if NebbieDash.autoWidthRight then
-    local chars = NebbieDash.computeRightMaxChars(data) + 3
-    local cap = NebbieDash.autoWidthRightMaxChars or 38
-    local maxRight = math.floor(mainW * (NebbieDash.autoWidthRightMaxWindowPct or 0.32))
-    local w = math.floor(charW * math.min(chars, cap))
-    w = math.max(NebbieDash.autoWidthMin, math.min(w, maxRight))
-    if w ~= NebbieDash.guiWidthRight then
-      NebbieDash.guiWidthRight = w
-      setBorderRight(w)
-    end
-  end
+  setBorderRight(0)
 end
 
 function NebbieDash.positionGUI()
   if not NebbieDash._guiCreated then return end
-  local w, h = getMainWindowSize()
-  w = w or 800
+  local _w, h = getMainWindowSize()
   h = h or 600
-  moveWindow("NebbieDashEquip", 0, 0)
-  resizeWindow("NebbieDashEquip", NebbieDash.guiWidthEquip, h)
-  local x = math.max(0, w - NebbieDash.guiWidthRight)
+  local sideW = NebbieDash.guiWidthEquip or 260
+  local name = NebbieDash.currentChar
+  local data = name and NebbieDash.getCharData(name) or nil
   local usableH = math.max(0, h - NebbieDash.dividerPx)
-  local spellsH = math.floor(usableH * NebbieDash.guiRatios.spells)
-  local speedwalkH = usableH - spellsH
-  local maxSwH = math.floor(usableH * (NebbieDash.speedwalkMaxHeightRatio or 0.48))
-  -- Con nheights basso l'utente vuole piu' speedwalk: cap solo se spell >= 50%.
-  if (NebbieDash.guiRatios.spells or 0.20) >= 0.50 and speedwalkH > maxSwH then
-    speedwalkH = maxSwH
-  end
-  moveWindow("NebbieDashSpells", x, 0)
-  resizeWindow("NebbieDashSpells", NebbieDash.guiWidthRight, spellsH)
-  moveWindow("NebbieDashDivider", x, spellsH)
-  resizeWindow("NebbieDashDivider", NebbieDash.guiWidthRight, NebbieDash.dividerPx)
-  moveWindow("NebbieDashSpeedwalks", x, spellsH + NebbieDash.dividerPx)
-  resizeWindow("NebbieDashSpeedwalks", NebbieDash.guiWidthRight, speedwalkH)
+  local equipRatio = NebbieDash.computeSidebarEquipRatio(data)
+  local equipH = math.floor(usableH * equipRatio)
+  local speedwalkH = usableH - equipH
+  moveWindow("NebbieDashEquip", 0, 0)
+  resizeWindow("NebbieDashEquip", sideW, equipH)
+  moveWindow("NebbieDashDivider", 0, equipH)
+  resizeWindow("NebbieDashDivider", sideW, NebbieDash.dividerPx)
+  moveWindow("NebbieDashSpeedwalks", 0, equipH + NebbieDash.dividerPx)
+  resizeWindow("NebbieDashSpeedwalks", sideW, speedwalkH)
   NebbieDash.positionHelpButton()
 end
 
@@ -1808,8 +1828,7 @@ function NebbieDash.positionHelpButton()
   -- equip e bordo destro spell/speedwalk), cosi' non si sovrappone mai ai
   -- nostri pannelli anche quando sono ridimensionati.
   local leftW = NebbieDash._guiCreated and NebbieDash.guiWidthEquip or 0
-  local rightW = NebbieDash._guiCreated and NebbieDash.guiWidthRight or 0
-  local centerAreaW = math.max(0, w - leftW - rightW)
+  local centerAreaW = math.max(0, w - leftW)
   local x = leftW + math.max(0, math.floor((centerAreaW - NebbieDash.helpButtonW) / 2))
   moveWindow("NebbieDashHelpBtn", x, 2)
   if NebbieDash._helpWinCreated then
@@ -1844,12 +1863,12 @@ NebbieDash.HELP_TEXT = {
   { "nchar <nome>", "Forza manualmente il personaggio attivo." },
   { "nclass <cast|recall|mind>", "Imposta il comando di lancio per il personaggio attivo." },
   { "nfont <6-24>", "Imposta la dimensione del font dei pannelli." },
-  { "nwidth [equip|right] <n|auto>", "Imposta/auto la larghezza di una colonna." },
-  { "nheights <percentuale spell>", "Imposta la proporzione verticale spell/speedwalk (destra)." },
+  { "nwidth [auto|<px>]", "Larghezza bordo sinistro (Equip+Speedwalk); default auto." },
+  { "nheights <10-90>|auto", "Altezza Equip vs Speedwalk: auto = proporzione al testo; o % Equip manuale." },
   { "usa <parola-chiave>", "Cambio arma da zaino (rem/get/wield — come nebbie-play-all)." },
   { "nconfigdir", "Mostra cartella profiles/ndashboard e file indice nebbie-dash-config-root.txt." },
   { "nitemlen <n>", "Lunghezza massima delle descrizioni oggetti in equip." },
-  { "nspellwarn <tick>", "Sotto questa soglia di tick una spell appare rossa." },
+  { "nspellwarn <tick>", "(Legacy) soglia colore pannello spell rimosso — ignorato." },
   { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk." },
   { "nspeeddelay <secondi>", "Ritardo tra un comando e l'altro in uno speedwalk." },
   { "npackageupdate", "Scarica/reinstalla il dashboard (branch nebbie-mudlet-dashboard su GitHub). Opzionale: force" },
@@ -1925,7 +1944,7 @@ function NebbieDash.toggleGUI()
     else
       for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do showWindow(win) end
       setBorderLeft(NebbieDash.guiWidthEquip)
-      setBorderRight(NebbieDash.guiWidthRight)
+      setBorderRight(0)
       NebbieDash.positionGUI()
     end
   end
@@ -1934,23 +1953,23 @@ end
 
 function NebbieDash.resetLayout()
   NebbieDash.guiWidthEquip = 260
-  NebbieDash.guiWidthRight = 380
+  NebbieDash.guiWidthRight = 0
   NebbieDash.fontSize = 11
   NebbieDash.autoWidthEquip = true
   NebbieDash.autoWidthRight = true
-  NebbieDash.guiRatios = { spells = 0.20 }
+  NebbieDash.guiRatios = { equip = 0.5, manualEquip = false }
   NebbieDash.persistGuiRatios()
   if NebbieDash._guiCreated then
     for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
       setMiniConsoleFontSize(win, NebbieDash.fontSize)
     end
     setBorderLeft(NebbieDash.guiWidthEquip)
-    setBorderRight(NebbieDash.guiWidthRight)
+    setBorderRight(0)
     NebbieDash.applyAutoWidth()
     NebbieDash.positionGUI()
     NebbieDash.refreshDashboard()
   end
-  cecho("<green>[NebbieDash] Layout ripristinato: auto-larghezza, spell 20% (default), font 11.\n")
+  cecho("<green>[NebbieDash] Layout ripristinato: bordo sinistro auto, Equip/Speedwalk proporzionali al testo, font 11.\n")
 end
 
 function NebbieDash.cmdSetFont(sizeStr)
@@ -1968,64 +1987,56 @@ function NebbieDash.cmdSetFont(sizeStr)
   cecho("<green>[NebbieDash] Font pannello impostato a " .. size .. ".\n")
 end
 
--- "nwidth equip 300", "nwidth right auto", ecc. Senza indicare la colonna
--- (es. "nwidth 300" o "nwidth auto") agisce sulla colonna destra, per
--- compatibilita' con la sintassi usata prima di avere due colonne separate.
+-- Larghezza bordo sinistro (Equip + Speedwalk impilati).
 function NebbieDash.cmdSetWidth(argStr)
-  argStr = argStr or ""
-  local side, rest = argStr:match("^%s*(%S+)%s+(.-)%s*$")
-  if not side then
-    side, rest = "right", argStr:match("^%s*(.-)%s*$")
-  end
-  side = side:lower()
-  local isEquip = (side == "equip" or side == "left" or side == "sinistra")
-  local isRight = (side == "right" or side == "spell" or side == "spells" or side == "destra")
-  if not isEquip and not isRight then
-    cecho("<orange>[NebbieDash] Uso: nwidth <equip|right> <numero tra 150 e 900> oppure <yellow>nwidth <equip|right> auto\n")
-    return
-  end
-  local label = isEquip and "equip (sinistra)" or "spell/speedwalk (destra)"
-
-  if (rest or ""):lower():match("^auto$") then
-    if isEquip then NebbieDash.autoWidthEquip = true else NebbieDash.autoWidthRight = true end
+  argStr = (argStr or ""):match("^%s*(.-)%s*$")
+  if argStr == "" or argStr:lower() == "auto" then
+    NebbieDash.autoWidthEquip = true
+    NebbieDash.autoWidthRight = true
     NebbieDash.refreshDashboard()
-    cecho("<green>[NebbieDash] Larghezza pannello " .. label .. ": automatica.\n")
+    cecho("<green>[NebbieDash] Larghezza bordo sinistro: automatica.\n")
     return
   end
-  local width = tonumber(rest)
+  local width = tonumber(argStr)
   if not width or width < 150 or width > 900 then
-    cecho("<orange>[NebbieDash] Uso: nwidth <equip|right> <numero tra 150 e 900> oppure <yellow>nwidth <equip|right> auto\n")
+    cecho("<orange>[NebbieDash] Uso: nwidth <numero 150-900> oppure <yellow>nwidth auto\n")
     return
   end
-  if isEquip then
-    NebbieDash.autoWidthEquip = false
-    NebbieDash.guiWidthEquip = width
-    if NebbieDash._guiCreated then setBorderLeft(width) end
-  else
-    NebbieDash.autoWidthRight = false
-    NebbieDash.guiWidthRight = width
-    if NebbieDash._guiCreated then setBorderRight(width) end
+  NebbieDash.autoWidthEquip = false
+  NebbieDash.autoWidthRight = false
+  NebbieDash.guiWidthEquip = width
+  if NebbieDash._guiCreated then
+    setBorderLeft(width)
+    setBorderRight(0)
+    NebbieDash.positionGUI()
   end
-  if NebbieDash._guiCreated then NebbieDash.positionGUI() end
-  cecho("<green>[NebbieDash] Larghezza pannello " .. label .. " impostata a " .. width .. " (manuale).\n")
+  cecho("<green>[NebbieDash] Larghezza bordo sinistro impostata a " .. width .. " (manuale).\n")
 end
 
--- Regola la ripartizione verticale della colonna destra tra Spell attivi e
--- Speedwalk (richiesta esplicita: "non riesco a ridimensionare manualmente
--- l'altezza delle sotto-colonne"). Non e' un trascinamento col mouse (la API
--- Lua di Mudlet non espone un modo affidabile per intercettare il drag su un
--- bordo tra due miniconsole), ma un comando che ottiene lo stesso risultato.
 function NebbieDash.cmdSetHeights(pctStr)
-  local pct = tonumber(pctStr)
-  if not pct or pct < 10 or pct > 90 then
-    cecho("<orange>[NebbieDash] Uso: nheights <percentuale tra 10 e 90> — quota per 'Spell attivi', il resto va a 'Speedwalk' (attuale: "
-      .. math.floor(NebbieDash.guiRatios.spells * 100) .. "%)\n")
+  pctStr = (pctStr or ""):match("^%s*(.-)%s*$"):lower()
+  if pctStr == "auto" then
+    NebbieDash.guiRatios = NebbieDash.guiRatios or {}
+    NebbieDash.guiRatios.manualEquip = false
+    NebbieDash.persistGuiRatios()
+    if NebbieDash._guiCreated then NebbieDash.positionGUI() end
+    cecho("<green>[NebbieDash] Altezza Equip/Speedwalk: automatica (proporzione al testo).\n")
     return
   end
-  NebbieDash.guiRatios.spells = pct / 100
+  local pct = tonumber(pctStr)
+  if not pct or pct < 10 or pct > 90 then
+    local cur = NebbieDash.guiRatios.manualEquip and math.floor((NebbieDash.guiRatios.equip or 0.5) * 100)
+      or "auto"
+    cecho("<orange>[NebbieDash] Uso: nheights <10-90> (% altezza Equip) oppure <yellow>nheights auto<grey> (attuale: "
+      .. tostring(cur) .. ")\n")
+    return
+  end
+  NebbieDash.guiRatios = NebbieDash.guiRatios or {}
+  NebbieDash.guiRatios.equip = pct / 100
+  NebbieDash.guiRatios.manualEquip = true
   NebbieDash.persistGuiRatios()
   if NebbieDash._guiCreated then NebbieDash.positionGUI() end
-  cecho("<green>[NebbieDash] Altezza 'Spell attivi' impostata al " .. pct .. "% (Speedwalk: " .. (100 - pct) .. "%).\n")
+  cecho("<green>[NebbieDash] Equip al " .. pct .. "% dell'altezza sinistra (Speedwalk: " .. (100 - pct) .. "%).\n")
 end
 
 function NebbieDash.cmdSetLeftHeights(_pctStr)
@@ -2168,10 +2179,8 @@ function NebbieDash.refreshDashboard()
   NebbieDash.refreshSpeedwalkPanel()
   local name = NebbieDash.currentChar
   clearWindow("NebbieDashEquip")
-  clearWindow("NebbieDashSpells")
   if not name then
     cecho("NebbieDashEquip", "<grey>Nessun personaggio rilevato.\n")
-    cecho("NebbieDashSpells", "<grey>Nessun personaggio rilevato.\n")
     return
   end
   local data = NebbieDash.getCharData(name)
@@ -2180,43 +2189,15 @@ function NebbieDash.refreshDashboard()
   if not (data.eqUpdated) then
     cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
   else
-    -- Una riga per ogni posizione nota (occupata o "(vuoto)") — vedi
-    -- buildEquipRows(). Il numero mostrato tra parentesi quadre e' solo la
-    -- posizione della riga nel NOSTRO elenco (per somigliare visivamente al
-    -- testo di `eq` sul gioco, come richiesto), NON il numero di slot che
-    -- riporta il gioco: quel numero e' solo un contatore progressivo sugli
-    -- oggetti indossati, non un identificatore di posizione affidabile (vedi
-    -- bug corretto in LOG.md, "conteggio slot sbagliato") e non viene mai
-    -- usato per decidere quale oggetto va in quale riga.
     for idx, row in ipairs(NebbieDash.buildEquipRows(data)) do
       if row.empty then
-        cecho("NebbieDashEquip", string.format("<grey>[%2d] %s (vuoto)\n", idx, row.location))
+        cecho("NebbieDashEquip", string.format(
+          "<grey>[%2d] <yellow>%s\n     <red><b>▢ VUOTO ▢</b>\n", idx, row.location))
       else
         local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
         cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", idx, row.location, item))
       end
     end
-  end
-
-  cecho("NebbieDashSpells", "<cyan><b>Spell attivi — " .. name .. "</b>\n")
-  local panelSpells = NebbieDash.castSpellPanelList or {}
-  if #panelSpells > 0 then
-    local prefix = NebbieDash.getCastPrefixForCharacter(name)
-    local activeSpells = data.activeSpells or {}
-    for _, spellName in ipairs(panelSpells) do
-      local activeTicks = activeSpells[spellName]
-      local active = activeTicks ~= nil
-      local ticks = active and (tonumber(activeTicks) or 0) or 0
-      local color = (active and ticks > NebbieDash.spellWarnTicks) and "<green>" or "<red>"
-      cechoLink("NebbieDashSpells", color .. spellName,
-        string.format("NebbieDash.cmdQuickCast(%q, %q, %q)", prefix, spellName, name),
-        "Clicca per lanciare su " .. name .. ": " .. spellName, true)
-      local ticksLabel = active and tostring(ticks) or "-"
-      cecho("NebbieDashSpells", string.format(" %s%s tick\n", color, ticksLabel))
-    end
-  else
-    cecho("NebbieDashSpells", "<grey>(nessuna — elenca spell in " .. NebbieDash.castSpellsPath() ..
-      " poi <yellow>nspellaliasesreload<grey>)\n")
   end
 end
 
@@ -2227,6 +2208,7 @@ function NebbieDash.refreshSpeedwalkPanel()
   if #(NebbieDash.speedwalkItems or {}) == 0 and #NebbieDash.speedwalks == 0 then
     cecho("NebbieDashSpeedwalks",
       "<grey>(nessuno — scrivili in " .. NebbieDash.speedwalkPath() .. " poi digita <yellow>nspeedwalks<grey>)\n")
+    NebbieDash.positionGUI()
     return
   end
   for i, item in ipairs(NebbieDash.speedwalkItems or {}) do
@@ -2243,9 +2225,9 @@ function NebbieDash.refreshSpeedwalkPanel()
         -- nascosto finche' la sezione e' collassata
       else
         local preview = item.dirString or ""
-        local descCols = NebbieDash.panelWrapCols("right", 0)
-        local lineCols = NebbieDash.panelWrapCols("right", 2)
-        local noteCols = NebbieDash.panelWrapCols("right", 4)
+        local descCols = NebbieDash.panelWrapCols("left", 0)
+        local lineCols = NebbieDash.panelWrapCols("left", 2)
+        local noteCols = NebbieDash.panelWrapCols("left", 4)
         local dirLines = NebbieDash.wrapPanelText(preview, lineCols)
         for idx, dline in ipairs(NebbieDash.wrapPanelText(item.desc, descCols)) do
           if idx == 1 then
@@ -2279,6 +2261,7 @@ function NebbieDash.refreshSpeedwalkPanel()
       end
     end
   end
+  NebbieDash.positionGUI()
 end
 
 function NebbieDash.updateVitalsDisplay()

@@ -2,22 +2,17 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.15.33)
+description = [[# Nebbie Dashboard (1.15.34)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 
-- **Equip** (bordo sinistro): tutti gli slot indossati, con posizione ed
-  oggetto letti da `eq`; segna anche gli slot liberi noti.
-- **Spell attivi** (bordo destro, in alto): elenco **tuo** in
-  `nebbie-cast-spells.txt` (solo self-cast che puoi lanciare); colori/tick da
-  `attrib`; click rilancia con bersaglio = PG attivo (`nclass` per cast/recall/mind).
+- **Equip + Speedwalk** (solo bordo sinistro, impilati): equip da `eq` con slot
+  vuoti evidenziati; speedwalk cliccabili sotto. Altezze proporzionali al testo
+  (`nheights auto`); niente pannello spell GUI (lancio con `c`/`r`/`m` e shortcut).
 - **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
   **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
-- **Speedwalk** (bordo destro, in basso): percorsi rapidi definiti a mano in
-  un file di testo, cliccabili per eseguirli in sequenza.
-- Layout ridimensionabile (larghezza automatica o manuale, altezza
-  spell/speedwalk regolabile) e persistente tra sessioni.
+- Layout: larghezza `nwidth`; altezza Equip/Speedwalk `nheights` o automatica.
 - Tasto **"? Comandi"** in cima allo schermo: apre/chiude un elenco di tutti
   i comandi disponibili (anche `nhelp`).
 - Numero di riga tra parentesi quadre nel pannello equip, come nel testo di
@@ -96,6 +91,6 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.15.33]]
+version = [[1.15.34]]
 created = [[2026-09-26]]
 website = [[https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage]]
