@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.32 — 2026-10-05
+
+- **npackageupdate (critico)**: dopo `uninstallPackage` lo script del package non arrivava mai a
+  `installPackage` (profilo senza comandi `n*`). Installazione differita su `_G` + `tempTimer` con
+  callback stringa; URL `.mpackage` senza `?cb=` (Mudlet rifiuta query dopo l'estensione).
+- Handler di backup su `sysUninstallPackage` per schedulare l'install se il timer principale fallisce.
+
 ## 1.15.31 — 2026-10-05
 
 - **GUI**: rimosso pannello **Armi** (colonna equip a tutta altezza).
