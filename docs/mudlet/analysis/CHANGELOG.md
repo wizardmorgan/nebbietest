@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.36 — 2026-10-05
+
+- **usa (critico)**: `usa flamberga` non usava più `boris`/`noor` sbagliati — rispetta
+  l'argomento digitato, risolve da `displayName`/`nebbie-item-keywords.txt` (es.
+  `flamberga boris`); zaino con stessa logica delle macro fame (`korred`, non ultima parola).
+
 ## 1.15.35 — 2026-10-05
 
 - **npackageupdate**: scarica il `.mpackage` con **`downloadFile` + `?cb=`** e installa dal
