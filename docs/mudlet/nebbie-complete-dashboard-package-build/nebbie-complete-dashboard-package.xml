@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.34"
+local PKG_VER = "1.15.35"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -38,29 +38,8 @@ NebbieDash.package = "nebbie-complete-dashboard-package"
 -- Self-update: funzioni su _G + tempTimer con callback stringa, cosi' l'install
 -- sopravvive a uninstallPackage (che rimuove alias/script del package prima che
 -- installPackage possa girare nello stesso stack).
-function _G.NebbieDashRunPendingPackageInstall()
-  local pending = _G.NebbieDashPendingPackageInstall
-  if not pending or pending.started then return end
-  pending.started = true
-  local url = pending.url
-  local pkg = pending.pkg or "nebbie-complete-dashboard-package"
-  if not url or url == "" then
-    _G.NebbieDashPendingPackageInstall = nil
-    return
-  end
-  cecho("<grey>Scarico e installo '" .. pkg .. "' da GitHub...\n")
-  if type(installPackage) ~= "function" then
-    cecho("<red>installPackage non disponibile — Package Manager → Installa da URL:\n<white>" .. url .. "\n")
-    _G.NebbieDashPendingPackageInstall = nil
-    return false
-  end
-  local ok, err = pcall(installPackage, url)
-  _G.NebbieDashPendingPackageInstall = nil
-  if not ok then
-    cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
-    cecho("<orange>Package Manager → Installa da URL (senza ?query):\n<white>" .. url .. "\n")
-    return false
-  end
+function _G.NebbieDashPostPackageInstall(pkg)
+  pkg = pkg or "nebbie-complete-dashboard-package"
   tempTimer(0.6, function()
     NebbieDash = NebbieDash or {}
     NebbieDash._mainLoaded = false
@@ -77,13 +56,91 @@ function _G.NebbieDashRunPendingPackageInstall()
       vPkg = getPackageInfo(pkg, "version") or ""
     end
     if vPkg == "" then
-      cecho("<red>Package non risulta installato — usa Package Manager → Installa da URL:\n<white>" ..
-        url .. "\n")
+      cecho("<red>Package non risulta installato.\n")
     else
       cecho("<green>[NebbieDash] Package Manager: <white>" .. vPkg ..
         "<green> — in esecuzione: <white>v" .. vRun .. "<green>.\n")
+      if vPkg ~= vRun then
+        cecho("<orange>Versioni diverse: riavvia Mudlet o digita <yellow>nfix<orange>.\n")
+      end
     end
   end)
+end
+
+function _G.NebbieDashOnPackageDownloadDone(_, saveTo)
+  local pending = _G.NebbieDashPendingPackageInstall
+  if not pending or not pending.saveTo or saveTo ~= pending.saveTo then return end
+  if pending.installStarted then return end
+  pending.installStarted = true
+  local pkg = pending.pkg or "nebbie-complete-dashboard-package"
+  cecho("<grey>Installo il file scaricato...\n")
+  if type(installPackage) ~= "function" then
+    _G.NebbieDashPendingPackageInstall = nil
+    return
+  end
+  local ok, err = pcall(installPackage, saveTo)
+  _G.NebbieDashPendingPackageInstall = nil
+  if not ok then
+    cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
+    return
+  end
+  _G.NebbieDashPostPackageInstall(pkg)
+end
+
+function _G.NebbieDashOnPackageDownloadError(_, msg, saveTo)
+  local pending = _G.NebbieDashPendingPackageInstall
+  if not pending or saveTo ~= pending.saveTo then return end
+  local url = pending.url or PKG_MPACKAGE_URL
+  _G.NebbieDashPendingPackageInstall = nil
+  cecho("<red>Download .mpackage fallito: " .. tostring(msg) .. "\n")
+  cecho("<orange>Package Manager → Installa da URL:\n<white>" .. url .. "\n")
+end
+
+function NebbieDash.ensurePackageDownloadHandlers()
+  if type(registerAnonymousEventHandler) ~= "function" then return end
+  if _G._NebbieDashPkgDownloadHandlersInstalled then return end
+  registerAnonymousEventHandler("sysDownloadDone", "_G.NebbieDashOnPackageDownloadDone")
+  registerAnonymousEventHandler("sysDownloadError", "_G.NebbieDashOnPackageDownloadError")
+  _G._NebbieDashPkgDownloadHandlersInstalled = true
+end
+
+function _G.NebbieDashRunPendingPackageInstall()
+  local pending = _G.NebbieDashPendingPackageInstall
+  if not pending or pending.started then return end
+  pending.started = true
+  local url = pending.url
+  local pkg = pending.pkg or "nebbie-complete-dashboard-package"
+  if not url or url == "" then
+    _G.NebbieDashPendingPackageInstall = nil
+    return
+  end
+  local cleanUrl = NebbieDash.cleanMpackageUrl(url)
+  pending.url = cleanUrl
+
+  if type(downloadFile) == "function" and type(installPackage) == "function" then
+    NebbieDash.ensurePackageDownloadHandlers()
+    local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+    pending.saveTo = home .. "/nebbie-dash-update.mpackage"
+    pending.installStarted = false
+    pcall(function() os.remove(pending.saveTo) end)
+    cecho("<grey>Scarico '" .. pkg .. "' (cache-bust — evita .mpackage vecchio da GitHub raw)...\n")
+    downloadFile(pending.saveTo, cleanUrl .. "?cb=" .. tostring(os.time()))
+    return true
+  end
+
+  cecho("<grey>Scarico e installo '" .. pkg .. "' da GitHub...\n")
+  if type(installPackage) ~= "function" then
+    cecho("<red>installPackage non disponibile — Package Manager → Installa da URL:\n<white>" .. cleanUrl .. "\n")
+    _G.NebbieDashPendingPackageInstall = nil
+    return false
+  end
+  local ok, err = pcall(installPackage, cleanUrl)
+  _G.NebbieDashPendingPackageInstall = nil
+  if not ok then
+    cecho("<red>installPackage fallito: " .. tostring(err) .. "\n")
+    return false
+  end
+  _G.NebbieDashPostPackageInstall(pkg)
   return true
 end
 

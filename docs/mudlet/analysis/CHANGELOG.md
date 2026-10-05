@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.35 — 2026-10-05
+
+- **npackageupdate**: scarica il `.mpackage` con **`downloadFile` + `?cb=`** e installa dal
+  file locale (GitHub raw serviva spesso la versione precedente con `installPackage(URL)`).
+- Include **1.15.34** (GUI Equip+Speedwalk sinistra, no spell) se eri rimasto a 1.15.33.
+
 ## 1.15.34 — 2026-10-05
 
 - **GUI**: rimosso pannello **Spell attivi**; niente bordo destro — solo colonna sinistra
