@@ -47,12 +47,23 @@ EDIT_API_PORT="${EDIT_API_PORT:-8090}"
 EDIT_API_SECRET="${EDIT_API_SECRET:-nebbie-edit-dev-secret}"
 EDIT_WEB_PORT="${EDIT_WEB_PORT:-3080}"
 
-RAZZE_REMOTE="${RAZZE_REMOTE:-upstream}"
-RAZZE_BRANCH="${RAZZE_BRANCH:-feature/Razze}"
+# Montero base (Razze è in produzione/develop; nuovi sviluppi su feature/Principi)
+UPSTREAM_REMOTE="${UPSTREAM_REMOTE:-upstream}"
+PRINCIPI_REMOTE="${PRINCIPI_REMOTE:-${RAZZE_REMOTE:-$UPSTREAM_REMOTE}}"
+if [ -n "${PRINCIPI_BRANCH:-}" ]; then
+	:
+elif [ -n "${RAZZE_BRANCH:-}" ] && [ "${RAZZE_BRANCH}" != "feature/Razze" ]; then
+	# Retrocompat: RAZZE_BRANCH custom (non il vecchio nome obsoleto)
+	PRINCIPI_BRANCH="$RAZZE_BRANCH"
+else
+	PRINCIPI_BRANCH="feature/Principi"
+fi
+# Alias legacy (comandi sync-razze / update-razze)
+RAZZE_REMOTE="$PRINCIPI_REMOTE"
+RAZZE_BRANCH="$PRINCIPI_BRANCH"
 # C++ portal: remote fork mud (finché edit_portal.cpp non è su NebbieArcane/Server)
 EDIT_REMOTE="${EDIT_REMOTE:-mine}"
 EDIT_BRANCH="${EDIT_BRANCH:-feature/edit-portal}"
-UPSTREAM_REMOTE="${UPSTREAM_REMOTE:-upstream}"
 # UI: NebbieArcane/edit-portal
 PORTAL_UI_REMOTE="${PORTAL_UI_REMOTE:-origin}"
 PORTAL_UI_BRANCH="${PORTAL_UI_BRANCH:-develop}"
@@ -70,14 +81,20 @@ fi
 ROOT="$MUD_ROOT"
 source "${MUD_ROOT}/scripts/load-mysql-conf.sh"
 
+COMPOSE=""
 if docker compose version >/dev/null 2>&1; then
 	COMPOSE='docker compose'
 elif command -v docker-compose >/dev/null 2>&1; then
 	COMPOSE='docker-compose'
-else
-	echo "ERRORE: né 'docker compose' né 'docker-compose' trovati." >&2
-	exit 1
 fi
+
+require_compose() {
+	if [ -z "$COMPOSE" ]; then
+		echo "ERRORE: né 'docker compose' né 'docker-compose' trovati." >&2
+		echo "  (comandi git-only: sync-principi, sync-mud, sync-ui, sync-all, help)" >&2
+		exit 1
+	fi
+}
 
 portal_ui_app_js() {
 	if [ -f "$PORTAL_UI_ROOT/public/app.js" ]; then
@@ -92,10 +109,12 @@ portal_ui_app_js() {
 }
 
 compose() {
+	require_compose
 	(cd "$MUD_ROOT" && $COMPOSE "$@")
 }
 
 compose_edit() {
+	require_compose
 	# Preferisci repo ufficiale (docker-compose.yml, build: .)
 	if [ -f "$PORTAL_UI_ROOT/docker-compose.yml" ] && [ -f "$PORTAL_UI_ROOT/server.js" ]; then
 		(
@@ -356,9 +375,9 @@ git_pull_branch() {
 	)
 }
 
-cmd_sync_razze() {
-	echo "=== sync-razze: $MUD_ROOT ($RAZZE_REMOTE/$RAZZE_BRANCH) ==="
-	# Preferisci merge Razze sul clone C++ (EDIT_REPO), se distinto da MUD_ROOT
+cmd_sync_principi() {
+	echo "=== sync-principi: $EDIT_REPO ($PRINCIPI_REMOTE/$PRINCIPI_BRANCH) ==="
+	# Preferisci merge Principi sul clone C++ (EDIT_REPO), se distinto da MUD_ROOT
 	local repo="$EDIT_REPO"
 	if [ ! -d "$repo/.git" ]; then
 		repo="$MUD_ROOT"
@@ -366,20 +385,25 @@ cmd_sync_razze() {
 	ensure_upstream_remote "$repo"
 	(
 		cd "$repo"
-		# Se RAZZE_REMOTE manca, usa upstream
-		if ! git remote get-url "$RAZZE_REMOTE" >/dev/null 2>&1; then
-			RAZZE_REMOTE="$UPSTREAM_REMOTE"
+		local remote="$PRINCIPI_REMOTE"
+		if ! git remote get-url "$remote" >/dev/null 2>&1; then
+			remote="$UPSTREAM_REMOTE"
 		fi
-		git fetch "$RAZZE_REMOTE" "$RAZZE_BRANCH"
-		if git merge --no-edit "$RAZZE_REMOTE/$RAZZE_BRANCH"; then
-			echo "merge $RAZZE_REMOTE/$RAZZE_BRANCH ok"
+		git fetch "$remote" "$PRINCIPI_BRANCH"
+		if git merge --no-edit "$remote/$PRINCIPI_BRANCH"; then
+			echo "merge $remote/$PRINCIPI_BRANCH ok"
 		else
-			echo "ERRORE: conflitti merge Razze in $repo — vedi docs/sync-razze-procedure.md" >&2
+			echo "ERRORE: conflitti merge Principi in $repo — vedi docs/sync-principi-procedure.md" >&2
 			exit 1
 		fi
 	)
 	ensure_docker_override
-	echo "sync-razze ok."
+	echo "sync-principi ok."
+}
+
+# Alias legacy (Razze → produzione; base sviluppo = Principi)
+cmd_sync_razze() {
+	cmd_sync_principi
 }
 
 # C++ / API myst (edit_portal.cpp) dal remote mud (mine/feature/edit-portal)
@@ -426,8 +450,8 @@ cmd_sync_edit() {
 }
 
 cmd_sync_all() {
-	# Tree mud pulito consigliato (stash) prima di sync-razze
-	cmd_sync_razze
+	# Tree mud pulito consigliato (stash) prima di sync-principi
+	cmd_sync_principi
 	cmd_sync_mud
 	cmd_sync_ui
 	echo "sync-all ok."
@@ -449,9 +473,14 @@ cmd_build_edit() {
 	echo "build edit-portal ok."
 }
 
-cmd_update_razze() {
-	cmd_sync_razze
+cmd_update_principi() {
+	cmd_sync_principi
 	cmd_build
+}
+
+# Alias legacy
+cmd_update_razze() {
+	cmd_update_principi
 }
 
 cmd_update_edit() {
@@ -822,18 +851,20 @@ Config: ~/.config/nebbie/mud-dev.env
   MUD_APP_ROOT=$MUD_APP_ROOT
 
 SYNC (git)
-  sync-razze      merge Montero ($RAZZE_REMOTE/$RAZZE_BRANCH) nel clone C++
+  sync-principi   merge Montero ($PRINCIPI_REMOTE/$PRINCIPI_BRANCH) nel clone C++
+  sync-razze      alias di sync-principi (legacy)
   sync-mud        pull C++ portal ($EDIT_REMOTE/$EDIT_BRANCH) su EDIT_REPO
   sync-ui         pull UI ufficiale ($PORTAL_UI_REMOTE/$PORTAL_UI_BRANCH)
   sync-edit       sync-mud + sync-ui  (retrocompat)
-  sync-all        sync-razze + sync-mud + sync-ui
+  sync-all        sync-principi + sync-mud + sync-ui
 
 BUILD
   build           compila myst (./build.sh devel, sorgente MUD_APP_ROOT)
   build-edit      rebuild immagine Docker edit-portal (da PORTAL_UI_ROOT)
 
 UPDATE (sync + build)
-  update-razze    sync-razze + build myst
+  update-principi sync-principi + build myst
+  update-razze    alias di update-principi (legacy)
   update-edit     sync-ui + build-edit
   update-all      sync-all + build myst + build-edit
   deploy-edit     sync-mud + sync-ui + build + start
@@ -859,7 +890,7 @@ INFO
 
 Esempi:
   $0 sync-ui && $0 build-edit && $0 start-edit   # solo UI ufficiale
-  $0 sync-all && $0 build && $0 start            # Razze + C++ + UI
+  $0 sync-all && $0 build && $0 start            # Principi + C++ + UI
   $0 deploy-edit
 
 Vedi docs/edit-portal-nucbuntu.md e docs/edit-portal-ssh-deploy.md
@@ -872,14 +903,14 @@ main() {
 	help | -h | --help) usage ;;
 	status) cmd_status ;;
 	health) cmd_health ;;
-	sync-razze) cmd_sync_razze ;;
+	sync-principi | sync-razze) cmd_sync_principi ;;
 	sync-mud) cmd_sync_mud ;;
 	sync-ui | sync-portal) cmd_sync_ui ;;
 	sync-edit) cmd_sync_edit ;;
 	sync-all) cmd_sync_all ;;
 	build) cmd_build ;;
 	build-edit) cmd_build_edit ;;
-	update-razze) cmd_update_razze ;;
+	update-principi | update-razze) cmd_update_principi ;;
 	update-edit) cmd_update_edit ;;
 	deploy-edit) cmd_deploy_edit ;;
 	rebuild-myst) cmd_rebuild_myst ;;
