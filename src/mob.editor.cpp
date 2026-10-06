@@ -2152,17 +2152,11 @@ void do_trasferisci(struct char_data* ch, struct char_data* mob, std::string_vie
 	std::string err;
 	if(!resolve_affect_pick(obj_a, aff_name, pick, err)) {
 		tell_from_jeweler(ch, mob, err);
-<<<<<<< HEAD
 		/* Ternary fuori da mudlog: FORMAT/% mangia ?: */
-		const char* aname = obj_a->short_description ? obj_a->short_description : "?";
-		mudlog(LOG_PLAYERS, "EditAffectBroker transfer denied %s: %s (affect=%s A=%s)",
-			   GET_NAME(ch), err.c_str(), aff_name.c_str(), aname);
-=======
 		const char* a_short =
 			obj_a->short_description ? obj_a->short_description : "?";
 		mudlog(LOG_PLAYERS, "EditAffectBroker transfer denied %s: %s (affect=%s A=%s)",
 			   GET_NAME(ch), err.c_str(), aff_name.c_str(), a_short);
->>>>>>> upstream/feature/Principi
 		return;
 	}
 
