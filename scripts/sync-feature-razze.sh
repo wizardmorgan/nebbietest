@@ -1,7 +1,4 @@
 #!/bin/bash
-# Allinea il branch locale a origin/feature/Razze (repo NebbieArcane).
+# Obsoleto: Razze → produzione. Delega a sync-feature-principi.sh
 set -euo pipefail
-cd "$(dirname "$0")/.."
-git fetch origin feature/Razze
-git merge --no-edit origin/feature/Razze
-echo "Allineato a origin/feature/Razze. Branch attuale: $(git branch --show-current)"
+exec "$(dirname "$0")/sync-feature-principi.sh"

@@ -27,6 +27,7 @@
 #include "snew.hpp"
 #include "utility.hpp"
 #include "spells.hpp"
+#include "spell_parser.hpp"
 #include "maximums.hpp"
 #include "opinion.hpp"
 #include "procarea_band_stats.inc"
@@ -575,6 +576,7 @@ static void procarea_apply_hold_defense(char_data* mob, ProcMobKind kind) {
 		mob->immune &= ~IMM_HOLD;
 		break;
 	case ProcMobKind::Normal:
+	case ProcMobKind::Hireling:
 		SET_BIT(mob->immune, IMM_HOLD);
 		mob->M_immune &= ~IMM_HOLD;
 		break;
@@ -1503,7 +1505,7 @@ static void procarea_rescale_instance_mobs(const ProcAreaInstance& inst, float d
 			continue;
 		}
 		for(char_data* mob = rp->people; mob != nullptr; mob = mob->next_in_room) {
-			if(procarea_is_runtime_mob(mob)) {
+			if(procarea_is_runtime_mob(mob) && !is_hireling_mob(mob)) {
 				procarea_apply_power_delta(mob, delta);
 			}
 		}
@@ -3291,7 +3293,7 @@ int count_mobs(const ProcAreaInstance& inst) {
 			continue;
 		}
 		for(struct char_data* mob = rp->people; mob != nullptr; mob = mob->next_in_room) {
-			if(IS_NPC(mob) && !IS_SET(mob->specials.act, ACT_POLYSELF)) {
+			if(IS_NPC(mob) && !IS_SET(mob->specials.act, ACT_POLYSELF) && !is_hireling_mob(mob)) {
 				++count;
 			}
 		}
@@ -3499,6 +3501,95 @@ static constexpr ProcRoomTemplate kProcCrystalChamberRoom {
 	static_cast<long>(INDOORS | DARK),
 };
 
+[[nodiscard]] static std::string hireling_classes_look_text(unsigned long mask) {
+	struct Tok {
+		unsigned long bit;
+		const char* name;
+	};
+	static constexpr Tok kToks[] = {
+		{ CLASS_MAGIC_USER, "maghi" },     { CLASS_SORCERER, "stregoni" },
+		{ CLASS_PSI, "psionici" },         { CLASS_DRUID, "druidi" },
+		{ CLASS_CLERIC, "chierici" },      { CLASS_WARRIOR, "guerrieri" },
+		{ CLASS_THIEF, "ladri" },          { CLASS_MONK, "monaci" },
+		{ CLASS_BARBARIAN, "barbari" },    { CLASS_PALADIN, "paladini" },
+		{ CLASS_RANGER, "ranger" },
+	};
+	std::string out;
+	for(const Tok& t : kToks) {
+		if((mask & t.bit) == 0UL) {
+			continue;
+		}
+		if(!out.empty()) {
+			out += "$c0007, $c0015";
+		}
+		out += t.name;
+	}
+	if(out.empty()) {
+		return "$c0009nessuna$c0007";
+	}
+	return std::string("$c0015") + out + "$c0007";
+}
+
+static void procarea_append_room_description(struct room_data* room, const char* add) {
+	if(room == nullptr || add == nullptr || add[0] == '\0') {
+		return;
+	}
+	const char* old = room->description != nullptr ? room->description : "";
+	std::string combined = std::string(old) + add;
+	if(room->description != nullptr) {
+		free(room->description);
+	}
+	room->description = strdup(combined.c_str());
+}
+
+/** Solo + hireling enabled: cartello lookable congelato alla config di creazione istanza. */
+static void spawn_entrance_hireling_sign(ProcAreaInstance& inst, struct room_data* rp,
+										 bool append_room_hint) {
+	if(!inst.solo_mode || rp == nullptr) {
+		return;
+	}
+	const ProcHirelingConfig& cfg = procarea_hireling_config();
+	if(!cfg.enabled) {
+		return;
+	}
+
+	std::ostringstream desc;
+	desc << "$c0014=== Cartello della Scorta ===$c0007\n\r"
+		 << "Rune $c0011dorate$c0007 e inchiostro di $c0012bruma$c0007 spiegano il patto:\n\r"
+		 << "\n\r"
+		 << "Comando: $c0015assolda$c0007\n\r"
+		 << "Ottieni una $c0014scorta tank$c0007 che ti segue e ti assiste in combattimento.\n\r"
+		 << "\n\r";
+	if(cfg.allow_multi) {
+		desc << "Chi: $c0010anche multiclasse$c0007, tra le classi ammesse.\n\r";
+	} else {
+		desc << "Chi: solo $c0010monoclasse$c0007, tra le classi ammesse.\n\r";
+	}
+	desc << "Classi: " << hireling_classes_look_text(cfg.class_mask) << ".\n\r"
+		 << "\n\r"
+		 << "Costo $c0011frammenti$c0007: "
+		 << "$c0015(livello x banda cristallo x " << cfg.frag_num << ") / " << cfg.frag_den
+		 << "$c0007\n\r"
+		 << "Costo $c0011oro$c0007: $c0015livello x " << cfg.gold_per_level << "$c0007\n\r"
+		 << "Se i frammenti non bastano, spezzi $c0013rune$c0007 intere ("
+		 << procarea_fragments_per_rune() << " frag/runa; il resto resta in frammenti).\n\r"
+		 << "\n\r";
+	if(cfg.rebuy) {
+		desc << "Se la scorta $c0009cade$c0007, in questa run $c0010puoi$c0007 riassoldarne un'altra.\n\r";
+	} else {
+		desc << "Se la scorta $c0009cade$c0007, in questa run $c0009non$c0007 puoi riassoldarne un'altra.\n\r";
+	}
+	desc << "Max $c0015una$c0007 scorta alla volta.";
+
+	procarea_add_room_extra(rp, "cartello manifesto scorta assolda tabella", desc.str().c_str());
+	if(append_room_hint) {
+		procarea_append_room_description(
+			rp,
+			"Su un pilastro di rune fluttua un $c0014cartello$c0007 luminoso:\n\r"
+			"spiega come $c0014assoldare$c0007 una scorta tank.\n\r");
+	}
+}
+
 void spawn_entrance_crystals(ProcAreaInstance& inst) {
 	if(inst.entrance_vnum <= 0) {
 		return;
@@ -3511,6 +3602,7 @@ void spawn_entrance_crystals(ProcAreaInstance& inst) {
 	for(int idx = 0; idx < PROCAREA_CRYSTAL_COUNT; ++idx) {
 		procarea_add_room_extra(rp, kCrystalExtraKeys[idx], kCrystalExtraDesc[idx]);
 	}
+	spawn_entrance_hireling_sign(inst, rp, true);
 }
 
 void remove_entrance_crystals(ProcAreaInstance& inst) {
@@ -3530,6 +3622,8 @@ void remove_entrance_crystals(ProcAreaInstance& inst) {
 			extract_obj(obj);
 		}
 	}
+	/* Cartello scorta resta dopo la sintonia (extras cristallo rimossi). */
+	spawn_entrance_hireling_sign(inst, rp, false);
 }
 
 void open_entrance_passage(ProcAreaInstance& inst) {
@@ -4218,6 +4312,354 @@ bool instance_has_ranger(const ProcAreaInstance& inst) {
 
 void roll_reward_weapon_impl(struct obj_data* obj, const ProcAreaInstance& inst) {
 	roll_reward_weapon_impl(obj, procarea_reward_band(inst), procarea_instance_has_ranger(inst));
+}
+
+bool is_hireling_mob(const char_data* mob) {
+	return mob != nullptr && IS_NPC(mob) &&
+		   mob->commandp == static_cast<int>(ProcMobKind::Hireling);
+}
+
+void release_hireling(ProcAreaInstance& inst, bool mark_dead) {
+	char_data* mob = inst.hireling;
+	inst.hireling = nullptr;
+	if(mark_dead) {
+		inst.hireling_dead = true;
+	} else {
+		inst.hireling_dead = false;
+	}
+	if(mob == nullptr || mob->nMagicNumber != CHAR_VALID_MAGIC) {
+		return;
+	}
+	if(!is_hireling_mob(mob)) {
+		return;
+	}
+	if(mob->specials.fighting) {
+		stop_fighting(mob);
+	}
+	if(mob->master != nullptr || mob->followers != nullptr) {
+		die_follower(mob);
+	}
+	extract_char(mob);
+}
+
+namespace {
+
+enum class HireAlignBucket { Good, Neutral, Evil };
+
+[[nodiscard]] HireAlignBucket hire_align_bucket(const char_data* ch) {
+	if(ch == nullptr) {
+		return HireAlignBucket::Neutral;
+	}
+	if(IS_GOOD(ch)) {
+		return HireAlignBucket::Good;
+	}
+	if(IS_EVIL(ch)) {
+		return HireAlignBucket::Evil;
+	}
+	return HireAlignBucket::Neutral;
+}
+
+struct HirelingForm {
+	int race;
+	const char* keywords;
+	const char* short_descr;
+	const char* long_descr;
+};
+
+[[nodiscard]] unsigned long hire_pick_class_bit(const char_data* pc, unsigned long mask) {
+	static constexpr unsigned long kOrder[] = {
+		CLASS_MAGIC_USER, CLASS_SORCERER, CLASS_PSI, CLASS_DRUID, CLASS_CLERIC,
+		CLASS_WARRIOR,    CLASS_BARBARIAN, CLASS_PALADIN, CLASS_RANGER, CLASS_THIEF,
+		CLASS_MONK,
+	};
+	for(unsigned long bit : kOrder) {
+		if((mask & bit) != 0UL && HasClass(const_cast<char_data*>(pc), static_cast<int>(bit))) {
+			return bit;
+		}
+	}
+	return 0UL;
+}
+
+[[nodiscard]] HirelingForm hire_form_for(unsigned long class_bit, HireAlignBucket align) {
+	const int a = static_cast<int>(align);
+	/* [class][good/neut/evil] — always !IsHumanoid (no wear). */
+	if(class_bit == CLASS_MAGIC_USER || class_bit == CLASS_SORCERER) {
+		static constexpr HirelingForm kMu[3] = {
+			{ RACE_ELEMENT, "beholder occhio cristallo scorta luce",
+			  "un beholder di cristallo",
+			  "Un beholder di cristallo fluttua al tuo fianco, pupille di luce.\n" },
+			{ RACE_SPECIAL, "beholder occhio bruma scorta",
+			  "un beholder della bruma",
+			  "Un beholder della bruma veglia silenzioso, occhio centrale aperto.\n" },
+			{ RACE_ELEMENT, "beholder occhio ombra scorta nero",
+			  "un beholder d'ombra",
+			  "Un beholder d'ombra fluttua, l'occhio nero fissa i nemici.\n" },
+		};
+		return kMu[a];
+	}
+	if(class_bit == CLASS_PSI) {
+		static constexpr HirelingForm kPsi[3] = {
+			{ RACE_PLANAR, "eco mentale nucleo scorta argenteo",
+			  "un eco mentale argenteo",
+			  "Un eco mentale argenteo pulsa a mezz'aria.\n" },
+			{ RACE_PLANAR, "nucleo psionico scorta",
+			  "un nucleo psionico",
+			  "Un nucleo psionico orbita vicino a te.\n" },
+			{ RACE_PLANAR, "larva mentale scorta",
+			  "una larva mentale",
+			  "Una larva mentale fremente ti segue.\n" },
+		};
+		return kPsi[a];
+	}
+	if(class_bit == CLASS_DRUID) {
+		static constexpr HirelingForm kDr[3] = {
+			{ RACE_TREE, "guardiano quercia albero scorta",
+			  "un guardiano di quercia",
+			  "Un guardiano di quercia animato si muove al tuo fianco.\n" },
+			{ RACE_PREDATOR, "orso radure scorta",
+			  "un orso delle radure",
+			  "Un orso delle radure ti segue, massiccio e paziente.\n" },
+			{ RACE_SLIME, "melma bosco scorta",
+			  "una melma del bosco",
+			  "Una melma del bosco striscia al tuo fianco.\n" },
+		};
+		return kDr[a];
+	}
+	if(class_bit == CLASS_CLERIC) {
+		static constexpr HirelingForm kCl[3] = {
+			{ RACE_ELEMENT, "elementale sacro scorta",
+			  "un elementale sacro",
+			  "Un elementale sacro di luce ti scorta.\n" },
+			{ RACE_ELEMENT, "elementale culto scorta",
+			  "un elementale del culto",
+			  "Un elementale del culto ti resta vicino.\n" },
+			{ RACE_ELEMENT, "elementale profano scorta",
+			  "un elementale profano",
+			  "Un elementale profano di fumo nero ti scorta.\n" },
+		};
+		return kCl[a];
+	}
+	if(class_bit == CLASS_BARBARIAN) {
+		static constexpr HirelingForm kBa[3] = {
+			{ RACE_PREDATOR, "orso bianco scorta",
+			  "un orso bianco",
+			  "Un orso bianco enorme ti segue.\n" },
+			{ RACE_PREDATOR, "orso bruno scorta",
+			  "un orso bruno",
+			  "Un orso bruno ti scorta con passo pesante.\n" },
+			{ RACE_PREDATOR, "orso nero rabbioso scorta",
+			  "un orso nero",
+			  "Un orso nero dagli occhi rossi ti segue.\n" },
+		};
+		return kBa[a];
+	}
+	if(class_bit == CLASS_WARRIOR) {
+		static constexpr HirelingForm kWa[3] = {
+			{ RACE_ELEMENT, "costrutto marmo scorta",
+			  "un costrutto di marmo",
+			  "Un costrutto di marmo avanza come scudo vivente.\n" },
+			{ RACE_ELEMENT, "costrutto pietra scorta",
+			  "un costrutto di pietra",
+			  "Un costrutto di pietra ti resta al fianco.\n" },
+			{ RACE_ELEMENT, "costrutto ossidiana scorta",
+			  "un costrutto d'ossidiana",
+			  "Un costrutto d'ossidiana nera ti scorta.\n" },
+		};
+		return kWa[a];
+	}
+	if(class_bit == CLASS_THIEF) {
+		static constexpr HirelingForm kTh[3] = {
+			{ RACE_SNAKE, "serpente verde scorta",
+			  "un serpente verde",
+			  "Un serpente verde si avvolge vicino ai tuoi piedi.\n" },
+			{ RACE_ARACHNID, "ragno ombre scorta",
+			  "un ragno delle ombre",
+			  "Un ragno delle ombre ti segue silenzioso.\n" },
+			{ RACE_SNAKE, "serpente nero scorta",
+			  "un serpente nero",
+			  "Un serpente nero lucido ti scorta.\n" },
+		};
+		return kTh[a];
+	}
+	if(class_bit == CLASS_RANGER) {
+		static constexpr HirelingForm kRa[3] = {
+			{ RACE_PREDATOR, "lupo bianco scorta",
+			  "un lupo bianco",
+			  "Un lupo bianco ti resta al fianco.\n" },
+			{ RACE_PREDATOR, "lupo grigio scorta",
+			  "un lupo grigio",
+			  "Un lupo grigio ti segue fedele.\n" },
+			{ RACE_PREDATOR, "lupo nero scorta",
+			  "un lupo nero",
+			  "Un lupo nero dagli occhi gialli ti scorta.\n" },
+		};
+		return kRa[a];
+	}
+	if(class_bit == CLASS_PALADIN) {
+		static constexpr HirelingForm kPa[3] = {
+			{ RACE_ELEMENT, "elementale luce scorta",
+			  "un elementale di luce",
+			  "Un elementale di luce ti protegge.\n" },
+			{ RACE_ELEMENT, "elementale vincolato scorta",
+			  "un elementale vincolato",
+			  "Un elementale vincolato dal giuramento ti scorta.\n" },
+			{ RACE_ELEMENT, "elementale spezzato scorta",
+			  "un elementale spezzato",
+			  "Un elementale spezzato di luce fioca ti segue.\n" },
+		};
+		return kPa[a];
+	}
+	if(class_bit == CLASS_MONK) {
+		static constexpr HirelingForm kMk[3] = {
+			{ RACE_ELEMENT, "spirito pietra scorta",
+			  "uno spirito di pietra",
+			  "Uno spirito di pietra fluttua in guardia.\n" },
+			{ RACE_SLIME, "sfera ki scorta",
+			  "una sfera di ki",
+			  "Una sfera di ki pulsante ti orbita intorno.\n" },
+			{ RACE_SLIME, "ombra fluida scorta",
+			  "un'ombra fluida",
+			  "Un'ombra fluida ti scorta senza rumore.\n" },
+		};
+		return kMk[a];
+	}
+	static constexpr HirelingForm kFallback[3] = {
+		{ RACE_ELEMENT, "scudiero dimensione scorta",
+		  "uno scudiero della Dimensione",
+		  "Uno scudiero della Dimensione ti resta vicino.\n" },
+		{ RACE_ELEMENT, "scudiero dimensione scorta",
+		  "uno scudiero della Dimensione",
+		  "Uno scudiero della Dimensione ti resta vicino.\n" },
+		{ RACE_ELEMENT, "scudiero dimensione scorta",
+		  "uno scudiero della Dimensione",
+		  "Uno scudiero della Dimensione ti resta vicino.\n" },
+	};
+	return kFallback[a];
+}
+
+} // namespace
+
+char_data* spawn_hireling(ProcAreaInstance& inst, char_data* owner) {
+	if(owner == nullptr || owner->in_room == NOWHERE) {
+		return nullptr;
+	}
+	char_data* real_pc = procarea_real_pc(owner);
+	if(real_pc == nullptr) {
+		real_pc = owner;
+	}
+	const ProcHirelingConfig& cfg = procarea_hireling_config();
+	/* Immortali: forma da qualsiasi classe PG, non solo h_classes. */
+	const unsigned long form_mask =
+		IS_IMMORTALE(real_pc)
+			? (CLASS_MAGIC_USER | CLASS_SORCERER | CLASS_PSI | CLASS_DRUID | CLASS_CLERIC |
+			   CLASS_WARRIOR | CLASS_THIEF | CLASS_MONK | CLASS_BARBARIAN | CLASS_PALADIN |
+			   CLASS_RANGER)
+			: cfg.class_mask;
+	const unsigned long class_bit = hire_pick_class_bit(real_pc, form_mask);
+	const HirelingForm form = hire_form_for(class_bit, hire_align_bucket(real_pc));
+	const int level = std::clamp(GetMaxLevel(real_pc), PROCAREA_MIN_LEVEL, PROCAREA_PC_MAX_LEVEL);
+	/* HP scorta: 1.6x max hit PG all'ingresso. */
+	const int hp = std::max(1, (inst.entry_max_hit * 8) / 5);
+	const int master_ac = GET_AC(real_pc);
+	/* AC 30% migliore del master (in Diku: numero piu' basso). */
+	const int hire_ac = master_ac - (std::abs(master_ac) * 30) / 100;
+
+	char_data* mob = nullptr;
+	CREATE(mob, char_data, 1);
+	if(mob == nullptr) {
+		return nullptr;
+	}
+	clear_char(mob);
+	mob->specials.last_direction = -1;
+	mob->mult_att = 2.0f;
+	mob->specials.spellfail = 101;
+	mob->specials.mobtype = 'L';
+
+	mob->player.name = strdup(form.keywords);
+	mob->player.short_descr = strdup(form.short_descr);
+	mob->player.long_descr = strdup(form.long_descr);
+	mob->player.description = strdup("Una scorta della Dimensione Effimera, fedele al suo padrone.\n");
+	mob->player.sounds = nullptr;
+	mob->player.distant_snds = nullptr;
+	mob->player.title = nullptr;
+
+	SET_BIT(mob->specials.act, ACT_ISNPC | ACT_WARRIOR);
+	REMOVE_BIT(mob->specials.act, ACT_AGGRESSIVE);
+	mob->player.iClass = 0;
+	mob->player.time.birth = time(nullptr);
+	mob->player.time.played = 0;
+	mob->player.time.logon = time(nullptr);
+	mob->player.weight = 400;
+	mob->player.height = 200;
+	for(int i = 0; i < 3; ++i) {
+		GET_COND(mob, i) = -1;
+	}
+	for(int i = 0; i < MAX_WEAR; ++i) {
+		mob->equipment[i] = nullptr;
+	}
+
+	GET_LEVEL(mob, WARRIOR_LEVEL_IND) = level;
+	mob->points.max_hit = hp;
+	mob->points.hit = hp;
+	GET_AC(mob) = hire_ac;
+	mob->points.hitroll = static_cast<sbyte>(std::max(1, level / 10));
+	mob->points.damroll = static_cast<sbyte>(std::max(1, level / 12));
+	mob->specials.damnodice = 2;
+	mob->specials.damsizedice = 8;
+	GET_EXP(mob) = 0;
+	mob->points.gold = 0;
+	GET_ALIGNMENT(mob) = GET_ALIGNMENT(real_pc);
+
+	mob->abilities.str = 16;
+	mob->abilities.intel = 8;
+	mob->abilities.wis = 8;
+	mob->abilities.dex = 12;
+	mob->abilities.con = 18;
+	mob->abilities.chr = 8;
+	mob->tmpabilities = mob->abilities;
+	mob->points.max_mana = 10;
+	for(int i = 0; i < 5; ++i) {
+		mob->specials.apply_saving_throw[i] = static_cast<sbyte>(MAX(20 - level, 2));
+	}
+
+	mob->nr = -1;
+	mob->generic = PROCAREA_HIRELING_VNUM;
+	mob->commandp = static_cast<int>(ProcMobKind::Hireling);
+	GET_RACE(mob) = form.race;
+	SetRacialStuff(mob);
+
+	/* Resist (immune) fisiche + magiche; meta: hold e fuoco. Dopo SetRacialStuff. */
+	mob->immune |= IMM_BLUNT | IMM_PIERCE | IMM_SLASH | IMM_FIRE | IMM_COLD | IMM_ELEC |
+				   IMM_ENERGY | IMM_ACID | IMM_POISON | IMM_DRAIN | IMM_SLEEP | IMM_CHARM;
+	SET_BIT(mob->M_immune, IMM_HOLD | IMM_FIRE);
+	mob->immune &= ~IMM_HOLD;
+
+	/* Volo obbligatorio scorta (non dipende dalla razza). */
+	SET_BIT(mob->specials.affected_by, AFF_FLYING);
+	/* Move generoso (NewMobMov): deve seguire ovunque senza restare a corto. */
+	mob->points.max_move = 0;
+	mob->points.max_move = NewMobMov(mob);
+	mob->points.mana = mana_limit(mob);
+	mob->points.move = move_limit(mob);
+	mob->specials.tick = mob_tick_count++;
+	if(mob_tick_count == TICK_WRAP_COUNT) {
+		mob_tick_count = 0;
+	}
+
+	mob->next = character_list;
+	character_list = mob;
+	mob_count++;
+
+	char_to_room(mob, owner->in_room);
+	add_follower(mob, owner);
+	SET_BIT(mob->specials.affected_by, AFF_CHARM | AFF_TRUE_SIGHT);
+	REMOVE_BIT(mob->specials.affected_by, AFF_GROUP);
+	/* SENTINEL: no wander (evita pianti RawMove); GUARDIAN: auto-assist master. */
+	SET_BIT(mob->specials.act, ACT_SENTINEL | ACT_GUARDIAN);
+
+	inst.hireling = mob;
+	inst.hireling_dead = false;
+	return mob;
 }
 
 } // namespace procarea_internal
