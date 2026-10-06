@@ -846,12 +846,11 @@ void make_corpse(struct char_data* ch, int killedbytype) {
 	corpse->affected[1].modifier=GetMaxLevel(ch);  /* level of corpse */
 
 	corpse->obj_flags.value[3] = 1; /* corpse identifyer */
-	if(ADeadBody) {
-		corpse->obj_flags.weight = GET_WEIGHT(ch)+IS_CARRYING_W(ch);
-	}
-	else {
-		corpse->obj_flags.weight = 1+IS_CARRYING_W(ch);
-	}
+	/* Peso: non usare IS_CARRYING_W qui. Con EQPESANTE true include gia' l'eq
+	 * indossato, e obj_to_obj sotto lo riconta. Inventario e' agganciato per
+	 * puntatore senza passare da obj_to_obj: il totale si ricalcola a fine
+	 * make_corpse (corpo + contenuto top-level). */
+	corpse->obj_flags.weight = 0;
 	corpse->obj_flags.cost_per_day = 100000;
 	if(IS_NPC(ch)) {
 		corpse->obj_flags.timer = MAX_NPC_CORPSE_TIME;
@@ -919,6 +918,17 @@ void make_corpse(struct char_data* ch, int killedbytype) {
 				extract_obj(co);
 			}
 		}
+	}
+
+	/* Peso finale: corpo (o 1 se dust) + ogni oggetto top-level nel cadavere.
+	 * Copre inventario (link diretto), oro ed eq (obj_to_obj) una sola volta;
+	 * le borse includono gia' il peso del contenuto in GET_OBJ_WEIGHT. */
+	{
+		int corpse_weight = ADeadBody ? GET_WEIGHT(ch) : 1;
+		for(struct obj_data* co = corpse->contains; co != nullptr; co = co->next_content) {
+			corpse_weight += GET_OBJ_WEIGHT(co);
+		}
+		corpse->obj_flags.weight = corpse_weight;
 	}
 
 	/* Audit: eq/inv lasciati sul cadavere (dopo recupero simbolo clan). */
@@ -2792,15 +2802,20 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
 				exp = MAX(exp, 1);
 
 				if(!IS_PC(victim)) {
-					exp = RatioExp(ch, victim, exp);
-					exp = ExpCaps(ch, 0, exp, victim); /* bug fix for non_grouped peoples */
+					char_data* xp_to = ch;
+					if(IS_NPC(ch) && IS_AFFECTED(ch, AFF_CHARM) && ch->master != nullptr &&
+					   IS_PC(ch->master) && ch->master->in_room == ch->in_room) {
+						xp_to = ch->master;
+					}
+					exp = RatioExp(xp_to, victim, exp);
+					exp = ExpCaps(xp_to, 0, exp, victim); /* bug fix for non_grouped peoples */
 
-					if(!IS_IMMORTAL(ch)) {
+					if(!IS_IMMORTAL(xp_to)) {
 						sprintf(buf,"La tua esperienza e' aumentata di %d punti.",
 								exp);
-						act(buf, FALSE, ch, 0, 0, TO_CHAR);
+						act(buf, FALSE, xp_to, 0, 0, TO_CHAR);
 					}
-					gain_exp(ch, exp);
+					gain_exp(xp_to, exp);
 				}
 				change_alignment(ch, victim);
 			}
@@ -3599,7 +3614,8 @@ int CalcThaco(struct char_data* ch, struct char_data* victim) {
 
 	/*  Drow are -4 to hit during daylight or lighted rooms. */
 	if(!IS_DARK(ch->in_room) && GET_RACE(ch) == RACE_DARK_ELF && IS_PC(ch)
-			&& !affected_by_spell(ch,SPELL_GLOBE_DARKNESS) && !IS_UNDERGROUND(ch)) {
+			&& !affected_by_spell(ch, SPELL_GLOBE_DARKNESS) &&
+			!IS_AFFECTED(ch, AFF_GLOBE_DARKNESS) && !IS_UNDERGROUND(ch)) {
 		calc_thaco += 4;
 	}
 

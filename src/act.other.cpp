@@ -8,12 +8,13 @@
  *
  */
 /***************************  System  include ************************************/
-#include <cstdio>
-#include <cstring>
+#include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
-#include <vector>
+#include <cstring>
 #include <string>
+#include <vector>
 #include <boost/algorithm/string.hpp>
 /***************************  General include ************************************/
 #include "config.hpp"
@@ -125,6 +126,81 @@ struct char_data* linkdead_unpoly(struct char_data* mob, bool extract_mob) {
 	return per;
 }
 
+/** Tutti gli oggetti in un albero contains (per audit item-loss). */
+static void forcerent_collect_tree(struct obj_data* obj, std::vector<struct obj_data*>& out) {
+	for(; obj; obj = obj->next_content) {
+		out.push_back(obj);
+		if(obj->contains) {
+			forcerent_collect_tree(obj->contains, out);
+		}
+	}
+}
+
+/** No-rent da staccare dal PG (cost_per_day < 0). Non scende nei contains
+ *  del no-rent: il contenitore va a terra intero. */
+static void forcerent_collect_norent_drops(struct obj_data* obj,
+										  std::vector<struct obj_data*>& out) {
+	for(; obj; obj = obj->next_content) {
+		if(obj->obj_flags.cost_per_day < 0) {
+			out.push_back(obj);
+			continue;
+		}
+		if(obj->contains) {
+			forcerent_collect_norent_drops(obj->contains, out);
+		}
+	}
+}
+
+/** Prima del recep_offer: i no-rent fanno fallire tutta l'offerta e wipeavano EQ.
+ *  Qui li togliamo, li logghiamo (contenitore + contenuto) e li lasciamo in room 4. */
+static void forcerent_drop_norent_to_room4(struct char_data* ch) {
+	std::vector<struct obj_data*> drops;
+	forcerent_collect_norent_drops(ch->carrying, drops);
+	for(int i = 0; i < MAX_WEAR; ++i) {
+		struct obj_data* worn = ch->equipment[i];
+		if(!worn) {
+			continue;
+		}
+		if(worn->obj_flags.cost_per_day < 0) {
+			drops.push_back(worn);
+		}
+		else if(worn->contains) {
+			forcerent_collect_norent_drops(worn->contains, drops);
+		}
+	}
+	if(drops.empty()) {
+		return;
+	}
+
+	std::vector<struct obj_data*> audited;
+	for(struct obj_data* obj : drops) {
+		audited.push_back(obj);
+		if(obj && obj->contains) {
+			forcerent_collect_tree(obj->contains, audited);
+		}
+	}
+	character_item_loss_log_list(ch, audited, kItemLossForcerentNorent, "room 4");
+	mudlog(LOG_PLAYERS,
+		   "forcerent: dropping %zu no-rent item(s) (%zu audited) to room 4 for %s",
+		   drops.size(), audited.size(), GET_NAME(ch));
+
+	for(struct obj_data* obj : drops) {
+		if(!obj) {
+			continue;
+		}
+		if(obj->equipped_by) {
+			obj = unequip_char(ch, obj->eq_pos);
+		}
+		else if(obj->in_obj) {
+			obj_from_obj(obj);
+		}
+		else if(obj->carried_by) {
+			obj_from_char(obj);
+		}
+		obj_to_room(obj, ch->in_room);
+	}
+}
+
 void forcerent_extract_player(struct char_data* victim) {
 	struct obj_cost cost {};
 	struct char_data* target = linkdead_unpoly(victim, true);
@@ -144,6 +220,8 @@ void forcerent_extract_player(struct char_data* victim) {
 		close_socket(target->desc);
 	}
 	target->desc = 0;
+
+	forcerent_drop_norent_to_room4(target);
 
 	if(recep_offer(target, nullptr, &cost, 1)) {
 		cost.total_cost = 100;
@@ -627,6 +705,16 @@ bool save_pc_valid(struct char_data* ch) {
 	return true;
 }
 
+/** Equip con restrizione di classe indossato da chi usa sneak con quella classe. */
+bool sneak_blocked_by_class_gear(struct char_data* ch) {
+	if(ch == nullptr) {
+		return false;
+	}
+	return (HasClass(ch, CLASS_THIEF) && EqWBits(ch, ITEM_ANTI_THIEF)) ||
+	       (HasClass(ch, CLASS_RANGER) && EqWBits(ch, ITEM_ANTI_RANGER)) ||
+	       (HasClass(ch, CLASS_MONK) && EqWBits(ch, ITEM_ANTI_MONK));
+}
+
 struct char_data* save_poly_original(struct char_data* ch) {
 	if(!IS_POLY(ch) || !ch->desc) {
 		return nullptr;
@@ -1004,33 +1092,44 @@ ACTION_FUNC(do_save) {
 	if(player_is_migrated_for_save(ch)) {
 		struct obj_file_u rent {};
 		struct char_file_u body {};
+		struct char_data* pc = save_char_resolve_pc(ch);
+		const char* who = (pc && GET_NAME(pc)) ? GET_NAME(pc) : "?";
 #if INVENTORY_SAVE_INCREMENTAL
 		std::vector<inventory_flat_item> flat;
 		fill_inventory_snapshot(ch, &rent, &flat);
+		/* Body/toon senza wipe inventorio; rent via path incrementale (+ writeback id). */
+		if(build_char_file_for_save(ch, &body)) {
+			if(!save_character_to_db(ch, &body, nullptr, CHAR_DB_SAVE_BODY_TOON)) {
+				mudlog(LOG_SYSERR, "do_save: save body/toon failed for %s", who);
+			}
+		}
+		else {
+			mudlog(LOG_SYSERR,
+				   "do_save: build_char_file_for_save failed for %s, rent-only",
+				   who);
+		}
+		if(!save_character_rent_incremental(ch, &rent, flat)) {
+			mudlog(LOG_SYSERR,
+				   "do_save: save_character_rent_incremental failed for %s, full rent fallback",
+				   who);
+			if(!save_character_to_db(ch, nullptr, &rent, CHAR_DB_SAVE_RENT_EXTRA, &flat)) {
+				mudlog(LOG_SYSERR, "do_save: rent fallback failed for %s", who);
+			}
+		}
 #else
 		fill_inventory_snapshot(ch, &rent);
-#endif
 		if(!build_char_file_for_save(ch, &body)) {
-			struct char_data* pc = save_char_resolve_pc(ch);
-			const char* who = (pc && GET_NAME(pc)) ? GET_NAME(pc) : "?";
 			mudlog(LOG_SYSERR,
 				   "do_save: build_char_file_for_save failed for %s, rent-only fallback",
 				   who);
-#if INVENTORY_SAVE_INCREMENTAL
-			if(!save_character_to_db(ch, nullptr, &rent, CHAR_DB_SAVE_RENT_EXTRA, &flat)) {
-#else
 			if(!save_character_to_db(ch, nullptr, &rent, CHAR_DB_SAVE_RENT_EXTRA)) {
-#endif
 				mudlog(LOG_SYSERR, "do_save: rent-only fallback failed for %s", who);
 			}
 		}
-#if INVENTORY_SAVE_INCREMENTAL
-		else if(!save_character_to_db(ch, &body, &rent, CHAR_DB_SAVE_FULL, &flat)) {
-#else
 		else if(!save_character_to_db(ch, &body, &rent, CHAR_DB_SAVE_FULL)) {
-#endif
-			mudlog(LOG_SYSERR, "do_save: save_character_to_db failed for %s", GET_NAME(ch));
+			mudlog(LOG_SYSERR, "do_save: save_character_to_db failed for %s", who);
 		}
+#endif
 		if(cmd == CMD_SAVE) {
 			send_to_char("Salvato.\n\r", ch);
 		}
@@ -1128,64 +1227,68 @@ ACTION_FUNC(do_not_here) {
 
 
 ACTION_FUNC(do_sneak) {
-	struct affected_type af;
-	byte percent;
+	if(ch == nullptr) {
+		mudlog(LOG_SYSERR, "ch==nullptr in do_sneak (act.other.cpp)");
+		return;
+	}
 
 	if(IS_AFFECTED(ch, AFF_SNEAK)) {
 		affect_from_char(ch, SKILL_SNEAK);
 		if(IS_AFFECTED(ch, AFF_HIDE)) {
 			REMOVE_BIT(ch->specials.affected_by, AFF_HIDE);
 		}
-		send_to_char("Occhio... ti sentono!.\n\r",ch);
+		send_to_char("Occhio... ti sentono!\n\r", ch);
 		return;
 	}
 
 	if(!ch->skills || !IS_SET(ch->skills[SKILL_SNEAK].flags, SKILL_KNOWN)) {
-		send_to_char("You're not trained to walk silently!\n\r", ch);
+		send_to_char("Non sei addestrato a muoverti in silenzio!\n\r", ch);
 		return;
 	}
 
-	if(HasClass(ch,CLASS_RANGER) && !OUTSIDE(ch)) {
-		send_to_char("You must do this outdoors!\n\r", ch);
+	if(HasClass(ch, CLASS_RANGER) && !OUTSIDE(ch)) {
+		send_to_char("Devi farlo all'aperto!\n\r", ch);
 		return;
 	}
 
 	if(MOUNTED(ch)) {
-		send_to_char("Yeah... right... while mounted\n\r", ch);
+		send_to_char("Gia'... mentre sei a cavallo?\n\r", ch);
 		return;
 	}
 
 	if(!IS_AFFECTED(ch, AFF_SILENCE)) {
-		if(EqWBits(ch, ITEM_ANTI_THIEF)) {
+		if(sneak_blocked_by_class_gear(ch)) {
 			send_to_char("Dura muoversi silenziosamente con tutta quella ferraglia addosso!\n\r", ch);
 			return;
 		}
 		if(HasWBits(ch, ITEM_HUM)) {
-			send_to_char("Si, bravo.. ronzi come un calabrone e vorresti muoverti in silenzio?\n\r",
+			send_to_char("Ottimo... ronzi come un calabrone e vorresti muoverti in silenzio?\n\r",
 						 ch);
 			return;
 		}
 	}
 
-	send_to_char("Ok, you'll try to move silently for a while.\n\r", ch);
-
-	percent=number(1,101); /* 101% is a complete failure */
+	send_to_char("Ok, cercherai di muoverti in silenzio per un po'.\n\r", ch);
 
 	if(!ch->skills) {
 		return;
 	}
 
+	int percent = number(1, 101); /* 101% = fallimento completo */
 	if(IS_AFFECTED(ch, AFF_SILENCE)) {
-		percent = MIN(1, percent-35);    /* much easier when silenced */
+		percent = std::min(1, percent - 35);
 	}
 
-	if(percent > MIN(100, ch->skills[SKILL_SNEAK].learned) +
-			dex_app_skill[ static_cast<int>(GET_DEX(ch)) ].sneak) {
+	const int chance =
+		std::min(100, static_cast<int>(ch->skills[SKILL_SNEAK].learned)) +
+		dex_app_skill[static_cast<int>(GET_DEX(ch))].sneak;
+	if(percent > chance) {
 		LearnFromMistake(ch, SKILL_SNEAK, 1, 90);
 		WAIT_STATE(ch, PULSE_VIOLENCE);
 		return;
 	}
 
+	affected_type af{};
 	af.type = SKILL_SNEAK;
 	af.duration = GET_LEVEL(ch, BestThiefClass(ch));
 	af.modifier = 0;
@@ -1193,14 +1296,14 @@ ACTION_FUNC(do_sneak) {
 	af.bitvector = AFF_SNEAK;
 	affect_to_char(ch, &af);
 	WAIT_STATE(ch, PULSE_VIOLENCE);
-
 }
+
 ACTION_FUNC(do_tspy) {
 	struct affected_type af;
 
 	if(affected_by_spell(ch, SKILL_TSPY)) {
 		affect_from_char(ch, SKILL_TSPY);
-		send_to_char("Smetti di origliare.\n\r",ch);
+		send_to_char("Smetti di origliare.\n\r", ch);
 		return;
 	}
 
@@ -1218,17 +1321,16 @@ ACTION_FUNC(do_tspy) {
 
 	af.type = SKILL_TSPY;
 	if IS_DIO_MINORE(ch) {
-		af.duration = GET_LEVEL(ch,BestThiefClass(ch));
+		af.duration = GET_LEVEL(ch, BestThiefClass(ch));
 	}
 	else {
-		af.duration = GET_LEVEL(ch, BestThiefClass(ch))/(IS_SINGLE(ch)?1:10);
+		af.duration = GET_LEVEL(ch, BestThiefClass(ch)) / (IS_SINGLE(ch) ? 1 : 10);
 	}
 	af.modifier = 0;
 	af.location = APPLY_NONE;
 	af.bitvector = 0;
 	affect_to_char(ch, &af);
 	WAIT_STATE(ch, PULSE_VIOLENCE);
-
 }
 
 

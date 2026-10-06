@@ -1316,6 +1316,15 @@ void sync_char_carry_counts(struct char_data* ch) {
 		++count;
 		weight += GET_OBJ_WEIGHT(obj);
 	}
+#if EQPESANTE
+	/* Stessa regola di equip_char: eq indossato pesa, zaino (WEAR_BACK) no. */
+	for(int i = 0; i < MAX_WEAR; ++i) {
+		if(ch->equipment[i] == nullptr || i == WEAR_BACK) {
+			continue;
+		}
+		weight += GET_OBJ_WEIGHT(ch->equipment[i]);
+	}
+#endif
 	if(count > 255) {
 		mudlog(LOG_SYSERR, "sync_char_carry_counts: %s carrying %d items (cap 255)",
 			   GET_NAME(ch), count);
@@ -1589,9 +1598,8 @@ struct obj_data* unequip_char(struct char_data* ch, int pos) {
 	if(pos == WEAR_BACK) {
 		IS_CARRYING_W(obj->equipped_by) += GET_OBJ_WEIGHT(obj);    // SALVO controllo se borsa per il peso
 	}
-#else
-	IS_CARRYING_W(obj->equipped_by) += GET_OBJ_WEIGHT(obj);
 #endif
+	/* Con EQPESANTE false il peso conta solo in inventorio (obj_to_char / obj_from_char). */
 	ch->equipment[pos] = 0;
 	obj->equipped_by = 0;
 	obj->eq_pos = -1;
@@ -2243,13 +2251,26 @@ void extract_obj(struct obj_data* obj) {
 				   "Couldn't find object %s in object list in extract_obj "
 				   "(handler.c).", obj->name);
 			obj_count = 0;
+			obj_count_edit = 0;
+			obj_count_clan_symbol = 0;
 			for(i = 0; i < top_of_objt; i++) {
 				obj_index[ i ].number = 0;
 			}
 			for(temp1 = object_list; temp1; temp1 = temp1->next) {
-				if(temp1->item_number >= 0 && temp1->item_number < top_of_objt) {
+				if(temp1->item_number < 0 || temp1->item_number >= top_of_objt) {
+					continue;
+				}
+				obj_count++;
+				if(object_is_zone_limit_exempt(temp1)) {
+					if(clan_symbol_is_obj(temp1)) {
+						obj_count_clan_symbol++;
+					}
+					else {
+						obj_count_edit++;
+					}
+				}
+				else {
 					(obj_index[ temp1->item_number ].number)++;
-					obj_count++;
 				}
 			}
 			free_obj(obj);
@@ -2258,8 +2279,22 @@ void extract_obj(struct obj_data* obj) {
 	}
 
 	if(obj->item_number >= 0 && obj->item_number < top_of_objt) {
-		(obj_index[obj->item_number].number)--;
-		obj_count--;
+		if(object_is_zone_limit_exempt(obj)) {
+			if(clan_symbol_is_obj(obj)) {
+				if(obj_count_clan_symbol > 0) {
+					obj_count_clan_symbol--;
+				}
+			}
+			else if(obj_count_edit > 0) {
+				obj_count_edit--;
+			}
+		}
+		else {
+			(obj_index[obj->item_number].number)--;
+		}
+		if(obj_count > 0) {
+			obj_count--;
+		}
 	}
 	free_obj(obj);
 
