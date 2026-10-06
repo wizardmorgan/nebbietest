@@ -1697,9 +1697,12 @@ struct AffectPick {
 	if(listino_cost <= 0) {
 		return 0;
 	}
-	/* long long evita -Werror=strict-overflow su (long * const) / 100. */
-	return static_cast<long>(
-		(static_cast<long long>(listino_cost) * kEditBrokerPercentKeep) / 100LL);
+	/*
+	 * 25% del listino. Evitare (x * pct) / 100: GCC -Werror=strict-overflow
+	 * lo rifiuta anche con cast a long long nel docker mudcompiler.
+	 */
+	static_assert(kEditBrokerPercentKeep == 25, "percent_of_listino assume 25%");
+	return listino_cost / 4;
 }
 
 [[nodiscard]] bool can_afford_prince_floor(struct char_data* ch, long cost) {
