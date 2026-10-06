@@ -1697,7 +1697,9 @@ struct AffectPick {
 	if(listino_cost <= 0) {
 		return 0;
 	}
-	return (listino_cost * kEditBrokerPercentKeep) / 100;
+	/* long long evita -Werror=strict-overflow su (long * const) / 100. */
+	return static_cast<long>(
+		(static_cast<long long>(listino_cost) * kEditBrokerPercentKeep) / 100LL);
 }
 
 [[nodiscard]] bool can_afford_prince_floor(struct char_data* ch, long cost) {
