@@ -1863,9 +1863,10 @@ void do_trasferisci(struct char_data* ch, struct char_data* mob, std::string_vie
 	std::string err;
 	if(!resolve_affect_pick(obj_a, aff_name, pick, err)) {
 		tell_from_jeweler(ch, mob, err);
+		/* Ternary fuori da mudlog: FORMAT/% mangia ?: */
+		const char* aname = obj_a->short_description ? obj_a->short_description : "?";
 		mudlog(LOG_PLAYERS, "EditAffectBroker transfer denied %s: %s (affect=%s A=%s)",
-			   GET_NAME(ch), err.c_str(), aff_name.c_str(),
-			   obj_a->short_description ? obj_a->short_description : "?");
+			   GET_NAME(ch), err.c_str(), aff_name.c_str(), aname);
 		return;
 	}
 
@@ -1964,9 +1965,10 @@ void do_trasferisci(struct char_data* ch, struct char_data* mob, std::string_vie
 						  "Avvisa immediatamente uno staffer.");
 		mudlog(LOG_SYSERR,
 			   "EditAffectBroker transfer persist fail owner=%s A=%llu(%d) B=%llu(%d) %s",
-			   GET_NAME(ch), static_cast<unsigned long long>(obj_a->db_instance_id), ok_a,
-			   static_cast<unsigned long long>(obj_b->db_instance_id), ok_b,
-			   pick.label.c_str());
+			   GET_NAME(ch), static_cast<unsigned long long>(obj_a->db_instance_id),
+			   static_cast<int>(ok_a),
+			   static_cast<unsigned long long>(obj_b->db_instance_id),
+			   static_cast<int>(ok_b), pick.label.c_str());
 	}
 
 	schedule_inventory_save(ch);
