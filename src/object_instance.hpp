@@ -25,13 +25,21 @@ namespace Alarmud {
 inline constexpr const char* kObjInstSourceProcareaLoot = "procarea_loot";
 inline constexpr const char* kObjInstSourceGodEdit = "god_edit";
 inline constexpr const char* kObjInstSourceClanSymbol = "clan_symbol";
+inline constexpr const char* kObjInstEventPlayerDust = "player_dust";
 
 struct obj_data;
 struct char_data;
 
-#if USE_MYSQL
-/** Prototipo mondo da usare come base_vnum (char_vnum / non-34k). 0 se sconosciuto. */
-int object_instance_resolve_base_vnum(const obj_data* obj);
+/**
+ * Edit / object_instance: non devono saturare il contatore del prototipo
+ * usato dai reset di zona (O/P/E/G). Idempotente.
+ * Rilascia lo slot in obj_index[rnum_to_release] (default: item_number
+ * corrente); non tocca obj_count. Aggiorna obj_count_edit / clan_symbol.
+ */
+void object_exclude_from_zone_limit(obj_data* obj, int rnum_to_release = -2);
+
+/** true se l'oggetto e' escluso dal conteggio limited/zona. */
+[[nodiscard]] bool object_is_zone_limit_exempt(const obj_data* obj) noexcept;
 
 /** Estrae owner da keyword EDnome (senza il prefisso ED). Vuoto se assente. */
 std::string object_instance_extract_ed_owner(const char* keywords);
@@ -39,8 +47,12 @@ std::string object_instance_extract_ed_owner(const char* keywords);
 /** Rimuove token EDxxx dalle keyword. */
 std::string object_instance_strip_ed_tokens(const char* keywords);
 
+#if USE_MYSQL
+/** Prototipo mondo da usare come base_vnum (char_vnum / non-34k). 0 se sconosciuto. */
+int object_instance_resolve_base_vnum(const obj_data* obj);
+
 /**
- * Crea o aggiorna object_instance (+ affect) da obj.
+ * Crea o aggiorna object_instance (+ affect + extradesc) da obj.
  * actor = wiz/PG che salva (created/updated_by). owner da personal_owner / ED / PERSONAL.
  * write_event: true per osave/personalize; false per sync inventorio (no flood audit).
  * system_actor: etichetta audit se actor e' null (es. "boot" per migrazione al boot).
@@ -52,7 +64,9 @@ unsigned long long object_instance_persist(obj_data* obj, int base_vnum,
 										   bool write_event = true,
 										   const char* system_actor = nullptr);
 
-/** Overlay stats/affect/name da object_instance su obj gia' read_object(base). */
+/** Overlay stats/affect/name/extradesc da object_instance su obj gia' read_object(base).
+ *  Le E del proto vengono sempre sostituite da quelle in DB (anche lista vuota).
+ */
 bool object_instance_apply(obj_data* obj, unsigned long long instance_id);
 
 /** Sync rapido: se obj->db_instance_id, UPDATE istanza da obj live. */
@@ -62,12 +76,25 @@ bool object_instance_sync(obj_data* obj, char_data* actor = nullptr);
 obj_data* object_instance_materialize(unsigned long long instance_id);
 
 /**
+ * Ricostruisce lo stato al primo evento create (osave db procarea iniziale).
+ * Per stat procarea: baseline modifiche staff. Caller deve extract_obj().
+ */
+obj_data* object_instance_materialize_create_baseline(unsigned long long instance_id);
+
+/**
  * Elenco wiz. deleted_list=false: solo attivi con numeri densi 1..N.
  * deleted_list=true: solo soft-deleted con numeri densi 1..M.
  * filter vuoto=tutti della lista; numerico=numero lista; altrimenti substring.
  */
 void object_instance_show_list(char_data* ch, const char* filter,
 							   bool deleted_list = false);
+
+/**
+ * Totali edit di un PG: pool attivo + over (character_stats) e delta
+ * affects vs prototipo (base_vnum) sulle object_instance attive di cui e'
+ * owner (no clan_symbol).
+ */
+void object_instance_show_edit_totals(char_data* ch, const char* name);
 
 /** Storico event (create/update/delete) per PK interno. */
 void object_instance_show_history(char_data* ch, unsigned long long instance_id);
@@ -158,12 +185,6 @@ bool object_instance_normalize_stored(unsigned* item_number,
 inline int object_instance_resolve_base_vnum(const obj_data*) {
 	return 0;
 }
-inline std::string object_instance_extract_ed_owner(const char*) {
-	return {};
-}
-inline std::string object_instance_strip_ed_tokens(const char* keywords) {
-	return keywords ? std::string(keywords) : std::string();
-}
 inline unsigned long long object_instance_persist(obj_data*, int, unsigned long long = 0,
 												 char_data* = nullptr, bool = true,
 												 const char* = nullptr) {
@@ -178,7 +199,11 @@ inline bool object_instance_sync(obj_data*, char_data* = nullptr) {
 inline obj_data* object_instance_materialize(unsigned long long) {
 	return nullptr;
 }
+inline obj_data* object_instance_materialize_create_baseline(unsigned long long) {
+	return nullptr;
+}
 inline void object_instance_show_list(char_data*, const char*, bool = false) {}
+inline void object_instance_show_edit_totals(char_data*, const char*) {}
 inline void object_instance_show_history(char_data*, unsigned long long) {}
 inline unsigned long long object_instance_resolve_id(char_data*, const char*,
 													bool = false) {

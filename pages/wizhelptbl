@@ -22,14 +22,14 @@ $c0014Indice per livello$c0007 (privilegi a scalare: un 57 ha anche 52-56):
   59  Maestro dei Creatori    wizhelp 59  /  wizhelp maestro_dei_creatori
   60  Immenso                 wizhelp 60  /  wizhelp immenso
 
-$c0014Riferimenti$c0007: wizhelp reference  (flag, razze, danni, sector, ?)
+$c0014Riferimenti$c0007: wizhelp reference  (flag, razze, danni, sector, ...)
 
 $c0013Vedi anche$c0007: EDIT, GOTO, STAT, PURGE
 
 #
 "52" "IMMORTALE" "LIVELLO 52"
 
-$c0014Livello 52$c0007 ? Immortale
+$c0014Livello 52$c0007 - Immortale
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -149,11 +149,24 @@ o aggiorna questo help dopo aver verificato il comportamento.
 #
 "WIZMOTD"
 
-$c0014Livello minimo$c0007: 52 (Immortale)
+$c0014Livello minimo$c0007: 52 (Immortale) lettura / set
 
-Comando wizard wizmotd.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
+Messaggio del giorno per gli immortali (MySQL, slot general/server/world).
+
+Sintassi:
+  wizmotd
+  wizmotd show
+  wizmotd set [general|server|world] [versione] <testo>
+
+Senza argomenti (o show): mostra il wizmotd corrente.
+set: sostituisce lo slot indicato (default general).
+Esempio:
+  wizmotd set server 3.6.9 Build di prova staff
+
+Le release possono aggiornare lo slot server dal commit (TITLE: / NEWS:);
+preferisci TITLE: nel body della release invece di MOTD_HEADLINE a compile-time.
+
+$c0013Vedi anche$c0007: MOTD, WIZNEWS, NEWS
 
 
 #
@@ -161,17 +174,45 @@ o aggiorna questo help dopo aver verificato il comportamento.
 
 $c0014Livello minimo$c0007: 52 (Immortale)
 
-Comando wizard wiznews.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
+News riservate agli immortali (lista MySQL + eventuale testo esteso).
+
+Sintassi (tutti gli immortali):
+  wiznews
+  wiznews <pagina>
+  wiznews read <numero>
+
+Sintassi admin (52+):
+  wiznews list
+  wiznews add [gg/mm/aaaa] [server|world] [versione] <titolo>
+  wiznews edit <numero> [gg/mm/aaaa] [server|world] [versione] <titolo>
+  wiznews del <numero>
+  wiznews deleted
+  wiznews undel <id>
+  wiznews body <numero>
+
+Pagine da 30 (come news): solo la pagina corrente in RAM.
+read/del/edit/body usano l'indice globale. Footer con hint wiznews N.
+list: elenco tecnico della pagina corrente.
+add: nuova voce (titolo breve; server|world + version opzionali).
+edit: modifica meta della voce N (body invariato).
+body: editor multilinea, termina con @.
+del / deleted / undel: soft-delete e ripristino.
+
+Le release auto-inseriscono voci da commit con TITLE: / WIZ: (vedi NEWS).
+
+$c0013Vedi anche$c0007: NEWS, WIZMOTD, MOTD
 
 #
-"CLAN" "CLAN QUOTA" "CLAN TOGLI"
+"CLAN" "CLAN INFO" "CLAN QUOTA" "CLAN TOGLI" "CLAN REGISTRA"
 
 $c0014Livello minimo$c0007: 52 (Immortale) per le opzioni god;
 i principi usano le sotto-opzioni base (vedi help CLAN).
 
 Gestione clan / simboli del clan.
+
+$c0015clan info <principe>$c0007
+  Scheda del simbolo registrato (nome, effetti, quota). I membri
+  del clan usano $c0015clan info$c0007 senza argomenti (vedi help CLAN).
 
 $c0015clan vassalli <principe>$c0007
 $c0015clan simboli <principe>$c0007
@@ -185,6 +226,13 @@ $c0015clan quota <principe> <n>$c0007
   I pezzi gia' migrati / assegnati contano nella quota;
   ripudia/ritira distruggono il simbolo e liberano lo slot.
 
+$c0015clan registra <principe> <oggetto>$c0007
+$c0015clan registra <principe> <oggetto> force$c0007
+  (god) Registra un oggetto accessibile (es. dopo oload) come
+  simbolo del clan di quel principe. Non serve osave db prima:
+  crea l'instance e la riga in clan_symbol. Con force sostituisce
+  un simbolo gia' registrato per lo stesso principe.
+
 $c0015clan togli <personaggio>$c0007
   Toglie e distrugge l'eventuale simbolo del clan dal PG
   (online o offline). Lo slot del relativo clan torna libero.
@@ -194,7 +242,7 @@ $c0013Vedi anche$c0007: help CLAN, PRINCIPE, VASSALLO
 #
 "53" "DIO_MINORE" "LIVELLO 53"
 
-$c0014Livello 53$c0007 ? Dio minore
+$c0014Livello 53$c0007 - Dio minore
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -308,21 +356,59 @@ Sintassi:
   show rooms <zona#|death|private>
   show items
   show rare                    (livello alto)
-  show db [n|nome|owner]       (edits attivi, numeri densi 1..N)
+  show edits <nome>            (riepilogo listino edit PG)
+  show db [n|nome|owner]       (lista instance attive, numeri densi 1..N)
   show db deleted [n|nome|owner]
   show db history <n>
   show db history deleted <n>
+  show loss <nome> ...         (audit perdite oggetti; vedi SHOW LOSS)
 
 Per show objects: colonne VNUM, rnum, count (in-memory), db (inventori
 MySQL), names. Asterisco = file edit in objects/ senza prototipo in memoria.
 
+$c0015show edits <nome>$c0007
+  Riepilogo compatto listino: pezzi 0/21, pool e over, cap
+  DAM+SP/HR/SF/AC (delta vs proto), stats, resi/imm/spell e
+  mancanti, warn per pezzo fuori limite. Esclusi simboli clan.
+  Funziona anche offline.
+
 show db elenca solo gli edit attivi (non soft-deleted).
 I numeri sono di lista (si rinumerano dopo odelete), non il pk MySQL.
-Alias: show edits | show instances (compatibile).
+Alias lista: show instances (compatibile).
 I simboli del clan migrati compaiono come instance (owner = principe),
 non come file objects/ nel range 34k.
 
-$c0013Vedi anche$c0007: OLOAD, OSAVE, STAT, WHERE, ODELETE
+$c0013Vedi anche$c0007: SHOW LOSS, OLOAD, OSAVE, STAT, WHERE, ODELETE, EDITPOOL
+
+
+#
+"SHOW LOSS" "LOSS" "PERDITE"
+
+$c0014Livello minimo$c0007: 53 (Dio minore)
+
+Audit MySQL delle perdite oggetti dei PG migrati (tabella character_item_loss).
+Retention 7 giorni. Immortali (>=52) non vengono loggati.
+
+Sintassi:
+  show loss <nome> [detail|death] [giorni|orario]
+
+Senza sotto-opzioni: riassunto eventi (default ultimi 2 giorni).
+  detail / dettaglio   pezzi aggregati (xN stesso vnum/desc nello stesso at)
+  death / morte        dettaglio DEATH_CORPSE (ultima, o filtrata per orario)
+  giorni               1..7 (max = retention)
+  orario               sottostringa di at, es. 12:56:53
+
+Esempi:
+  show loss montero
+  show loss montero 7
+  show loss montero detail
+  show loss montero death
+  show loss montero death 12:56:53
+
+Kind tipici: DROP, GIVE, STEAL, JUNK, DESTROY, COMBAT_BREAK,
+SHOP_SELL, AUCTION, DEATH_CORPSE, FORCERENT_NORENT.
+
+$c0013Vedi anche$c0007: SHOW
 
 
 #
@@ -347,7 +433,7 @@ o aggiorna questo help dopo aver verificato il comportamento.
 #
 "54" "DIO" "LIVELLO 54"
 
-$c0014Livello 54$c0007 ? Dio
+$c0014Livello 54$c0007 - Dio
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -494,7 +580,7 @@ o aggiorna questo help dopo aver verificato il comportamento.
 #
 "55" "MAESTRO_DEGLI_DEI" "LIVELLO 55"
 
-$c0014Livello 55$c0007 ? Maestro degli Dei
+$c0014Livello 55$c0007 - Maestro degli Dei
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -715,13 +801,14 @@ Sintassi:
   stat room
 
 Su un oggetto vedi vnum, char_vnum (originale), flags, valori, affect.
-In fondo, se e' un edit: Edit value / Vs prototipo / Modifiche vs prototipo.
+In fondo, se e' un edit personale: Edit value / Vs prototipo / Modifiche vs prototipo.
+Premi procarea salvati (osave db procarea): stesso formato edit ma baseline
+  = snapshot create; listino solo su modifiche staff (oedit/personalize).
+  Esclusi da edit pool al login. Storico: show db history #n.
 Se salvato con osave db compare anche:
   Edit lista #n / Base vnum / instance id
 Se ha proprietario:
   Owner: [Nome]
-Premi procarea (PROCAREA-REWARD): in show db source=procarea_loot;
-salvataggio staff con osave db procarea (vedi wizhelp OSAVE).
 I simboli del clan (ITEM_CLAN_SYMBOL) usano V0 = toon_id del principe
 e lo slot wear dedicato; in show db compaiono come instance.
 
@@ -767,7 +854,7 @@ o aggiorna questo help dopo aver verificato il comportamento.
 #
 "56" "CREATORE" "LIVELLO 56"
 
-$c0014Livello 56$c0007 ? Creatore
+$c0014Livello 56$c0007 - Creatore
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -775,8 +862,11 @@ Comandi con livello minimo uguale a questo rank
   ?
   dimensione densita
   dimensione premi
+  dimensione kit
+  dimensione scorta
   dimensione densita esempi
   dimensione premi esempi
+  dimensione kit esempi
   reboottime
   shutdown
   switch
@@ -812,7 +902,7 @@ Persistenza ODB tabella $c0015procarea_balance$c0007 (sopravvive al reboot).
     Elenco chiavi e sintassi.
 
   $c0014dimensione densita bias <0.5-1.5>$c0007
-    Moltiplicatore globale (stanze/spawn). Esempio: bias 0.9 ? ?10%.
+    Moltiplicatore globale (stanze/spawn). Esempio: bias 0.9 ~ -10%.
 
   $c0014dimensione densita set <chiave> <valore>$c0007
     Ritocca un parametro. Chiavi tipiche:
@@ -1015,6 +1105,108 @@ $c0013Vedi anche$c0007: DIMENSIONE PREMI, DIMENSIONE DENSITA ESEMPI
 
 
 #
+"DIMENSIONE KIT" "KIT" "PROCAREA KIT" "SOLO KIT"
+
+$c0014Livello minimo$c0007: 56 (Creatore)
+
+Bilanciamento $c0010solitaria$c0007 per kit PG (cl/mk = baseline 1.00 = oggi).
+La $c0014fascia$c0007 resta dall'indice eq; kit ritocca solo durezza mob e mix
+classi / % none corridoio. Persistenza ODB $c0015procarea_balance$c0007 (prefisso k_).
+
+  $c0014dimensione kit$c0007
+    Mostra base/none/caster per ogni kit + curva beholder.
+
+  $c0014dimensione kit help$c0007
+    Sintassi e chiavi.
+
+  $c0014dimensione kit set <chiave> <valore>$c0007
+    Ritocca un parametro. Chiavi:
+    base_<kit>, none_<kit>, caster_<kit>,
+    beholder_low, beholder_high, toughness_min, toughness_max
+    Kit: clmk fullhybrid healhybrid supportcaster dpshybrid
+    puremelee purehealer beholdercaster othercaster
+
+  $c0014dimensione kit reset$c0007
+    Torna ai default (cl/mk=1, altri sotto).
+
+Esempi comando-per-comando: $c0014wizhelp dimensione kit esempi$c0007
+
+$c0013Vedi anche$c0007: DIMENSIONE KIT ESEMPI, DIMENSIONE DENSITA
+
+
+#
+"DIMENSIONE KIT ESEMPI" "KIT ESEMPI"
+
+$c0014Livello minimo$c0007: 56 (Creatore)
+
+Esempi pronti da copiare per $c0014dimensione kit$c0007.
+
+$c0014Beholder (nudo)$c0007 - forte in basso, debole in alto:
+  dimensione kit set beholder_low 1.10
+  dimensione kit set beholder_high 0.90
+  dimensione kit set toughness_min 0.70
+  dimensione kit set toughness_max 1.00
+
+$c0014Mono sfigati$c0007 - piu' none in corridoio:
+  dimensione kit set none_othercaster 2.75
+  dimensione kit set none_purehealer 2.00
+  dimensione kit set none_puremelee 1.40
+  dimensione kit set none_beholdercaster 1.25
+
+$c0014Durezza$c0007 (cl/mk resta 1.00 forzato):
+  dimensione kit set base_othercaster 0.81
+  dimensione kit set base_purehealer 0.86
+  dimensione kit set base_beholdercaster 0.85
+  dimensione kit set base_healhybrid 0.92
+  dimensione kit set base_fullhybrid 0.95
+
+$c0014Meno caster nel mix$c0007 (anche basher "soft"):
+  dimensione kit set caster_purehealer 0.75
+  dimensione kit set caster_puremelee 0.85
+
+$c0014Utilita'$c0007:
+  dimensione kit
+  dimensione kit help
+  dimensione kit reset
+
+$c0014Mini ricetta$c0007 "psi piu' facile":
+  1) dimensione kit set base_othercaster 0.81
+  2) dimensione kit set none_othercaster 2.75
+
+$c0013Vedi anche$c0007: DIMENSIONE KIT, DIMENSIONE DENSITA ESEMPI
+
+
+#
+"DIMENSIONE SCORTA" "SCORTA" "HIRELING" "ASSOLDA CONFIG"
+
+$c0014Livello minimo$c0007: 56 (Creatore)
+
+Policy $c0014assolda$c0007 (scorta tank solitaria). Persistenza ODB
+$c0015procarea_balance$c0007 (prefisso h_).
+
+Default: enabled=1, rebuy=0, allow_multi=0,
+classi mu/sorc/psi/druid/cleric,
+costo frammenti=(livello*banda)/10 + oro=livello*1000 (entrambe).
+
+  $c0014dimensione scorta$c0007
+    Mostra stato.
+
+  $c0014dimensione scorta help$c0007
+    Sintassi e chiavi.
+
+  $c0014dimensione scorta set <chiave> <val>$c0007
+    Chiavi: enabled, rebuy, allow_multi, classes,
+    frag_num, frag_den, gold_per_level
+
+  $c0014dimensione scorta reset$c0007
+    Torna ai default.
+
+Alias wiz: hireling | assolda.
+
+$c0013Vedi anche$c0007: DIMENSIONE KIT
+
+
+#
 "REBOOTTIME"
 
 $c0014Livello minimo$c0007: 56 (Creatore)
@@ -1089,7 +1281,7 @@ o aggiorna questo help dopo aver verificato il comportamento.
 #
 "57" "QUESTMASTER" "LIVELLO 57"
 
-$c0014Livello 57$c0007 ? Questmaster
+$c0014Livello 57$c0007 - Questmaster
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -1104,6 +1296,10 @@ Comandi con livello minimo uguale a questo rank
   mercy
   oedit
   editpool
+  odust
+  dbexport
+  motd (set)
+  news (admin)
   oload
   osave
   pquest
@@ -1114,6 +1310,57 @@ Comandi con livello minimo uguale a questo rank
 $c0013Vedi anche$c0007: WIZHELP, 56, 58
 
 #
+"DBEXPORT"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Esporta tabelle/query MySQL in CSV sotto $c0015exports/$c0007 (cwd tipicamente lib/).
+Password e authcode non vengono mai scritti; email/realname solo con flag $c0015pii$c0007.
+
+Uso:
+  $c0015dbexport list$c0007
+  $c0015dbexport dump [pii]$c0007
+  $c0015dbexport table <nome> [pii]$c0007
+  $c0015dbexport <query> [pii]$c0007
+
+Esempi:
+  $c0015dbexport list$c0007
+    Elenca query nominate e tabelle ammesse.
+  $c0015dbexport edits$c0007
+    CSV degli object_instance attivi con affect affiancati
+    (A0_loc..A4_mod + colonna affects leggibile).
+  $c0015dbexport edits_sheet$c0007
+    Vista stile foglio DB Edit: grants leggibili, totali hp/mana/move/regen
+    ricostruiti pre-strip dalla storia edit_pool (colonna strip_ricostruito).
+  $c0015dbexport edits_deleted$c0007
+    Come edits, solo soft-deleted (+ affect).
+  $c0015dbexport edits_affect$c0007
+    Solo tabella affect (una riga per slot; formato lungo).
+  $c0015dbexport edit_strips$c0007
+    Storico strip listino: eventi kind=edit_pool JOIN oggetto
+    (note/detail = da quale pezzo e quanto accreditato al PG).
+  $c0015dbexport dust$c0007
+    Storico polvere: eventi kind=player_dust JOIN oggetto
+    (+ colonne dust_* attuali sull'instance).
+  $c0015dbexport toons$c0007
+    Elenco PG (toon) senza password.
+  $c0015dbexport users pii$c0007
+    Account user con email (pii); password esclusa.
+  $c0015dbexport table object_instance$c0007
+    Una sola tabella (deve essere in whitelist).
+  $c0015dbexport dump$c0007
+    Cartella exports/dump_YYYYMMDD_HHMMSS/ con un CSV per tabella.
+  $c0015dbexport dump pii$c0007
+    Come dump, ma include email/realname.
+
+Query nominate: toons, users, chars, edits (+ affect), edits_sheet, edits_deleted (+ affect),
+edits_affect, edit_strips, dust, inventory, stats, skills, procarea.
+Elenco: $c0015dbexport list$c0007.
+Limite soft ~200000 righe per file. Se una tabella del dump manca, viene saltata.
+
+$c0013Vedi anche$c0007: SHOW, OSAVE, EDITPOOL
+
+#
 "EDITPOOL"
 
 $c0014Livello minimo$c0007: 57 (Questmaster)
@@ -1122,7 +1369,7 @@ Gestisce il $c0015listino edit$c0007 sul personaggio (hp/mana/move e regen),
 non sull'equipaggiamento. Cap listino: hp 100, mana 150, move 100, regen 50.
 L'overedit e' solo contabile (nessun bonus in gioco).
 
-Flusso: anteprima ? conferma pagamento ? applica. Paga il PG editato
+Flusso: anteprima -> conferma pagamento -> applica. Paga il PG editato
 (listino ufficiale +50% artifact; XP=(x mult)/n_classi, rune=ceil(x mult)).
 Se il target e' liv >= 53 (Dio minore+), l'aumento listino e' gratis
 ($c0015editpool ok$c0007).
@@ -1164,7 +1411,38 @@ $c0013Esempi$c0007:
   editpool Montero over hp -10
   editpool ok misto 50 50
 
-$c0013Vedi anche$c0007: STAT, OEDIT, PEDIT, SHOW
+$c0013Vedi anche$c0007: STAT, OEDIT, PEDIT, SHOW, ODUST
+
+#
+"ODUST"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Corregge i contatori polvere achievement sull'oggetto (e gli APPLY
+corrispondenti). Non tocca il listino del PG: se il bonus era gia' in
+editpool, usa $c0015editpool$c0007 sul personaggio.
+
+$c0015Uso$c0007:
+  odust <oggetto>
+  odust <oggetto> clear
+  odust <oggetto> <campo> <n>
+
+Campi: hp, mana, move, hpregen, manaregen, moveregen, spellfail.
+<n> e' assoluto (0..50). spellfail e' il bonus polvere (sull'eq
+APPLY_SPELLFAIL diminuisce di n), come la polvere celeste.
+
+$c0015clear$c0007 azzera tutti i dust_*, toglie DUSTED e gli APPLY polvere.
+
+Se l'oggetto ha instance MySQL, sincronizza e scrive event player_dust.
+
+$c0013Esempi$c0007:
+  odust sigillo
+  odust sigillo hp 1
+  odust sigillo spellfail 1
+  odust sigillo hp 0
+  odust sigillo clear
+
+$c0013Vedi anche$c0007: STAT, EDITPOOL, OSAVE, OEDIT
 
 #
 "OLOAD"
@@ -1204,7 +1482,7 @@ $c0013Vedi anche$c0007: OSAVE, OEDIT, SHOW, STAT, ODELETE
 
 $c0014Livello minimo$c0007: 57 (Questmaster)
 
-Soft-delete di un edit MySQL (lista attivi ? lista cancellati),
+Soft-delete di un edit MySQL (lista attivi -> lista cancellati),
 oppure archivio di un file in objects/ sotto deleted/objects/.
 
 $c0015Uso$c0007:
@@ -1455,10 +1733,85 @@ Comando wizard system.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
 
+
+#
+"MOTD"
+
+$c0014Livello minimo$c0007: TUTTI lettura; 57 (Questmaster) per set
+
+Message Of The Day (login). Tre slot MySQL: general, server, world.
+
+Sintassi:
+  motd
+  motd show
+  motd set [general|server|world] [versione] <testo>
+
+Senza argomenti (o show): mostra il motd.
+set (57+): sostituisce lo slot (default general).
+Esempi:
+  motd set Controllate sempre le NEWS
+  motd set server 3.6.9 Edit personali non bloccano il ripop zona
+  motd set world 3.7.6 Vecchia Storia, Nuova Citta'
+
+Layout tipico:
+  Versioni correnti
+  [general]
+  Server <ver> [TITLE breve]
+  World  <ver> [motto mondo]
+
+Su release reali lo slot server si aggiorna da TITLE: (o MOTD:/SUMMARY:)
+nel body del commit; MOTD_HEADLINE a compile-time e' override raro.
+
+$c0013Vedi anche$c0007: NEWS, WIZMOTD, WIZNEWS
+
+
+#
+"NEWS"
+
+$c0014Livello minimo$c0007: TUTTI lettura; 57 (Questmaster) admin
+
+News pubbliche (lista MySQL + eventuale testo esteso).
+
+Sintassi giocatore:
+  news                 (pagina 1: ultime 30)
+  news <pagina>        (es. news 2 = voci 31-60)
+  news read <numero>   (numero globale, anche fuori pagina)
+
+Sintassi admin (57+):
+  news list
+  news add [gg/mm/aaaa] [server|world] [versione] <titolo>
+  news edit <numero> [gg/mm/aaaa] [server|world] [versione] <titolo>
+  news del <numero>
+  news deleted
+  news undel <id>
+  news body <numero>
+
+Lista a pagine da 30: in RAM solo la pagina corrente (senza body).
+read/body/del usano l'indice globale (1 = piu' recente).
+Footer: pagina X/Y e hint news N per scorrere.
+list: elenco tecnico della pagina corrente (id, component, version).
+add: nuova voce. Per annunci versioni usa titolo breve (come TITLE:)
+  e opzionalmente server|world + version (colonne in lista).
+edit: modifica data/component/version/titolo della voce N (body invariato).
+body: editor multilinea del testo esteso, termina con @.
+del / deleted / undel: soft-delete e ripristino.
+
+Standard commit di release (body git -> BUILD_BODY):
+  TITLE: <riga breve, max ~70>
+  NEWS:
+  <dettaglio giocatori>
+  WIZ:
+  <dettaglio immortali>
+Alias TITLE: = MOTD: = SUMMARY:. Opzionale WIZTITLE: per wiznews.
+TITLE alimenta motd Server e i titoli in lista news/wiznews;
+NEWS:/WIZ: finiscono nel body (news/wiznews read).
+
+$c0013Vedi anche$c0007: MOTD, WIZNEWS, WIZMOTD
+
 #
 "58" "MAESTRO_DEL_CREATO" "LIVELLO 58"
 
-$c0014Livello 58$c0007 ? Maestro del Creato
+$c0014Livello 58$c0007 - Maestro del Creato
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -1644,7 +1997,7 @@ o aggiorna questo help dopo aver verificato il comportamento.
 #
 "59" "MAESTRO_DEI_CREATORI" "LIVELLO 59"
 
-$c0014Livello 59$c0007 ? Maestro dei Creatori
+$c0014Livello 59$c0007 - Maestro dei Creatori
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -1810,7 +2163,7 @@ o aggiorna questo help dopo aver verificato il comportamento.
 #
 "60" "IMMENSO" "LIVELLO 60"
 
-$c0014Livello 60$c0007 ? Immenso
+$c0014Livello 60$c0007 - Immenso
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):

@@ -483,8 +483,22 @@ struct obj_data {
 	unsigned long long db_inventory_id;
 	/** object_instance.id (MySQL); 0 = no instance / legacy edit-vnum path. */
 	unsigned long long db_instance_id;
+	/**
+	 * true: non conta in obj_index.number per i limiti di zona
+	 * (edit/object_instance). Resta in obj_count. Impostato da
+	 * object_exclude_from_zone_limit.
+	 */
+	bool zone_limit_exempt;
 	/** Owner PG name for PERSONAL/edit instance; empty = use legacy ED* in name. */
 	char personal_owner[32];
+	/** Polvere achievement su APPLY pool (non entra nell'edit pool). */
+	sh_int dust_hp;
+	sh_int dust_mana;
+	sh_int dust_move;
+	sh_int dust_hp_regen;
+	sh_int dust_mana_regen;
+	sh_int dust_move_regen;
+	sh_int dust_spellfail;
 };
 /* ======================================================================*/
 

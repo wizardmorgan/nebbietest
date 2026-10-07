@@ -27,6 +27,8 @@
 #include "toon_migration.hpp"
 #include "reception.hpp"
 #include "modify.hpp"
+#include "edit_pool.hpp"
+#include "procarea_legacy_drop.hpp"
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <odb/mysql/database.hxx>
@@ -36,14 +38,17 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <map>
 #include <sstream>
 #include <string>
+#include <strings.h>
+#include <vector>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <vector>
 
 namespace Alarmud {
 
@@ -641,6 +646,13 @@ void fill_instance_from_obj(object_instance& row, const struct obj_data* obj, in
 	row.wear_flags = obj->obj_flags.wear_flags;
 	row.extra_flags = static_cast<int>(obj->obj_flags.extra_flags);
 	row.extra_flags2 = static_cast<int>(obj->obj_flags.extra_flags2);
+	row.dust_hp = obj->dust_hp;
+	row.dust_mana = obj->dust_mana;
+	row.dust_move = obj->dust_move;
+	row.dust_hp_regen = obj->dust_hp_regen;
+	row.dust_mana_regen = obj->dust_mana_regen;
+	row.dust_move_regen = obj->dust_move_regen;
+	row.dust_spellfail = obj->dust_spellfail;
 	/* Come obj_to_store: per i container il peso runtime include il contenuto.
 	 * In MySQL va il solo guscio, altrimenti al reload si "cuoce" peso pieno. */
 	{
@@ -752,6 +764,193 @@ bool replace_instance_affects_tx(DB* db, unsigned long long instance_id,
 	return true;
 }
 
+void clear_obj_ex_descriptions(struct obj_data* obj) {
+	if(!obj) {
+		return;
+	}
+	struct extra_descr_data* next = nullptr;
+	for(struct extra_descr_data* ed = obj->ex_description; ed; ed = next) {
+		next = ed->next;
+		if(ed->nMagicNumber == EXDESC_VALID_MAGIC) {
+			ed->nMagicNumber = EXDESC_FREED_MAGIC;
+			free(ed->keyword);
+			ed->keyword = nullptr;
+			free(ed->description);
+			ed->description = nullptr;
+			free(ed);
+		}
+		else {
+			mudlog(LOG_SYSERR,
+				   "clear_obj_ex_descriptions: invalid magic on instance obj");
+			break;
+		}
+	}
+	obj->ex_description = nullptr;
+}
+
+bool replace_instance_extradesc_tx(DB* db, unsigned long long instance_id,
+								   const struct obj_data* obj) {
+	if(!db || instance_id == 0 || !obj) {
+		return false;
+	}
+	using EdQ = odb::query<object_instance_extradesc>;
+	db->erase_query<object_instance_extradesc>(EdQ::key.instance_id == instance_id);
+
+	unsigned char slot = 0;
+	for(const struct extra_descr_data* ed = obj->ex_description; ed;
+		ed = ed->next) {
+		if(!ed->keyword || !*ed->keyword || !ed->description) {
+			continue;
+		}
+		object_instance_extradesc row;
+		row.key.instance_id = instance_id;
+		row.key.slot = slot;
+		row.keyword = ed->keyword;
+		row.description = ed->description;
+		db->persist(row);
+		if(slot == 255) {
+			break;
+		}
+		++slot;
+	}
+	return true;
+}
+
+bool apply_instance_extradesc_tx(DB* db, unsigned long long instance_id,
+								 struct obj_data* obj) {
+	if(!db || !obj || instance_id == 0) {
+		return false;
+	}
+	/* Via le E del proto; poi solo quelle salvate sull'instance (anche vuote). */
+	clear_obj_ex_descriptions(obj);
+
+	using EdQ = odb::query<object_instance_extradesc>;
+	std::vector<object_instance_extradesc> rows;
+	for(const auto& row : db->query<object_instance_extradesc>(
+			EdQ::key.instance_id == instance_id)) {
+		rows.push_back(row);
+	}
+	std::sort(rows.begin(), rows.end(),
+			  [](const object_instance_extradesc& a,
+				 const object_instance_extradesc& b) {
+				  return a.key.slot < b.key.slot;
+			  });
+
+	struct extra_descr_data* head = nullptr;
+	struct extra_descr_data* tail = nullptr;
+	for(const auto& row : rows) {
+		if(row.keyword.empty()) {
+			continue;
+		}
+		struct extra_descr_data* ed = nullptr;
+		CREATE(ed, struct extra_descr_data, 1);
+		ed->nMagicNumber = EXDESC_VALID_MAGIC;
+		ed->keyword = strdup(row.keyword.c_str());
+		ed->description = strdup(row.description.c_str());
+		ed->next = nullptr;
+		if(!head) {
+			head = tail = ed;
+		}
+		else {
+			tail->next = ed;
+			tail = ed;
+		}
+	}
+	obj->ex_description = head;
+	return true;
+}
+
+[[nodiscard]] bool extradesc_has_rows_tx(DB* db, unsigned long long instance_id) {
+	if(!db || instance_id == 0) {
+		return false;
+	}
+	using EdQ = odb::query<object_instance_extradesc>;
+	auto r = db->query<object_instance_extradesc>(EdQ::key.instance_id == instance_id);
+	return r.begin() != r.end();
+}
+
+[[nodiscard]] bool try_load_legacy_edit_extradesc(unsigned edit_vnum,
+												  struct obj_data* dest) {
+	if(!dest || edit_vnum == 0) {
+		return false;
+	}
+	clear_obj_ex_descriptions(dest);
+	char path[256];
+	FILE* f = nullptr;
+	snprintf(path, sizeof(path), "%s/%u", DELETED_OBJ_DIR, edit_vnum);
+	f = fopen(path, "rt");
+	if(!f) {
+		snprintf(path, sizeof(path), "%s/%u", OBJ_DIR, edit_vnum);
+		f = fopen(path, "rt");
+	}
+	if(!f) {
+		return false;
+	}
+	int tmp_vnum = 0;
+	if(fscanf(f, "#%d \n", &tmp_vnum) != 1) {
+		fclose(f);
+		return false;
+	}
+	struct obj_data* scratch = nullptr;
+	CREATE(scratch, struct obj_data, 1);
+	clear_object(scratch);
+	read_obj_from_file(scratch, f);
+	fclose(f);
+	dest->ex_description = scratch->ex_description;
+	scratch->ex_description = nullptr;
+	/* free_obj libera anche lo struct (calloc); non free(scratch) di nuovo. */
+	free_obj(scratch);
+	return true; /* file letto (anche se senza E) */
+}
+
+void object_instance_backfill_extradesc(DB* db) {
+	if(!db) {
+		return;
+	}
+	int filled = 0;
+	int empty_ok = 0;
+	int missing_file = 0;
+	mudlog(LOG_CHECK, "object_instance_backfill_extradesc: start");
+	try {
+		odb::transaction t(db->begin());
+		using Q = odb::query<object_instance>;
+		for(const auto& row : db->query<object_instance>(
+				Q::deleted == false && Q::legacy_edit_vnum.is_not_null())) {
+			if(extradesc_has_rows_tx(db, row.id)) {
+				continue;
+			}
+			const unsigned legacy = row.legacy_edit_vnum.get();
+			struct obj_data tmp {};
+			clear_object(&tmp);
+			if(!try_load_legacy_edit_extradesc(legacy, &tmp)) {
+				++missing_file;
+				continue;
+			}
+			if(tmp.ex_description) {
+				replace_instance_extradesc_tx(db, row.id, &tmp);
+				++filled;
+			}
+			else {
+				++empty_ok;
+			}
+			clear_obj_ex_descriptions(&tmp);
+		}
+		t.commit();
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_backfill_extradesc: %s", e.what());
+		return;
+	}
+	catch(const std::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_backfill_extradesc: %s", e.what());
+		return;
+	}
+	mudlog(LOG_CHECK,
+		   "object_instance_extradesc backfill: filled=%d empty_file=%d "
+		   "no_file=%d",
+		   filled, empty_ok, missing_file);
+}
+
 /** Se c'e' gia' una tx sul thread, riusala (no begin/commit). Altrimenti aprine una.
  *  Se la tx corrente risulta finalized (TLS sporco), reset e aprine una nuova. */
 template <typename F>
@@ -814,6 +1013,7 @@ unsigned long long persist_body_tx(DB* db, struct obj_data* obj, int base_vnum,
 			have_before = false;
 		}
 	}
+	edit_pool_maybe_capture_dust(obj);
 	fill_instance_from_obj(row, obj, base_vnum, actor, is_create, system_actor);
 	fill_actor_and_owner_ids_tx(db, row, actor, is_create);
 
@@ -834,6 +1034,7 @@ unsigned long long persist_body_tx(DB* db, struct obj_data* obj, int base_vnum,
 		db->update(row);
 	}
 	replace_instance_affects_tx(db, id, obj);
+	replace_instance_extradesc_tx(db, id, obj);
 	if(write_event || is_create) {
 		char note[96];
 		if(is_create && procarea_is_reward_vnum(base_vnum)) {
@@ -881,57 +1082,6 @@ void apply_strings(struct obj_data* obj, const std::string& name, const std::str
 }
 
 } // namespace
-
-std::string object_instance_extract_ed_owner(const char* keywords) {
-	if(!keywords || !*keywords) {
-		return {};
-	}
-	const char* p = keywords;
-	while(*p) {
-		while(*p && isspace(static_cast<unsigned char>(*p))) {
-			++p;
-		}
-		if(!*p) {
-			break;
-		}
-		const char* start = p;
-		while(*p && !isspace(static_cast<unsigned char>(*p))) {
-			++p;
-		}
-		if((p - start) > 2 && start[0] == 'E' && start[1] == 'D') {
-			return std::string(start + 2, p);
-		}
-	}
-	return {};
-}
-
-std::string object_instance_strip_ed_tokens(const char* keywords) {
-	if(!keywords || !*keywords) {
-		return {};
-	}
-	std::string out;
-	const char* p = keywords;
-	while(*p) {
-		while(*p && isspace(static_cast<unsigned char>(*p))) {
-			++p;
-		}
-		if(!*p) {
-			break;
-		}
-		const char* start = p;
-		while(*p && !isspace(static_cast<unsigned char>(*p))) {
-			++p;
-		}
-		if((p - start) > 2 && start[0] == 'E' && start[1] == 'D') {
-			continue;
-		}
-		if(!out.empty()) {
-			out.push_back(' ');
-		}
-		out.append(start, p);
-	}
-	return out;
-}
 
 int object_instance_resolve_base_vnum(const struct obj_data* obj) {
 	if(!obj) {
@@ -990,6 +1140,11 @@ unsigned long long object_instance_persist(struct obj_data* obj, int base_vnum,
 			obj->char_vnum = base_vnum;
 		}
 	}
+	/* Solo se l'oggetto live punta gia' al prototipo base (non ai 34k legacy). */
+	if(obj->item_number >= 0 && obj->item_number < top_of_objt &&
+	   obj_index[obj->item_number].iVNum == base_vnum) {
+		object_exclude_from_zone_limit(obj);
+	}
 	return id;
 }
 
@@ -1013,6 +1168,13 @@ bool object_instance_apply(struct obj_data* obj, unsigned long long instance_id)
 			obj->obj_flags.wear_flags = row.wear_flags;
 			obj->obj_flags.extra_flags = static_cast<unsigned int>(row.extra_flags);
 			obj->obj_flags.extra_flags2 = static_cast<unsigned int>(row.extra_flags2);
+			obj->dust_hp = row.dust_hp;
+			obj->dust_mana = row.dust_mana;
+			obj->dust_move = row.dust_move;
+			obj->dust_hp_regen = row.dust_hp_regen;
+			obj->dust_mana_regen = row.dust_mana_regen;
+			obj->dust_move_regen = row.dust_move_regen;
+			obj->dust_spellfail = row.dust_spellfail;
 			obj->obj_flags.weight = row.weight;
 			obj->obj_flags.cost = row.cost;
 			obj->obj_flags.cost_per_day = row.cost_per_day;
@@ -1059,6 +1221,7 @@ bool object_instance_apply(struct obj_data* obj, unsigned long long instance_id)
 				obj->affected[af.key.affect_slot].location = af.location;
 				obj->affected[af.key.affect_slot].modifier = af.modifier;
 			}
+			apply_instance_extradesc_tx(db, instance_id, obj);
 			return true;
 		});
 		if(!ok) {
@@ -1072,6 +1235,298 @@ bool object_instance_apply(struct obj_data* obj, unsigned long long instance_id)
 	}
 	obj->db_instance_id = instance_id;
 	return true;
+}
+
+namespace {
+
+void trim_segment(std::string& s) {
+	while(!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) {
+		s.erase(s.begin());
+	}
+	while(!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) {
+		s.pop_back();
+	}
+}
+
+[[nodiscard]] unsigned long flags_from_label_string(const std::string& label,
+													const char* names[]) {
+	if(label.empty() || label == "NONE" || label == "NOBITS") {
+		return 0;
+	}
+	unsigned long bits = 0;
+	long nr = 0;
+	for(; names[nr] && *names[nr] != '\n'; ++nr) {
+		const std::string flag = names[nr];
+		if(flag.empty()) {
+			continue;
+		}
+		size_t pos = 0;
+		while((pos = label.find(flag, pos)) != std::string::npos) {
+			const bool left_ok = (pos == 0) || label[pos - 1] == ' ';
+			const bool right_ok = (pos + flag.size() == label.size()) ||
+								  label[pos + flag.size()] == ' ';
+			if(left_ok && right_ok) {
+				SET_BIT(bits, 1UL << nr);
+				break;
+			}
+			pos += 1;
+		}
+	}
+	return bits;
+}
+
+[[nodiscard]] int parse_item_type_name(const std::string& name) {
+	int nr = 0;
+	for(; item_types[nr] && *item_types[nr] != '\n'; ++nr) {
+		if(name == item_types[nr]) {
+			return nr;
+		}
+	}
+	return -1;
+}
+
+[[nodiscard]] int resolve_apply_name(const std::string& name) {
+	for(int loc = 0; loc <= APPLY_SKIP; ++loc) {
+		if(apply_types[loc] && *apply_types[loc] != '\n' && name == apply_types[loc]) {
+			return loc;
+		}
+	}
+	return APPLY_NONE;
+}
+
+[[nodiscard]] bool parse_affect_segment(const std::string& seg, short& loc, int& mod) {
+	if(seg.size() < 2) {
+		return false;
+	}
+	const bool remove = seg[0] == '-';
+	const bool add = seg[0] == '+';
+	if(!remove && !add) {
+		return false;
+	}
+	std::string rest = seg.substr(1);
+	trim_segment(rest);
+	const size_t sp = rest.rfind(' ');
+	if(sp == std::string::npos || sp == 0) {
+		return false;
+	}
+	const std::string loc_name = rest.substr(0, sp);
+	mod = std::atoi(rest.substr(sp + 1).c_str());
+	if(remove) {
+		mod = -mod;
+	}
+	loc = static_cast<short>(resolve_apply_name(loc_name));
+	return loc != APPLY_NONE || mod == 0;
+}
+
+[[nodiscard]] bool parse_create_header(const std::string& seg, unsigned& base_vnum, int& cost,
+									   int& cost_per_day) {
+	if(seg.compare(0, 7, "create ") != 0) {
+		return false;
+	}
+	unsigned base = 0;
+	int c = 0;
+	int cpd = 0;
+	if(std::sscanf(seg.c_str(), "create base=%u cost=%d cost/day=%d", &base, &c, &cpd) < 1 ||
+	   base == 0) {
+		return false;
+	}
+	base_vnum = base;
+	cost = c;
+	cost_per_day = cpd;
+	return true;
+}
+
+[[nodiscard]] bool split_kv(const std::string& seg, std::string& key, std::string& val) {
+	const size_t eq = seg.find('=');
+	if(eq == std::string::npos) {
+		return false;
+	}
+	key = seg.substr(0, eq);
+	val = seg.substr(eq + 1);
+	trim_segment(key);
+	trim_segment(val);
+	return !key.empty();
+}
+
+bool apply_create_detail_to_obj(struct obj_data* obj, const std::string& detail) {
+	if(!obj || detail.empty()) {
+		return false;
+	}
+	std::vector<short> aff_loc(MAX_OBJ_AFFECT, 0);
+	std::vector<int> aff_mod(MAX_OBJ_AFFECT, 0);
+	int aff_slot = 0;
+
+	std::string rest = detail;
+	while(!rest.empty()) {
+		size_t cut = rest.find(';');
+		std::string seg = (cut == std::string::npos) ? rest : rest.substr(0, cut);
+		rest = (cut == std::string::npos) ? std::string() : rest.substr(cut + 1);
+		trim_segment(seg);
+		if(seg.empty()) {
+			continue;
+		}
+
+		if(seg[0] == '+' || seg[0] == '-') {
+			short loc = 0;
+			int mod = 0;
+			if(parse_affect_segment(seg, loc, mod) && aff_slot < MAX_OBJ_AFFECT) {
+				aff_loc[aff_slot] = loc;
+				aff_mod[aff_slot] = mod;
+				++aff_slot;
+			}
+			continue;
+		}
+
+		unsigned tmp_base = 0;
+		int cost = 0;
+		int cost_per_day = 0;
+		if(parse_create_header(seg, tmp_base, cost, cost_per_day)) {
+			obj->obj_flags.cost = cost;
+			obj->obj_flags.cost_per_day = cost_per_day;
+			continue;
+		}
+
+		std::string key;
+		std::string val;
+		if(!split_kv(seg, key, val)) {
+			continue;
+		}
+
+		if(key == "short") {
+			if(obj->short_description) {
+				free(obj->short_description);
+			}
+			obj->short_description = strdup(val.c_str());
+		}
+		else if(key == "name") {
+			if(obj->name) {
+				free(obj->name);
+			}
+			obj->name = strdup(val.c_str());
+		}
+		else if(key == "type") {
+			const int t = parse_item_type_name(val);
+			if(t >= 0) {
+				obj->obj_flags.type_flag = static_cast<unsigned char>(t);
+			}
+		}
+		else if(key == "wear") {
+			obj->obj_flags.wear_flags = flags_from_label_string(val, wear_bits);
+		}
+		else if(key == "extra") {
+			obj->obj_flags.extra_flags =
+				static_cast<unsigned int>(flags_from_label_string(val, extra_bits));
+		}
+		else if(key == "extra2") {
+			obj->obj_flags.extra_flags2 =
+				static_cast<unsigned int>(flags_from_label_string(val, extra_bits2));
+		}
+		else if(key == "AC") {
+			obj->obj_flags.value[0] = std::atoi(val.c_str());
+		}
+		else if(key == "full_str") {
+			obj->obj_flags.value[1] = std::atoi(val.c_str());
+		}
+		else if(key == "cost") {
+			obj->obj_flags.cost = std::atoi(val.c_str());
+		}
+		else if(key == "cost/day") {
+			obj->obj_flags.cost_per_day = std::atoi(val.c_str());
+		}
+		else if(key == "weight") {
+			obj->obj_flags.weight = std::atoi(val.c_str());
+		}
+	}
+
+	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+		obj->affected[i].location = 0;
+		obj->affected[i].modifier = 0;
+	}
+	for(int i = 0; i < aff_slot; ++i) {
+		obj->affected[i].location = aff_loc[i];
+		obj->affected[i].modifier = aff_mod[i];
+	}
+	return true;
+}
+
+} // namespace
+
+obj_data* object_instance_materialize_create_baseline(unsigned long long instance_id) {
+	if(instance_id == 0) {
+		return nullptr;
+	}
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return nullptr;
+	}
+
+	unsigned int base_vnum = 0;
+	std::string detail;
+	try {
+		const bool ok = with_odb_tx(db, [&]() {
+			using EvQ = odb::query<object_instance_event>;
+			object_instance_event create_ev {};
+			bool found = false;
+			for(const auto& ev :
+				db->query<object_instance_event>(EvQ::instance_id == instance_id)) {
+				if(ev.kind != "create") {
+					continue;
+				}
+				if(!found || ev.at < create_ev.at) {
+					create_ev = ev;
+					found = true;
+				}
+			}
+			if(!found) {
+				return false;
+			}
+			if(!create_ev.detail.null() && !create_ev.detail.get().empty()) {
+				detail = create_ev.detail.get();
+			}
+			else if(!create_ev.note.null() && !create_ev.note.get().empty()) {
+				detail = create_ev.note.get();
+			}
+			if(detail.empty()) {
+				return false;
+			}
+			unsigned base = 0;
+			int cost = 0;
+			int cpd = 0;
+			const size_t semi = detail.find(';');
+			const std::string header =
+				(semi == std::string::npos) ? detail : detail.substr(0, semi);
+			if(!parse_create_header(header, base, cost, cpd)) {
+				return false;
+			}
+			base_vnum = base;
+			return true;
+		});
+		if(!ok || base_vnum == 0) {
+			return nullptr;
+		}
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_materialize_create_baseline(%llu): %s",
+			   static_cast<unsigned long long>(instance_id), e.what());
+		return nullptr;
+	}
+
+	if(real_object(static_cast<int>(base_vnum)) < 0) {
+		return nullptr;
+	}
+	struct obj_data* obj = read_object(static_cast<int>(base_vnum), VIRTUAL);
+	if(obj == nullptr) {
+		return nullptr;
+	}
+	if(!apply_create_detail_to_obj(obj, detail)) {
+		extract_obj(obj);
+		return nullptr;
+	}
+	obj->char_vnum = static_cast<int>(base_vnum);
+	obj->personal_owner[0] = '\0';
+	REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+	REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_PERSONAL);
+	return obj;
 }
 
 bool object_instance_sync(struct obj_data* obj, char_data* actor) {
@@ -1126,6 +1581,8 @@ obj_data* object_instance_materialize(unsigned long long instance_id) {
 		extract_obj(obj);
 		return nullptr;
 	}
+	/* Istanza DB: non deve saturare il max del prototipo nei reset zona. */
+	object_exclude_from_zone_limit(obj);
 	return obj;
 }
 
@@ -1640,14 +2097,19 @@ void object_instance_show_list(struct char_data* ch, const char* filter, bool de
 					dbn = it->second;
 				}
 				const unsigned tot = on + dbn;
-				if(tot > 1) {
+				const std::string src = format_instance_source_short(row);
+				/* Clan: template condiviso, tot>1 = piu' vassalli, non duplicato. */
+				const bool clan_shared =
+					!row.source.null() &&
+					row.source.get() == kObjInstSourceClanSymbol;
+				const bool dup_warn = (tot > 1 && !clan_shared);
+				if(dup_warn) {
 					++multi;
 				}
 
-				const std::string src = format_instance_source_short(row);
 				snprintf(line, sizeof(line),
 						 "$c0007%4u %6u %4s %4u %3u %3u%s %-20.20s %s$c0007 (%s)$c0007\n\r",
-						 list_n, row.base_vnum, src.c_str(), on, dbn, tot, tot > 1 ? "*" : " ",
+						 list_n, row.base_vnum, src.c_str(), on, dbn, tot, dup_warn ? "*" : " ",
 						 owner.c_str(), row.short_desc.c_str(), row.obj_name.c_str());
 				out += line;
 				++shown;
@@ -1671,6 +2133,562 @@ void object_instance_show_list(struct char_data* ch, const char* filter, bool de
 	catch(const odb::exception& e) {
 		mudlog(LOG_SYSERR, "object_instance_show_list: %s", e.what());
 		send_to_char("Errore lettura object_instance.\n\r", ch);
+	}
+}
+
+namespace {
+
+[[nodiscard]] bool apply_loc_is_bitmask(short loc) noexcept {
+	switch(loc) {
+	case APPLY_M_IMMUNE:
+	case APPLY_IMMUNE:
+	case APPLY_SUSC:
+	case APPLY_SPELL:
+	case APPLY_AFF2:
+		return true;
+	default:
+		return false;
+	}
+}
+
+[[nodiscard]] struct char_data* find_online_pc_ci(const char* name) {
+	if(!name || !*name) {
+		return nullptr;
+	}
+	for(struct char_data* i = character_list; i; i = i->next) {
+		if(IS_PC(i) && GET_NAME(i) && strcasecmp(GET_NAME(i), name) == 0) {
+			return i;
+		}
+	}
+	return nullptr;
+}
+
+struct AffectTotals {
+	std::map<short, long long> numeric;
+	std::map<short, unsigned long> bits;
+};
+
+void accumulate_affect_slot(AffectTotals& tot, short loc, int mod) {
+	if(loc == APPLY_NONE || loc == APPLY_SKIP || mod == 0) {
+		return;
+	}
+	if(apply_loc_is_bitmask(loc)) {
+		tot.bits[loc] |= static_cast<unsigned long>(mod);
+	}
+	else {
+		tot.numeric[loc] += mod;
+	}
+}
+
+void accumulate_obj_affects(const struct obj_data* obj, AffectTotals& tot) {
+	if(!obj) {
+		return;
+	}
+	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+		accumulate_affect_slot(tot, static_cast<short>(obj->affected[i].location),
+							   obj->affected[i].modifier);
+	}
+}
+
+[[nodiscard]] bool load_instance_affects(MYSQL* h, unsigned long long iid,
+										 AffectTotals& tot) {
+	std::ostringstream asql;
+	asql << "SELECT location, modifier FROM object_instance_affect "
+			"WHERE key_instance_id="
+		 << iid;
+	if(mysql_query(h, asql.str().c_str()) != 0) {
+		return false;
+	}
+	MYSQL_RES* res = mysql_store_result(h);
+	if(!res) {
+		return false;
+	}
+	while(MYSQL_ROW row = mysql_fetch_row(res)) {
+		if(!row[0] || !row[1]) {
+			continue;
+		}
+		accumulate_affect_slot(tot, static_cast<short>(atoi(row[0])), atoi(row[1]));
+	}
+	mysql_free_result(res);
+	return true;
+}
+
+[[nodiscard]] const AffectTotals& proto_affects_cached(
+	unsigned base_vnum, std::map<unsigned, AffectTotals>& cache) {
+	if(const auto it = cache.find(base_vnum); it != cache.end()) {
+		return it->second;
+	}
+	AffectTotals tot;
+	if(base_vnum != 0 && real_object(static_cast<int>(base_vnum)) >= 0) {
+		if(struct obj_data* proto =
+			   read_object(static_cast<int>(base_vnum), VIRTUAL)) {
+			accumulate_obj_affects(proto, tot);
+			extract_obj(proto);
+		}
+	}
+	return cache.emplace(base_vnum, std::move(tot)).first->second;
+}
+
+[[nodiscard]] long long affect_num(const AffectTotals& t, short loc) {
+	const auto it = t.numeric.find(loc);
+	return it == t.numeric.end() ? 0 : it->second;
+}
+
+[[nodiscard]] unsigned long affect_bits(const AffectTotals& t, short loc) {
+	const auto it = t.bits.find(loc);
+	return it == t.bits.end() ? 0ul : it->second;
+}
+
+[[nodiscard]] long long affect_delta(const AffectTotals& edited,
+									 const AffectTotals& proto, short loc) {
+	return affect_num(edited, loc) - affect_num(proto, loc);
+}
+
+void add_edit_deltas(const AffectTotals& edited, const AffectTotals& proto,
+					 std::map<short, long long>& numeric_totals,
+					 std::map<short, unsigned long>& bit_added,
+					 std::map<short, unsigned long>& bit_removed) {
+	std::unordered_set<short> locs;
+	for(const auto& kv : edited.numeric) {
+		locs.insert(kv.first);
+	}
+	for(const auto& kv : proto.numeric) {
+		locs.insert(kv.first);
+	}
+	for(const auto& kv : edited.bits) {
+		locs.insert(kv.first);
+	}
+	for(const auto& kv : proto.bits) {
+		locs.insert(kv.first);
+	}
+
+	for(short loc : locs) {
+		if(edit_pool_is_pool_apply(loc)) {
+			/* Gia' nel pool PG. */
+			continue;
+		}
+		if(apply_loc_is_bitmask(loc)) {
+			const unsigned long e = affect_bits(edited, loc);
+			const unsigned long p = affect_bits(proto, loc);
+			const unsigned long added = e & ~p;
+			const unsigned long removed = p & ~e;
+			if(added) {
+				bit_added[loc] |= added;
+			}
+			if(removed) {
+				bit_removed[loc] |= removed;
+			}
+		}
+		else {
+			const long long delta = affect_delta(edited, proto, loc);
+			if(delta != 0) {
+				numeric_totals[loc] += delta;
+			}
+		}
+	}
+}
+
+/* Listino edits (nebbiearcane.it/listino-edits): tetti PG / per pezzo. */
+constexpr int kListinoMaxPieces = 21;
+constexpr int kListinoMaxDamSp = 30;
+constexpr int kListinoPerPieceDam = 2;
+constexpr int kListinoPerPieceHr = 2;
+constexpr int kListinoPerPieceArmor = -40;
+constexpr int kListinoPerPieceStat = 3;
+constexpr int kListinoMaxHitroll = kListinoPerPieceHr * kListinoMaxPieces;
+
+constexpr unsigned long kListinoResiBits =
+	IMM_FIRE | IMM_COLD | IMM_ELEC | IMM_ENERGY | IMM_BLUNT | IMM_PIERCE |
+	IMM_SLASH | IMM_ACID | IMM_POISON | IMM_DRAIN | IMM_HOLD;
+constexpr unsigned long kListinoImmuneBits = IMM_DRAIN | IMM_CHARM | IMM_POISON;
+constexpr unsigned long kListinoSpellBits =
+	AFF_TELEPATHY | AFF_GLOBE_DARKNESS | AFF_WATERBREATH | AFF_TRUE_SIGHT |
+	AFF_INVISIBLE | AFF_SENSE_LIFE | AFF_SCRYING | AFF_PROTECT_FROM_EVIL |
+	AFF_FLYING;
+constexpr unsigned long kListinoSpell2Bits = AFF2_DANGER_SENSE;
+
+[[nodiscard]] long long map_num(const std::map<short, long long>& m, short loc) {
+	const auto it = m.find(loc);
+	return it == m.end() ? 0 : it->second;
+}
+
+[[nodiscard]] unsigned long map_bits(const std::map<short, unsigned long>& m,
+									 short loc) {
+	const auto it = m.find(loc);
+	return it == m.end() ? 0ul : it->second;
+}
+
+void append_bit_names_filtered(std::ostringstream& out, unsigned long bits,
+							   const char* names[], unsigned long mask) {
+	bool first = true;
+	unsigned long b = bits & mask;
+	for(int i = 0; b && names && names[i] && names[i][0] != '\n'; ++i) {
+		const unsigned long bit = 1ul << i;
+		if(b & bit) {
+			if(!first) {
+				out << ' ';
+			}
+			out << names[i];
+			first = false;
+			b &= ~bit;
+		}
+	}
+	if(first) {
+		out << '-';
+	}
+}
+
+std::string strip_color_codes(std::string s) {
+	for(;;) {
+		const auto p = s.find("$c");
+		if(p == std::string::npos || p + 5 > s.size()) {
+			break;
+		}
+		s.erase(p, 6);
+	}
+	return s;
+}
+
+std::string short_label(const std::string& short_desc) {
+	std::string s = strip_color_codes(short_desc);
+	while(!s.empty() && s.front() == ' ') {
+		s.erase(s.begin());
+	}
+	if(s.size() > 24) {
+		s.resize(24);
+		s += "..";
+	}
+	return s.empty() ? "?" : s;
+}
+
+void append_ratio(std::ostringstream& out, const char* label, long long cur,
+				  long long maxv) {
+	out << label << ' ' << cur << '/' << maxv;
+}
+
+} // namespace
+
+void object_instance_show_edit_totals(struct char_data* ch, const char* name) {
+	if(!ch) {
+		return;
+	}
+	if(!name || !*name) {
+		send_to_char("Uso: show edits <nome>\n\r", ch);
+		return;
+	}
+	if(isdigit(static_cast<unsigned char>(*name))) {
+		send_to_char("Uso: show edits <nome>  (non un numero; per la lista: show db)\n\r",
+					 ch);
+		return;
+	}
+
+	DB* db = Sql::getMysql();
+	if(!db) {
+		send_to_char("Nessuna connessione MySQL.\n\r", ch);
+		return;
+	}
+
+	std::string canon;
+	unsigned long long toon_id = 0;
+	char_edit_pool_data pool {};
+	bool have_pool = false;
+	unsigned n_instances = 0;
+	std::map<short, long long> numeric_totals;
+	std::map<short, unsigned long> bit_added;
+	std::map<short, unsigned long> bit_removed;
+	std::vector<std::string> piece_warn;
+
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+
+		std::string esc;
+		esc.resize(std::strlen(name) * 2 + 1);
+		esc.resize(mysql_real_escape_string(
+			h, esc.data(), name, static_cast<unsigned long>(std::strlen(name))));
+
+		{
+			std::ostringstream sql;
+			sql << "SELECT id, name FROM toon WHERE LOWER(name)=LOWER('" << esc
+				<< "') LIMIT 1";
+			if(mysql_query(h, sql.str().c_str()) == 0) {
+				MYSQL_RES* res = mysql_store_result(h);
+				if(res) {
+					if(MYSQL_ROW row = mysql_fetch_row(res)) {
+						if(row[0]) {
+							toon_id = strtoull(row[0], nullptr, 10);
+						}
+						if(row[1]) {
+							canon = row[1];
+						}
+					}
+					mysql_free_result(res);
+				}
+			}
+		}
+		if(canon.empty()) {
+			canon = name;
+		}
+
+		if(struct char_data* online = find_online_pc_ci(canon.c_str())) {
+			pool = online->edit_pool;
+			have_pool = true;
+		}
+		else if(toon_id != 0) {
+			std::ostringstream sql;
+			sql << "SELECT edit_hp, edit_mana, edit_move, edit_hp_regen, "
+				   "edit_mana_regen, edit_move_regen, overedit_hp, overedit_mana, "
+				   "overedit_move, overedit_hp_regen, overedit_mana_regen, "
+				   "overedit_move_regen FROM character_stats WHERE toon_id="
+				<< toon_id << " LIMIT 1";
+			if(mysql_query(h, sql.str().c_str()) == 0) {
+				MYSQL_RES* res = mysql_store_result(h);
+				if(res) {
+					if(MYSQL_ROW row = mysql_fetch_row(res)) {
+						auto as_short = [](const char* s) -> short {
+							return s ? static_cast<short>(atoi(s)) : 0;
+						};
+						pool.edit_hp = as_short(row[0]);
+						pool.edit_mana = as_short(row[1]);
+						pool.edit_move = as_short(row[2]);
+						pool.edit_hp_regen = as_short(row[3]);
+						pool.edit_mana_regen = as_short(row[4]);
+						pool.edit_move_regen = as_short(row[5]);
+						pool.overedit_hp = as_short(row[6]);
+						pool.overedit_mana = as_short(row[7]);
+						pool.overedit_move = as_short(row[8]);
+						pool.overedit_hp_regen = as_short(row[9]);
+						pool.overedit_mana_regen = as_short(row[10]);
+						pool.overedit_move_regen = as_short(row[11]);
+						have_pool = true;
+					}
+					mysql_free_result(res);
+				}
+			}
+		}
+
+		std::ostringstream sql;
+		sql << "SELECT oi.id, oi.base_vnum, oi.short_desc FROM object_instance oi WHERE "
+			   "(oi.deleted = 0 OR oi.deleted IS NULL) "
+			   "AND (oi.source IS NULL OR oi.source <> '"
+			<< kObjInstSourceClanSymbol << "') AND (";
+		if(toon_id != 0) {
+			sql << "oi.owner_toon_id=" << toon_id << " OR ";
+		}
+		sql << "LOWER(oi.owner_name)=LOWER('" << esc << "'))";
+
+		struct InstRef {
+			unsigned long long id;
+			unsigned base_vnum;
+			std::string short_desc;
+		};
+		std::vector<InstRef> instances;
+		if(mysql_query(h, sql.str().c_str()) == 0) {
+			MYSQL_RES* res = mysql_store_result(h);
+			if(res) {
+				while(MYSQL_ROW row = mysql_fetch_row(res)) {
+					if(!row[0]) {
+						continue;
+					}
+					InstRef r {};
+					r.id = strtoull(row[0], nullptr, 10);
+					r.base_vnum = row[1] ? static_cast<unsigned>(strtoul(row[1], nullptr, 10))
+										 : 0u;
+					if(row[2]) {
+						r.short_desc = row[2];
+					}
+					instances.push_back(std::move(r));
+				}
+				mysql_free_result(res);
+			}
+		}
+		n_instances = static_cast<unsigned>(instances.size());
+
+		std::map<unsigned, AffectTotals> proto_cache;
+		for(const InstRef& inst : instances) {
+			AffectTotals edited;
+			if(!load_instance_affects(h, inst.id, edited)) {
+				continue;
+			}
+			const AffectTotals& proto =
+				proto_affects_cached(inst.base_vnum, proto_cache);
+			add_edit_deltas(edited, proto, numeric_totals, bit_added, bit_removed);
+
+			const long long d_hr = affect_delta(edited, proto, APPLY_HITROLL);
+			const long long d_dam = affect_delta(edited, proto, APPLY_DAMROLL);
+			const long long d_sp = affect_delta(edited, proto, APPLY_SPELLPOWER);
+			const long long d_hd = affect_delta(edited, proto, APPLY_HITNDAM);
+			const long long d_hs = affect_delta(edited, proto, APPLY_HITNSP);
+			const long long d_ac = affect_delta(edited, proto, APPLY_AC);
+			const long long piece_hr = d_hr + d_hd + d_hs;
+			const long long piece_dam = d_dam + d_hd;
+			const long long piece_sp = d_sp + d_hs;
+
+			std::ostringstream w;
+			bool any_w = false;
+			auto push_w = [&](const std::string& msg) {
+				if(any_w) {
+					w << ',';
+				}
+				w << msg;
+				any_w = true;
+			};
+			if(piece_dam > kListinoPerPieceDam) {
+				push_w("dam+" + std::to_string(piece_dam));
+			}
+			if(piece_sp > kListinoPerPieceDam) {
+				push_w("sp+" + std::to_string(piece_sp));
+			}
+			if(piece_hr > kListinoPerPieceHr) {
+				push_w("hr+" + std::to_string(piece_hr));
+			}
+			if(d_ac < kListinoPerPieceArmor) {
+				push_w("ac" + std::to_string(d_ac));
+			}
+			for(short st : {static_cast<short>(APPLY_STR), static_cast<short>(APPLY_DEX),
+							static_cast<short>(APPLY_CON), static_cast<short>(APPLY_INT),
+							static_cast<short>(APPLY_WIS), static_cast<short>(APPLY_CHR)}) {
+				const long long ds = affect_delta(edited, proto, st);
+				if(ds > kListinoPerPieceStat) {
+					push_w(apply_loc_name(st) + "+" + std::to_string(ds));
+				}
+			}
+			if(any_w) {
+				piece_warn.push_back(short_label(inst.short_desc) + " (" + w.str() + ")");
+			}
+		}
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_show_edit_totals: %s", e.what());
+		send_to_char("Errore lettura edit del personaggio.\n\r", ch);
+		return;
+	}
+
+	if(!have_pool && n_instances == 0 && toon_id == 0) {
+		send_to_char("Nessun personaggio o edit trovato con quel nome.\n\r", ch);
+		return;
+	}
+
+	const long long tot_hr = map_num(numeric_totals, APPLY_HITROLL) +
+							 map_num(numeric_totals, APPLY_HITNDAM) +
+							 map_num(numeric_totals, APPLY_HITNSP);
+	const long long tot_dam = map_num(numeric_totals, APPLY_DAMROLL) +
+							  map_num(numeric_totals, APPLY_HITNDAM);
+	const long long tot_sp = map_num(numeric_totals, APPLY_SPELLPOWER) +
+							 map_num(numeric_totals, APPLY_HITNSP);
+	const long long tot_dam_sp = tot_dam + tot_sp;
+	const long long tot_sf = map_num(numeric_totals, APPLY_SPELLFAIL);
+	const long long tot_ac = map_num(numeric_totals, APPLY_AC);
+
+	std::ostringstream out;
+	out << "Edit " << canon << " — pezzi " << n_instances << '/' << kListinoMaxPieces
+		<< "\n\r";
+	out << "Pool: ";
+	append_ratio(out, "HIT", pool.edit_hp, kEditPoolMaxHit);
+	out << ' ';
+	append_ratio(out, "MANA", pool.edit_mana, kEditPoolMaxMana);
+	out << ' ';
+	append_ratio(out, "MOVE", pool.edit_move, kEditPoolMaxMove);
+	out << " | ";
+	append_ratio(out, "HRgn", pool.edit_hp_regen, kEditPoolMaxHitRegen);
+	out << ' ';
+	append_ratio(out, "MRgn", pool.edit_mana_regen, kEditPoolMaxManaRegen);
+	out << ' ';
+	append_ratio(out, "VRgn", pool.edit_move_regen, kEditPoolMaxMoveRegen);
+	out << "\n\r";
+	if(pool.overedit_hp || pool.overedit_mana || pool.overedit_move ||
+	   pool.overedit_hp_regen || pool.overedit_mana_regen ||
+	   pool.overedit_move_regen) {
+		out << "Over: ";
+		bool first = true;
+		auto ov = [&](const char* lab, short v) {
+			if(!v) {
+				return;
+			}
+			if(!first) {
+				out << ' ';
+			}
+			first = false;
+			out << lab << '+';
+			out << v;
+		};
+		ov("HIT", pool.overedit_hp);
+		ov("MANA", pool.overedit_mana);
+		ov("MOVE", pool.overedit_move);
+		ov("HRgn", pool.overedit_hp_regen);
+		ov("MRgn", pool.overedit_mana_regen);
+		ov("VRgn", pool.overedit_move_regen);
+		out << "\n\r";
+	}
+
+	out << "Cap: ";
+	append_ratio(out, "DAM+SP", tot_dam_sp, kListinoMaxDamSp);
+	out << " (d" << tot_dam << "+sp" << tot_sp << ") ";
+	append_ratio(out, "HR", tot_hr, kListinoMaxHitroll);
+	out << " SF " << tot_sf << " AC " << tot_ac << "\n\r";
+
+	{
+		out << "Stats:";
+		bool any = false;
+		for(short st : {static_cast<short>(APPLY_STR), static_cast<short>(APPLY_DEX),
+						static_cast<short>(APPLY_CON), static_cast<short>(APPLY_INT),
+						static_cast<short>(APPLY_WIS), static_cast<short>(APPLY_CHR)}) {
+			const long long v = map_num(numeric_totals, st);
+			if(!v) {
+				continue;
+			}
+			out << ' ' << apply_loc_name(st);
+			if(v > 0) {
+				out << '+';
+			}
+			out << v;
+			any = true;
+		}
+		if(!any) {
+			out << " -";
+		}
+		out << "\n\r";
+	}
+
+	{
+		const unsigned long resi = map_bits(bit_added, APPLY_IMMUNE);
+		const unsigned long imm = map_bits(bit_added, APPLY_M_IMMUNE);
+		const unsigned long spl = map_bits(bit_added, APPLY_SPELL);
+		const unsigned long sp2 = map_bits(bit_added, APPLY_AFF2);
+		out << "Resi: ";
+		append_bit_names_filtered(out, resi, immunity_names, kListinoResiBits);
+		out << " | mancano: ";
+		append_bit_names_filtered(out, kListinoResiBits & ~resi, immunity_names,
+								  kListinoResiBits);
+		out << "\n\rImm: ";
+		append_bit_names_filtered(out, imm, immunity_names, kListinoImmuneBits);
+		out << " | Spell: ";
+		append_bit_names_filtered(out, spl, affected_bits, kListinoSpellBits);
+		if(sp2 & kListinoSpell2Bits) {
+			out << " DANGER-SENSE";
+		}
+		out << "\n\r";
+	}
+
+	(void)bit_removed;
+	if(!piece_warn.empty()) {
+		out << "Warn:";
+		const size_t max_show = 5;
+		for(size_t i = 0; i < piece_warn.size() && i < max_show; ++i) {
+			out << ' ' << piece_warn[i] << ';';
+		}
+		if(piece_warn.size() > max_show) {
+			out << " +" << (piece_warn.size() - max_show) << " altri";
+		}
+		out << "\n\r";
+	}
+
+	if(ch->desc) {
+		page_string(ch->desc, out.str().c_str(), true);
+	}
+	else {
+		send_to_char(out.str().c_str(), ch);
 	}
 }
 
@@ -2187,6 +3205,112 @@ bool rewrite_rent_edit_to_base(const std::string& name, unsigned edit_vnum,
 	return true;
 }
 
+constexpr const char* kLegacyDropBaselineTag = "legacy_drop_baseline";
+
+/* Pezza transitoria: riscrive il create event con la foto drop (tabella
+ * procarea_legacy_drop.cpp). Eq live invariata. Togliere con la tabella. */
+bool create_event_has_legacy_drop_tag(DB* db, unsigned long long instance_id) {
+	return with_odb_tx(db, [&]() {
+		using EvQ = odb::query<object_instance_event>;
+		object_instance_event create_ev {};
+		bool found = false;
+		for(const auto& ev :
+			db->query<object_instance_event>(EvQ::instance_id == instance_id)) {
+			if(ev.kind != "create") {
+				continue;
+			}
+			if(!found || ev.at < create_ev.at) {
+				create_ev = ev;
+				found = true;
+			}
+		}
+		if(!found || create_ev.note.null()) {
+			return false;
+		}
+		return create_ev.note.get().find(kLegacyDropBaselineTag) != std::string::npos;
+	});
+}
+
+void patch_legacy_procarea_drop_create(DB* db, unsigned long long instance_id,
+										unsigned edit_vnum, int base_vnum) {
+	if(!db || instance_id == 0 || !procarea_legacy_drop_has(edit_vnum)) {
+		return;
+	}
+	try {
+		if(create_event_has_legacy_drop_tag(db, instance_id)) {
+			/* Gia' in MySQL: i boot successivi non riapplicano la tabella. */
+			return;
+		}
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "legacy_drop_baseline: tag check %llu: %s", instance_id,
+			   e.what());
+		return;
+	}
+	if(real_object(base_vnum) < 0) {
+		return;
+	}
+	struct obj_data* proto = read_object(base_vnum, VIRTUAL);
+	if(!proto) {
+		mudlog(LOG_SYSERR, "legacy_drop_baseline: cannot read proto %d for edit %u",
+			   base_vnum, edit_vnum);
+		return;
+	}
+	if(!procarea_legacy_drop_apply_to_proto(proto, edit_vnum)) {
+		extract_obj(proto);
+		return;
+	}
+	object_instance row {};
+	fill_instance_from_obj(row, proto, base_vnum, nullptr, true, nullptr);
+	const std::string detail = build_instance_diff(nullptr, row, nullptr, nullptr, proto);
+	extract_obj(proto);
+	if(detail.empty()) {
+		return;
+	}
+
+	try {
+		const bool patched = with_odb_tx(db, [&]() {
+			using EvQ = odb::query<object_instance_event>;
+			object_instance_event create_ev {};
+			bool found = false;
+			for(const auto& ev :
+				db->query<object_instance_event>(EvQ::instance_id == instance_id)) {
+				if(ev.kind != "create") {
+					continue;
+				}
+				if(!found || ev.at < create_ev.at) {
+					create_ev = ev;
+					found = true;
+				}
+			}
+			if(!found) {
+				return false;
+			}
+			if(!create_ev.note.null() &&
+			   create_ev.note.get().find(kLegacyDropBaselineTag) != std::string::npos) {
+				return false;
+			}
+			create_ev.detail = detail;
+			std::string note = create_ev.note.null() ? std::string() : create_ev.note.get();
+			if(!note.empty()) {
+				note += " ";
+			}
+			note += kLegacyDropBaselineTag;
+			create_ev.note = note;
+			db->update(create_ev);
+			return true;
+		});
+		if(patched) {
+			mudlog(LOG_CHECK,
+				   "legacy_drop_baseline: patched create of instance %llu (edit %u base %d)",
+				   instance_id, edit_vnum, base_vnum);
+		}
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "legacy_drop_baseline: instance %llu: %s", instance_id, e.what());
+	}
+}
+
 } // namespace
 
 void object_instance_boot_migrate() {
@@ -2237,10 +3361,18 @@ void object_instance_boot_migrate() {
 			continue;
 		}
 
-		const std::string ed_owner = object_instance_extract_ed_owner(obj->name);
-		if(ed_owner.empty()) {
+		/* Dopo hydrate in read_object, ED* e' in personal_owner (keyword strip).
+		 * Controlla entrambi: non rompere edit legacy ne' personalize moderno. */
+		std::string owner;
+		if(obj->personal_owner[0] != '\0') {
+			owner = obj->personal_owner;
+		}
+		else {
+			owner = object_instance_extract_ed_owner(obj->name);
+		}
+		if(owner.empty()) {
 			mudlog(LOG_CHECK,
-				   "edit_boot_migrate: skip %d (no ED* owner, not an edit)",
+				   "edit_boot_migrate: skip %d (no owner, not an edit)",
 				   edit_vnum);
 			extract_obj(obj);
 			++skipped;
@@ -2263,14 +3395,16 @@ void object_instance_boot_migrate() {
 			mudlog(LOG_CHECK, "edit_boot_migrate: created instance %llu for edit %d "
 							  "(base %d owner %s)",
 				   static_cast<unsigned long long>(instance_id), edit_vnum, base_vnum,
-				   ed_owner.c_str());
+				   owner.c_str());
 		}
 		else {
 			mudlog(LOG_CHECK,
 				   "edit_boot_migrate: reuse instance %llu for edit %d (base %d owner %s)",
 				   static_cast<unsigned long long>(instance_id), edit_vnum, base_vnum,
-				   ed_owner.c_str());
+				   owner.c_str());
 		}
+		patch_legacy_procarea_drop_create(db, instance_id, static_cast<unsigned>(edit_vnum),
+										  base_vnum);
 		extract_obj(obj);
 		obj = nullptr;
 
@@ -2347,11 +3481,95 @@ void object_instance_boot_migrate() {
 
 	mudlog(LOG_CHECK, "edit_boot_migrate: done migrated=%d skipped=%d failed=%d",
 		   migrated, skipped, failed);
+	object_instance_backfill_extradesc(db);
 }
 
 } // namespace Alarmud
 
 #endif /* USE_MYSQL */
+
+#include <cctype>
+#include <string>
+#include "db.hpp"
+#include "structs.hpp"
+#include "clan_symbol.hpp"
+
+namespace Alarmud {
+
+bool object_is_zone_limit_exempt(const obj_data* obj) noexcept {
+	return obj != nullptr && obj->zone_limit_exempt;
+}
+
+void object_exclude_from_zone_limit(obj_data* obj, int rnum_to_release) {
+	if(!obj || obj->zone_limit_exempt) {
+		return;
+	}
+	obj->zone_limit_exempt = true;
+	const int rnum = (rnum_to_release == -2) ? obj->item_number : rnum_to_release;
+	if(rnum >= 0 && rnum < top_of_objt && obj_index[rnum].number > 0) {
+		obj_index[rnum].number--;
+	}
+	/* obj_count resta: l'oggetto e' ancora in gioco. */
+	if(clan_symbol_is_obj(obj)) {
+		++obj_count_clan_symbol;
+	}
+	else {
+		++obj_count_edit;
+	}
+}
+
+std::string object_instance_extract_ed_owner(const char* keywords) {
+	if(!keywords || !*keywords) {
+		return {};
+	}
+	const char* p = keywords;
+	while(*p) {
+		while(*p && isspace(static_cast<unsigned char>(*p))) {
+			++p;
+		}
+		if(!*p) {
+			break;
+		}
+		const char* start = p;
+		while(*p && !isspace(static_cast<unsigned char>(*p))) {
+			++p;
+		}
+		if((p - start) > 2 && start[0] == 'E' && start[1] == 'D') {
+			return std::string(start + 2, p);
+		}
+	}
+	return {};
+}
+
+std::string object_instance_strip_ed_tokens(const char* keywords) {
+	if(!keywords || !*keywords) {
+		return {};
+	}
+	std::string out;
+	const char* p = keywords;
+	while(*p) {
+		while(*p && isspace(static_cast<unsigned char>(*p))) {
+			++p;
+		}
+		if(!*p) {
+			break;
+		}
+		const char* start = p;
+		while(*p && !isspace(static_cast<unsigned char>(*p))) {
+			++p;
+		}
+		if((p - start) > 2 && start[0] == 'E' && start[1] == 'D') {
+			continue;
+		}
+		if(!out.empty()) {
+			out.push_back(' ');
+		}
+		out.append(start, p);
+	}
+	return out;
+}
+
+} // namespace Alarmud
 
 #if !USE_MYSQL
 #include "db.hpp"

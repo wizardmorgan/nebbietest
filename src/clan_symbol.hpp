@@ -22,7 +22,10 @@ struct obj_data;
  */
 void clan_symbol_boot_migrate();
 
-/** true se il vnum e' nella lista simboli del clan (seed). */
+/**
+ * true se il vnum e' un simbolo clan registrato (seed storico e/o riga
+ * attiva in MySQL clan_symbol - es. creato con clan registra).
+ */
 bool clan_symbol_is_listed_vnum(unsigned vnum);
 
 /** true se ch puo' indossare questo simbolo (principe / vassallo / imm). */
@@ -84,7 +87,7 @@ inline void clan_symbol_try_auto_wear(struct char_data*, struct obj_data*) {}
 inline void clan_symbol_strip_from_char(struct char_data*, const char*) {}
 #endif
 
-/** Comando clan: vassalli / simboli / assegna / associa / ripudia / quota. */
+/** Comando clan: info / vassalli / simboli / assegna / associa / ripudia / quota. */
 ACTION_FUNC(do_clan);
 
 } // namespace Alarmud

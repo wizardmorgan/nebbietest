@@ -36,9 +36,24 @@ namespace {
 
 ProcDensityConfig g_density{};
 ProcRewardsConfig g_rewards{};
+ProcLevelConfig g_levels{};
+ProcSoloKitConfig g_solo_kit{};
+ProcHirelingConfig g_hireling{};
 
 constexpr const char* kCrystalNames[PROCAREA_CRYSTAL_COUNT] = {
 	"verde", "blu", "rosso", "arancione", "fucsia",
+};
+
+constexpr const char* kSoloKitKeyNames[PROCAREA_SOLO_KIT_COUNT] = {
+	"clmk",
+	"fullhybrid",
+	"healhybrid",
+	"supportcaster",
+	"dpshybrid",
+	"puremelee",
+	"purehealer",
+	"beholdercaster",
+	"othercaster",
 };
 
 [[nodiscard]] bool is_balance_wiz(char_data* ch) {
@@ -117,6 +132,46 @@ void sanitize_rewards(ProcRewardsConfig& r) {
 	}
 }
 
+void sanitize_levels(ProcLevelConfig& L) {
+	for(int i = 0; i < PROCAREA_TEMPLATE_BANDS; ++i) {
+		L.fascia[i] = clamp_int(L.fascia[i], 0, 8);
+	}
+	L.boss_bonus = clamp_int(L.boss_bonus, 0, 10);
+	L.trap_bonus_lo = clamp_int(L.trap_bonus_lo, 0, 10);
+	L.trap_bonus_hi = clamp_int(L.trap_bonus_hi, 0, 10);
+	if(L.trap_bonus_hi < L.trap_bonus_lo) {
+		L.trap_bonus_hi = L.trap_bonus_lo;
+	}
+}
+
+void sanitize_solo_kit(ProcSoloKitConfig& k) {
+	for(int i = 0; i < PROCAREA_SOLO_KIT_COUNT; ++i) {
+		k.kit_base[i] = clamp_float(k.kit_base[i], 0.50f, 1.20f);
+		k.corridor_none_mult[i] = clamp_float(k.corridor_none_mult[i], 1.00f, 5.00f);
+		k.caster_keep_mult[i] = clamp_float(k.caster_keep_mult[i], 0.0f, 1.00f);
+	}
+	/* cl/mk ancora: forzato a 1.00 dopo clamp soft */
+	k.kit_base[static_cast<int>(ProcSoloKit::ClMk)] = 1.00f;
+	k.corridor_none_mult[static_cast<int>(ProcSoloKit::ClMk)] = 1.00f;
+	k.caster_keep_mult[static_cast<int>(ProcSoloKit::ClMk)] = 1.00f;
+	k.beholder_mult_low = clamp_float(k.beholder_mult_low, 0.80f, 1.40f);
+	k.beholder_mult_high = clamp_float(k.beholder_mult_high, 0.70f, 1.20f);
+	k.toughness_min = clamp_float(k.toughness_min, 0.50f, 1.00f);
+	k.toughness_max = clamp_float(k.toughness_max, 0.80f, 1.00f);
+	if(k.toughness_max < k.toughness_min) {
+		k.toughness_max = k.toughness_min;
+	}
+}
+
+void sanitize_hireling(ProcHirelingConfig& h) {
+	h.frag_num = clamp_int(h.frag_num, 1, 100);
+	h.frag_den = clamp_int(h.frag_den, 1, 100);
+	h.gold_per_level = clamp_int(h.gold_per_level, 0, 100000);
+	if(h.class_mask == 0UL) {
+		h.class_mask = CLASS_MAGIC_USER | CLASS_SORCERER | CLASS_PSI | CLASS_DRUID | CLASS_CLERIC;
+	}
+}
+
 using KeyMap = std::unordered_map<std::string, std::string>;
 
 void put_int(KeyMap& m, const std::string& k, int v) {
@@ -185,6 +240,140 @@ void export_rewards(KeyMap& m) {
 		put_int(m, p + "drop_corr", g_rewards.crystal[i].frag_drop_corridor_pct);
 		put_int(m, p + "drop_tes", g_rewards.crystal[i].frag_drop_treasure_pct);
 	}
+}
+
+void export_levels(KeyMap& m) {
+	for(int i = 0; i < PROCAREA_TEMPLATE_BANDS; ++i) {
+		put_int(m, "fascia_" + std::to_string(i), g_levels.fascia[i]);
+	}
+	put_int(m, "boss_bonus", g_levels.boss_bonus);
+	put_int(m, "trap_bonus_lo", g_levels.trap_bonus_lo);
+	put_int(m, "trap_bonus_hi", g_levels.trap_bonus_hi);
+}
+
+void export_solo_kit(KeyMap& m) {
+	for(int i = 0; i < PROCAREA_SOLO_KIT_COUNT; ++i) {
+		const std::string name = kSoloKitKeyNames[i];
+		put_float(m, "base_" + name, g_solo_kit.kit_base[i]);
+		put_float(m, "none_" + name, g_solo_kit.corridor_none_mult[i]);
+		put_float(m, "caster_" + name, g_solo_kit.caster_keep_mult[i]);
+	}
+	put_float(m, "beholder_low", g_solo_kit.beholder_mult_low);
+	put_float(m, "beholder_high", g_solo_kit.beholder_mult_high);
+	put_float(m, "toughness_min", g_solo_kit.toughness_min);
+	put_float(m, "toughness_max", g_solo_kit.toughness_max);
+}
+
+[[nodiscard]] unsigned long hireling_class_bit_from_token(std::string_view tok) {
+	if(tok == "mu" || tok == "mage" || tok == "magic" || tok == "magicuser") {
+		return CLASS_MAGIC_USER;
+	}
+	if(tok == "sorc" || tok == "sorcerer") {
+		return CLASS_SORCERER;
+	}
+	if(tok == "psi" || tok == "psionicist") {
+		return CLASS_PSI;
+	}
+	if(tok == "druid" || tok == "dr") {
+		return CLASS_DRUID;
+	}
+	if(tok == "cleric" || tok == "cl") {
+		return CLASS_CLERIC;
+	}
+	if(tok == "wa" || tok == "warrior") {
+		return CLASS_WARRIOR;
+	}
+	if(tok == "th" || tok == "thief") {
+		return CLASS_THIEF;
+	}
+	if(tok == "mk" || tok == "monk") {
+		return CLASS_MONK;
+	}
+	if(tok == "ba" || tok == "barb" || tok == "barbarian") {
+		return CLASS_BARBARIAN;
+	}
+	if(tok == "pa" || tok == "paladin") {
+		return CLASS_PALADIN;
+	}
+	if(tok == "ra" || tok == "ranger") {
+		return CLASS_RANGER;
+	}
+	return 0UL;
+}
+
+[[nodiscard]] std::string hireling_class_mask_to_string(unsigned long mask) {
+	struct Tok {
+		unsigned long bit;
+		const char* name;
+	};
+	static constexpr Tok kToks[] = {
+		{ CLASS_MAGIC_USER, "mu" }, { CLASS_SORCERER, "sorc" }, { CLASS_PSI, "psi" },
+		{ CLASS_DRUID, "druid" },   { CLASS_CLERIC, "cleric" }, { CLASS_WARRIOR, "wa" },
+		{ CLASS_THIEF, "th" },      { CLASS_MONK, "mk" },       { CLASS_BARBARIAN, "ba" },
+		{ CLASS_PALADIN, "pa" },    { CLASS_RANGER, "ra" },
+	};
+	std::string out;
+	for(const Tok& t : kToks) {
+		if((mask & t.bit) == 0UL) {
+			continue;
+		}
+		if(!out.empty()) {
+			out += ',';
+		}
+		out += t.name;
+	}
+	return out.empty() ? "none" : out;
+}
+
+[[nodiscard]] bool hireling_parse_class_mask(const std::string& s, unsigned long& out) {
+	if(s == "default" || s == "casters") {
+		out = CLASS_MAGIC_USER | CLASS_SORCERER | CLASS_PSI | CLASS_DRUID | CLASS_CLERIC;
+		return true;
+	}
+	unsigned long mask = 0UL;
+	std::string token;
+	for(char c : s) {
+		if(c == ',' || c == '|' || c == ' ' || c == '+') {
+			if(!token.empty()) {
+				for(char& ch : token) {
+					ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+				}
+				const unsigned long bit = hireling_class_bit_from_token(token);
+				if(bit == 0UL) {
+					return false;
+				}
+				mask |= bit;
+				token.clear();
+			}
+			continue;
+		}
+		token.push_back(c);
+	}
+	if(!token.empty()) {
+		for(char& ch : token) {
+			ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+		}
+		const unsigned long bit = hireling_class_bit_from_token(token);
+		if(bit == 0UL) {
+			return false;
+		}
+		mask |= bit;
+	}
+	if(mask == 0UL) {
+		return false;
+	}
+	out = mask;
+	return true;
+}
+
+void export_hireling(KeyMap& m) {
+	put_int(m, "enabled", g_hireling.enabled ? 1 : 0);
+	put_int(m, "rebuy", g_hireling.rebuy ? 1 : 0);
+	put_int(m, "allow_multi", g_hireling.allow_multi ? 1 : 0);
+	m["classes"] = hireling_class_mask_to_string(g_hireling.class_mask);
+	put_int(m, "frag_num", g_hireling.frag_num);
+	put_int(m, "frag_den", g_hireling.frag_den);
+	put_int(m, "gold_per_level", g_hireling.gold_per_level);
 }
 
 [[nodiscard]] bool parse_int_val(const std::string& s, int& out) {
@@ -337,6 +526,104 @@ void apply_rewards_key(const std::string& key, const std::string& val) {
 	}
 }
 
+void apply_levels_key(const std::string& key, const std::string& val) {
+	int iv = 0;
+	if(!parse_int_val(val, iv)) {
+		return;
+	}
+	if(key.rfind("fascia_", 0) == 0) {
+		const int idx = std::atoi(key.c_str() + 7);
+		if(idx >= 0 && idx < PROCAREA_TEMPLATE_BANDS) {
+			g_levels.fascia[idx] = iv;
+		}
+	} else if(key == "boss_bonus") {
+		g_levels.boss_bonus = iv;
+	} else if(key == "trap_bonus_lo") {
+		g_levels.trap_bonus_lo = iv;
+	} else if(key == "trap_bonus_hi") {
+		g_levels.trap_bonus_hi = iv;
+	}
+}
+
+[[nodiscard]] int solo_kit_index_from_suffix(std::string_view suffix) {
+	for(int i = 0; i < PROCAREA_SOLO_KIT_COUNT; ++i) {
+		if(suffix == kSoloKitKeyNames[i]) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+void apply_solo_kit_key(const std::string& key, const std::string& val) {
+	float fv = 0.0f;
+	if(!parse_float_val(val, fv)) {
+		return;
+	}
+	if(key == "beholder_low") {
+		g_solo_kit.beholder_mult_low = fv;
+		return;
+	}
+	if(key == "beholder_high") {
+		g_solo_kit.beholder_mult_high = fv;
+		return;
+	}
+	if(key == "toughness_min") {
+		g_solo_kit.toughness_min = fv;
+		return;
+	}
+	if(key == "toughness_max") {
+		g_solo_kit.toughness_max = fv;
+		return;
+	}
+	if(key.rfind("base_", 0) == 0) {
+		const int idx = solo_kit_index_from_suffix(key.substr(5));
+		if(idx >= 0) {
+			g_solo_kit.kit_base[idx] = fv;
+		}
+		return;
+	}
+	if(key.rfind("none_", 0) == 0) {
+		const int idx = solo_kit_index_from_suffix(key.substr(5));
+		if(idx >= 0) {
+			g_solo_kit.corridor_none_mult[idx] = fv;
+		}
+		return;
+	}
+	if(key.rfind("caster_", 0) == 0) {
+		const int idx = solo_kit_index_from_suffix(key.substr(7));
+		if(idx >= 0) {
+			g_solo_kit.caster_keep_mult[idx] = fv;
+		}
+	}
+}
+
+void apply_hireling_key(const std::string& key, const std::string& val) {
+	if(key == "classes") {
+		unsigned long mask = 0UL;
+		if(hireling_parse_class_mask(val, mask)) {
+			g_hireling.class_mask = mask;
+		}
+		return;
+	}
+	int iv = 0;
+	if(!parse_int_val(val, iv)) {
+		return;
+	}
+	if(key == "enabled") {
+		g_hireling.enabled = iv != 0;
+	} else if(key == "rebuy") {
+		g_hireling.rebuy = iv != 0;
+	} else if(key == "allow_multi") {
+		g_hireling.allow_multi = iv != 0;
+	} else if(key == "frag_num") {
+		g_hireling.frag_num = iv;
+	} else if(key == "frag_den") {
+		g_hireling.frag_den = iv;
+	} else if(key == "gold_per_level") {
+		g_hireling.gold_per_level = iv;
+	}
+}
+
 #if USE_MYSQL
 void load_from_db() {
 	DB* db = Sql::getMysql();
@@ -356,11 +643,23 @@ void load_from_db() {
 			} else if(key.rfind("r_", 0) == 0) {
 				apply_rewards_key(key.substr(2), val);
 				++loaded;
+			} else if(key.rfind("l_", 0) == 0) {
+				apply_levels_key(key.substr(2), val);
+				++loaded;
+			} else if(key.rfind("k_", 0) == 0) {
+				apply_solo_kit_key(key.substr(2), val);
+				++loaded;
+			} else if(key.rfind("h_", 0) == 0) {
+				apply_hireling_key(key.substr(2), val);
+				++loaded;
 			}
 		}
 		t.commit();
 		sanitize_density(g_density);
 		sanitize_rewards(g_rewards);
+		sanitize_levels(g_levels);
+		sanitize_solo_kit(g_solo_kit);
+		sanitize_hireling(g_hireling);
 		if(loaded > 0) {
 			mudlog(LOG_CHECK, "procarea_balance: loaded %d keys from DB", loaded);
 		}
@@ -370,7 +669,9 @@ void load_from_db() {
 	}
 }
 
-void save_map_to_db(const KeyMap& density_map, const KeyMap& rewards_map) {
+void save_map_to_db(const KeyMap& density_map, const KeyMap& rewards_map,
+					const KeyMap& levels_map, const KeyMap& kit_map,
+					const KeyMap& hireling_map) {
 	DB* db = Sql::getMysql();
 	if(db == nullptr) {
 		return;
@@ -391,6 +692,9 @@ void save_map_to_db(const KeyMap& density_map, const KeyMap& rewards_map) {
 		};
 		persist_map("d_", density_map);
 		persist_map("r_", rewards_map);
+		persist_map("l_", levels_map);
+		persist_map("k_", kit_map);
+		persist_map("h_", hireling_map);
 		t.commit();
 	}
 	catch(const odb::exception& e) {
@@ -488,6 +792,121 @@ void premi_help(char_data* ch) {
 		"  Non usare osave <obj> 651xx su file (prototipo condiviso).\n\r"
 		"Esempi: $c0014wizhelp dimensione premi esempi$c0007\n\r",
 		ch);
+}
+
+void dump_levels(char_data* ch) {
+	const ProcLevelConfig& L = g_levels;
+	std::ostringstream os;
+	os << "$c0014=== Livelli Dimensione (runtime, default B1.5) ===$c0007\n\r"
+	   << "Vale per i mob delle $c0010prossime$c0007 istanze.\n\r"
+	   << "normale = (group_max_level - 1) + fascia[band]; trap +lo..hi; boss +bonus.\n\r"
+	   << "fascia bande 0..9:";
+	for(int i = 0; i < PROCAREA_TEMPLATE_BANDS; ++i) {
+		os << " " << L.fascia[i];
+	}
+	os << "\n\rboss_bonus=" << L.boss_bonus << " trap_bonus=" << L.trap_bonus_lo << ".."
+	   << L.trap_bonus_hi << "\n\r"
+	   << "Esempio PG 51 (normali):";
+	for(int band = 0; band < PROCAREA_TEMPLATE_BANDS; ++band) {
+		const int n = (51 - 1) + L.fascia[band];
+		os << " b" << band << "=" << n;
+	}
+	os << "\n\rUso: $c0014dimensione livelli set <chiave> <val>$c0007 | $c0014reset$c0007\n\r"
+	   << "Chiavi: fascia_0..fascia_9, boss_bonus, trap_bonus_lo, trap_bonus_hi\n\r";
+	send_to_char(os.str().c_str(), ch);
+}
+
+void livelli_help(char_data* ch) {
+	send_to_char(
+		"$c0014dimensione livelli$c0007 - mostra fascia livelli per banda\n\r"
+		"$c0014dimensione livelli set <chiave> <val>$c0007\n\r"
+		"$c0014dimensione livelli reset$c0007 - torna a B1.5 (1,1,1,1,2,2,2,3,3,4)\n\r"
+		"Chiavi: fascia_0..fascia_9 (0-8), boss_bonus, trap_bonus_lo/hi\n\r"
+		"Effetto: solo istanze $c0010nuove$c0007.\n\r"
+		"Esempi: $c0014wizhelp dimensione livelli esempi$c0007\n\r",
+		ch);
+}
+
+void dump_solo_kit(char_data* ch) {
+	const ProcSoloKitConfig& k = g_solo_kit;
+	std::ostringstream os;
+	os << "$c0014=== Kit solitaria Dimensione (runtime) ===$c0007\n\r"
+	   << "cl/mk = baseline 1.00 (come oggi). Fascia da eq; kit ritocca durezza/mix.\n\r"
+	   << "beholder_low/high=" << k.beholder_mult_low << "/" << k.beholder_mult_high
+	   << " toughness=" << k.toughness_min << ".." << k.toughness_max << "\n\r";
+	for(int i = 0; i < PROCAREA_SOLO_KIT_COUNT; ++i) {
+		os << kSoloKitKeyNames[i] << ": base=" << k.kit_base[i]
+		   << " none=" << k.corridor_none_mult[i] << " caster=" << k.caster_keep_mult[i]
+		   << "\n\r";
+	}
+	os << "Uso: $c0014dimensione kit set <chiave> <val>$c0007 | $c0014reset$c0007\n\r"
+	   << "Chiavi: base_<kit>, none_<kit>, caster_<kit>, beholder_low/high, "
+		  "toughness_min/max\n\r"
+	   << "Kit: clmk fullhybrid healhybrid supportcaster dpshybrid puremelee "
+		  "purehealer beholdercaster othercaster\n\r";
+	send_to_char(os.str().c_str(), ch);
+}
+
+void kit_help(char_data* ch) {
+	send_to_char(
+		"$c0014dimensione kit$c0007 - mostra bilanciamento kit solitaria\n\r"
+		"$c0014dimensione kit set <chiave> <val>$c0007\n\r"
+		"$c0014dimensione kit reset$c0007 - default (cl/mk=1, altri sotto)\n\r"
+		"Fascia: dall'eq. Durezza mob: kit_base * beholder (max 1.00).\n\r"
+		"none_*: boost % none corridoio. caster_*: quanto tenere mu/psi/dr.\n\r"
+		"Effetto: solo istanze $c0010solitarie nuove$c0007.\n\r"
+		"Esempi: $c0014wizhelp dimensione kit esempi$c0007\n\r",
+		ch);
+}
+
+[[nodiscard]] bool handle_levels_wiz(char_data* ch, const char* rest) {
+	std::array<char, MAX_INPUT_LENGTH> arg1{};
+	std::array<char, MAX_INPUT_LENGTH> arg2{};
+	std::array<char, MAX_INPUT_LENGTH> arg3{};
+	const char* p = rest != nullptr ? rest : "";
+	p = one_argument(p, arg1.data());
+	p = one_argument(p, arg2.data());
+	one_argument(p, arg3.data());
+
+	if(arg1[0] == '\0') {
+		dump_levels(ch);
+		return true;
+	}
+	if(!strcasecmp(arg1.data(), "help") || !strcasecmp(arg1.data(), "?")) {
+		livelli_help(ch);
+		return true;
+	}
+	if(!strcasecmp(arg1.data(), "reset")) {
+		procarea_balance_reset_levels();
+		procarea_balance_save();
+		send_to_char("Livelli ripristinati a B1.5 e salvati.\n\r", ch);
+		mudlog(LOG_CHECK, "procarea_balance: %s reset livelli", GET_NAME(ch));
+		return true;
+	}
+	if(!strcasecmp(arg1.data(), "set")) {
+		if(arg2[0] == '\0' || arg3[0] == '\0') {
+			send_to_char("Uso: dimensione livelli set <chiave> <valore>\n\r", ch);
+			return true;
+		}
+		KeyMap probe;
+		export_levels(probe);
+		if(probe.find(arg2.data()) == probe.end()) {
+			send_to_char("Chiave livelli sconosciuta. Vedi: dimensione livelli help\n\r", ch);
+			return true;
+		}
+		apply_levels_key(arg2.data(), arg3.data());
+		sanitize_levels(g_levels);
+		procarea_balance_save();
+		std::ostringstream os;
+		os << "Impostato " << arg2.data() << "=" << arg3.data()
+		   << " (clamp/salvato; prossime istanze).\n\r";
+		send_to_char(os.str().c_str(), ch);
+		mudlog(LOG_CHECK, "procarea_balance: %s livelli set %s=%s", GET_NAME(ch), arg2.data(),
+			   arg3.data());
+		return true;
+	}
+	send_to_char("Sotto-comandi: (vuoto) | help | set | reset\n\r", ch);
+	return true;
 }
 
 [[nodiscard]] bool handle_density_wiz(char_data* ch, const char* rest) {
@@ -605,6 +1024,131 @@ void premi_help(char_data* ch) {
 	return true;
 }
 
+[[nodiscard]] bool handle_solo_kit_wiz(char_data* ch, const char* rest) {
+	std::array<char, MAX_INPUT_LENGTH> arg1{};
+	std::array<char, MAX_INPUT_LENGTH> arg2{};
+	std::array<char, MAX_INPUT_LENGTH> arg3{};
+	const char* p = rest != nullptr ? rest : "";
+	p = one_argument(p, arg1.data());
+	p = one_argument(p, arg2.data());
+	one_argument(p, arg3.data());
+
+	if(arg1[0] == '\0') {
+		dump_solo_kit(ch);
+		return true;
+	}
+	if(!strcasecmp(arg1.data(), "help") || !strcasecmp(arg1.data(), "?")) {
+		kit_help(ch);
+		return true;
+	}
+	if(!strcasecmp(arg1.data(), "reset")) {
+		procarea_balance_reset_solo_kit();
+		procarea_balance_save();
+		send_to_char("Kit solitaria ripristinato ai default e salvato.\n\r", ch);
+		mudlog(LOG_CHECK, "procarea_balance: %s reset kit", GET_NAME(ch));
+		return true;
+	}
+	if(!strcasecmp(arg1.data(), "set")) {
+		if(arg2[0] == '\0' || arg3[0] == '\0') {
+			send_to_char("Uso: dimensione kit set <chiave> <valore>\n\r", ch);
+			return true;
+		}
+		KeyMap probe;
+		export_solo_kit(probe);
+		if(probe.find(arg2.data()) == probe.end()) {
+			send_to_char("Chiave kit sconosciuta. Vedi: dimensione kit help\n\r", ch);
+			return true;
+		}
+		apply_solo_kit_key(arg2.data(), arg3.data());
+		sanitize_solo_kit(g_solo_kit);
+		procarea_balance_save();
+		std::ostringstream os;
+		os << "Impostato " << arg2.data() << "=" << arg3.data()
+		   << " (clamp/salvato; prossime solitarie).\n\r";
+		send_to_char(os.str().c_str(), ch);
+		mudlog(LOG_CHECK, "procarea_balance: %s kit set %s=%s", GET_NAME(ch), arg2.data(),
+			   arg3.data());
+		return true;
+	}
+	send_to_char("Sotto-comandi: (vuoto) | help | set | reset\n\r", ch);
+	return true;
+}
+
+void dump_hireling(char_data* ch) {
+	const ProcHirelingConfig& h = g_hireling;
+	std::ostringstream os;
+	os << "$c0014=== Scorta solitaria (assolda) ===$c0007\n\r"
+	   << "enabled=" << (h.enabled ? 1 : 0) << " rebuy=" << (h.rebuy ? 1 : 0)
+	   << " allow_multi=" << (h.allow_multi ? 1 : 0) << "\n\r"
+	   << "classes=" << hireling_class_mask_to_string(h.class_mask) << "\n\r"
+	   << "cost frag=(livello*banda*" << h.frag_num << ")/" << h.frag_den
+	   << " | oro=livello*" << h.gold_per_level
+	   << " (se frag insufficienti spezza rune a "
+	   << procarea_fragments_per_rune() << " frag/runa, resto ai frammenti)\n\r"
+	   << "Uso: $c0014dimensione scorta set <chiave> <val>$c0007 | $c0014reset$c0007\n\r";
+	send_to_char(os.str().c_str(), ch);
+}
+
+void hireling_help(char_data* ch) {
+	send_to_char(
+		"$c0014dimensione scorta$c0007 - mostra config assolda\n\r"
+		"$c0014dimensione scorta set <chiave> <val>$c0007\n\r"
+		"$c0014dimensione scorta reset$c0007 - default (on, no rebuy, no multi, caster)\n\r"
+		"Chiavi: enabled, rebuy, allow_multi, classes, frag_num, frag_den, gold_per_level\n\r"
+		"classes: mu,sorc,psi,druid,cleric (o wa,th,mk,ba,pa,ra) separati da virgola\n\r"
+		"Alias: hireling | assolda\n\r",
+		ch);
+}
+
+[[nodiscard]] bool handle_hireling_wiz(char_data* ch, const char* rest) {
+	std::array<char, MAX_INPUT_LENGTH> arg1{};
+	std::array<char, MAX_INPUT_LENGTH> arg2{};
+	std::array<char, MAX_INPUT_LENGTH> arg3{};
+	const char* p = rest != nullptr ? rest : "";
+	p = one_argument(p, arg1.data());
+	p = one_argument(p, arg2.data());
+	one_argument(p, arg3.data());
+
+	if(arg1[0] == '\0') {
+		dump_hireling(ch);
+		return true;
+	}
+	if(!strcasecmp(arg1.data(), "help") || !strcasecmp(arg1.data(), "?")) {
+		hireling_help(ch);
+		return true;
+	}
+	if(!strcasecmp(arg1.data(), "reset")) {
+		procarea_balance_reset_hireling();
+		procarea_balance_save();
+		send_to_char("Scorta ripristinata ai default e salvata.\n\r", ch);
+		mudlog(LOG_CHECK, "procarea_balance: %s reset hireling", GET_NAME(ch));
+		return true;
+	}
+	if(!strcasecmp(arg1.data(), "set")) {
+		if(arg2[0] == '\0' || arg3[0] == '\0') {
+			send_to_char("Uso: dimensione scorta set <chiave> <valore>\n\r", ch);
+			return true;
+		}
+		KeyMap probe;
+		export_hireling(probe);
+		if(probe.find(arg2.data()) == probe.end()) {
+			send_to_char("Chiave scorta sconosciuta. Vedi: dimensione scorta help\n\r", ch);
+			return true;
+		}
+		apply_hireling_key(arg2.data(), arg3.data());
+		sanitize_hireling(g_hireling);
+		procarea_balance_save();
+		std::ostringstream os;
+		os << "Impostato " << arg2.data() << "=" << arg3.data() << " (salvato).\n\r";
+		send_to_char(os.str().c_str(), ch);
+		mudlog(LOG_CHECK, "procarea_balance: %s hireling set %s=%s", GET_NAME(ch), arg2.data(),
+			   arg3.data());
+		return true;
+	}
+	send_to_char("Sotto-comandi: (vuoto) | help | set | reset\n\r", ch);
+	return true;
+}
+
 } // namespace
 
 const ProcDensityConfig& procarea_density_config() {
@@ -615,12 +1159,36 @@ const ProcRewardsConfig& procarea_rewards_config() {
 	return g_rewards;
 }
 
+const ProcLevelConfig& procarea_level_config() {
+	return g_levels;
+}
+
+const ProcSoloKitConfig& procarea_solo_kit_config() {
+	return g_solo_kit;
+}
+
+const ProcHirelingConfig& procarea_hireling_config() {
+	return g_hireling;
+}
+
 ProcDensityConfig& procarea_density_config_mut() {
 	return g_density;
 }
 
 ProcRewardsConfig& procarea_rewards_config_mut() {
 	return g_rewards;
+}
+
+ProcLevelConfig& procarea_level_config_mut() {
+	return g_levels;
+}
+
+ProcSoloKitConfig& procarea_solo_kit_config_mut() {
+	return g_solo_kit;
+}
+
+ProcHirelingConfig& procarea_hireling_config_mut() {
+	return g_hireling;
 }
 
 int procarea_fragments_per_rune() {
@@ -637,26 +1205,60 @@ void procarea_balance_reset_rewards() {
 	sanitize_rewards(g_rewards);
 }
 
+void procarea_balance_reset_levels() {
+	g_levels = ProcLevelConfig{};
+	sanitize_levels(g_levels);
+}
+
+void procarea_balance_reset_solo_kit() {
+	g_solo_kit = ProcSoloKitConfig{};
+	sanitize_solo_kit(g_solo_kit);
+}
+
+void procarea_balance_reset_hireling() {
+	g_hireling = ProcHirelingConfig{};
+	sanitize_hireling(g_hireling);
+}
+
 void procarea_balance_save() {
 	sanitize_density(g_density);
 	sanitize_rewards(g_rewards);
+	sanitize_levels(g_levels);
+	sanitize_solo_kit(g_solo_kit);
+	sanitize_hireling(g_hireling);
 #if USE_MYSQL
 	KeyMap dmap;
 	KeyMap rmap;
+	KeyMap lmap;
+	KeyMap kmap;
+	KeyMap hmap;
 	export_density(dmap);
 	export_rewards(rmap);
-	save_map_to_db(dmap, rmap);
+	export_levels(lmap);
+	export_solo_kit(kmap);
+	export_hireling(hmap);
+	save_map_to_db(dmap, rmap, lmap, kmap, hmap);
 #endif
 }
 
 void procarea_balance_boot() {
 	procarea_balance_reset_density();
 	procarea_balance_reset_rewards();
+	procarea_balance_reset_levels();
+	procarea_balance_reset_solo_kit();
+	procarea_balance_reset_hireling();
 #if USE_MYSQL
 	load_from_db();
 #endif
-	mudlog(LOG_CHECK, "procarea_balance: ready (bias=%.2f rooms_max_hi=%d)", g_density.bias,
-		   g_density.rooms_max_hi);
+	mudlog(LOG_CHECK,
+		   "procarea_balance: ready (bias=%.2f rooms_max_hi=%d fascia9=%d kit_clmk=%.2f)",
+		   g_density.bias, g_density.rooms_max_hi, g_levels.fascia[PROCAREA_TEMPLATE_BANDS - 1],
+		   g_solo_kit.kit_base[static_cast<int>(ProcSoloKit::ClMk)]);
+	if(g_hireling.enabled) {
+		mudlog(LOG_CHECK, "procarea_balance: hireling enabled");
+	} else {
+		mudlog(LOG_CHECK, "procarea_balance: hireling disabled");
+	}
 }
 
 bool procarea_try_balance_wiz_command(char_data* ch, const char* subcmd, const char* rest) {
@@ -677,6 +1279,30 @@ bool procarea_try_balance_wiz_command(char_data* ch, const char* subcmd, const c
 			return true;
 		}
 		return handle_rewards_wiz(ch, rest);
+	}
+	if(!strcasecmp(subcmd, "livelli") || !strcasecmp(subcmd, "levels") ||
+	   !strcasecmp(subcmd, "level")) {
+		if(!is_balance_wiz(ch)) {
+			send_to_char("Solo gli immortali possono modificare i livelli.\n\r", ch);
+			return true;
+		}
+		return handle_levels_wiz(ch, rest);
+	}
+	if(!strcasecmp(subcmd, "kit") || !strcasecmp(subcmd, "solokit") ||
+	   !strcasecmp(subcmd, "solo")) {
+		if(!is_balance_wiz(ch)) {
+			send_to_char("Solo gli immortali possono modificare il kit solitaria.\n\r", ch);
+			return true;
+		}
+		return handle_solo_kit_wiz(ch, rest);
+	}
+	if(!strcasecmp(subcmd, "scorta") || !strcasecmp(subcmd, "hireling") ||
+	   !strcasecmp(subcmd, "assolda")) {
+		if(!is_balance_wiz(ch)) {
+			send_to_char("Solo gli immortali possono modificare la scorta.\n\r", ch);
+			return true;
+		}
+		return handle_hireling_wiz(ch, rest);
 	}
 	return false;
 }

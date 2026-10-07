@@ -1,7 +1,7 @@
 #
 "53" "DIO_MINORE" "LIVELLO 53"
 
-$c0014Livello 53$c0007 — Dio minore
+$c0014Livello 53$c0007 - Dio minore
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -115,21 +115,59 @@ Sintassi:
   show rooms <zona#|death|private>
   show items
   show rare                    (livello alto)
-  show db [n|nome|owner]       (edits attivi, numeri densi 1..N)
+  show edits <nome>            (riepilogo listino edit PG)
+  show db [n|nome|owner]       (lista instance attive, numeri densi 1..N)
   show db deleted [n|nome|owner]
   show db history <n>
   show db history deleted <n>
+  show loss <nome> ...         (audit perdite oggetti; vedi SHOW LOSS)
 
 Per show objects: colonne VNUM, rnum, count (in-memory), db (inventori
 MySQL), names. Asterisco = file edit in objects/ senza prototipo in memoria.
 
+$c0015show edits <nome>$c0007
+  Riepilogo compatto listino: pezzi 0/21, pool e over, cap
+  DAM+SP/HR/SF/AC (delta vs proto), stats, resi/imm/spell e
+  mancanti, warn per pezzo fuori limite. Esclusi simboli clan.
+  Funziona anche offline.
+
 show db elenca solo gli edit attivi (non soft-deleted).
 I numeri sono di lista (si rinumerano dopo odelete), non il pk MySQL.
-Alias: show edits | show instances (compatibile).
+Alias lista: show instances (compatibile).
 I simboli del clan migrati compaiono come instance (owner = principe),
 non come file objects/ nel range 34k.
 
-$c0013Vedi anche$c0007: OLOAD, OSAVE, STAT, WHERE, ODELETE
+$c0013Vedi anche$c0007: SHOW LOSS, OLOAD, OSAVE, STAT, WHERE, ODELETE, EDITPOOL
+
+
+#
+"SHOW LOSS" "LOSS" "PERDITE"
+
+$c0014Livello minimo$c0007: 53 (Dio minore)
+
+Audit MySQL delle perdite oggetti dei PG migrati (tabella character_item_loss).
+Retention 7 giorni. Immortali (>=52) non vengono loggati.
+
+Sintassi:
+  show loss <nome> [detail|death] [giorni|orario]
+
+Senza sotto-opzioni: riassunto eventi (default ultimi 2 giorni).
+  detail / dettaglio   pezzi aggregati (xN stesso vnum/desc nello stesso at)
+  death / morte        dettaglio DEATH_CORPSE (ultima, o filtrata per orario)
+  giorni               1..7 (max = retention)
+  orario               sottostringa di at, es. 12:56:53
+
+Esempi:
+  show loss montero
+  show loss montero 7
+  show loss montero detail
+  show loss montero death
+  show loss montero death 12:56:53
+
+Kind tipici: DROP, GIVE, STEAL, JUNK, DESTROY, COMBAT_BREAK,
+SHOP_SELL, AUCTION, DEATH_CORPSE, FORCERENT_NORENT.
+
+$c0013Vedi anche$c0007: SHOW
 
 
 #

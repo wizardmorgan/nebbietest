@@ -2,15 +2,15 @@
 
 ## Una directory sola: `~/NebbieArcane/Server`
 
-Non **serve** `docker-vms/Server`. Quella directory era solo un clone del fork usato per testare edit-portal **senza** toccare NebbieArcane — utile se volevi `git pull origin feature/Razze` senza file edit-portal nel working tree.
+Non **serve** `docker-vms/Server`. Quella directory era solo un clone del fork usato per testare edit-portal **senza** toccare NebbieArcane.
 
 Se il mud già gira su **NebbieArcane/Server**, usa **solo quella**:
 
 | Cosa | Dove |
 |------|------|
 | MUD + myst + mysql | `~/NebbieArcane/Server` |
-| `git pull` Montero | `origin feature/Razze` |
-| edit-portal + `edit_portal.cpp` | stesso repo, branch locale (es. merge da `mine/feature/edit-portal`) |
+| `git pull` Montero | `upstream feature/Principi` (Razze = produzione/`develop`) |
+| edit-portal + `edit_portal.cpp` | stesso repo, branch `feature/edit-portal` (da `mine`) |
 | `mud-dev.sh` | `scripts/mud-dev.sh` (dal fork, non in upstream) |
 | `docker-compose.override.yml` | locale, non committato |
 
@@ -23,15 +23,16 @@ cd ~/NebbieArcane/Server
 
 # Remote fork (se non c'è)
 git remote add mine https://github.com/wizardmorgan/nebbietest.git 2>/dev/null || true
+git remote add upstream https://github.com/NebbieArcane/Server.git 2>/dev/null || true
 
-# Porta edit-portal sul branch che usi (es. dopo pull Razze)
+# Porta edit-portal sul branch di lavoro
 git fetch mine feature/edit-portal
+git checkout feature/edit-portal
 git merge mine/feature/edit-portal
-# oppure: git checkout -b feature/Razze-edit-portal mine/feature/edit-portal
 
-# Aggiornamenti upstream Montero
-git fetch origin feature/Razze
-git merge origin/feature/Razze
+# Aggiornamenti upstream Montero (base sviluppo)
+git fetch upstream feature/Principi
+git merge upstream/feature/Principi
 ```
 
 File locali da **non** committare su upstream: `docker-compose.override.yml`, opzionale `scripts/mud-dev.sh` in `.git/info/exclude`.

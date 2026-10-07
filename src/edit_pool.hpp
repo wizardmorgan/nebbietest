@@ -38,6 +38,28 @@ void edit_pool_accumulate_obj_delta(const struct obj_data* obj,
 bool edit_pool_strip_obj(struct obj_data* obj, const struct obj_data* proto);
 
 /**
+ * Polvere achievement su APPLY pool: flag DUSTED, incrementa dust_*,
+ * persist instance se il pezzo e' da edit pool e non ne ha una.
+ */
+void edit_pool_note_player_dust(struct obj_data* obj, struct char_data* ch,
+								 int location, int bonus);
+
+/**
+ * Imposta un contatore polvere (valore assoluto >= 0) e allinea l'APPLY.
+ * SPELLFAIL: n e' il bonus (sull'eq modifier -= n), come use.
+ */
+bool edit_pool_dust_set_absolute(struct obj_data* obj, int location, int value);
+
+/** Azzera tutti i dust_*, toglie DUSTED, toglie gli APPLY corrispondenti. */
+void edit_pool_dust_clear(struct obj_data* obj);
+
+/**
+ * Se DUSTED e dust_* ancora 0, copia il delta pool vs proto nei contatori
+ * (osave dopo reboot, o flag staff). No-op se gia' tracciato.
+ */
+void edit_pool_maybe_capture_dust(struct obj_data* obj);
+
+/**
  * Heal una tantum: istanze gia' strippate a APPLY_NONE ripristinano i pool
  * apply del base_vnum. Idempotente (event edit_pool_proto_restore).
  */
@@ -123,7 +145,7 @@ void edit_pool_migrate_char(struct char_data* ch);
 
 /**
  * Boot: per ogni object_instance attiva, somma delta pool all'owner, strip affect,
- * aggiorna character_stats (solo se edit_pool_migrated=0). Poi marca migrated.
+ * aggiorna character_stats (crea stub se manca la riga). Poi marca migrated.
  */
 void edit_pool_boot_migrate();
 

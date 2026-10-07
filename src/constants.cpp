@@ -2732,6 +2732,8 @@ const char* extra_bits2[] = {
 	"NO-PRINCE",
 	"ONLY-PRINCE",
 	"PROCAREA-REWARD",
+	"DUSTED",
+	"PAID-MALUS",
 	"\n"
 };
 

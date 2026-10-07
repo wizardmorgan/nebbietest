@@ -144,6 +144,27 @@ struct ObjEditListinoSpec {
 [[nodiscard]] ObjEditAnalysis AnalyzeObjEdit(struct obj_data* obj);
 
 /**
+ * Diff vs baseline esplicito (non carica il prototipo boot).
+ * staff_incremental_absolute: valore = solo affect *aggiunti* vs baseline
+ * (togliere bonus gia' in create/proto non abbassa il listino).
+ */
+[[nodiscard]] ObjEditAnalysis AnalyzeObjEditAgainst(struct obj_data* obj,
+													const struct obj_data* baseline,
+													bool staff_incremental_absolute = false);
+
+/** Listino edit solo su modifiche staff dopo il primo osave db procarea. */
+[[nodiscard]] ObjEditAnalysis AnalyzeProcareaStaffEdit(struct obj_data* obj);
+
+/**
+ * Costo listino (scala storage, come diff.valore) di un singolo delta affect
+ * sull'oggetto: AffectSlotValue * scale * class_mult, e *1.5 se l'oggetto ha
+ * ITEM_IMMUNE rispetto al prototipo (stessa pipeline di AnalyzeObjEditAgainst).
+ * delta_mod: quantita' numerica oppure bitmask aggiunta (bitfield APPLY_*).
+ */
+[[nodiscard]] long EditAffectDeltaListinoCost(struct obj_data* obj, int location,
+											  int delta_mod);
+
+/**
  * Applica la scala storage legacy a un ExpValue raw (valore/derent * scale).
  */
 [[nodiscard]] ExpValue ScaleObjExpValue(const ExpValue& raw,

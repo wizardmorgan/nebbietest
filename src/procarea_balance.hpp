@@ -4,6 +4,7 @@
  *ALARMUD*/
 #ifndef __PROCAREA_BALANCE_HPP
 #define __PROCAREA_BALANCE_HPP
+#include "autoenums.hpp"
 #include "procarea.hpp"
 #include "procarea_fatigue.hpp"
 #include "typedefs.hpp"
@@ -78,19 +79,95 @@ struct ProcRewardsConfig {
 	};
 };
 
+/**
+ * Fascia livelli mob per banda template (runtime, WIZ + DB).
+ * Default B1½: bande 0-3→1, 4-6→2, 7-8→3, 9→4.
+ * Livello normale = (group_max_level - 1) + fascia[band]; trap/boss + bonus.
+ */
+struct ProcLevelConfig {
+	int fascia[PROCAREA_TEMPLATE_BANDS] = {1, 1, 1, 1, 2, 2, 2, 3, 3, 4};
+	int boss_bonus = 3;
+	int trap_bonus_lo = 1;
+	int trap_bonus_hi = 2;
+};
+
+/**
+ * Kit solitaria (runtime, WIZ + DB). cl/mk = baseline 1.00 (com'e' oggi);
+ * gli altri scendono. Fascia dall'eq grezzo; queste manopole ritoccano
+ * durezza mob e mix classi / % none corridoio.
+ */
+enum class ProcSoloKit : int {
+	ClMk = 0,
+	FullHybrid,
+	HealHybrid,
+	SupportCaster,
+	DpsHybrid,
+	PureMelee,
+	PureHealer,
+	BeholderCaster,
+	OtherCaster,
+	Count,
+};
+
+constexpr int PROCAREA_SOLO_KIT_COUNT = static_cast<int>(ProcSoloKit::Count);
+
+struct ProcSoloKitConfig {
+	/* durezza relativa (cl/mk = 1.00) */
+	float kit_base[PROCAREA_SOLO_KIT_COUNT] = {
+		1.00f, 0.95f, 0.92f, 0.90f, 0.88f, 0.86f, 0.86f, 0.85f, 0.81f,
+	};
+	/* boost % none corridoio */
+	float corridor_none_mult[PROCAREA_SOLO_KIT_COUNT] = {
+		1.00f, 1.00f, 1.05f, 1.10f, 1.10f, 1.40f, 2.00f, 1.25f, 2.75f,
+	};
+	/* quanto tenere dei caster nel mix (1 = invariato) */
+	float caster_keep_mult[PROCAREA_SOLO_KIT_COUNT] = {
+		1.00f, 1.00f, 0.95f, 0.95f, 0.95f, 0.85f, 0.75f, 0.90f, 1.00f,
+	};
+	/* curva beholder (nudo): alto in basso, basso in alto */
+	float beholder_mult_low = 1.10f;
+	float beholder_mult_high = 0.90f;
+	float toughness_min = 0.70f;
+	float toughness_max = 1.00f; /* mai sopra cl/mk */
+};
+
+/** Scorta tank solitaria (assolda): policy + costi. Persistenza prefisso h_. */
+struct ProcHirelingConfig {
+	bool enabled = true;
+	bool rebuy = false; /* dopo morte hireling */
+	bool allow_multi = false;
+	/** Classi ammesse (bit CLASS_*). Default: caster mono tipici. */
+	unsigned long class_mask = CLASS_MAGIC_USER | CLASS_SORCERER | CLASS_PSI |
+							   CLASS_DRUID | CLASS_CLERIC;
+	/** Frammenti = (livello * effective_band * frag_num) / frag_den */
+	int frag_num = 1;
+	int frag_den = 10;
+	/** Oro = livello * gold_per_level (heavy). */
+	int gold_per_level = 1000;
+};
+
 void procarea_balance_boot();
 void procarea_balance_save();
 void procarea_balance_reset_density();
 void procarea_balance_reset_rewards();
+void procarea_balance_reset_levels();
+void procarea_balance_reset_solo_kit();
+void procarea_balance_reset_hireling();
 
 [[nodiscard]] const ProcDensityConfig& procarea_density_config();
 [[nodiscard]] const ProcRewardsConfig& procarea_rewards_config();
+[[nodiscard]] const ProcLevelConfig& procarea_level_config();
+[[nodiscard]] const ProcSoloKitConfig& procarea_solo_kit_config();
+[[nodiscard]] const ProcHirelingConfig& procarea_hireling_config();
 [[nodiscard]] ProcDensityConfig& procarea_density_config_mut();
 [[nodiscard]] ProcRewardsConfig& procarea_rewards_config_mut();
+[[nodiscard]] ProcLevelConfig& procarea_level_config_mut();
+[[nodiscard]] ProcSoloKitConfig& procarea_solo_kit_config_mut();
+[[nodiscard]] ProcHirelingConfig& procarea_hireling_config_mut();
 
 [[nodiscard]] int procarea_fragments_per_rune();
 
-/** true se ha gestito densita/premi (anche errori di sintassi). */
+/** true se ha gestito densita/premi/livelli/kit/scorta (anche errori di sintassi). */
 bool procarea_try_balance_wiz_command(char_data* ch, const char* subcmd, const char* rest);
 
 } // namespace Alarmud

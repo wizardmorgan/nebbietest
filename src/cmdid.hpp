@@ -529,7 +529,10 @@ namespace Alarmud {
 #define CMD_CLAN                517
 #define CMD_CTELL               518
 #define CMD_EDITPOOL            519
-#define MAX_CMD_LIST            520
+#define CMD_ODUST               520
+#define CMD_DBEXPORT            521
+#define CMD_ASSOLDA             522
+#define MAX_CMD_LIST            523
 } // namespace Alarmud
 
 #endif

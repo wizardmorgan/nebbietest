@@ -8,12 +8,14 @@
  * */
 /***************************  System  include ************************************/
 #include <cstring>
+#include <strings.h>
 #include <cstdio>
 #include <cctype>
 #include <cassert>
 #include <cstdlib>
 #include <cstdint>
 #include <ctime>
+#include <string>
 /***************************  General include ************************************/
 #include "config.hpp"
 #include "typedefs.hpp"
@@ -35,6 +37,7 @@
 #include "events.hpp"
 #include "fight.hpp"
 #include "interpreter.hpp"
+#include "object_instance.hpp"
 #include "utility.hpp"
 #include "modify.hpp"
 #include "opinion.hpp"
@@ -1313,6 +1316,15 @@ void sync_char_carry_counts(struct char_data* ch) {
 		++count;
 		weight += GET_OBJ_WEIGHT(obj);
 	}
+#if EQPESANTE
+	/* Stessa regola di equip_char: eq indossato pesa, zaino (WEAR_BACK) no. */
+	for(int i = 0; i < MAX_WEAR; ++i) {
+		if(ch->equipment[i] == nullptr || i == WEAR_BACK) {
+			continue;
+		}
+		weight += GET_OBJ_WEIGHT(ch->equipment[i]);
+	}
+#endif
 	if(count > 255) {
 		mudlog(LOG_SYSERR, "sync_char_carry_counts: %s carrying %d items (cap 255)",
 			   GET_NAME(ch), count);
@@ -1586,9 +1598,8 @@ struct obj_data* unequip_char(struct char_data* ch, int pos) {
 	if(pos == WEAR_BACK) {
 		IS_CARRYING_W(obj->equipped_by) += GET_OBJ_WEIGHT(obj);    // SALVO controllo se borsa per il peso
 	}
-#else
-	IS_CARRYING_W(obj->equipped_by) += GET_OBJ_WEIGHT(obj);
 #endif
+	/* Con EQPESANTE false il peso conta solo in inventorio (obj_to_char / obj_from_char). */
 	ch->equipment[pos] = 0;
 	obj->equipped_by = 0;
 	obj->eq_pos = -1;
@@ -1628,6 +1639,54 @@ int get_number(char** name) {
 	return(1);
 }
 
+[[nodiscard]] static bool obj_ed_token_is_owner(const char* keywords, const char* arg) {
+	if(!keywords || !arg || !*arg) {
+		return false;
+	}
+	const char* p = keywords;
+	while(*p) {
+		while(*p && isspace(static_cast<unsigned char>(*p))) {
+			++p;
+		}
+		if(!*p) {
+			break;
+		}
+		const char* start = p;
+		while(*p && !isspace(static_cast<unsigned char>(*p))) {
+			++p;
+		}
+		if((p - start) > 2 && start[0] == 'E' && start[1] == 'D') {
+			const size_t n = static_cast<size_t>(p - (start + 2));
+			if(n > 0 && strncasecmp(start + 2, arg, n) == 0 && arg[n] == '\0') {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool obj_keyword_or_owner_match(const struct obj_data* obj, const char* arg,
+								bool allow_prefix) {
+	if(!obj || !arg || !*arg) {
+		return false;
+	}
+	if(obj->name) {
+		if(isname(arg, obj->name)) {
+			return true;
+		}
+		if(allow_prefix && isname2(arg, obj->name)) {
+			return true;
+		}
+	}
+	if(clan_symbol_is_obj(obj)) {
+		return false;
+	}
+	if(obj->personal_owner[0] != '\0' && !str_cmp(obj->personal_owner, arg)) {
+		return true;
+	}
+	return obj_ed_token_is_owner(obj->name, arg);
+}
+
 /* Search a given list for an object, and return a pointer to that object */
 struct obj_data* get_obj_in_list(const char* name, struct obj_data* list) {
 	struct obj_data* i;
@@ -1644,7 +1703,7 @@ struct obj_data* get_obj_in_list(const char* name, struct obj_data* list) {
 	}
 
 	for(i = list, j = 1; i && (j <= number); i = i->next_content)
-		if(isname(tmp, i->name)) {
+		if(obj_keyword_or_owner_match(i, tmp, false)) {
 			if(j == number) {
 				return(i);
 			}
@@ -1652,7 +1711,7 @@ struct obj_data* get_obj_in_list(const char* name, struct obj_data* list) {
 		}
 
 	for(i = list, j = 1; i && (j <= number); i = i->next_content)
-		if(isname2(tmp, i->name)) {
+		if(obj_keyword_or_owner_match(i, tmp, true)) {
 			if(j == number) {
 				return(i);
 			}
@@ -1692,7 +1751,7 @@ struct obj_data* get_obj(const char* name) {
 	}
 
 	for(i = object_list, j = 1; i && (j <= number); i = i->next)
-		if(isname(tmp, i->name)) {
+		if(obj_keyword_or_owner_match(i, tmp, false)) {
 			if(j == number) {
 				return(i);
 			}
@@ -1700,7 +1759,7 @@ struct obj_data* get_obj(const char* name) {
 		}
 
 	for(i = object_list, j = 1; i && (j <= number); i = i->next)
-		if(isname2(tmp, i->name)) {
+		if(obj_keyword_or_owner_match(i, tmp, true)) {
 			if(j == number) {
 				return(i);
 			}
@@ -1844,6 +1903,12 @@ struct char_data* get_char_num(int nr) {
 
 
 /* put an object in a room */
+namespace {
+const char* obj_name_or_q(const struct obj_data* object) {
+	return (object && object->name) ? object->name : "?";
+}
+} // namespace
+
 void obj_to_room(struct obj_data* object, long room) {
 
 	if(room == -1) {
@@ -1857,17 +1922,29 @@ void obj_to_room(struct obj_data* object, long room) {
 
 	assert(!object->equipped_by && object->eq_pos == -1);
 
+	struct room_data* rp = real_roomp(room);
+	if(!rp) {
+		const std::string msg = "obj_to_room: no room " + std::to_string(room) +
+								" for " + obj_name_or_q(object) + " fallback-4";
+		mudlog(LOG_SYSERR, "%s", msg.c_str());
+		room = 4;
+		rp = real_roomp(room);
+		if(!rp) {
+			mudlog(LOG_SYSERR, "obj_to_room: fallback room 4 missing");
+			return;
+		}
+	}
+
 	if(object->in_room > NOWHERE) {
 		obj_from_room(object);
 	}
 
-	object->next_content = real_roomp(room)->contents;
-	real_roomp(room)->contents = object;
+	object->next_content = rp->contents;
+	rp->contents = object;
 	object->in_room = room;
 	object->carried_by = 0;
 	object->equipped_by = 0; /* should be unnecessary */
-	if(!IS_SET(real_roomp(room)->room_flags, DEATH) &&
-			IS_SET(real_roomp(room)->room_flags, SAVE_ROOM)) {
+	if(!IS_SET(rp->room_flags, DEATH) && IS_SET(rp->room_flags, SAVE_ROOM)) {
 		save_room(room);
 	}
 }
@@ -1878,14 +1955,32 @@ void obj_to_room2(struct obj_data* object, long room) {
 		room = 4;
 	}
 
+	if(object == NULL) {
+		mudlog(LOG_SYSERR, "object == NULL in obj_to_room2 (handler.c).");
+		return;
+	}
+
 	assert(!object->equipped_by && object->eq_pos == -1);
+
+	struct room_data* rp = real_roomp(room);
+	if(!rp) {
+		const std::string msg = "obj_to_room2: no room " + std::to_string(room) +
+								" for " + obj_name_or_q(object) + " fallback-4";
+		mudlog(LOG_SYSERR, "%s", msg.c_str());
+		room = 4;
+		rp = real_roomp(room);
+		if(!rp) {
+			mudlog(LOG_SYSERR, "obj_to_room2: fallback room 4 missing");
+			return;
+		}
+	}
 
 	if(object->in_room > NOWHERE) {
 		obj_from_room(object);
 	}
 
-	object->next_content = real_roomp(room)->contents;
-	real_roomp(room)->contents = object;
+	object->next_content = rp->contents;
+	rp->contents = object;
 	object->in_room = room;
 	object->carried_by = 0;
 	object->equipped_by = 0; /* should be unnecessary */
@@ -1919,12 +2014,23 @@ void obj_from_room(struct obj_data* object) {
 		return;
 	}
 
-	if(object == real_roomp(object->in_room)->contents) {   /* head of list */
-		real_roomp(object->in_room)->contents = object->next_content;
+	struct room_data* rp = real_roomp(object->in_room);
+	if(!rp) {
+		const std::string msg = "obj_from_room: no room " +
+								std::to_string(object->in_room) + " for " +
+								obj_name_or_q(object);
+		mudlog(LOG_SYSERR, "%s", msg.c_str());
+		object->in_room = NOWHERE;
+		object->next_content = 0;
+		return;
+	}
+
+	if(object == rp->contents) {   /* head of list */
+		rp->contents = object->next_content;
 	}
 
 	else {   /* locate previous element in list */
-		for(i = real_roomp(object->in_room)->contents; i &&
+		for(i = rp->contents; i &&
 				i->next_content != object; i = i->next_content);
 
 		if(i) {
@@ -1932,8 +2038,7 @@ void obj_from_room(struct obj_data* object) {
 		}
 	}
 
-	if(!IS_SET(real_roomp(object->in_room)->room_flags, DEATH) &&
-			IS_SET(real_roomp(object->in_room)->room_flags, SAVE_ROOM)) {
+	if(!IS_SET(rp->room_flags, DEATH) && IS_SET(rp->room_flags, SAVE_ROOM)) {
 		save_room(object->in_room);
 	}
 	object->in_room = NOWHERE;
@@ -2146,13 +2251,26 @@ void extract_obj(struct obj_data* obj) {
 				   "Couldn't find object %s in object list in extract_obj "
 				   "(handler.c).", obj->name);
 			obj_count = 0;
+			obj_count_edit = 0;
+			obj_count_clan_symbol = 0;
 			for(i = 0; i < top_of_objt; i++) {
 				obj_index[ i ].number = 0;
 			}
 			for(temp1 = object_list; temp1; temp1 = temp1->next) {
-				if(temp1->item_number >= 0 && temp1->item_number < top_of_objt) {
+				if(temp1->item_number < 0 || temp1->item_number >= top_of_objt) {
+					continue;
+				}
+				obj_count++;
+				if(object_is_zone_limit_exempt(temp1)) {
+					if(clan_symbol_is_obj(temp1)) {
+						obj_count_clan_symbol++;
+					}
+					else {
+						obj_count_edit++;
+					}
+				}
+				else {
 					(obj_index[ temp1->item_number ].number)++;
-					obj_count++;
 				}
 			}
 			free_obj(obj);
@@ -2161,8 +2279,22 @@ void extract_obj(struct obj_data* obj) {
 	}
 
 	if(obj->item_number >= 0 && obj->item_number < top_of_objt) {
-		(obj_index[obj->item_number].number)--;
-		obj_count--;
+		if(object_is_zone_limit_exempt(obj)) {
+			if(clan_symbol_is_obj(obj)) {
+				if(obj_count_clan_symbol > 0) {
+					obj_count_clan_symbol--;
+				}
+			}
+			else if(obj_count_edit > 0) {
+				obj_count_edit--;
+			}
+		}
+		else {
+			(obj_index[obj->item_number].number)--;
+		}
+		if(obj_count > 0) {
+			obj_count--;
+		}
 	}
 	free_obj(obj);
 
@@ -2525,6 +2657,14 @@ void extract_char_smarter(struct char_data* ch, long save_room,
 		t_desc->idle_since = time(nullptr);
 		SEND_TO_Q(MENU, t_desc);
 	}
+	else if(IS_PC(ch)) {
+		/* PC senza desc (forcerent, purge, extract linkdead): free obbligatorio.
+		 * Prima restava orphan fuori da character_list → crash idle. */
+		mudlog(LOG_CHECK,
+			   "extract_char_smarter: freeing descriptor-less PC %s",
+			   GET_NAME_DESC(ch));
+		free_char(ch);
+	}
 }
 
 
@@ -2675,7 +2815,7 @@ struct obj_data* get_obj_in_list_vis(struct char_data* ch, const char* name,stru
 	}
 
 	for(i = list, j = 1; i && (j <= number); i = i->next_content)
-		if(isname(tmp, i->name))
+		if(obj_keyword_or_owner_match(i, tmp, false))
 			if(CAN_SEE_OBJ(ch, i)) {
 				if(j == number) {
 					return(i);
@@ -2684,7 +2824,7 @@ struct obj_data* get_obj_in_list_vis(struct char_data* ch, const char* name,stru
 			}
 
 	for(i = list, j = 1; i && (j <= number); i = i->next_content)
-		if(isname2(tmp, i->name))
+		if(obj_keyword_or_owner_match(i, tmp, true))
 			if(CAN_SEE_OBJ(ch, i)) {
 				if(j == number) {
 					return(i);
@@ -2712,7 +2852,7 @@ struct obj_data* get_obj_vis_world(struct char_data* ch, const char* name,
 
 	/* ok.. no luck yet. scan the entire obj list   */
 	for(i = object_list; i && (j <= number); i = i->next)
-		if(isname(tmp, i->name))
+		if(obj_keyword_or_owner_match(i, tmp, false))
 			if(CAN_SEE_OBJ(ch, i)) {
 				if(j == number) {
 					return(i);
@@ -2724,7 +2864,7 @@ struct obj_data* get_obj_vis_world(struct char_data* ch, const char* name,
 
 	/* ok.. no luck yet. scan the entire obj list   */
 	for(i = object_list; i && (j <= number); i = i->next)
-		if(isname2(tmp, i->name))
+		if(obj_keyword_or_owner_match(i, tmp, true))
 			if(CAN_SEE_OBJ(ch, i)) {
 				if(j == number) {
 					return(i);
@@ -2771,7 +2911,7 @@ struct obj_data* get_obj_vis_accessible(struct char_data* ch, const char* name) 
 
 	/* scan items carried */
 	for(i = ch->carrying, j=1; i && j<=number; i = i->next_content) {
-		if(isname(tmp, i->name) && CAN_SEE_OBJ(ch, i)) {
+		if(obj_keyword_or_owner_match(i, tmp, false) && CAN_SEE_OBJ(ch, i)) {
 			if(j == number) {
 				return(i);
 			}
@@ -2781,7 +2921,7 @@ struct obj_data* get_obj_vis_accessible(struct char_data* ch, const char* name) 
 		}
 	}
 	for(i = real_roomp(ch->in_room)->contents; i && j<=number; i = i->next_content) {
-		if(isname(tmp, i->name) && CAN_SEE_OBJ(ch, i)) {
+		if(obj_keyword_or_owner_match(i, tmp, false) && CAN_SEE_OBJ(ch, i)) {
 			if(j==number) {
 				return(i);
 			}
@@ -2792,7 +2932,7 @@ struct obj_data* get_obj_vis_accessible(struct char_data* ch, const char* name) 
 	}
 	/* scan items carried */
 	for(i = ch->carrying, j=1; i && j<=number; i = i->next_content) {
-		if(isname2(tmp, i->name) && CAN_SEE_OBJ(ch, i)) {
+		if(obj_keyword_or_owner_match(i, tmp, true) && CAN_SEE_OBJ(ch, i)) {
 			if(j == number) {
 				return(i);
 			}
@@ -2802,7 +2942,7 @@ struct obj_data* get_obj_vis_accessible(struct char_data* ch, const char* name) 
 		}
 	}
 	for(i = real_roomp(ch->in_room)->contents; i && j<=number; i = i->next_content) {
-		if(isname2(tmp, i->name) && CAN_SEE_OBJ(ch, i)) {
+		if(obj_keyword_or_owner_match(i, tmp, true) && CAN_SEE_OBJ(ch, i)) {
 			if(j==number) {
 				return(i);
 			}
@@ -2889,8 +3029,6 @@ struct obj_data* create_money(int amount) {
 
 void pers_obj(struct char_data* god, struct char_data* plr, struct obj_data* obj, int cmd)
 {
-    char personal[MAX_INPUT_LENGTH];
-
     if(IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
     {
         mudlog(LOG_PLAYERS,"pers_obj: can't personalize twice %s.", obj->short_description);
@@ -2918,12 +3056,28 @@ void pers_obj(struct char_data* god, struct char_data* plr, struct obj_data* obj
     SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PERSONAL);
 	strncpy(obj->personal_owner, GET_NAME(plr), sizeof(obj->personal_owner) - 1);
 	obj->personal_owner[sizeof(obj->personal_owner) - 1] = '\0';
+	/* Runtime moderno: owner nel campo, keyword senza ED* (file via helper). */
+	{
+		const std::string stripped = object_instance_strip_ed_tokens(obj->name);
+		if(obj->name && stripped != obj->name) {
+			free(obj->name);
+			obj->name = strdup(stripped.c_str());
+		}
+	}
 
-    sprintf(personal,"%s ED%s",obj->name,GET_NAME(plr));
-    free(obj->name);
-    obj->name = (char*)strdup(personal);
+    mudlog(LOG_PLAYERS, "%s personalized %s[%d] on %s (owner=%s).", GET_NAME(god),
+		   obj->short_description, obj->item_number, GET_NAME(plr),
+		   obj->personal_owner);
+}
 
-    mudlog(LOG_PLAYERS, "%s Add key%s on %s[%d].", GET_NAME(god), personal, obj->short_description, obj->item_number);
+bool obj_owned_by(const struct obj_data* obj, const char* name) {
+	if(!obj || !name || !*name) {
+		return false;
+	}
+	if(obj->personal_owner[0] != '\0') {
+		return !str_cmp(obj->personal_owner, name);
+	}
+	return obj_ed_token_is_owner(obj->name, name);
 }
 
 bool pers_on(struct char_data* ch, struct obj_data* obj)
@@ -2931,16 +3085,53 @@ bool pers_on(struct char_data* ch, struct obj_data* obj)
 	if(!ch || !obj || !GET_NAME(ch)) {
 		return FALSE;
 	}
+	return obj_owned_by(obj, GET_NAME(ch));
+}
 
-	/* Preferisci colonna/runtime owner (istanze MySQL senza ED* nelle keyword). */
-	if(obj->personal_owner[0] != '\0') {
-		return !str_cmp(obj->personal_owner, GET_NAME(ch));
+std::string obj_keywords_for_legacy_file(const struct obj_data* obj) {
+	if(!obj) {
+		return {};
 	}
+	const std::string base = object_instance_strip_ed_tokens(obj->name);
+	std::string owner;
+	if(obj->personal_owner[0] != '\0') {
+		owner = obj->personal_owner;
+	}
+	else {
+		owner = object_instance_extract_ed_owner(obj->name);
+	}
+	if(owner.empty()) {
+		if(!base.empty()) {
+			return base;
+		}
+		return obj->name ? std::string(obj->name) : std::string();
+	}
+	if(base.empty()) {
+		return std::string("ED") + owner;
+	}
+	return base + " ED" + owner;
+}
 
-	char name[25];
-	strcpy(name, "ED");
-	strcat(name, GET_NAME(ch));
-	return isname(name, obj->name) ? TRUE : FALSE;
+void hydrate_personal_owner_from_ed(struct obj_data* obj, bool strip_ed) {
+	if(!obj) {
+		return;
+	}
+	if(obj->personal_owner[0] == '\0') {
+		const std::string ed = object_instance_extract_ed_owner(obj->name);
+		if(!ed.empty()) {
+			strncpy(obj->personal_owner, ed.c_str(), sizeof(obj->personal_owner) - 1);
+			obj->personal_owner[sizeof(obj->personal_owner) - 1] = '\0';
+		}
+	}
+	if(!strip_ed || !obj->name) {
+		return;
+	}
+	const std::string stripped = object_instance_strip_ed_tokens(obj->name);
+	if(stripped == obj->name) {
+		return;
+	}
+	free(obj->name);
+	obj->name = strdup(stripped.c_str());
 }
 
 

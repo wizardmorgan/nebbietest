@@ -436,13 +436,15 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 
 /**
  * Riscrive i totali combat preservando gli altri affect.
- * Compatta HITNDAM/HITNSP PRIMA di ripristinare non-combat: con MAX_OBJ_AFFECT=5
+ * Accorpamento HITNDAM/HITNSP solo se allow_merge (conferma esplicita UI):
+ * altrimenti lascia HITROLL/DAMROLL/SPELLPOWER separati anche se uguali.
+ * Compatta PRIMA di ripristinare non-combat: con MAX_OBJ_AFFECT=5
  * piazzare HITROLL+DAMROLL separati mangia uno slot di troppo e droppava
  * IMMUNE/SPELL in silenzio (es. hit-n-dam dopo resi+spy).
  */
 [[nodiscard]] static bool rewrite_combat_totals(struct obj_data* obj, int hitroll,
 												int damroll, int spellpower,
-												std::string& err) {
+												std::string& err, bool allow_merge) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -494,14 +496,14 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 		return true;
 	};
 
-	if(hr > 0 && hr == dr && dr > 0) {
+	if(allow_merge && hr > 0 && hr == dr && dr > 0) {
 		if(!place_or_fail(APPLY_HITNDAM, hr)) {
 			return false;
 		}
 		hr = 0;
 		dr = 0;
 	}
-	if(hr > 0 && hr == sp && dr == 0) {
+	if(allow_merge && hr > 0 && hr == sp && dr == 0) {
 		if(!place_or_fail(APPLY_HITNSP, hr)) {
 			return false;
 		}
@@ -665,7 +667,8 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 			err = "nessuno slot da rimuovere";
 			return false;
 		}
-		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err);
+		/* Clear: mai accorpare d'ufficio i restanti combat. */
+		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err, false);
 	}
 
 	const int slot = find_affect_slot_for_location(obj, location);
@@ -682,6 +685,38 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 		return current > 0;
 	}
 	return current < 0;
+}
+
+bool object_edit_recovers_listino_malus(const struct obj_data* obj, int location,
+									   int target_modifier, bool clear_slot) noexcept {
+	if(!obj || clear_slot) {
+		return false;
+	}
+	/* Bitfield: rimozione gratis via clear_slot, non "recupero malus" listino. */
+	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE || location == APPLY_SPELL
+	   || location == APPLY_AFF2) {
+		return false;
+	}
+	ObjEditListinoSpec spec;
+	if(!obj_edit_listino_spec(location, spec)) {
+		return false;
+	}
+	const int cur = object_edit_display_current(obj, location);
+	if(!listino_current_is_malus(location, cur)) {
+		return false;
+	}
+	if(location == APPLY_AC || location == APPLY_SPELLFAIL) {
+		/* Piu' basso = meglio (meno malus AC/spellfail). */
+		return target_modifier < cur;
+	}
+	/* Stats/combat: -3 → 0 / +1 migliora. */
+	return target_modifier > cur;
+}
+
+static void portal_force_paid_malus(struct obj_data* obj) noexcept {
+	if(obj) {
+		SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PAID_MALUS);
+	}
 }
 
 [[nodiscard]] static bool listino_current_is_positive_effect(int location,
@@ -707,7 +742,8 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 
 [[nodiscard]] bool apply_target_modifier(struct obj_data* obj, int location,
 										 int target_modifier, std::string& err,
-										 bool clear_slot = false) {
+										 bool clear_slot = false,
+										 bool allow_combat_merge = false) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -849,7 +885,13 @@ static void wipe_affect_slot(struct obj_data* obj, int slot) noexcept {
 		default:
 			break;
 		}
-		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err);
+		/* Hit-n-dam / Hit-n-sp scelti esplicitamente = merge voluto.
+		 * Hit/dam/sp separati: merge solo con conferma UI (allow_combat_merge). */
+		const bool merge =
+			!clear_slot
+			&& (allow_combat_merge || location == APPLY_HITNDAM
+				|| location == APPLY_HITNSP);
+		return rewrite_combat_totals(obj, hitroll, damroll, spellpower, err, merge);
 	}
 
 	int slot = find_affect_slot_for_location(obj, location);
@@ -1319,31 +1361,12 @@ int object_edit_display_current(const struct obj_data* obj, int location) noexce
 		return combat_damroll_total(obj);
 	case APPLY_SPELLPOWER:
 		return combat_spellpower_total(obj);
-	case APPLY_HITNDAM: {
-		const int combined = sum_location_mod(obj, APPLY_HITNDAM);
-		if(combined != 0) {
-			return combined;
-		}
-		/* Se hit e dam sono separati ma uguali, tratta come hitndam effettivo. */
-		const int hr = combat_hitroll_total(obj);
-		const int dr = combat_damroll_total(obj);
-		if(hr > 0 && hr == dr) {
-			return hr;
-		}
-		return 0;
-	}
-	case APPLY_HITNSP: {
-		const int combined = sum_location_mod(obj, APPLY_HITNSP);
-		if(combined != 0) {
-			return combined;
-		}
-		const int hr = combat_hitroll_total(obj);
-		const int sp = combat_spellpower_total(obj);
-		if(hr > 0 && hr == sp) {
-			return hr;
-		}
-		return 0;
-	}
+	case APPLY_HITNDAM:
+		/* Solo lo slot combinato reale: hit/dam separati uguali restano distinti
+		 * finché il giocatore non conferma l'accorpamento. */
+		return sum_location_mod(obj, APPLY_HITNDAM);
+	case APPLY_HITNSP:
+		return sum_location_mod(obj, APPLY_HITNSP);
 	default:
 		return sum_location_mod(obj, location);
 	}
@@ -1614,7 +1637,8 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 bool object_quote_affect_target(struct obj_data* obj, int location, int target_modifier,
 								long& xp_raw, int& pq, std::string& err,
 								int other_worn_edited_dam, int other_worn_edited_sp,
-								bool clear_slot, int other_owned_edited_spellfail) {
+								bool clear_slot, int other_owned_edited_spellfail,
+								bool allow_combat_merge) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -1622,13 +1646,37 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 	if(!enforce_dam_spellpower_mutex(obj, location, clear_slot, err)) {
 		return false;
 	}
+	/*
+	 * ITEM2_PAID_MALUS: senza flag AnalyzeObjEdit ignora i malus (NonNeg) e il
+	 * recupero costerebbe 0. Se l'edit recupera un malus (o il pezzo ha gia' il
+	 * flag), forziamo PAID_MALUS sui clone di analisi cosi' diff.valore include
+	 * la tariffa 2× e, in un solo posto, class_mult + Artifact +50%.
+	 */
+	const bool use_paid_malus =
+		IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS)
+		|| object_edit_recovers_listino_malus(obj, location, target_modifier, clear_slot);
+
+	struct obj_data* before_obj = portal_clone_obj_state(obj);
+	if(!before_obj) {
+		err = "impossibile clonare oggetto";
+		return false;
+	}
+	if(use_paid_malus) {
+		portal_force_paid_malus(before_obj);
+	}
+	const ObjEditAnalysis before = AnalyzeObjEdit(before_obj);
+	extract_obj(before_obj);
+
 	struct obj_data* clone = portal_clone_obj_state(obj);
 	if(!clone) {
 		err = "impossibile clonare oggetto";
 		return false;
 	}
-	const ObjEditAnalysis before = AnalyzeObjEdit(obj);
-	if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot)) {
+	if(use_paid_malus) {
+		portal_force_paid_malus(clone);
+	}
+	if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot,
+							  allow_combat_merge)) {
 		extract_obj(clone);
 		return false;
 	}
@@ -1648,23 +1696,10 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		return false;
 	}
 	const ObjEditAnalysis after = AnalyzeObjEdit(clone);
-	const bool artifact = IS_OBJ_STAT(clone, ITEM_IMMUNE);
 	extract_obj(clone);
-	/*
-	 * Costo = incremento di CheckValueObj assoluto (scalato), non la diff
-	 * clampata vs proto. La clamp a ≥0 azzerava (o sottostimava) la rimozione
-	 * di malus sotto il prototipo — es. armor +10→0 o spellfail malus→0 a 0 MXP.
-	 * class_mult / Artifact come in AnalyzeObjEdit, applicati al delta pagato.
-	 */
-	const long delta_raw = after.absolute.valore - before.absolute.valore;
-	xp_raw = std::max(0L, delta_raw * kObjValueStorageScale);
-	if(after.class_mult != 1.0 && xp_raw > 0) {
-		xp_raw = static_cast<long>(std::llround(
-			static_cast<double>(xp_raw) * after.class_mult));
-	}
-	if(artifact && xp_raw > 0) {
-		xp_raw = (xp_raw * 3) / 2;
-	}
+
+	/* diff.valore e' gia' scalato e include class_mult + Artifact. */
+	xp_raw = std::max(0L, after.diff.valore - before.diff.valore);
 	pq = std::max(0, after.diff.rune - before.diff.rune);
 	return true;
 }
@@ -1672,7 +1707,8 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 bool object_apply_affect_target(struct obj_data* obj, int location, int target_modifier,
 								std::string& err, int other_worn_edited_dam,
 								int other_worn_edited_sp, bool clear_slot,
-								int other_owned_edited_spellfail) {
+								int other_owned_edited_spellfail,
+								bool allow_combat_merge) {
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -1680,6 +1716,8 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 	if(!enforce_dam_spellpower_mutex(obj, location, clear_slot, err)) {
 		return false;
 	}
+	const bool recovers_malus =
+		object_edit_recovers_listino_malus(obj, location, target_modifier, clear_slot);
 	const bool need_budget = (object_edit_location_affects_dam(location)
 							  && other_worn_edited_dam >= 0)
 							 || (object_edit_location_affects_spellpower(location)
@@ -1692,7 +1730,8 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 			err = "impossibile clonare oggetto";
 			return false;
 		}
-		if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot)) {
+		if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot,
+								  allow_combat_merge)) {
 			extract_obj(clone);
 			return false;
 		}
@@ -1704,7 +1743,16 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 		}
 		extract_obj(clone);
 	}
-	return apply_target_modifier(obj, location, target_modifier, err, clear_slot);
+	if(!apply_target_modifier(obj, location, target_modifier, err, clear_slot,
+							  allow_combat_merge)) {
+		return false;
+	}
+	/* Persistenza: dopo aver pagato il recupero malus a 2×, il pezzo deve avere
+	 * ITEM2_PAID_MALUS (Montero: listino si, edit pool no). */
+	if(recovers_malus) {
+		portal_force_paid_malus(obj);
+	}
+	return true;
 }
 
 } // namespace Alarmud

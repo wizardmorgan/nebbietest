@@ -32,6 +32,7 @@
 #include "act.off.hpp"
 #include "act.other.hpp"
 #include "clan_symbol.hpp"
+#include "character_item_loss.hpp"
 #include "comm.hpp"
 #include "db.hpp"
 #include "handler.hpp"
@@ -76,6 +77,61 @@ inline bool char_is_valid(const char_data* ch) noexcept {
 
 inline bool combat_pulse_ended(DamageResult result) noexcept {
 	return result == SubjectDead || result == VictimDead;
+}
+
+/** True if obj is still allocated but linked nowhere (limbo / "Nemmeno Dio..."). */
+[[nodiscard]] bool obj_is_unplaced(const obj_data* obj) noexcept {
+	return obj != nullptr
+		&& obj->equipped_by == nullptr
+		&& obj->carried_by == nullptr
+		&& obj->in_obj == nullptr
+		&& obj->in_room == NOWHERE;
+}
+
+/**
+ * Re-link a weapon temporarily unequipped for dual-wield combat.
+ * prefer_pos: WIELD/HOLD if free, else inventory; if ch dead, drop to fallback_room.
+ * No-op if already placed. Caller must not pass an extracted (freed) obj.
+ */
+void reattach_or_place(char_data* ch, obj_data* obj, int prefer_pos,
+					   long fallback_room) {
+	if(!obj_is_unplaced(obj)) {
+		return;
+	}
+	if(char_is_valid(ch)) {
+		if(prefer_pos >= 0 && prefer_pos < MAX_WEAR
+				&& ch->equipment[prefer_pos] == nullptr) {
+			equip_char(ch, obj, prefer_pos);
+			return;
+		}
+		obj_to_char(obj, ch);
+		return;
+	}
+	if(fallback_room != NOWHERE) {
+		obj_to_room(obj, fallback_room);
+		return;
+	}
+	const char* oname = (obj->name != nullptr) ? obj->name : "?";
+	mudlog(LOG_SYSERR, "reattach_or_place: orphan %s (no char/room)", oname);
+}
+
+/**
+ * After off-hand dual swing: offhand was in WIELD, primary was floating.
+ * If offhand was destroyed mid-hit, do not touch its pointer.
+ */
+void restore_dual_after_offhand_hit(char_data* ch, obj_data* primary,
+									obj_data* offhand, long fallback_room) {
+	if(char_is_valid(ch)) {
+		if(ch->equipment[WIELD] == offhand) {
+			unequip_char(ch, WIELD);
+			reattach_or_place(ch, offhand, HOLD, fallback_room);
+		}
+		/* else: 2nd arma distrutta (SALVO) — non dereferenziare offhand */
+		reattach_or_place(ch, primary, WIELD, fallback_room);
+		return;
+	}
+	/* SubjectDead: eq gia' sul cadavere; la primaria floating va a terra. */
+	reattach_or_place(nullptr, primary, -1, fallback_room);
 }
 
 void drop_stale_opponent(char_data* ch, char_data* victim) {
@@ -790,12 +846,11 @@ void make_corpse(struct char_data* ch, int killedbytype) {
 	corpse->affected[1].modifier=GetMaxLevel(ch);  /* level of corpse */
 
 	corpse->obj_flags.value[3] = 1; /* corpse identifyer */
-	if(ADeadBody) {
-		corpse->obj_flags.weight = GET_WEIGHT(ch)+IS_CARRYING_W(ch);
-	}
-	else {
-		corpse->obj_flags.weight = 1+IS_CARRYING_W(ch);
-	}
+	/* Peso: non usare IS_CARRYING_W qui. Con EQPESANTE true include gia' l'eq
+	 * indossato, e obj_to_obj sotto lo riconta. Inventario e' agganciato per
+	 * puntatore senza passare da obj_to_obj: il totale si ricalcola a fine
+	 * make_corpse (corpo + contenuto top-level). */
+	corpse->obj_flags.weight = 0;
 	corpse->obj_flags.cost_per_day = 100000;
 	if(IS_NPC(ch)) {
 		corpse->obj_flags.timer = MAX_NPC_CORPSE_TIME;
@@ -862,6 +917,37 @@ void make_corpse(struct char_data* ch, int killedbytype) {
 			else {
 				extract_obj(co);
 			}
+		}
+	}
+
+	/* Peso finale: corpo (o 1 se dust) + ogni oggetto top-level nel cadavere.
+	 * Copre inventario (link diretto), oro ed eq (obj_to_obj) una sola volta;
+	 * le borse includono gia' il peso del contenuto in GET_OBJ_WEIGHT. */
+	{
+		int corpse_weight = ADeadBody ? GET_WEIGHT(ch) : 1;
+		for(struct obj_data* co = corpse->contains; co != nullptr; co = co->next_content) {
+			corpse_weight += GET_OBJ_WEIGHT(co);
+		}
+		corpse->obj_flags.weight = corpse_weight;
+	}
+
+	/* Audit: eq/inv lasciati sul cadavere (dopo recupero simbolo clan). */
+	if(!IS_NPC(ch) && corpse->contains != nullptr) {
+		std::vector<obj_data*> lost;
+		std::vector<obj_data*> stack;
+		for(obj_data* o = corpse->contains; o != nullptr; o = o->next_content) {
+			stack.push_back(o);
+		}
+		while(!stack.empty()) {
+			obj_data* o = stack.back();
+			stack.pop_back();
+			lost.push_back(o);
+			for(obj_data* in = o->contains; in != nullptr; in = in->next_content) {
+				stack.push_back(in);
+			}
+		}
+		if(!lost.empty()) {
+			character_item_loss_log_list(ch, lost, kItemLossDeathCorpse);
 		}
 	}
 
@@ -2716,15 +2802,20 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
 				exp = MAX(exp, 1);
 
 				if(!IS_PC(victim)) {
-					exp = RatioExp(ch, victim, exp);
-					exp = ExpCaps(ch, 0, exp, victim); /* bug fix for non_grouped peoples */
+					char_data* xp_to = ch;
+					if(IS_NPC(ch) && IS_AFFECTED(ch, AFF_CHARM) && ch->master != nullptr &&
+					   IS_PC(ch->master) && ch->master->in_room == ch->in_room) {
+						xp_to = ch->master;
+					}
+					exp = RatioExp(xp_to, victim, exp);
+					exp = ExpCaps(xp_to, 0, exp, victim); /* bug fix for non_grouped peoples */
 
-					if(!IS_IMMORTAL(ch)) {
+					if(!IS_IMMORTAL(xp_to)) {
 						sprintf(buf,"La tua esperienza e' aumentata di %d punti.",
 								exp);
-						act(buf, FALSE, ch, 0, 0, TO_CHAR);
+						act(buf, FALSE, xp_to, 0, 0, TO_CHAR);
 					}
-					gain_exp(ch, exp);
+					gain_exp(xp_to, exp);
 				}
 				change_alignment(ch, victim);
 			}
@@ -3115,41 +3206,47 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
 			case SPELL_ACID_BLAST:
 			case SPELL_FIRESTORM:
 			case SKILL_FLAME_SHROUD:
+			case SPELL_HEAT_STUFF:
+			case SPELL_INCENDIARY_CLOUD:
+			case SKILL_MIND_BURN:
 			case SPELL_FIRE_BREATH:
 			case SPELL_ACID_BREATH:
 				break;
 			default:
-                regenerate = MIN((con_app[(int)GET_CON(victim)].hitp+ number(0,GetMaxLevel(ch))), dam/2);
-                GET_HIT(victim)+= regenerate;
-				alter_hit(victim,0);
+				regenerate = MIN((con_app[(int)GET_CON(victim)].hitp +
+								  number(0, GetMaxLevel(ch))), dam / 2);
+				GET_HIT(victim) += regenerate;
+				alter_hit(victim, 0);
 				if(dam > 0 && regenerate > 0) {
-                    sprintf(buf, "Rigeneri!");
-                    if(IS_SET(victim->player.user_flags,PWP_MODE))
-                    {
-                        std::string msg = buf;
-                        msg += " $c0006[";
-                        if(regenerate != 0) {
-                            msg += "+";
-                        }
-                        msg += std::to_string((regenerate < 0 ? 0 : regenerate));
-                        msg += "]$c0007";
-                        std::snprintf(buf, sizeof(buf), "%s", msg.c_str());
-                    }
-					act(buf,TRUE,victim,0,ch,TO_CHAR);
-                    sprintf(buf, "$N rigenera!");
-                    if(IS_SET(ch->player.user_flags,PWP_MODE))
-                    {
-                        std::string msg = buf;
-                        msg += " $c0006[";
-                        if(regenerate != 0) {
-                            msg += "+";
-                        }
-                        msg += std::to_string((regenerate < 0 ? 0 : regenerate));
-                        msg += "]$c0007";
-                        std::snprintf(buf, sizeof(buf), "%s", msg.c_str());
-                    }
-					act(buf,TRUE,ch,0,victim,TO_CHAR);
-                    act("$N rigenera!",TRUE,ch,0,victim,TO_NOTVICT);
+					sprintf(buf, "Rigeneri!");
+					if(IS_SET(victim->player.user_flags, PWP_MODE)) {
+						std::string msg = buf;
+						msg += " $c0006[";
+						if(regenerate != 0) {
+							msg += "+";
+						}
+						msg += std::to_string((regenerate < 0 ? 0 : regenerate));
+						msg += "]$c0007";
+						std::snprintf(buf, sizeof(buf), "%s", msg.c_str());
+					}
+					act(buf, TRUE, victim, 0, ch, TO_CHAR);
+					/* "$N rigenera!" non a chi rigenera: su self-damage ch==victim
+					 * TO_NOTVICT resta visibile alla stanza. */
+					if(ch != victim) {
+						sprintf(buf, "$N rigenera!");
+						if(IS_SET(ch->player.user_flags, PWP_MODE)) {
+							std::string msg = buf;
+							msg += " $c0006[";
+							if(regenerate != 0) {
+								msg += "+";
+							}
+							msg += std::to_string((regenerate < 0 ? 0 : regenerate));
+							msg += "]$c0007";
+							std::snprintf(buf, sizeof(buf), "%s", msg.c_str());
+						}
+						act(buf, TRUE, ch, 0, victim, TO_CHAR);
+					}
+					act("$N rigenera!", TRUE, ch, 0, victim, TO_NOTVICT);
 				}
 				break;
 			}
@@ -3517,7 +3614,8 @@ int CalcThaco(struct char_data* ch, struct char_data* victim) {
 
 	/*  Drow are -4 to hit during daylight or lighted rooms. */
 	if(!IS_DARK(ch->in_room) && GET_RACE(ch) == RACE_DARK_ELF && IS_PC(ch)
-			&& !affected_by_spell(ch,SPELL_GLOBE_DARKNESS) && !IS_UNDERGROUND(ch)) {
+			&& !affected_by_spell(ch, SPELL_GLOBE_DARKNESS) &&
+			!IS_AFFECTED(ch, AFF_GLOBE_DARKNESS) && !IS_UNDERGROUND(ch)) {
 		calc_thaco += 4;
 	}
 
@@ -4029,9 +4127,12 @@ DamageResult hit(struct char_data* ch, struct char_data* victim,
 
 void PCAttacks(char_data* pChar) {
 	float fAttacks = pChar->mult_att;
-	struct obj_data* pTmp = NULL;
-	struct obj_data* pWeapon = NULL; // SALVO la setto NULL mi serve per dopo
-    int perc;
+	obj_data* pTmp = nullptr;
+	obj_data* pWeapon = nullptr; // SALVO: primaria durante lo swap off-hand
+	int perc = 0;
+	const long start_room = pChar->in_room;
+	bool pulse_ended = false;
+	DamageResult last_hit = AllLiving;
 
 	/* Controlla se il tipo e' in parrying, in questo caso
 	   diminuisce gli attacchi di uno per ogni attacco
@@ -4086,17 +4187,27 @@ void PCAttacks(char_data* pChar) {
             alter_move(pChar, 0);
     }
 
-
+	/* Dual: HOLD aside during primary swings. Must re-link before any exit
+	 * (VictimDead/SubjectDead), else the weapon stays in limbo. */
+	obj_data* held_aside = nullptr;
 	if(DUAL_WIELD(pChar)) {
-		pTmp = unequip_char(pChar, HOLD);
+		held_aside = unequip_char(pChar, HOLD);
 	}
 
+	auto mark_pulse_ended = [&](DamageResult result) -> bool {
+		last_hit = result;
+		if(combat_pulse_ended(result)) {
+			pulse_ended = true;
+			return true;
+		}
+		return false;
+	};
 
 	while(fAttacks > 0.999) {
 		if(pChar->specials.fighting) {
-			if(combat_pulse_ended(hit(pChar, pChar->specials.fighting,
-									  TYPE_UNDEFINED))) {
-				return;
+			if(mark_pulse_ended(hit(pChar, pChar->specials.fighting,
+									TYPE_UNDEFINED))) {
+				break;
 			}
 		}
 		else {
@@ -4110,7 +4221,7 @@ void PCAttacks(char_data* pChar) {
 		MindflayerAttack(pChar, pChar->specials.fighting);
 	}
 #endif
-	if(fAttacks > .01) {
+	if(!pulse_ended && fAttacks > .01) {
 #if 1
 
 		perc = number(1,100);
@@ -4124,33 +4235,37 @@ void PCAttacks(char_data* pChar) {
 			if(perc <= ((int)(fAttacks * 100.0) + 10 -
 						(pChar->equipment[ WIELD ]->obj_flags.weight)*2)) {
 				if(pChar->specials.fighting) {
-					if(combat_pulse_ended(hit(pChar, pChar->specials.fighting,
-											  TYPE_UNDEFINED))) {
-						return;
-					}
+					mark_pulse_ended(hit(pChar, pChar->specials.fighting,
+										 TYPE_UNDEFINED));
 				}
 			}
 		}
 		else if(perc <= (fAttacks * 100.0)) {
 			if(pChar->specials.fighting) {
-				if(combat_pulse_ended(hit(pChar, pChar->specials.fighting,
-										  TYPE_UNDEFINED))) {
-					return;
-				}
+				mark_pulse_ended(hit(pChar, pChar->specials.fighting,
+									 TYPE_UNDEFINED));
 			}
 		}
 #else
 		/* lets give them the hit */
-		if(pChar->specials.fighting)
-			if(hit(pChar, pChar->specials.fighting,
-					TYPE_UNDEFINED) == SubjectDead) {
-				return;
-			}
+		if(pChar->specials.fighting) {
+			mark_pulse_ended(hit(pChar, pChar->specials.fighting,
+								 TYPE_UNDEFINED));
+		}
 #endif
 	}
 
-	if(pTmp) {
-		equip_char(pChar, pTmp, HOLD);
+	/* VictimDead: rimetti in HOLD. SubjectDead: a terra (eq gia' sul cadavere). */
+	if(last_hit == SubjectDead) {
+		reattach_or_place(nullptr, held_aside, -1, start_room);
+	}
+	else {
+		reattach_or_place(pChar, held_aside, HOLD, start_room);
+	}
+	held_aside = nullptr;
+
+	if(pulse_ended) {
+		return;
 	}
 
 	/* check for the second attack */
@@ -4170,9 +4285,8 @@ void PCAttacks(char_data* pChar) {
 			if(pChar->specials.fighting) {
 				if(combat_pulse_ended(hit(pChar, pChar->specials.fighting,
 										  TYPE_UNDEFINED))) {
-					if(pChar->equipment[WIELD]!=pTmp && pWeapon) { // SALVO si e' distrutta la 2nd arma
-						equip_char(pChar, pWeapon, WIELD);
-					}
+					restore_dual_after_offhand_hit(pChar, pWeapon, pTmp,
+												   start_room);
 					return;
 				}
 			}
@@ -4952,6 +5066,7 @@ void MakeScrap(struct char_data* ch,struct char_data* v, struct obj_data* obj) {
 
 #if USE_MYSQL
 	if(owner && IS_PC(owner) && toon_is_migrated_by_name(GET_NAME(owner))) {
+		character_item_loss_log(owner, obj, kItemLossCombatBreak);
 		if(!mark_scrapped_item_mysql(GET_NAME(owner), obj)) {
 			mudlog(LOG_SYSERR, "MakeScrap: mark_scrapped_item_mysql failed for %s",
 				   GET_NAME(owner));

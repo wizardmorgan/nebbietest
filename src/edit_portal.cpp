@@ -518,6 +518,15 @@ std::atomic<bool> g_http_running {false};
 	return portal_mysql_exec(db, sql.str(), err, "portal:deduct");
 }
 
+/** Owner per class_mult listino: personal_owner / ED, altrimenti toon del portale. */
+void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_name) {
+	if(!obj || toon_name.empty() || obj->personal_owner[0] != '\0') {
+		return;
+	}
+	strncpy(obj->personal_owner, toon_name.c_str(), sizeof(obj->personal_owner) - 1);
+	obj->personal_owner[sizeof(obj->personal_owner) - 1] = '\0';
+}
+
 /**
  * Listino: la parte MXP (quote_xp) si paga in XP e/o Rune (1 MXP = 1 Rune =
  * kObjEditRunePerMegaXp XP raw). quote_pq sono rune “rent” aggiuntive obbligatorie.
@@ -578,6 +587,14 @@ std::atomic<bool> g_http_running {false};
 		 */
 		if(IS_SET(row.elem.extra_flags2, ITEM2_EDIT)) {
 			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+		}
+		if(IS_SET(row.elem.extra_flags2, ITEM2_PAID_MALUS)) {
+			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PAID_MALUS);
+		}
+		/* Artifact: se l'inventario ha ancora ITEM_IMMUNE e l'instance no,
+		 * il listino perderebbe il +50% (es. quote 135 invece di 202). */
+		if(IS_SET(row.elem.extra_flags, ITEM_IMMUNE)) {
+			SET_BIT(obj->obj_flags.extra_flags, ITEM_IMMUNE);
 		}
 		if(obj->personal_owner[0] == '\0' && row.elem.name[0] != '\0') {
 			const std::string ed = object_instance_extract_ed_owner(row.elem.name);
@@ -998,6 +1015,7 @@ void portal_apply_personalize(struct obj_data* obj, const char* owner_name) {
 	j["diff_derent_mega"] = static_cast<long long>(a.diff.derent / 1000000L);
 	j["changes"] = a.changes;
 	j["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
+	j["paid_malus"] = IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS) ? 1 : 0;
 	return j;
 }
 
@@ -2161,6 +2179,7 @@ struct ToonInventoryEditScan {
 				extract_obj(obj);
 				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
 			}
+			ensure_portal_listino_owner(obj, toon_name);
 
 			if(flag == "artifact") {
 				const int current = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
@@ -2212,9 +2231,11 @@ struct ToonInventoryEditScan {
 					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
 														  toon_name.c_str())
 					: -1;
+			const bool allow_combat_merge =
+				parse_json_int(req, "allow_combat_merge", 0) != 0;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
 										   quote_err, other_dam, other_sp, clear_slot,
-										   other_sf)) {
+										   other_sf, allow_combat_merge)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -2252,8 +2273,20 @@ struct ToonInventoryEditScan {
 			d["inventory_id"] = inventory_id;
 			d["artifact"] = IS_OBJ_STAT(obj, ITEM_IMMUNE) ? 1 : 0;
 			d["pending_artifact"] = pending_artifact ? 1 : 0;
+			d["paid_malus"] = IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS) ? 1 : 0;
+			d["allow_combat_merge"] = allow_combat_merge ? 1 : 0;
+			d["will_set_paid_malus"] =
+				object_edit_recovers_listino_malus(obj, location, target_modifier,
+												   clear_slot)
+					? 1
+					: 0;
 			if(clear_slot) {
 				d["note"] = "Rimuovi slot: libera lo slot (gratis, listino)";
+			}
+			else if(d["will_set_paid_malus"] == 1 && xp_raw > 0) {
+				d["note"] =
+					"Recupero malus a tariffa 2× (ITEM2_PAID_MALUS); include class_mult "
+					"e Artifact se presenti";
 			}
 			else if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
 				d["note"] = "Include maggiorazione Artifact +50% (listino)";
@@ -2337,6 +2370,7 @@ struct ToonInventoryEditScan {
 				extract_obj(obj);
 				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
 			}
+			ensure_portal_listino_owner(obj, target_name);
 
 			if(flag == "artifact") {
 				const bool already = IS_OBJ_STAT(obj, ITEM_IMMUNE);
@@ -2409,6 +2443,13 @@ struct ToonInventoryEditScan {
 				return json_ok(d);
 			}
 
+			/* Stesso pending_artifact del quote: evita sotto-quote in apply. */
+			const bool pending_artifact =
+				parse_json_int(req, "pending_artifact", 0) != 0;
+			if(pending_artifact || IS_OBJ_STAT(obj, ITEM_IMMUNE)) {
+				SET_BIT(obj->obj_flags.extra_flags, ITEM_IMMUNE);
+			}
+
 			long quote_xp = 0;
 			int quote_pq = 0;
 			std::string quote_err;
@@ -2427,9 +2468,11 @@ struct ToonInventoryEditScan {
 					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
 														  target_name.c_str())
 					: -1;
+			const bool allow_combat_merge =
+				parse_json_int(req, "allow_combat_merge", 0) != 0;
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
 										   quote_pq, quote_err, other_dam, other_sp,
-										   clear_slot, other_sf)) {
+										   clear_slot, other_sf, allow_combat_merge)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -2443,7 +2486,8 @@ struct ToonInventoryEditScan {
 
 			std::string apply_err;
 			if(!object_apply_affect_target(after, location, target_modifier, apply_err,
-										   other_dam, other_sp, clear_slot, other_sf)) {
+										   other_dam, other_sp, clear_slot, other_sf,
+										   allow_combat_merge)) {
 				extract_obj(after);
 				return json_error(apply_err.c_str(), 400);
 			}

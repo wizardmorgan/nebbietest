@@ -25,6 +25,7 @@
 #include "vt100c.hpp"
 #include "procarea.hpp"
 #include "db.hpp"
+#include "object_instance.hpp"
 
 namespace Alarmud {
 
@@ -74,6 +75,8 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
 	int i, row, update;
 	unsigned long check = 0;
 	char buf[255];
+	/* extra_bits (32) + extra_bits2 fino a PAID-MALUS (10) = 42 voci menu. */
+	static constexpr int kExtraFlagMenuCount = 42;
 
 	if(type != ENTER_CHECK)
 		if(!*arg || (*arg == '\n')) {
@@ -85,7 +88,7 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
 	update = atoi(arg);
 	update--;
 	if(type != ENTER_CHECK) {
-		if(update < 0 || update > 39) {
+		if(update < 0 || update >= kExtraFlagMenuCount) {
 			return;
 		}
 		check = (update < 32) ? (1UL << update) : (1UL << (update - 32));
@@ -106,7 +109,24 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
                 }
                 else
             {
-                SET_BIT(ch->specials.objedit->obj_flags.extra_flags2, check);
+				if(check == ITEM2_PERSONAL) {
+					struct obj_data* o = ch->specials.objedit;
+					const bool has_owner =
+						(o->personal_owner[0] != '\0') ||
+						!object_instance_extract_ed_owner(o->name).empty();
+					if(!has_owner) {
+						send_to_char(
+							"PERSONAL richiede un proprietario. Usa: "
+							"personalize <oggetto> <nome_pg>\n\r",
+							ch);
+					}
+					else {
+						SET_BIT(ch->specials.objedit->obj_flags.extra_flags2, check);
+					}
+				}
+				else {
+					SET_BIT(ch->specials.objedit->obj_flags.extra_flags2, check);
+				}
             }
         }
 	}
@@ -119,7 +139,7 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
         send_to_char(buf, ch);
 
         row = 0;
-        for(i = 0; i < 40; i++)
+        for(i = 0; i < kExtraFlagMenuCount; i++)
         {
             sprintf(buf, VT_CURSPOS, row + 4, ((i & 1) ? 45 : 5));
             if(i & 1)
@@ -154,7 +174,7 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
         sprintf(buf, "\n\rObject Extra Flags:\n\r\n\r");
         send_to_char(buf, ch);
 
-        for(i = 0; i < 40; i++)
+        for(i = 0; i < kExtraFlagMenuCount; i++)
         {
             check = (i < 32) ? (1UL << i) : (1UL << (i - 32));
             snprintf(buf2, sizeof(buf2), "%%-%d", 45-x);
@@ -194,7 +214,11 @@ void ChangeObjFlags(struct char_data* ch, const char* arg, int type) {
             fmt2.clear();
         }
 
-        sb.append("\r\n\n\r");
+		/* Count dispari: ultima voce in colonna sinistra senza \n\r. */
+		if((kExtraFlagMenuCount & 1) != 0) {
+			sb.append("\n\r");
+		}
+		sb.append("\n\r\n\r");
         page_string(ch->desc, sb.c_str(), true);
         send_to_char("Select the number to toggle, <C/R> to return to main menu.\n\r--> ", ch);
     }

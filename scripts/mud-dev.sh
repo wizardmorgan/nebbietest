@@ -1,5 +1,7 @@
 #!/bin/bash
-# Dev Docker: NebbieArcane (Razze) + fork edit-portal (due repo).
+# Dev Docker nucbuntu:
+#   MUD (myst/C++)  → ~/NebbieArcane/Server
+#   UI portale      → ~/NebbieArcane/edit-portal  (NebbieArcane/edit-portal, non il fork)
 # Config: ~/.config/nebbie/mud-dev.env (vedi docs/nebbie-mud-dev.env.example)
 set -euo pipefail
 
@@ -19,8 +21,24 @@ if [ -z "${MUD_ROOT:-}" ]; then
 	fi
 fi
 
-EDIT_REPO="${EDIT_REPO:-$SCRIPT_REPO}"
-MUD_APP_ROOT="${MUD_APP_ROOT:-$MUD_ROOT}"
+# C++ / myst: clone Server (branch con edit_portal, tipicamente feature/edit-portal)
+EDIT_REPO="${EDIT_REPO:-$MUD_ROOT}"
+MUD_APP_ROOT="${MUD_APP_ROOT:-$EDIT_REPO}"
+
+# UI ufficiale (repo Node): default clone dedicato
+if [ -z "${PORTAL_UI_ROOT:-}" ]; then
+	if [ -d "${HOME}/NebbieArcane/edit-portal/.git" ]; then
+		PORTAL_UI_ROOT="${HOME}/NebbieArcane/edit-portal"
+	elif [ -f "$SCRIPT_REPO/public/app.js" ] && [ -f "$SCRIPT_REPO/server.js" ]; then
+		# mud-dev.sh gira dal clone NebbieArcane/edit-portal
+		PORTAL_UI_ROOT="$SCRIPT_REPO"
+	elif [ -d "$EDIT_REPO/edit-portal" ]; then
+		# legacy: UI annidata nel clone mud
+		PORTAL_UI_ROOT="$EDIT_REPO/edit-portal"
+	else
+		PORTAL_UI_ROOT="${HOME}/NebbieArcane/edit-portal"
+	fi
+fi
 
 ENVIRONMENT="${ENVIRONMENT:-devel}"
 MUD_PORT="${MUD_PORT:-4002}"
@@ -29,11 +47,28 @@ EDIT_API_PORT="${EDIT_API_PORT:-8090}"
 EDIT_API_SECRET="${EDIT_API_SECRET:-nebbie-edit-dev-secret}"
 EDIT_WEB_PORT="${EDIT_WEB_PORT:-3080}"
 
-RAZZE_REMOTE="${RAZZE_REMOTE:-origin}"
-RAZZE_BRANCH="${RAZZE_BRANCH:-feature/Razze}"
+# Montero base (Razze è in produzione/develop; nuovi sviluppi su feature/Principi)
+UPSTREAM_REMOTE="${UPSTREAM_REMOTE:-upstream}"
+PRINCIPI_REMOTE="${PRINCIPI_REMOTE:-${RAZZE_REMOTE:-$UPSTREAM_REMOTE}}"
+if [ -n "${PRINCIPI_BRANCH:-}" ]; then
+	:
+elif [ -n "${RAZZE_BRANCH:-}" ] && [ "${RAZZE_BRANCH}" != "feature/Razze" ]; then
+	# Retrocompat: RAZZE_BRANCH custom (non il vecchio nome obsoleto)
+	PRINCIPI_BRANCH="$RAZZE_BRANCH"
+else
+	PRINCIPI_BRANCH="feature/Principi"
+fi
+# Alias legacy (comandi sync-razze / update-razze)
+RAZZE_REMOTE="$PRINCIPI_REMOTE"
+RAZZE_BRANCH="$PRINCIPI_BRANCH"
+# C++ portal: remote fork mud (finché edit_portal.cpp non è su NebbieArcane/Server)
 EDIT_REMOTE="${EDIT_REMOTE:-mine}"
 EDIT_BRANCH="${EDIT_BRANCH:-feature/edit-portal}"
-UPSTREAM_REMOTE="${UPSTREAM_REMOTE:-upstream}"
+# UI: NebbieArcane/edit-portal
+PORTAL_UI_REMOTE="${PORTAL_UI_REMOTE:-origin}"
+PORTAL_UI_BRANCH="${PORTAL_UI_BRANCH:-develop}"
+PORTAL_UI_GIT_URL="${PORTAL_UI_GIT_URL:-git@github.com:NebbieArcane/edit-portal.git}"
+PORTAL_UI_SSH_KEY="${PORTAL_UI_SSH_KEY:-${HOME}/.ssh/edit_portal_deploy}"
 
 MUD_STACK_NETWORK="${MUD_STACK_NETWORK:-$(basename "$MUD_ROOT" | tr '[:upper:]' '[:lower:]')_default}"
 
@@ -46,29 +81,69 @@ fi
 ROOT="$MUD_ROOT"
 source "${MUD_ROOT}/scripts/load-mysql-conf.sh"
 
+COMPOSE=""
 if docker compose version >/dev/null 2>&1; then
 	COMPOSE='docker compose'
 elif command -v docker-compose >/dev/null 2>&1; then
 	COMPOSE='docker-compose'
-else
-	echo "ERRORE: né 'docker compose' né 'docker-compose' trovati." >&2
-	exit 1
 fi
 
+require_compose() {
+	if [ -z "$COMPOSE" ]; then
+		echo "ERRORE: né 'docker compose' né 'docker-compose' trovati." >&2
+		echo "  (comandi git-only: sync-principi, sync-mud, sync-ui, sync-all, help)" >&2
+		exit 1
+	fi
+}
+
+portal_ui_app_js() {
+	if [ -f "$PORTAL_UI_ROOT/public/app.js" ]; then
+		echo "$PORTAL_UI_ROOT/public/app.js"
+	elif [ -f "$PORTAL_UI_ROOT/edit-portal/public/app.js" ]; then
+		echo "$PORTAL_UI_ROOT/edit-portal/public/app.js"
+	elif [ -f "$EDIT_REPO/edit-portal/public/app.js" ]; then
+		echo "$EDIT_REPO/edit-portal/public/app.js"
+	else
+		return 1
+	fi
+}
+
 compose() {
+	require_compose
 	(cd "$MUD_ROOT" && $COMPOSE "$@")
 }
 
 compose_edit() {
-	if [ ! -f "$EDIT_REPO/docker-compose.edit-portal.yml" ]; then
-		echo "ERRORE: EDIT_REPO=$EDIT_REPO senza docker-compose.edit-portal.yml" >&2
-		return 1
+	require_compose
+	# Preferisci repo ufficiale (docker-compose.yml, build: .)
+	if [ -f "$PORTAL_UI_ROOT/docker-compose.yml" ] && [ -f "$PORTAL_UI_ROOT/server.js" ]; then
+		(
+			cd "$PORTAL_UI_ROOT"
+			export MUD_STACK_NETWORK EDIT_API_SECRET EDIT_WEB_PORT
+			$COMPOSE -f docker-compose.yml "$@"
+		)
+		return $?
 	fi
-	(
-		cd "$EDIT_REPO"
-		export MUD_STACK_NETWORK EDIT_API_SECRET EDIT_WEB_PORT
-		$COMPOSE -f docker-compose.edit-portal.yml "$@"
-	)
+	# Legacy: overlay nel clone mud (build: ./edit-portal)
+	if [ -f "$EDIT_REPO/docker-compose.edit-portal.yml" ]; then
+		(
+			cd "$EDIT_REPO"
+			export MUD_STACK_NETWORK EDIT_API_SECRET EDIT_WEB_PORT
+			$COMPOSE -f docker-compose.edit-portal.yml "$@"
+		)
+		return $?
+	fi
+	echo "ERRORE: nessun compose UI. Clona NebbieArcane/edit-portal in PORTAL_UI_ROOT=$PORTAL_UI_ROOT" >&2
+	return 1
+}
+
+portal_git_ssh_env() {
+	# Evita rewrite HTTPS Cursor; usa deploy key se presente.
+	if [ -f "$PORTAL_UI_SSH_KEY" ]; then
+		export GIT_SSH_COMMAND="ssh -i ${PORTAL_UI_SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+		export GIT_CONFIG_GLOBAL=/dev/null
+		export GIT_CONFIG_SYSTEM=/dev/null
+	fi
 }
 
 service_running() {
@@ -208,12 +283,18 @@ print_do() {
 }
 
 ensure_docker_override() {
-	local example="$EDIT_REPO/Confs/docker-compose.override.edit-api.example"
-	local target="$MUD_ROOT/docker-compose.override.yml"
-	if [ ! -f "$target" ] && [ -f "$example" ]; then
-		echo "Copia override API edit → $target"
-		cp "$example" "$target"
-	fi
+	local example target
+	target="$MUD_ROOT/docker-compose.override.yml"
+	for example in \
+		"$EDIT_REPO/Confs/docker-compose.override.edit-api.example" \
+		"$MUD_ROOT/Confs/docker-compose.override.edit-api.example" \
+		"$SCRIPT_REPO/docs/docker-compose.override.edit-api.example"; do
+		if [ ! -f "$target" ] && [ -f "$example" ]; then
+			echo "Copia override API edit → $target"
+			cp "$example" "$target"
+			return 0
+		fi
+	done
 }
 
 ensure_edit_remote() {
@@ -227,13 +308,34 @@ ensure_edit_remote() {
 }
 
 ensure_upstream_remote() {
+	local repo="${1:-$EDIT_REPO}"
 	(
-		cd "$EDIT_REPO"
+		cd "$repo"
 		if ! git remote get-url "$UPSTREAM_REMOTE" >/dev/null 2>&1; then
 			echo "Aggiunta remote $UPSTREAM_REMOTE → https://github.com/NebbieArcane/Server.git"
 			git remote add "$UPSTREAM_REMOTE" https://github.com/NebbieArcane/Server.git
 		fi
 	)
+}
+
+ensure_portal_ui_clone() {
+	if [ -d "$PORTAL_UI_ROOT/.git" ] && [ -f "$PORTAL_UI_ROOT/server.js" ]; then
+		return 0
+	fi
+	if [ -f "$PORTAL_UI_ROOT/server.js" ] && [ ! -d "$PORTAL_UI_ROOT/.git" ]; then
+		# nested legacy path without own git — ok for compose, not for sync-ui
+		return 0
+	fi
+	echo "=== clone UI ufficiale → $PORTAL_UI_ROOT ==="
+	mkdir -p "$(dirname "$PORTAL_UI_ROOT")"
+	portal_git_ssh_env
+	if [ -f "$PORTAL_UI_SSH_KEY" ]; then
+		GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+			git clone "$PORTAL_UI_GIT_URL" "$PORTAL_UI_ROOT"
+	else
+		echo "AVVISO: $PORTAL_UI_SSH_KEY assente — provo clone HTTPS (repo privato: serve auth)." >&2
+		git clone "https://github.com/NebbieArcane/edit-portal.git" "$PORTAL_UI_ROOT"
+	fi
 }
 
 git_discard_local_file() {
@@ -273,46 +375,85 @@ git_pull_branch() {
 	)
 }
 
-cmd_sync_razze() {
-	echo "=== sync-razze: $MUD_ROOT ($RAZZE_REMOTE/$RAZZE_BRANCH) ==="
-	git_pull_branch "$MUD_ROOT" "$RAZZE_REMOTE" "$RAZZE_BRANCH"
-	ensure_docker_override
-	echo "sync-razze ok."
-}
-
-cmd_sync_edit() {
-	echo "=== sync-edit: $EDIT_REPO ($EDIT_REMOTE/$EDIT_BRANCH) ==="
-	ensure_edit_remote
-	git_discard_local_file "$EDIT_REPO" scripts/mud-dev.sh
-	git_discard_local_file "$EDIT_REPO" scripts/verify-myst-portal.sh
-	git_discard_local_file "$EDIT_REPO" scripts/fix-edit-system-perms.sh
-	git_discard_local_file "$EDIT_REPO" pages/wizhelptbl.stamp
-	git_pull_branch "$EDIT_REPO" "$EDIT_REMOTE" "$EDIT_BRANCH"
-	chmod +x "$EDIT_REPO/scripts/mud-dev.sh" \
-		"$EDIT_REPO/scripts/verify-myst-portal.sh" \
-		"$EDIT_REPO/scripts/fix-edit-system-perms.sh" 2>/dev/null || true
-	echo "sync-edit ok."
-}
-
-cmd_sync_all() {
-	cmd_sync_razze
-	echo "=== merge Razze in EDIT_REPO ==="
-	ensure_upstream_remote
-	ensure_edit_remote
-	git_discard_local_file "$EDIT_REPO" scripts/mud-dev.sh
-	git_discard_local_file "$EDIT_REPO" scripts/verify-myst-portal.sh
+cmd_sync_principi() {
+	echo "=== sync-principi: $EDIT_REPO ($PRINCIPI_REMOTE/$PRINCIPI_BRANCH) ==="
+	# Preferisci merge Principi sul clone C++ (EDIT_REPO), se distinto da MUD_ROOT
+	local repo="$EDIT_REPO"
+	if [ ! -d "$repo/.git" ]; then
+		repo="$MUD_ROOT"
+	fi
+	ensure_upstream_remote "$repo"
 	(
-		cd "$EDIT_REPO"
-		git fetch "$UPSTREAM_REMOTE" "$RAZZE_BRANCH"
-		if git merge --no-edit "$UPSTREAM_REMOTE/$RAZZE_BRANCH"; then
-			echo "merge $UPSTREAM_REMOTE/$RAZZE_BRANCH ok"
+		cd "$repo"
+		local remote="$PRINCIPI_REMOTE"
+		if ! git remote get-url "$remote" >/dev/null 2>&1; then
+			remote="$UPSTREAM_REMOTE"
+		fi
+		git fetch "$remote" "$PRINCIPI_BRANCH"
+		if git merge --no-edit "$remote/$PRINCIPI_BRANCH"; then
+			echo "merge $remote/$PRINCIPI_BRANCH ok"
 		else
-			echo "ERRORE: conflitti merge in $EDIT_REPO — risolvi, commit, poi riprova." >&2
+			echo "ERRORE: conflitti merge Principi in $repo — vedi docs/sync-principi-procedure.md" >&2
 			exit 1
 		fi
 	)
+	ensure_docker_override
+	echo "sync-principi ok."
+}
+
+# Alias legacy (Razze → produzione; base sviluppo = Principi)
+cmd_sync_razze() {
+	cmd_sync_principi
+}
+
+# C++ / API myst (edit_portal.cpp) dal remote mud (mine/feature/edit-portal)
+cmd_sync_mud() {
+	echo "=== sync-mud (C++ portal): $EDIT_REPO ($EDIT_REMOTE/$EDIT_BRANCH) ==="
+	ensure_edit_remote
+	git_discard_local_file "$EDIT_REPO" pages/wizhelptbl.stamp
 	git_pull_branch "$EDIT_REPO" "$EDIT_REMOTE" "$EDIT_BRANCH"
-	chmod +x "$EDIT_REPO/scripts/mud-dev.sh" 2>/dev/null || true
+	chmod +x "$EDIT_REPO/scripts/"*.sh 2>/dev/null || true
+	echo "sync-mud ok."
+}
+
+# UI ufficiale NebbieArcane/edit-portal
+cmd_sync_ui() {
+	echo "=== sync-ui: $PORTAL_UI_ROOT ($PORTAL_UI_REMOTE/$PORTAL_UI_BRANCH) ==="
+	ensure_portal_ui_clone
+	if [ ! -d "$PORTAL_UI_ROOT/.git" ]; then
+		echo "ERRORE: $PORTAL_UI_ROOT non e' un clone git (UI ufficiale)." >&2
+		echo "  Clona: git clone $PORTAL_UI_GIT_URL $PORTAL_UI_ROOT" >&2
+		exit 1
+	fi
+	portal_git_ssh_env
+	(
+		cd "$PORTAL_UI_ROOT"
+		git fetch "$PORTAL_UI_REMOTE" "$PORTAL_UI_BRANCH"
+		git checkout "$PORTAL_UI_BRANCH"
+		if git merge-base --is-ancestor HEAD FETCH_HEAD 2>/dev/null; then
+			git merge --ff-only FETCH_HEAD
+		elif git merge-base --is-ancestor FETCH_HEAD HEAD 2>/dev/null; then
+			echo "[UI] già aggiornato rispetto a $PORTAL_UI_REMOTE/$PORTAL_UI_BRANCH"
+		else
+			echo "[UI] reset --hard a $PORTAL_UI_REMOTE/$PORTAL_UI_BRANCH (working tree UI pulito richiesto)"
+			git reset --hard "FETCH_HEAD"
+		fi
+	)
+	chmod +x "$PORTAL_UI_ROOT/scripts/"*.sh 2>/dev/null || true
+	echo "sync-ui ok. UI build: $(grep -E 'EDIT_PORTAL_UI_BUILD\s*=' "$(portal_ui_app_js)" 2>/dev/null | head -1 || echo '?')"
+}
+
+# Retrocompat: sync-edit = sync C++ mud (come prima) + sync UI ufficiale
+cmd_sync_edit() {
+	cmd_sync_mud
+	cmd_sync_ui
+}
+
+cmd_sync_all() {
+	# Tree mud pulito consigliato (stash) prima di sync-principi
+	cmd_sync_principi
+	cmd_sync_mud
+	cmd_sync_ui
 	echo "sync-all ok."
 }
 
@@ -332,20 +473,25 @@ cmd_build_edit() {
 	echo "build edit-portal ok."
 }
 
-cmd_update_razze() {
-	cmd_sync_razze
+cmd_update_principi() {
+	cmd_sync_principi
 	cmd_build
 }
 
+# Alias legacy
+cmd_update_razze() {
+	cmd_update_principi
+}
+
 cmd_update_edit() {
-	cmd_sync_edit
+	cmd_sync_ui
 	cmd_build_edit
 }
 
 cmd_deploy_edit() {
-	echo "=== deploy-edit: sync fork + build myst + build portal + start ==="
-	echo "Nota: sync-edit fa pull da $EDIT_REMOTE/$EDIT_BRANCH — pusha le modifiche prima del deploy."
-	cmd_sync_edit
+	echo "=== deploy-edit: sync mud C++ + UI ufficiale + build + start ==="
+	cmd_sync_mud
+	cmd_sync_ui
 	cmd_build
 	cmd_stop_mud
 	cmd_build_edit
@@ -485,15 +631,18 @@ cmd_start_edit() {
 	if ! find_mudcompiler_container >/dev/null; then
 		print_warn "mudcompiler non attivo — API edit non disponibile"
 	fi
-	echo "Avvio edit-portal (EDIT_REPO=$EDIT_REPO, rete $MUD_STACK_NETWORK)..."
+	echo "Avvio edit-portal (PORTAL_UI_ROOT=$PORTAL_UI_ROOT, rete $MUD_STACK_NETWORK)..."
 	export EDIT_API_SECRET EDIT_WEB_PORT
 	# MAI --remove-orphans qui: il compose edit-portal non elenca mysql/adminer,
 	# quindi orphans li UCCIDE (come successso su nucbuntu).
 	docker rm -f nebbie-edit-portal 2>/dev/null || true
-	if [ -f "$EDIT_REPO/edit-portal/public/app.js" ]; then
+	local host_app
+	if host_app="$(portal_ui_app_js)"; then
 		echo "Host app.js marker:"
-		grep -n 'EDIT_PORTAL_UI_BUILD' "$EDIT_REPO/edit-portal/public/app.js" | head -3 || \
-			print_warn "EDIT_PORTAL_UI_BUILD assente su host — git merge incompleto?"
+		grep -n 'EDIT_PORTAL_UI_BUILD' "$host_app" | head -3 || \
+			print_warn "EDIT_PORTAL_UI_BUILD assente su host — sync-ui incompleto?"
+	else
+		print_warn "public/app.js non trovato — esegui: $0 sync-ui"
 	fi
 	compose_edit up -d --build --force-recreate edit-portal
 	# mysql potrebbe essere stato stoppato da altri comandi: ripristina
@@ -509,7 +658,7 @@ cmd_start_edit() {
 	local health expected_ui
 	health="$(curl -sf "http://localhost:${EDIT_WEB_PORT}/api/health" 2>/dev/null || true)"
 	echo "health: ${health:-"(nessuna risposta)"}"
-	expected_ui="$(grep -E 'EDIT_PORTAL_UI_BUILD\s*=' "$EDIT_REPO/edit-portal/public/app.js" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1)"
+	expected_ui="$(grep -E 'EDIT_PORTAL_UI_BUILD\s*=' "$(portal_ui_app_js 2>/dev/null || true)" 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1)"
 	expected_ui="${expected_ui:-?}"
 	if docker exec nebbie-edit-portal grep -q "EDIT_PORTAL_UI_BUILD = ${expected_ui}" /app/public/app.js 2>/dev/null; then
 		echo "OK: container ha app.js UI build ${expected_ui}"
@@ -532,18 +681,22 @@ cmd_status() {
 	local mysql_up=0 myst_up=0 edit_up=0
 
 	print_header "Percorsi"
-	echo "  MUD_ROOT:      $MUD_ROOT"
-	echo "  MUD_APP_ROOT:  $MUD_APP_ROOT"
-	echo "  EDIT_REPO:     $EDIT_REPO"
-	echo "  Rete Docker:   $MUD_STACK_NETWORK"
-	echo "  Porta mud:     $MUD_PORT | Edit API: $EDIT_API_PORT | Web: $EDIT_WEB_PORT"
+	echo "  MUD_ROOT:       $MUD_ROOT"
+	echo "  MUD_APP_ROOT:   $MUD_APP_ROOT"
+	echo "  EDIT_REPO(C++): $EDIT_REPO"
+	echo "  PORTAL_UI_ROOT: $PORTAL_UI_ROOT"
+	echo "  Rete Docker:    $MUD_STACK_NETWORK"
+	echo "  Porta mud:      $MUD_PORT | Edit API: $EDIT_API_PORT | Web: $EDIT_WEB_PORT"
 
 	print_header "Git (branch attuale)"
 	if [ -d "$MUD_ROOT/.git" ]; then
 		echo "  MUD_ROOT:  $(cd "$MUD_ROOT" && git branch --show-current) @ $(cd "$MUD_ROOT" && git rev-parse --short HEAD)"
 	fi
-	if [ -d "$EDIT_REPO/.git" ]; then
+	if [ -d "$EDIT_REPO/.git" ] && [ "$EDIT_REPO" != "$MUD_ROOT" ]; then
 		echo "  EDIT_REPO: $(cd "$EDIT_REPO" && git branch --show-current) @ $(cd "$EDIT_REPO" && git rev-parse --short HEAD)"
+	fi
+	if [ -d "$PORTAL_UI_ROOT/.git" ]; then
+		echo "  PORTAL_UI: $(cd "$PORTAL_UI_ROOT" && git branch --show-current) @ $(cd "$PORTAL_UI_ROOT" && git rev-parse --short HEAD)"
 	fi
 
 	print_header "Docker Compose (MUD_ROOT)"
@@ -689,28 +842,33 @@ cmd_dev() {
 
 usage() {
 	cat <<EOF
-mud-dev.sh — MUD NebbieArcane + edit-portal (due repo)
+mud-dev.sh — MUD NebbieArcane/Server + UI NebbieArcane/edit-portal
 
 Config: ~/.config/nebbie/mud-dev.env
-  MUD_ROOT=$MUD_ROOT        ($RAZZE_REMOTE/$RAZZE_BRANCH)
-  EDIT_REPO=$EDIT_REPO      ($EDIT_REMOTE/$EDIT_BRANCH)
+  MUD_ROOT=$MUD_ROOT
+  EDIT_REPO=$EDIT_REPO          (C++ / myst, tipicamente stesso di MUD_ROOT)
+  PORTAL_UI_ROOT=$PORTAL_UI_ROOT  (UI ufficiale, repo Node)
   MUD_APP_ROOT=$MUD_APP_ROOT
 
 SYNC (git)
-  sync-razze      pull Montero su NebbieArcane (solo MUD_ROOT)
-  sync-edit       pull fork edit-portal su EDIT_REPO
-  sync-all        sync-razze + merge Razze in EDIT_REPO + pull edit-portal
+  sync-principi   merge Montero ($PRINCIPI_REMOTE/$PRINCIPI_BRANCH) nel clone C++
+  sync-razze      alias di sync-principi (legacy)
+  sync-mud        pull C++ portal ($EDIT_REMOTE/$EDIT_BRANCH) su EDIT_REPO
+  sync-ui         pull UI ufficiale ($PORTAL_UI_REMOTE/$PORTAL_UI_BRANCH)
+  sync-edit       sync-mud + sync-ui  (retrocompat)
+  sync-all        sync-principi + sync-mud + sync-ui
 
 BUILD
   build           compila myst (./build.sh devel, sorgente MUD_APP_ROOT)
-  build-edit      rebuild immagine Docker edit-portal
+  build-edit      rebuild immagine Docker edit-portal (da PORTAL_UI_ROOT)
 
 UPDATE (sync + build)
-  update-razze    sync-razze + build myst
-  update-edit     sync-edit + build-edit
+  update-principi sync-principi + build myst
+  update-razze    alias di update-principi (legacy)
+  update-edit     sync-ui + build-edit
   update-all      sync-all + build myst + build-edit
-  deploy-edit     sync-edit + build myst + build-edit + start (workflow portale)
-  doctor          diagnostica mount/build/myst (perché il deploy fallisce)
+  deploy-edit     sync-mud + sync-ui + build + start
+  doctor          diagnostica mount/build/myst
   rebuild-myst    build + ricrea container se mount errato + riavvia myst
 
 AVVIO / STOP
@@ -726,17 +884,16 @@ INFO
   status          diagnostica stack e git
   logs [righe]    tail errors.log / edit_portal in myst
   health          curl health web + ping API myst
-  dev             update-all + start (workflow dopo update Montero)
+  dev             update-all + start
 
   help | --help   questo messaggio (default senza argomenti)
 
 Esempi:
-  $0 dev                    # Montero ha pushato: pull, build, avvio tutto
-  $0 update-razze && $0 start-mud   # solo upstream + mud telnet
-  $0 sync-edit && $0 build-edit && $0 start-edit
-  $0 deploy-edit              # pull fork + build tutto + avvio (docker-vms)
+  $0 sync-ui && $0 build-edit && $0 start-edit   # solo UI ufficiale
+  $0 sync-all && $0 build && $0 start            # Principi + C++ + UI
+  $0 deploy-edit
 
-Vedi docs/edit-portal-two-repos.md
+Vedi docs/edit-portal-nucbuntu.md e docs/edit-portal-ssh-deploy.md
 EOF
 }
 
@@ -746,12 +903,14 @@ main() {
 	help | -h | --help) usage ;;
 	status) cmd_status ;;
 	health) cmd_health ;;
-	sync-razze) cmd_sync_razze ;;
+	sync-principi | sync-razze) cmd_sync_principi ;;
+	sync-mud) cmd_sync_mud ;;
+	sync-ui | sync-portal) cmd_sync_ui ;;
 	sync-edit) cmd_sync_edit ;;
 	sync-all) cmd_sync_all ;;
 	build) cmd_build ;;
 	build-edit) cmd_build_edit ;;
-	update-razze) cmd_update_razze ;;
+	update-principi | update-razze) cmd_update_principi ;;
 	update-edit) cmd_update_edit ;;
 	deploy-edit) cmd_deploy_edit ;;
 	rebuild-myst) cmd_rebuild_myst ;;

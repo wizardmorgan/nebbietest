@@ -27,6 +27,7 @@
 #include "snew.hpp"
 #include "utility.hpp"
 #include "spells.hpp"
+#include "spell_parser.hpp"
 #include "maximums.hpp"
 #include "opinion.hpp"
 #include "procarea_band_stats.inc"
@@ -575,6 +576,7 @@ static void procarea_apply_hold_defense(char_data* mob, ProcMobKind kind) {
 		mob->immune &= ~IMM_HOLD;
 		break;
 	case ProcMobKind::Normal:
+	case ProcMobKind::Hireling:
 		SET_BIT(mob->immune, IMM_HOLD);
 		mob->M_immune &= ~IMM_HOLD;
 		break;
@@ -754,6 +756,111 @@ static void procarea_adjust_solo_non_fighter_class_weights(int* weights) {
 	}
 }
 
+/** Riduce pesi mu/psi/dr e redistribuisce su melee (anche basher "sfigati"). */
+static void procarea_soft_casters_to_melee(int* weights, float caster_keep_mult) {
+	if(weights == nullptr || caster_keep_mult >= 0.999f) {
+		return;
+	}
+	caster_keep_mult = std::clamp(caster_keep_mult, 0.0f, 1.0f);
+	int freed = 0;
+	for(const int caster_class : kProcSoloNonFighterCasterClasses) {
+		const int old = weights[caster_class];
+		const int keep = static_cast<int>(static_cast<float>(old) * caster_keep_mult + 0.5f);
+		freed += old - keep;
+		weights[caster_class] = keep;
+	}
+	if(freed <= 0) {
+		return;
+	}
+	int melee_sum = 0;
+	for(const int melee_class : kProcSoloNonFighterMeleeClasses) {
+		melee_sum += weights[melee_class];
+	}
+	if(melee_sum <= 0) {
+		weights[static_cast<int>(ProcRollClass::Warrior)] += freed;
+		return;
+	}
+	int assigned = 0;
+	const std::size_t melee_count = std::size(kProcSoloNonFighterMeleeClasses);
+	for(std::size_t i = 0; i < melee_count; ++i) {
+		const int melee_class = kProcSoloNonFighterMeleeClasses[i];
+		int share = 0;
+		if(i + 1 == melee_count) {
+			share = freed - assigned;
+		} else {
+			share = (freed * weights[melee_class]) / melee_sum;
+		}
+		weights[melee_class] += share;
+		assigned += share;
+	}
+}
+
+/** Alza % none corridoio togliendo in proporzione dalle altre classi. */
+static void procarea_boost_corridor_none(int* weights, float none_mult) {
+	if(weights == nullptr || none_mult <= 1.001f) {
+		return;
+	}
+	const int none_i = static_cast<int>(ProcRollClass::None);
+	const int old_none = weights[none_i];
+	int total = 0;
+	for(int i = 0; i < static_cast<int>(ProcRollClass::Count); ++i) {
+		total += weights[i];
+	}
+	if(total <= 0) {
+		return;
+	}
+	const int new_none = std::min(total,
+		static_cast<int>(static_cast<float>(old_none) * none_mult + 0.5f));
+	int need = new_none - old_none;
+	if(need <= 0) {
+		return;
+	}
+	weights[none_i] = new_none;
+	int others = total - old_none;
+	if(others <= 0) {
+		return;
+	}
+	int taken = 0;
+	for(int i = 0; i < static_cast<int>(ProcRollClass::Count); ++i) {
+		if(i == none_i || weights[i] <= 0) {
+			continue;
+		}
+		int cut = 0;
+		if(taken >= need) {
+			break;
+		}
+		/* Ultima classe non-none con peso: prende il resto. */
+		bool last = true;
+		for(int j = i + 1; j < static_cast<int>(ProcRollClass::Count); ++j) {
+			if(j != none_i && weights[j] > 0) {
+				last = false;
+				break;
+			}
+		}
+		if(last) {
+			cut = std::min(weights[i], need - taken);
+		} else {
+			cut = std::min(weights[i], (need * weights[i]) / others);
+		}
+		weights[i] -= cut;
+		taken += cut;
+	}
+	if(taken < need) {
+		weights[none_i] = old_none + taken;
+	}
+}
+
+static void procarea_apply_solo_kit_class_weights(int* weights, bool corridor,
+												  float none_mult, float caster_keep) {
+	if(weights == nullptr) {
+		return;
+	}
+	procarea_soft_casters_to_melee(weights, caster_keep);
+	if(corridor) {
+		procarea_boost_corridor_none(weights, none_mult);
+	}
+}
+
 static void procarea_sync_mob_weapon_dice(char_data* mob) {
 	if(mob == nullptr || mob->equipment[WIELD] == nullptr ||
 	   mob->equipment[WIELD]->obj_flags.type_flag != ITEM_WEAPON) {
@@ -811,9 +918,11 @@ static void procarea_apply_roll_class(char_data* mob, ProcRollClass roll_class) 
 
 static void procarea_apply_standalone_class(char_data* mob, int template_band,
 											ProcMobClassContext class_ctx, bool solo_mode,
-											bool solo_owner_is_basher) {
+											bool solo_owner_is_basher, float none_mult = 1.0f,
+											float caster_keep = 1.0f) {
 	const int band = std::clamp(template_band, 0, PROCAREA_TEMPLATE_BANDS - 1);
 	int weights[static_cast<int>(ProcRollClass::Count)] = {};
+	const bool corridor = (class_ctx != ProcMobClassContext::Treasure);
 	if(class_ctx == ProcMobClassContext::Treasure) {
 		procarea_fill_treasure_class_weights(kProcTreasureClassByBand[band], weights);
 	} else {
@@ -821,6 +930,9 @@ static void procarea_apply_standalone_class(char_data* mob, int template_band,
 	}
 	if(solo_mode && !solo_owner_is_basher) {
 		procarea_adjust_solo_non_fighter_class_weights(weights);
+	}
+	if(solo_mode) {
+		procarea_apply_solo_kit_class_weights(weights, corridor, none_mult, caster_keep);
 	}
 
 	const int pick = procarea_weighted_pick(
@@ -974,13 +1086,14 @@ static void procarea_apply_boss_class_buffs(char_data* mob, int template_band,
 
 static void procarea_apply_boss_add_class(char_data* mob, const char_data* boss, int template_band,
 										  ProcMobClassContext class_ctx, bool solo_mode,
-										  bool solo_owner_is_basher) {
+										  bool solo_owner_is_basher, float none_mult,
+										  float caster_keep) {
 	if(mob == nullptr || boss == nullptr) {
 		return;
 	}
 	if(procarea_mob_has_magic_user(boss)) {
 		procarea_apply_standalone_class(mob, template_band, class_ctx, solo_mode,
-										solo_owner_is_basher);
+										solo_owner_is_basher, none_mult, caster_keep);
 		return;
 	}
 	if(solo_mode && !solo_owner_is_basher) {
@@ -995,7 +1108,8 @@ static void procarea_apply_class_role(char_data* mob, ProcMobKind kind, int add_
 									  int template_band, ProcMobClassContext class_ctx,
 									  bool solo_mode, bool solo_owner_is_basher,
 									  const char_data* boss_for_add,
-									  ProcBossRollClass* out_boss_roll) {
+									  ProcBossRollClass* out_boss_roll,
+									  float none_mult = 1.0f, float caster_keep = 1.0f) {
 	if(mob == nullptr) {
 		return;
 	}
@@ -1023,7 +1137,7 @@ static void procarea_apply_class_role(char_data* mob, ProcMobKind kind, int add_
 	if(add_slot >= 0) {
 		if(boss_for_add != nullptr) {
 			procarea_apply_boss_add_class(mob, boss_for_add, template_band, class_ctx, solo_mode,
-										  solo_owner_is_basher);
+										  solo_owner_is_basher, none_mult, caster_keep);
 			return;
 		}
 		static constexpr ProcRollClass kAddClassOrder[] = {
@@ -1058,7 +1172,7 @@ static void procarea_apply_class_role(char_data* mob, ProcMobKind kind, int add_
 		return;
 	}
 	procarea_apply_standalone_class(mob, template_band, class_ctx, solo_mode,
-									solo_owner_is_basher);
+									solo_owner_is_basher, none_mult, caster_keep);
 }
 
 static constexpr int kProcAlignPaladin = 1000;
@@ -1163,14 +1277,17 @@ static void procarea_apply_aggressive(char_data* mob, int template_band, ProcMob
 [[nodiscard]] static int procarea_spawn_level(int group_max_level, int template_band,
 											  ProcMobKind kind) {
 	const int band = std::clamp(template_band, 0, PROCAREA_TEMPLATE_BANDS - 1);
-	const int fascia_effettiva = 1 + (band * 5) / 9;
+	const ProcLevelConfig& cfg = procarea_level_config();
+	const int fascia_effettiva = cfg.fascia[band];
 	const int mob_level =
 		std::clamp((group_max_level - 1) + fascia_effettiva, 1, PROCAREA_MOB_LEVEL_CAP);
 	switch(kind) {
 	case ProcMobKind::Boss:
-		return std::clamp(mob_level + 3, 1, PROCAREA_MOB_LEVEL_CAP);
-	case ProcMobKind::Trap:
-		return std::clamp(mob_level + number(1, 2), 1, PROCAREA_MOB_LEVEL_CAP);
+		return std::clamp(mob_level + cfg.boss_bonus, 1, PROCAREA_MOB_LEVEL_CAP);
+	case ProcMobKind::Trap: {
+		const int bonus = number(cfg.trap_bonus_lo, cfg.trap_bonus_hi);
+		return std::clamp(mob_level + bonus, 1, PROCAREA_MOB_LEVEL_CAP);
+	}
 	default:
 		return mob_level;
 	}
@@ -1388,7 +1505,7 @@ static void procarea_rescale_instance_mobs(const ProcAreaInstance& inst, float d
 			continue;
 		}
 		for(char_data* mob = rp->people; mob != nullptr; mob = mob->next_in_room) {
-			if(procarea_is_runtime_mob(mob)) {
+			if(procarea_is_runtime_mob(mob) && !is_hireling_mob(mob)) {
 				procarea_apply_power_delta(mob, delta);
 			}
 		}
@@ -1551,6 +1668,10 @@ static void procarea_scale_mob(char_data* mob, float eq_index, int template_band
 
 	if(solo_mode) {
 		ratio *= procarea_solo_kind_mult(kind);
+		if(inst != nullptr && inst->solo_toughness_mult > 0.0f &&
+		   inst->solo_toughness_mult < 0.999f) {
+			ratio *= inst->solo_toughness_mult;
+		}
 	} else if(party_power_mult > 1.0f) {
 		ratio *= party_power_mult;
 	}
@@ -1944,10 +2065,13 @@ void break_treasure_seals(ProcAreaInstance& inst, const char_data* boss) {
 	return true;
 }
 
-/** Riferimento band 4 (eq ~8500+): cap massimi bonus scudo premio. */
+/**
+ * Curva bonus premio: B0 entry → B4 soft → B5 mezzo → B6 = pieno storico (ex B4) →
+ * B7–B9 sopra il vecchio cap. scale(B6)=1, scale(B9)=1.4.
+ */
 [[nodiscard]] static float procarea_shield_band_factor(int band) {
 	const int b = std::clamp(band, 0, PROCAREA_TEMPLATE_BANDS - 1);
-	return std::min(1.0f, 0.20f + static_cast<float>(b) * 0.20f);
+	return 0.20f + 0.80f * static_cast<float>(b) / 6.0f;
 }
 
 [[nodiscard]] static int procarea_shield_bonus_count(int group_max_level) {
@@ -1973,7 +2097,59 @@ void break_treasure_seals(ProcAreaInstance& inst, const char_data* boss) {
 	return number(lo, hi);
 }
 
-[[nodiscard]] static int procarea_roll_shield_bonus_modifier(int location, int band) {
+/** HITROLL / DAMROLL / SPELLPOWER: B0–B6 da scale; B7+ range fissi (scudo puo' arrivare a 5). */
+static void procarea_combat_flat_range(int band, bool is_shield, int& lo, int& hi) {
+	const int b = std::clamp(band, 0, PROCAREA_TEMPLATE_BANDS - 1);
+	if(b >= 9) {
+		lo = 3;
+		hi = is_shield ? 5 : 4;
+		return;
+	}
+	if(b >= 8) {
+		lo = 2;
+		hi = is_shield ? 5 : 4;
+		return;
+	}
+	if(b >= 7) {
+		lo = 2;
+		hi = 4;
+		return;
+	}
+	const float scale = procarea_shield_band_factor(b);
+	lo = std::max(1, static_cast<int>(std::lround(1.0f * scale)));
+	hi = std::max(lo, static_cast<int>(std::lround(4.0f * scale)));
+	hi = std::min(hi, 4);
+	lo = std::min(lo, hi);
+}
+
+/** HITNDAM: gear ref 1–3 / scudo 1–4 fino a B6; poi range fissi (cap gear 4, scudo 5). */
+static void procarea_hitndam_range(int band, bool is_shield, int& lo, int& hi) {
+	const int b = std::clamp(band, 0, PROCAREA_TEMPLATE_BANDS - 1);
+	if(b >= 9) {
+		lo = 3;
+		hi = is_shield ? 5 : 4;
+		return;
+	}
+	if(b >= 8) {
+		lo = 2;
+		hi = is_shield ? 5 : 4;
+		return;
+	}
+	if(b >= 7) {
+		lo = 2;
+		hi = is_shield ? 4 : 3;
+		return;
+	}
+	const float scale = procarea_shield_band_factor(b);
+	const int ref_max = is_shield ? 4 : 3;
+	const int abs_cap = is_shield ? 5 : 4;
+	lo = std::max(1, static_cast<int>(std::lround(1.0f * scale)));
+	hi = std::max(lo, static_cast<int>(std::lround(static_cast<float>(ref_max) * scale)));
+	hi = std::min(hi, abs_cap);
+	lo = std::min(lo, hi);
+}
+
+[[nodiscard]] static int procarea_roll_shield_bonus_modifier(int location, int band, bool is_shield) {
 	const float scale = procarea_shield_band_factor(band);
 
 	switch(location) {
@@ -1986,17 +2162,25 @@ void break_treasure_seals(ProcAreaInstance& inst, const char_data* boss) {
 		return procarea_shield_scaled_roll(5, 30, scale);
 	case APPLY_HITROLL:
 	case APPLY_DAMROLL:
-	case APPLY_SPELLPOWER:
-		return procarea_shield_scaled_roll(1, 4, scale);
-	case APPLY_HITNDAM:
-		return procarea_shield_scaled_roll(1, 3, scale);
+	case APPLY_SPELLPOWER: {
+		int lo = 1;
+		int hi = 1;
+		procarea_combat_flat_range(band, is_shield, lo, hi);
+		return number(lo, hi);
+	}
+	case APPLY_HITNDAM: {
+		int lo = 1;
+		int hi = 1;
+		procarea_hitndam_range(band, is_shield, lo, hi);
+		return number(lo, hi);
+	}
 	case APPLY_SAVE_ALL: {
 		const int mag_min = std::max(1, static_cast<int>(std::lround(2.0f * scale)));
 		const int mag_max = std::max(mag_min, static_cast<int>(std::lround(5.0f * scale)));
 		return -number(mag_min, mag_max);
 	}
 	case APPLY_SPELLFAIL: {
-		// Banda 0: −5…−10 → banda 5: −20…−30 (cap).
+		// Banda 0: −5…−10 → banda 9: −20…−30 (cap).
 		static constexpr int kSpellfailAbsMinByBand[PROCAREA_TEMPLATE_BANDS] = {
 			5, 6, 8, 9, 11, 12, 14, 15, 17, 20,
 		};
@@ -2035,12 +2219,12 @@ static constexpr ProcShieldBonusWeight kShieldWeightsTank[] = {
 	{ APPLY_MANA_REGEN, 1 },
 };
 
-/** Prevalenza caster: mana, spellpower, regen, save, spellfail. */
+/** Prevalenza caster: mana, spellpower, regen, save (spellfail meno del hybrid). */
 static constexpr ProcShieldBonusWeight kShieldWeightsCaster[] = {
 	{ APPLY_MANA, 26 },
 	{ APPLY_SPELLPOWER, 22 },
 	{ APPLY_MANA_REGEN, 18 },
-	{ APPLY_SPELLFAIL, 14 },
+	{ APPLY_SPELLFAIL, 8 },
 	{ APPLY_SAVE_ALL, 12 },
 	{ APPLY_HIT, 6 },
 	{ APPLY_HIT_REGEN, 2 },
@@ -2048,7 +2232,7 @@ static constexpr ProcShieldBonusWeight kShieldWeightsCaster[] = {
 	{ APPLY_HITROLL, 1 },
 };
 
-/** Multiclasse magic + fighter: mix equilibrato su entrambi i fronti. */
+/** Multiclasse magic + fighter: mix equilibrato; spellfail piu' del caster puro. */
 static constexpr ProcShieldBonusWeight kShieldWeightsHybrid[] = {
 	{ APPLY_HIT, 16 },
 	{ APPLY_MANA, 14 },
@@ -2056,7 +2240,7 @@ static constexpr ProcShieldBonusWeight kShieldWeightsHybrid[] = {
 	{ APPLY_MANA_REGEN, 12 },
 	{ APPLY_HIT_REGEN, 12 },
 	{ APPLY_SPELLPOWER, 10 },
-	{ APPLY_SPELLFAIL, 8 },
+	{ APPLY_SPELLFAIL, 14 },
 	{ APPLY_DAMROLL, 8 },
 	{ APPLY_HITROLL, 6 },
 	{ APPLY_HITNDAM, 6 },
@@ -2074,11 +2258,6 @@ static constexpr ProcShieldBonusWeight kShieldWeightsGeneric[] = {
 	{ APPLY_HITNDAM, 10 },
 	{ APPLY_SAVE_ALL, 10 },
 };
-
-/** Peso del modello principale in run solitaria (resto ripartito sugli altri). */
-static constexpr int kProcShieldSoloPrimaryWeight = 75;
-static constexpr int kProcShieldSoloSecondaryWeight = 8;
-static constexpr int kProcShieldSoloGenericWeight = 5;
 
 [[nodiscard]] static int procarea_weighted_pick_index(const int* weights, int count) {
 	int total = 0;
@@ -2177,35 +2356,78 @@ static void procarea_for_each_resolved_member(const ProcAreaInstance& inst, Fn&&
 	return found;
 }
 
+/** PC online risolti nell'instance (owner + member_names, dedup). */
+[[nodiscard]] static int procarea_live_party_count(const ProcAreaInstance& inst) {
+	int count = 0;
+	procarea_for_each_resolved_member(inst, [&](char_data* /*member*/) { ++count; });
+	return count;
+}
+
+/**
+ * Banda usata solo al drop premio (vnum/AC + APPLY + arma).
+ * Con 4+ PG live: +1 rispetto a effective_band, cap B9. Spawn mob invariato.
+ */
+[[nodiscard]] static int procarea_reward_band(const ProcAreaInstance& inst) {
+	const int band = std::clamp(inst.effective_band, 0, PROCAREA_TEMPLATE_BANDS - 1);
+	if(procarea_live_party_count(inst) >= 4) {
+		return std::min(band + 1, PROCAREA_TEMPLATE_BANDS - 1);
+	}
+	return band;
+}
+
 [[nodiscard]] static ProcShieldRollModel
 procarea_pick_shield_roll_model_solo(char_data* solo_ch) {
-	const ProcShieldRollModel primary = procarea_shield_archetype_for_char(solo_ch);
-	int weights[4] = {
-		kProcShieldSoloSecondaryWeight,
-		kProcShieldSoloSecondaryWeight,
-		kProcShieldSoloSecondaryWeight,
-		kProcShieldSoloGenericWeight,
-	};
-	weights[procarea_shield_model_index(primary)] = kProcShieldSoloPrimaryWeight;
-
-	const int pick = procarea_weighted_pick_index(weights, 4);
-	if(pick < 0) {
-		return primary;
-	}
-	return procarea_shield_model_from_index(pick);
+	/* Solitaria: sempre l'archetype del PG (niente spill caster↔melee). */
+	return procarea_shield_archetype_for_char(solo_ch);
 }
 
 [[nodiscard]] static ProcShieldRollModel
 procarea_pick_shield_roll_model_group(const ProcAreaInstance& inst, char_data* fallback_ch) {
 	int weights[4] = { 0, 0, 0, 0 };
+	bool has_tank = false;
+	bool has_caster = false;
+	bool has_hybrid = false;
+	bool has_generic = false;
 
 	procarea_for_each_resolved_member(inst, [&](char_data* member) {
 		const ProcShieldRollModel archetype = procarea_shield_archetype_for_char(member);
 		++weights[procarea_shield_model_index(archetype)];
+		switch(archetype) {
+		case ProcShieldRollModel::Tank:
+			has_tank = true;
+			break;
+		case ProcShieldRollModel::Caster:
+			has_caster = true;
+			break;
+		case ProcShieldRollModel::Hybrid:
+			has_hybrid = true;
+			break;
+		case ProcShieldRollModel::Generic:
+			has_generic = true;
+			break;
+		}
 	});
 
-	if(weights[0] > 0 && weights[1] > 0) {
-		weights[2] += weights[0] + weights[1];
+	/* Hybrid ammesso se c'e' un multi o se party misto melee+caster. */
+	if(has_tank && has_caster) {
+		has_hybrid = true;
+		weights[procarea_shield_model_index(ProcShieldRollModel::Hybrid)] +=
+			weights[procarea_shield_model_index(ProcShieldRollModel::Tank)] +
+			weights[procarea_shield_model_index(ProcShieldRollModel::Caster)];
+	}
+
+	/* C: azzera modelli assenti nel party (niente loot caster a solo melee, ecc.). */
+	if(!has_tank) {
+		weights[procarea_shield_model_index(ProcShieldRollModel::Tank)] = 0;
+	}
+	if(!has_caster) {
+		weights[procarea_shield_model_index(ProcShieldRollModel::Caster)] = 0;
+	}
+	if(!has_hybrid) {
+		weights[procarea_shield_model_index(ProcShieldRollModel::Hybrid)] = 0;
+	}
+	if(!has_generic) {
+		weights[procarea_shield_model_index(ProcShieldRollModel::Generic)] = 0;
 	}
 
 	const int total = weights[0] + weights[1] + weights[2] + weights[3];
@@ -2251,7 +2473,7 @@ procarea_shield_weight_table(ProcShieldRollModel model) {
 }
 
 static bool procarea_apply_shield_bonus_roll(struct obj_data* obj, int band,
-											 ProcShieldRollModel model) {
+											 ProcShieldRollModel model, bool is_shield) {
 	if(obj == nullptr) {
 		return false;
 	}
@@ -2296,7 +2518,7 @@ static bool procarea_apply_shield_bonus_roll(struct obj_data* obj, int band,
 	}
 
 	obj->affected[slot].location = pick;
-	obj->affected[slot].modifier = procarea_roll_shield_bonus_modifier(pick, band);
+	obj->affected[slot].modifier = procarea_roll_shield_bonus_modifier(pick, band, is_shield);
 	return true;
 }
 
@@ -2313,14 +2535,14 @@ static void procarea_apply_reward_prince_flags(struct obj_data* obj, int group_m
 
 static void procarea_roll_reward_bonuses(const ProcAreaInstance& inst, struct obj_data* obj,
 										 char_data* opener, bool allow_physical_immune,
-										 bool try_ac_upgrade) {
+										 bool try_ac_upgrade, bool is_shield) {
 	if(obj == nullptr) {
 		return;
 	}
 
 	SET_BIT(obj->obj_flags.extra_flags, ITEM_RESISTANT);
 
-	const int band = std::clamp(inst.effective_band, 0, PROCAREA_TEMPLATE_BANDS - 1);
+	const int band = procarea_reward_band(inst);
 
 	if(try_ac_upgrade && GET_ITEM_TYPE(obj) == ITEM_ARMOR) {
 		const int ac_upgrade_chance = 30 + band * 10;
@@ -2335,7 +2557,7 @@ static void procarea_roll_reward_bonuses(const ProcAreaInstance& inst, struct ob
 	const int bonus_count = procarea_shield_bonus_count(inst.group_max_level);
 	const ProcShieldRollModel model = procarea_pick_shield_roll_model(inst, opener);
 	for(int i = 0; i < bonus_count; ++i) {
-		if(!procarea_apply_shield_bonus_roll(obj, band, model)) {
+		if(!procarea_apply_shield_bonus_roll(obj, band, model, is_shield)) {
 			break;
 		}
 	}
@@ -2358,7 +2580,7 @@ static void procarea_roll_reward_bonuses(const ProcAreaInstance& inst, struct ob
 
 static void procarea_roll_reward_shield(const ProcAreaInstance& inst, struct obj_data* obj,
 										char_data* opener) {
-	procarea_roll_reward_bonuses(inst, obj, opener, false, true);
+	procarea_roll_reward_bonuses(inst, obj, opener, false, true, true);
 }
 
 static void procarea_roll_reward_gear_item(const ProcAreaInstance& inst, struct obj_data* obj,
@@ -2373,7 +2595,7 @@ static void procarea_roll_reward_gear_item(const ProcAreaInstance& inst, struct 
 	}
 	const bool allow_physical = slot == ProcRewardGearSlot::Body;
 	const bool try_ac = GET_ITEM_TYPE(obj) == ITEM_ARMOR;
-	procarea_roll_reward_bonuses(inst, obj, opener, allow_physical, try_ac);
+	procarea_roll_reward_bonuses(inst, obj, opener, allow_physical, try_ac, false);
 }
 
 [[nodiscard]] static int procarea_treasure_gear_drop_pct(int hoard_count, int fatigue_tier) {
@@ -2392,16 +2614,56 @@ static void procarea_roll_reward_gear_item(const ProcAreaInstance& inst, struct 
 	}
 }
 
+[[nodiscard]] static bool procarea_pc_skips_weapon_loot(char_data* ch) {
+	ch = procarea_real_pc(ch);
+	return ch != nullptr && HasClass(ch, CLASS_MONK);
+}
+
+[[nodiscard]] static bool procarea_instance_thief_only(const ProcAreaInstance& inst) {
+	bool any = false;
+	bool all_thief = true;
+	procarea_for_each_resolved_member(inst, [&](char_data* member) {
+		any = true;
+		if(!HasClass(member, CLASS_THIEF)) {
+			all_thief = false;
+		}
+	});
+	return any && all_thief;
+}
+
+[[nodiscard]] static bool procarea_reward_prefers_pierce_weapon(const ProcAreaInstance& inst) {
+	return inst.solo_mode || procarea_instance_thief_only(inst);
+}
+
+/** sub_variant % 3: 0 slash, 1 pierce, 2 crush. */
+[[nodiscard]] static int procarea_pick_weapon_damage_sub_variant(const ProcAreaInstance& inst) {
+	if(procarea_reward_prefers_pierce_weapon(inst)) {
+		static constexpr int kPierceBiasWeights[] = { 20, 60, 20 };
+		return procarea_weighted_pick(kPierceBiasWeights, 3);
+	}
+	return number(0, 2);
+}
+
 /** true = scudo premio; false = slot gear in @p gear_slot. */
-static void procarea_pick_random_treasure_loot(bool& is_shield, ProcRewardGearSlot& gear_slot) {
-	const int pick = number(0, static_cast<int>(ProcRewardGearSlot::Count));
-	if(pick >= static_cast<int>(ProcRewardGearSlot::Count)) {
-		is_shield = true;
-		gear_slot = ProcRewardGearSlot::Light;
-		return;
+static void procarea_pick_random_treasure_loot(bool& is_shield, ProcRewardGearSlot& gear_slot,
+											   char_data* roll_ch) {
+	static constexpr int kMaxAttempts = 8;
+	for(int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+		const int pick = number(0, static_cast<int>(ProcRewardGearSlot::Count));
+		if(pick >= static_cast<int>(ProcRewardGearSlot::Count)) {
+			is_shield = true;
+			gear_slot = ProcRewardGearSlot::Light;
+			return;
+		}
+		gear_slot = static_cast<ProcRewardGearSlot>(pick);
+		if(gear_slot != ProcRewardGearSlot::Wield || !procarea_pc_skips_weapon_loot(roll_ch)) {
+			is_shield = false;
+			return;
+		}
 	}
 	is_shield = false;
-	gear_slot = static_cast<ProcRewardGearSlot>(pick);
+	gear_slot = static_cast<ProcRewardGearSlot>(
+		number(0, static_cast<int>(ProcRewardGearSlot::Wield) - 1));
 }
 
 static bool procarea_try_grant_treasure_item(char_data* roll_ch, ProcAreaInstance& inst,
@@ -2414,15 +2676,17 @@ static bool procarea_try_grant_treasure_item(char_data* roll_ch, ProcAreaInstanc
 
 	bool is_shield = false;
 	ProcRewardGearSlot slot = ProcRewardGearSlot::Light;
-	procarea_pick_random_treasure_loot(is_shield, slot);
+	procarea_pick_random_treasure_loot(is_shield, slot, roll_ch);
 
+	const int reward_band = procarea_reward_band(inst);
 	long vnum = -1;
 	if(is_shield) {
-		vnum = procarea_reward_shield_vnum(inst.effective_band);
+		vnum = procarea_reward_shield_vnum(reward_band);
 	} else {
-		const int sub_variant =
-			slot == ProcRewardGearSlot::Wield ? number(0, 2) : procarea_pick_gear_sub_variant(slot);
-		vnum = reward_gear_vnum(slot, inst.effective_band, sub_variant);
+		const int sub_variant = slot == ProcRewardGearSlot::Wield ?
+									procarea_pick_weapon_damage_sub_variant(inst) :
+									procarea_pick_gear_sub_variant(slot);
+		vnum = reward_gear_vnum(slot, reward_band, sub_variant);
 	}
 	if(vnum < 0) {
 		return false;
@@ -2858,8 +3122,15 @@ static char_data* procarea_create_mob(int archetype_index, float eq_index, int t
 	procarea_apply_hold_defense(mob, kind);
 	procarea_apply_aggressive(mob, template_band, kind);
 	ProcBossRollClass boss_roll = ProcBossRollClass::Cleric;
+	float none_mult = 1.0f;
+	float caster_keep = 1.0f;
+	if(solo_mode && inst != nullptr) {
+		none_mult = inst->solo_corridor_none_mult;
+		caster_keep = inst->solo_caster_keep_mult;
+	}
 	procarea_apply_class_role(mob, kind, add_slot, template_band, class_ctx, solo_mode,
-							  solo_owner_is_basher, boss_for_add, &boss_roll);
+							  solo_owner_is_basher, boss_for_add, &boss_roll, none_mult,
+							  caster_keep);
 	procarea_apply_mob_alignment(mob, kind, inst);
 	procarea_apply_sentinel(mob, kind, follow_anchor_sentinel, class_ctx);
 	procarea_scale_mob(mob, eq_index, template_band, group_max_level, kind, class_ctx, solo_mode,
@@ -3022,7 +3293,7 @@ int count_mobs(const ProcAreaInstance& inst) {
 			continue;
 		}
 		for(struct char_data* mob = rp->people; mob != nullptr; mob = mob->next_in_room) {
-			if(IS_NPC(mob) && !IS_SET(mob->specials.act, ACT_POLYSELF)) {
+			if(IS_NPC(mob) && !IS_SET(mob->specials.act, ACT_POLYSELF) && !is_hireling_mob(mob)) {
 				++count;
 			}
 		}
@@ -3230,6 +3501,95 @@ static constexpr ProcRoomTemplate kProcCrystalChamberRoom {
 	static_cast<long>(INDOORS | DARK),
 };
 
+[[nodiscard]] static std::string hireling_classes_look_text(unsigned long mask) {
+	struct Tok {
+		unsigned long bit;
+		const char* name;
+	};
+	static constexpr Tok kToks[] = {
+		{ CLASS_MAGIC_USER, "maghi" },     { CLASS_SORCERER, "stregoni" },
+		{ CLASS_PSI, "psionici" },         { CLASS_DRUID, "druidi" },
+		{ CLASS_CLERIC, "chierici" },      { CLASS_WARRIOR, "guerrieri" },
+		{ CLASS_THIEF, "ladri" },          { CLASS_MONK, "monaci" },
+		{ CLASS_BARBARIAN, "barbari" },    { CLASS_PALADIN, "paladini" },
+		{ CLASS_RANGER, "ranger" },
+	};
+	std::string out;
+	for(const Tok& t : kToks) {
+		if((mask & t.bit) == 0UL) {
+			continue;
+		}
+		if(!out.empty()) {
+			out += "$c0007, $c0015";
+		}
+		out += t.name;
+	}
+	if(out.empty()) {
+		return "$c0009nessuna$c0007";
+	}
+	return std::string("$c0015") + out + "$c0007";
+}
+
+static void procarea_append_room_description(struct room_data* room, const char* add) {
+	if(room == nullptr || add == nullptr || add[0] == '\0') {
+		return;
+	}
+	const char* old = room->description != nullptr ? room->description : "";
+	std::string combined = std::string(old) + add;
+	if(room->description != nullptr) {
+		free(room->description);
+	}
+	room->description = strdup(combined.c_str());
+}
+
+/** Solo + hireling enabled: cartello lookable congelato alla config di creazione istanza. */
+static void spawn_entrance_hireling_sign(ProcAreaInstance& inst, struct room_data* rp,
+										 bool append_room_hint) {
+	if(!inst.solo_mode || rp == nullptr) {
+		return;
+	}
+	const ProcHirelingConfig& cfg = procarea_hireling_config();
+	if(!cfg.enabled) {
+		return;
+	}
+
+	std::ostringstream desc;
+	desc << "$c0014=== Cartello della Scorta ===$c0007\n\r"
+		 << "Rune $c0011dorate$c0007 e inchiostro di $c0012bruma$c0007 spiegano il patto:\n\r"
+		 << "\n\r"
+		 << "Comando: $c0015assolda$c0007\n\r"
+		 << "Ottieni una $c0014scorta tank$c0007 che ti segue e ti assiste in combattimento.\n\r"
+		 << "\n\r";
+	if(cfg.allow_multi) {
+		desc << "Chi: $c0010anche multiclasse$c0007, tra le classi ammesse.\n\r";
+	} else {
+		desc << "Chi: solo $c0010monoclasse$c0007, tra le classi ammesse.\n\r";
+	}
+	desc << "Classi: " << hireling_classes_look_text(cfg.class_mask) << ".\n\r"
+		 << "\n\r"
+		 << "Costo $c0011frammenti$c0007: "
+		 << "$c0015(livello x banda cristallo x " << cfg.frag_num << ") / " << cfg.frag_den
+		 << "$c0007\n\r"
+		 << "Costo $c0011oro$c0007: $c0015livello x " << cfg.gold_per_level << "$c0007\n\r"
+		 << "Se i frammenti non bastano, spezzi $c0013rune$c0007 intere ("
+		 << procarea_fragments_per_rune() << " frag/runa; il resto resta in frammenti).\n\r"
+		 << "\n\r";
+	if(cfg.rebuy) {
+		desc << "Se la scorta $c0009cade$c0007, in questa run $c0010puoi$c0007 riassoldarne un'altra.\n\r";
+	} else {
+		desc << "Se la scorta $c0009cade$c0007, in questa run $c0009non$c0007 puoi riassoldarne un'altra.\n\r";
+	}
+	desc << "Max $c0015una$c0007 scorta alla volta.";
+
+	procarea_add_room_extra(rp, "cartello manifesto scorta assolda tabella", desc.str().c_str());
+	if(append_room_hint) {
+		procarea_append_room_description(
+			rp,
+			"Su un pilastro di rune fluttua un $c0014cartello$c0007 luminoso:\n\r"
+			"spiega come $c0014assoldare$c0007 una scorta tank.\n\r");
+	}
+}
+
 void spawn_entrance_crystals(ProcAreaInstance& inst) {
 	if(inst.entrance_vnum <= 0) {
 		return;
@@ -3242,6 +3602,7 @@ void spawn_entrance_crystals(ProcAreaInstance& inst) {
 	for(int idx = 0; idx < PROCAREA_CRYSTAL_COUNT; ++idx) {
 		procarea_add_room_extra(rp, kCrystalExtraKeys[idx], kCrystalExtraDesc[idx]);
 	}
+	spawn_entrance_hireling_sign(inst, rp, true);
 }
 
 void remove_entrance_crystals(ProcAreaInstance& inst) {
@@ -3261,6 +3622,8 @@ void remove_entrance_crystals(ProcAreaInstance& inst) {
 			extract_obj(obj);
 		}
 	}
+	/* Cartello scorta resta dopo la sintonia (extras cristallo rimossi). */
+	spawn_entrance_hireling_sign(inst, rp, false);
 }
 
 void open_entrance_passage(ProcAreaInstance& inst) {
@@ -3324,7 +3687,9 @@ bool apply_crystal_choice(ProcAreaInstance& inst, ProcCrystalTier tier) {
 
 int create_instance(float group_eq_index, int group_max_level, long return_room,
 					long& entrance_vnum, const char* owner_name, bool solo_mode, int party_size,
-					bool solo_owner_is_basher, int entry_max_hit) {
+					bool solo_owner_is_basher, int entry_max_hit, float solo_toughness_mult,
+					float solo_corridor_none_mult, float solo_caster_keep_mult,
+					const char* solo_kit_label) {
 	ProcAreaDifficulty diff = procarea_difficulty_from_eq(group_eq_index);
 	if(solo_mode) {
 		diff = procarea_difficulty_apply_solo(diff);
@@ -3332,6 +3697,10 @@ int create_instance(float group_eq_index, int group_max_level, long return_room,
 	diff.group_max_level = group_max_level;
 	diff.solo_mode = solo_mode;
 	diff.solo_owner_is_basher = solo_owner_is_basher;
+	diff.solo_toughness_mult = solo_mode ? std::clamp(solo_toughness_mult, 0.70f, 1.00f) : 1.0f;
+	diff.solo_corridor_none_mult = solo_mode ? std::max(1.0f, solo_corridor_none_mult) : 1.0f;
+	diff.solo_caster_keep_mult =
+		solo_mode ? std::clamp(solo_caster_keep_mult, 0.0f, 1.0f) : 1.0f;
 	if(solo_mode) {
 		diff.party_power_mult = 1.0f;
 	} else {
@@ -3394,10 +3763,19 @@ int create_instance(float group_eq_index, int group_max_level, long return_room,
 	inst.solo_mode = solo_mode;
 	inst.solo_owner_is_basher = solo_mode && solo_owner_is_basher;
 	if(solo_mode) {
+		inst.solo_toughness_mult = diff.solo_toughness_mult;
+		inst.solo_corridor_none_mult = diff.solo_corridor_none_mult;
+		inst.solo_caster_keep_mult = diff.solo_caster_keep_mult;
+		inst.solo_kit_label =
+			(solo_kit_label != nullptr && *solo_kit_label != '\0') ? solo_kit_label : "solo";
 		inst.entry_max_hit = std::max(0, entry_max_hit);
 		inst.party_size_at_scale = 1;
 		inst.party_power_mult = 1.0f;
 	} else {
+		inst.solo_toughness_mult = 1.0f;
+		inst.solo_corridor_none_mult = 1.0f;
+		inst.solo_caster_keep_mult = 1.0f;
+		inst.solo_kit_label = "";
 		inst.party_size_at_scale = std::clamp(party_size, 1, PROCAREA_PARTY_SIZE_CAP);
 		inst.party_power_mult = diff.party_power_mult;
 	}
@@ -3472,12 +3850,16 @@ int create_instance(float group_eq_index, int group_max_level, long return_room,
 
 	g_instances.push_back(inst);
 	entrance_vnum = inst.entrance_vnum;
-	const char* const solo_suffix = solo_mode ? ", solo" : "";
 	if(solo_mode) {
+		const char* const kit_label =
+			(inst.solo_kit_label != nullptr && *inst.solo_kit_label != '\0')
+				? inst.solo_kit_label
+				: "?";
 		mudlog(LOG_CHECK,
-			   "procarea: created instance %d theme '%s' power %.0f (factor %.2f%s) entry_hp %d with %zu rooms (entrance %ld, boss %ld, crystal pending)",
-			   instance_id, theme.label, group_eq_index, diff.factor, solo_suffix, inst.entry_max_hit,
-			   layout.size(), inst.entrance_vnum, inst.boss_vnum);
+			   "procarea: created instance %d theme '%s' power %.0f (factor %.2f, solo) kit %s tough %.2f with %zu rooms (entrance %ld, boss %ld, crystal pending)",
+			   instance_id, theme.label, group_eq_index, diff.factor, kit_label,
+			   inst.solo_toughness_mult, layout.size(), inst.entrance_vnum,
+			   inst.boss_vnum);
 	} else {
 		mudlog(LOG_CHECK,
 			   "procarea: created instance %d theme '%s' power %.0f (factor %.2f, party x%.2f) with %zu rooms (entrance %ld, boss %ld, crystal pending)",
@@ -3929,7 +4311,355 @@ bool instance_has_ranger(const ProcAreaInstance& inst) {
 }
 
 void roll_reward_weapon_impl(struct obj_data* obj, const ProcAreaInstance& inst) {
-	roll_reward_weapon_impl(obj, inst.effective_band, procarea_instance_has_ranger(inst));
+	roll_reward_weapon_impl(obj, procarea_reward_band(inst), procarea_instance_has_ranger(inst));
+}
+
+bool is_hireling_mob(const char_data* mob) {
+	return mob != nullptr && IS_NPC(mob) &&
+		   mob->commandp == static_cast<int>(ProcMobKind::Hireling);
+}
+
+void release_hireling(ProcAreaInstance& inst, bool mark_dead) {
+	char_data* mob = inst.hireling;
+	inst.hireling = nullptr;
+	if(mark_dead) {
+		inst.hireling_dead = true;
+	} else {
+		inst.hireling_dead = false;
+	}
+	if(mob == nullptr || mob->nMagicNumber != CHAR_VALID_MAGIC) {
+		return;
+	}
+	if(!is_hireling_mob(mob)) {
+		return;
+	}
+	if(mob->specials.fighting) {
+		stop_fighting(mob);
+	}
+	if(mob->master != nullptr || mob->followers != nullptr) {
+		die_follower(mob);
+	}
+	extract_char(mob);
+}
+
+namespace {
+
+enum class HireAlignBucket { Good, Neutral, Evil };
+
+[[nodiscard]] HireAlignBucket hire_align_bucket(const char_data* ch) {
+	if(ch == nullptr) {
+		return HireAlignBucket::Neutral;
+	}
+	if(IS_GOOD(ch)) {
+		return HireAlignBucket::Good;
+	}
+	if(IS_EVIL(ch)) {
+		return HireAlignBucket::Evil;
+	}
+	return HireAlignBucket::Neutral;
+}
+
+struct HirelingForm {
+	int race;
+	const char* keywords;
+	const char* short_descr;
+	const char* long_descr;
+};
+
+[[nodiscard]] unsigned long hire_pick_class_bit(const char_data* pc, unsigned long mask) {
+	static constexpr unsigned long kOrder[] = {
+		CLASS_MAGIC_USER, CLASS_SORCERER, CLASS_PSI, CLASS_DRUID, CLASS_CLERIC,
+		CLASS_WARRIOR,    CLASS_BARBARIAN, CLASS_PALADIN, CLASS_RANGER, CLASS_THIEF,
+		CLASS_MONK,
+	};
+	for(unsigned long bit : kOrder) {
+		if((mask & bit) != 0UL && HasClass(const_cast<char_data*>(pc), static_cast<int>(bit))) {
+			return bit;
+		}
+	}
+	return 0UL;
+}
+
+[[nodiscard]] HirelingForm hire_form_for(unsigned long class_bit, HireAlignBucket align) {
+	const int a = static_cast<int>(align);
+	/* [class][good/neut/evil] — always !IsHumanoid (no wear). */
+	if(class_bit == CLASS_MAGIC_USER || class_bit == CLASS_SORCERER) {
+		static constexpr HirelingForm kMu[3] = {
+			{ RACE_ELEMENT, "beholder occhio cristallo scorta luce",
+			  "un beholder di cristallo",
+			  "Un beholder di cristallo fluttua al tuo fianco, pupille di luce.\n" },
+			{ RACE_SPECIAL, "beholder occhio bruma scorta",
+			  "un beholder della bruma",
+			  "Un beholder della bruma veglia silenzioso, occhio centrale aperto.\n" },
+			{ RACE_ELEMENT, "beholder occhio ombra scorta nero",
+			  "un beholder d'ombra",
+			  "Un beholder d'ombra fluttua, l'occhio nero fissa i nemici.\n" },
+		};
+		return kMu[a];
+	}
+	if(class_bit == CLASS_PSI) {
+		static constexpr HirelingForm kPsi[3] = {
+			{ RACE_PLANAR, "eco mentale nucleo scorta argenteo",
+			  "un eco mentale argenteo",
+			  "Un eco mentale argenteo pulsa a mezz'aria.\n" },
+			{ RACE_PLANAR, "nucleo psionico scorta",
+			  "un nucleo psionico",
+			  "Un nucleo psionico orbita vicino a te.\n" },
+			{ RACE_PLANAR, "larva mentale scorta",
+			  "una larva mentale",
+			  "Una larva mentale fremente ti segue.\n" },
+		};
+		return kPsi[a];
+	}
+	if(class_bit == CLASS_DRUID) {
+		static constexpr HirelingForm kDr[3] = {
+			{ RACE_TREE, "guardiano quercia albero scorta",
+			  "un guardiano di quercia",
+			  "Un guardiano di quercia animato si muove al tuo fianco.\n" },
+			{ RACE_PREDATOR, "orso radure scorta",
+			  "un orso delle radure",
+			  "Un orso delle radure ti segue, massiccio e paziente.\n" },
+			{ RACE_SLIME, "melma bosco scorta",
+			  "una melma del bosco",
+			  "Una melma del bosco striscia al tuo fianco.\n" },
+		};
+		return kDr[a];
+	}
+	if(class_bit == CLASS_CLERIC) {
+		static constexpr HirelingForm kCl[3] = {
+			{ RACE_ELEMENT, "elementale sacro scorta",
+			  "un elementale sacro",
+			  "Un elementale sacro di luce ti scorta.\n" },
+			{ RACE_ELEMENT, "elementale culto scorta",
+			  "un elementale del culto",
+			  "Un elementale del culto ti resta vicino.\n" },
+			{ RACE_ELEMENT, "elementale profano scorta",
+			  "un elementale profano",
+			  "Un elementale profano di fumo nero ti scorta.\n" },
+		};
+		return kCl[a];
+	}
+	if(class_bit == CLASS_BARBARIAN) {
+		static constexpr HirelingForm kBa[3] = {
+			{ RACE_PREDATOR, "orso bianco scorta",
+			  "un orso bianco",
+			  "Un orso bianco enorme ti segue.\n" },
+			{ RACE_PREDATOR, "orso bruno scorta",
+			  "un orso bruno",
+			  "Un orso bruno ti scorta con passo pesante.\n" },
+			{ RACE_PREDATOR, "orso nero rabbioso scorta",
+			  "un orso nero",
+			  "Un orso nero dagli occhi rossi ti segue.\n" },
+		};
+		return kBa[a];
+	}
+	if(class_bit == CLASS_WARRIOR) {
+		static constexpr HirelingForm kWa[3] = {
+			{ RACE_ELEMENT, "costrutto marmo scorta",
+			  "un costrutto di marmo",
+			  "Un costrutto di marmo avanza come scudo vivente.\n" },
+			{ RACE_ELEMENT, "costrutto pietra scorta",
+			  "un costrutto di pietra",
+			  "Un costrutto di pietra ti resta al fianco.\n" },
+			{ RACE_ELEMENT, "costrutto ossidiana scorta",
+			  "un costrutto d'ossidiana",
+			  "Un costrutto d'ossidiana nera ti scorta.\n" },
+		};
+		return kWa[a];
+	}
+	if(class_bit == CLASS_THIEF) {
+		static constexpr HirelingForm kTh[3] = {
+			{ RACE_SNAKE, "serpente verde scorta",
+			  "un serpente verde",
+			  "Un serpente verde si avvolge vicino ai tuoi piedi.\n" },
+			{ RACE_ARACHNID, "ragno ombre scorta",
+			  "un ragno delle ombre",
+			  "Un ragno delle ombre ti segue silenzioso.\n" },
+			{ RACE_SNAKE, "serpente nero scorta",
+			  "un serpente nero",
+			  "Un serpente nero lucido ti scorta.\n" },
+		};
+		return kTh[a];
+	}
+	if(class_bit == CLASS_RANGER) {
+		static constexpr HirelingForm kRa[3] = {
+			{ RACE_PREDATOR, "lupo bianco scorta",
+			  "un lupo bianco",
+			  "Un lupo bianco ti resta al fianco.\n" },
+			{ RACE_PREDATOR, "lupo grigio scorta",
+			  "un lupo grigio",
+			  "Un lupo grigio ti segue fedele.\n" },
+			{ RACE_PREDATOR, "lupo nero scorta",
+			  "un lupo nero",
+			  "Un lupo nero dagli occhi gialli ti scorta.\n" },
+		};
+		return kRa[a];
+	}
+	if(class_bit == CLASS_PALADIN) {
+		static constexpr HirelingForm kPa[3] = {
+			{ RACE_ELEMENT, "elementale luce scorta",
+			  "un elementale di luce",
+			  "Un elementale di luce ti protegge.\n" },
+			{ RACE_ELEMENT, "elementale vincolato scorta",
+			  "un elementale vincolato",
+			  "Un elementale vincolato dal giuramento ti scorta.\n" },
+			{ RACE_ELEMENT, "elementale spezzato scorta",
+			  "un elementale spezzato",
+			  "Un elementale spezzato di luce fioca ti segue.\n" },
+		};
+		return kPa[a];
+	}
+	if(class_bit == CLASS_MONK) {
+		static constexpr HirelingForm kMk[3] = {
+			{ RACE_ELEMENT, "spirito pietra scorta",
+			  "uno spirito di pietra",
+			  "Uno spirito di pietra fluttua in guardia.\n" },
+			{ RACE_SLIME, "sfera ki scorta",
+			  "una sfera di ki",
+			  "Una sfera di ki pulsante ti orbita intorno.\n" },
+			{ RACE_SLIME, "ombra fluida scorta",
+			  "un'ombra fluida",
+			  "Un'ombra fluida ti scorta senza rumore.\n" },
+		};
+		return kMk[a];
+	}
+	static constexpr HirelingForm kFallback[3] = {
+		{ RACE_ELEMENT, "scudiero dimensione scorta",
+		  "uno scudiero della Dimensione",
+		  "Uno scudiero della Dimensione ti resta vicino.\n" },
+		{ RACE_ELEMENT, "scudiero dimensione scorta",
+		  "uno scudiero della Dimensione",
+		  "Uno scudiero della Dimensione ti resta vicino.\n" },
+		{ RACE_ELEMENT, "scudiero dimensione scorta",
+		  "uno scudiero della Dimensione",
+		  "Uno scudiero della Dimensione ti resta vicino.\n" },
+	};
+	return kFallback[a];
+}
+
+} // namespace
+
+char_data* spawn_hireling(ProcAreaInstance& inst, char_data* owner) {
+	if(owner == nullptr || owner->in_room == NOWHERE) {
+		return nullptr;
+	}
+	char_data* real_pc = procarea_real_pc(owner);
+	if(real_pc == nullptr) {
+		real_pc = owner;
+	}
+	const ProcHirelingConfig& cfg = procarea_hireling_config();
+	/* Immortali: forma da qualsiasi classe PG, non solo h_classes. */
+	const unsigned long form_mask =
+		IS_IMMORTALE(real_pc)
+			? (CLASS_MAGIC_USER | CLASS_SORCERER | CLASS_PSI | CLASS_DRUID | CLASS_CLERIC |
+			   CLASS_WARRIOR | CLASS_THIEF | CLASS_MONK | CLASS_BARBARIAN | CLASS_PALADIN |
+			   CLASS_RANGER)
+			: cfg.class_mask;
+	const unsigned long class_bit = hire_pick_class_bit(real_pc, form_mask);
+	const HirelingForm form = hire_form_for(class_bit, hire_align_bucket(real_pc));
+	const int level = std::clamp(GetMaxLevel(real_pc), PROCAREA_MIN_LEVEL, PROCAREA_PC_MAX_LEVEL);
+	/* HP scorta: 1.6x max hit PG all'ingresso. */
+	const int hp = std::max(1, (inst.entry_max_hit * 8) / 5);
+	const int master_ac = GET_AC(real_pc);
+	/* AC 30% migliore del master (in Diku: numero piu' basso). */
+	const int hire_ac = master_ac - (std::abs(master_ac) * 30) / 100;
+
+	char_data* mob = nullptr;
+	CREATE(mob, char_data, 1);
+	if(mob == nullptr) {
+		return nullptr;
+	}
+	clear_char(mob);
+	mob->specials.last_direction = -1;
+	mob->mult_att = 2.0f;
+	mob->specials.spellfail = 101;
+	mob->specials.mobtype = 'L';
+
+	mob->player.name = strdup(form.keywords);
+	mob->player.short_descr = strdup(form.short_descr);
+	mob->player.long_descr = strdup(form.long_descr);
+	mob->player.description = strdup("Una scorta della Dimensione Effimera, fedele al suo padrone.\n");
+	mob->player.sounds = nullptr;
+	mob->player.distant_snds = nullptr;
+	mob->player.title = nullptr;
+
+	SET_BIT(mob->specials.act, ACT_ISNPC | ACT_WARRIOR);
+	REMOVE_BIT(mob->specials.act, ACT_AGGRESSIVE);
+	mob->player.iClass = 0;
+	mob->player.time.birth = time(nullptr);
+	mob->player.time.played = 0;
+	mob->player.time.logon = time(nullptr);
+	mob->player.weight = 400;
+	mob->player.height = 200;
+	for(int i = 0; i < 3; ++i) {
+		GET_COND(mob, i) = -1;
+	}
+	for(int i = 0; i < MAX_WEAR; ++i) {
+		mob->equipment[i] = nullptr;
+	}
+
+	GET_LEVEL(mob, WARRIOR_LEVEL_IND) = level;
+	mob->points.max_hit = hp;
+	mob->points.hit = hp;
+	GET_AC(mob) = hire_ac;
+	mob->points.hitroll = static_cast<sbyte>(std::max(1, level / 10));
+	mob->points.damroll = static_cast<sbyte>(std::max(1, level / 12));
+	mob->specials.damnodice = 2;
+	mob->specials.damsizedice = 8;
+	GET_EXP(mob) = 0;
+	mob->points.gold = 0;
+	GET_ALIGNMENT(mob) = GET_ALIGNMENT(real_pc);
+
+	mob->abilities.str = 16;
+	mob->abilities.intel = 8;
+	mob->abilities.wis = 8;
+	mob->abilities.dex = 12;
+	mob->abilities.con = 18;
+	mob->abilities.chr = 8;
+	mob->tmpabilities = mob->abilities;
+	mob->points.max_mana = 10;
+	for(int i = 0; i < 5; ++i) {
+		mob->specials.apply_saving_throw[i] = static_cast<sbyte>(MAX(20 - level, 2));
+	}
+
+	mob->nr = -1;
+	mob->generic = PROCAREA_HIRELING_VNUM;
+	mob->commandp = static_cast<int>(ProcMobKind::Hireling);
+	GET_RACE(mob) = form.race;
+	SetRacialStuff(mob);
+
+	/* Resist (immune) fisiche + magiche; meta: hold e fuoco. Dopo SetRacialStuff. */
+	mob->immune |= IMM_BLUNT | IMM_PIERCE | IMM_SLASH | IMM_FIRE | IMM_COLD | IMM_ELEC |
+				   IMM_ENERGY | IMM_ACID | IMM_POISON | IMM_DRAIN | IMM_SLEEP | IMM_CHARM;
+	SET_BIT(mob->M_immune, IMM_HOLD | IMM_FIRE);
+	mob->immune &= ~IMM_HOLD;
+
+	/* Volo obbligatorio scorta (non dipende dalla razza). */
+	SET_BIT(mob->specials.affected_by, AFF_FLYING);
+	/* Move generoso (NewMobMov): deve seguire ovunque senza restare a corto. */
+	mob->points.max_move = 0;
+	mob->points.max_move = NewMobMov(mob);
+	mob->points.mana = mana_limit(mob);
+	mob->points.move = move_limit(mob);
+	mob->specials.tick = mob_tick_count++;
+	if(mob_tick_count == TICK_WRAP_COUNT) {
+		mob_tick_count = 0;
+	}
+
+	mob->next = character_list;
+	character_list = mob;
+	mob_count++;
+
+	char_to_room(mob, owner->in_room);
+	add_follower(mob, owner);
+	SET_BIT(mob->specials.affected_by, AFF_CHARM | AFF_TRUE_SIGHT);
+	REMOVE_BIT(mob->specials.affected_by, AFF_GROUP);
+	/* SENTINEL: no wander (evita pianti RawMove); GUARDIAN: auto-assist master. */
+	SET_BIT(mob->specials.act, ACT_SENTINEL | ACT_GUARDIAN);
+
+	inst.hireling = mob;
+	inst.hireling_dead = false;
+	return mob;
 }
 
 } // namespace procarea_internal

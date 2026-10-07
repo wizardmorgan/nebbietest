@@ -1,7 +1,7 @@
 #
 "57" "QUESTMASTER" "LIVELLO 57"
 
-$c0014Livello 57$c0007 — Questmaster
+$c0014Livello 57$c0007 - Questmaster
 
 Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
@@ -16,6 +16,10 @@ Comandi con livello minimo uguale a questo rank
   mercy
   oedit
   editpool
+  odust
+  dbexport
+  motd (set)
+  news (admin)
   oload
   osave
   pquest
@@ -26,6 +30,57 @@ Comandi con livello minimo uguale a questo rank
 $c0013Vedi anche$c0007: WIZHELP, 56, 58
 
 #
+"DBEXPORT"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Esporta tabelle/query MySQL in CSV sotto $c0015exports/$c0007 (cwd tipicamente lib/).
+Password e authcode non vengono mai scritti; email/realname solo con flag $c0015pii$c0007.
+
+Uso:
+  $c0015dbexport list$c0007
+  $c0015dbexport dump [pii]$c0007
+  $c0015dbexport table <nome> [pii]$c0007
+  $c0015dbexport <query> [pii]$c0007
+
+Esempi:
+  $c0015dbexport list$c0007
+    Elenca query nominate e tabelle ammesse.
+  $c0015dbexport edits$c0007
+    CSV degli object_instance attivi con affect affiancati
+    (A0_loc..A4_mod + colonna affects leggibile).
+  $c0015dbexport edits_sheet$c0007
+    Vista stile foglio DB Edit: grants leggibili, totali hp/mana/move/regen
+    ricostruiti pre-strip dalla storia edit_pool (colonna strip_ricostruito).
+  $c0015dbexport edits_deleted$c0007
+    Come edits, solo soft-deleted (+ affect).
+  $c0015dbexport edits_affect$c0007
+    Solo tabella affect (una riga per slot; formato lungo).
+  $c0015dbexport edit_strips$c0007
+    Storico strip listino: eventi kind=edit_pool JOIN oggetto
+    (note/detail = da quale pezzo e quanto accreditato al PG).
+  $c0015dbexport dust$c0007
+    Storico polvere: eventi kind=player_dust JOIN oggetto
+    (+ colonne dust_* attuali sull'instance).
+  $c0015dbexport toons$c0007
+    Elenco PG (toon) senza password.
+  $c0015dbexport users pii$c0007
+    Account user con email (pii); password esclusa.
+  $c0015dbexport table object_instance$c0007
+    Una sola tabella (deve essere in whitelist).
+  $c0015dbexport dump$c0007
+    Cartella exports/dump_YYYYMMDD_HHMMSS/ con un CSV per tabella.
+  $c0015dbexport dump pii$c0007
+    Come dump, ma include email/realname.
+
+Query nominate: toons, users, chars, edits (+ affect), edits_sheet, edits_deleted (+ affect),
+edits_affect, edit_strips, dust, inventory, stats, skills, procarea.
+Elenco: $c0015dbexport list$c0007.
+Limite soft ~200000 righe per file. Se una tabella del dump manca, viene saltata.
+
+$c0013Vedi anche$c0007: SHOW, OSAVE, EDITPOOL
+
+#
 "EDITPOOL"
 
 $c0014Livello minimo$c0007: 57 (Questmaster)
@@ -34,7 +89,7 @@ Gestisce il $c0015listino edit$c0007 sul personaggio (hp/mana/move e regen),
 non sull'equipaggiamento. Cap listino: hp 100, mana 150, move 100, regen 50.
 L'overedit e' solo contabile (nessun bonus in gioco).
 
-Flusso: anteprima → conferma pagamento → applica. Paga il PG editato
+Flusso: anteprima -> conferma pagamento -> applica. Paga il PG editato
 (listino ufficiale +50% artifact; XP=(x mult)/n_classi, rune=ceil(x mult)).
 Se il target e' liv >= 53 (Dio minore+), l'aumento listino e' gratis
 ($c0015editpool ok$c0007).
@@ -76,7 +131,38 @@ $c0013Esempi$c0007:
   editpool Montero over hp -10
   editpool ok misto 50 50
 
-$c0013Vedi anche$c0007: STAT, OEDIT, PEDIT, SHOW
+$c0013Vedi anche$c0007: STAT, OEDIT, PEDIT, SHOW, ODUST
+
+#
+"ODUST"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Corregge i contatori polvere achievement sull'oggetto (e gli APPLY
+corrispondenti). Non tocca il listino del PG: se il bonus era gia' in
+editpool, usa $c0015editpool$c0007 sul personaggio.
+
+$c0015Uso$c0007:
+  odust <oggetto>
+  odust <oggetto> clear
+  odust <oggetto> <campo> <n>
+
+Campi: hp, mana, move, hpregen, manaregen, moveregen, spellfail.
+<n> e' assoluto (0..50). spellfail e' il bonus polvere (sull'eq
+APPLY_SPELLFAIL diminuisce di n), come la polvere celeste.
+
+$c0015clear$c0007 azzera tutti i dust_*, toglie DUSTED e gli APPLY polvere.
+
+Se l'oggetto ha instance MySQL, sincronizza e scrive event player_dust.
+
+$c0013Esempi$c0007:
+  odust sigillo
+  odust sigillo hp 1
+  odust sigillo spellfail 1
+  odust sigillo hp 0
+  odust sigillo clear
+
+$c0013Vedi anche$c0007: STAT, EDITPOOL, OSAVE, OEDIT
 
 #
 "OLOAD"
@@ -116,7 +202,7 @@ $c0013Vedi anche$c0007: OSAVE, OEDIT, SHOW, STAT, ODELETE
 
 $c0014Livello minimo$c0007: 57 (Questmaster)
 
-Soft-delete di un edit MySQL (lista attivi → lista cancellati),
+Soft-delete di un edit MySQL (lista attivi -> lista cancellati),
 oppure archivio di un file in objects/ sotto deleted/objects/.
 
 $c0015Uso$c0007:
@@ -366,4 +452,79 @@ $c0014Livello minimo$c0007: 57 (Questmaster)
 Comando wizard system.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
+
+
+#
+"MOTD"
+
+$c0014Livello minimo$c0007: TUTTI lettura; 57 (Questmaster) per set
+
+Message Of The Day (login). Tre slot MySQL: general, server, world.
+
+Sintassi:
+  motd
+  motd show
+  motd set [general|server|world] [versione] <testo>
+
+Senza argomenti (o show): mostra il motd.
+set (57+): sostituisce lo slot (default general).
+Esempi:
+  motd set Controllate sempre le NEWS
+  motd set server 3.6.9 Edit personali non bloccano il ripop zona
+  motd set world 3.7.6 Vecchia Storia, Nuova Citta'
+
+Layout tipico:
+  Versioni correnti
+  [general]
+  Server <ver> [TITLE breve]
+  World  <ver> [motto mondo]
+
+Su release reali lo slot server si aggiorna da TITLE: (o MOTD:/SUMMARY:)
+nel body del commit; MOTD_HEADLINE a compile-time e' override raro.
+
+$c0013Vedi anche$c0007: NEWS, WIZMOTD, WIZNEWS
+
+
+#
+"NEWS"
+
+$c0014Livello minimo$c0007: TUTTI lettura; 57 (Questmaster) admin
+
+News pubbliche (lista MySQL + eventuale testo esteso).
+
+Sintassi giocatore:
+  news                 (pagina 1: ultime 30)
+  news <pagina>        (es. news 2 = voci 31-60)
+  news read <numero>   (numero globale, anche fuori pagina)
+
+Sintassi admin (57+):
+  news list
+  news add [gg/mm/aaaa] [server|world] [versione] <titolo>
+  news edit <numero> [gg/mm/aaaa] [server|world] [versione] <titolo>
+  news del <numero>
+  news deleted
+  news undel <id>
+  news body <numero>
+
+Lista a pagine da 30: in RAM solo la pagina corrente (senza body).
+read/body/del usano l'indice globale (1 = piu' recente).
+Footer: pagina X/Y e hint news N per scorrere.
+list: elenco tecnico della pagina corrente (id, component, version).
+add: nuova voce. Per annunci versioni usa titolo breve (come TITLE:)
+  e opzionalmente server|world + version (colonne in lista).
+edit: modifica data/component/version/titolo della voce N (body invariato).
+body: editor multilinea del testo esteso, termina con @.
+del / deleted / undel: soft-delete e ripristino.
+
+Standard commit di release (body git -> BUILD_BODY):
+  TITLE: <riga breve, max ~70>
+  NEWS:
+  <dettaglio giocatori>
+  WIZ:
+  <dettaglio immortali>
+Alias TITLE: = MOTD: = SUMMARY:. Opzionale WIZTITLE: per wiznews.
+TITLE alimenta motd Server e i titoli in lista news/wiznews;
+NEWS:/WIZ: finiscono nel body (news/wiznews read).
+
+$c0013Vedi anche$c0007: MOTD, WIZNEWS, WIZMOTD
 

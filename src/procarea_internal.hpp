@@ -25,7 +25,7 @@ enum class ProcArchetype {
 	Count
 };
 
-enum class ProcMobKind { Normal, Boss, Trap };
+enum class ProcMobKind { Normal, Boss, Trap, Hireling };
 enum class ProcMobClassContext { Corridor, Treasure, Trap };
 
 enum class ProcCrystalTier : int8_t {
@@ -90,6 +90,10 @@ struct ProcAreaDifficulty {
 	int depth_extra_pct;
 	bool solo_mode = false;
 	bool solo_owner_is_basher = true;
+	/** Solitaria: moltiplicatore durezza mob (kit), fascia resta sull'eq grezzo. */
+	float solo_toughness_mult = 1.0f;
+	float solo_corridor_none_mult = 1.0f;
+	float solo_caster_keep_mult = 1.0f;
 	float party_power_mult = 1.0f;
 };
 
@@ -125,8 +129,18 @@ struct ProcAreaInstance {
 	bool solo_mode = false;
 	/** Solitaria: PG ingresso guerriero/barbaro/paladino/ranger (mob boss/trappola possono castare). */
 	bool solo_owner_is_basher = true;
+	/** Solitaria: durezza mob da kit (cl/mk=1); fascia da group_eq_index grezzo. */
+	float solo_toughness_mult = 1.0f;
+	float solo_corridor_none_mult = 1.0f;
+	float solo_caster_keep_mult = 1.0f;
+	/** Solitaria: etichetta kit per log (puntatore a literal statico). */
+	const char* solo_kit_label = "";
 	/** Solitaria: PF massimi del PG all'ingresso (pavimento combattimento). */
 	int entry_max_hit = 0;
+	/** Scorta tank (assolda): ptr runtime; nullptr se assente. */
+	char_data* hireling = nullptr;
+	/** True se l'hireling e' morto in combattimento (rebuy solo se config). */
+	bool hireling_dead = false;
 	int party_size_at_scale = 0;
 	float party_power_mult = 1.0f;
 	std::unordered_map<std::string, long> member_saved_load_room;
@@ -178,7 +192,9 @@ void clear_world_links(const ProcAreaInstance& inst);
 
 int create_instance(float group_eq_index, int group_max_level, long return_room,
 					long& entrance_vnum, const char* owner_name, bool solo_mode = false,
-					int party_size = 1, bool solo_owner_is_basher = true, int entry_max_hit = 0);
+					int party_size = 1, bool solo_owner_is_basher = true, int entry_max_hit = 0,
+					float solo_toughness_mult = 1.0f, float solo_corridor_none_mult = 1.0f,
+					float solo_caster_keep_mult = 1.0f, const char* solo_kit_label = "");
 
 void sync_party_power_scale(ProcAreaInstance& inst);
 
@@ -186,6 +202,12 @@ int count_mobs(const ProcAreaInstance& inst);
 void open_exit_portal(ProcAreaInstance& inst);
 void break_treasure_seals(ProcAreaInstance& inst, const char_data* boss);
 bool try_open_treasure(char_data* ch, struct room_data* room, std::string_view target);
+
+[[nodiscard]] bool is_hireling_mob(const char_data* mob);
+/** Extract hireling; mark_dead=true solo se caduto in combattimento (blocca rebuy). */
+void release_hireling(ProcAreaInstance& inst, bool mark_dead);
+/** Spawn scorta charm in room di owner. nullptr se fallisce. */
+char_data* spawn_hireling(ProcAreaInstance& inst, char_data* owner);
 
 void boot_reward_shields_impl();
 void boot_reward_gear_impl();

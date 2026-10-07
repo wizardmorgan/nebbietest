@@ -43,6 +43,7 @@
 #include "multiclass.hpp"
 #include "act.comm.hpp"
 #include "cmdid.hpp"
+#include "constants.hpp"
 
 namespace Alarmud {
 
@@ -57,7 +58,8 @@ struct ClanSymbolEntry {
 
 /*
  * Seed iniziale (una tantum se riga assente in clan_symbol).
- * Specchio di tools/clan_symbol_vnums.txt — dopo il seed la verita' e' MySQL.
+ * Specchio di tools/clan_symbol_vnums.txt - dopo il seed la verita' e' MySQL.
+ * Nuovi clan: clan registra <principe> <oggetto> (god), senza toccare questo array.
  */
 constexpr ClanSymbolEntry kClanSymbols[] = {
 	{34002, "Montero"},
@@ -80,6 +82,7 @@ constexpr ClanSymbolEntry kClanSymbols[] = {
 	{34649, "Fratello"},
 	{34694, "Chunli"},
 	{34696, "Greenblade"},
+	{34797, "Khaos"},
 };
 
 constexpr unsigned kClanSymbolWearFlags =
@@ -163,7 +166,49 @@ bool sql_escape(MYSQL* h, const std::string& in, std::string& out) {
 }
 
 constexpr unsigned kDefaultClanSymbolSlots = 5;
-constexpr const char* kClanAssegnaActor = "clan_assegna";
+constexpr const char* kClanRegistraActor = "clan_registra";
+/** Chiavi registry senza file 34k (oload + clan registra). */
+constexpr unsigned kClanSymbolSyntheticVnumMin = 900000u;
+
+std::unordered_set<unsigned> listed_vnum_cache;
+bool listed_vnum_cache_valid = false;
+
+void invalidate_listed_vnum_cache() {
+	listed_vnum_cache.clear();
+	listed_vnum_cache_valid = false;
+}
+
+void ensure_listed_vnum_cache(DB* db) {
+	if(listed_vnum_cache_valid) {
+		return;
+	}
+	listed_vnum_cache.clear();
+	for(const ClanSymbolEntry& e : kClanSymbols) {
+		listed_vnum_cache.insert(e.vnum);
+	}
+	if(db) {
+		try {
+			odb::connection_ptr cp(db->connection());
+			auto& mc = static_cast<odb::mysql::connection&>(*cp);
+			MYSQL* h = mc.handle();
+			if(mysql_query(h, "SELECT vnum FROM clan_symbol WHERE active=1") == 0) {
+				MYSQL_RES* res = mysql_store_result(h);
+				if(res) {
+					while(MYSQL_ROW row = mysql_fetch_row(res)) {
+						if(row[0]) {
+							listed_vnum_cache.insert(parse_u(row[0]));
+						}
+					}
+					mysql_free_result(res);
+				}
+			}
+		}
+		catch(const odb::exception& e) {
+			mudlog(LOG_SYSERR, "clan_symbol listed cache: %s", e.what());
+		}
+	}
+	listed_vnum_cache_valid = true;
+}
 
 bool ensure_clan_symbol_table(DB* db) {
 	try {
@@ -304,6 +349,7 @@ bool seed_row(DB* db, unsigned vnum, const char* prince) {
 			return false;
 		}
 		t.commit();
+		invalidate_listed_vnum_cache();
 		return true;
 	}
 	catch(const odb::exception& e) {
@@ -334,9 +380,116 @@ void update_registry_row(DB* db, unsigned vnum, unsigned base_vnum,
 			return;
 		}
 		t.commit();
+		invalidate_listed_vnum_cache();
 	}
 	catch(const odb::exception& e) {
 		mudlog(LOG_SYSERR, "clan_symbol update %u: %s", vnum, e.what());
+	}
+}
+
+[[nodiscard]] bool upsert_registry_row(DB* db, unsigned vnum, unsigned base_vnum,
+									   unsigned long long prince_id,
+									   const char* prince,
+									   unsigned long long instance_id) {
+	if(!db || !prince || !*prince || vnum == 0 || base_vnum == 0 ||
+	   prince_id == 0 || instance_id == 0) {
+		return false;
+	}
+	try {
+		odb::transaction t(db->begin());
+		t.tracer(logTracer);
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		std::string esc;
+		sql_escape(h, prince, esc);
+		std::ostringstream sql;
+		sql << "INSERT INTO clan_symbol "
+			   "(vnum, base_vnum, prince_name, prince_toon_id, instance_id, "
+			   "slots_max, active, updated_at) VALUES ("
+			<< vnum << "," << base_vnum << ",'" << esc << "'," << prince_id << ","
+			<< instance_id << "," << kDefaultClanSymbolSlots
+			<< ",1,NOW()) ON DUPLICATE KEY UPDATE base_vnum=" << base_vnum
+			<< ", prince_name='" << esc << "', prince_toon_id=" << prince_id
+			<< ", instance_id=" << instance_id
+			<< ", active=1, updated_at=NOW()";
+		if(mysql_query(h, sql.str().c_str()) != 0) {
+			mudlog(LOG_SYSERR, "clan_symbol upsert %u: %s", vnum, mysql_error(h));
+			t.rollback();
+			return false;
+		}
+		t.commit();
+		invalidate_listed_vnum_cache();
+		return true;
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "clan_symbol upsert %u: %s", vnum, e.what());
+		return false;
+	}
+}
+
+[[nodiscard]] unsigned allocate_synthetic_clan_vnum(DB* db) {
+	unsigned next = kClanSymbolSyntheticVnumMin;
+	if(!db) {
+		return next;
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		std::ostringstream sql;
+		sql << "SELECT IFNULL(MAX(vnum), " << (kClanSymbolSyntheticVnumMin - 1)
+			<< ") FROM clan_symbol WHERE vnum >= " << kClanSymbolSyntheticVnumMin;
+		if(mysql_query(h, sql.str().c_str()) != 0) {
+			return next;
+		}
+		MYSQL_RES* res = mysql_store_result(h);
+		if(!res) {
+			return next;
+		}
+		MYSQL_ROW row = mysql_fetch_row(res);
+		if(row && row[0]) {
+			next = parse_u(row[0]) + 1;
+			if(next < kClanSymbolSyntheticVnumMin) {
+				next = kClanSymbolSyntheticVnumMin;
+			}
+		}
+		mysql_free_result(res);
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "clan_symbol allocate vnum: %s", e.what());
+	}
+	return next;
+}
+
+[[nodiscard]] bool clan_symbol_vnum_owned_by_other(DB* db, unsigned vnum,
+												   const char* prince) {
+	if(!db || vnum == 0 || !prince || !*prince) {
+		return false;
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		std::string esc;
+		sql_escape(h, prince, esc);
+		std::ostringstream sql;
+		sql << "SELECT prince_name FROM clan_symbol WHERE vnum=" << vnum
+			<< " AND active=1 AND LOWER(prince_name)<>LOWER('" << esc
+			<< "') LIMIT 1";
+		if(mysql_query(h, sql.str().c_str()) != 0) {
+			return false;
+		}
+		MYSQL_RES* res = mysql_store_result(h);
+		if(!res) {
+			return false;
+		}
+		const bool other = (mysql_fetch_row(res) != nullptr);
+		mysql_free_result(res);
+		return other;
+	}
+	catch(const odb::exception&) {
+		return false;
 	}
 }
 
@@ -500,12 +653,9 @@ void destroy_clan_symbol_obj(struct obj_data* obj,
 							 struct char_data* actor);
 
 bool clan_symbol_is_listed_vnum(unsigned vnum) {
-	for(const ClanSymbolEntry& e : kClanSymbols) {
-		if(e.vnum == vnum) {
-			return true;
-		}
-	}
-	return false;
+	DB* db = Sql::getMysql();
+	ensure_listed_vnum_cache(db);
+	return listed_vnum_cache.count(vnum) != 0;
 }
 
 bool clan_symbol_can_wear(struct char_data* ch, const struct obj_data* obj) {
@@ -810,6 +960,8 @@ void clan_symbol_boot_migrate() {
 	if(!ensure_clan_symbol_table(db)) {
 		return;
 	}
+	invalidate_listed_vnum_cache();
+	ensure_listed_vnum_cache(db);
 
 	std::unordered_map<unsigned, std::unordered_set<std::string>> rent_holders;
 	index_rent_holders(rent_holders);
@@ -1724,6 +1876,68 @@ void list_symbol_holders(struct char_data* ch, const ClanRegistry& reg) {
 	send_to_char(out.str().c_str(), ch);
 }
 
+void show_clan_info(struct char_data* ch, const ClanRegistry& reg) {
+	if(ch == nullptr) {
+		return;
+	}
+	if(reg.template_instance_id == 0 || reg.base_vnum == 0) {
+		send_to_char("Questo clan non ha un simbolo registrato.\n\r", ch);
+		return;
+	}
+
+	struct obj_data* obj =
+		object_instance_materialize(reg.template_instance_id);
+	if(!obj) {
+		send_to_char("Impossibile leggere il simbolo del clan.\n\r", ch);
+		return;
+	}
+
+	DB* db = Sql::getMysql();
+	const int used = clan_symbol_slots_used(db, reg.prince_toon_id);
+
+	std::ostringstream out;
+	out << "Simbolo del clan di " << reg.prince_name << ":\n\r";
+	const char* short_desc =
+		obj->short_description ? obj->short_description : "(senza nome)";
+	out << "  " << short_desc << "\n\r";
+	out << "  Slot: simbolo del clan.\n\r";
+
+	bool any_affect = false;
+	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+		const int loc = obj->affected[i].location;
+		const int mod = obj->affected[i].modifier;
+		if(loc == 0 || mod == 0) {
+			continue;
+		}
+		if(!any_affect) {
+			out << "  Effetti:\n\r";
+			any_affect = true;
+		}
+		const char* type_name =
+			(loc >= 0 && apply_types[loc] != nullptr &&
+			 apply_types[loc][0] != '\n')
+				? apply_types[loc]
+				: "?";
+		out << "    ";
+		if(mod > 0) {
+			out << "+";
+		}
+		out << mod << " " << type_name << "\n\r";
+	}
+	if(!any_affect) {
+		out << "  Effetti: nessuno.\n\r";
+	}
+
+	out << "  Quota: " << used << "/" << reg.slots_max << " in uso.\n\r";
+	if(clan_is_immortale(ch)) {
+		out << "  (god) registry " << reg.vnum << ", base " << reg.base_vnum
+			<< ", instance " << reg.template_instance_id << "\n\r";
+	}
+
+	send_to_char(out.str().c_str(), ch);
+	destroy_clan_symbol_obj(obj, reg.template_instance_id, nullptr);
+}
+
 bool clan_assegna_to_vassal(struct char_data* prince, struct char_data* vassal) {
 	if(!prince || !vassal) {
 		return false;
@@ -1768,22 +1982,21 @@ bool clan_assegna_to_vassal(struct char_data* prince, struct char_data* vassal) 
 		return false;
 	}
 
+	/*
+	 * Copia runtime del template condiviso: stesso db_instance_id del
+	 * registro clan. Non creare una nuova object_instance (altrimenti ogni
+	 * assegna appare come edit duplicato in lista). Inventario/save gia'
+	 * escludono sync delle stats dei simboli; destroy scollega senza
+	 * soft-delete del template.
+	 */
 	struct obj_data* obj = object_instance_materialize(reg.template_instance_id);
 	if(!obj) {
 		send_to_char("Impossibile creare una copia del simbolo.\n\r", prince);
 		return false;
 	}
 	apply_fields(obj, static_cast<int>(reg.prince_toon_id));
-	obj->db_instance_id = 0;
-	if(GET_NAME(vassal_pc)) {
-		set_personal_owner(obj, GET_NAME(vassal_pc));
-	}
-	const unsigned long long nid = object_instance_persist(
-		obj, static_cast<int>(reg.base_vnum), 0, prince_pc, true, kClanAssegnaActor);
-	if(nid == 0) {
-		extract_obj(obj);
-		send_to_char("Salvataggio simbolo fallito.\n\r", prince);
-		return false;
+	if(obj->db_instance_id != reg.template_instance_id) {
+		obj->db_instance_id = reg.template_instance_id;
 	}
 	/* Il pezzo va sul corpo in gioco (anche poly). */
 	obj_to_char(obj, vassal);
@@ -1924,10 +2137,12 @@ void show_not_in_clan(struct char_data* ch) {
 	if(ch != nullptr && clan_is_immortale(ch)) {
 		send_to_char(
 			"Uso (god):\n\r"
-			"  clan vassalli <principe>   - lista vassalli\n\r"
-			"  clan simboli <principe>    - lista simboli\n\r"
-			"  clan quota <principe> [n]  - mostra/imposta quota (default 5)\n\r"
-			"  clan togli <pg>            - toglie/distrugge il simbolo\n\r",
+			"  clan info <principe>                       - scheda del simbolo\n\r"
+			"  clan vassalli <principe>                   - lista vassalli\n\r"
+			"  clan simboli <principe>                    - lista simboli\n\r"
+			"  clan quota <principe> [n]                  - mostra/imposta quota (default 5)\n\r"
+			"  clan registra <principe> <oggetto> [force] - registra un pezzo come simbolo\n\r"
+			"  clan togli <pg>                            - toglie/distrugge il simbolo\n\r",
 			ch);
 	}
 }
@@ -1972,10 +2187,9 @@ void show_not_in_clan(struct char_data* ch) {
 			mudlog(LOG_SYSERR, "clan prince_has_vassals: %s", e.what());
 		}
 	}
-
-	std::map<std::string, std::string> from_aux;
-	collect_vassals_from_aux(pname, from_aux);
-	return !from_aux.empty();
+	/* Niente scan rent/.aux qui: usato da clan / char_in_clan e lagga.
+	 * I vassalli solo-su-file restano visibili in clan vassalli. */
+	return false;
 }
 
 void show_clan_usage(struct char_data* ch) {
@@ -2005,6 +2219,7 @@ void show_clan_usage(struct char_data* ch) {
 	if(leads) {
 		send_to_char(
 			"Uso:\n\r"
+			"  clan info                  - scheda del simbolo del clan\n\r"
 			"  clan vassalli              - lista i tuoi vassalli\n\r"
 			"  clan simboli               - chi ha i simboli del clan\n\r"
 			"  clan assegna <nome>        - assegna un simbolo (stessa stanza)\n\r"
@@ -2019,6 +2234,7 @@ void show_clan_usage(struct char_data* ch) {
 	else if(princeOf != nullptr) {
 		send_to_char(
 			"Uso:\n\r"
+			"  clan info                  - scheda del simbolo del clan\n\r"
 			"  clan ripudia [nome]        - rinuncia al tuo principe\n\r"
 			"  clan tell <messaggio>      - parla al clan (anche da polato)\n\r"
 			"  ctell <messaggio>          - alias di clan tell\n\r",
@@ -2026,10 +2242,12 @@ void show_clan_usage(struct char_data* ch) {
 	}
 	if(clan_is_immortale(ch)) {
 		send_to_char(
-			"  clan vassalli <principe>   - (god) lista vassalli\n\r"
-			"  clan simboli <principe>    - (god) lista simboli\n\r"
-			"  clan quota <principe> [n]  - (god) mostra/imposta quota (default 5)\n\r"
-			"  clan togli <pg>            - (god) toglie/distrugge il simbolo\n\r",
+			"  clan info <principe>                       - (god) scheda del simbolo\n\r"
+			"  clan vassalli <principe>                   - (god) lista vassalli\n\r"
+			"  clan simboli <principe>                    - (god) lista simboli\n\r"
+			"  clan quota <principe> [n]                  - (god) mostra/imposta quota (default 5)\n\r"
+			"  clan registra <principe> <oggetto> [force] - (god) registra simbolo da pezzo\n\r"
+			"  clan togli <pg>                            - (god) toglie/distrugge il simbolo\n\r",
 			ch);
 	}
 }
@@ -2075,6 +2293,62 @@ void show_clan_usage(struct char_data* ch) {
 	}
 	if(!load_registry_by_prince(db, name.c_str(), reg)) {
 		send_to_char("Clan/principe non trovato in clan_symbol.\n\r", ch);
+		return false;
+	}
+	return true;
+}
+
+[[nodiscard]] bool resolve_clan_info_target(struct char_data* ch,
+											std::string_view arg,
+											ClanRegistry& reg) {
+	DB* db = Sql::getMysql();
+	if(!db) {
+		send_to_char("MySQL non disponibile.\n\r", ch);
+		return false;
+	}
+
+	std::string name{arg};
+	while(!name.empty() &&
+		  (name.back() == ' ' || name.back() == '\r' || name.back() == '\n')) {
+		name.pop_back();
+	}
+
+	struct char_data* const id = clan_pc_identity(ch);
+	const char* own_prince = nullptr;
+	if(HAS_PRINCE(ch) && GET_PRINCE(ch)) {
+		own_prince = GET_PRINCE(ch);
+	}
+	else if(id != nullptr && HAS_PRINCE(id) && GET_PRINCE(id)) {
+		own_prince = GET_PRINCE(id);
+	}
+	else if(clan_is_prince(ch) && id != nullptr && GET_NAME(id)) {
+		own_prince = GET_NAME(id);
+	}
+
+	if(name.empty()) {
+		if(own_prince != nullptr) {
+			name = own_prince;
+		}
+		else if(clan_is_immortale(ch)) {
+			send_to_char("Uso: clan info <principe>\n\r", ch);
+			return false;
+		}
+		else {
+			show_not_in_clan(ch);
+			return false;
+		}
+	}
+	else if(!clan_is_immortale(ch)) {
+		if(own_prince == nullptr ||
+		   strcasecmp(own_prince, name.c_str()) != 0) {
+			send_to_char("Puoi vedere solo il tuo clan.\n\r", ch);
+			return false;
+		}
+	}
+
+	if(!load_registry_by_prince(db, name.c_str(), reg) ||
+	   reg.template_instance_id == 0 || reg.base_vnum == 0) {
+		send_to_char("Questo clan non ha un simbolo registrato.\n\r", ch);
 		return false;
 	}
 	return true;
@@ -2854,6 +3128,166 @@ void clan_ritira(struct char_data* ch, const char* arg) {
 	}
 }
 
+void clan_registra(struct char_data* ch, const char* arg) {
+	if(ch == nullptr) {
+		return;
+	}
+	if(!clan_is_immortale(ch)) {
+		send_to_char("Solo gli immortali possono usare questo comando.\n\r", ch);
+		return;
+	}
+
+	const auto [prince_tok, rest1] =
+		chop_argument(arg, MAX_INPUT_LENGTH - 1, MAX_INPUT_LENGTH - 1);
+	const auto [obj_tok, rest2] =
+		chop_argument(rest1.c_str(), MAX_INPUT_LENGTH - 1, MAX_INPUT_LENGTH - 1);
+	const std::string force_tok =
+		chop_argument(rest2.c_str(), MAX_INPUT_LENGTH - 1, 0).first;
+	const bool force =
+		!force_tok.empty() &&
+		(is_abbrev(force_tok.c_str(), "force") ||
+		 is_abbrev(force_tok.c_str(), "forza"));
+
+	if(prince_tok.empty() || obj_tok.empty()) {
+		send_to_char(
+			"Uso: clan registra <principe> <oggetto> [force]\n\r"
+			"Esempio: oload orecchino -> modifica -> clan registra Ogun orecchino\n\r",
+			ch);
+		return;
+	}
+
+	DB* db = Sql::getMysql();
+	if(!db) {
+		send_to_char("MySQL non disponibile.\n\r", ch);
+		return;
+	}
+	if(!ensure_clan_symbol_table(db)) {
+		send_to_char("Tabella clan_symbol non disponibile.\n\r", ch);
+		return;
+	}
+
+	struct obj_data* obj = get_obj_vis_accessible(ch, obj_tok.c_str());
+	if(obj == nullptr) {
+		send_to_char("Non vedo quell'oggetto.\n\r", ch);
+		return;
+	}
+
+	const unsigned long long prince_id =
+		lookup_toon_id_ci(db, prince_tok.c_str());
+	if(prince_id == 0) {
+		send_to_char("Principe non trovato in toon (nome esatto del PG).\n\r", ch);
+		return;
+	}
+	std::string prince_name = lookup_toon_name_by_id(db, prince_id);
+	if(prince_name.empty()) {
+		prince_name = prince_tok;
+	}
+
+	struct char_data* online = find_pc_by_name_ci(prince_name.c_str());
+	if(online != nullptr && !IS_PRINCE(clan_pc_identity(online)) &&
+	   !IS_IMMORTAL(online)) {
+		send_to_char(
+			"Attenzione: quel PG non risulta principe (registro comunque).\n\r",
+			ch);
+	}
+
+	const int base_vnum = object_instance_resolve_base_vnum(obj);
+	if(base_vnum <= 0 ||
+	   (base_vnum >= LOW_EDITED_ITEMS && base_vnum <= HIGH_EDITED_ITEMS) ||
+	   real_object(base_vnum) < 0) {
+		send_to_char(
+			"Serve un prototipo mondo valido (char_vnum / base fuori dal 34k).\n\r"
+			"Esempio: oload di un orecchino del mondo, poi clan registra.\n\r",
+			ch);
+		return;
+	}
+
+	ClanRegistry existing {};
+	const bool have_reg =
+		load_registry_by_prince(db, prince_name.c_str(), existing);
+	if(have_reg && existing.template_instance_id != 0 && !force) {
+		const std::string msg =
+			prince_name +
+			" ha gia' un simbolo registrato (instance " +
+			std::to_string(existing.template_instance_id) +
+			"). Usa: clan registra " + prince_name + " " + obj_tok +
+			" force\n\r";
+		send_to_char(msg.c_str(), ch);
+		return;
+	}
+
+	const int cur_vnum =
+		(obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
+	unsigned registry_vnum = 0;
+	if(have_reg && existing.vnum != 0) {
+		registry_vnum = existing.vnum;
+	}
+	else if(cur_vnum >= LOW_EDITED_ITEMS && cur_vnum <= HIGH_EDITED_ITEMS) {
+		registry_vnum = static_cast<unsigned>(cur_vnum);
+	}
+	else {
+		registry_vnum = allocate_synthetic_clan_vnum(db);
+	}
+
+	if(clan_symbol_vnum_owned_by_other(db, registry_vnum, prince_name.c_str())) {
+		send_to_char(
+			"Quel vnum e' gia' registrato come simbolo di un altro clan.\n\r",
+			ch);
+		return;
+	}
+
+	apply_fields(obj, static_cast<int>(prince_id));
+	set_personal_owner(obj, prince_name);
+	REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+	REMOVE_BIT(obj->obj_flags.extra_flags2, ITEM2_PERSONAL);
+
+	unsigned long long update_id = 0;
+	if(have_reg && existing.template_instance_id != 0 && force) {
+		update_id = existing.template_instance_id;
+	}
+	else if(obj->db_instance_id != 0 && have_reg &&
+			obj->db_instance_id == existing.template_instance_id) {
+		update_id = obj->db_instance_id;
+	}
+
+	const unsigned long long instance_id = object_instance_persist(
+		obj, base_vnum, update_id, ch, true, kClanRegistraActor);
+	if(instance_id == 0) {
+		send_to_char("Salvataggio instance del simbolo fallito.\n\r", ch);
+		return;
+	}
+
+	if(!upsert_registry_row(db, registry_vnum,
+							static_cast<unsigned>(base_vnum), prince_id,
+							prince_name.c_str(), instance_id)) {
+		send_to_char("Aggiornamento tabella clan_symbol fallito.\n\r", ch);
+		return;
+	}
+
+	const unsigned list_n = object_instance_active_list_num(instance_id);
+	std::ostringstream msg;
+	msg << "Simbolo del clan di " << prince_name << " registrato: base "
+		<< base_vnum << ", registry vnum " << registry_vnum << ", instance "
+		<< instance_id;
+	if(list_n > 0) {
+		msg << " (lista #" << list_n << ")";
+	}
+	if(have_reg && force) {
+		msg << " [sostituito]";
+	}
+	msg << ".\n\rIl principe puo' usare: clan assegna <vassallo>\n\r";
+	send_to_char(msg.str().c_str(), ch);
+
+	{
+		std::ostringstream logmsg;
+		logmsg << "clan registra: "
+			   << (GET_NAME(ch) ? GET_NAME(ch) : "?") << " set symbol for "
+			   << prince_name << " base=" << base_vnum << " vnum=" << registry_vnum
+			   << " instance=" << instance_id << (force ? " force" : "");
+		mudlog(LOG_PLAYERS, "%s", logmsg.str().c_str());
+	}
+}
+
 void clan_togli_announce(struct char_data* god, struct char_data* target,
 						 bool same_room) {
 	if(same_room && target) {
@@ -3032,6 +3466,11 @@ ACTION_FUNC(do_clan) {
 		clan_togli(ch, rest.c_str());
 		return;
 	}
+	if(is_abbrev(cmdtok.c_str(), "registra") ||
+	   is_abbrev(cmdtok.c_str(), "register")) {
+		clan_registra(ch, rest.c_str());
+		return;
+	}
 
 	DB* db = Sql::getMysql();
 	if(!db) {
@@ -3042,6 +3481,20 @@ ACTION_FUNC(do_clan) {
 	const std::string argtok =
 		chop_argument(rest.c_str(), MAX_INPUT_LENGTH - 1, 0).first;
 
+	if(is_abbrev(cmdtok.c_str(), "info") ||
+	   is_abbrev(cmdtok.c_str(), "information")) {
+		if(!clan_is_immortale(ch) && !clan_is_prince(ch) &&
+		   !char_in_clan(ch) && !char_in_clan(clan_pc_identity(ch))) {
+			show_not_in_clan(ch);
+			return;
+		}
+		ClanRegistry reg;
+		if(!resolve_clan_info_target(ch, argtok, reg)) {
+			return;
+		}
+		show_clan_info(ch, reg);
+		return;
+	}
 	if(is_abbrev(cmdtok.c_str(), "vassalli")) {
 		if(!clan_is_prince(ch) && !clan_is_immortale(ch)) {
 			send_to_char("Solo i principi possono usare questo comando.\n\r", ch);

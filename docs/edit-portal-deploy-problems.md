@@ -2,7 +2,7 @@
 
 ## Non è (solo) “due repo”
 
-Su nucbuntu usi **un solo clone** (`~/NebbieArcane/Server`) con due remote (`origin` = Razze, `mine` = edit-portal).  
+Su nucbuntu usi **un solo clone** (`~/NebbieArcane/Server`) con remote `upstream`/`origin` (Montero, base `feature/Principi`) e `mine` (fork edit-portal).  
 I due repo erano un’opzione storica (`docker-vms/Server`); **non servono** se tutto vive in NebbieArcane.
 
 I problemi reali sono **architetturali nel workflow Docker + avvio myst**, non il fork git in sé.

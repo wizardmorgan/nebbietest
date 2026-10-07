@@ -217,6 +217,14 @@ public:
   odb::nullable<unsigned int> legacy_edit_vnum;
   /** Origine edit: procarea_loot, god_edit, clan_symbol, … (null = legacy). */
   odb::nullable<std::string> source;
+  /** Polvere achievement (APPLY pool); non accreditata come edit. */
+  short dust_hp;
+  short dust_mana;
+  short dust_move;
+  short dust_hp_regen;
+  short dust_mana_regen;
+  short dust_move_regen;
+  short dust_spellfail;
   bool deleted;
   odb::nullable<boost::posix_time::ptime> deleted_on;
   boost::posix_time::ptime created_at;
@@ -238,6 +246,22 @@ public:
   int modifier;
 };
 
+#ifdef ODB_COMPILER
+#pragma db value
+#endif
+struct object_instance_extradesc_key {
+  unsigned long long instance_id;
+  unsigned char slot;
+};
+
+/** Extra description (blocchi E) per-instance; non quelle del proto. */
+class object_instance_extradesc {
+public:
+  object_instance_extradesc_key key;
+  std::string keyword;
+  std::string description;
+};
+
 /** Storico modifiche istanza (leggere sempre l'ultima per at DESC). */
 class object_instance_event {
 public:
@@ -249,6 +273,25 @@ public:
   std::string kind;
   odb::nullable<std::string> note;
   /** Diff strutturato (create/update); TEXT. Preferito in show history. */
+  odb::nullable<std::string> detail;
+};
+
+/**
+ * Audit perdita oggetti dal PG (drop/steal/junk/…; kind stringa aperta).
+ * Non e' inventorio: solo storico. Indice (toon_id, at).
+ */
+class character_item_loss {
+public:
+  unsigned long long id;
+  boost::posix_time::ptime at;
+  unsigned long long toon_id;
+  /** Snapshot nome al momento della perdita (query senza join). */
+  odb::nullable<std::string> toon_name;
+  std::string kind;
+  unsigned int item_number;
+  odb::nullable<unsigned long long> instance_id;
+  std::string short_desc;
+  odb::nullable<long long> room_vnum;
   odb::nullable<std::string> detail;
 };
 
@@ -529,7 +572,11 @@ public:
 #pragma db model version(1, 7, closed)
 #pragma db model version(1, 8, closed)
 #pragma db model version(1, 9, closed)
-#pragma db model version(1, 10, open)
+#pragma db model version(1, 10, closed)
+#pragma db model version(1, 11, closed)
+#pragma db model version(1, 12, closed)
+#pragma db model version(1, 13, closed)
+#pragma db model version(1, 14, open)
 
 #pragma db object(character_achievements) session(false)
 #pragma db member(character_achievements::key) id
@@ -687,6 +734,13 @@ public:
 #pragma db member(object_instance::updated_by_name) type("varchar(32)") null
 #pragma db member(object_instance::legacy_edit_vnum) null
 #pragma db member(object_instance::source) type("varchar(32)") null
+#pragma db member(object_instance::dust_hp) not_null default(0)
+#pragma db member(object_instance::dust_mana) not_null default(0)
+#pragma db member(object_instance::dust_move) not_null default(0)
+#pragma db member(object_instance::dust_hp_regen) not_null default(0)
+#pragma db member(object_instance::dust_mana_regen) not_null default(0)
+#pragma db member(object_instance::dust_move_regen) not_null default(0)
+#pragma db member(object_instance::dust_spellfail) not_null default(0)
 #pragma db member(object_instance::deleted) not_null default(0)
 #pragma db member(object_instance::deleted_on) type("TIMESTAMP") null
 #pragma db member(object_instance::created_at) type("TIMESTAMP") not_null
@@ -710,6 +764,13 @@ public:
 #pragma db member(object_instance_affect::location) not_null default(0)
 #pragma db member(object_instance_affect::modifier) not_null default(0)
 
+#pragma db object(object_instance_extradesc) session(false)
+#pragma db member(object_instance_extradesc::key) id
+#pragma db member(object_instance_extradesc_key::instance_id) not_null
+#pragma db member(object_instance_extradesc_key::slot) not_null
+#pragma db member(object_instance_extradesc::keyword) type("varchar(255)") not_null
+#pragma db member(object_instance_extradesc::description) type("TEXT") not_null
+
 #pragma db object(object_instance_event) session(false)
 #pragma db member(object_instance_event::id) id auto
 #pragma db member(object_instance_event::instance_id) not_null index
@@ -721,6 +782,21 @@ public:
 #pragma db member(object_instance_event::detail) type("TEXT") null
 #pragma db index(object_instance_event::"idx_object_instance_event_at")        \
     members(instance_id, at)
+
+#pragma db object(character_item_loss) session(false)
+#pragma db member(character_item_loss::id) id auto
+#pragma db member(character_item_loss::at) type("TIMESTAMP") not_null
+#pragma db member(character_item_loss::toon_id) not_null index
+#pragma db member(character_item_loss::toon_name) type("varchar(32)") null
+#pragma db member(character_item_loss::kind) type("varchar(32)") not_null
+#pragma db member(character_item_loss::item_number) not_null default(0)
+#pragma db member(character_item_loss::instance_id) null
+#pragma db member(character_item_loss::short_desc) type("varchar(128)")       \
+    not_null default("")
+#pragma db member(character_item_loss::room_vnum) null
+#pragma db member(character_item_loss::detail) type("varchar(256)") null
+#pragma db index(character_item_loss::"idx_item_loss_toon_at") members(toon_id, at)
+#pragma db index(character_item_loss::"idx_item_loss_instance") members(instance_id)
 
 #pragma db object(character_mercy) session(false)
 #pragma db member(character_mercy::key) id

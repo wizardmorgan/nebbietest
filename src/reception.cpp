@@ -636,10 +636,11 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st,
 				/* Se l' oggetto costa al rent, e' considerato raro, e percio' viene
 				 * gia' contato nella procedura CountLimitedItems. Questo dovrebbe
 				 * risolvere il problema degli oggetti rari che non ripoppano come
-				 * dovrebbero.
+				 * dovrebbero. Gli edit/instance sono gia' esclusi dal contatore.
 				 */
 				if(obj->item_number >= 0 &&
-						obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+						obj->obj_flags.cost >= LIM_ITEM_COST_MIN &&
+						!object_is_zone_limit_exempt(obj)) {
 					obj_index[ obj->item_number ].number--;
 				}
 #endif
@@ -699,6 +700,8 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st,
 				strcpy(obj->name, st->objects[i].name);
 				strcpy(obj->short_description, st->objects[i].sd);
 				strcpy(obj->description, st->objects[i].desc);
+
+				hydrate_personal_owner_from_ed(obj, true);
 
 				SetStatus(STATUS_OTCCOPYAFFECT, NULL);
 
@@ -800,9 +803,11 @@ void obj_store_to_char_by_parent(struct char_data* ch,
 			continue;
 		}
 #if LIMITED_ITEMS
-		/* Gia' contati in CountLimitedItemsMysql al boot (come obj_store_to_char). */
+		/* Gia' contati in CountLimitedItemsMysql al boot (come obj_store_to_char).
+		 * Edit/instance: esclusi da object_exclude_from_zone_limit in materialize. */
 		if(obj->item_number >= 0 &&
-				obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+				obj->obj_flags.cost >= LIM_ITEM_COST_MIN &&
+				!object_is_zone_limit_exempt(obj)) {
 			obj_index[obj->item_number].number--;
 		}
 #endif
@@ -844,6 +849,7 @@ void obj_store_to_char_by_parent(struct char_data* ch,
 		strcpy(obj->name, row.elem.name);
 		strcpy(obj->short_description, row.elem.sd);
 		strcpy(obj->description, row.elem.desc);
+		hydrate_personal_owner_from_ed(obj, true);
 		for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
 			obj->affected[j] = row.elem.affected[j];
 		}
@@ -933,8 +939,6 @@ void obj_store_to_char_by_parent(struct char_data* ch,
 
 void SetPersonOnSave(struct char_data* ch, struct obj_data* obj)
 {
-	char personal[MAX_INPUT_LENGTH];
-
 	if(!ch || !obj || !GET_NAME(ch)) {
 		return;
 	}
@@ -942,11 +946,14 @@ void SetPersonOnSave(struct char_data* ch, struct obj_data* obj)
 	strncpy(obj->personal_owner, GET_NAME(ch), sizeof(obj->personal_owner) - 1);
 	obj->personal_owner[sizeof(obj->personal_owner) - 1] = '\0';
 
-	/* Legacy rent/file: mantieni anche ED* nelle keyword. */
-	snprintf(personal, sizeof(personal) - 1, "%s ED%s",
-			 obj->name ? obj->name : "", GET_NAME(ch));
-	free(obj->name);
-	obj->name = (char*)strdup(personal);
+	/* Runtime: owner nel campo, keyword senza ED* (rent/file via helper). */
+	{
+		const std::string stripped = object_instance_strip_ed_tokens(obj->name);
+		if(obj->name && stripped != obj->name) {
+			free(obj->name);
+			obj->name = strdup(stripped.c_str());
+		}
+	}
 
 	if(!IS_OBJ_STAT2(obj, ITEM2_PERSONAL)) {
 		SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PERSONAL);
@@ -959,8 +966,9 @@ void SetPersonOnSave(struct char_data* ch, struct obj_data* obj)
 		}
 	}
 #endif
-	mudlog(LOG_PLAYERS, "MUD: Personalized %s[%d] on %s.", obj->name,
-		   obj_index[obj->item_number].iVNum, GET_NAME(ch));
+	mudlog(LOG_PLAYERS, "MUD: Personalized %s[%d] on %s.",
+		   (obj->name ? obj->name : "?"), obj_index[obj->item_number].iVNum,
+		   GET_NAME(ch));
 }
 
 void old_obj_store_to_char(struct char_data* ch, struct old_obj_file_u* st)
@@ -991,10 +999,11 @@ void old_obj_store_to_char(struct char_data* ch, struct old_obj_file_u* st)
                 /* Se l' oggetto costa al rent, e' considerato raro, e percio' viene
                  * gia' contato nella procedura CountLimitedItems. Questo dovrebbe
                  * risolvere il problema degli oggetti rari che non ripoppano come
-                 * dovrebbero.
+                 * dovrebbero. Gli edit/instance sono gia' esclusi dal contatore.
                  */
                 if(obj->item_number >= 0 &&
-                    obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+                    obj->obj_flags.cost >= LIM_ITEM_COST_MIN &&
+                    !object_is_zone_limit_exempt(obj)) {
                     obj_index[ obj->item_number ].number--;
                 }
 #endif
@@ -1033,6 +1042,8 @@ void old_obj_store_to_char(struct char_data* ch, struct old_obj_file_u* st)
                 strcpy(obj->name, st->objects[i].name);
                 strcpy(obj->short_description, st->objects[i].sd);
                 strcpy(obj->description, st->objects[i].desc);
+
+                hydrate_personal_owner_from_ed(obj, true);
 
                 SetStatus(STATUS_OTCCOPYAFFECT, NULL);
 
@@ -1406,15 +1417,19 @@ void load_char_objs(struct char_data* ch, bool ghost) {
 		clan_symbol_enforce_single(ch);
 	}
 
-	/* Save char, to avoid strange data if crashing (PG migrati: solo al quit/rent) */
+	/* Save char, to avoid strange data if crashing (PG migrati: solo al quit/rent).
+	 * Ghost: pool/simbolo si applicano; il salvataggio lo fai tu con forcerent. */
+	if(ghost) {
+		mudlog(LOG_SAVE, "load_char_objs: skip post-load save for ghost %s",
+			   GET_NAME(ch));
+	}
 #if USE_MYSQL
-	if(toon_is_migrated_by_name(GET_NAME(ch))) {
+	else if(toon_is_migrated_by_name(GET_NAME(ch))) {
 		mudlog(LOG_SAVE, "load_char_objs: skip post-load save for migrated %s",
 			   GET_NAME(ch));
 	}
-	else
 #endif
-	{
+	else {
 		mudlog(LOG_CHECK, "Saving character...");
 		save_char(ch, AUTO_RENT, 0);
 	}
@@ -1479,10 +1494,15 @@ void put_obj_in_store(struct obj_data* obj, struct obj_file_u* st, struct char_d
 	oe->value[2] = obj->obj_flags.value[2];
 	oe->value[3] = obj->obj_flags.value[3];
 
-    if(obj_index[obj->item_number].iVNum >= LOW_EDITED_ITEMS && obj_index[obj->item_number].iVNum <= HIGH_EDITED_ITEMS && !pers_on(ch,obj) && !IS_OBJ_STAT2(obj, ITEM2_PERSONAL))
-    {
-        SetPersonOnSave(ch, obj);
-    }
+	{
+		const int vnum = obj_index[obj->item_number].iVNum;
+		if(vnum >= LOW_EDITED_ITEMS && vnum <= HIGH_EDITED_ITEMS
+		   && !pers_on(ch, obj)
+		   && !IS_OBJ_STAT2(obj, ITEM2_PERSONAL)
+		   && !is_castle_no_auto_personalize(vnum)) {
+			SetPersonOnSave(ch, obj);
+		}
+	}
 
 	oe->extra_flags = obj->obj_flags.extra_flags;
     oe->extra_flags2 = obj->obj_flags.extra_flags2;
@@ -1491,7 +1511,9 @@ void put_obj_in_store(struct obj_data* obj, struct obj_file_u* st, struct char_d
 	oe->bitvector  = obj->obj_flags.bitvector;
 
 	if(obj->name) {
-		strcpy(oe->name, obj->name);
+		const std::string kn = obj_keywords_for_legacy_file(obj);
+		strncpy(oe->name, kn.c_str(), sizeof(oe->name) - 1);
+		oe->name[sizeof(oe->name) - 1] = '\0';
 	}
 	else {
 		mudlog(LOG_SYSERR, "object %d has no name!",
@@ -1607,10 +1629,11 @@ void obj_to_store(struct obj_data* obj, struct obj_file_u* st,
 #if LIMITED_ITEMS
 		/* Se lo oggetto e' raro, non ne deve essere decrementato il numero
 		 * presente nel mondo. Questo dovrebbe risolvere il problema di alcuni
-		 * oggetti rari che non ripoppano.
+		 * oggetti rari che non ripoppano. Edit/instance: non riservano slot zona.
 		 */
 		if(obj->item_number >= 0 &&
-				obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+				obj->obj_flags.cost >= LIM_ITEM_COST_MIN &&
+				!object_is_zone_limit_exempt(obj)) {
 			obj_index[ obj->item_number ].number++;
 		}
 #endif
@@ -1949,6 +1972,101 @@ void cleanup_migrated_legacy_files() {
 	mudlog(LOG_CHECK, "cleanup_migrated_legacy: processed %d migrated PG", archived_players);
 }
 
+/**
+ * Prova lazy migrate di un PG da .dat gia' caricato.
+ * @return true se migrato (o gia' migrato): il caller puo' saltare il path rent file.
+ */
+static bool try_lazy_migrate_from_dat(const char_file_u& ch_st, const char* ent_name,
+									  const char* log_tag) {
+	if(boot_is_migrated_name(ch_st.name)) {
+		return true;
+	}
+
+	std::string file_base = lower(ch_st.name);
+	if(file_base.empty() && ent_name != nullptr) {
+		file_base = ent_name;
+		const auto dot = file_base.rfind(".dat");
+		if(dot != std::string::npos && dot + 4 == file_base.size()) {
+			file_base.resize(dot);
+		}
+		for(char& c : file_base) {
+			if(c >= 'A' && c <= 'Z') {
+				c = static_cast<char>(c + ('a' - 'A'));
+			}
+		}
+	}
+
+	try {
+		toonPtr pg = Sql::getOne<toon>(toonQuery::name == std::string(ch_st.name));
+		if((!pg || !pg->id) && !file_base.empty()) {
+			pg = Sql::getOne<toon>(toonQuery::name == file_base);
+		}
+		if(!pg || !pg->id) {
+			return false;
+		}
+		DB* db = Sql::getMysql();
+		if(!toon_needs_migration(db, *pg)) {
+			return false;
+		}
+		LegacyImportReport rep {};
+		if(legacy_import_character_mysql(file_base.c_str(), rep)) {
+			mudlog(LOG_CONNECT, "%s: lazy migration OK for %s (%s)", log_tag,
+				   file_base.c_str(), rep.message.c_str());
+			legacy_archive_migrated_player(ch_st.name);
+			g_boot_migrated_names.insert(lower(ch_st.name));
+			return true;
+		}
+		mudlog(LOG_SYSERR, "%s: lazy migration FAILED for %s (%s)", log_tag,
+			   file_base.c_str(), rep.message.c_str());
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "%s: migration check %s: %s", log_tag, ch_st.name,
+			   e.what());
+	}
+	return false;
+}
+
+void boot_migrate_pending_characters() {
+	DIR* dir = opendir(PLAYERS_DIR);
+	if(dir == nullptr) {
+		mudlog(LOG_SYSERR, "boot_migrate_pending: cannot open %s", PLAYERS_DIR);
+		return;
+	}
+
+	int scanned = 0;
+	int imported = 0;
+	int already = 0;
+	struct dirent* ent;
+	while((ent = readdir(dir)) != nullptr) {
+		if(ent->d_name[0] == '.' || !strstr(ent->d_name, ".dat")) {
+			continue;
+		}
+		char playerPath[300];
+		snprintf(playerPath, sizeof(playerPath) - 1, "%s/%s", PLAYERS_DIR, ent->d_name);
+
+		char_file_u ch_st {};
+		if(!legacy_load_char_file_path(playerPath, ch_st)) {
+			mudlog(LOG_ERROR, "boot_migrate_pending: Error reading file %s.",
+				   playerPath);
+			continue;
+		}
+		++scanned;
+
+		if(boot_is_migrated_name(ch_st.name)) {
+			++already;
+			continue;
+		}
+		if(try_lazy_migrate_from_dat(ch_st, ent->d_name, "boot_migrate_pending")) {
+			++imported;
+		}
+	}
+	closedir(dir);
+
+	mudlog(LOG_CHECK,
+		   "boot_migrate_pending: scanned %d .dat, imported %d, already migrated %d",
+		   scanned, imported, already);
+}
+
 #else /* !USE_MYSQL */
 
 void cleanup_migrated_legacy_files() {}
@@ -1956,6 +2074,8 @@ void cleanup_migrated_legacy_files() {}
 void legacy_archive_migrated_player(const char* name) {
 	(void)name;
 }
+
+void boot_migrate_pending_characters() {}
 
 #endif /* USE_MYSQL */
 
@@ -2002,53 +2122,9 @@ void update_obj_file() {
             }
 
 #if USE_MYSQL
-            if(boot_is_migrated_name(ch_st.name)) {
+            /* Gia' migrato o lazy migrate ora: salta path rent legacy. */
+            if(try_lazy_migrate_from_dat(ch_st, ent->d_name, "update_obj_file")) {
                 continue;
-            }
-
-            {
-                /* Preferisci il nome dal .dat (gia' in ch_st); basename solo fallback. */
-                std::string file_base = lower(ch_st.name);
-                if(file_base.empty()) {
-                    file_base = ent->d_name;
-                    const auto dot = file_base.rfind(".dat");
-                    if(dot != std::string::npos && dot + 4 == file_base.size()) {
-                        file_base.resize(dot);
-                    }
-                    for(char& c : file_base) {
-                        if(c >= 'A' && c <= 'Z') {
-                            c = static_cast<char>(c + ('a' - 'A'));
-                        }
-                    }
-                }
-
-                try {
-                    toonPtr pg = Sql::getOne<toon>(toonQuery::name == std::string(ch_st.name));
-                    if((!pg || !pg->id) && !file_base.empty()) {
-                        pg = Sql::getOne<toon>(toonQuery::name == file_base);
-                    }
-                    if(pg && pg->id) {
-                        DB* db = Sql::getMysql();
-                        if(toon_needs_migration(db, *pg)) {
-                            LegacyImportReport rep {};
-                            if(legacy_import_character_mysql(file_base.c_str(), rep)) {
-                                mudlog(LOG_CONNECT,
-                                       "update_obj_file: lazy migration OK for %s (%s)",
-                                       file_base.c_str(), rep.message.c_str());
-                                legacy_archive_migrated_player(ch_st.name);
-                                g_boot_migrated_names.insert(lower(ch_st.name));
-                                continue;
-                            }
-                            mudlog(LOG_SYSERR,
-                                   "update_obj_file: lazy migration FAILED for %s (%s)",
-                                   file_base.c_str(), rep.message.c_str());
-                        }
-                    }
-                }
-                catch(const odb::exception& e) {
-                    mudlog(LOG_SYSERR, "update_obj_file: migration check %s: %s",
-                           ch_st.name, e.what());
-                }
             }
 #endif
 
@@ -2269,9 +2345,11 @@ void CountLimitedItems(struct obj_file_u* st) {
 			/* eek.. read in the object, and then extract it.
 			 (all this just to find rent cost.)  *sigh* */
 			if((obj = object_instance_load_stored(st->objects[ i ].item_number, 0))) {
-				/* if the cost is >= LIM_ITEM_COST_MIN, then mark before extractin */
+				/* if the cost is >= LIM_ITEM_COST_MIN, then mark before extractin.
+				 * Edit/object_instance: non contano sul prototipo di zona. */
 				if(obj->item_number >= 0 &&
-						obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+						obj->obj_flags.cost >= LIM_ITEM_COST_MIN &&
+						!object_is_zone_limit_exempt(obj)) {
 					obj_index[ obj->item_number ].number++;
 
 					/*Acidus 2004-show rare*/
@@ -2355,7 +2433,7 @@ void CountLimitedItemsMysql() {
 
 	long long inventory_rows = 0;
 	long long rare_added = 0;
-	long long rare_from_instance = 0;
+	long long skipped_instance = 0;
 	MYSQL_ROW row;
 	while((row = mysql_fetch_row(res)) != nullptr) {
 		const int item_vnum = (row[0] != nullptr) ? std::atoi(row[0]) : 0;
@@ -2364,88 +2442,42 @@ void CountLimitedItemsMysql() {
 		const char* owner = (row[2] != nullptr && row[2][0] != '\0') ? row[2] : "?";
 		++inventory_rows;
 
-		int count_vnum = 0;
-		bool is_rare = false;
-		bool from_instance = false;
-		const char* label = "?";
-		std::string label_storage;
-
-		if(instance_id != 0 && row[4] != nullptr) {
-			/* Istanza: cost/nome da object_instance; contatore su base_vnum. */
-			const int base_vnum = (row[3] != nullptr) ? std::atoi(row[3]) : 0;
-			const int inst_cost = std::atoi(row[4]);
-			count_vnum = base_vnum > 0 ? base_vnum : item_vnum;
-			is_rare = (inst_cost >= LIM_ITEM_COST_MIN);
-			from_instance = true;
-			if(row[5] != nullptr && row[5][0] != '\0') {
-				label = row[5];
-			}
-			else {
-				label_storage = "instance#" + std::to_string(instance_id);
-				label = label_storage.c_str();
-			}
-		}
-		else {
-			if(item_vnum <= 0) {
-				continue;
-			}
-			count_vnum = item_vnum;
-			is_rare = false;
-			label = "?";
-			if(instance_id == 0 && item_vnum >= LOW_EDITED_ITEMS &&
-			   item_vnum <= HIGH_EDITED_ITEMS) {
-				struct obj_data* resolved =
-					object_instance_load_stored(item_vnum, 0);
-				if(resolved && resolved->db_instance_id != 0) {
-					const int base = object_instance_resolve_base_vnum(resolved);
-					count_vnum = base > 0 ? base : item_vnum;
-					is_rare = (resolved->item_number >= 0 &&
-							   resolved->obj_flags.cost >= LIM_ITEM_COST_MIN);
-					label_storage =
-						resolved->name != nullptr ? resolved->name : "?";
-					label = label_storage.c_str();
-					from_instance = true;
-					extract_obj(resolved);
-				}
-				else {
-					if(resolved) {
-						extract_obj(resolved);
-					}
-					is_rare = ensure_proto(item_vnum);
-					label = proto_name.count(item_vnum) ? proto_name[item_vnum].c_str()
-														: "?";
-				}
-			}
-			else {
-				is_rare = ensure_proto(item_vnum);
-				label = proto_name.count(item_vnum) ? proto_name[item_vnum].c_str() : "?";
-			}
-		}
-
-		if(!is_rare || count_vnum <= 0) {
+		if(instance_id != 0) {
+			/* object_instance (edit/loot unico): non riserva slot sul prototipo. */
+			++skipped_instance;
 			continue;
 		}
-		const int rnum = real_object(count_vnum);
+		if(item_vnum <= 0) {
+			continue;
+		}
+		if(item_vnum >= LOW_EDITED_ITEMS && item_vnum <= HIGH_EDITED_ITEMS) {
+			/* Legacy 34k gia' migrato → instance: skip. */
+			struct obj_data* resolved =
+				object_instance_load_stored(item_vnum, 0);
+			if(resolved && resolved->db_instance_id != 0) {
+				extract_obj(resolved);
+				++skipped_instance;
+				continue;
+			}
+			if(resolved) {
+				extract_obj(resolved);
+			}
+		}
+		if(!ensure_proto(item_vnum)) {
+			continue;
+		}
+		const int rnum = real_object(item_vnum);
 		if(rnum < 0) {
 			continue;
 		}
 		obj_index[rnum].number++;
 		++rare_added;
-		if(from_instance) {
-			++rare_from_instance;
-		}
 
 		char buf[MAX_STRING_LENGTH];
-		if(from_instance) {
-			std::snprintf(buf, sizeof(buf) - 1,
-						  "  %5d %s %s [mysql inst#%llu]\n\r", count_vnum, label, owner,
-						  static_cast<unsigned long long>(
-							  instance_id != 0 ? instance_id : 0ULL));
-		}
-		else {
-			std::snprintf(buf, sizeof(buf) - 1, "  %5d %s %s [mysql]\n\r", count_vnum,
-						  label, owner);
-		}
+		const char* label =
+			proto_name.count(item_vnum) ? proto_name[item_vnum].c_str() : "?";
+		std::snprintf(buf, sizeof(buf) - 1, "  %5d %s %s [mysql]\n\r", item_vnum,
+					  label, owner);
 		strncat(rarelist, " ", MAX_STRING_LENGTH);
 		strncat(rarelist, buf, MAX_STRING_LENGTH);
 	}
@@ -2453,8 +2485,8 @@ void CountLimitedItemsMysql() {
 
 	mudlog(LOG_CHECK,
 		   "CountLimitedItemsMysql: %lld inventory rows scanned, +%lld rare "
-		   "(di cui %lld da object_instance)",
-		   inventory_rows, rare_added, rare_from_instance);
+		   "(skip %lld object_instance)",
+		   inventory_rows, rare_added, skipped_instance);
 #endif /* LIMITED_ITEMS */
 }
 
@@ -4210,6 +4242,7 @@ void obj_store_to_room(int room, struct obj_file_u* st) {
 			strcpy(obj->short_description, st->objects[ i ].sd);
 			strcpy(obj->description, st->objects[ i ].desc);
 
+			hydrate_personal_owner_from_ed(obj, true);
 
 			for(j = 0; j < MAX_OBJ_AFFECT; j++) {
 				obj->affected[ j ] = st->objects[ i ].affected[ j ];

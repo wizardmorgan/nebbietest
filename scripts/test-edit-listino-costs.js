@@ -69,6 +69,26 @@ ok(
 // Armor −40 sul pezzo vuoto = 4 step
 ok('armor-40', mxpFromUnit(100 * 40) === 40, String(mxpFromUnit(100 * 40)));
 
+// INT -3 → 0: tariffa malus 2× (3000) → 9000 raw = 90 MXP = 6 unità INT positive
+const intNegUnit = 3000;
+const intMalus3Raw = 3 * intNegUnit;
+ok('int-malus3-raw-is-6-units', intMalus3Raw === 6 * 1500, String(intMalus3Raw));
+ok('int-malus3-base-mxp', mxpFromUnit(intMalus3Raw) === 90, String(mxpFromUnit(intMalus3Raw)));
+ok(
+  'int-malus3-bi-only-135',
+  mxpFromUnit(intMalus3Raw) * 1.5 === 135,
+  String(mxpFromUnit(intMalus3Raw) * 1.5),
+);
+ok(
+  'int-malus3-bi-artifact-202.5',
+  mxpFromUnit(intMalus3Raw) * 1.5 * 1.5 === 202.5,
+  String(mxpFromUnit(intMalus3Raw) * 1.5 * 1.5),
+);
+
+// Bonus +1 INT: stessi moltiplicatori (ordine base → class → artifact)
+ok('int-plus1-base', mxpFromUnit(1500) === 15, String(mxpFromUnit(1500)));
+ok('int-plus1-bi-art', mxpFromUnit(1500) * 1.5 * 1.5 === 33.75, String(mxpFromUnit(1500) * 1.5 * 1.5));
+
 if (fails.length) {
   console.error('FAILS\n' + fails.join('\n'));
   process.exit(1);
