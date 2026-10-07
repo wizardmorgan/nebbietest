@@ -1793,7 +1793,7 @@ struct AffectPick {
  * Accetta nomi apply_types (HITROLL, DAMROLL, SPELL AFFECT, ...) oppure bit
  * (DARKNESS, FIRE, ...).
  */
-[[nodiscard]] bool resolve_affect_pick(struct obj_data* src, const std::string& raw_name,
+[[nodiscard]] bool resolve_affect_pick(struct obj_data* src, std::string_view raw_name,
 									   AffectPick& out, std::string& err) {
 	out = AffectPick{};
 	const std::string key = normalize_affect_key(raw_name);
