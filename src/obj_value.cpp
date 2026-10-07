@@ -668,9 +668,9 @@ ObjEditAnalysis AnalyzeObjEditAgainst(struct obj_data* obj, const struct obj_dat
 										   report.class_mult));
 	}
 
-	/* Listino: Artifact +50% sul costo finale (dopo class_mult), sia se il
-	 * pezzo era gia' Artifact sia se il flag viene aggiunto nello stesso edit. */
-	if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && report.diff.valore > 0) {
+	/* Edit PG: listino ufficiale + sempre +50% artifact (come editpool),
+	 * indipendente dal flag ITEM_IMMUNE sull'istanza. */
+	if(report.diff.valore > 0) {
 		report.diff.valore = (report.diff.valore * 3) / 2;
 	}
 
@@ -839,18 +839,10 @@ long EditAffectDeltaListinoCost(struct obj_data* obj, int location, int delta_mo
 			std::llround(static_cast<double>(scaled) * mult));
 	}
 
-	const int iVNum = ResolvePrototypeVnum(obj);
-	const int rNum = real_object(iVNum);
-	struct obj_data* original = nullptr;
-	if(rNum >= 0) {
-		original = read_object(rNum, REAL);
-	}
-	if(original != nullptr) {
-		if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && !IS_OBJ_STAT(original, ITEM_IMMUNE) &&
-		   scaled > 0) {
-			scaled = (scaled * 3) / 2;
-		}
-		extract_obj(original);
+	/* Sempre +50% artifact sul listino edit (come editpool), anche se il pezzo
+	 * non ha ancora ITEM_IMMUNE. */
+	if(scaled > 0) {
+		scaled = (scaled * 3) / 2;
 	}
 	return scaled;
 }

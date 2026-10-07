@@ -13,6 +13,12 @@
  * EditAffectBroker (myst.spe: M 3017 EditAffectBroker):
  * Ask <mob> trasferisci <effetto> <objA> <objB>  — anteprima, poi ask <mob> si|no
  * Ask <mob> distruggi <objC>
+ *
+ * Tetti stack su B (delta vs proto), brokeraggio separato dall'edit gia' presente:
+ * - DAMROLL / HITROLL / SPELLPOWER: edit B <= +2, broker <= +2, totale <= +4
+ * - STR / DEX / INT / WIS / CHR:     edit B <= +3, broker <= +3, totale <= +6
+ * - ARMOR (APPLY_AC, piu' negativo = meglio): edit B <= -40, broker <= -40, totale <= -80
+ * - CON e resto: nessun tetto numerico qui
  */
 #include <functional>
 #include <map>
@@ -1789,14 +1795,58 @@ struct AffectPick {
 }
 
 /**
+ * Accetta "str", "str by 2", "STR by 2": toglie un eventuale suffisso "by N"
+ * (come nei messaggi di aiuto) e restituisce l'ammontare richiesto se presente.
+ */
+[[nodiscard]] std::string strip_by_amount(std::string_view raw, int* requested_amt) {
+	if(requested_amt) {
+		*requested_amt = 0;
+	}
+	std::string cleaned(raw);
+	/* trim trailing spaces */
+	while(!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.back()))) {
+		cleaned.pop_back();
+	}
+	const auto pos = cleaned.rfind(" by ");
+	if(pos == std::string::npos) {
+		const auto pos2 = cleaned.rfind(" BY ");
+		if(pos2 == std::string::npos) {
+			return cleaned;
+		}
+		const std::string num = cleaned.substr(pos2 + 4);
+		char* end = nullptr;
+		const long v = std::strtol(num.c_str(), &end, 10);
+		if(end != num.c_str() && *end == '\0' && v != 0) {
+			if(requested_amt) {
+				*requested_amt = static_cast<int>(v);
+			}
+			return cleaned.substr(0, pos2);
+		}
+		return cleaned;
+	}
+	const std::string num = cleaned.substr(pos + 4);
+	char* end = nullptr;
+	const long v = std::strtol(num.c_str(), &end, 10);
+	if(end != num.c_str() && *end == '\0' && v != 0) {
+		if(requested_amt) {
+			*requested_amt = static_cast<int>(v);
+		}
+		return cleaned.substr(0, pos);
+	}
+	return cleaned;
+}
+
+/**
  * Risolve il nome dato dal toon in un affect presente come delta vs prototipo su src.
  * Accetta nomi apply_types (HITROLL, DAMROLL, SPELL AFFECT, ...) oppure bit
  * (DARKNESS, FIRE, ...).
  */
-[[nodiscard]] bool resolve_affect_pick(struct obj_data* src, std::string_view raw_name,
+[[nodiscard]] bool resolve_affect_pick(struct obj_data* src, const std::string& raw_name,
 									   AffectPick& out, std::string& err) {
 	out = AffectPick{};
-	const std::string key = normalize_affect_key(raw_name);
+	int requested_amt = 0;
+	const std::string name_core = strip_by_amount(raw_name, &requested_amt);
+	const std::string key = normalize_affect_key(name_core);
 	if(key.empty()) {
 		err = "Devi specificare il nome dell'effetto da trasferire.";
 		return false;
@@ -1857,9 +1907,107 @@ struct AffectPick {
 		}
 		out.location = matched_loc;
 		out.delta = static_cast<int>(delta);
-		out.label = apply_display_name(matched_loc) + " by " + std::to_string(delta);
+		if(requested_amt != 0) {
+			if(matched_loc == APPLY_AC) {
+				const int want =
+					requested_amt < 0 ? requested_amt : -std::abs(requested_amt);
+				if(out.delta < 0 && want < 0) {
+					out.delta = std::max(out.delta, want);
+				}
+			}
+			else if(out.delta > 0 && requested_amt > 0) {
+				out.delta = std::min(out.delta, requested_amt);
+			}
+		}
+		out.label = apply_display_name(matched_loc) + " by " + std::to_string(out.delta);
 		extract_obj(proto);
 		return true;
+	}
+
+	/* 1b) Label lista / identify: "SPELL AFFECT INVISIBLE DETECT-EVIL ..." */
+	{
+		std::vector<std::string> words;
+		std::string_view rest = name_core;
+		for(;;) {
+			auto [w, next] = next_arg(rest);
+			if(w.empty()) {
+				break;
+			}
+			words.push_back(std::move(w));
+			rest = next;
+		}
+		const int max_prefix = std::min(3, static_cast<int>(words.size()));
+		for(int nprefix = max_prefix; nprefix >= 1; --nprefix) {
+			std::string cand;
+			for(int i = 0; i < nprefix; ++i) {
+				if(i != 0) {
+					cand.push_back(' ');
+				}
+				cand += words[static_cast<std::size_t>(i)];
+			}
+			const std::string ckey = normalize_affect_key(cand);
+			int loc = APPLY_NONE;
+			for(int i = 0; apply_types[i] && apply_types[i][0] != '\n'; ++i) {
+				if(is_bitfield_location(i) && normalize_affect_key(apply_types[i]) == ckey) {
+					loc = i;
+					break;
+				}
+			}
+			if(loc == APPLY_NONE) {
+				continue;
+			}
+
+			const unsigned added =
+				or_affect_bits_on_obj(src, loc) & ~or_affect_bits_on_obj(proto, loc);
+			if(added == 0) {
+				return finish_fail(
+					"Su quell'oggetto non c'e' un delta di quell'effetto rispetto al prototipo.");
+			}
+
+			unsigned want = 0;
+			if(static_cast<int>(words.size()) == nprefix) {
+				want = added;
+			}
+			else {
+				bool bits_ok = true;
+				for(std::size_t wi = static_cast<std::size_t>(nprefix); wi < words.size();
+					++wi) {
+					unsigned b = 0;
+					const std::string bk = normalize_affect_key(words[wi]);
+					bool matched = false;
+					if(loc == APPLY_SPELL) {
+						matched = match_bit_table(affected_bits, bk, b);
+					}
+					else if(loc == APPLY_AFF2) {
+						matched = match_bit_table(affected_bits2, bk, b);
+					}
+					else {
+						matched = match_bit_table(immunity_names, bk, b);
+					}
+					if(!matched) {
+						bits_ok = false;
+						break;
+					}
+					want |= b;
+				}
+				if(!bits_ok) {
+					continue;
+				}
+				want &= added;
+				if(want == 0) {
+					return finish_fail(
+						"Su quell'oggetto non c'e' un delta di quell'effetto rispetto al "
+						"prototipo.");
+				}
+			}
+
+			out.location = loc;
+			out.delta = static_cast<int>(want);
+			out.label =
+				apply_display_name(loc) + " " + bit_display_name(loc, want);
+			extract_obj(proto);
+			return true;
+		}
 	}
 
 	/* 2) Match su singolo bit (SPELL / IMMUNE / AFF2). */
@@ -1992,10 +2140,7 @@ struct AffectPick {
 	if(listino_cost <= 0) {
 		return 0;
 	}
-	/*
-	 * 25% del listino. Evitare (x * pct) / 100: GCC -Werror=strict-overflow
-	 * lo rifiuta anche con cast a long long nel docker mudcompiler.
-	 */
+	/* 25% listino: evita (x*25)/100 che con -Werror=strict-overflow fallisce. */
 	static_assert(kEditBrokerPercentKeep == 25, "percent_of_listino assume 25%");
 	return listino_cost / 4;
 }
@@ -2077,7 +2222,7 @@ struct AffectPick {
 	return true;
 }
 
-/** Dopo il transfer: B diventa PERSONAL+EDIT del toon (se non lo e' gia'). */
+/** Dopo il transfer: B diventa PERSONAL+EDIT+ARTIFACT del toon (se non lo e' gia'). */
 void ensure_b_personal_edit(struct char_data* ch, struct char_data* mob,
 							struct obj_data* obj_b) {
 	if(!ch || !obj_b) {
@@ -2091,6 +2236,9 @@ void ensure_b_personal_edit(struct char_data* ch, struct char_data* mob,
 		return;
 	}
 	SET_BIT(obj_b->obj_flags.extra_flags2, ITEM2_EDIT);
+	if(!IS_OBJ_STAT(obj_b, ITEM_IMMUNE)) {
+		SET_BIT(obj_b->obj_flags.extra_flags, ITEM_IMMUNE); /* ARTIFACT */
+	}
 	strncpy(obj_b->personal_owner, GET_NAME(ch), sizeof(obj_b->personal_owner) - 1);
 	obj_b->personal_owner[sizeof(obj_b->personal_owner) - 1] = '\0';
 }
@@ -2114,13 +2262,19 @@ void remove_numeric_delta(struct obj_data* obj, int loc, int delta) {
 		}
 		return;
 	}
+	/* Delta negativo (es. armor): togli miglioramento riportando i modifier verso 0. */
 	int left = -delta;
 	for(int i = 0; i < MAX_OBJ_AFFECT && left > 0; ++i) {
-		if(obj->affected[i].location != loc) {
+		if(obj->affected[i].location != loc || obj->affected[i].modifier >= 0) {
 			continue;
 		}
-		obj->affected[i].modifier += left;
-		left = 0;
+		const int avail = -obj->affected[i].modifier;
+		const int take = std::min(avail, left);
+		obj->affected[i].modifier += take;
+		left -= take;
+		if(obj->affected[i].modifier == 0) {
+			obj->affected[i].location = APPLY_NONE;
+		}
 	}
 }
 
@@ -2128,9 +2282,14 @@ void add_numeric_delta(struct obj_data* obj, int loc, int delta) {
 	if(!obj || delta == 0) {
 		return;
 	}
-	const int slot = find_location_slot(obj, loc);
+	int slot = find_location_slot(obj, loc);
 	if(slot < 0) {
-		return;
+		slot = find_free_affect_slot(obj);
+		if(slot < 0) {
+			return;
+		}
+		obj->affected[slot].location = static_cast<short>(loc);
+		obj->affected[slot].modifier = 0;
 	}
 	obj->affected[slot].modifier += delta;
 }
@@ -2155,7 +2314,13 @@ void remove_bit_delta(struct obj_data* obj, int loc, unsigned bits) {
 	if(!obj || bits == 0) {
 		return false;
 	}
-	const int slot = find_free_affect_slot(obj);
+	int slot = find_location_slot(obj, loc);
+	if(slot >= 0) {
+		obj->affected[slot].modifier =
+			static_cast<int>(static_cast<unsigned>(obj->affected[slot].modifier) | bits);
+		return true;
+	}
+	slot = find_free_affect_slot(obj);
 	if(slot < 0) {
 		return false;
 	}
@@ -2205,23 +2370,15 @@ void remove_bit_delta(struct obj_data* obj, int loc, unsigned bits) {
 			if(added == 0) {
 				continue;
 			}
-			/* Una riga per bit, cosi' il toon puo' trasferire DARKNESS ecc. */
-			for(int bi = 0; bi < 32; ++bi) {
-				const unsigned bit = 1u << bi;
-				if((added & bit) == 0) {
-					continue;
-				}
-				out.push_back(apply_display_name(loc) + " " + bit_display_name(loc, bit));
-				std::string trimmed = bit_display_name(loc, bit);
-				while(!trimmed.empty() &&
-					  (trimmed.back() == ' ' || trimmed.back() == '\r' ||
-					   trimmed.back() == '\n')) {
-					trimmed.pop_back();
-				}
-				if(!trimmed.empty()) {
-					out.push_back(trimmed);
-				}
+			/* Una sola riga per location bitfield (come in identify: tutti i bit
+			 * sulla stessa affect). Si puo' comunque trasferire un singolo bit
+			 * nominandolo (es. invisible). */
+			std::string bits = bit_display_name(loc, added);
+			while(!bits.empty() &&
+				  (bits.back() == ' ' || bits.back() == '\r' || bits.back() == '\n')) {
+				bits.pop_back();
 			}
+			out.push_back(apply_display_name(loc) + " " + bits);
 			continue;
 		}
 		const long cur = sum_affect_location(obj, loc);
@@ -2264,9 +2421,11 @@ void show_edit_broker_usage(struct char_data* ch, struct char_data* mob) {
 		"PERSONAL in inv, oppure uno solo)\n\r"
 		"$c0015A:$c0007 deve essere EDIT, PERSONAL e tuo.\n\r"
 		"$c0015B:$c0007 non deve esserlo gia'; dopo il transfer diventa EDIT/PERSONAL tuo.\n\r"
-		"  B deve essere un oggetto che puoi usare.\n\r"
 		"$c0015Trasferimento:$c0007 costa il 25% di quanto pagheresti in origine per "
 		"quell'effetto. Non puoi scendere sotto i 400 milioni di esperienza.\n\r"
+		"$c0015Tetti su B (edit gia' presente + brokeraggio):$c0007 "
+		"dam/hit/spell +2+2; STR/DEX/INT/WIS/CHR +3+3; armor -40+-40 "
+		"(piu' negativo = meglio).\n\r"
 		"$c0015Distruggi:$c0007 elimini l'edit e ricevi il 25% di quanto e' stato pagato "
 		"per editare l'intero oggetto (il valore in piu' rispetto al pezzo originale).\n\r"
 		"Prima di ogni operazione ti mostro un riepilogo: conferma con $c0011si$c0007 o "
@@ -2305,6 +2464,12 @@ struct TransferPlan {
 	long fee{};
 	long payment{};
 	int classes{};
+	/** Delta edit gia' su B vs proto prima del broker (AC: negativo se migliorato). */
+	int b_prior_edit_delta{};
+	int existing_cap{};
+	int transfer_cap{};
+	int total_cap{};
+	bool had_stack_cap{};
 };
 
 struct DestroyPlan {
@@ -2429,7 +2594,7 @@ void supersede_edit_broker_pending(char_data* ch, char_data* mob) {
 
 	AffectPick pick;
 	std::string err;
-	if(!resolve_affect_pick(obj_a, aff_name, pick, err)) {
+	if(!resolve_affect_pick(obj_a, std::string(aff_name), pick, err)) {
 		tell_from_jeweler(ch, mob, err);
 		mudlog(LOG_PLAYERS, "EditAffectBroker transfer denied %s: %s (affect=%.*s A=%s)",
 			   GET_NAME(ch), err.c_str(), static_cast<int>(aff_name.size()), aff_name.data(),
@@ -2437,23 +2602,143 @@ void supersede_edit_broker_pending(char_data* ch, char_data* mob) {
 		return false;
 	}
 
-	if(is_nonstackable_location(pick.location)) {
-		if(find_free_affect_slot(obj_b) < 0) {
+	/* Slot: bit/non-stack → stesso loc o libero; stackable → stesso loc o libero. */
+	if(is_bitfield_location(pick.location)) {
+		if(find_location_slot(obj_b, pick.location) < 0 &&
+		   find_free_affect_slot(obj_b) < 0) {
 			tell_from_jeweler(ch, mob,
-							  "L'oggetto B non ha uno slot affect libero per questo effetto "
-							  "(non sommabile).");
+							  "L'oggetto B non ha uno slot libero per questo effetto.");
 			mudlog(LOG_PLAYERS,
 				   "EditAffectBroker transfer denied %s: no free slot on B for %s",
 				   GET_NAME(ch), pick.label.c_str());
 			return false;
 		}
 	}
-	else if(!has_affect_location(obj_b, pick.location)) {
+	else if(is_nonstackable_location(pick.location)) {
+		if(find_free_affect_slot(obj_b) < 0) {
+			tell_from_jeweler(ch, mob,
+							  "L'oggetto B non ha uno slot libero per questo effetto.");
+			mudlog(LOG_PLAYERS,
+				   "EditAffectBroker transfer denied %s: no free slot on B for %s",
+				   GET_NAME(ch), pick.label.c_str());
+			return false;
+		}
+	}
+	else if(!has_affect_location(obj_b, pick.location) &&
+			find_free_affect_slot(obj_b) < 0) {
 		tell_from_jeweler(ch, mob,
-						  "L'oggetto B non ha gia' lo stesso effetto: non posso sommerlo.");
-		mudlog(LOG_PLAYERS, "EditAffectBroker transfer denied %s: B missing %s",
+						  "L'oggetto B non ha gia' lo stesso effetto ne' uno slot libero: "
+						  "non posso sommarlo.");
+		mudlog(LOG_PLAYERS, "EditAffectBroker transfer denied %s: B no slot for %s",
 			   GET_NAME(ch), pick.label.c_str());
 		return false;
+	}
+
+	/*
+	 * Tetti delta vs proto su B (edit esistente + brokeraggio, tetti separati):
+	 * - DAMROLL / HITROLL / SPELLPOWER: edit <= 2, broker <= 2, totale <= 4
+	 * - STR / DEX / INT / WIS / CHR:     edit <= 3, broker <= 3, totale <= 6
+	 * - ARMOR: edit <= -40, broker <= -40, totale <= -80 (miglioramento = piu' negativo)
+	 * - CON e resto: nessun tetto numerico qui
+	 */
+	auto stack_caps_for = [](int loc, int& existing_cap, int& transfer_cap,
+							 int& total_cap) -> bool {
+		if(loc == APPLY_DAMROLL || loc == APPLY_HITROLL || loc == APPLY_SPELLPOWER) {
+			existing_cap = 2;
+			transfer_cap = 2;
+			total_cap = 4;
+			return true;
+		}
+		if(loc == APPLY_STR || loc == APPLY_DEX || loc == APPLY_INT || loc == APPLY_WIS ||
+		   loc == APPLY_CHR) {
+			existing_cap = 3;
+			transfer_cap = 3;
+			total_cap = 6;
+			return true;
+		}
+		if(loc == APPLY_AC) {
+			existing_cap = 40;
+			transfer_cap = 40;
+			total_cap = 80;
+			return true;
+		}
+		return false;
+	};
+
+	int existing_cap = 0;
+	int transfer_cap = 0;
+	int total_cap = 0;
+	int b_prior_edit_delta = 0;
+	bool had_stack_cap = false;
+	if(stack_caps_for(pick.location, existing_cap, transfer_cap, total_cap)) {
+		had_stack_cap = true;
+		struct obj_data* proto_b = load_edit_prototype(obj_b);
+		if(!proto_b) {
+			tell_from_jeweler(ch, mob,
+							  "Non riesco a confrontare l'oggetto B con il suo prototipo.");
+			return false;
+		}
+		const long cur_b = sum_affect_location(obj_b, pick.location);
+		const long base_b = sum_affect_location(proto_b, pick.location);
+		extract_obj(proto_b);
+
+		if(pick.location == APPLY_AC) {
+			const int existing_improve =
+				static_cast<int>(std::max(0L, base_b - cur_b));
+			b_prior_edit_delta = -existing_improve;
+			if(existing_improve > existing_cap) {
+				char buf[256];
+				snprintf(buf, sizeof(buf),
+						 "L'oggetto B ha gia' troppi punti di edit su armor "
+						 "(massimo %d rispetto all'originale).",
+						 -existing_cap);
+				tell_from_jeweler(ch, mob, buf);
+				return false;
+			}
+			const int want = pick.delta < 0 ? -pick.delta : 0;
+			const int room = total_cap - existing_improve;
+			const int take = std::min({want, transfer_cap, room});
+			if(take <= 0) {
+				char buf[256];
+				snprintf(buf, sizeof(buf),
+						 "Non posso trasferire altro armor: B e' al tetto "
+						 "massimo (%d di edit + %d di brokeraggio = %d).",
+						 -existing_cap, -transfer_cap, -total_cap);
+				tell_from_jeweler(ch, mob, buf);
+				return false;
+			}
+			pick.delta = -take;
+			pick.label = apply_display_name(pick.location) + " by " +
+						 std::to_string(pick.delta);
+		}
+		else {
+			const int existing_edit = static_cast<int>(std::max(0L, cur_b - base_b));
+			b_prior_edit_delta = existing_edit;
+			if(existing_edit > existing_cap) {
+				char buf[256];
+				snprintf(buf, sizeof(buf),
+						 "L'oggetto B ha gia' troppi punti di edit su questo effetto "
+						 "(massimo %d rispetto all'originale).",
+						 existing_cap);
+				tell_from_jeweler(ch, mob, buf);
+				return false;
+			}
+			const int want = pick.delta > 0 ? pick.delta : 0;
+			const int room = total_cap - existing_edit;
+			const int take = std::min({want, transfer_cap, room});
+			if(take <= 0) {
+				char buf[256];
+				snprintf(buf, sizeof(buf),
+						 "Non posso trasferire altro su questo effetto: B e' al tetto "
+						 "massimo (%d di edit + %d di brokeraggio = %d).",
+						 existing_cap, transfer_cap, total_cap);
+				tell_from_jeweler(ch, mob, buf);
+				return false;
+			}
+			pick.delta = take;
+			pick.label = apply_display_name(pick.location) + " by " +
+						 std::to_string(pick.delta);
+		}
 	}
 
 	const long listino = EditAffectDeltaListinoCost(obj_a, pick.location, pick.delta);
@@ -2473,26 +2758,70 @@ void supersede_edit_broker_pending(char_data* ch, char_data* mob) {
 		return false;
 	}
 
-	out = TransferPlan{obj_a, obj_b, pick, listino, fee, payment, classes};
+	out = TransferPlan{};
+	out.obj_a = obj_a;
+	out.obj_b = obj_b;
+	out.pick = pick;
+	out.listino = listino;
+	out.fee = fee;
+	out.payment = payment;
+	out.classes = classes;
+	out.b_prior_edit_delta = b_prior_edit_delta;
+	out.existing_cap = existing_cap;
+	out.transfer_cap = transfer_cap;
+	out.total_cap = total_cap;
+	out.had_stack_cap = had_stack_cap;
 	return true;
 }
 
 void preview_transfer(struct char_data* ch, struct char_data* mob, const TransferPlan& plan) {
-	char buf[512];
-	snprintf(buf, sizeof(buf),
-			 "$c0015Anteprima trasferimento$c0007\n\r"
-			 "  Effetto: $c0011%s$c0007\n\r"
-			 "  Da A: %s\n\r"
-			 "  A B: %s (poi EDIT/PERSONAL tuo)\n\r"
-			 "  Listino effetto: %ld\n\r"
-			 "  Addebito score: %ld XP (25%% = %ld, diviso %d classi)\n\r"
-			 "  Floor XP dopo pagamento: almeno %ld.",
-			 plan.pick.label.c_str(), obj_shortn(plan.obj_a), obj_shortn(plan.obj_b),
-			 plan.listino, plan.payment, plan.fee, plan.classes, kEditBrokerPrinceFloor);
+	char buf[640];
+	if(plan.had_stack_cap) {
+		if(plan.pick.location == APPLY_AC) {
+			snprintf(buf, sizeof(buf),
+					 "$c0015Anteprima trasferimento$c0007\n\r"
+					 "  Effetto: $c0011%s$c0007 (brokeraggio)\n\r"
+					 "  Da: %s\n\r"
+					 "  Verso: %s (edit gia' presente: %d; tetti edit %d / broker %d / "
+					 "totale %d)\n\r"
+					 "  Costo: %ld esperienza.\n\r"
+					 "  Dopo il pagamento non potrai scendere sotto i 400 milioni di "
+					 "esperienza.",
+					 plan.pick.label.c_str(), obj_shortn(plan.obj_a), obj_shortn(plan.obj_b),
+					 plan.b_prior_edit_delta, -plan.existing_cap, -plan.transfer_cap,
+					 -plan.total_cap, plan.payment);
+		}
+		else {
+			snprintf(buf, sizeof(buf),
+					 "$c0015Anteprima trasferimento$c0007\n\r"
+					 "  Effetto: $c0011%s$c0007 (brokeraggio)\n\r"
+					 "  Da: %s\n\r"
+					 "  Verso: %s (edit gia' presente: %+d; tetti edit %d / broker %d / "
+					 "totale %d)\n\r"
+					 "  Costo: %ld esperienza.\n\r"
+					 "  Dopo il pagamento non potrai scendere sotto i 400 milioni di "
+					 "esperienza.",
+					 plan.pick.label.c_str(), obj_shortn(plan.obj_a), obj_shortn(plan.obj_b),
+					 plan.b_prior_edit_delta, plan.existing_cap, plan.transfer_cap,
+					 plan.total_cap, plan.payment);
+		}
+	}
+	else {
+		snprintf(buf, sizeof(buf),
+				 "$c0015Anteprima trasferimento$c0007\n\r"
+				 "  Effetto: $c0011%s$c0007 (brokeraggio)\n\r"
+				 "  Da: %s\n\r"
+				 "  Verso: %s\n\r"
+				 "  Costo: %ld esperienza.\n\r"
+				 "  Dopo il pagamento non potrai scendere sotto i 400 milioni di esperienza.",
+				 plan.pick.label.c_str(), obj_shortn(plan.obj_a), obj_shortn(plan.obj_b),
+				 plan.payment);
+	}
 	tell_from_jeweler(ch, mob, buf);
-	if(procarea_obj_is_reward(plan.obj_b) && plan.obj_b->db_instance_id == 0) {
+	if(GetMaxLevel(ch) >= IMMORTALE && procarea_obj_is_reward(plan.obj_b) &&
+	   plan.obj_b->db_instance_id == 0) {
 		tell_from_jeweler(ch, mob,
-						  "Nota: registrero' il premio PROCAREA di B nel database prima del "
+						  "[wiz] Registrero' il premio PROCAREA di B nel database prima del "
 						  "trasferimento.");
 	}
 	ask_edit_broker_confirm(ch, mob);
@@ -2545,10 +2874,9 @@ void preview_destroy(struct char_data* ch, struct char_data* mob, const DestroyP
 	snprintf(buf, sizeof(buf),
 			 "$c0015Anteprima distruzione$c0007\n\r"
 			 "  Oggetto: %s\n\r"
-			 "  Valore edit vs prototipo (listino): %ld\n\r"
-			 "  Rimborso score: %ld XP (25%% = %ld, diviso %d classi)\n\r"
-			 "  L'edit sara' cancellato (soft-delete), irreversibile da qui.",
-			 plan.shortn.c_str(), plan.listino_diff, plan.refund, plan.fee, plan.classes);
+			 "  Rimborso: %ld esperienza (25%% del valore di edit rispetto all'originale).\n\r"
+			 "  L'edit verra' eliminato: non si puo' annullare da qui.",
+			 plan.shortn.c_str(), plan.refund);
 	tell_from_jeweler(ch, mob, buf);
 	ask_edit_broker_confirm(ch, mob);
 }
@@ -2612,17 +2940,41 @@ void execute_transfer(struct char_data* ch, struct char_data* mob, const Transfe
 										static_cast<long long>(plan.payment));
 	}
 
-	char note_a[256];
-	char note_b[256];
-	char detail[512];
-	snprintf(note_a, sizeof(note_a), "transfer remove %s -> B", plan.pick.label.c_str());
-	snprintf(note_b, sizeof(note_b), "transfer add %s <- instance %llu",
-			 plan.pick.label.c_str(),
-			 static_cast<unsigned long long>(plan.obj_a->db_instance_id));
+	char note_a[320];
+	char note_b[384];
+	char detail[768];
+	char caps_part[128];
+	if(plan.had_stack_cap) {
+		if(plan.pick.location == APPLY_AC) {
+			snprintf(caps_part, sizeof(caps_part),
+					 "B_prior_edit_delta=%d caps=edit%d/broker%d/total%d",
+					 plan.b_prior_edit_delta, -plan.existing_cap, -plan.transfer_cap,
+					 -plan.total_cap);
+		}
+		else {
+			snprintf(caps_part, sizeof(caps_part),
+					 "B_prior_edit_delta=%+d caps=edit%d/broker%d/total%d",
+					 plan.b_prior_edit_delta, plan.existing_cap, plan.transfer_cap,
+					 plan.total_cap);
+		}
+	}
+	else {
+		snprintf(caps_part, sizeof(caps_part), "B_prior_edit_delta=%+d caps=none",
+				 plan.b_prior_edit_delta);
+	}
+	snprintf(note_a, sizeof(note_a),
+			 "brokeraggio REMOVE %s -> B_inst=%llu", plan.pick.label.c_str(),
+			 static_cast<unsigned long long>(plan.obj_b->db_instance_id));
+	snprintf(note_b, sizeof(note_b),
+			 "brokeraggio ADD %s <- A_inst=%llu %s", plan.pick.label.c_str(),
+			 static_cast<unsigned long long>(plan.obj_a->db_instance_id), caps_part);
 	snprintf(detail, sizeof(detail),
-			 "affect=%s payment_xp=%ld fee=%ld listino=%ld classes=%d actor=%s",
-			 plan.pick.label.c_str(), plan.payment, plan.fee, plan.listino, plan.classes,
-			 GET_NAME(ch));
+			 "kind=broker_transfer affect=%s broker_delta=%+d %s "
+			 "A_inst=%llu B_inst=%llu payment_xp=%ld fee=%ld listino=%ld classes=%d actor=%s",
+			 plan.pick.label.c_str(), plan.pick.delta, caps_part,
+			 static_cast<unsigned long long>(plan.obj_a->db_instance_id),
+			 static_cast<unsigned long long>(plan.obj_b->db_instance_id), plan.payment,
+			 plan.fee, plan.listino, plan.classes, GET_NAME(ch));
 
 	const bool ok_a =
 		persist_edit_obj(plan.obj_a, ch, "affect_transfer", note_a, detail);
@@ -2644,13 +2996,14 @@ void execute_transfer(struct char_data* ch, struct char_data* mob, const Transfe
 
 	char okmsg[320];
 	snprintf(okmsg, sizeof(okmsg),
-			 "Fatto: trasferito %s. Ti ho addebitato %ld XP (25%% listino / %d classi).",
-			 plan.pick.label.c_str(), plan.payment, plan.classes);
+			 "Fatto: trasferito %s. Ti ho addebitato %ld esperienza.",
+			 plan.pick.label.c_str(), plan.payment);
 	tell_from_jeweler(ch, mob, okmsg);
 	mudlog(LOG_PLAYERS,
-		   "EditAffectBroker transfer OK %s affect=%s A_inst=%llu B_inst=%llu pay=%ld "
-		   "fee=%ld listino=%ld classes=%d",
-		   GET_NAME(ch), plan.pick.label.c_str(),
+		   "EditAffectBroker transfer OK %s affect=%s broker_delta=%+d "
+		   "B_prior_edit_delta=%+d A_inst=%llu B_inst=%llu pay=%ld fee=%ld listino=%ld "
+		   "classes=%d",
+		   GET_NAME(ch), plan.pick.label.c_str(), plan.pick.delta, plan.b_prior_edit_delta,
 		   static_cast<unsigned long long>(plan.obj_a->db_instance_id),
 		   static_cast<unsigned long long>(plan.obj_b->db_instance_id), plan.payment,
 		   plan.fee, plan.listino, plan.classes);
@@ -2680,8 +3033,8 @@ void execute_destroy(struct char_data* ch, struct char_data* mob, const DestroyP
 
 	char okmsg[320];
 	snprintf(okmsg, sizeof(okmsg),
-			 "Ho distrutto %s. Ti rimborso %ld XP (25%% listino / %d classi).",
-			 plan.shortn.c_str(), plan.refund, plan.classes);
+			 "Ho distrutto %s. Ti rimborso %ld esperienza.",
+			 plan.shortn.c_str(), plan.refund);
 	tell_from_jeweler(ch, mob, okmsg);
 	mudlog(LOG_PLAYERS,
 		   "EditAffectBroker destroy OK %s inst=%llu refund=%ld fee=%ld listino=%ld "
@@ -2815,11 +3168,44 @@ void show_edit_broker_help_and_list(struct char_data* ch, struct char_data* mob,
 	}
 }
 
+/** Ultimi due token = oggetti A/B; tutto il resto (anche multi-parola) = effetto. */
+[[nodiscard]] bool split_transfer_args(std::string_view args, std::string& aff_name,
+										 std::string& name_a, std::string& name_b) {
+	std::vector<std::string> toks;
+	std::string_view rest = args;
+	for(;;) {
+		auto [w, next] = next_arg(rest);
+		if(w.empty()) {
+			break;
+		}
+		toks.push_back(std::move(w));
+		rest = next;
+	}
+	if(toks.size() < 3) {
+		return false;
+	}
+	name_b = toks.back();
+	toks.pop_back();
+	name_a = toks.back();
+	toks.pop_back();
+	aff_name.clear();
+	for(std::size_t i = 0; i < toks.size(); ++i) {
+		if(i != 0) {
+			aff_name.push_back(' ');
+		}
+		aff_name += toks[i];
+	}
+	return true;
+}
+
 void do_trasferisci(struct char_data* ch, struct char_data* mob, std::string_view args) {
-	auto [aff_name, rest1] = next_arg(args);
-	auto [name_a, rest2] = next_arg(rest1);
-	auto [name_b, rest3] = next_arg(rest2);
-	(void)rest3;
+	std::string aff_name;
+	std::string name_a;
+	std::string name_b;
+	if(!split_transfer_args(args, aff_name, name_a, name_b)) {
+		tell_from_jeweler(ch, mob, "Sintassi: trasferisci <effetto> <oggettoA> <oggettoB>.");
+		return;
+	}
 
 	supersede_edit_broker_pending(ch, mob);
 
@@ -2833,9 +3219,9 @@ void do_trasferisci(struct char_data* ch, struct char_data* mob, std::string_vie
 	pending.jeweler = mob;
 	pending.op = EditBrokerOpKind::Transfer;
 	pending.expires_at = time(nullptr) + kEditBrokerPendingTimeoutSec;
-	pending.aff_name = std::string(aff_name);
-	pending.name_a = std::string(name_a);
-	pending.name_b = std::string(name_b);
+	pending.aff_name = aff_name;
+	pending.name_a = name_a;
+	pending.name_b = name_b;
 	g_edit_broker_pending[ch] = std::move(pending);
 }
 
