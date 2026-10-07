@@ -312,7 +312,7 @@ void incastonatore_ambient_tick(char_data* mob) {
 
 void ask_name_incise_question(char_data* ch, char_data* jeweler) {
 	tell_from_jeweler(ch, jeweler,
-					  "Vuoi che incida il tuo nome nell'oggetto? Dimmi si o no.");
+					  "Vuoi che incida il tuo nome nell'oggetto? Dimmi si o no, oppure annuisci o scuoti la testa.");
 }
 
 void start_name_incise_offer(char_data* ch, char_data* jeweler, obj_data* obj) {
@@ -767,7 +767,8 @@ void show_usage(char_data* ch, char_data* jeweler) {
 			"Al piu' cinque incavi, meno quelli gia' sul pezzo.",
 			"Opale e ossidiana ne chiedono due, il quarzo rosa tre.",
 			"Lo zircone: una sola pietra per la resistenza, tre per l'artifact.",
-			"Prima di cesellare ti mostro l'intarsio e attendo il tuo $c0015si$c0011 o $c0015no$c0011.",
+			"Prima di cesellare ti mostro l'intarsio e attendo $c0015si$c0011 o $c0015no$c0011,",
+			"oppure un cenno del capo ($c0015nod$c0011) o uno scuotere la testa ($c0015shake$c0011).",
 			"Se vuoi vedere gli effetti, $c0015chiedimi listino$c0011.",
 			"Per queste parole, $c0015chiedimi aiuto$c0011."
 		});
@@ -1093,7 +1094,7 @@ void show_mount_preview(char_data* ch, char_data* jeweler, const MountOffer& off
 		: offer.obj->obj_flags.cost + added;
 	tell_from_jeweler(ch, jeweler,
 					  "Il pezzo verra' considerato raro (valore " + std::to_string(new_cost)
-					  + "). Dimmi $c0015si$c0007 per confermare, $c0015no$c0007 per rinunciare.");
+					  + "). Conferma con $c0015si$c0007 / $c0015nod$c0007, rinuncia con $c0015no$c0007 / $c0015shake$c0007.");
 }
 
 void incastona_apply(char_data* ch, char_data* jeweler, obj_data* obj,
@@ -1145,7 +1146,7 @@ bool try_handle_mount_confirm(char_data* ch, char_data* mob, std::string_view te
 		if(!consume_other) {
 			return false;
 		}
-		tell_from_jeweler(ch, mob, "Attendo un si o un no.");
+		tell_from_jeweler(ch, mob, "Attendo un si o un no, un cenno del capo o uno scuotere la testa.");
 		show_mount_preview(ch, mob, offer);
 		return true;
 	}
@@ -1559,6 +1560,17 @@ MOBSPECIAL_FUNC(Incastonatore) {
 		auto it = g_name_incise_offers.find(ch);
 		if(it != g_name_incise_offers.end() && it->second.jeweler == mob) {
 			cancel_name_incise_offer(ch, mob, true);
+		}
+		return FALSE;
+	}
+
+	if(cmd == CMD_NOD || cmd == CMD_SHAKE) {
+		const char* answer = (cmd == CMD_NOD) ? "si" : "no";
+		if(try_handle_mount_confirm(ch, mob, answer, false)) {
+			return TRUE;
+		}
+		if(try_handle_name_incise_answer(ch, mob, answer)) {
+			return TRUE;
 		}
 		return FALSE;
 	}
