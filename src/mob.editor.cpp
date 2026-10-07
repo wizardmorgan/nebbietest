@@ -4,10 +4,13 @@
  * Il PG tiene oggetto e pietre con se': il mob lavora sul banco, senza
  * prenderli in consegna. Comando: incastona <oggetto> <pietra> [pietra ...]
  * Ask <mob> aiuto | listino
+ * Il mob mostra una preview e attende si/no prima di cesellare.
  */
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
+#include <map>
 #include <string>
 
 #include "config.hpp"
@@ -438,6 +441,8 @@ void show_usage(struct char_data* ch, struct char_data* jeweler) {
 		tell_from_jeweler(ch, jeweler,
 						  "$c0011Lo zircone: una sola pietra per la resistenza, tre per l'artifact.$c0007");
 		tell_from_jeweler(ch, jeweler,
+						  "$c0011Prima di cesellare ti mostro l'intarsio e attendo il tuo $c0015si$c0011 o $c0015no$c0011.$c0007");
+		tell_from_jeweler(ch, jeweler,
 						  "$c0011Se vuoi vedere gli effetti, $c0015chiedimi listino$c0011. Per queste parole, $c0015chiedimi aiuto$c0011.$c0007");
 		return;
 	}
@@ -728,6 +733,361 @@ struct SlotPlan {
 	struct obj_data* stones[3];
 };
 
+constexpr time_t kMountConfirmTimeoutSec = 75;
+
+struct MountOffer {
+	struct char_data* jeweler;
+	struct obj_data* obj;
+	SlotPlan slots[kMaxSlots];
+	int nslots;
+	int wait;
+	time_t expires_at;
+	char leftover[256];
+};
+
+std::map<struct char_data*, MountOffer> g_mount_offers;
+
+bool obj_in_carrying(struct char_data* ch, struct obj_data* obj) {
+	if(!ch || !obj) {
+		return false;
+	}
+	for(struct obj_data* o = ch->carrying; o; o = o->next_content) {
+		if(o == obj) {
+			return true;
+		}
+	}
+	return false;
+}
+
+const char* slot_effect_label(const SlotPlan& plan, bool weapon) {
+	if(plan.extra == GEM_EXTRA_ARTEFACT) {
+		return "artifact";
+	}
+	if(plan.extra == GEM_EXTRA_RESISTANT) {
+		return "resistent";
+	}
+	if(plan.extra == GEM_EXTRA_INVISIBLE && weapon) {
+		return "invisible (flag)";
+	}
+	if(!plan.def) {
+		return "?";
+	}
+	return weapon ? plan.def->desc_weapon : plan.def->desc_other;
+}
+
+bool mount_offer_valid(struct char_data* ch, const MountOffer& offer) {
+	if(!ch || !offer.jeweler || !offer.obj || offer.nslots <= 0) {
+		return false;
+	}
+	if(ch->in_room != offer.jeweler->in_room) {
+		return false;
+	}
+	if(!obj_in_carrying(ch, offer.obj)) {
+		return false;
+	}
+	if(IS_OBJ_STAT2(offer.obj, ITEM2_INSERT) || IS_OBJ_STAT2(offer.obj, ITEM2_EDIT)
+	   || offer.obj->obj_flags.cost >= LIM_ITEM_COST_MIN) {
+		return false;
+	}
+	for(int i = 0; i < offer.nslots; i++) {
+		for(int s = 0; s < offer.slots[i].consumed; s++) {
+			if(!obj_in_carrying(ch, offer.slots[i].stones[s])) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+void cancel_mount_offer(struct char_data* ch, struct char_data* jeweler, bool notify) {
+	if(!ch) {
+		return;
+	}
+	auto it = g_mount_offers.find(ch);
+	if(it == g_mount_offers.end()) {
+		return;
+	}
+	struct char_data* j = jeweler ? jeweler : it->second.jeweler;
+	g_mount_offers.erase(it);
+	if(notify && j) {
+		tell_from_jeweler(ch, j, "Va bene, non tocco nulla. Pietre e pezzo restano tuoi.");
+	}
+}
+
+void show_mount_preview(struct char_data* ch, struct char_data* jeweler, const MountOffer& offer) {
+	const char* oname = offer.obj && offer.obj->short_description
+		? offer.obj->short_description : "il pezzo";
+	const bool weapon = is_weapon_item(offer.obj);
+	char hdr[256];
+	std::snprintf(hdr, sizeof(hdr),
+				  "$c0011Ecco l'intarsio che farei su %s, prima di toccare nulla:$c0007",
+				  oname);
+	tell_from_jeweler(ch, jeweler, hdr);
+
+	int hnd = 0;
+	int added = 0;
+	for(int i = 0; i < offer.nslots; i++) {
+		const SlotPlan& plan = offer.slots[i];
+		added += plan.value;
+		if(plan.loc == APPLY_HITNDAM) {
+			hnd += plan.mod;
+		}
+		char line[256];
+		const char* mat = plan.def ? plan.def->material : "pietra";
+		std::snprintf(line, sizeof(line),
+					  "  $c0012%s$c0007 x%d  —  $c0015%s$c0007\n\r",
+					  mat, plan.consumed, slot_effect_label(plan, weapon));
+		send_to_char(line, ch);
+	}
+	if(weapon && hnd > 1) {
+		char line[256];
+		std::snprintf(line, sizeof(line),
+					  "  I bonus hit-n-dam si fondono in un solo $c0015+%d/+%d$c0007.\n\r",
+					  hnd, hnd);
+		send_to_char(line, ch);
+	}
+	if(offer.leftover[0]) {
+		tell_from_jeweler(ch, jeweler, offer.leftover);
+	}
+	const int new_cost = (offer.obj->obj_flags.cost + added < LIM_ITEM_COST_MIN)
+		? LIM_ITEM_COST_MIN
+		: offer.obj->obj_flags.cost + added;
+	char rare[256];
+	std::snprintf(rare, sizeof(rare),
+				  "Il pezzo verra' considerato raro (valore %d). Dimmi $c0015si$c0007 per confermare, $c0015no$c0007 per rinunciare.",
+				  new_cost);
+	tell_from_jeweler(ch, jeweler, rare);
+}
+
+void incastona_apply(struct char_data* ch, struct char_data* jeweler, struct obj_data* obj,
+					 SlotPlan* slots, int nslots, int wait);
+
+void start_mount_offer(struct char_data* ch, struct char_data* jeweler, struct obj_data* obj,
+					   const SlotPlan* slots, int nslots, int wait, const char* leftover) {
+	MountOffer offer{};
+	offer.jeweler = jeweler;
+	offer.obj = obj;
+	offer.nslots = nslots;
+	offer.wait = wait;
+	offer.expires_at = time(nullptr) + kMountConfirmTimeoutSec;
+	offer.leftover[0] = '\0';
+	if(leftover && *leftover) {
+		std::snprintf(offer.leftover, sizeof(offer.leftover), "%s", leftover);
+	}
+	for(int i = 0; i < nslots; i++) {
+		offer.slots[i] = slots[i];
+	}
+	g_mount_offers[ch] = offer;
+	show_mount_preview(ch, jeweler, offer);
+}
+
+enum YesNoAnswer { YESNO_YES, YESNO_NO, YESNO_OTHER };
+
+YesNoAnswer parse_yes_no(const char* text) {
+	char word[MAX_INPUT_LENGTH];
+	one_argument(text ? text : "", word);
+	if(!*word) {
+		return YESNO_OTHER;
+	}
+	if(!str_cmp(word, "si") || !str_cmp(word, "s") || !str_cmp(word, "yes")
+	   || !str_cmp(word, "y")) {
+		return YESNO_YES;
+	}
+	if(!str_cmp(word, "no") || !str_cmp(word, "n")) {
+		return YESNO_NO;
+	}
+	return YESNO_OTHER;
+}
+
+bool try_handle_mount_confirm(struct char_data* ch, struct char_data* mob, const char* text,
+							  bool consume_other) {
+	auto it = g_mount_offers.find(ch);
+	if(it == g_mount_offers.end()) {
+		return false;
+	}
+	if(it->second.jeweler != mob) {
+		return false;
+	}
+	MountOffer offer = it->second;
+	if(time(nullptr) > offer.expires_at || !mount_offer_valid(ch, offer)) {
+		cancel_mount_offer(ch, mob, true);
+		return true;
+	}
+	switch(parse_yes_no(text)) {
+	case YESNO_YES:
+		g_mount_offers.erase(it);
+		if(!object_can_be_mounted(ch, mob, offer.obj) || !mount_offer_valid(ch, offer)) {
+			tell_from_jeweler(ch, mob, "Qualcosa e' cambiato: non posso piu' fare quell'intarsio.");
+			return true;
+		}
+		incastona_apply(ch, mob, offer.obj, offer.slots, offer.nslots, offer.wait);
+		return true;
+	case YESNO_NO:
+		cancel_mount_offer(ch, mob, true);
+		return true;
+	case YESNO_OTHER:
+		if(!consume_other) {
+			return false;
+		}
+		tell_from_jeweler(ch, mob, "Attendo un si o un no.");
+		show_mount_preview(ch, mob, offer);
+		return true;
+	}
+	return true;
+}
+
+void sweep_mount_offers_for_mob(struct char_data* mob) {
+	if(!mob) {
+		return;
+	}
+	const time_t now = time(nullptr);
+	for(auto it = g_mount_offers.begin(); it != g_mount_offers.end();) {
+		struct char_data* client = it->first;
+		const MountOffer& offer = it->second;
+		if(offer.jeweler != mob) {
+			++it;
+			continue;
+		}
+		if(now > offer.expires_at || !mount_offer_valid(client, offer)) {
+			struct char_data* j = offer.jeweler;
+			it = g_mount_offers.erase(it);
+			if(client && j && client->in_room == j->in_room) {
+				tell_from_jeweler(client, j, "Va bene, non tocco nulla. Pietre e pezzo restano tuoi.");
+			}
+		}
+		else {
+			++it;
+		}
+	}
+}
+
+void incastona_apply(struct char_data* ch, struct char_data* jeweler, struct obj_data* obj,
+					 SlotPlan* slots, int nslots, int wait) {
+	const char* rand_reaction[] = {
+		"Studi meticolosamente $p, poi sorridi tra te e te.",
+		"Guardi entusiasta $p pensando 'Ma quanto sono brav$b!'",
+		"Esclami: '$c0009SI PUO' FARE!$c0007'",
+		"Sorridi compiaciut$b.",
+		"Pensi: 'Potevo fare di meglio, ma comunque va MOLTO bene :-)'",
+		"Guardi con adorazione $p poi, a voce alta, esclami: '$c0009Il mio tesssssoro!$c0007'",
+		"Ti sfreghi le mani con soddisfazione.",
+		"Osservi sognante $p, hai fatto un ottimo lavoro!",
+		"Molto bene, la gemma e' incastonata perfettamente.",
+		"Pensi tra te e te: 'E anche questa e' fatta!'",
+		"$n studia meticolosamente $p, poi sorride tra se e se.",
+		"$n guarda entusiasta $p.",
+		"$n esclama: '$c0009SI PUO' FARE!$c0007'",
+		"$n sorride compiaciut$b.",
+		"$n annuisce soddisfatto, valutando il taglio.",
+		"$n guarda con adorazione $p poi esclama: '$c0009Il mio tesssssoro!$c0007'",
+		"$n si sfrega le mani con soddisfazione.",
+		"$n osserva sognante $p.",
+		"Un ghigno compiaciuto compare sulle labbra di $n.",
+		"$n mormora: 'E anche questa e' fatta!'"
+	};
+	const int nRandReac = 9;
+
+	struct char_data* actor = jeweler ? jeweler : ch;
+
+	if(jeweler) {
+		act("$n sistema gli attrezzi sul banco di legno: scalpelli, uncini, pinze, lime.",
+			TRUE, actor, obj, 0, TO_ROOM);
+		act("$N attira $c0015$p$c0007 sul banco davanti a te, senza sottrartelo, e pesca le pietre dalla tua borsa.",
+			FALSE, ch, obj, jeweler, TO_CHAR);
+		act("$N attira $c0015$p$c0007 sul banco davanti a $n e pesca le pietre dalla borsa.",
+			FALSE, ch, obj, jeweler, TO_NOTVICT);
+		act("$n valuta $c0015$p$c0007 e, con mano ferma, si mette all'opera.\n\r",
+			TRUE, actor, obj, 0, TO_ROOM);
+	}
+	else {
+		send_to_char("Sistemi gli attrezzi di lavoro sul tuo banco di legno e li controlli con cura: scalpelli, uncini, pinze, lime.\n\r", ch);
+		send_to_char("Valuti con cura quali siano i migliori per iniziare, prendi fiato ed inizi a lavorare.\n\r\n\r", ch);
+		act("Inizi ad armeggiare con $c0015$p$c0007.\n\r", TRUE, ch, obj, 0, TO_CHAR);
+		act("$n tira fuori una serie di utensili da lavoro, controlla sapientemente $c0015$p$c0007 poi,\n\rcon mano ferma, si mette all'opera.\n\r",
+			TRUE, ch, obj, 0, TO_ROOM);
+	}
+
+	for(int i = 0; i < nslots; i++) {
+		for(int s = 0; s < slots[i].consumed; s++) {
+			struct obj_data* stone = slots[i].stones[s];
+			if(!stone) {
+				continue;
+			}
+			char buf[256];
+			if(jeweler) {
+				std::snprintf(buf, sizeof(buf),
+							  "$n incastona $c0015%s$c0007 su $c0015$p$c0007.",
+							  stone->short_description ? stone->short_description : "una pietra");
+				act(buf, TRUE, actor, obj, 0, TO_ROOM);
+				act(rand_reaction[number(10, nRandReac + 10)], TRUE, actor, obj, 0, TO_ROOM);
+			}
+			else {
+				std::snprintf(buf, sizeof(buf), "Incastoni $c0015%s$c0007 su $c0015%s$c0007.\n\r",
+							  stone->short_description ? stone->short_description : "una pietra",
+							  obj->short_description ? obj->short_description : "l'oggetto");
+				send_to_char(buf, ch);
+				act(rand_reaction[number(0, nRandReac)], TRUE, ch, obj, 0, TO_CHAR);
+				std::snprintf(buf, sizeof(buf), "$n incastona $c0015%s$c0007 su $c0015$p$c0007.",
+							  stone->short_description ? stone->short_description : "una pietra");
+				act(buf, TRUE, ch, obj, 0, TO_ROOM);
+				act(rand_reaction[number(10, nRandReac + 10)], TRUE, ch, obj, 0, TO_ROOM);
+			}
+			obj_from_char(stone);
+			extract_obj(stone);
+		}
+	}
+
+	const int val_orig = obj->obj_flags.cost;
+	int aff = 0;
+	int colore[kMaxSlots] = { 0, 0, 0, 0, 0 };
+
+	for(int i = 0; i < MAX_OBJ_AFFECT && aff < nslots; i++) {
+		if((obj->affected[i].location != APPLY_NONE)
+		   && (obj->affected[i].modifier != 0)
+		   && (obj->affected[i].location != APPLY_SKIP)) {
+			continue;
+		}
+		const SlotPlan& plan = slots[aff];
+		obj->affected[i].location = plan.loc;
+		obj->affected[i].modifier = plan.mod;
+		apply_extra_flag(obj, plan.extra);
+		obj->obj_flags.cost += plan.value;
+		colore[aff] = plan.color;
+		aff++;
+	}
+
+	consolidate_weapon_hnd(obj);
+	rename_mounted_item(obj, aff, val_orig, colore);
+	SET_BIT(obj->obj_flags.extra_flags2, ITEM2_INSERT);
+	/* Listino: ogni incastonatura rende l'oggetto raro (cost >= LIM_ITEM_COST_MIN).
+	 * insert somma solo il valore delle pietre; se non basta, si porta alla soglia. */
+	if(obj->obj_flags.cost < LIM_ITEM_COST_MIN) {
+		obj->obj_flags.cost = LIM_ITEM_COST_MIN;
+	}
+
+	if(!jeweler && wait > 0 && !IS_DIO_MINORE(ch)) {
+		WAIT_STATE(ch, wait);
+	}
+
+	if(jeweler) {
+		act("$n lascia $c0015$p$c0007 sul banco davanti a te e mette via gli attrezzi, soddisfatt$b.",
+			TRUE, actor, obj, ch, TO_VICT);
+		act("$n lascia $c0015$p$c0007 sul banco davanti a $N e mette via gli attrezzi, soddisfatt$b.",
+			TRUE, actor, obj, ch, TO_NOTVICT);
+	}
+	else {
+		act("\n\rHai terminato il tuo lavoro su $c0015$p$c0007.", TRUE, ch, obj, 0, TO_CHAR);
+		act("$n mette via tutti gli attrezzi, e' soddisfatt$b del suo lavoro su $c0015$p$c0007.",
+			TRUE, ch, obj, 0, TO_ROOM);
+	}
+
+	const char* oname = obj->short_description ? obj->short_description : "?";
+	const char* jname = (jeweler && GET_NAME(jeweler)) ? GET_NAME(jeweler) : "self";
+	mudlog(LOG_PLAYERS, "%s incastona %d slot su %s (jeweler=%s)",
+		   GET_NAME(ch), aff, oname, jname);
+	schedule_inventory_save(ch);
+}
+
 void incastona_execute(struct char_data* ch, struct char_data* jeweler, const char* arg) {
 	char objname[MAX_INPUT_LENGTH];
 	arg = one_argument(arg, objname);
@@ -877,14 +1237,14 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 		nslots++;
 	}
 
+	char leftover[256];
+	leftover[0] = '\0';
 	char extra_gem[MAX_INPUT_LENGTH];
 	one_argument(arg, extra_gem);
 	if(*extra_gem && nslots > 0) {
-		char buf[256];
-		std::snprintf(buf, sizeof(buf),
+		std::snprintf(leftover, sizeof(leftover),
 					  "Su questo pezzo restano solo %d incavi liberi: le altre pietre restano nella tua borsa.",
 					  nslots);
-		tell_from_jeweler(ch, jeweler, buf);
 	}
 
 	if(nslots <= 0) {
@@ -897,129 +1257,14 @@ void incastona_execute(struct char_data* ch, struct char_data* jeweler, const ch
 		return;
 	}
 
-	const char* rand_reaction[] = {
-		"Studi meticolosamente $p, poi sorridi tra te e te.",
-		"Guardi entusiasta $p pensando 'Ma quanto sono brav$b!'",
-		"Esclami: '$c0009SI PUO' FARE!$c0007'",
-		"Sorridi compiaciut$b.",
-		"Pensi: 'Potevo fare di meglio, ma comunque va MOLTO bene :-)'",
-		"Guardi con adorazione $p poi, a voce alta, esclami: '$c0009Il mio tesssssoro!$c0007'",
-		"Ti sfreghi le mani con soddisfazione.",
-		"Osservi sognante $p, hai fatto un ottimo lavoro!",
-		"Molto bene, la gemma e' incastonata perfettamente.",
-		"Pensi tra te e te: 'E anche questa e' fatta!'",
-		"$n studia meticolosamente $p, poi sorride tra se e se.",
-		"$n guarda entusiasta $p.",
-		"$n esclama: '$c0009SI PUO' FARE!$c0007'",
-		"$n sorride compiaciut$b.",
-		"$n annuisce soddisfatto, valutando il taglio.",
-		"$n guarda con adorazione $p poi esclama: '$c0009Il mio tesssssoro!$c0007'",
-		"$n si sfrega le mani con soddisfazione.",
-		"$n osserva sognante $p.",
-		"Un ghigno compiaciuto compare sulle labbra di $n.",
-		"$n mormora: 'E anche questa e' fatta!'"
-	};
-	const int nRandReac = 9;
-
-	struct char_data* actor = jeweler ? jeweler : ch;
-
 	if(jeweler) {
-		act("$n sistema gli attrezzi sul banco di legno: scalpelli, uncini, pinze, lime.",
-			TRUE, actor, obj, 0, TO_ROOM);
-		act("$N attira $c0015$p$c0007 sul banco davanti a te, senza sottrartelo, e pesca le pietre dalla tua borsa.",
-			FALSE, ch, obj, jeweler, TO_CHAR);
-		act("$N attira $c0015$p$c0007 sul banco davanti a $n e pesca le pietre dalla borsa.",
-			FALSE, ch, obj, jeweler, TO_NOTVICT);
-		act("$n valuta $c0015$p$c0007 e, con mano ferma, si mette all'opera.\n\r",
-			TRUE, actor, obj, 0, TO_ROOM);
+		start_mount_offer(ch, jeweler, obj, slots, nslots, wait, leftover);
+		return;
 	}
-	else {
-		send_to_char("Sistemi gli attrezzi di lavoro sul tuo banco di legno e li controlli con cura: scalpelli, uncini, pinze, lime.\n\r", ch);
-		send_to_char("Valuti con cura quali siano i migliori per iniziare, prendi fiato ed inizi a lavorare.\n\r\n\r", ch);
-		act("Inizi ad armeggiare con $c0015$p$c0007.\n\r", TRUE, ch, obj, 0, TO_CHAR);
-		act("$n tira fuori una serie di utensili da lavoro, controlla sapientemente $c0015$p$c0007 poi,\n\rcon mano ferma, si mette all'opera.\n\r",
-			TRUE, ch, obj, 0, TO_ROOM);
+	if(leftover[0]) {
+		tell_from_jeweler(ch, jeweler, leftover);
 	}
-
-	for(int i = 0; i < nslots; i++) {
-		for(int s = 0; s < slots[i].consumed; s++) {
-			struct obj_data* stone = slots[i].stones[s];
-			if(!stone) {
-				continue;
-			}
-			char buf[256];
-			if(jeweler) {
-				std::snprintf(buf, sizeof(buf),
-							  "$n incastona $c0015%s$c0007 su $c0015$p$c0007.",
-							  stone->short_description ? stone->short_description : "una pietra");
-				act(buf, TRUE, actor, obj, 0, TO_ROOM);
-				act(rand_reaction[number(10, nRandReac + 10)], TRUE, actor, obj, 0, TO_ROOM);
-			}
-			else {
-				std::snprintf(buf, sizeof(buf), "Incastoni $c0015%s$c0007 su $c0015%s$c0007.\n\r",
-							  stone->short_description ? stone->short_description : "una pietra",
-							  obj->short_description ? obj->short_description : "l'oggetto");
-				send_to_char(buf, ch);
-				act(rand_reaction[number(0, nRandReac)], TRUE, ch, obj, 0, TO_CHAR);
-				std::snprintf(buf, sizeof(buf), "$n incastona $c0015%s$c0007 su $c0015$p$c0007.",
-							  stone->short_description ? stone->short_description : "una pietra");
-				act(buf, TRUE, ch, obj, 0, TO_ROOM);
-				act(rand_reaction[number(10, nRandReac + 10)], TRUE, ch, obj, 0, TO_ROOM);
-			}
-			obj_from_char(stone);
-			extract_obj(stone);
-		}
-	}
-
-	const int val_orig = obj->obj_flags.cost;
-	int aff = 0;
-	int colore[kMaxSlots] = { 0, 0, 0, 0, 0 };
-
-	for(int i = 0; i < MAX_OBJ_AFFECT && aff < nslots; i++) {
-		if((obj->affected[i].location != APPLY_NONE)
-		   && (obj->affected[i].modifier != 0)
-		   && (obj->affected[i].location != APPLY_SKIP)) {
-			continue;
-		}
-		const SlotPlan& plan = slots[aff];
-		obj->affected[i].location = plan.loc;
-		obj->affected[i].modifier = plan.mod;
-		apply_extra_flag(obj, plan.extra);
-		obj->obj_flags.cost += plan.value;
-		colore[aff] = plan.color;
-		aff++;
-	}
-
-	consolidate_weapon_hnd(obj);
-	rename_mounted_item(obj, aff, val_orig, colore);
-	SET_BIT(obj->obj_flags.extra_flags2, ITEM2_INSERT);
-	/* Listino: ogni incastonatura rende l'oggetto raro (cost >= LIM_ITEM_COST_MIN).
-	 * insert somma solo il valore delle pietre; se non basta, si porta alla soglia. */
-	if(obj->obj_flags.cost < LIM_ITEM_COST_MIN) {
-		obj->obj_flags.cost = LIM_ITEM_COST_MIN;
-	}
-
-	if(!jeweler && wait > 0 && !IS_DIO_MINORE(ch)) {
-		WAIT_STATE(ch, wait);
-	}
-
-	if(jeweler) {
-		act("$n lascia $c0015$p$c0007 sul banco davanti a te e mette via gli attrezzi, soddisfatt$b.",
-			TRUE, actor, obj, ch, TO_VICT);
-		act("$n lascia $c0015$p$c0007 sul banco davanti a $N e mette via gli attrezzi, soddisfatt$b.",
-			TRUE, actor, obj, ch, TO_NOTVICT);
-	}
-	else {
-		act("\n\rHai terminato il tuo lavoro su $c0015$p$c0007.", TRUE, ch, obj, 0, TO_CHAR);
-		act("$n mette via tutti gli attrezzi, e' soddisfatt$b del suo lavoro su $c0015$p$c0007.",
-			TRUE, ch, obj, 0, TO_ROOM);
-	}
-
-	const char* oname = obj->short_description ? obj->short_description : "?";
-	const char* jname = (jeweler && GET_NAME(jeweler)) ? GET_NAME(jeweler) : "self";
-	mudlog(LOG_PLAYERS, "%s incastona %d slot su %s (jeweler=%s)",
-		   GET_NAME(ch), aff, oname, jname);
-	schedule_inventory_save(ch);
+	incastona_apply(ch, jeweler, obj, slots, nslots, wait);
 }
 
 bool ask_is_for_mob(struct char_data* ch, const char* arg, struct char_data* mob,
@@ -1062,6 +1307,7 @@ MOBSPECIAL_FUNC(Incastonatore) {
 	}
 
 	if(type == EVENT_TICK) {
+		sweep_mount_offers_for_mob(mob);
 		if(!AWAKE(mob) || mob->specials.fighting) {
 			return FALSE;
 		}
@@ -1113,10 +1359,28 @@ MOBSPECIAL_FUNC(Incastonatore) {
 		return FALSE;
 	}
 
+	if((cmd >= CMD_NORTH && cmd <= CMD_DOWN) || cmd == CMD_FLEE) {
+		auto it = g_mount_offers.find(ch);
+		if(it != g_mount_offers.end() && it->second.jeweler == mob) {
+			cancel_mount_offer(ch, mob, true);
+		}
+		return FALSE;
+	}
+
+	if(cmd == CMD_SAY || cmd == CMD_SAY_APICE) {
+		if(try_handle_mount_confirm(ch, mob, arg ? arg : "", true)) {
+			return TRUE;
+		}
+		return FALSE;
+	}
+
 	if(cmd == CMD_ASK) {
 		char rest[MAX_INPUT_LENGTH];
 		if(!ask_is_for_mob(ch, arg, mob, rest, sizeof(rest))) {
 			return FALSE;
+		}
+		if(try_handle_mount_confirm(ch, mob, rest, false)) {
+			return TRUE;
 		}
 		char topic[MAX_INPUT_LENGTH];
 		const char* p = one_argument(rest, topic);
