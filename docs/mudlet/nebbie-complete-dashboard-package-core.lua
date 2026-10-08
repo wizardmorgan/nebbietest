@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.43"
+local PKG_VER = "1.15.44"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 -- Non uscire in anticipo dal chunk core (alias/trigger del package possono essere
@@ -24,6 +24,27 @@ NebbieDash.version = PKG_VER
 NebbieDash._loadedVer = PKG_VER
 NebbieDash._upgradeFromVer = (_prevPkgVer and _prevPkgVer ~= PKG_VER) and _prevPkgVer or nil
 NebbieDash.package = "nebbie-complete-dashboard-package"
+NebbieDash.PACKAGE_UPDATE_URL =
+  "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
+
+function NebbieDash.parseVersionParts(ver)
+  local parts = {}
+  for n in (ver or ""):gmatch("%d+") do
+    table.insert(parts, tonumber(n) or 0)
+  end
+  return parts
+end
+
+function NebbieDash.versionLessThan(a, b)
+  local pa, pb = NebbieDash.parseVersionParts(a), NebbieDash.parseVersionParts(b)
+  local n = math.max(#pa, #pb)
+  for i = 1, n do
+    local da, db = pa[i] or 0, pb[i] or 0
+    if da < db then return true end
+    if da > db then return false end
+  end
+  return false
+end
 
 -- Confronto versione in Package Manager (config.lua) vs codice in esecuzione.
 function NebbieDash.printPackageVersionHint()
@@ -31,10 +52,15 @@ function NebbieDash.printPackageVersionHint()
   local pkg = NebbieDash.package or "nebbie-complete-dashboard-package"
   local vPkg = getPackageInfo(pkg, "version") or ""
   local vRun = NebbieDash.version or "?"
-  if vPkg == "" then return end
-  if vPkg ~= vRun then
-    cecho("<orange>[NebbieDash] Package Manager: <white>" .. vPkg ..
-      "<orange> — in esecuzione: <white>v" .. vRun .. "<orange>. Riavvia Mudlet o <yellow>nfix<orange>.\n")
+  local web = getPackageInfo(pkg, "website") or ""
+  if web == "" then
+    cecho("<yellow>[NebbieDash] Il package installato non ha campo <white>website<yellow>: "
+      .. "Alt+O non lo mostrera' tra gli aggiornabili. Reinstalla una volta da URL:\n<white>"
+      .. NebbieDash.PACKAGE_UPDATE_URL .. "\n")
+  elseif vPkg ~= "" and vPkg ~= vRun then
+    cecho("<orange>[NebbieDash] Package Manager: <white>v" .. vPkg ..
+      "<orange> — in esecuzione: <white>v" .. vRun ..
+      "<orange>. Usa <yellow>Alt+O<orange> → Aggiorna / Installa da URL, oppure <yellow>nfix<orange>.\n")
   end
 end
 
@@ -1787,8 +1813,68 @@ function NebbieDash.teardownGui()
   NebbieDash._dividerLabel = nil
   NebbieDash._guiCreated = false
   NebbieDash._floatSidebarCreated = false
+  NebbieDash._equipRatioDragReady = false
+  NebbieDash._equipRatioDrag = nil
   pcall(setBorderLeft, 0)
   pcall(setBorderRight, 0)
+end
+
+function NebbieDash.equipDividerPointerY(event)
+  if type(getMousePosition) == "function" then
+    local _x, y = getMousePosition()
+    if type(y) == "number" then return y end
+  end
+  if type(event) == "table" then
+    return event.y or event.yPos or event["y-pos"] or 0
+  end
+  return 0
+end
+
+function NebbieDash.setEquipHeightRatioFromPointerY(y)
+  local _w, h = getMainWindowSize()
+  h = h or 600
+  local usableH = math.max(1, h - (NebbieDash.dividerPx or 4))
+  local ratio = math.max(0.1, math.min(0.9, (y or 0) / usableH))
+  NebbieDash.guiRatios = NebbieDash.guiRatios or {}
+  NebbieDash.guiRatios.equip = ratio
+  NebbieDash.guiRatios.manualEquip = true
+  NebbieDash.positionGUI()
+end
+
+function NebbieDash.onEquipDividerPress(event)
+  if event and event.button and event.button ~= "LeftButton" then return end
+  NebbieDash._equipRatioDrag = true
+  NebbieDash.setEquipHeightRatioFromPointerY(NebbieDash.equipDividerPointerY(event))
+end
+
+function NebbieDash.onEquipDividerMove(event)
+  if not NebbieDash._equipRatioDrag then return end
+  NebbieDash.setEquipHeightRatioFromPointerY(NebbieDash.equipDividerPointerY(event))
+end
+
+function NebbieDash.onEquipDividerRelease(_event)
+  if not NebbieDash._equipRatioDrag then return end
+  NebbieDash._equipRatioDrag = nil
+  NebbieDash.persistGuiRatios()
+end
+
+function NebbieDash.setupEquipDividerDrag()
+  if NebbieDash._equipRatioDragReady then return end
+  if type(setLabelClickCallback) ~= "function"
+    or type(setLabelMoveCallback) ~= "function"
+    or type(setLabelReleaseCallback) ~= "function" then
+    return
+  end
+  if type(setLabelCursor) == "function" then
+    pcall(setLabelCursor, "NebbieDashDivider", "splitVCursor")
+  end
+  if type(setLabelToolTip) == "function" then
+    setLabelToolTip("NebbieDashDivider", "Trascina per regolare altezza Equip / Speedwalk (oppure nheights)")
+  end
+  setLabelClickCallback("NebbieDashDivider", "NebbieDash.onEquipDividerPress")
+  setLabelMoveCallback("NebbieDashDivider", "NebbieDash.onEquipDividerMove")
+  setLabelReleaseCallback("NebbieDashDivider", "NebbieDash.onEquipDividerRelease")
+  NebbieDash._equipRatioDragReady = true
 end
 
 function NebbieDash.initDockSidebar()
@@ -1878,6 +1964,7 @@ function NebbieDash.initGUI()
     setBackgroundColor(win, 15, 15, 15, 255)
   end
   setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
+  NebbieDash.setupEquipDividerDrag()
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
   NebbieDash.destroyLegacyGuiWindows()
@@ -2798,32 +2885,31 @@ function NebbieDash.patchCachedEqLocation(data, locationLabel, itemText)
     end
   else
     local item = itemText:match("^%s*(.-)%s*$")
-    if #matchingSlots > 0 then
-      data.eq[matchingSlots[1]] = { location = canonLabel, item = item }
-      for i = 2, #matchingSlots do
-        data.eq[matchingSlots[i]] = nil
+    local preferSlot = (#matchingSlots > 0) and matchingSlots[1] or nil
+    for slot, entry in pairs(data.eq) do
+      if eqEntryLocationCanon(entry) == canon then
+        data.eq[slot] = nil
       end
-    else
-      -- I numeri di slot in cache seguono l'output di `eq` del gioco (es. 16 =
-      -- tenuto), non l'indice in EQ_SLOT_ORDER (16 = impugnato): non sovrascrivere
-      -- un'altra posizione se l'indice canonico e' già occupato.
-      local slotIdx = nil
-      if orderIdx then
-        local occupant = data.eq[orderIdx]
-        if not occupant or eqEntryLocationCanon(occupant) == canon then
-          slotIdx = orderIdx
-        end
-      end
-      if not slotIdx then
-        local maxK = 0
-        for slot in pairs(data.eq) do
-          if type(slot) == "number" and slot > maxK then maxK = slot end
-        end
-        slotIdx = maxK + 1
-        if slotIdx < 1 then slotIdx = orderIdx or 1 end
-      end
-      data.eq[slotIdx] = { location = canonLabel, item = item }
     end
+    -- I numeri di slot in cache seguono l'output di `eq` del gioco (es. 16 =
+    -- tenuto), non l'indice in EQ_SLOT_ORDER (16 = impugnato): non sovrascrivere
+    -- un'altra posizione se l'indice canonico e' già occupato.
+    local slotIdx = preferSlot
+    if not slotIdx and orderIdx then
+      local occupant = data.eq[orderIdx]
+      if not occupant or eqEntryLocationCanon(occupant) == canon then
+        slotIdx = orderIdx
+      end
+    end
+    if not slotIdx then
+      local maxK = 0
+      for slot in pairs(data.eq) do
+        if type(slot) == "number" and slot > maxK then maxK = slot end
+      end
+      slotIdx = maxK + 1
+      if slotIdx < 1 then slotIdx = orderIdx or 1 end
+    end
+    data.eq[slotIdx] = { location = canonLabel, item = item }
   end
   data.eqUpdated = os.time()
   NebbieDash.saveStore()
@@ -2842,9 +2928,7 @@ function NebbieDash.onStopUsingLine()
   for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
     if not row.empty and row.location == "impugnato" then
       if NebbieDash.eqItemNamesMatch(row.item, itemName) then
-        if not NebbieDash._weaponSwapBusy then
-          NebbieDash.patchCachedEqLocation(data, "impugnato", nil)
-        end
+        NebbieDash.patchCachedEqLocation(data, "impugnato", nil)
         return
       end
     end
@@ -4998,7 +5082,8 @@ function NebbieDash.boot()
   if NebbieDash._upgradeFromVer then
     cecho("<yellow>[NebbieDash] Aggiornamento v" .. NebbieDash._upgradeFromVer ..
       " → v" .. NebbieDash.version .. ".\n")
-    cecho("<grey>[NebbieDash] Aggiornamenti: <yellow>Alt+O<grey> Gestione pacchetti. Se la barra e' nera: <yellow>nfix<grey>.\n")
+    cecho("<grey>[NebbieDash] Aggiornamenti: <yellow>Alt+O<grey> → Aggiorna (serve campo website; URL branch "
+      .. "<white>nebbie-mudlet-dashboard<grey>). Se la barra e' nera: <yellow>nfix<grey>.\n")
     NebbieDash._upgradeFromVer = nil
   end
   cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto (" ..

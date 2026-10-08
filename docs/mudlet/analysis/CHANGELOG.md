@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.44 — 2026-10-08
+
+- **Equip / `usa`**: `patchCachedEqLocation` rimuove tutte le voci duplicate della stessa
+  posizione prima di scriverne una (evita doppio **impugnato** e cambio arma bloccato).
+- **Layout**: trascinamento barra **Equip / Speedwalk** (`NebbieDashDivider`); larghezza colonna
+  resta `nwidth` / bordo Mudlet (l’auto-width non si trascina).
+- **Aggiornamenti**: messaggio se il package installato non ha `website` (reinstall da URL
+  branch `nebbie-mudlet-dashboard`); GMCP `Client.GUI` allineato a **1.15.44**.
+
 ## 1.15.43 — 2026-10-08
 
 - **Equip / `usa`**: aggiornamento cache su `Impugni` non sovrascrive più lo slot **tenuto**
