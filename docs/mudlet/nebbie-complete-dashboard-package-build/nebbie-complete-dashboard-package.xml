@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.42"
+local PKG_VER = "1.15.43"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 -- Non uscire in anticipo dal chunk core (alias/trigger del package possono essere
@@ -2770,30 +2770,66 @@ end
 
 -- Aggiorna la cache equip (da `eq`) senza rifare neq: usato su messaggi MUD di
 -- rem/wield/wear durante il cambio arma automatico.
+local function eqEntryLocationCanon(entry)
+  if not entry then return "" end
+  return (entry.location or ""):lower():match("^%s*(.-)%s*$") or ""
+end
+
 function NebbieDash.patchCachedEqLocation(data, locationLabel, itemText)
   if not data or not data.eqUpdated then return false end
   data.eq = data.eq or {}
   local canon = (locationLabel or ""):lower():match("^%s*(.-)%s*$")
   if canon == "" then return false end
-  local slotIdx, canonLabel = nil, nil
+  local canonLabel, orderIdx = nil, nil
   for idx, label in ipairs(NebbieDash.EQ_SLOT_ORDER) do
     if label:lower() == canon then
       canonLabel = label
-      for slot, entry in pairs(data.eq) do
-        if entry and (entry.location or ""):lower():match("^%s*(.-)%s*$") == canon then
-          slotIdx = slot
-          break
-        end
-      end
-      if not slotIdx then slotIdx = idx end
+      orderIdx = idx
       break
     end
   end
-  if not slotIdx or not canonLabel then return false end
+  if not canonLabel then return false end
+
+  local matchingSlots = {}
+  for slot, entry in pairs(data.eq) do
+    if eqEntryLocationCanon(entry) == canon then
+      table.insert(matchingSlots, slot)
+    end
+  end
+  table.sort(matchingSlots, function(a, b) return a < b end)
+
   if itemText == nil or itemText == "" then
-    data.eq[slotIdx] = nil
+    for _, slot in ipairs(matchingSlots) do
+      data.eq[slot] = nil
+    end
   else
-    data.eq[slotIdx] = { location = canonLabel, item = itemText:match("^%s*(.-)%s*$") }
+    local item = itemText:match("^%s*(.-)%s*$")
+    if #matchingSlots > 0 then
+      data.eq[matchingSlots[1]] = { location = canonLabel, item = item }
+      for i = 2, #matchingSlots do
+        data.eq[matchingSlots[i]] = nil
+      end
+    else
+      -- I numeri di slot in cache seguono l'output di `eq` del gioco (es. 16 =
+      -- tenuto), non l'indice in EQ_SLOT_ORDER (16 = impugnato): non sovrascrivere
+      -- un'altra posizione se l'indice canonico e' già occupato.
+      local slotIdx = nil
+      if orderIdx then
+        local occupant = data.eq[orderIdx]
+        if not occupant or eqEntryLocationCanon(occupant) == canon then
+          slotIdx = orderIdx
+        end
+      end
+      if not slotIdx then
+        local maxK = 0
+        for slot in pairs(data.eq) do
+          if type(slot) == "number" and slot > maxK then maxK = slot end
+        end
+        slotIdx = maxK + 1
+        if slotIdx < 1 then slotIdx = orderIdx or 1 end
+      end
+      data.eq[slotIdx] = { location = canonLabel, item = item }
+    end
   end
   data.eqUpdated = os.time()
   NebbieDash.saveStore()
@@ -2812,7 +2848,9 @@ function NebbieDash.onStopUsingLine()
   for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
     if not row.empty and row.location == "impugnato" then
       if NebbieDash.eqItemNamesMatch(row.item, itemName) then
-        NebbieDash.patchCachedEqLocation(data, "impugnato", nil)
+        if not NebbieDash._weaponSwapBusy then
+          NebbieDash.patchCachedEqLocation(data, "impugnato", nil)
+        end
         return
       end
     end

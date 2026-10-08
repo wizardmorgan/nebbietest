@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.43 — 2026-10-08
+
+- **Equip / `usa`**: aggiornamento cache su `Impugni` non sovrascrive più lo slot **tenuto**
+  quando i numeri di riga di `eq` del gioco non coincidono con `EQ_SLOT_ORDER`.
+- **Cambio arma**: durante `_weaponSwapBusy` non si svuota **impugnato** su `Smetti di usare`
+  (aggiornamento da `Impugni`).
+
 ## 1.15.41 — 2026-10-08
 
 - **GUI (fix)**: equip non usa più HTML nelle miniconsole (compariva testo grezzo `<table…>`).
