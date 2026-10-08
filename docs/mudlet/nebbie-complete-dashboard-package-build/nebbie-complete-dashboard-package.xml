@@ -5385,6 +5385,20 @@ end]]></script>
    <regex>^nautosplit (.+)$</regex>
   </Alias>
   <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-groupcmd</name>
+   <script><![CDATA[NebbieDash.cmdGroupCmd("")]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^ngroupcmd$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-groupcmd-args</name>
+   <script><![CDATA[NebbieDash.cmdGroupCmd(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^ngroupcmd (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
    <name>nebbie-dash-split</name>
    <script><![CDATA[NebbieDash.cmdSplit(matches[2])]]></script>
    <command></command>

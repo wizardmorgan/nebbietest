@@ -393,10 +393,25 @@ check("loot: riga 'Prendi...' da sola non genera comandi",
   #sentLog == sentBefore8a)
 
 -- 8b: la riga con l'importo avvia il controllo gruppo (invio di "group").
+NebbieDash._lastLootFp = nil
+NebbieDash._lastLootFpAt = nil
+NebbieDash._groupCheckActive = false
+NebbieDash._pendingSplitAmount = nil
 line = "C'erano 100000 monete."
 NebbieDash.onLootLine()
 check("loot: importo riconosciuto correttamente", NebbieDash._pendingSplitAmount == 100000)
 check("loot: dopo il loot invia 'group' per il controllo", lastSent == "group")
+
+line = "C'erano 150000 monete."
+NebbieDash._lastLootFp = nil
+NebbieDash._lastLootFpAt = nil
+NebbieDash._groupCheckActive = false
+NebbieDash._pendingSplitAmount = nil
+sentLog = {}
+NebbieDash.onLootLine()
+NebbieDash.onLootLine()
+check("loot: doppio trigger stessa riga C'erano -> un solo group/split pending",
+  NebbieDash._pendingSplitAmount == 150000 and #sentLog == 1)
 
 -- 8c: risposta "da soli" -> nessuno split inviato, stato ripulito.
 line = "But you are a member of no group?!"
@@ -1085,6 +1100,25 @@ check("ident batch: identBatchParseFilter resume", r1 and t1 == "")
 check("ident batch: identBatchParseFilter resume toon", r2 and t2 == "Astaroth")
 check("ident batch: identBatchParseFilter toon normale", not r3 and t3 == "Montero")
 os.remove(resumeCsv)
+
+check("groupcmd: parseGroupSaySpeaker con colori server",
+  (function()
+    local s, p = NebbieDash.parseGroupSaySpeaker(
+      "$c0012[$c0015Martin$c0012] dice al gruppo 'dro'")
+    return s == "Martin" and p == "dro"
+  end)())
+check("groupcmd: groupCmdSpeakerKey primo token",
+  NebbieDash.groupCmdSpeakerKey("Martin") == "martin")
+check("groupcmd: expandGroupCmdTemplate",
+  NebbieDash.expandGroupCmdTemplate("adrenalize {name}", "Chunli") == "adrenalize chunli")
+check("groupcmd: normalizeGroupCmdTemplate aggiunge {name}",
+  NebbieDash.normalizeGroupCmdTemplate("adrenalize") == "adrenalize {name}")
+
+check("package update: isValidMpackageInstallUrl",
+  NebbieDash.isValidMpackageInstallUrl(PKG_MPACKAGE_URL or
+    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage")
+  and not NebbieDash.isValidMpackageInstallUrl(
+    "https://example.com/foo.mpackage?cb=1"))
 
 print("")
 if failures == 0 then
