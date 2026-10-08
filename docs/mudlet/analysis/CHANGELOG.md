@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.41 — 2026-10-08
+
+- **GUI (fix)**: equip non usa più HTML nelle miniconsole (compariva testo grezzo `<table…>`).
+  Rendering unificato con tag **cecho** (dock e float).
+- **Layout**: anche in modalità **float** il bordo sinistro riserva spazio al testo MUD
+  (`setBorderLeft`), niente pannello sopra il gioco.
+- **Default**: `sidebar_mode = dock` nel file preferenze nuovo (float opzionale con `nsidebar float`).
+
 ## 1.15.40 — 2026-10-08
 
 - **Aggiornamento**: rimosso comando **`npackageupdate`** e tutta la logica self-update custom

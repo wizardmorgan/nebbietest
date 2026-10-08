@@ -56,7 +56,7 @@ Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 
 - **Equip + Speedwalk** (dock sinistro o pannello **float** trascinabile): equip da
-  `eq` con slot vuoti evidenziati e tabella HTML colorata; speedwalk cliccabili.
+  `eq` con slot vuoti evidenziati e colori per posizione; speedwalk cliccabili.
   Altezze proporzionali al testo (`nheights auto`); niente pannello spell GUI.
 - **Preferenze** `nebbie-dash-preferences.txt`: `nsidebar`, `weapon_swap_delay`,
   `sanity_neq_on_login` (`npreferencesreload`).

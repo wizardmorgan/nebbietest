@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.40"
+local PKG_VER = "1.15.41"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 -- Non uscire in anticipo dal chunk core (alias/trigger del package possono essere
@@ -186,7 +186,7 @@ function NebbieDash.ensurePreferencesFile()
     "# sidebar_mode = dock     # dock = bordo sinistro classico Mudlet\n" ..
     "# weapon_swap_delay = 0.5 # secondi tra i comandi di usa / cambio arma\n" ..
     "# sanity_neq_on_login = on  # se l'equip in cache è vuoto ma marcato sincronizzato, invia eq\n" ..
-    "sidebar_mode = float\n" ..
+    "sidebar_mode = dock\n" ..
     "weapon_swap_delay = 0.5\n" ..
     "sanity_neq_on_login = on\n"
   )
@@ -201,7 +201,7 @@ end
 function NebbieDash.loadPreferences()
   NebbieDash.migrateConfigFileIfNeeded("nebbie-dash-preferences.txt")
   NebbieDash.prefs = NebbieDash.prefs or {
-    sidebar_mode = "float",
+    sidebar_mode = "dock",
     weapon_swap_delay = 0.5,
     sanity_neq_on_login = true,
   }
@@ -1672,46 +1672,32 @@ function NebbieDash.effectiveSidebarMode()
   return mode
 end
 
-function NebbieDash.htmlEscape(s)
-  s = tostring(s or "")
-  return s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
-end
-
-function NebbieDash.equipLocationColor(location)
+function NebbieDash.equipLocationCechoTag(location)
   local loc = (location or ""):lower():match("^%s*(.-)%s*$")
-  if loc == "impugnato" or loc == "tenuto" then return "#fbbf24" end
-  if loc == "sulla schiena" then return "#60a5fa" end
-  if loc == "davanti agli occhi" then return "#c084fc" end
-  return "#86efac"
+  if loc == "impugnato" or loc == "tenuto" then return "yellow" end
+  if loc == "sulla schiena" then return "cyan" end
+  if loc == "davanti agli occhi" then return "purple" end
+  return "green"
 end
 
-function NebbieDash.buildEquipHtml(name, data)
-  local parts = {
-    "<table width='100%' cellspacing='0' cellpadding='2'>",
-    "<tr><td align='center' colspan='2'><span style='color:#22d3ee;font-size:11pt;font-weight:bold;'>",
-    "Equip — ", NebbieDash.htmlEscape(name), "</span></td></tr>",
-  }
+-- Miniconsole Mudlet/Geyser: solo tag cecho, non HTML (le <table> compaiono come testo grezzo).
+function NebbieDash.renderEquipPanel(name, data)
+  cecho("NebbieDashEquip", "<cyan><b>Equip — " .. name .. "</b>\n")
   if not (data and data.eqUpdated) then
-    table.insert(parts, "<tr><td colspan='2'><span style='color:#9ca3af;'>Mai sincronizzato — neq / nresync</span></td></tr>")
-  else
-    for idx, row in ipairs(NebbieDash.buildEquipRows(data)) do
-      if row.empty then
-        table.insert(parts, string.format(
-          "<tr><td width='28' align='right'><span style='color:#6b7280;'>[%2d]</span></td>" ..
-          "<td><span style='color:#eab308;'>%s</span> <span style='color:#ef4444;font-weight:bold;'>▢ VUOTO ▢</span></td></tr>",
-          idx, NebbieDash.htmlEscape(row.location)))
-      else
-        local item = NebbieDash.htmlEscape(NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen))
-        local col = NebbieDash.equipLocationColor(row.location)
-        table.insert(parts, string.format(
-          "<tr><td width='28' align='right'><span style='color:#6b7280;'>[%2d]</span></td>" ..
-          "<td><span style='color:%s;font-weight:bold;'>%s</span><br><span style='color:#e5e7eb;'>%s</span></td></tr>",
-          idx, col, NebbieDash.htmlEscape(row.location), item))
-      end
+    cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
+    return
+  end
+  for idx, row in ipairs(NebbieDash.buildEquipRows(data)) do
+    if row.empty then
+      cecho("NebbieDashEquip", string.format(
+        "<grey>[%2d] <yellow>%s\n     <red><b>▢ VUOTO ▢</b>\n", idx, row.location))
+    else
+      local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
+      local tag = NebbieDash.equipLocationCechoTag(row.location)
+      cecho("NebbieDashEquip", string.format(
+        "<grey>[%2d] <%s>%s\n     <white>%s\n", idx, tag, row.location, item))
     end
   end
-  table.insert(parts, "</table>")
-  return table.concat(parts)
 end
 
 function NebbieDash.clearPanel(win)
@@ -1719,9 +1705,19 @@ function NebbieDash.clearPanel(win)
     NebbieDash._equipGeyser:clear()
   elseif win == "NebbieDashSpeedwalks" and NebbieDash._swGeyser then
     NebbieDash._swGeyser:clear()
-  else
-    clearWindow(win)
   end
+  if type(clearWindow) == "function" then
+    pcall(clearWindow, win)
+  end
+end
+
+function NebbieDash.applySidebarBorder()
+  if not NebbieDash._guiCreated then return end
+  if NebbieDash._guiHidden then
+    setBorderLeft(0)
+    return
+  end
+  setBorderLeft(NebbieDash.guiWidthEquip or 260)
 end
 
 function NebbieDash.maybeSanityResyncEq(charName)
@@ -1844,16 +1840,17 @@ function NebbieDash.initGUI()
   else
     NebbieDash.initDockSidebar()
   end
-  for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
-    setMiniConsoleFontSize(win, NebbieDash.fontSize)
-    -- Una miniconsole appena creata ha uno sfondo di default (grigio, widget
-    -- Qt non ancora disegnato) finche' non le si assegna esplicitamente un
-    -- colore e non ci si scrive dentro almeno una volta: senza questo il
-    -- pannello resta grigio anche a install riuscita (bug osservato, vedi
-    -- docs/mudlet/analysis/LOG.md).
-    setBackgroundColor(win, 15, 15, 15, 255)
+  if NebbieDash.sidebarMode == "dock" then
+    for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
+      setMiniConsoleFontSize(win, NebbieDash.fontSize)
+      setBackgroundColor(win, 15, 15, 15, 255)
+    end
+    setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
+  else
+    for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
+      pcall(setMiniConsoleFontSize, win, NebbieDash.fontSize)
+    end
   end
-  setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
   NebbieDash.destroyLegacyGuiWindows()
@@ -1929,11 +1926,7 @@ function NebbieDash.applyAutoWidth()
       NebbieDash.guiWidthEquip = w
     end
   end
-  if NebbieDash.effectiveSidebarMode() == "float" then
-    setBorderLeft(0)
-  elseif NebbieDash.guiWidthEquip then
-    setBorderLeft(NebbieDash.guiWidthEquip)
-  end
+  NebbieDash.applySidebarBorder()
   setBorderRight(0)
 end
 
@@ -2141,10 +2134,8 @@ function NebbieDash.toggleGUI()
         NebbieDash._sidebarContainer:show()
       else
         for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do showWindow(win) end
-        if NebbieDash.effectiveSidebarMode() == "dock" then
-          setBorderLeft(NebbieDash.guiWidthEquip)
-        end
       end
+      NebbieDash.applySidebarBorder()
       setBorderRight(0)
       NebbieDash.positionGUI()
     end
@@ -2164,11 +2155,7 @@ function NebbieDash.resetLayout()
     for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
       setMiniConsoleFontSize(win, NebbieDash.fontSize)
     end
-    if NebbieDash.effectiveSidebarMode() == "dock" then
-      setBorderLeft(NebbieDash.guiWidthEquip)
-    else
-      setBorderLeft(0)
-    end
+    NebbieDash.applySidebarBorder()
     setBorderRight(0)
     NebbieDash.applyAutoWidth()
     NebbieDash.positionGUI()
@@ -2419,32 +2406,10 @@ function NebbieDash.refreshDashboard()
   local name = NebbieDash.currentChar
   NebbieDash.clearPanel("NebbieDashEquip")
   if not name then
-    if NebbieDash._equipGeyser then
-      NebbieDash._equipGeyser:echo("<span style='color:#9ca3af;'>Nessun personaggio rilevato.</span>")
-    else
-      cecho("NebbieDashEquip", "<grey>Nessun personaggio rilevato.\n")
-    end
+    cecho("NebbieDashEquip", "<grey>Nessun personaggio rilevato.\n")
     return
   end
-  local data = NebbieDash.getCharData(name)
-  if NebbieDash._equipGeyser then
-    NebbieDash._equipGeyser:echo(NebbieDash.buildEquipHtml(name, data))
-  else
-    cecho("NebbieDashEquip", "<cyan><b>Equip — " .. name .. "</b>\n")
-    if not (data.eqUpdated) then
-      cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
-    else
-      for idx, row in ipairs(NebbieDash.buildEquipRows(data)) do
-        if row.empty then
-          cecho("NebbieDashEquip", string.format(
-            "<grey>[%2d] <yellow>%s\n     <red><b>▢ VUOTO ▢</b>\n", idx, row.location))
-        else
-          local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
-          cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", idx, row.location, item))
-        end
-      end
-    end
-  end
+  NebbieDash.renderEquipPanel(name, NebbieDash.getCharData(name))
 end
 
 function NebbieDash.refreshSpeedwalkPanel()
