@@ -1929,7 +1929,7 @@ NebbieDash.HELP_TEXT = {
   { "neq", "Mostra l'equip corrente (dati salvati)." },
   { "nattrib", "Mostra le spell attive correnti (dati salvati)." },
   { "nresync", "Invia eq + attrib al gioco per risincronizzare i pannelli." },
-  { "nfix", "Ricrea la GUI da zero in caso di problemi visivi." },
+  { "nfix", "Riavvia il package e rimuove pannelli legacy (Spell/Armi) se restano visibili." },
   { "ntriggers", "Reinstalla i trigger NebbieDash (fame/sete, prompt, loot, …) senza riavviare Mudlet." },
   { "ngui", "Mostra/nascondi tutti i pannelli." },
   { "nlayout", "Ripristina larghezze/font/proporzioni di default." },
