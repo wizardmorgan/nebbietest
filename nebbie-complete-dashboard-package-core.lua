@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.36"
+local PKG_VER = "1.15.38"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -280,6 +280,80 @@ function NebbieDash.ensureDefaultConfigFiles()
   NebbieDash.ensureBatchCommandsFile()
   NebbieDash.ensureIdentBatchCommandsFile()
   NebbieDash.ensureBatchItemsFile()
+  NebbieDash.ensurePreferencesFile()
+end
+
+function NebbieDash.preferencesPath()
+  return NebbieDash.configPath("nebbie-dash-preferences.txt")
+end
+
+function NebbieDash.ensurePreferencesFile()
+  local path = NebbieDash.preferencesPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# NebbieDash — preferenze globali (cartella profiles/ndashboard)\n" ..
+    "# Dopo modifiche: npreferencesreload (o riavvio Mudlet)\n" ..
+    "#\n" ..
+    "# sidebar_mode = float    # float = pannello trascinabile (più spazio al testo centrale)\n" ..
+    "# sidebar_mode = dock     # dock = bordo sinistro classico Mudlet\n" ..
+    "# weapon_swap_delay = 0.5 # secondi tra i comandi di usa / cambio arma\n" ..
+    "# sanity_neq_on_login = on  # se l'equip in cache è vuoto ma marcato sincronizzato, invia eq\n" ..
+    "sidebar_mode = float\n" ..
+    "weapon_swap_delay = 0.5\n" ..
+    "sanity_neq_on_login = on\n"
+  )
+  f:close()
+end
+
+function NebbieDash.parsePreferencesBool(v)
+  v = (v or ""):lower():match("^%s*(.-)%s*$")
+  return v == "on" or v == "yes" or v == "true" or v == "1"
+end
+
+function NebbieDash.loadPreferences()
+  NebbieDash.migrateConfigFileIfNeeded("nebbie-dash-preferences.txt")
+  NebbieDash.prefs = NebbieDash.prefs or {
+    sidebar_mode = "float",
+    weapon_swap_delay = 0.5,
+    sanity_neq_on_login = true,
+  }
+  local path = NebbieDash.preferencesPath()
+  if type(io.exists) ~= "function" or not io.exists(path) then return end
+  local f = io.open(path, "r")
+  if not f then return end
+  for line in f:lines() do
+    local key, val = line:match("^%s*([%w_]+)%s*=%s*(.+)%s*$")
+    if key and val and not key:match("^#") then
+      val = val:gsub("%s*#.*$", ""):match("^%s*(.-)%s*$")
+      if key == "sidebar_mode" and (val == "float" or val == "dock") then
+        NebbieDash.prefs.sidebar_mode = val
+      elseif key == "weapon_swap_delay" then
+        local n = tonumber(val)
+        if n and n >= 0.1 and n <= 3 then NebbieDash.prefs.weapon_swap_delay = n end
+      elseif key == "sanity_neq_on_login" then
+        NebbieDash.prefs.sanity_neq_on_login = NebbieDash.parsePreferencesBool(val)
+      end
+    end
+  end
+  f:close()
+  NebbieDash.sidebarMode = NebbieDash.prefs.sidebar_mode
+  NebbieDash.weaponSwapDelay = NebbieDash.prefs.weapon_swap_delay or NebbieDash.weaponSwapDelay
+end
+
+function NebbieDash.savePreferencesFile()
+  NebbieDash.ensureConfigDir()
+  local path = NebbieDash.preferencesPath()
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# NebbieDash — preferenze (npreferencesreload)\n" ..
+    "sidebar_mode = " .. tostring(NebbieDash.sidebarMode or NebbieDash.prefs.sidebar_mode or "float") .. "\n" ..
+    "weapon_swap_delay = " .. tostring(NebbieDash.weaponSwapDelay or 0.5) .. "\n" ..
+    "sanity_neq_on_login = " .. ((NebbieDash.prefs and NebbieDash.prefs.sanity_neq_on_login) and "on" or "off") .. "\n"
+  )
+  f:close()
 end
 
 function NebbieDash.legacyNebbieDashHomePath(filename)
@@ -457,6 +531,11 @@ function NebbieDash.setCurrentCharacter(name, manual)
   if type(raiseEvent) == "function" then
     pcall(raiseEvent, "nebbieDashCharacterChanged", name, manual and true or false)
   end
+  if not manual then
+    tempTimer(1.2, function()
+      NebbieDash.maybeSanityResyncEq(name)
+    end)
+  end
   cecho("<cyan>[NebbieDash] Personaggio attivo: <yellow>" .. name .. "\n")
 end
 
@@ -490,6 +569,7 @@ function NebbieDash.onConnectionEvent()
   -- sbagliato senza accorgersene.
   NebbieDash.currentChar = nil
   NebbieDash._awaitingPromptAfterConnect = true
+  NebbieDash._sanityNeqForChar = {}
   NebbieDash.refreshDashboard()
 end
 
@@ -603,15 +683,20 @@ function NebbieDash.finishEqCapture()
     pcall(disableTrigger, NebbieDash._eqLineTrig)
   end
   if not cap then return end
+  local slotCount = NebbieDash.countSlots(cap.slots)
   local name = NebbieDash.currentChar
   if not name then return end
   local data = NebbieDash.getCharData(name)
+  if slotCount == 0 then
+    cecho("<orange>[NebbieDash] Cattura eq incompleta (0 slot) — equip non modificato. Riprova <yellow>neq<orange>.\n")
+    return
+  end
   data.eq = cap.slots
   data.eqUpdated = os.time()
   NebbieDash.refreshHungerBackKeywordFromEq(data, true)
   NebbieDash.saveStore()
   NebbieDash.refreshDashboard()
-  cecho("<green>[NebbieDash] Equip aggiornato (" .. tostring(NebbieDash.countSlots(cap.slots)) .. "/21 slot).\n")
+  cecho("<green>[NebbieDash] Equip aggiornato (" .. tostring(slotCount) .. "/21 slot).\n")
 end
 
 function NebbieDash.countSlots(slots)
@@ -634,7 +719,9 @@ function NebbieDash.onEqCaptureLine()
   text = text or ""
 
   if NebbieDash.parsePromptLine(text) or text:match("^>>%s*$") then
-    NebbieDash.finishEqCapture()
+    if NebbieDash.countSlots(cap.slots) > 0 then
+      NebbieDash.finishEqCapture()
+    end
     return
   end
 
@@ -654,7 +741,9 @@ function NebbieDash.onEqCaptureLine()
   end
 
   if text:match("^%s*$") then
-    NebbieDash.finishEqCapture()
+    if NebbieDash.countSlots(cap.slots) > 0 then
+      NebbieDash.finishEqCapture()
+    end
     return
   end
 
@@ -820,6 +909,8 @@ NebbieDash.SHORTCUT_RESERVED = {
   npackageupdate = true,
   usa = true,
   nconfigdir = true,
+  nsidebar = true,
+  npreferencesreload = true,
 }
 
 function NebbieDash.spellShortcutsPath()
@@ -1720,8 +1811,108 @@ function NebbieDash.computeSidebarEquipRatio(data)
   return math.max(0.12, math.min(0.88, eqLines / total))
 end
 
-function NebbieDash.initGUI()
-  if NebbieDash._guiCreated then return end
+function NebbieDash.canUseFloatingSidebar()
+  return type(Adjustable) == "table" and type(Adjustable.Container) == "table"
+    and type(Geyser) == "table" and type(Geyser.MiniConsole) == "table"
+end
+
+function NebbieDash.effectiveSidebarMode()
+  local mode = NebbieDash.sidebarMode or (NebbieDash.prefs and NebbieDash.prefs.sidebar_mode) or "dock"
+  if mode == "float" and not NebbieDash.canUseFloatingSidebar() then
+    return "dock"
+  end
+  return mode
+end
+
+function NebbieDash.htmlEscape(s)
+  s = tostring(s or "")
+  return s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+end
+
+function NebbieDash.equipLocationColor(location)
+  local loc = (location or ""):lower():match("^%s*(.-)%s*$")
+  if loc == "impugnato" or loc == "tenuto" then return "#fbbf24" end
+  if loc == "sulla schiena" then return "#60a5fa" end
+  if loc == "davanti agli occhi" then return "#c084fc" end
+  return "#86efac"
+end
+
+function NebbieDash.buildEquipHtml(name, data)
+  local parts = {
+    "<table width='100%' cellspacing='0' cellpadding='2'>",
+    "<tr><td align='center' colspan='2'><span style='color:#22d3ee;font-size:11pt;font-weight:bold;'>",
+    "Equip — ", NebbieDash.htmlEscape(name), "</span></td></tr>",
+  }
+  if not (data and data.eqUpdated) then
+    table.insert(parts, "<tr><td colspan='2'><span style='color:#9ca3af;'>Mai sincronizzato — neq / nresync</span></td></tr>")
+  else
+    for idx, row in ipairs(NebbieDash.buildEquipRows(data)) do
+      if row.empty then
+        table.insert(parts, string.format(
+          "<tr><td width='28' align='right'><span style='color:#6b7280;'>[%2d]</span></td>" ..
+          "<td><span style='color:#eab308;'>%s</span> <span style='color:#ef4444;font-weight:bold;'>▢ VUOTO ▢</span></td></tr>",
+          idx, NebbieDash.htmlEscape(row.location)))
+      else
+        local item = NebbieDash.htmlEscape(NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen))
+        local col = NebbieDash.equipLocationColor(row.location)
+        table.insert(parts, string.format(
+          "<tr><td width='28' align='right'><span style='color:#6b7280;'>[%2d]</span></td>" ..
+          "<td><span style='color:%s;font-weight:bold;'>%s</span><br><span style='color:#e5e7eb;'>%s</span></td></tr>",
+          idx, col, NebbieDash.htmlEscape(row.location), item))
+      end
+    end
+  end
+  table.insert(parts, "</table>")
+  return table.concat(parts)
+end
+
+function NebbieDash.clearPanel(win)
+  if win == "NebbieDashEquip" and NebbieDash._equipGeyser then
+    NebbieDash._equipGeyser:clear()
+  elseif win == "NebbieDashSpeedwalks" and NebbieDash._swGeyser then
+    NebbieDash._swGeyser:clear()
+  else
+    clearWindow(win)
+  end
+end
+
+function NebbieDash.maybeSanityResyncEq(charName)
+  if not charName or charName == "" then return end
+  if not (NebbieDash.prefs and NebbieDash.prefs.sanity_neq_on_login) then return end
+  NebbieDash._sanityNeqForChar = NebbieDash._sanityNeqForChar or {}
+  if NebbieDash._sanityNeqForChar[charName] then return end
+  local data = NebbieDash.getCharData(charName)
+  if not data.eqUpdated then return end
+  if NebbieDash.countSlots(data.eq) > 0 then return end
+  NebbieDash._sanityNeqForChar[charName] = true
+  cecho("<yellow>[NebbieDash] Equip in cache vuoto per <white>" .. charName ..
+    "<yellow> — invio automatico <white>eq<yellow> (sanity_neq_on_login).\n")
+  send("eq")
+  NebbieDash.startEqCapture()
+end
+
+function NebbieDash.teardownGui()
+  for _, w in ipairs(NebbieDash.ALL_GUI_ELEMENTS or {}) do
+    if type(deleteWindow) == "function" then pcall(deleteWindow, w) end
+  end
+  if NebbieDash._sidebarContainer then
+    if type(NebbieDash._sidebarContainer.delete) == "function" then
+      pcall(function() NebbieDash._sidebarContainer:delete() end)
+    elseif type(NebbieDash._sidebarContainer.hide) == "function" then
+      pcall(function() NebbieDash._sidebarContainer:hide() end)
+    end
+  end
+  NebbieDash._sidebarContainer = nil
+  NebbieDash._equipGeyser = nil
+  NebbieDash._swGeyser = nil
+  NebbieDash._dividerLabel = nil
+  NebbieDash._guiCreated = false
+  NebbieDash._floatSidebarCreated = false
+  pcall(setBorderLeft, 0)
+  pcall(setBorderRight, 0)
+end
+
+function NebbieDash.initDockSidebar()
   setBorderLeft(NebbieDash.guiWidthEquip)
   setBorderRight(0)
   createMiniConsole("NebbieDashEquip", 0, 0, NebbieDash.guiWidthEquip, 0)
@@ -1735,6 +1926,76 @@ function NebbieDash.initGUI()
     setMaxLines("NebbieDashSpeedwalks", 500)
   end
   createLabel("NebbieDashDivider", 0, 0, NebbieDash.guiWidthEquip, NebbieDash.dividerPx, 1)
+end
+
+function NebbieDash.initFloatSidebar()
+  setBorderLeft(0)
+  setBorderRight(0)
+  if NebbieDash._floatSidebarCreated and NebbieDash._sidebarContainer then return end
+  local sideW = NebbieDash.guiWidthEquip or 280
+  NebbieDash._sidebarContainer = Adjustable.Container:new({
+    name = "NebbieDashSidebarContainer",
+    x = 0, y = 0,
+    width = sideW, height = "100%",
+    titleText = "Nebbie — Equip + Speedwalk",
+    titleTxtColor = "white",
+    adjLabelstyle = [[
+      background-color: rgb(10, 10, 16);
+      border: 2px solid rgb(70, 70, 100);
+      border-radius: 8px;
+    ]],
+  })
+  local pad = 4
+  local titleH = 26
+  NebbieDash._equipGeyser = Geyser.MiniConsole:new({
+    name = "NebbieDashEquip",
+    x = pad, y = titleH, width = sideW - pad * 2, height = 200,
+  }, NebbieDash._sidebarContainer)
+  NebbieDash._equipGeyser:setColor(15, 15, 15, 255)
+  if type(enableScrollBar) == "function" then
+    enableScrollBar("NebbieDashEquip", true)
+  end
+  NebbieDash._dividerLabel = Geyser.Label:new({
+    name = "NebbieDashDivider",
+    x = pad, y = titleH + 200, width = sideW - pad * 2, height = NebbieDash.dividerPx,
+  }, NebbieDash._sidebarContainer)
+  NebbieDash._dividerLabel:setStyleSheet("background-color: rgb(90, 90, 100);")
+  NebbieDash._swGeyser = Geyser.MiniConsole:new({
+    name = "NebbieDashSpeedwalks",
+    x = pad, y = titleH + 200 + NebbieDash.dividerPx, width = sideW - pad * 2, height = 200,
+  }, NebbieDash._sidebarContainer)
+  NebbieDash._swGeyser:setColor(15, 15, 15, 255)
+  if type(enableScrollBar) == "function" then
+    enableScrollBar("NebbieDashSpeedwalks", true)
+  end
+  NebbieDash._floatSidebarCreated = true
+end
+
+function NebbieDash.destroyLegacyGuiWindows()
+  local legacy = {
+    "NebbieDashSpells", "NebbieDashWeapons", "NebbieDashDividerLeft",
+    "NebbieDashAttrib",
+  }
+  for _, win in ipairs(legacy) do
+    if type(deleteWindow) == "function" then
+      pcall(deleteWindow, win)
+    elseif type(hideWindow) == "function" then
+      pcall(hideWindow, win)
+    end
+  end
+  if type(setBorderRight) == "function" then
+    pcall(setBorderRight, 0)
+  end
+end
+
+function NebbieDash.initGUI()
+  if NebbieDash._guiCreated then return end
+  NebbieDash.sidebarMode = NebbieDash.effectiveSidebarMode()
+  if NebbieDash.sidebarMode == "float" then
+    NebbieDash.initFloatSidebar()
+  else
+    NebbieDash.initDockSidebar()
+  end
   for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
     setMiniConsoleFontSize(win, NebbieDash.fontSize)
     -- Una miniconsole appena creata ha uno sfondo di default (grigio, widget
@@ -1747,11 +2008,7 @@ function NebbieDash.initGUI()
   setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
-  if type(hideWindow) == "function" then
-    pcall(hideWindow, "NebbieDashWeapons")
-    pcall(hideWindow, "NebbieDashDividerLeft")
-    pcall(hideWindow, "NebbieDashSpells")
-  end
+  NebbieDash.destroyLegacyGuiWindows()
   NebbieDash.refreshDashboard()
   -- getMainWindowSize() puo' non essere ancora affidabile nello stesso istante
   -- in cui la GUI viene creata (geometria Qt non ancora assestata all'avvio
@@ -1822,8 +2079,12 @@ function NebbieDash.applyAutoWidth()
     w = math.max(NebbieDash.autoWidthMin, math.min(w, maxSidebar))
     if w ~= NebbieDash.guiWidthEquip then
       NebbieDash.guiWidthEquip = w
-      setBorderLeft(w)
     end
+  end
+  if NebbieDash.effectiveSidebarMode() == "float" then
+    setBorderLeft(0)
+  elseif NebbieDash.guiWidthEquip then
+    setBorderLeft(NebbieDash.guiWidthEquip)
   end
   setBorderRight(0)
 end
@@ -1839,12 +2100,35 @@ function NebbieDash.positionGUI()
   local equipRatio = NebbieDash.computeSidebarEquipRatio(data)
   local equipH = math.floor(usableH * equipRatio)
   local speedwalkH = usableH - equipH
-  moveWindow("NebbieDashEquip", 0, 0)
-  resizeWindow("NebbieDashEquip", sideW, equipH)
-  moveWindow("NebbieDashDivider", 0, equipH)
-  resizeWindow("NebbieDashDivider", sideW, NebbieDash.dividerPx)
-  moveWindow("NebbieDashSpeedwalks", 0, equipH + NebbieDash.dividerPx)
-  resizeWindow("NebbieDashSpeedwalks", sideW, speedwalkH)
+  if NebbieDash.effectiveSidebarMode() == "float" and NebbieDash._sidebarContainer then
+    local pad = 4
+    local titleH = 26
+    local innerH = math.max(120, h - titleH - pad)
+    equipH = math.floor(innerH * equipRatio)
+    speedwalkH = innerH - equipH - NebbieDash.dividerPx
+    if NebbieDash._sidebarContainer.resize then
+      NebbieDash._sidebarContainer:resize(sideW, h)
+    end
+    if NebbieDash._equipGeyser then
+      NebbieDash._equipGeyser:move(pad, titleH)
+      NebbieDash._equipGeyser:resize(sideW - pad * 2, math.max(40, equipH))
+    end
+    if NebbieDash._dividerLabel then
+      NebbieDash._dividerLabel:move(pad, titleH + equipH)
+      NebbieDash._dividerLabel:resize(sideW - pad * 2, NebbieDash.dividerPx)
+    end
+    if NebbieDash._swGeyser then
+      NebbieDash._swGeyser:move(pad, titleH + equipH + NebbieDash.dividerPx)
+      NebbieDash._swGeyser:resize(sideW - pad * 2, math.max(40, speedwalkH))
+    end
+  else
+    moveWindow("NebbieDashEquip", 0, 0)
+    resizeWindow("NebbieDashEquip", sideW, equipH)
+    moveWindow("NebbieDashDivider", 0, equipH)
+    resizeWindow("NebbieDashDivider", sideW, NebbieDash.dividerPx)
+    moveWindow("NebbieDashSpeedwalks", 0, equipH + NebbieDash.dividerPx)
+    resizeWindow("NebbieDashSpeedwalks", sideW, speedwalkH)
+  end
   NebbieDash.positionHelpButton()
 end
 
@@ -1878,7 +2162,14 @@ function NebbieDash.positionHelpButton()
   -- Centrato in orizzontale sull'area di testo centrale (tra bordo sinistro
   -- equip e bordo destro spell/speedwalk), cosi' non si sovrappone mai ai
   -- nostri pannelli anche quando sono ridimensionati.
-  local leftW = NebbieDash._guiCreated and NebbieDash.guiWidthEquip or 0
+  local leftW = 0
+  if NebbieDash._guiCreated and NebbieDash._guiHidden ~= true then
+    if NebbieDash.effectiveSidebarMode() == "float" and NebbieDash._sidebarContainer then
+      leftW = NebbieDash.guiWidthEquip or 0
+    elseif NebbieDash.effectiveSidebarMode() == "dock" then
+      leftW = NebbieDash.guiWidthEquip or 0
+    end
+  end
   local centerAreaW = math.max(0, w - leftW)
   local x = leftW + math.max(0, math.floor((centerAreaW - NebbieDash.helpButtonW) / 2))
   moveWindow("NebbieDashHelpBtn", x, 2)
@@ -1907,14 +2198,16 @@ NebbieDash.HELP_TEXT = {
   { "neq", "Mostra l'equip corrente (dati salvati)." },
   { "nattrib", "Mostra le spell attive correnti (dati salvati)." },
   { "nresync", "Invia eq + attrib al gioco per risincronizzare i pannelli." },
-  { "nfix", "Ricrea la GUI da zero in caso di problemi visivi." },
+  { "nfix", "Riavvia il package e rimuove pannelli legacy (Spell/Armi) se restano visibili." },
   { "ntriggers", "Reinstalla i trigger NebbieDash (fame/sete, prompt, loot, …) senza riavviare Mudlet." },
   { "ngui", "Mostra/nascondi tutti i pannelli." },
   { "nlayout", "Ripristina larghezze/font/proporzioni di default." },
   { "nchar <nome>", "Forza manualmente il personaggio attivo." },
   { "nclass <cast|recall|mind>", "Imposta il comando di lancio per il personaggio attivo." },
   { "nfont <6-24>", "Imposta la dimensione del font dei pannelli." },
-  { "nwidth [auto|<px>]", "Larghezza bordo sinistro (Equip+Speedwalk); default auto." },
+  { "nwidth [auto|<px>]", "Larghezza colonna Equip+Speedwalk (dock o float); default auto." },
+  { "nsidebar float|dock", "Pannello trascinabile (float) o bordo sinistro classico (dock); poi nfix." },
+  { "npreferencesreload", "Ricarica nebbie-dash-preferences.txt (delay usa, sanity eq, sidebar)." },
   { "nheights <10-90>|auto", "Altezza Equip vs Speedwalk: auto = proporzione al testo; o % Equip manuale." },
   { "usa <parola-chiave>", "Cambio arma da zaino (rem/get/wield — come nebbie-play-all)." },
   { "nconfigdir", "Mostra cartella profiles/ndashboard e file indice nebbie-dash-config-root.txt." },
@@ -1989,12 +2282,22 @@ function NebbieDash.toggleGUI()
   else
     NebbieDash._guiHidden = not NebbieDash._guiHidden
     if NebbieDash._guiHidden then
-      for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do hideWindow(win) end
+      if NebbieDash._sidebarContainer and NebbieDash._sidebarContainer.hide then
+        NebbieDash._sidebarContainer:hide()
+      else
+        for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do hideWindow(win) end
+      end
       setBorderLeft(0)
       setBorderRight(0)
     else
-      for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do showWindow(win) end
-      setBorderLeft(NebbieDash.guiWidthEquip)
+      if NebbieDash._sidebarContainer and NebbieDash._sidebarContainer.show then
+        NebbieDash._sidebarContainer:show()
+      else
+        for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do showWindow(win) end
+        if NebbieDash.effectiveSidebarMode() == "dock" then
+          setBorderLeft(NebbieDash.guiWidthEquip)
+        end
+      end
       setBorderRight(0)
       NebbieDash.positionGUI()
     end
@@ -2014,13 +2317,17 @@ function NebbieDash.resetLayout()
     for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
       setMiniConsoleFontSize(win, NebbieDash.fontSize)
     end
-    setBorderLeft(NebbieDash.guiWidthEquip)
+    if NebbieDash.effectiveSidebarMode() == "dock" then
+      setBorderLeft(NebbieDash.guiWidthEquip)
+    else
+      setBorderLeft(0)
+    end
     setBorderRight(0)
     NebbieDash.applyAutoWidth()
     NebbieDash.positionGUI()
     NebbieDash.refreshDashboard()
   end
-  cecho("<green>[NebbieDash] Layout ripristinato: bordo sinistro auto, Equip/Speedwalk proporzionali al testo, font 11.\n")
+  cecho("<green>[NebbieDash] Layout ripristinato: larghezza auto, Equip/Speedwalk proporzionali al testo, font 11.\n")
 end
 
 function NebbieDash.cmdSetFont(sizeStr)
@@ -2103,6 +2410,37 @@ function NebbieDash.cmdConfigDir(_arg)
   cecho("<grey>File indice in profiles (percorso scritto qui):\n<white>" ..
     NebbieDash.configRootPointerPath() .. "\n")
   cecho("<grey>Profilo Mudlet attivo: <white>" .. NebbieDash.mudletProfileHome() .. "\n")
+end
+
+function NebbieDash.cmdReloadPreferences()
+  NebbieDash.loadPreferences()
+  NebbieDash.weaponSwapDelay = NebbieDash.prefs.weapon_swap_delay or NebbieDash.weaponSwapDelay
+  cecho("<green>[NebbieDash] Preferenze ricaricate da <white>" .. NebbieDash.preferencesPath() ..
+    "<green> (sidebar=" .. tostring(NebbieDash.effectiveSidebarMode()) ..
+    ", weapon_swap_delay=" .. tostring(NebbieDash.weaponSwapDelay) .. ").\n")
+end
+
+function NebbieDash.cmdSetSidebar(modeStr)
+  modeStr = (modeStr or ""):lower():match("^%s*(.-)%s*$")
+  if modeStr ~= "float" and modeStr ~= "dock" then
+    cecho("<orange>[NebbieDash] Uso: nsidebar <yellow>float<orange>|<yellow>dock<orange> (attuale: " ..
+      tostring(NebbieDash.effectiveSidebarMode()) .. ")\n")
+    cecho("<grey>  float = Adjustable.Container trascinabile; dock = bordo sinistro Mudlet.\n")
+    return
+  end
+  if modeStr == "float" and not NebbieDash.canUseFloatingSidebar() then
+    cecho("<orange>[NebbieDash] Geyser/Adjustable non disponibili in questo profilo — uso dock.\n")
+    modeStr = "dock"
+  end
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  NebbieDash.prefs.sidebar_mode = modeStr
+  NebbieDash.sidebarMode = modeStr
+  NebbieDash.savePreferencesFile()
+  NebbieDash.teardownGui()
+  NebbieDash.initGUI()
+  NebbieDash.refreshDashboard()
+  cecho("<green>[NebbieDash] Sidebar impostata su <yellow>" .. modeStr ..
+    "<green>. Modifica anche <white>nebbie-dash-preferences.txt<green>.\n")
 end
 
 function NebbieDash.cmdSetItemLen(lenStr)
@@ -2229,24 +2567,31 @@ function NebbieDash.refreshDashboard()
   NebbieDash.positionGUI()
   NebbieDash.refreshSpeedwalkPanel()
   local name = NebbieDash.currentChar
-  clearWindow("NebbieDashEquip")
+  NebbieDash.clearPanel("NebbieDashEquip")
   if not name then
-    cecho("NebbieDashEquip", "<grey>Nessun personaggio rilevato.\n")
+    if NebbieDash._equipGeyser then
+      NebbieDash._equipGeyser:echo("<span style='color:#9ca3af;'>Nessun personaggio rilevato.</span>")
+    else
+      cecho("NebbieDashEquip", "<grey>Nessun personaggio rilevato.\n")
+    end
     return
   end
   local data = NebbieDash.getCharData(name)
-
-  cecho("NebbieDashEquip", "<cyan><b>Equip — " .. name .. "</b>\n")
-  if not (data.eqUpdated) then
-    cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
+  if NebbieDash._equipGeyser then
+    NebbieDash._equipGeyser:echo(NebbieDash.buildEquipHtml(name, data))
   else
-    for idx, row in ipairs(NebbieDash.buildEquipRows(data)) do
-      if row.empty then
-        cecho("NebbieDashEquip", string.format(
-          "<grey>[%2d] <yellow>%s\n     <red><b>▢ VUOTO ▢</b>\n", idx, row.location))
-      else
-        local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
-        cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", idx, row.location, item))
+    cecho("NebbieDashEquip", "<cyan><b>Equip — " .. name .. "</b>\n")
+    if not (data.eqUpdated) then
+      cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
+    else
+      for idx, row in ipairs(NebbieDash.buildEquipRows(data)) do
+        if row.empty then
+          cecho("NebbieDashEquip", string.format(
+            "<grey>[%2d] <yellow>%s\n     <red><b>▢ VUOTO ▢</b>\n", idx, row.location))
+        else
+          local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
+          cecho("NebbieDashEquip", string.format("<grey>[%2d] <white>%s\n     <green>%s\n", idx, row.location, item))
+        end
       end
     end
   end
@@ -2254,7 +2599,7 @@ end
 
 function NebbieDash.refreshSpeedwalkPanel()
   if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
-  clearWindow("NebbieDashSpeedwalks")
+  NebbieDash.clearPanel("NebbieDashSpeedwalks")
   cecho("NebbieDashSpeedwalks", "<cyan><b>Speedwalk</b>\n")
   if #(NebbieDash.speedwalkItems or {}) == 0 and #NebbieDash.speedwalks == 0 then
     cecho("NebbieDashSpeedwalks",
@@ -2667,7 +3012,7 @@ function NebbieDash.onStopUsingLine()
         -- Durante la macro fame/sete il gioco manda "Smetti di usare …" per `rem`
         -- zaino: svuotare la cache qui fa perdere {zaino} al giro successivo se
         -- il testo sulle spalle dopo `wear` non matcha piu' l'override keyword.
-        if not NebbieDash._hungerMacroBusy then
+        if not NebbieDash._hungerMacroBusy and not NebbieDash._weaponSwapBusy then
           NebbieDash.patchCachedEqLocation(data, "sulla schiena", nil)
         end
         return
@@ -4773,6 +5118,7 @@ function NebbieDash.migrateSharedConfigFiles()
     "nebbie-batch-commands.txt",
     "nebbie-batch-items.csv",
     "nebbie-ident-batch-commands.txt",
+    "nebbie-dash-preferences.txt",
   }
   for _, f in ipairs(files) do
     NebbieDash.migrateConfigFileIfNeeded(f)
@@ -4790,6 +5136,7 @@ function NebbieDash.boot()
   NebbieDash.migrateSharedConfigFiles()
   NebbieDash.loadStore()
   NebbieDash.loadUiStore()
+  NebbieDash.loadPreferences()
   NebbieDash.loadSpeedwalks()
   NebbieDash.loadSpellCastConfig()
   NebbieDash.loadHungerMacros()
@@ -4797,6 +5144,7 @@ function NebbieDash.boot()
   NebbieDash.loadBatchCommands()
   NebbieDash.loadBatchItems()
   NebbieDash.installTriggers()
+  NebbieDash.destroyLegacyGuiWindows()
   NebbieDash.initGUI()
   NebbieDash.initHelpButton()
   NebbieDash._mainLoaded = true
@@ -4810,6 +5158,7 @@ end
 
 function NebbieDash.runFix()
   NebbieDash._lastBootTime = nil
+  NebbieDash.teardownGui()
   NebbieDash.boot()
   cecho("<green>[NebbieDash] nfix completato.\n")
 end
