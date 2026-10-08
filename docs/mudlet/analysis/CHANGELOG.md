@@ -1,5 +1,15 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.37 — 2026-10-08
+
+- **Equip (critico)**: la cattura `eq` non sovrascrive più l'equip con **0 slot** se il parser
+  chiude troppo presto (riga vuota / prompt prima del blocco, o timeout senza righe `[N]`).
+  Messaggio arancione + suggerimento `neq`.
+- **usa**: durante il cambio arma, `Smetti di usare …` sul zaino non svuota più lo slot
+  **sulla schiena** nella cache (come già per le macro fame).
+- **GUI**: `destroyLegacyGuiWindows()` rimuove/nasconde pannelli legacy (**Spell**, Armi, bordo
+  destro) a ogni boot e in `nfix`.
+
 ## 1.15.36 — 2026-10-05
 
 - **usa (critico)**: `usa flamberga` non usava più `boris`/`noor` sbagliati — rispetta

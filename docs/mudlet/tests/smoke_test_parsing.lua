@@ -132,6 +132,20 @@ check("eq: slot 21 ultimo (item)", data.eq[21].item == "Glass no Kamen")
 check("eq: slot 21 ultimo (location)", data.eq[21].location == "davanti agli occhi")
 check("eq: capture chiusa (nessuna capture attiva)", NebbieDash._eqCapture == nil)
 
+-- Test 3a: cattura fallita (0 slot) non cancella l'equip già in cache
+local eqBackup = {}
+for k, v in pairs(data.eq) do eqBackup[k] = v end
+NebbieDash.startEqCapture()
+line = ""
+NebbieDash.onEqCaptureLine()
+check("eq vuota: capture ancora attiva dopo riga vuota iniziale", NebbieDash._eqCapture ~= nil)
+line = "NomiyaMaki H: 100/100 M: 100/100 V: 100/100 x:0 *:* *:* [[D]] G:0 >>"
+NebbieDash.onEqCaptureLine()
+check("eq vuota: capture ancora attiva dopo prompt senza slot", NebbieDash._eqCapture ~= nil)
+NebbieDash.finishEqCapture()
+check("eq vuota: slot in cache invariati", NebbieDash.countSlots(data.eq) == 21)
+check("eq vuota: slot 16 ancora impugnato", data.eq[16] and data.eq[16].item == "La Flamberga di Boris")
+
 -- Test 3b: la posizione viene sempre letta dalla riga stessa, non da una
 -- tabella statica per indice — verifica esplicita che un ordine "anomalo"
 -- (slot non contiguo, posizione diversa da quella che una tabella statica

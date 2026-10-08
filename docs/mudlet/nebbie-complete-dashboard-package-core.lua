@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.36"
+local PKG_VER = "1.15.37"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -603,15 +603,20 @@ function NebbieDash.finishEqCapture()
     pcall(disableTrigger, NebbieDash._eqLineTrig)
   end
   if not cap then return end
+  local slotCount = NebbieDash.countSlots(cap.slots)
   local name = NebbieDash.currentChar
   if not name then return end
   local data = NebbieDash.getCharData(name)
+  if slotCount == 0 then
+    cecho("<orange>[NebbieDash] Cattura eq incompleta (0 slot) — equip non modificato. Riprova <yellow>neq<orange>.\n")
+    return
+  end
   data.eq = cap.slots
   data.eqUpdated = os.time()
   NebbieDash.refreshHungerBackKeywordFromEq(data, true)
   NebbieDash.saveStore()
   NebbieDash.refreshDashboard()
-  cecho("<green>[NebbieDash] Equip aggiornato (" .. tostring(NebbieDash.countSlots(cap.slots)) .. "/21 slot).\n")
+  cecho("<green>[NebbieDash] Equip aggiornato (" .. tostring(slotCount) .. "/21 slot).\n")
 end
 
 function NebbieDash.countSlots(slots)
@@ -634,7 +639,9 @@ function NebbieDash.onEqCaptureLine()
   text = text or ""
 
   if NebbieDash.parsePromptLine(text) or text:match("^>>%s*$") then
-    NebbieDash.finishEqCapture()
+    if NebbieDash.countSlots(cap.slots) > 0 then
+      NebbieDash.finishEqCapture()
+    end
     return
   end
 
@@ -654,7 +661,9 @@ function NebbieDash.onEqCaptureLine()
   end
 
   if text:match("^%s*$") then
-    NebbieDash.finishEqCapture()
+    if NebbieDash.countSlots(cap.slots) > 0 then
+      NebbieDash.finishEqCapture()
+    end
     return
   end
 
@@ -1720,6 +1729,23 @@ function NebbieDash.computeSidebarEquipRatio(data)
   return math.max(0.12, math.min(0.88, eqLines / total))
 end
 
+function NebbieDash.destroyLegacyGuiWindows()
+  local legacy = {
+    "NebbieDashSpells", "NebbieDashWeapons", "NebbieDashDividerLeft",
+    "NebbieDashAttrib",
+  }
+  for _, win in ipairs(legacy) do
+    if type(deleteWindow) == "function" then
+      pcall(deleteWindow, win)
+    elseif type(hideWindow) == "function" then
+      pcall(hideWindow, win)
+    end
+  end
+  if type(setBorderRight) == "function" then
+    pcall(setBorderRight, 0)
+  end
+end
+
 function NebbieDash.initGUI()
   if NebbieDash._guiCreated then return end
   setBorderLeft(NebbieDash.guiWidthEquip)
@@ -1747,11 +1773,7 @@ function NebbieDash.initGUI()
   setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
-  if type(hideWindow) == "function" then
-    pcall(hideWindow, "NebbieDashWeapons")
-    pcall(hideWindow, "NebbieDashDividerLeft")
-    pcall(hideWindow, "NebbieDashSpells")
-  end
+  NebbieDash.destroyLegacyGuiWindows()
   NebbieDash.refreshDashboard()
   -- getMainWindowSize() puo' non essere ancora affidabile nello stesso istante
   -- in cui la GUI viene creata (geometria Qt non ancora assestata all'avvio
@@ -2667,7 +2689,7 @@ function NebbieDash.onStopUsingLine()
         -- Durante la macro fame/sete il gioco manda "Smetti di usare …" per `rem`
         -- zaino: svuotare la cache qui fa perdere {zaino} al giro successivo se
         -- il testo sulle spalle dopo `wear` non matcha piu' l'override keyword.
-        if not NebbieDash._hungerMacroBusy then
+        if not NebbieDash._hungerMacroBusy and not NebbieDash._weaponSwapBusy then
           NebbieDash.patchCachedEqLocation(data, "sulla schiena", nil)
         end
         return
@@ -4797,6 +4819,7 @@ function NebbieDash.boot()
   NebbieDash.loadBatchCommands()
   NebbieDash.loadBatchItems()
   NebbieDash.installTriggers()
+  NebbieDash.destroyLegacyGuiWindows()
   NebbieDash.initGUI()
   NebbieDash.initHelpButton()
   NebbieDash._mainLoaded = true
