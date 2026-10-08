@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.41"
+local PKG_VER = "1.15.42"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 -- Non uscire in anticipo dal chunk core (alias/trigger del package possono essere
@@ -1659,46 +1659,87 @@ function NebbieDash.canUseFloatingSidebar()
 end
 
 function NebbieDash.effectiveSidebarMode()
-  local mode = NebbieDash.sidebarMode or (NebbieDash.prefs and NebbieDash.prefs.sidebar_mode) or "dock"
-  if mode == "float" and not NebbieDash.canUseFloatingSidebar() then
-    return "dock"
+  -- Dock (bordo sinistro Mudlet): unico layout supportato in produzione — il float
+  -- Geyser non riceveva cecho() globale e lasciava pannelli neri vuoti.
+  return "dock"
+end
+
+function NebbieDash.panelGeyser(win)
+  if win == "NebbieDashEquip" then return NebbieDash._equipGeyser end
+  if win == "NebbieDashSpeedwalks" then return NebbieDash._swGeyser end
+  return nil
+end
+
+function NebbieDash.panelCecho(win, text)
+  local g = NebbieDash.panelGeyser(win)
+  if g and type(g.cecho) == "function" then
+    g:cecho(text)
+  else
+    cecho(win, text)
   end
-  return mode
+end
+
+function NebbieDash.panelCechoLink(win, text, command, hint, paste)
+  local g = NebbieDash.panelGeyser(win)
+  if g and type(g.cechoLink) == "function" then
+    g:cechoLink(text, command, hint, paste)
+  else
+    cechoLink(win, text, command, hint, paste)
+  end
+end
+
+function NebbieDash.destroyFloatSidebarArtifacts()
+  if NebbieDash._sidebarContainer then
+    if type(NebbieDash._sidebarContainer.delete) == "function" then
+      pcall(function() NebbieDash._sidebarContainer:delete() end)
+    elseif type(NebbieDash._sidebarContainer.hide) == "function" then
+      pcall(function() NebbieDash._sidebarContainer:hide() end)
+    end
+  end
+  for _, name in ipairs({ "NebbieDashSidebarContainer", "NebbieDashEquip", "NebbieDashSpeedwalks" }) do
+    if type(deleteWindow) == "function" then pcall(deleteWindow, name) end
+  end
+  NebbieDash._sidebarContainer = nil
+  NebbieDash._equipGeyser = nil
+  NebbieDash._swGeyser = nil
+  NebbieDash._dividerLabel = nil
+  NebbieDash._floatSidebarCreated = false
 end
 
 function NebbieDash.equipLocationCechoTag(location)
   local loc = (location or ""):lower():match("^%s*(.-)%s*$")
   if loc == "impugnato" or loc == "tenuto" then return "yellow" end
   if loc == "sulla schiena" then return "cyan" end
-  if loc == "davanti agli occhi" then return "purple" end
+  if loc == "davanti agli occhi" then return "magenta" end
   return "green"
 end
 
 -- Miniconsole Mudlet/Geyser: solo tag cecho, non HTML (le <table> compaiono come testo grezzo).
 function NebbieDash.renderEquipPanel(name, data)
-  cecho("NebbieDashEquip", "<cyan><b>Equip — " .. name .. "</b>\n")
+  NebbieDash.panelCecho("NebbieDashEquip", "<cyan><b>Equip — " .. name .. "</b>\n")
   if not (data and data.eqUpdated) then
-    cecho("NebbieDashEquip", "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
+    NebbieDash.panelCecho("NebbieDashEquip",
+      "<grey>(mai sincronizzato — esegui <yellow>neq<grey> o <yellow>nresync<grey>)\n")
     return
   end
   for idx, row in ipairs(NebbieDash.buildEquipRows(data)) do
     if row.empty then
-      cecho("NebbieDashEquip", string.format(
+      NebbieDash.panelCecho("NebbieDashEquip", string.format(
         "<grey>[%2d] <yellow>%s\n     <red><b>▢ VUOTO ▢</b>\n", idx, row.location))
     else
       local item = NebbieDash.truncate(row.item or "?", NebbieDash.itemMaxLen)
       local tag = NebbieDash.equipLocationCechoTag(row.location)
-      cecho("NebbieDashEquip", string.format(
+      NebbieDash.panelCecho("NebbieDashEquip", string.format(
         "<grey>[%2d] <%s>%s\n     <white>%s\n", idx, tag, row.location, item))
     end
   end
 end
 
 function NebbieDash.clearPanel(win)
-  if win == "NebbieDashEquip" and NebbieDash._equipGeyser then
-    NebbieDash._equipGeyser:clear()
-  elseif win == "NebbieDashSpeedwalks" and NebbieDash._swGeyser then
-    NebbieDash._swGeyser:clear()
+  local g = NebbieDash.panelGeyser(win)
+  if g and type(g.clear) == "function" then
+    g:clear()
+    return
   end
   if type(clearWindow) == "function" then
     pcall(clearWindow, win)
@@ -1810,9 +1851,10 @@ function NebbieDash.initFloatSidebar()
 end
 
 function NebbieDash.destroyLegacyGuiWindows()
+  NebbieDash.destroyFloatSidebarArtifacts()
   local legacy = {
     "NebbieDashSpells", "NebbieDashWeapons", "NebbieDashDividerLeft",
-    "NebbieDashAttrib",
+    "NebbieDashAttrib", "NebbieDashSidebarContainer",
   }
   for _, win in ipairs(legacy) do
     if type(deleteWindow) == "function" then
@@ -1828,23 +1870,14 @@ end
 
 function NebbieDash.initGUI()
   if NebbieDash._guiCreated then return end
-  NebbieDash.sidebarMode = NebbieDash.effectiveSidebarMode()
-  if NebbieDash.sidebarMode == "float" then
-    NebbieDash.initFloatSidebar()
-  else
-    NebbieDash.initDockSidebar()
+  NebbieDash.destroyFloatSidebarArtifacts()
+  NebbieDash.sidebarMode = "dock"
+  NebbieDash.initDockSidebar()
+  for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
+    setMiniConsoleFontSize(win, NebbieDash.fontSize)
+    setBackgroundColor(win, 15, 15, 15, 255)
   end
-  if NebbieDash.sidebarMode == "dock" then
-    for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
-      setMiniConsoleFontSize(win, NebbieDash.fontSize)
-      setBackgroundColor(win, 15, 15, 15, 255)
-    end
-    setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
-  else
-    for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
-      pcall(setMiniConsoleFontSize, win, NebbieDash.fontSize)
-    end
-  end
+  setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
   NebbieDash._guiCreated = true
   NebbieDash.positionGUI()
   NebbieDash.destroyLegacyGuiWindows()
@@ -1935,35 +1968,12 @@ function NebbieDash.positionGUI()
   local equipRatio = NebbieDash.computeSidebarEquipRatio(data)
   local equipH = math.floor(usableH * equipRatio)
   local speedwalkH = usableH - equipH
-  if NebbieDash.effectiveSidebarMode() == "float" and NebbieDash._sidebarContainer then
-    local pad = 4
-    local titleH = 26
-    local innerH = math.max(120, h - titleH - pad)
-    equipH = math.floor(innerH * equipRatio)
-    speedwalkH = innerH - equipH - NebbieDash.dividerPx
-    if NebbieDash._sidebarContainer.resize then
-      NebbieDash._sidebarContainer:resize(sideW, h)
-    end
-    if NebbieDash._equipGeyser then
-      NebbieDash._equipGeyser:move(pad, titleH)
-      NebbieDash._equipGeyser:resize(sideW - pad * 2, math.max(40, equipH))
-    end
-    if NebbieDash._dividerLabel then
-      NebbieDash._dividerLabel:move(pad, titleH + equipH)
-      NebbieDash._dividerLabel:resize(sideW - pad * 2, NebbieDash.dividerPx)
-    end
-    if NebbieDash._swGeyser then
-      NebbieDash._swGeyser:move(pad, titleH + equipH + NebbieDash.dividerPx)
-      NebbieDash._swGeyser:resize(sideW - pad * 2, math.max(40, speedwalkH))
-    end
-  else
-    moveWindow("NebbieDashEquip", 0, 0)
-    resizeWindow("NebbieDashEquip", sideW, equipH)
-    moveWindow("NebbieDashDivider", 0, equipH)
-    resizeWindow("NebbieDashDivider", sideW, NebbieDash.dividerPx)
-    moveWindow("NebbieDashSpeedwalks", 0, equipH + NebbieDash.dividerPx)
-    resizeWindow("NebbieDashSpeedwalks", sideW, speedwalkH)
-  end
+  moveWindow("NebbieDashEquip", 0, 0)
+  resizeWindow("NebbieDashEquip", sideW, equipH)
+  moveWindow("NebbieDashDivider", 0, equipH)
+  resizeWindow("NebbieDashDivider", sideW, NebbieDash.dividerPx)
+  moveWindow("NebbieDashSpeedwalks", 0, equipH + NebbieDash.dividerPx)
+  resizeWindow("NebbieDashSpeedwalks", sideW, speedwalkH)
   NebbieDash.positionHelpButton()
 end
 
@@ -1998,12 +2008,8 @@ function NebbieDash.positionHelpButton()
   -- equip e bordo destro spell/speedwalk), cosi' non si sovrappone mai ai
   -- nostri pannelli anche quando sono ridimensionati.
   local leftW = 0
-  if NebbieDash._guiCreated and NebbieDash._guiHidden ~= true then
-    if NebbieDash.effectiveSidebarMode() == "float" and NebbieDash._sidebarContainer then
-      leftW = NebbieDash.guiWidthEquip or 0
-    elseif NebbieDash.effectiveSidebarMode() == "dock" then
-      leftW = NebbieDash.guiWidthEquip or 0
-    end
+    if NebbieDash._guiCreated and NebbieDash._guiHidden ~= true then
+    leftW = NebbieDash.guiWidthEquip or 0
   end
   local centerAreaW = math.max(0, w - leftW)
   local x = leftW + math.max(0, math.floor((centerAreaW - NebbieDash.helpButtonW) / 2))
@@ -2041,7 +2047,7 @@ NebbieDash.HELP_TEXT = {
   { "nclass <cast|recall|mind>", "Imposta il comando di lancio per il personaggio attivo." },
   { "nfont <6-24>", "Imposta la dimensione del font dei pannelli." },
   { "nwidth [auto|<px>]", "Larghezza colonna Equip+Speedwalk (dock o float); default auto." },
-  { "nsidebar float|dock", "Pannello trascinabile (float) o bordo sinistro classico (dock); poi nfix." },
+  { "nsidebar dock", "Layout bordo sinistro (unico supportato); rimuove eventuali pannelli float residui + nfix." },
   { "npreferencesreload", "Ricarica nebbie-dash-preferences.txt (delay usa, sanity eq, sidebar)." },
   { "nheights <10-90>|auto", "Altezza Equip vs Speedwalk: auto = proporzione al testo; o % Equip manuale." },
   { "usa <parola-chiave>", "Cambio arma da zaino (rem/get/wield — come nebbie-play-all)." },
@@ -2116,19 +2122,11 @@ function NebbieDash.toggleGUI()
   else
     NebbieDash._guiHidden = not NebbieDash._guiHidden
     if NebbieDash._guiHidden then
-      if NebbieDash._sidebarContainer and NebbieDash._sidebarContainer.hide then
-        NebbieDash._sidebarContainer:hide()
-      else
-        for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do hideWindow(win) end
-      end
+      for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do hideWindow(win) end
       setBorderLeft(0)
       setBorderRight(0)
     else
-      if NebbieDash._sidebarContainer and NebbieDash._sidebarContainer.show then
-        NebbieDash._sidebarContainer:show()
-      else
-        for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do showWindow(win) end
-      end
+      for _, win in ipairs(NebbieDash.ALL_GUI_ELEMENTS) do showWindow(win) end
       NebbieDash.applySidebarBorder()
       setBorderRight(0)
       NebbieDash.positionGUI()
@@ -2250,15 +2248,13 @@ end
 
 function NebbieDash.cmdSetSidebar(modeStr)
   modeStr = (modeStr or ""):lower():match("^%s*(.-)%s*$")
-  if modeStr ~= "float" and modeStr ~= "dock" then
-    cecho("<orange>[NebbieDash] Uso: nsidebar <yellow>float<orange>|<yellow>dock<orange> (attuale: " ..
-      tostring(NebbieDash.effectiveSidebarMode()) .. ")\n")
-    cecho("<grey>  float = Adjustable.Container trascinabile; dock = bordo sinistro Mudlet.\n")
-    return
-  end
-  if modeStr == "float" and not NebbieDash.canUseFloatingSidebar() then
-    cecho("<orange>[NebbieDash] Geyser/Adjustable non disponibili in questo profilo — uso dock.\n")
+  if modeStr == "float" then
+    cecho("<grey>[NebbieDash] Modalita' float disabilitata (pannelli neri in Mudlet) — uso <yellow>dock<grey>.\n")
     modeStr = "dock"
+  end
+  if modeStr ~= "dock" then
+    cecho("<orange>[NebbieDash] Uso: nsidebar <yellow>dock<orange> (attuale: dock)\n")
+    return
   end
   NebbieDash.prefs = NebbieDash.prefs or {}
   NebbieDash.prefs.sidebar_mode = modeStr
@@ -2400,7 +2396,7 @@ function NebbieDash.refreshDashboard()
   local name = NebbieDash.currentChar
   NebbieDash.clearPanel("NebbieDashEquip")
   if not name then
-    cecho("NebbieDashEquip", "<grey>Nessun personaggio rilevato.\n")
+    NebbieDash.panelCecho("NebbieDashEquip", "<grey>Nessun personaggio rilevato.\n")
     return
   end
   NebbieDash.renderEquipPanel(name, NebbieDash.getCharData(name))
@@ -2409,9 +2405,9 @@ end
 function NebbieDash.refreshSpeedwalkPanel()
   if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
   NebbieDash.clearPanel("NebbieDashSpeedwalks")
-  cecho("NebbieDashSpeedwalks", "<cyan><b>Speedwalk</b>\n")
+  NebbieDash.panelCecho("NebbieDashSpeedwalks", "<cyan><b>Speedwalk</b>\n")
   if #(NebbieDash.speedwalkItems or {}) == 0 and #NebbieDash.speedwalks == 0 then
-    cecho("NebbieDashSpeedwalks",
+    NebbieDash.panelCecho("NebbieDashSpeedwalks",
       "<grey>(nessuno — scrivili in " .. NebbieDash.speedwalkPath() .. " poi digita <yellow>nspeedwalks<grey>)\n")
     NebbieDash.positionGUI()
     return
@@ -2420,11 +2416,11 @@ function NebbieDash.refreshSpeedwalkPanel()
     if item.kind == "section" then
       local collapsed = NebbieDash.isSpeedwalkSectionCollapsed(item.key)
       local icon = collapsed and "▶" or "▼"
-      cechoLink("NebbieDashSpeedwalks", "<yellow><b>" .. icon .. " " .. item.title .. "</b>",
+      NebbieDash.panelCechoLink("NebbieDashSpeedwalks", "<yellow><b>" .. icon .. " " .. item.title .. "</b>",
         string.format("NebbieDash.toggleSpeedwalkSection(%d)", i),
         (collapsed and "Espandi sezione" or "Collassa sezione") ..
           " — nel file: (>> " .. item.title .. ")", true)
-      cecho("NebbieDashSpeedwalks", "\n")
+      NebbieDash.panelCecho("NebbieDashSpeedwalks", "\n")
     elseif item.kind == "walk" then
       if item.sectionKey and NebbieDash.isSpeedwalkSectionCollapsed(item.sectionKey) then
         -- nascosto finche' la sezione e' collassata
@@ -2436,29 +2432,29 @@ function NebbieDash.refreshSpeedwalkPanel()
         local dirLines = NebbieDash.wrapPanelText(preview, lineCols)
         for idx, dline in ipairs(NebbieDash.wrapPanelText(item.desc, descCols)) do
           if idx == 1 then
-            cechoLink("NebbieDashSpeedwalks", "<cyan>" .. dline,
+            NebbieDash.panelCechoLink("NebbieDashSpeedwalks", "<cyan>" .. dline,
               string.format("NebbieDash.runSpeedwalk(%d)", item.walkIndex),
               "Clicca per andare: " .. item.desc .. " (" .. preview .. ")", true)
-            cecho("NebbieDashSpeedwalks", "\n")
+            NebbieDash.panelCecho("NebbieDashSpeedwalks", "\n")
           else
-            cecho("NebbieDashSpeedwalks", "<cyan>  " .. dline .. "\n")
+            NebbieDash.panelCecho("NebbieDashSpeedwalks", "<cyan>  " .. dline .. "\n")
           end
         end
         for _, dline in ipairs(dirLines) do
-          cecho("NebbieDashSpeedwalks", "<grey>  " .. dline .. "\n")
+          NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>  " .. dline .. "\n")
         end
         if item.note and item.note ~= "" then
           local noteLines = NebbieDash.wrapPanelText(item.note, noteCols)
           if #noteLines == 1 then
-            cecho("NebbieDashSpeedwalks", "<grey>  (" .. noteLines[1] .. ")\n")
+            NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>  (" .. noteLines[1] .. ")\n")
           else
             for ni, nline in ipairs(noteLines) do
               if ni == 1 then
-                cecho("NebbieDashSpeedwalks", "<grey>  (" .. nline .. "\n")
+                NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>  (" .. nline .. "\n")
               elseif ni == #noteLines then
-                cecho("NebbieDashSpeedwalks", "<grey>    " .. nline .. ")\n")
+                NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>    " .. nline .. ")\n")
               else
-                cecho("NebbieDashSpeedwalks", "<grey>    " .. nline .. "\n")
+                NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>    " .. nline .. "\n")
               end
             end
           end
@@ -4945,6 +4941,8 @@ function NebbieDash.boot()
   NebbieDash.loadStore()
   NebbieDash.loadUiStore()
   NebbieDash.loadPreferences()
+  NebbieDash.prefs.sidebar_mode = "dock"
+  NebbieDash.sidebarMode = "dock"
   NebbieDash.loadSpeedwalks()
   NebbieDash.loadSpellCastConfig()
   NebbieDash.loadHungerMacros()
@@ -4952,6 +4950,9 @@ function NebbieDash.boot()
   NebbieDash.loadBatchCommands()
   NebbieDash.loadBatchItems()
   NebbieDash.installTriggers()
+  if NebbieDash._upgradeFromVer then
+    NebbieDash.teardownGui()
+  end
   NebbieDash.destroyLegacyGuiWindows()
   NebbieDash.initGUI()
   NebbieDash.initHelpButton()
@@ -4959,8 +4960,7 @@ function NebbieDash.boot()
   if NebbieDash._upgradeFromVer then
     cecho("<yellow>[NebbieDash] Aggiornamento v" .. NebbieDash._upgradeFromVer ..
       " → v" .. NebbieDash.version .. ".\n")
-    cecho("<grey>[NebbieDash] Aggiornamenti: <yellow>Alt+O<grey> Gestione pacchetti (Aggiorna / Installa da URL). " ..
-      "GUI: <yellow>nsidebar float<grey>|<yellow>dock<grey>; <yellow>nfix<grey> se serve.\n")
+    cecho("<grey>[NebbieDash] Aggiornamenti: <yellow>Alt+O<grey> Gestione pacchetti. Se la barra e' nera: <yellow>nfix<grey>.\n")
     NebbieDash._upgradeFromVer = nil
   end
   cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto (" ..
