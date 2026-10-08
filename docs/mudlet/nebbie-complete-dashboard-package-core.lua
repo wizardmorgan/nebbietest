@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.38"
+local PKG_VER = "1.15.39"
 local PKG_MPACKAGE_URL =
   "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
 local PKG_CORE_RAW_URL =
@@ -468,6 +468,9 @@ function NebbieDash.loadUiStore()
     NebbieDash.guiRatios.equip = math.max(0.1, math.min(0.9, gr.equip))
     NebbieDash.guiRatios.manualEquip = gr.manualEquip == true
   end
+  if NebbieDash.uiState.showClanSlot == true then
+    NebbieDash.showClanSlot = true
+  end
 end
 
 function NebbieDash.persistGuiRatios()
@@ -691,18 +694,70 @@ function NebbieDash.finishEqCapture()
     cecho("<orange>[NebbieDash] Cattura eq incompleta (0 slot) — equip non modificato. Riprova <yellow>neq<orange>.\n")
     return
   end
+  NebbieDash.syncClanSlotFromCapturedEq(cap.slots)
   data.eq = cap.slots
   data.eqUpdated = os.time()
   NebbieDash.refreshHungerBackKeywordFromEq(data, true)
   NebbieDash.saveStore()
   NebbieDash.refreshDashboard()
-  cecho("<green>[NebbieDash] Equip aggiornato (" .. tostring(slotCount) .. "/21 slot).\n")
+  cecho("<green>[NebbieDash] " .. NebbieDash.formatEquipCaptureSummary(data, slotCount) .. "\n")
 end
 
 function NebbieDash.countSlots(slots)
   local n = 0
   for _ in pairs(slots or {}) do n = n + 1 end
   return n
+end
+
+function NebbieDash.canonicalEquipPositionCount()
+  local n = #NebbieDash.EQ_SLOT_ORDER
+  if NebbieDash.showClanSlot then n = n + 1 end
+  return n
+end
+
+function NebbieDash.countOccupiedEquipRows(data)
+  local occupied, empty = 0, 0
+  for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+    if row.empty then empty = empty + 1 else occupied = occupied + 1 end
+  end
+  return occupied, empty
+end
+
+function NebbieDash.syncClanSlotFromCapturedEq(slots)
+  for _, entry in pairs(slots or {}) do
+    local loc = (entry and entry.location or ""):lower():match("^%s*(.-)%s*$")
+    if loc == NebbieDash.EQ_SLOT_CLAN:lower() then
+      if not NebbieDash.showClanSlot then
+        NebbieDash.showClanSlot = true
+        NebbieDash.uiState = NebbieDash.uiState or {}
+        NebbieDash.uiState.showClanSlot = true
+        NebbieDash.saveUiStore()
+        cecho("<grey>[NebbieDash] Rilevato <white>simbolo del clan<grey> in eq — slot clan attivato (nclanslot off per nasconderlo).\n")
+      end
+      return
+    end
+  end
+end
+
+function NebbieDash.formatEquipCaptureSummary(data, linesFromGame)
+  local occupied, empty = NebbieDash.countOccupiedEquipRows(data)
+  local positions = NebbieDash.canonicalEquipPositionCount()
+  local msg = string.format(
+    "Equip aggiornato: %d occupati, %d vuoti su %d posizioni",
+    occupied, empty, positions)
+  if linesFromGame and linesFromGame ~= occupied then
+    msg = msg .. string.format(" (%d righe numerate in eq)", linesFromGame)
+  end
+  if empty > 0 then
+    local names = {}
+    for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+      if row.empty then table.insert(names, row.location) end
+    end
+    if #names <= 3 then
+      msg = msg .. " — vuoto: " .. table.concat(names, ", ")
+    end
+  end
+  return msg
 end
 
 -- Trigger "sempre presente" ma disabilitato salvo durante la cattura: costo
@@ -2557,6 +2612,9 @@ function NebbieDash.cmdSetClanSlot(argStr)
     cecho("<orange>[NebbieDash] Uso: nclanslot <on|off> (attuale: " .. (NebbieDash.showClanSlot and "on" or "off") .. ")\n")
     return
   end
+  NebbieDash.uiState = NebbieDash.uiState or {}
+  NebbieDash.uiState.showClanSlot = NebbieDash.showClanSlot
+  NebbieDash.saveUiStore()
   NebbieDash.refreshDashboard()
   cecho("<green>[NebbieDash] Slot 'simbolo del clan': " .. (NebbieDash.showClanSlot and "attivato" or "disattivato") .. ".\n")
 end
@@ -5151,9 +5209,12 @@ function NebbieDash.boot()
   if NebbieDash._upgradeFromVer then
     cecho("<yellow>[NebbieDash] Aggiornamento v" .. NebbieDash._upgradeFromVer ..
       " → v" .. NebbieDash.version .. ".\n")
+    cecho("<grey>[NebbieDash] GUI: <yellow>nsidebar float<grey> (pannello trascinabile) o <yellow>dock<grey>; " ..
+      "<yellow>npreferencesreload<grey> dopo edit in ndashboard. Se non cambia nulla: <yellow>nfix<grey>.\n")
     NebbieDash._upgradeFromVer = nil
   end
-  cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto. Usa <yellow>nresync<green> dopo il login.\n")
+  cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto (" ..
+    tostring(NebbieDash.effectiveSidebarMode()) .. " sidebar). Usa <yellow>nresync<green> dopo il login.\n")
 end
 
 function NebbieDash.runFix()

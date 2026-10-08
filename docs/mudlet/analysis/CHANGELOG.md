@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.39 — 2026-10-08
+
+- **Messaggio eq**: conteggio **occupati / vuoti / posizioni** (non più `21/21` fisso); fino a
+  3 nomi degli slot vuoti (es. `come scudo` con clan attivo). Nota righe numerate in `eq`.
+- **Clan**: `nclanslot` persistito in `nebbie-dash-ui.lua`; auto-on se `eq` include
+  `simbolo del clan`.
+- **Boot**: indica modalità sidebar; hint GUI dopo aggiornamento (`nsidebar float`, `nfix`).
+
 ## 1.15.38 — 2026-10-08
 
 - **GUI (XpTracker-style)**: modalità **`nsidebar float`** con `Adjustable.Container`
