@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.45 — 2026-10-08
+
+- **Fix critico**: ripristinato alias Mudlet **`usa`** nel package pubblicato dal branch
+  `nebbie-mudlet-dashboard` (mancava nel build root → comando al MUD, `Pardon?`).
+- **Layout**: barra Equip/Speedwalk senza click-through (trascinamento verticale).
+
 ## 1.15.44 — 2026-10-08
 
 - **Equip / `usa`**: `patchCachedEqLocation` rimuove tutte le voci duplicate della stessa

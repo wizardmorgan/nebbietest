@@ -175,6 +175,7 @@ ALIASES = [
     ("nebbie-dash-configdir", "^nconfigdir$", "NebbieDash.cmdConfigDir(\"\")"),
     ("nebbie-dash-sidebar", "^nsidebar (.+)$", "NebbieDash.cmdSetSidebar(matches[2])"),
     ("nebbie-dash-preferences-reload", "^npreferencesreload$", "NebbieDash.cmdReloadPreferences()"),
+    ("nebbie-dash-triggers", "^ntriggers$", "NebbieDash.cmdReinstallTriggers()"),
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
     ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
     ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),

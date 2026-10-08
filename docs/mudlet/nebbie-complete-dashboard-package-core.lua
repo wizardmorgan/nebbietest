@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.44"
+local PKG_VER = "1.15.45"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 -- Non uscire in anticipo dal chunk core (alias/trigger del package possono essere
@@ -1890,7 +1890,8 @@ function NebbieDash.initDockSidebar()
     setMaxLines("NebbieDashEquip", 400)
     setMaxLines("NebbieDashSpeedwalks", 500)
   end
-  createLabel("NebbieDashDivider", 0, 0, NebbieDash.guiWidthEquip, NebbieDash.dividerPx, 1)
+  -- enableClickthrough = 0: altrimenti il mouse passa alle miniconsole sotto e il drag non funziona.
+  createLabel("NebbieDashDivider", 0, 0, NebbieDash.guiWidthEquip, NebbieDash.dividerPx, 1, 0)
 end
 
 function NebbieDash.initFloatSidebar()
