@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.40 — 2026-10-08
+
+- **Aggiornamento**: rimosso comando **`npackageupdate`** e tutta la logica self-update custom
+  (`_G` download/uninstall timer). Usa **Gestione pacchetti (Alt+O)** → Aggiorna / Installa da URL
+  (`website` nel package → branch `nebbie-mudlet-dashboard`) o **GMCP `Client.GUI`** al login.
+- **`nfix`** / messaggio boot: hint versione Package Manager vs codice in esecuzione.
+
 ## 1.15.39 — 2026-10-08
 
 - **Messaggio eq**: conteggio **occupati / vuoti / posizioni** (non più `21/21` fisso); fino a

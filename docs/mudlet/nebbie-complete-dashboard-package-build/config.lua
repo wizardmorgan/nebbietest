@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.15.39)
+description = [[# Nebbie Dashboard (1.15.40)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -52,7 +52,8 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   funzionalità nuove non venivano attivati finché non si riavviava
   completamente Mudlet.
 - **Speedwalk**: sezioni collassabili; formati `(desc) dirs` e `dirs (desc)`; `nspeedwalks` diagnostico.
-- **Aggiornamento package**: `npackageupdate` o GMCP `Client.GUI` al login (versione allineata a config.lua).
+- **Aggiornamento package**: Gestione pacchetti Mudlet (**Alt+O**) — campo `website` nel package
+  (URL .mpackage); oppure GMCP `Client.GUI` al login (versione server = config.lua).
 - **Cambio arma**: alias **`usa <parola-chiave>`** (sequenza borsa come
   nebbie-play-all; keyword da equip/`identify`/`nebbie-item-keywords.txt`).
   Il vecchio pannello "Armi" è stato rimosso (equip a tutta altezza).
@@ -93,6 +94,6 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.15.39]]
+version = [[1.15.40]]
 created = [[2026-09-26]]
 website = [[https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage]]
