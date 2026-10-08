@@ -800,6 +800,25 @@ for _, row in ipairs(NebbieDash.buildEquipRows(wdata)) do
 end
 check("armi: patchCachedEqLocation aggiorna impugnato",
   impRow and not impRow.empty and impRow.item == "La Flamberga di Boris")
+
+-- Slot numerici del gioco (15/16/17) non coincidono con EQ_SLOT_ORDER (16=impugnato):
+-- aggiornare impugnato non deve cancellare tenuto in [16].
+wdata.eq = {
+  [16] = { location = "tenuto", item = "Una torcia" },
+  [17] = { location = "sulla schiena", item = "Borsa Inesauribile dei Korred" },
+}
+wdata.eqUpdated = os.time()
+NebbieDash.patchCachedEqLocation(wdata, "impugnato", "La Flamberga di Boris")
+local tenRow, impRow2 = nil, nil
+for _, row in ipairs(NebbieDash.buildEquipRows(wdata)) do
+  if row.location == "tenuto" then tenRow = row end
+  if row.location == "impugnato" then impRow2 = row end
+end
+check("armi: patch impugnato non svuota tenuto",
+  tenRow and not tenRow.empty and tenRow.item == "Una torcia")
+check("armi: patch impugnato con tenuto in slot 16",
+  impRow2 and not impRow2.empty and impRow2.item == "La Flamberga di Boris")
+
 check("armi: currentWieldedKeyword segue cache impugnato",
   NebbieDash.keywordsOverlap(NebbieDash.currentWieldedKeyword(wdata), "flamberga boris"))
 check("armi: swap termina con wear zaino", swapSteps[#swapSteps] == "wear korred")
