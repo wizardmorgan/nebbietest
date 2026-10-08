@@ -1,5 +1,17 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.38 — 2026-10-08
+
+- **GUI (XpTracker-style)**: modalità **`nsidebar float`** con `Adjustable.Container`
+  (trascina/ridimensiona; testo centrale a tutta larghezza) oppure **`dock`** (bordo
+  sinistro classico). Equip in **tabella HTML** con colori per slot (vuoto, impugnato,
+  zaino, indossato).
+- **Preferenze** `profiles/ndashboard/nebbie-dash-preferences.txt`: `sidebar_mode`,
+  `weapon_swap_delay`, `sanity_neq_on_login` — comandi **`npreferencesreload`** e
+  **`nsidebar float|dock`**.
+- **Sanity equip**: al primo prompt dopo login, se l'equip in cache è marcato sincronizzato
+  ma ha 0 slot, invio automatico di `eq` (disattivabile nel file preferenze).
+
 ## 1.15.37 — 2026-10-08
 
 - **Equip (critico)**: la cattura `eq` non sovrascrive più l'equip con **0 slot** se il parser

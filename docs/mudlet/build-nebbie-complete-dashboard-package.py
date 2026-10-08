@@ -55,9 +55,11 @@ PKG_DESCRIPTION = f"""# Nebbie Dashboard ({PKG_VER})
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 
-- **Equip + Speedwalk** (solo bordo sinistro, impilati): equip da `eq` con slot
-  vuoti evidenziati; speedwalk cliccabili sotto. Altezze proporzionali al testo
-  (`nheights auto`); niente pannello spell GUI (lancio con `c`/`r`/`m` e shortcut).
+- **Equip + Speedwalk** (dock sinistro o pannello **float** trascinabile): equip da
+  `eq` con slot vuoti evidenziati e tabella HTML colorata; speedwalk cliccabili.
+  Altezze proporzionali al testo (`nheights auto`); niente pannello spell GUI.
+- **Preferenze** `nebbie-dash-preferences.txt`: `nsidebar`, `weapon_swap_delay`,
+  `sanity_neq_on_login` (`npreferencesreload`).
 - **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
   **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
 - Layout: larghezza `nwidth`; altezza Equip/Speedwalk `nheights` o automatica.
@@ -170,6 +172,8 @@ ALIASES = [
     ("nebbie-dash-clanslot", "^nclanslot (.+)$", "NebbieDash.cmdSetClanSlot(matches[2])"),
     ("nebbie-dash-usa", "^usa (.+)$", "NebbieDash.cmdUsa(matches[2])"),
     ("nebbie-dash-configdir", "^nconfigdir$", "NebbieDash.cmdConfigDir(\"\")"),
+    ("nebbie-dash-sidebar", "^nsidebar (.+)$", "NebbieDash.cmdSetSidebar(matches[2])"),
+    ("nebbie-dash-preferences-reload", "^npreferencesreload$", "NebbieDash.cmdReloadPreferences()"),
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
     ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
     ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),

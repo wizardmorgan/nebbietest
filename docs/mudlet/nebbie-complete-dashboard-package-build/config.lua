@@ -2,14 +2,16 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.15.37)
+description = [[# Nebbie Dashboard (1.15.38)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 
-- **Equip + Speedwalk** (solo bordo sinistro, impilati): equip da `eq` con slot
-  vuoti evidenziati; speedwalk cliccabili sotto. Altezze proporzionali al testo
-  (`nheights auto`); niente pannello spell GUI (lancio con `c`/`r`/`m` e shortcut).
+- **Equip + Speedwalk** (dock sinistro o pannello **float** trascinabile): equip da
+  `eq` con slot vuoti evidenziati e tabella HTML colorata; speedwalk cliccabili.
+  Altezze proporzionali al testo (`nheights auto`); niente pannello spell GUI.
+- **Preferenze** `nebbie-dash-preferences.txt`: `nsidebar`, `weapon_swap_delay`,
+  `sanity_neq_on_login` (`npreferencesreload`).
 - **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
   **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
 - Layout: larghezza `nwidth`; altezza Equip/Speedwalk `nheights` o automatica.
@@ -91,6 +93,6 @@ Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
 repository del progetto.
 ]]
-version = [[1.15.37]]
+version = [[1.15.38]]
 created = [[2026-09-26]]
 website = [[https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage]]
