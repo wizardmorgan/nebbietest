@@ -1,0 +1,32 @@
+# Mirror docs/mudlet → wizardmorgan/nebbie-mudlet-dashboard (main).
+# Richiede secret repo: NEBBIE_MUDLET_DASHBOARD_PAT (PAT classic o fine-grained con
+# Contents write su wizardmorgan/nebbie-mudlet-dashboard).
+name: Publish Nebbie Mudlet dashboard
+
+on:
+  push:
+    branches: [mudlet, nebbie-mudlet-dashboard]
+    paths:
+      - 'docs/mudlet/**'
+      - 'scripts/publish-nebbie-mudlet-dashboard.sh'
+      - '.github/workflows/publish-nebbie-mudlet-dashboard.yml'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish to nebbie-mudlet-dashboard
+        env:
+          NEBBIE_MUDLET_DASHBOARD_PAT: ${{ secrets.NEBBIE_MUDLET_DASHBOARD_PAT }}
+        run: |
+          if [ -z "${NEBBIE_MUDLET_DASHBOARD_PAT}" ]; then
+            echo "::warning::Secret NEBBIE_MUDLET_DASHBOARD_PAT non configurato — skip mirror su repo personale."
+            exit 0
+          fi
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          export DEST_REPO="https://x-access-token:${NEBBIE_MUDLET_DASHBOARD_PAT}@github.com/wizardmorgan/nebbie-mudlet-dashboard.git"
+          ./scripts/publish-nebbie-mudlet-dashboard.sh

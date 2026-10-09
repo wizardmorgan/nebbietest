@@ -98,6 +98,10 @@ Runs `./getworldlocal` only. System packages and ODB are installed once via `scr
 
 ### Mudlet dashboard (`nebbie-complete-dashboard-package`)
 
-- **Codice e release**: branch **`nebbie-mudlet-dashboard`** su [`wizardmorgan/nebbietest`](https://github.com/wizardmorgan/nebbietest/tree/nebbie-mudlet-dashboard) (push cloud agent). `.mpackage` raw: `…/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage`.
-- **Repo personale** [`wizardmorgan/nebbie-mudlet-dashboard`](https://github.com/wizardmorgan/nebbie-mudlet-dashboard): resta vuoto finché l’utente non fa push dal Mac con **`gh auth login`** + **`gh auth setup-git`** (mai password GitHub su HTTPS). Vedi `PUBLISH.md` sul branch sopra.
+- **Download canonico**: [`wizardmorgan/nebbie-mudlet-dashboard`](https://github.com/wizardmorgan/nebbie-mudlet-dashboard) branch `main` —  
+  `https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage`
+- **Sviluppo**: `docs/mudlet/` su branch **`mudlet`** in [`wizardmorgan/nebbietest`](https://github.com/wizardmorgan/nebbietest). Mirror branch **`nebbie-mudlet-dashboard`** (stesso `.mpackage` in root).
+- **Pubblicare sul repo personale** (obbligatorio dopo ogni release dashboard):  
+  `./scripts/publish-nebbie-mudlet-dashboard.sh`  
+  Vedi `docs/mudlet/PUBLISH.md`. CI: workflow `publish-nebbie-mudlet-dashboard.yml` se è configurato il secret `NEBBIE_MUDLET_DASHBOARD_PAT` su `nebbietest`.
 - **Non** dare istruzioni `git push` al Mac senza il blocco `gh auth` (regola permanente per wizmorgan).
