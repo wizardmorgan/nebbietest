@@ -5,6 +5,37 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="${ROOT}/docs/mudlet"
+
+# Git isolato: evita rewrite Cursor (cursor[bot]) e insteadOf globali.
+GIT_PUBLISH_CONFIG="${TMPDIR:-/tmp}/nebbie-mudlet-dashboard-gitconfig"
+printf '[user]\n\temail = nebbie-mudlet-dashboard@wizardmorgan.github\n\tname = Nebbie Mudlet Dashboard Release\n' > "${GIT_PUBLISH_CONFIG}"
+export GIT_CONFIG_GLOBAL="${GIT_PUBLISH_CONFIG}"
+export GIT_CONFIG_SYSTEM=/dev/null
+git_publish() {
+  git -c credential.helper= "$@"
+}
+
+verify_write_access() {
+  local pat="${1:-}"
+  if [[ -z "${pat}" ]]; then
+    return 0
+  fi
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' -X PUT \
+    -H "Authorization: Bearer ${pat}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/wizardmorgan/nebbie-mudlet-dashboard/contents/.publish-auth-probe" \
+    -d "{\"message\":\"auth probe\",\"content\":\"$(echo -n x | base64 -w0)\"}")"
+  if [[ "${code}" == "200" || "${code}" == "201" ]]; then
+    echo "==> PAT: permesso scrittura Contents OK (probe ${code})"
+    return 0
+  fi
+  echo "ERRORE: PAT senza permesso Contents: write su nebbie-mudlet-dashboard (HTTP ${code})." >&2
+  echo "Rigenera il fine-grained PAT con Contents Read and write solo su quel repo," >&2
+  echo "oppure imposta WIZARDMORGAN_GITHUB_SSH_KEY (deploy key con write)." >&2
+  return 1
+}
+
 SSH_KEY_MATERIAL="${WIZARDMORGAN_GITHUB_SSH_KEY:-${NEBBIE_MUDLET_DASHBOARD_SSH_KEY:-}}"
 SSH_KEY_FILE=""
 if [[ -n "${SSH_KEY_MATERIAL}" ]]; then
@@ -21,7 +52,12 @@ if [[ -n "${SSH_KEY_MATERIAL}" ]]; then
 else
   PAT="${NEBBIE_MUDLET_DASHBOARD_PAT:-${WIZARDMORGAN_GITHUB_PAT:-}}"
   if [[ -n "${PAT}" ]]; then
+    verify_write_access "${PAT}"
     DEST_REPO="https://x-access-token:${PAT}@github.com/wizardmorgan/nebbie-mudlet-dashboard.git"
+    export GIT_PUBLISH_HOME="${TMPDIR:-/tmp}/nebbie-mudlet-dashboard-git-home-pat"
+    rm -rf "${GIT_PUBLISH_HOME}"
+    mkdir -p "${GIT_PUBLISH_HOME}"
+    export HOME="${GIT_PUBLISH_HOME}"
   else
     DEST_REPO="${NEBBIE_MUDLET_DASHBOARD_REPO:-git@github.com:wizardmorgan/nebbie-mudlet-dashboard.git}"
     export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o StrictHostKeyChecking=accept-new}"
@@ -40,9 +76,9 @@ echo "==> Build package"
 echo "==> Clone ${DEST_REPO}"
 rm -rf "${WORKDIR}"
 if [[ -n "${SSH_KEY_FILE}" ]]; then
-  GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" git -c credential.helper= clone --depth 1 --branch main "${DEST_REPO}" "${WORKDIR}"
+  env GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" git_publish clone --depth 1 --branch main "${DEST_REPO}" "${WORKDIR}"
 else
-  git clone --depth 1 --branch main "${DEST_REPO}" "${WORKDIR}"
+  git_publish clone --depth 1 --branch main "${DEST_REPO}" "${WORKDIR}"
 fi
 
 echo "==> Sync sorgenti"
@@ -63,18 +99,19 @@ if git diff --quiet && git diff --cached --quiet; then
 fi
 VER="$(rg -m1 'local PKG_VER = \"([^\"]+)\"' nebbie-complete-dashboard-package-core.lua -o -r '$1' || true)"
 git add -A
-git -c user.email="nebbie-mudlet-dashboard@wizardmorgan.github" \
-  -c user.name="Nebbie Mudlet Dashboard Release" \
-  commit -m "release: nebbie-complete-dashboard-package ${VER:-unknown}"
+git_publish commit -m "release: nebbie-complete-dashboard-package ${VER:-unknown}"
 
 echo "==> Push main"
-PUSH_ENV=()
 if [[ -n "${SSH_KEY_FILE}" ]]; then
-  PUSH_ENV=(env -u GIT_ASKPASS "GIT_SSH_COMMAND=${GIT_SSH_COMMAND}" git -c credential.helper=)
+  if ! env -u GIT_ASKPASS GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" git -c credential.helper= push origin main; then
+    PUSH_FAILED=1
+  fi
 else
-  PUSH_ENV=(git)
+  if ! git_publish push origin main; then
+    PUSH_FAILED=1
+  fi
 fi
-if ! "${PUSH_ENV[@]}" push origin main; then
+if [[ -n "${PUSH_FAILED:-}" ]]; then
   echo "ERRORE: push su wizardmorgan/nebbie-mudlet-dashboard fallito." >&2
   if [[ -n "${SSH_KEY_FILE}" ]]; then
     echo "La chiave SSH deve essere registrata su GitHub per l'account wizardmorgan (write su questo repo)." >&2

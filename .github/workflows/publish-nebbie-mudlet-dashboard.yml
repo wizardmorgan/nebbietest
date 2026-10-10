@@ -23,8 +23,8 @@ jobs:
           NEBBIE_MUDLET_DASHBOARD_PAT: ${{ secrets.NEBBIE_MUDLET_DASHBOARD_PAT }}
         run: |
           if [ -z "${NEBBIE_MUDLET_DASHBOARD_PAT}" ]; then
-            echo "::warning::Secret NEBBIE_MUDLET_DASHBOARD_PAT non configurato — skip mirror su repo personale."
-            exit 0
+            echo "::error::Secret NEBBIE_MUDLET_DASHBOARD_PAT non configurato in nebbietest → Settings → Secrets → Actions."
+            exit 1
           fi
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
