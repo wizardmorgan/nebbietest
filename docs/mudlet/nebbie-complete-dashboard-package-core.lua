@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.47"
+local PKG_VER = "1.15.48"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 -- Non uscire in anticipo dal chunk core (alias/trigger del package possono essere
@@ -3566,7 +3566,8 @@ function NebbieDash.cmdReinstallTriggers()
 end
 
 function NebbieDash.cmdReinstallKeys()
-  cecho("<cyan>[NebbieDash] Tastierino: gruppo <white>Nebbie Keypad<cyan> (Mudlet → Keys). Movimento 2/4/6/8, look 5, up/down 9/3.\n")
+  cecho("<cyan>[NebbieDash] Tastierino <white>numerico<cyan> (Nebbie Keypad): 2/4/6/8 movimento, 5 look, 9/3 su/giù — <white>non<grey> le frecce della tastiera.\n")
+  cecho("<grey>Num Lock <white>ON<grey>. Dopo aggiornamento: disattiva eventuali key «nav» vecchie in Mudlet → Keys.\n")
   cecho("<grey>Shortcut spell da command line (anche tasti numerici): file <white>nebbie-spell-shortcuts.txt<grey> — <yellow>nspellaliasesreload<grey>.\n")
   cecho("<grey>Reinstalla da: <white>" .. (NebbieDash.PACKAGE_UPDATE_URL or "?") .. "\n")
 end

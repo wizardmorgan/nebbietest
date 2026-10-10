@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.48 — 2026-10-10
+
+- **Tastierino numerico**: movimento solo sui tasti **fisici** del numpad (2/4/6/8, 5, 9/3) con
+  modifier Keypad; rimossi i binding «nav» su codici freccia (intercettavano le frecce della
+  tastiera estesa su Mac). **Num Lock ON**.
+
 ## 1.15.36 — 2026-10-05
 
 - **usa (critico)**: `usa flamberga` non usava più `boris`/`noor` sbagliati — rispetta

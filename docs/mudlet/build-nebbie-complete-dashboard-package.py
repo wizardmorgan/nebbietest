@@ -252,21 +252,17 @@ def cdata(text):
     return "<![CDATA[" + text.replace("]]>", "]]]]><![CDATA[>") + "]]>"
 
 
+# Solo tasti fisici del tastierino numerico (cifre + modifier Keypad).
+# Niente binding su Qt Key_Up/Down/…: su macOS Mudlet li confonde con le frecce
+# della tastiera estesa. Con Num Lock OFF il numpad non muove (solo cifre ON).
 KEYPAD_BINDINGS = [
-    ("nebbie-keypad look num", "look", 53, 536870912),
-    ("nebbie-keypad look nav", "look", 16777227, 536870912),
-    ("nebbie-keypad north num", "north", 56, 536870912),
-    ("nebbie-keypad north nav", "north", 16777235, 536870912),
-    ("nebbie-keypad south num", "south", 50, 536870912),
-    ("nebbie-keypad south nav", "south", 16777237, 536870912),
-    ("nebbie-keypad east num", "east", 54, 536870912),
-    ("nebbie-keypad east nav", "east", 16777236, 536870912),
-    ("nebbie-keypad west num", "west", 52, 536870912),
-    ("nebbie-keypad west nav", "west", 16777234, 536870912),
-    ("nebbie-keypad up num", "up", 57, 536870912),
-    ("nebbie-keypad up nav", "up", 16777238, 536870912),
-    ("nebbie-keypad down num", "down", 51, 536870912),
-    ("nebbie-keypad down nav", "down", 16777239, 536870912),
+    ("nebbie-keypad look", "look", 53, 536870912),   # 5
+    ("nebbie-keypad north", "north", 56, 536870912),  # 8
+    ("nebbie-keypad south", "south", 50, 536870912),  # 2
+    ("nebbie-keypad east", "east", 54, 536870912),    # 6
+    ("nebbie-keypad west", "west", 52, 536870912),    # 4
+    ("nebbie-keypad up", "up", 57, 536870912),        # 9
+    ("nebbie-keypad down", "down", 51, 536870912),    # 3
 ]
 
 
