@@ -45,7 +45,10 @@ git add -A
 git commit -m "release: nebbie-complete-dashboard-package ${VER:-unknown}"
 
 echo "==> Push main"
-git push origin main
+if ! git push origin main; then
+  echo "ERRORE: push su wizardmorgan/nebbie-mudlet-dashboard fallito (serve PAT con scrittura sul repo)." >&2
+  exit 1
+fi
 
 echo "OK: https://github.com/wizardmorgan/nebbie-mudlet-dashboard"
 echo "URL: https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage"
