@@ -1,30 +1,19 @@
-# Pubblicare su `wizardmorgan/nebbie-mudlet-dashboard`
+# Pubblicazione — solo `wizardmorgan/nebbie-mudlet-dashboard`
 
-**Download canonico** (Mudlet Alt+O → Installa da URL, campo `website` nel package, GMCP `Client.GUI`):
+**URL installazione Mudlet (unico canonico):**
 
 `https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage`
 
-Repo: **https://github.com/wizardmorgan/nebbie-mudlet-dashboard**
+Repo: https://github.com/wizardmorgan/nebbie-mudlet-dashboard
 
-## Da `nebbietest` (cloud agent / CI)
-
-Dopo modifiche in `docs/mudlet/`:
+## Dopo ogni modifica a `docs/mudlet/`
 
 ```bash
 ./scripts/publish-nebbie-mudlet-dashboard.sh
 ```
 
-Lo script: build `.mpackage`, sync su clone di `nebbie-mudlet-dashboard`, commit e push su `main`.
+Richiede un PAT con scrittura sul repo personale (`NEBBIE_MUDLET_DASHBOARD_PAT` o `WIZARDMORGAN_GITHUB_PAT`).
 
-Copia di sviluppo su nebbietest (branch `nebbie-mudlet-dashboard`):
+Su **nebbietest** il workflow `publish-nebbie-mudlet-dashboard.yml` fa la stessa cosa se il secret `NEBBIE_MUDLET_DASHBOARD_PAT` è configurato nelle Actions del repo.
 
-`https://github.com/wizardmorgan/nebbietest/tree/nebbie-mudlet-dashboard`
-
-## Da Mac (manuale)
-
-Stesso script, con `gh auth login` + `gh auth setup-git` se il push fallisce.
-
-```bash
-cd /path/to/nebbietest
-./scripts/publish-nebbie-mudlet-dashboard.sh
-```
+Il branch `nebbie-mudlet-dashboard` su **nebbietest** è solo copia di backup/sviluppo — **non** è l’URL da dare ai giocatori.

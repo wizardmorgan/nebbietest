@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.45"
+local PKG_VER = "1.15.47"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 -- Non uscire in anticipo dal chunk core (alias/trigger del package possono essere
@@ -25,7 +25,7 @@ NebbieDash._loadedVer = PKG_VER
 NebbieDash._upgradeFromVer = (_prevPkgVer and _prevPkgVer ~= PKG_VER) and _prevPkgVer or nil
 NebbieDash.package = "nebbie-complete-dashboard-package"
 NebbieDash.PACKAGE_UPDATE_URL =
-  "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage"
+  "https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage"
 
 function NebbieDash.parseVersionParts(ver)
   local parts = {}
@@ -856,7 +856,7 @@ end
 NebbieDash.CAST_PREFIX = { c = "cast", r = "recall", m = "mind" }
 NebbieDash.spellShortcuts = {}
 NebbieDash.castSpellPanelList = {}
-NebbieDash._spellShortcutTrigs = {}
+NebbieDash._spellShortcutAliases = {}
 
 -- Alias riservati (comandi Nebbie + prefissi c/r/m): non usabili come shortcut spell.
 NebbieDash.SHORTCUT_RESERVED = {
@@ -872,6 +872,7 @@ NebbieDash.SHORTCUT_RESERVED = {
   nconfigdir = true,
   nsidebar = true,
   npreferencesreload = true,
+  nkeys = true,
 }
 
 function NebbieDash.spellShortcutsPath()
@@ -1037,25 +1038,33 @@ function NebbieDash.regexEscapePattern(s)
   return (s or ""):gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
 end
 
-function NebbieDash.teardownSpellShortcutTriggers()
-  for _, id in ipairs(NebbieDash._spellShortcutTrigs or {}) do
-    if id then pcall(function() killTrigger(id) end) end
+function NebbieDash.teardownSpellShortcutAliases()
+  for _, id in ipairs(NebbieDash._spellShortcutAliases or {}) do
+    if id then pcall(function() killAlias(id) end) end
   end
-  NebbieDash._spellShortcutTrigs = {}
+  NebbieDash._spellShortcutAliases = {}
+end
+
+function NebbieDash.installSpellShortcutAliases()
+  NebbieDash.teardownSpellShortcutAliases()
+  if type(tempAlias) ~= "function" then return end
+  for lk, entry in pairs(NebbieDash.spellShortcuts or {}) do
+    local esc = NebbieDash.regexEscapePattern(entry.key)
+    local id1 = tempAlias("^" .. esc .. "$",
+      string.format([[NebbieDash.cmdSpellShortcut(%q)]], lk))
+    local id2 = tempAlias("^" .. esc .. "%s+(.+)$",
+      string.format([[NebbieDash.cmdSpellShortcut(%q, matches[2])]], lk))
+    table.insert(NebbieDash._spellShortcutAliases, id1)
+    table.insert(NebbieDash._spellShortcutAliases, id2)
+  end
+end
+
+function NebbieDash.teardownSpellShortcutTriggers()
+  NebbieDash.teardownSpellShortcutAliases()
 end
 
 function NebbieDash.installSpellShortcutTriggers()
-  NebbieDash.teardownSpellShortcutTriggers()
-  if type(tempRegexTrigger) ~= "function" then return end
-  for lk, entry in pairs(NebbieDash.spellShortcuts or {}) do
-    local esc = NebbieDash.regexEscapePattern(entry.key)
-    local id1 = tempRegexTrigger("^" .. esc .. "$",
-      string.format([[NebbieDash.cmdSpellShortcut(%q)]], lk))
-    local id2 = tempRegexTrigger("^" .. esc .. "%s+(.+)$",
-      string.format([[NebbieDash.cmdSpellShortcut(%q, matches[2])]], lk))
-    table.insert(NebbieDash._spellShortcutTrigs, id1)
-    table.insert(NebbieDash._spellShortcutTrigs, id2)
-  end
+  NebbieDash.installSpellShortcutAliases()
 end
 
 function NebbieDash.cmdListSpellAliases()
@@ -2129,6 +2138,7 @@ NebbieDash.HELP_TEXT = {
   { "nresync", "Invia eq + attrib al gioco per risincronizzare i pannelli." },
   { "nfix", "Riavvia il package e rimuove pannelli legacy (Spell/Armi). Aggiornamenti: Alt+O → Aggiorna/Installa da URL, o GMCP al login." },
   { "ntriggers", "Reinstalla i trigger NebbieDash (fame/sete, prompt, loot, …) senza riavviare Mudlet." },
+  { "nkeys", "Tastierino numerico (Nebbie Keypad) e shortcut spell da command line." },
   { "ngui", "Mostra/nascondi tutti i pannelli." },
   { "nlayout", "Ripristina larghezze/font/proporzioni di default." },
   { "nchar <nome>", "Forza manualmente il personaggio attivo." },
@@ -3553,6 +3563,12 @@ end
 function NebbieDash.cmdReinstallTriggers()
   NebbieDash.installTriggers()
   cecho("<green>[NebbieDash] Trigger reinstallati (" .. (NebbieDash.version or "?") .. ").\n")
+end
+
+function NebbieDash.cmdReinstallKeys()
+  cecho("<cyan>[NebbieDash] Tastierino: gruppo <white>Nebbie Keypad<cyan> (Mudlet → Keys). Movimento 2/4/6/8, look 5, up/down 9/3.\n")
+  cecho("<grey>Shortcut spell da command line (anche tasti numerici): file <white>nebbie-spell-shortcuts.txt<grey> — <yellow>nspellaliasesreload<grey>.\n")
+  cecho("<grey>Reinstalla da: <white>" .. (NebbieDash.PACKAGE_UPDATE_URL or "?") .. "\n")
 end
 
 function NebbieDash.cmdSetAutoFeed(argStr)

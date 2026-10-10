@@ -176,6 +176,7 @@ ALIASES = [
     ("nebbie-dash-sidebar", "^nsidebar (.+)$", "NebbieDash.cmdSetSidebar(matches[2])"),
     ("nebbie-dash-preferences-reload", "^npreferencesreload$", "NebbieDash.cmdReloadPreferences()"),
     ("nebbie-dash-triggers", "^ntriggers$", "NebbieDash.cmdReinstallTriggers()"),
+    ("nebbie-dash-keys", "^nkeys$", "NebbieDash.cmdReinstallKeys()"),
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
     ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
     ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),
@@ -251,6 +252,42 @@ def cdata(text):
     return "<![CDATA[" + text.replace("]]>", "]]]]><![CDATA[>") + "]]>"
 
 
+KEYPAD_BINDINGS = [
+    ("nebbie-keypad look num", "look", 53, 536870912),
+    ("nebbie-keypad look nav", "look", 16777227, 536870912),
+    ("nebbie-keypad north num", "north", 56, 536870912),
+    ("nebbie-keypad north nav", "north", 16777235, 536870912),
+    ("nebbie-keypad south num", "south", 50, 536870912),
+    ("nebbie-keypad south nav", "south", 16777237, 536870912),
+    ("nebbie-keypad east num", "east", 54, 536870912),
+    ("nebbie-keypad east nav", "east", 16777236, 536870912),
+    ("nebbie-keypad west num", "west", 52, 536870912),
+    ("nebbie-keypad west nav", "west", 16777234, 536870912),
+    ("nebbie-keypad up num", "up", 57, 536870912),
+    ("nebbie-keypad up nav", "up", 16777238, 536870912),
+    ("nebbie-keypad down num", "down", 51, 536870912),
+    ("nebbie-keypad down nav", "down", 16777239, 536870912),
+]
+
+
+def build_keypad_xml(pkg_name):
+    lines = [" <KeyPackage>", '  <KeyGroup isActive="yes" isFolder="yes">', "   <name>Nebbie Keypad</name>"]
+    lines.extend(["   <script></script>", "   <command></command>", "   <keyCode>-1</keyCode>",
+                  "   <keyModifier>-1</keyModifier>", f"   <packageName>{pkg_name}</packageName>"])
+    for name, command, key_code, key_mod in KEYPAD_BINDINGS:
+        lines.append('   <Key isActive="yes" isFolder="no">')
+        lines.append(f"    <name>{sax.escape(name)}</name>")
+        lines.append("    <script></script>")
+        lines.append(f"    <command>{sax.escape(command)}</command>")
+        lines.append(f"    <keyCode>{key_code}</keyCode>")
+        lines.append(f"    <keyModifier>{key_mod}</keyModifier>")
+        lines.append(f"    <packageName>{pkg_name}</packageName>")
+        lines.append("   </Key>")
+    lines.append("  </KeyGroup>")
+    lines.append(" </KeyPackage>")
+    return lines
+
+
 def build_xml(core_code):
     # Chiamata a boot() sia nello script "core" (che si esegue SUBITO ad ogni
     # (re)installazione a caldo del package — vedi nota in installTriggers()/
@@ -321,6 +358,7 @@ end'''
         parts.append(f'   <regex>{sax.escape(regex)}</regex>')
         parts.append('  </Alias>')
     parts.append(' </AliasPackage>')
+    parts.extend(build_keypad_xml(PKG_NAME))
     parts.append('</MudletPackage>')
     return "\n".join(parts) + "\n"
 

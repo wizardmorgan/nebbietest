@@ -37,7 +37,7 @@ def read_pkg_ver_from_core():
 
 PKG_VER = read_pkg_ver_from_core()
 PKG_URL = (
-    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/"
+    "https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/"
     f"{PKG_NAME}.mpackage"
 )
 PKG_CREATED = "2026-09-26"
@@ -55,17 +55,14 @@ PKG_DESCRIPTION = f"""# Nebbie Dashboard ({PKG_VER})
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 
-- **Equip** (bordo sinistro): tutti gli slot indossati, con posizione ed
-  oggetto letti da `eq`; segna anche gli slot liberi noti.
-- **Spell attivi** (bordo destro, in alto): elenco **tuo** in
-  `nebbie-cast-spells.txt` (solo self-cast che puoi lanciare); colori/tick da
-  `attrib`; click rilancia con bersaglio = PG attivo (`nclass` per cast/recall/mind).
+- **Equip + Speedwalk** (dock sinistro o pannello **float** trascinabile): equip da
+  `eq` con slot vuoti evidenziati e colori per posizione; speedwalk cliccabili.
+  Altezze proporzionali al testo (`nheights auto`); niente pannello spell GUI.
+- **Preferenze** `nebbie-dash-preferences.txt`: `nsidebar`, `weapon_swap_delay`,
+  `sanity_neq_on_login` (`npreferencesreload`).
 - **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
   **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
-- **Speedwalk** (bordo destro, in basso): percorsi rapidi definiti a mano in
-  un file di testo, cliccabili per eseguirli in sequenza.
-- Layout ridimensionabile (larghezza automatica o manuale, altezza
-  spell/speedwalk regolabile) e persistente tra sessioni.
+- Layout: larghezza `nwidth`; altezza Equip/Speedwalk `nheights` o automatica.
 - Tasto **"? Comandi"** in cima allo schermo: apre/chiude un elenco di tutti
   i comandi disponibili (anche `nhelp`).
 - Numero di riga tra parentesi quadre nel pannello equip, come nel testo di
@@ -103,10 +100,16 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   funzionalità nuove non venivano attivati finché non si riavviava
   completamente Mudlet.
 - **Speedwalk**: sezioni collassabili; formati `(desc) dirs` e `dirs (desc)`; `nspeedwalks` diagnostico.
-- **Aggiornamento package**: `npackageupdate` o GMCP `Client.GUI` al login (versione allineata a config.lua).
-- **Gestione armi** (pannello "Armi"): click per cambiare — sequenza borsa
-  come nebbie-play-all; keyword senza parentesi eq `(alone luminoso)`; `identify`
-  fissa la parola chiave canonica.
+- **Aggiornamento package**: Gestione pacchetti Mudlet (**Alt+O**) — campo `website` nel package
+  (URL .mpackage); oppure GMCP `Client.GUI` al login (versione server = config.lua).
+- **Cambio arma**: alias **`usa <parola-chiave>`** (sequenza borsa come
+  nebbie-play-all; keyword da equip/`identify`/`nebbie-item-keywords.txt`).
+  Il vecchio pannello "Armi" è stato rimosso (equip a tutta altezza).
+- **Config condivisa**: tutti i file `nebbie-*` e cache PG in **`profiles/ndashboard/`**
+  sotto la cartella Mudlet (es. Windows:
+  `C:/Users/<tu>/.config/mudlet/profiles/ndashboard`). Indice:
+  **`profiles/nebbie-dash-config-root.txt`**. Comando **`nconfigdir`**; scheletri
+  creati al primo avvio; migrazione da profilo singolo o da `~/NebbieDash`.
 - **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
   comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
   perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
@@ -173,6 +176,7 @@ ALIASES = [
     ("nebbie-dash-sidebar", "^nsidebar (.+)$", "NebbieDash.cmdSetSidebar(matches[2])"),
     ("nebbie-dash-preferences-reload", "^npreferencesreload$", "NebbieDash.cmdReloadPreferences()"),
     ("nebbie-dash-triggers", "^ntriggers$", "NebbieDash.cmdReinstallTriggers()"),
+    ("nebbie-dash-keys", "^nkeys$", "NebbieDash.cmdReinstallKeys()"),
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
     ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
     ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),
@@ -248,6 +252,42 @@ def cdata(text):
     return "<![CDATA[" + text.replace("]]>", "]]]]><![CDATA[>") + "]]>"
 
 
+KEYPAD_BINDINGS = [
+    ("nebbie-keypad look num", "look", 53, 536870912),
+    ("nebbie-keypad look nav", "look", 16777227, 536870912),
+    ("nebbie-keypad north num", "north", 56, 536870912),
+    ("nebbie-keypad north nav", "north", 16777235, 536870912),
+    ("nebbie-keypad south num", "south", 50, 536870912),
+    ("nebbie-keypad south nav", "south", 16777237, 536870912),
+    ("nebbie-keypad east num", "east", 54, 536870912),
+    ("nebbie-keypad east nav", "east", 16777236, 536870912),
+    ("nebbie-keypad west num", "west", 52, 536870912),
+    ("nebbie-keypad west nav", "west", 16777234, 536870912),
+    ("nebbie-keypad up num", "up", 57, 536870912),
+    ("nebbie-keypad up nav", "up", 16777238, 536870912),
+    ("nebbie-keypad down num", "down", 51, 536870912),
+    ("nebbie-keypad down nav", "down", 16777239, 536870912),
+]
+
+
+def build_keypad_xml(pkg_name):
+    lines = [" <KeyPackage>", '  <KeyGroup isActive="yes" isFolder="yes">', "   <name>Nebbie Keypad</name>"]
+    lines.extend(["   <script></script>", "   <command></command>", "   <keyCode>-1</keyCode>",
+                  "   <keyModifier>-1</keyModifier>", f"   <packageName>{pkg_name}</packageName>"])
+    for name, command, key_code, key_mod in KEYPAD_BINDINGS:
+        lines.append('   <Key isActive="yes" isFolder="no">')
+        lines.append(f"    <name>{sax.escape(name)}</name>")
+        lines.append("    <script></script>")
+        lines.append(f"    <command>{sax.escape(command)}</command>")
+        lines.append(f"    <keyCode>{key_code}</keyCode>")
+        lines.append(f"    <keyModifier>{key_mod}</keyModifier>")
+        lines.append(f"    <packageName>{pkg_name}</packageName>")
+        lines.append("   </Key>")
+    lines.append("  </KeyGroup>")
+    lines.append(" </KeyPackage>")
+    return lines
+
+
 def build_xml(core_code):
     # Chiamata a boot() sia nello script "core" (che si esegue SUBITO ad ogni
     # (re)installazione a caldo del package — vedi nota in installTriggers()/
@@ -318,6 +358,7 @@ end'''
         parts.append(f'   <regex>{sax.escape(regex)}</regex>')
         parts.append('  </Alias>')
     parts.append(' </AliasPackage>')
+    parts.extend(build_keypad_xml(PKG_NAME))
     parts.append('</MudletPackage>')
     return "\n".join(parts) + "\n"
 
