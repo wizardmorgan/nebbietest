@@ -24,7 +24,9 @@ Il token in ambiente spesso è **sola lettura**: l’API risponde `permissions.p
 
 1. Genera una coppia (`ssh-keygen -t ed25519 -C nebbie-mudlet-dashboard-cloud-agent`).
 2. Su https://github.com/wizardmorgan/nebbie-mudlet-dashboard/settings/keys → **Add deploy key** → incolla la `.pub` → **Allow write access**.
-3. Secret Cursor `WIZARDMORGAN_GITHUB_SSH_KEY` = contenuto della chiave privata.
+3. Secret Cursor `WIZARDMORGAN_GITHUB_SSH_KEY` = contenuto della **stessa** chiave privata della deploy key (pub e priv devono essere una coppia; fingerprint `ssh-keygen -l -f chiave.pub`).
+
+Se hai aggiunto la deploy key **v1** (`…LRq7ih`) ma il secret contiene un’altra privata (es. **v2** `…p5e8U`), `git push` fallisce con `Permission denied (publickey)`: aggiungi anche la pub **v2** su GitHub oppure allinea secret e deploy key.
 
 Su **nebbietest** il workflow `publish-nebbie-mudlet-dashboard.yml` esegue lo stesso script al push su `nebbie-mudlet-dashboard` / `mudlet` (fallisce se il secret Actions è vuoto).
 

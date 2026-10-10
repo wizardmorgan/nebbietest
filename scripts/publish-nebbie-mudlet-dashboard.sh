@@ -40,8 +40,9 @@ SSH_KEY_MATERIAL="${WIZARDMORGAN_GITHUB_SSH_KEY:-${NEBBIE_MUDLET_DASHBOARD_SSH_K
 SSH_KEY_FILE=""
 if [[ -n "${SSH_KEY_MATERIAL}" ]]; then
   SSH_KEY_FILE="${TMPDIR:-/tmp}/nebbie-mudlet-dashboard-ssh-key"
-  printf '%s\n' "${SSH_KEY_MATERIAL}" > "${SSH_KEY_FILE}"
-  chmod 600 "${SSH_KEY_FILE}"
+  # Secret multilinea: niente newline extra (rompe OpenSSH).
+  export SSH_KEY_MATERIAL
+  python3 -c 'import os, sys; p=sys.argv[1]; k=os.environ["SSH_KEY_MATERIAL"].strip()+"\n"; open(p,"w").write(k); os.chmod(p,0o600)' "${SSH_KEY_FILE}"
   export GIT_SSH_COMMAND="ssh -i ${SSH_KEY_FILE} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
   DEST_REPO="git@github.com:wizardmorgan/nebbie-mudlet-dashboard.git"
   # Cursor Cloud riscrive git@github.com → HTTPS cursor[bot]: serve HOME pulito per SSH reale.
@@ -76,7 +77,7 @@ echo "==> Build package"
 echo "==> Clone ${DEST_REPO}"
 rm -rf "${WORKDIR}"
 if [[ -n "${SSH_KEY_FILE}" ]]; then
-  env GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" git_publish clone --depth 1 --branch main "${DEST_REPO}" "${WORKDIR}"
+  env -u GIT_ASKPASS GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" git -c credential.helper= clone --depth 1 --branch main "${DEST_REPO}" "${WORKDIR}"
 else
   git_publish clone --depth 1 --branch main "${DEST_REPO}" "${WORKDIR}"
 fi
