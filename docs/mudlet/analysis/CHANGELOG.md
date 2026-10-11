@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.49 — 2026-10-11
+
+- **Keys**: al boot/`nfix` rimuove i tasti legacy `nebbie-keypad * num/nav` (duplicati lasciati da
+  Mudlet dopo aggiornamento package 1.15.47 → 1.15.48). Comando `nkeys` forza la pulizia.
+
 ## 1.15.48 — 2026-10-10
 
 - **Tastierino numerico**: movimento solo sui tasti **fisici** del numpad (2/4/6/8, 5, 9/3) con

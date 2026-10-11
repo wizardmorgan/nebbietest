@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.48"
+local PKG_VER = "1.15.49"
 
 local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 -- Non uscire in anticipo dal chunk core (alias/trigger del package possono essere
@@ -3565,7 +3565,51 @@ function NebbieDash.cmdReinstallTriggers()
   cecho("<green>[NebbieDash] Trigger reinstallati (" .. (NebbieDash.version or "?") .. ").\n")
 end
 
+-- Mudlet non elimina i Key del package quando cambiano nome (es. 1.15.47 num/nav → 1.15.48).
+-- Restano duplicati in cima all'albero Keys e sotto nebbie-complete-dashboard-package.
+function NebbieDash.killKeysByName(name)
+  if not name or name == "" then return 0 end
+  local removed = 0
+  if type(findItems) == "function" then
+    local ok, ids = pcall(function() return findItems(name, "key", true) end)
+    if ok and type(ids) == "table" then
+      for _, id in ipairs(ids) do
+        if type(disableKey) == "function" then pcall(function() disableKey(id) end) end
+        if type(killKey) == "function" then pcall(function() killKey(id) end) end
+        removed = removed + 1
+      end
+    end
+  end
+  if type(exists) == "function" and type(killKey) == "function" then
+    local tries = 0
+    while (exists(name, "key") or 0) > 0 and tries < 16 do
+      pcall(function() killKey(name) end)
+      tries = tries + 1
+      removed = removed + 1
+    end
+  end
+  return removed
+end
+
+function NebbieDash.purgeLegacyKeypadKeys(silent)
+  local dirs = { "look", "north", "south", "east", "west", "up", "down" }
+  local total = 0
+  for _, d in ipairs(dirs) do
+    total = total + NebbieDash.killKeysByName("nebbie-keypad " .. d .. " num")
+    total = total + NebbieDash.killKeysByName("nebbie-keypad " .. d .. " nav")
+  end
+  if total > 0 and not silent then
+    cecho("<yellow>[NebbieDash] Rimossi " .. total ..
+      " tasti keypad legacy (duplicati num/nav da versioni ≤1.15.47).\n")
+  end
+  return total
+end
+
 function NebbieDash.cmdReinstallKeys()
+  local n = NebbieDash.purgeLegacyKeypadKeys(false)
+  if n == 0 then
+    cecho("<grey>[NebbieDash] Nessun tasto legacy num/nav da rimuovere.\n")
+  end
   cecho("<cyan>[NebbieDash] Tastierino <white>numerico<cyan> (Nebbie Keypad): 2/4/6/8 movimento, 5 look, 9/3 su/giù — <white>non<grey> le frecce della tastiera.\n")
   cecho("<grey>Num Lock <white>ON<grey>. Dopo aggiornamento: disattiva eventuali key «nav» vecchie in Mudlet → Keys.\n")
   cecho("<grey>Shortcut spell da command line (anche tasti numerici): file <white>nebbie-spell-shortcuts.txt<grey> — <yellow>nspellaliasesreload<grey>.\n")
@@ -5090,6 +5134,7 @@ function NebbieDash.boot()
   NebbieDash.loadBatchCommands()
   NebbieDash.loadBatchItems()
   NebbieDash.installTriggers()
+  NebbieDash.purgeLegacyKeypadKeys(true)
   if NebbieDash._upgradeFromVer then
     NebbieDash.teardownGui()
   end
