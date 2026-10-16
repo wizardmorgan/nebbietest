@@ -13,6 +13,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <boost/algorithm/string.hpp>
@@ -2820,7 +2822,10 @@ ACTION_FUNC(do_use) {
 			send_to_char("What should the wand be pointed at?\n\r", ch);
 		}
 	}
-    else if(stick->obj_flags.type_flag == ITEM_TREASURE && (vnum = (stick->item_number >= 0) ? obj_index[stick->item_number].iVNum : 0) == OBJ_REWARD)
+    else if(stick->obj_flags.type_flag == ITEM_TREASURE &&
+            is_achie_dust_vnum(
+                (vnum = (stick->item_number >= 0) ? obj_index[stick->item_number].iVNum
+                                                 : 0)))
     {
         string sbch, sbroom;
         char risultato[255];
@@ -3831,6 +3836,58 @@ ACTION_FUNC(do_set_afk) {
 
 #define RACE_WAR_MIN_LEVEL 31
 /* this is the level a user can turn race war ON */
+namespace {
+
+const char* SetFlagOnOff(bool on) {
+	return on ? "ON" : "OFF";
+}
+
+void AppendSetFlagRow(std::ostringstream& os, const char* name, const char* values,
+					  const char* state) {
+	os << "  " << std::left << std::setw(14) << name << '\t' << std::setw(28) << values
+	   << '\t' << '[' << state << "]\n\r";
+}
+
+void send_set_flags_listing(struct char_data* ch) {
+	const char* email =
+		(ch->specials.email && ch->specials.email[0] != '\0') ? ch->specials.email
+															 : "(non impostata)";
+	const char* realname =
+		(ch->specials.realname && ch->specials.realname[0] != '\0')
+			? ch->specials.realname
+			: "(non impostato)";
+	const bool warningsOn = !IS_SET(ch->player.user_flags, WARNINGS_MODE_OFF);
+	const bool whoShow = IS_SET(ch->player.user_flags, SHOW_CLASSES);
+
+	std::ostringstream os;
+	os << "Opzioni set (valori possibili e stato attuale):\n\r";
+	AppendSetFlagRow(os, "achie", "on/off",
+					 SetFlagOnOff(IS_SET(ch->player.user_flags, ACHIE_MODE)));
+	AppendSetFlagRow(os, "ansi", "on/off",
+					 SetFlagOnOff(IS_SET(ch->player.user_flags, USE_ANSI)));
+	AppendSetFlagRow(os, "autoexits", "on/off",
+					 SetFlagOnOff(IS_SET(ch->player.user_flags, SHOW_EXITS)));
+	AppendSetFlagRow(os, "email", "<indirizzo>", email);
+	AppendSetFlagRow(os, "group name", "<nome gruppo>", "-");
+	AppendSetFlagRow(os, "pause", "on/off",
+					 SetFlagOnOff(IS_SET(ch->player.user_flags, USE_PAGING)));
+	const std::string pkillState =
+		std::string(SetFlagOnOff(IS_SET(ch->player.user_flags, RACE_WAR))) +
+		"; irrev., liv>=" + std::to_string(RACE_WAR_MIN_LEVEL);
+	AppendSetFlagRow(os, "pkill", "on/enable", pkillState.c_str());
+	AppendSetFlagRow(os, "pwp", "on/off",
+					 SetFlagOnOff(IS_SET(ch->player.user_flags, PWP_MODE)));
+	AppendSetFlagRow(os, "realname", "<nome reale>", realname);
+	AppendSetFlagRow(os, "warnings", "on/off", SetFlagOnOff(warningsOn));
+	AppendSetFlagRow(os, "who", "showclasses/hideclasses",
+					 whoShow ? "showclasses" : "hideclasses");
+	os << "warnings: avviso se porti troppi oggetti (limite rent); vale per tutti.\n\r"
+	   << "Nota: info-bar VT100 = comando DISPLAY (non set).\n\r";
+	send_to_char(os.str().c_str(), ch);
+}
+
+} /* namespace */
+
 ACTION_FUNC(do_set_flags) {
 	char type[255],field[255];
 	if(!ch) {
@@ -3840,19 +3897,7 @@ ACTION_FUNC(do_set_flags) {
 	arg = one_argument(arg,type);
 
 	if(!*type) {
-		send_to_char("Actually supported:\n\r"
-					 "Achie	\n\r"
-					 "Ansi       \n\r"
-					 "Autoexits \n\r"
-					 "Color     \n\r"
-					 "Display      \n\r"
-					 "Email\n\r"
-					 "Pkill \n\r"
-					 "Pwp \n\r"
-					 "Realname \n\r"
-					 "Warnings \n\r"
-					 "Who \n\r"
-					 ,ch);
+		send_set_flags_listing(ch);
 		return;
 	}
 
@@ -3980,7 +4025,8 @@ ACTION_FUNC(do_set_flags) {
 		return;
 	}
 
-	if(!*field) {
+	/* email/realname: senza valore si cancella l'impostazione. */
+	if(!*field && strcmp(type, "email") != 0 && strcmp(type, "realname") != 0) {
 		send_to_char("Set it to what? (Enable/On,Disable/Off)\n\r",ch);
 		return;
 	}

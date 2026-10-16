@@ -246,3 +246,4 @@ mysql_data/
 /tmp-odb-inspect/
 read_rent.py
 edit-portal/node_modules/
+docker-compose.override.yml

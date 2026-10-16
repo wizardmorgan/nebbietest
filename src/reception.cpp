@@ -10,6 +10,8 @@
 #include <dirent.h>
 #include <cerrno>
 #include <cstring>
+#include <charconv>
+#include <string_view>
 #include <sys/stat.h>
 /***************************  General include ************************************/
 #include "config.hpp"
@@ -24,6 +26,7 @@
 #include <vector>
 #include <unordered_map>
 #include "reception.hpp"
+#include "utility.hpp"
 #include "object_instance.hpp"
 #include "edit_pool.hpp"
 #include "clan_symbol.hpp"
@@ -710,6 +713,8 @@ void obj_store_to_char(struct char_data* ch, struct obj_file_u* st,
 				}
 				} /* !db_instance_id overlay */
 
+				(void)achie_reward_remap_obj(obj);
+
 				SetStatus(STATUS_OTCBAGTREE, NULL);
 
 				/* item restoring */
@@ -854,6 +859,8 @@ void obj_store_to_char_by_parent(struct char_data* ch,
 			obj->affected[j] = row.elem.affected[j];
 		}
 		}
+
+		(void)achie_reward_remap_obj(obj);
 
 		obj_by_id[row.id] = obj;
 		id_to_obj[row.id] = obj;
@@ -1050,6 +1057,8 @@ void old_obj_store_to_char(struct char_data* ch, struct old_obj_file_u* st)
                 for(j=0; j<MAX_OBJ_AFFECT; j++) {
                     obj->affected[j] = st->objects[i].affected[j];
                 }
+
+                (void)achie_reward_remap_obj(obj);
 
                 SetStatus(STATUS_OTCBAGTREE, NULL);
 
@@ -2331,10 +2340,46 @@ void old_st_to_st(struct old_obj_file_u* old_st, struct obj_file_u* st)
     }
 }
 
+namespace {
+
+/* Intero decimale da una stringa (colonna MySQL): nullptr, vuota, non
+ * numerica o fuori intervallo = 0. */
+[[nodiscard, maybe_unused]] int parse_int_or_zero(const char* s) {
+	if(s == nullptr) {
+		return 0;
+	}
+	const std::string_view v(s);
+	int n = 0;
+	const auto [ptr, ec] = std::from_chars(v.data(), v.data() + v.size(), n);
+	if(ec != std::errc() || ptr != v.data() + v.size()) {
+		return 0;
+	}
+	return n;
+}
+
+/* Accoda a rarelist " " + "  %5d nome proprietario<suffisso>\n\r" (stesso
+ * formato di prima, ma senza limite di lunghezza). nullptr -> "?". */
+void rarelist_add(int vnum, const char* nome, const char* proprietario,
+				  std::string_view suffisso) {
+	const std::string num = std::to_string(vnum);
+	rarelist += "   "; /* spazio iniziale + i due spazi del formato */
+	if(num.size() < 5) {
+		rarelist.append(5 - num.size(), ' ');
+	}
+	rarelist += num;
+	rarelist += ' ';
+	rarelist += (nome != nullptr) ? nome : "?";
+	rarelist += ' ';
+	rarelist += (proprietario != nullptr) ? proprietario : "?";
+	rarelist += suffisso;
+	rarelist += "\n\r";
+}
+
+} // namespace
+
 void CountLimitedItems(struct obj_file_u* st) {
 	int i;
 	struct obj_data* obj;
-	char buf[MAX_STRING_LENGTH];
 
 	if(!st->owner[0]) {
 		return;    /* don't count empty rent units */
@@ -2353,9 +2398,8 @@ void CountLimitedItems(struct obj_file_u* st) {
 					obj_index[ obj->item_number ].number++;
 
 					/*Acidus 2004-show rare*/
-					snprintf(buf, sizeof(buf)-1, "  %5d %s %s\n\r", (obj->item_number >= 0 ? obj_index[obj->item_number].iVNum : 0), obj->name, st->owner);
-					strncat(rarelist, " ",MAX_STRING_LENGTH);
-					strncat(rarelist, buf,MAX_STRING_LENGTH);
+					rarelist_add((obj->item_number >= 0 ? obj_index[obj->item_number].iVNum : 0),
+								 obj->name, st->owner, std::string_view());
 
 				}
 				if(IsQuestItem(obj))
@@ -2436,7 +2480,7 @@ void CountLimitedItemsMysql() {
 	long long skipped_instance = 0;
 	MYSQL_ROW row;
 	while((row = mysql_fetch_row(res)) != nullptr) {
-		const int item_vnum = (row[0] != nullptr) ? std::atoi(row[0]) : 0;
+		const int item_vnum = parse_int_or_zero(row[0]);
 		const unsigned long long instance_id =
 			(row[1] != nullptr) ? strtoull(row[1], nullptr, 10) : 0ULL;
 		const char* owner = (row[2] != nullptr && row[2][0] != '\0') ? row[2] : "?";
@@ -2473,20 +2517,62 @@ void CountLimitedItemsMysql() {
 		obj_index[rnum].number++;
 		++rare_added;
 
-		char buf[MAX_STRING_LENGTH];
 		const char* label =
 			proto_name.count(item_vnum) ? proto_name[item_vnum].c_str() : "?";
-		std::snprintf(buf, sizeof(buf) - 1, "  %5d %s %s [mysql]\n\r", item_vnum,
-					  label, owner);
-		strncat(rarelist, " ", MAX_STRING_LENGTH);
-		strncat(rarelist, buf, MAX_STRING_LENGTH);
+		rarelist_add(item_vnum, label, owner, " [mysql]");
 	}
 	mysql_free_result(res);
 
+	/* Cassette di sicurezza (personali, account, clan): vault_item (vnum +
+	 * quantita'). Al deposito obj_to_store lascia il raro contato, al prelievo
+	 * il vault lo scala di nuovo: al boot vanno quindi contati anche questi. */
+	long long vault_rows = 0;
+	long long vault_rare_added = 0;
+	{
+		MYSQL_RES* vres = nullptr;
+		const std::string vsql =
+			"SELECT vi.item_number, vi.quantity, "
+			"CONCAT(ELT(v.scope + 1, 'pers', 'acct', 'clan'), ':', v.owner_id) "
+			"FROM vault_item vi "
+			"INNER JOIN vault v ON v.id = vi.vault_id "
+			"WHERE vi.quantity > 0";
+		if(!legacy_mysql_select(db, vsql, vres) || vres == nullptr) {
+			mudlog(LOG_SYSERR, "CountLimitedItemsMysql: vault query failed");
+		}
+		else {
+			while((row = mysql_fetch_row(vres)) != nullptr) {
+				const int item_vnum = parse_int_or_zero(row[0]);
+				const int quantity = parse_int_or_zero(row[1]);
+				const char* owner =
+					(row[2] != nullptr && row[2][0] != '\0') ? row[2] : "?";
+				++vault_rows;
+				if(item_vnum <= 0 || quantity <= 0) {
+					continue;
+				}
+				if(!ensure_proto(item_vnum)) {
+					continue;
+				}
+				const int rnum = real_object(item_vnum);
+				if(rnum < 0) {
+					continue;
+				}
+				obj_index[rnum].number += quantity;
+				vault_rare_added += quantity;
+
+				const char* label =
+					proto_name.count(item_vnum) ? proto_name[item_vnum].c_str() : "?";
+				const std::string vault_tag = " [vault x" + std::to_string(quantity) + "]";
+				rarelist_add(item_vnum, label, owner, vault_tag);
+			}
+			mysql_free_result(vres);
+		}
+	}
+
 	mudlog(LOG_CHECK,
 		   "CountLimitedItemsMysql: %lld inventory rows scanned, +%lld rare "
-		   "(skip %lld object_instance)",
-		   inventory_rows, rare_added, skipped_instance);
+		   "(skip %lld object_instance); vault %lld rows, +%lld rare",
+		   inventory_rows, rare_added, skipped_instance, vault_rows,
+		   vault_rare_added);
 #endif /* LIMITED_ITEMS */
 }
 
@@ -4248,6 +4334,8 @@ void obj_store_to_room(int room, struct obj_file_u* st) {
 				obj->affected[ j ] = st->objects[ i ].affected[ j ];
 			}
 		}
+
+			(void)achie_reward_remap_obj(obj);
 
 			/* item restoring */
 			if(st->objects[i].depth > 60) {

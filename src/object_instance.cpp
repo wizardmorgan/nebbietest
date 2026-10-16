@@ -218,32 +218,6 @@ std::string apply_loc_name(short loc) {
 	return "loc" + std::to_string(loc);
 }
 
-/* Come sprintbit, ma su std::string: niente strcat su buffer fissi. */
-std::string format_bit_names(unsigned long bits, const char* names[]) {
-	if(!names) {
-		return "NONE";
-	}
-	std::string result;
-	long nr = 0;
-	for(; bits; bits >>= 1) {
-		if(IS_SET(1, bits)) {
-			if(!result.empty()) {
-				result += ' ';
-			}
-			if(*names[nr] != '\n') {
-				result += names[nr];
-			}
-			else {
-				result += "UNDEFINED";
-			}
-		}
-		if(*names[nr] != '\n') {
-			nr++;
-		}
-	}
-	return result.empty() ? "NONE" : result;
-}
-
 std::string format_named_type(int type, const char* names[]) {
 	if(!names) {
 		return std::to_string(type);
@@ -1107,6 +1081,14 @@ unsigned long long object_instance_persist(struct obj_data* obj, int base_vnum,
 	if(!obj || base_vnum <= 0) {
 		return 0;
 	}
+	{
+		std::string serr;
+		if(!object_instance_check_string_limits(obj, nullptr, &serr)) {
+			mudlog(LOG_SYSERR, "object_instance_persist: %s (base=%d)", serr.c_str(),
+				   base_vnum);
+			return 0;
+		}
+	}
 	DB* db = Sql::getMysql();
 	if(!db) {
 		mudlog(LOG_SYSERR, "object_instance_persist: no database");
@@ -1146,6 +1128,138 @@ unsigned long long object_instance_persist(struct obj_data* obj, int base_vnum,
 		object_exclude_from_zone_limit(obj);
 	}
 	return id;
+}
+
+namespace {
+
+void finish_persist_side_effects(struct obj_data* obj, unsigned long long id, int base_vnum,
+								 char_data* actor) {
+	if(!obj || id == 0 || base_vnum <= 0) {
+		return;
+	}
+	obj->db_instance_id = id;
+	const std::string owner = resolve_owner_name(obj, actor);
+	copy_personal_owner(obj, owner);
+	const std::string stripped = object_instance_strip_ed_tokens(obj->name);
+	if(!stripped.empty() && obj->name && stripped != obj->name) {
+		free(obj->name);
+		obj->name = static_cast<char*>(malloc(stripped.size() + 1));
+		std::strcpy(obj->name, stripped.c_str());
+	}
+	if(obj->char_vnum == 0 ||
+	   (obj->char_vnum >= LOW_EDITED_ITEMS && obj->char_vnum <= HIGH_EDITED_ITEMS)) {
+		obj->char_vnum = base_vnum;
+	}
+	if(obj->item_number >= 0 && obj->item_number < top_of_objt &&
+	   obj_index[obj->item_number].iVNum == base_vnum) {
+		object_exclude_from_zone_limit(obj);
+	}
+}
+
+} // namespace
+
+bool object_instance_broker_transfer_commit(
+	struct obj_data* obj_a, struct obj_data* obj_b, struct char_data* actor,
+	const char* note_a, const char* note_b, const char* detail, const char* xfer_id,
+	const obj_affected_type* b_create_baseline_affects) {
+	if(!obj_a || !obj_b || !xfer_id || !*xfer_id) {
+		return false;
+	}
+	const int base_a = object_instance_resolve_base_vnum(obj_a);
+	const int base_b = object_instance_resolve_base_vnum(obj_b);
+	if(base_a <= 0 || base_b <= 0) {
+		return false;
+	}
+	DB* db = Sql::getMysql();
+	if(!db) {
+		mudlog(LOG_SYSERR, "object_instance_broker_transfer_commit: no database");
+		return false;
+	}
+
+	SET_BIT(obj_a->obj_flags.extra_flags2, ITEM2_EDIT);
+	SET_BIT(obj_b->obj_flags.extra_flags2, ITEM2_EDIT);
+
+	const bool create_b_with_baseline =
+		b_create_baseline_affects != nullptr && obj_b->db_instance_id == 0;
+
+	unsigned long long id_a = 0;
+	unsigned long long id_b = 0;
+	try {
+		odb::transaction t(db->begin());
+		t.tracer(logTracer);
+		id_a = persist_body_tx(db, obj_a, base_a, obj_a->db_instance_id, actor, false);
+		if(create_b_with_baseline) {
+			obj_affected_type post_affects[MAX_OBJ_AFFECT];
+			std::memcpy(post_affects, obj_b->affected, sizeof(post_affects));
+			std::memcpy(obj_b->affected, b_create_baseline_affects, sizeof(post_affects));
+			id_b = persist_body_tx(db, obj_b, base_b, 0, actor, true);
+			std::memcpy(obj_b->affected, post_affects, sizeof(post_affects));
+			if(id_b != 0) {
+				id_b = persist_body_tx(db, obj_b, base_b, id_b, actor, false);
+			}
+		}
+		else {
+			id_b = persist_body_tx(db, obj_b, base_b, obj_b->db_instance_id, actor, false);
+		}
+		if(id_a == 0 || id_b == 0) {
+			mudlog(LOG_SYSERR,
+				   "object_instance_broker_transfer_commit: persist_body returned 0 "
+				   "(A=%llu B=%llu)",
+				   static_cast<unsigned long long>(id_a),
+				   static_cast<unsigned long long>(id_b));
+			return false; /* rollback on t dtor */
+		}
+		std::string note_a_use = note_a ? note_a : "";
+		std::string note_b_use = note_b ? note_b : "";
+		std::string detail_use = detail ? detail : "";
+		if(create_b_with_baseline) {
+			const std::string from = "B_inst=0";
+			const std::string to = "B_inst=" + std::to_string(id_b);
+			auto rewrite = [&](std::string& s) {
+				size_t pos = 0;
+				while((pos = s.find(from, pos)) != std::string::npos) {
+					s.replace(pos, from.size(), to);
+					pos += to.size();
+				}
+			};
+			rewrite(note_a_use);
+			rewrite(note_b_use);
+			rewrite(detail_use);
+		}
+		append_instance_event_tx(db, id_a, actor, "broker_transfer", note_a_use.c_str(),
+								 detail_use.c_str(), nullptr);
+		append_instance_event_tx(db, id_b, actor, "broker_transfer", note_b_use.c_str(),
+								 detail_use.c_str(), nullptr);
+		append_instance_event_tx(db, id_b, actor, "broker_xfer_applied", xfer_id,
+								 detail_use.c_str(), nullptr);
+		t.commit();
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_broker_transfer_commit: %s", e.what());
+		return false;
+	}
+
+	finish_persist_side_effects(obj_a, id_a, base_a, actor);
+	finish_persist_side_effects(obj_b, id_b, base_b, actor);
+	if(create_b_with_baseline && procarea_is_reward_vnum(base_b)) {
+		SET_BIT(obj_b->obj_flags.extra_flags2, ITEM2_PROCAREA_REWARD);
+		const int base_rnum = real_object(base_b);
+		if(base_rnum >= 0) {
+			obj_b->item_number = base_rnum;
+		}
+		object_exclude_from_zone_limit(obj_b);
+	}
+	return true;
+}
+
+bool object_instance_broker_transfer_mark_done(unsigned long long inst_b, const char* xfer_id,
+											   const char* detail, char_data* actor,
+											   const char* system_actor) {
+	if(inst_b == 0 || !xfer_id || !*xfer_id) {
+		return false;
+	}
+	return object_instance_append_event(inst_b, "broker_xfer_done", xfer_id, detail,
+										system_actor, actor);
 }
 
 bool object_instance_apply(struct obj_data* obj, unsigned long long instance_id) {
@@ -2229,6 +2343,43 @@ void accumulate_obj_affects(const struct obj_data* obj, AffectTotals& tot) {
 	return cache.emplace(base_vnum, std::move(tot)).first->second;
 }
 
+/**
+ * Create-baseline solo per premi Dimensione (rolled nello snapshot).
+ * Gli edit god/portale tengono il create gia' "pieno" di edit: vs create
+ * i delta sarebbero tutti 0 — per quelli si usa il proto mondo.
+ */
+[[nodiscard]] bool instance_uses_create_baseline(const std::string& source,
+												 int extra_flags2) noexcept {
+	if(source == kObjInstSourceProcareaLoot) {
+		return true;
+	}
+	return IS_SET(static_cast<unsigned long>(extra_flags2), ITEM2_PROCAREA_REWARD) != 0;
+}
+
+[[nodiscard]] const AffectTotals& baseline_affects_for_instance(
+	unsigned long long instance_id, unsigned base_vnum, bool use_create_snapshot,
+	std::map<unsigned long long, AffectTotals>& create_cache,
+	std::map<unsigned, AffectTotals>& proto_cache) {
+	if(!use_create_snapshot) {
+		return proto_affects_cached(base_vnum, proto_cache);
+	}
+	if(const auto it = create_cache.find(instance_id); it != create_cache.end()) {
+		return it->second;
+	}
+	AffectTotals tot;
+	if(instance_id != 0) {
+		if(struct obj_data* baseline =
+			   object_instance_materialize_create_baseline(instance_id)) {
+			accumulate_obj_affects(baseline, tot);
+			extract_obj(baseline);
+			return create_cache.emplace(instance_id, std::move(tot)).first->second;
+		}
+	}
+	/* Procarea senza create usabile: meglio proto mondo che inventare. */
+	tot = proto_affects_cached(base_vnum, proto_cache);
+	return create_cache.emplace(instance_id, std::move(tot)).first->second;
+}
+
 [[nodiscard]] long long affect_num(const AffectTotals& t, short loc) {
 	const auto it = t.numeric.find(loc);
 	return it == t.numeric.end() ? 0 : it->second;
@@ -2469,7 +2620,8 @@ void object_instance_show_edit_totals(struct char_data* ch, const char* name) {
 		}
 
 		std::ostringstream sql;
-		sql << "SELECT oi.id, oi.base_vnum, oi.short_desc FROM object_instance oi WHERE "
+		sql << "SELECT oi.id, oi.base_vnum, oi.short_desc, IFNULL(oi.source,''), "
+			   "oi.extra_flags2 FROM object_instance oi WHERE "
 			   "(oi.deleted = 0 OR oi.deleted IS NULL) "
 			   "AND (oi.source IS NULL OR oi.source <> '"
 			<< kObjInstSourceClanSymbol << "') AND (";
@@ -2482,6 +2634,8 @@ void object_instance_show_edit_totals(struct char_data* ch, const char* name) {
 			unsigned long long id;
 			unsigned base_vnum;
 			std::string short_desc;
+			std::string source;
+			int extra_flags2{0};
 		};
 		std::vector<InstRef> instances;
 		if(mysql_query(h, sql.str().c_str()) == 0) {
@@ -2498,6 +2652,10 @@ void object_instance_show_edit_totals(struct char_data* ch, const char* name) {
 					if(row[2]) {
 						r.short_desc = row[2];
 					}
+					if(row[3]) {
+						r.source = row[3];
+					}
+					r.extra_flags2 = row[4] ? atoi(row[4]) : 0;
 					instances.push_back(std::move(r));
 				}
 				mysql_free_result(res);
@@ -2506,24 +2664,32 @@ void object_instance_show_edit_totals(struct char_data* ch, const char* name) {
 		n_instances = static_cast<unsigned>(instances.size());
 
 		std::map<unsigned, AffectTotals> proto_cache;
+		std::map<unsigned long long, AffectTotals> create_cache;
 		for(const InstRef& inst : instances) {
 			AffectTotals edited;
 			if(!load_instance_affects(h, inst.id, edited)) {
 				continue;
 			}
-			const AffectTotals& proto =
-				proto_affects_cached(inst.base_vnum, proto_cache);
-			add_edit_deltas(edited, proto, numeric_totals, bit_added, bit_removed);
+			const bool use_create =
+				instance_uses_create_baseline(inst.source, inst.extra_flags2);
+			const AffectTotals& baseline = baseline_affects_for_instance(
+				inst.id, inst.base_vnum, use_create, create_cache, proto_cache);
+			add_edit_deltas(edited, baseline, numeric_totals, bit_added, bit_removed);
 
-			const long long d_hr = affect_delta(edited, proto, APPLY_HITROLL);
-			const long long d_dam = affect_delta(edited, proto, APPLY_DAMROLL);
-			const long long d_sp = affect_delta(edited, proto, APPLY_SPELLPOWER);
-			const long long d_hd = affect_delta(edited, proto, APPLY_HITNDAM);
-			const long long d_hs = affect_delta(edited, proto, APPLY_HITNSP);
-			const long long d_ac = affect_delta(edited, proto, APPLY_AC);
-			const long long piece_hr = d_hr + d_hd + d_hs;
-			const long long piece_dam = d_dam + d_hd;
-			const long long piece_sp = d_sp + d_hs;
+			/* Delta combat = differenza sui canali effective, non slot-per-slot. */
+			const long long piece_hr =
+				(affect_num(edited, APPLY_HITROLL) + affect_num(edited, APPLY_HITNDAM) +
+				 affect_num(edited, APPLY_HITNSP)) -
+				(affect_num(baseline, APPLY_HITROLL) + affect_num(baseline, APPLY_HITNDAM) +
+				 affect_num(baseline, APPLY_HITNSP));
+			const long long piece_dam =
+				(affect_num(edited, APPLY_DAMROLL) + affect_num(edited, APPLY_HITNDAM)) -
+				(affect_num(baseline, APPLY_DAMROLL) + affect_num(baseline, APPLY_HITNDAM));
+			const long long piece_sp =
+				(affect_num(edited, APPLY_SPELLPOWER) + affect_num(edited, APPLY_HITNSP)) -
+				(affect_num(baseline, APPLY_SPELLPOWER) +
+				 affect_num(baseline, APPLY_HITNSP));
+			const long long d_ac = affect_delta(edited, baseline, APPLY_AC);
 
 			std::ostringstream w;
 			bool any_w = false;
@@ -2549,7 +2715,7 @@ void object_instance_show_edit_totals(struct char_data* ch, const char* name) {
 			for(short st : {static_cast<short>(APPLY_STR), static_cast<short>(APPLY_DEX),
 							static_cast<short>(APPLY_CON), static_cast<short>(APPLY_INT),
 							static_cast<short>(APPLY_WIS), static_cast<short>(APPLY_CHR)}) {
-				const long long ds = affect_delta(edited, proto, st);
+				const long long ds = affect_delta(edited, baseline, st);
 				if(ds > kListinoPerPieceStat) {
 					push_w(apply_loc_name(st) + "+" + std::to_string(ds));
 				}
@@ -2570,6 +2736,7 @@ void object_instance_show_edit_totals(struct char_data* ch, const char* name) {
 		return;
 	}
 
+	/* Cap combat: equivalent a somma (effective_cur - effective_base) per pezzo. */
 	const long long tot_hr = map_num(numeric_totals, APPLY_HITROLL) +
 							 map_num(numeric_totals, APPLY_HITNDAM) +
 							 map_num(numeric_totals, APPLY_HITNSP);
@@ -2690,6 +2857,403 @@ void object_instance_show_edit_totals(struct char_data* ch, const char* name) {
 	else {
 		send_to_char(out.str().c_str(), ch);
 	}
+}
+
+bool object_instance_owner_dam_sp_totals(const char* owner_name, ObjInstDamSpTotals& out) {
+	out = {};
+	if(!owner_name || !*owner_name) {
+		return false;
+	}
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return false;
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+
+		std::string esc;
+		esc.resize(std::strlen(owner_name) * 2 + 1);
+		esc.resize(mysql_real_escape_string(
+			h, esc.data(), owner_name,
+			static_cast<unsigned long>(std::strlen(owner_name))));
+
+		unsigned long long toon_id = 0;
+		{
+			std::ostringstream sql;
+			sql << "SELECT id FROM toon WHERE LOWER(name)=LOWER('" << esc << "') LIMIT 1";
+			if(mysql_query(h, sql.str().c_str()) == 0) {
+				MYSQL_RES* res = mysql_store_result(h);
+				if(res) {
+					if(MYSQL_ROW row = mysql_fetch_row(res)) {
+						if(row[0]) {
+							toon_id = strtoull(row[0], nullptr, 10);
+						}
+					}
+					mysql_free_result(res);
+				}
+			}
+		}
+
+		std::ostringstream sql;
+		sql << "SELECT oi.id, oi.base_vnum, IFNULL(oi.source,''), oi.extra_flags2 "
+			   "FROM object_instance oi WHERE "
+			   "(oi.deleted = 0 OR oi.deleted IS NULL) "
+			   "AND (oi.source IS NULL OR oi.source <> '"
+			<< kObjInstSourceClanSymbol << "') AND (";
+		if(toon_id != 0) {
+			sql << "oi.owner_toon_id=" << toon_id << " OR ";
+		}
+		sql << "LOWER(oi.owner_name)=LOWER('" << esc << "'))";
+
+		struct InstRef {
+			unsigned long long id;
+			unsigned base_vnum;
+			std::string source;
+			int extra_flags2{0};
+		};
+		std::vector<InstRef> instances;
+		if(mysql_query(h, sql.str().c_str()) == 0) {
+			MYSQL_RES* res = mysql_store_result(h);
+			if(res) {
+				while(MYSQL_ROW row = mysql_fetch_row(res)) {
+					if(!row[0]) {
+						continue;
+					}
+					InstRef r {};
+					r.id = strtoull(row[0], nullptr, 10);
+					r.base_vnum =
+						row[1] ? static_cast<unsigned>(strtoul(row[1], nullptr, 10)) : 0u;
+					if(row[2]) {
+						r.source = row[2];
+					}
+					r.extra_flags2 = row[3] ? atoi(row[3]) : 0;
+					instances.push_back(r);
+				}
+				mysql_free_result(res);
+			}
+		}
+
+		std::map<unsigned, AffectTotals> proto_cache;
+		std::map<unsigned long long, AffectTotals> create_cache;
+		long long tot_dam = 0;
+		long long tot_sp = 0;
+		for(const InstRef& inst : instances) {
+			AffectTotals edited;
+			if(!load_instance_affects(h, inst.id, edited)) {
+				continue;
+			}
+			const bool use_create =
+				instance_uses_create_baseline(inst.source, inst.extra_flags2);
+			const AffectTotals& baseline = baseline_affects_for_instance(
+				inst.id, inst.base_vnum, use_create, create_cache, proto_cache);
+			tot_dam += affect_delta(edited, baseline, APPLY_DAMROLL) +
+					   affect_delta(edited, baseline, APPLY_HITNDAM);
+			tot_sp += affect_delta(edited, baseline, APPLY_SPELLPOWER) +
+					  affect_delta(edited, baseline, APPLY_HITNSP);
+		}
+		out.dam = tot_dam;
+		out.sp = tot_sp;
+		return true;
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_owner_dam_sp_totals: %s", e.what());
+		return false;
+	}
+}
+
+namespace {
+
+[[nodiscard]] bool parse_detail_long(const std::string& detail, const char* key,
+									 long& out) {
+	if(!key || !*key) {
+		return false;
+	}
+	const std::string needle = std::string(key) + "=";
+	const auto pos = detail.find(needle);
+	if(pos == std::string::npos) {
+		return false;
+	}
+	const char* p = detail.c_str() + pos + needle.size();
+	char* end = nullptr;
+	const long v = std::strtol(p, &end, 10);
+	if(end == p) {
+		return false;
+	}
+	out = v;
+	return true;
+}
+
+[[nodiscard]] bool parse_detail_token(const std::string& detail, const char* key,
+									  std::string& out) {
+	if(!key || !*key) {
+		return false;
+	}
+	const std::string needle = std::string(key) + "=";
+	const auto pos = detail.find(needle);
+	if(pos == std::string::npos) {
+		return false;
+	}
+	const char* p = detail.c_str() + pos + needle.size();
+	std::string tok;
+	while(*p && !std::isspace(static_cast<unsigned char>(*p))) {
+		tok.push_back(*p++);
+	}
+	if(tok.empty()) {
+		return false;
+	}
+	out = std::move(tok);
+	return true;
+}
+
+/** Addebita payment_xp rispettando il floor Prince. Online preferito, altrimenti MySQL. */
+[[nodiscard]] bool broker_debit_payment_xp(const std::string& actor_name, long payment) {
+	if(actor_name.empty() || payment <= 0) {
+		return true;
+	}
+	const long floor = static_cast<long>(PRINCEEXP);
+
+	for(char_data* ch = character_list; ch; ch = ch->next) {
+		if(IS_NPC(ch) || !GET_NAME(ch) || str_cmp(GET_NAME(ch), actor_name.c_str()) != 0) {
+			continue;
+		}
+		const long long cur = static_cast<long long>(GET_EXP(ch));
+		const long long next =
+			std::max(static_cast<long long>(floor), cur - static_cast<long long>(payment));
+		GET_EXP(ch) = static_cast<int>(next);
+		if(ch->desc) {
+			save_char(ch, AUTO_RENT, 0);
+		}
+		else {
+			struct char_file_u st {};
+			char_to_store(ch, &st);
+			if(!save_character_to_db(ch, &st, nullptr, CHAR_DB_SAVE_BODY_TOON)) {
+				mudlog(LOG_SYSERR,
+					   "broker_debit_payment_xp: save_character_to_db failed for LD %s",
+					   actor_name.c_str());
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/* Offline: UPDATE character_stats.exp */
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return false;
+	}
+	try {
+		odb::transaction t(db->begin());
+		t.tracer(logTracer);
+		const unsigned long long tid = lookup_toon_id_tx(db, actor_name);
+		if(tid == 0) {
+			mudlog(LOG_SYSERR, "broker_debit_payment_xp: no toon for %s",
+				   actor_name.c_str());
+			return false;
+		}
+		character_stats stats {};
+		try {
+			db->load<character_stats>(tid, stats);
+		}
+		catch(const odb::exception&) {
+			mudlog(LOG_SYSERR, "broker_debit_payment_xp: no stats for %s",
+				   actor_name.c_str());
+			return false;
+		}
+		const long long cur = static_cast<long long>(stats.exp);
+		const long long next =
+			std::max(static_cast<long long>(floor), cur - static_cast<long long>(payment));
+		stats.exp = static_cast<int>(next);
+		db->update(stats);
+		t.commit();
+		mudlog(LOG_PLAYERS, "broker_debit_payment_xp: offline %s -%ld exp -> %d",
+			   actor_name.c_str(), payment, stats.exp);
+		return true;
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "broker_debit_payment_xp(%s): %s", actor_name.c_str(), e.what());
+		return false;
+	}
+}
+
+} // namespace
+
+unsigned object_instance_broker_reconcile(const char* actor_name, bool notify_player) {
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return 0;
+	}
+
+	struct OpenXfer {
+		unsigned long long inst_b{};
+		std::string xfer_id;
+		std::string detail;
+		std::string actor;
+		long payment{};
+	};
+	std::vector<OpenXfer> open;
+
+	try {
+		with_odb_tx(db, [&]() {
+			using EvQ = odb::query<object_instance_event>;
+			std::unordered_set<std::string> done_ids;
+			for(const auto& ev :
+				db->query<object_instance_event>(EvQ::kind == "broker_xfer_done")) {
+				if(!ev.note.null() && !ev.note.get().empty()) {
+					done_ids.insert(ev.note.get());
+				}
+			}
+			for(const auto& ev :
+				db->query<object_instance_event>(EvQ::kind == "broker_xfer_applied")) {
+				if(ev.note.null() || ev.note.get().empty()) {
+					continue;
+				}
+				const std::string xfer_id = ev.note.get();
+				if(done_ids.count(xfer_id) != 0) {
+					continue;
+				}
+				const std::string detail =
+					(!ev.detail.null() && !ev.detail.get().empty()) ? ev.detail.get() : "";
+				std::string actor;
+				if(!parse_detail_token(detail, "actor", actor)) {
+					if(!ev.actor_name.null()) {
+						actor = ev.actor_name.get();
+					}
+				}
+				if(actor_name && *actor_name) {
+					if(actor.empty() || str_cmp(actor.c_str(), actor_name) != 0) {
+						continue;
+					}
+				}
+				long payment = 0;
+				(void)parse_detail_long(detail, "payment_xp", payment);
+				long b_inst = 0;
+				if(!parse_detail_long(detail, "B_inst", b_inst) || b_inst <= 0) {
+					b_inst = static_cast<long>(ev.instance_id);
+				}
+				OpenXfer ox {};
+				ox.inst_b = static_cast<unsigned long long>(b_inst);
+				ox.xfer_id = xfer_id;
+				ox.detail = detail;
+				ox.actor = actor;
+				ox.payment = payment;
+				open.push_back(std::move(ox));
+			}
+			return true;
+		});
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_broker_reconcile scan: %s", e.what());
+		return 0;
+	}
+
+	unsigned closed = 0;
+	for(const auto& ox : open) {
+		if(ox.actor.empty()) {
+			mudlog(LOG_SYSERR,
+				   "object_instance_broker_reconcile: skip xfer %s (no actor)",
+				   ox.xfer_id.c_str());
+			continue;
+		}
+		if(ox.payment > 0 && !broker_debit_payment_xp(ox.actor, ox.payment)) {
+			mudlog(LOG_SYSERR,
+				   "object_instance_broker_reconcile: XP debit failed xfer=%s actor=%s",
+				   ox.xfer_id.c_str(), ox.actor.c_str());
+			continue;
+		}
+		if(!object_instance_broker_transfer_mark_done(ox.inst_b, ox.xfer_id.c_str(),
+													  ox.detail.c_str(), nullptr,
+													  "broker_reconcile")) {
+			mudlog(LOG_SYSERR,
+				   "object_instance_broker_reconcile: mark_done failed xfer=%s",
+				   ox.xfer_id.c_str());
+			continue;
+		}
+		++closed;
+		mudlog(LOG_PLAYERS,
+			   "object_instance_broker_reconcile: closed xfer=%s actor=%s pay=%ld "
+			   "B_inst=%llu",
+			   ox.xfer_id.c_str(), ox.actor.c_str(), ox.payment,
+			   static_cast<unsigned long long>(ox.inst_b));
+
+		if(notify_player) {
+			for(char_data* ch = character_list; ch; ch = ch->next) {
+				if(IS_NPC(ch) || !GET_NAME(ch) ||
+				   str_cmp(GET_NAME(ch), ox.actor.c_str()) != 0) {
+					continue;
+				}
+				char buf[256];
+				snprintf(buf, sizeof(buf),
+						 "$c0011[trasferimento]$c0007 Addebitati %ld XP per un "
+						 "trasferimento interrotto.\n\r",
+						 ox.payment);
+				send_to_char(buf, ch);
+				break;
+			}
+		}
+	}
+	return closed;
+}
+
+long object_instance_sum_broker_delta(unsigned long long instance_id, int location) {
+	if(instance_id == 0 || location == APPLY_NONE || location == APPLY_SKIP) {
+		return 0;
+	}
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return 0;
+	}
+	long sum = 0;
+	try {
+		with_odb_tx(db, [&]() {
+			using EvQ = odb::query<object_instance_event>;
+			for(const auto& ev :
+				db->query<object_instance_event>(EvQ::instance_id == instance_id)) {
+				/* kind dedicato broker_transfer, o legacy affect_transfer. */
+				if(ev.kind != "broker_transfer" && ev.kind != "affect_transfer") {
+					continue;
+				}
+				const std::string note =
+					(!ev.note.null() && !ev.note.get().empty()) ? ev.note.get() : "";
+				const bool is_add = note.find("trasferimento ADD") != std::string::npos ||
+									note.find("brokeraggio ADD") != std::string::npos ||
+									note.find("transfer add") != std::string::npos;
+				const bool is_remove =
+					note.find("trasferimento REMOVE") != std::string::npos ||
+					note.find("brokeraggio REMOVE") != std::string::npos ||
+					note.find("transfer remove") != std::string::npos;
+				/* ADD su B e REMOVE su A (stesso broker_delta in detail). */
+				if(!is_add && !is_remove) {
+					continue;
+				}
+				const std::string detail =
+					(!ev.detail.null() && !ev.detail.get().empty()) ? ev.detail.get()
+																   : note;
+				long loc = -1;
+				long delta = 0;
+				if(!parse_detail_long(detail, "location", loc) ||
+				   loc != static_cast<long>(location)) {
+					continue;
+				}
+				if(!parse_detail_long(detail, "broker_delta", delta)) {
+					continue;
+				}
+				if(is_add) {
+					sum += delta;
+				}
+				else {
+					sum -= delta;
+				}
+			}
+			return true;
+		});
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_sum_broker_delta: %s", e.what());
+		return 0;
+	}
+	return sum;
 }
 
 void object_instance_show_history(struct char_data* ch, unsigned long long instance_id) {
@@ -3489,15 +4053,112 @@ void object_instance_boot_migrate() {
 #endif /* USE_MYSQL */
 
 #include <cctype>
+#include <cstring>
+#include <sstream>
 #include <string>
+#include "autoenums.hpp"
+#include "comm.hpp"
 #include "db.hpp"
+#include "handler.hpp"
 #include "structs.hpp"
+#include "utils.hpp"
 #include "clan_symbol.hpp"
 
 namespace Alarmud {
 
+namespace {
+
+[[nodiscard]] int vault_resolve_proto_vnum(const obj_data* obj) {
+	if(!obj) {
+		return 0;
+	}
+	const int base = object_instance_resolve_base_vnum(obj);
+	if(base > 0) {
+		return base;
+	}
+	if(obj->char_vnum > 0) {
+		const int cv = static_cast<int>(obj->char_vnum);
+		if(cv < LOW_EDITED_ITEMS || cv > HIGH_EDITED_ITEMS) {
+			return cv;
+		}
+	}
+	if(obj->item_number >= 0) {
+		const int vnum = obj_index[obj->item_number].iVNum;
+		if(vnum > 0 && (vnum < LOW_EDITED_ITEMS || vnum > HIGH_EDITED_ITEMS)) {
+			return vnum;
+		}
+	}
+	return 0;
+}
+
+[[nodiscard]] bool check_one_obj_string(const char* field, const char* value,
+										std::size_t max_len, std::string& err) {
+	const std::size_t n = (value && *value) ? std::strlen(value) : 0;
+	if(n <= max_len) {
+		return true;
+	}
+	std::ostringstream os;
+	os << "Campo " << field << " troppo lungo: " << n << " caratteri (max " << max_len
+	   << "). Accorcia il testo o riduci i codici colore.";
+	err = os.str();
+	return false;
+}
+
+} // namespace
+
+bool object_instance_check_string_limits(const obj_data* obj, char_data* ch,
+										 std::string* out_err) {
+	if(!obj) {
+		if(out_err) {
+			*out_err = "Oggetto non valido.";
+		}
+		if(ch) {
+			send_to_char("Oggetto non valido.\n\r", ch);
+		}
+		return false;
+	}
+	std::string err;
+	if(!check_one_obj_string("keywords/name", obj->name, kObjInstMaxName, err) ||
+	   !check_one_obj_string("short_desc", obj->short_description, kObjInstMaxShort, err) ||
+	   !check_one_obj_string("description", obj->description, kObjInstMaxDesc, err) ||
+	   !check_one_obj_string("action_desc", obj->action_description, kObjInstMaxAction,
+							 err)) {
+		if(out_err) {
+			*out_err = err;
+		}
+		if(ch) {
+			send_to_char(err.c_str(), ch);
+			send_to_char("\n\r", ch);
+		}
+		return false;
+	}
+	return true;
+}
+
 bool object_is_zone_limit_exempt(const obj_data* obj) noexcept {
 	return obj != nullptr && obj->zone_limit_exempt;
+}
+
+bool obj_vault_allowed(const obj_data* obj) {
+	const int proto_vnum = vault_resolve_proto_vnum(obj);
+	if(proto_vnum <= 0) {
+		return false;
+	}
+	const int rnum = real_object(proto_vnum);
+	if(rnum < 0) {
+		return false;
+	}
+	if(obj_index[rnum].data) {
+		const auto* proto = static_cast<const obj_data*>(obj_index[rnum].data);
+		return IS_OBJ_STAT2(proto, ITEM2_VAULT);
+	}
+	struct obj_data* loaded = read_object(rnum, REAL);
+	if(!loaded) {
+		return false;
+	}
+	const bool ok = IS_OBJ_STAT2(loaded, ITEM2_VAULT);
+	extract_obj(loaded);
+	return ok;
 }
 
 void object_exclude_from_zone_limit(obj_data* obj, int rnum_to_release) {

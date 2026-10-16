@@ -61,6 +61,7 @@
 #include "handler.hpp"
 #include "interpreter.hpp"
 #include "legacy_import.hpp"
+#include "spec_bank.hpp"
 #include "mail.hpp"
 #include "modify.hpp"
 #include "multiclass.hpp" //aggiunto per la nuova gestiopne del salvataggio pwd toon alla creazione
@@ -1098,6 +1099,10 @@ void assign_command_pointers() {
 	AddCommand( "deposit",              do_not_here,        CMD_DEPOSIT,                POSITION_RESTING,   1                       );
 	AddCommand( "withdraw",             do_not_here,        CMD_WITHDRAW,               POSITION_RESTING,   1                       );  /*  220 */
 	AddCommand( "balance",              do_not_here,        CMD_BALANCE,                POSITION_RESTING,   1                       );
+	AddCommand( "vault",                do_not_here,        CMD_VAULT,                  POSITION_RESTING,   1                       );
+	AddCommand( "account",              do_not_here,        CMD_ACCOUNT,                POSITION_RESTING,   1                       );
+	AddCommand( "vaultplan",            do_vaultplan,       CMD_VAULTPLAN,              POSITION_DEAD,      QUESTMASTER             );
+	AddCommand( "vaultinfo",            do_vaultinfo,       CMD_VAULTINFO,              POSITION_DEAD,      QUESTMASTER             );
 	AddCommand( "nohassle",             do_nohassle,        CMD_NOHASSLE,               POSITION_DEAD,      DIO                     );
 	AddCommand( "system",               do_system,          CMD_SYSTEM,                 POSITION_DEAD,      QUESTMASTER             );
 	AddCommand( "pull",                 do_open_exit,       CMD_PULL,                   POSITION_STANDING,  1                       );
@@ -1414,6 +1419,8 @@ void assign_command_pointers() {
              POSITION_DEAD, MAESTRO_DEL_CREATO);
   AddCommand("checkachie", do_checkachielevel, CMD_CHECKACHIELEVEL,
              POSITION_DEAD, TUTTI);
+  AddCommand("diceroll", do_diceroll, CMD_DICEROLL, POSITION_RESTING, TUTTI);
+  AddCommand("partyroll", do_partyroll, CMD_PARTYROLL, POSITION_RESTING, TUTTI);
 }
 
 /* *************************************************************************
@@ -1948,10 +1955,10 @@ NANNY_FUNC(con_account_pwd) {
   if (u and (IsTest() or !strcmp(crypt(arg, check), check))) {
 
     if (PORT == DEVEL_PORT and d->AccountData.level < IMMORTALE and
-        !d->AccountData.ptr) {
-      mudlog(LOG_CONNECT, "%s level %d ptr %s attempted to access devel",
+        d->AccountData.ptr != DevAccess::On) {
+      mudlog(LOG_CONNECT, "%s level %d ptr %u attempted to access devel",
              d->AccountData.email, d->AccountData.level,
-             (d->AccountData.ptr ? "ON" : "OFF"));
+             static_cast<unsigned>(d->AccountData.ptr));
       FLUSH_TO_Q(
           "Al server di sviluppo possono accedere solo gli immortali\n\r"
           "oppure account autorizzati (devaccess).\n\r",
@@ -1960,9 +1967,11 @@ NANNY_FUNC(con_account_pwd) {
       return false;
     }
     /*
-if(PORT==MASTER_PORT and d->AccountData.level<52 and !d->AccountData.ptr) {
-            mudlog(LOG_CONNECT,"%s level %d ptr %s attempted to access
-master",d->AccountData.email,d->AccountData.level,(d->AccountData.ptr?"ON":"OFF"));
+if(PORT==MASTER_PORT and d->AccountData.level<52 and
+d->AccountData.ptr != DevAccess::On) {
+            mudlog(LOG_CONNECT,"%s level %d ptr %u attempted to access
+master",d->AccountData.email,d->AccountData.level,
+static_cast<unsigned>(d->AccountData.ptr));
             FLUSH_TO_Q("Per accedere al server di test devi chiedere
 l'autorizzazione",d); close_socket(d); return false;
     }
@@ -2524,6 +2533,7 @@ NANNY_FUNC(con_slct) {
 
     act("$n e' entrat$b nel gioco.", TRUE, d->character, 0, 0, TO_ROOM);
     SET_STATE(d, CON_PLYNG);
+    edit_broker_reconcile_login(d->character);
     if (!GetMaxLevel(d->character)) {
       do_start(d->character);
     }
@@ -3033,6 +3043,7 @@ NANNY_FUNC(con_pwdok) {
       }
       d->character->persist = 0;
       SET_STATE(d, CON_PLYNG);
+      edit_broker_reconcile_login(d->character);
 
       act("$n si e' riconnesso.", TRUE, tmp_ch, 0, 0, TO_ROOM);
       mudlog(LOG_CONNECT, "%s[HOST:%s] has reconnected.",
@@ -3419,6 +3430,7 @@ NANNY_FUNC(con_city_choice) {
 
       act("$n e' entrat$b nel gioco.", TRUE, d->character, 0, 0, TO_ROOM);
       SET_STATE(d, CON_PLYNG);
+      edit_broker_reconcile_login(d->character);
       SetStatus("int 9", NULL, NULL);
       if (!GetMaxLevel(d->character)) {
         do_start(d->character);
@@ -3446,6 +3458,7 @@ NANNY_FUNC(con_city_choice) {
       }
       act("$n e' entrat$b nel gioco.", TRUE, d->character, 0, 0, TO_ROOM);
       SET_STATE(d, CON_PLYNG);
+      edit_broker_reconcile_login(d->character);
       if (!GetMaxLevel(d->character)) {
         do_start(d->character);
       }
@@ -3473,6 +3486,7 @@ NANNY_FUNC(con_city_choice) {
 
         act("$n e' entrat$b nel gioco.", TRUE, d->character, 0, 0, TO_ROOM);
         SET_STATE(d, CON_PLYNG);
+        edit_broker_reconcile_login(d->character);
         if (!GetMaxLevel(d->character)) {
           do_start(d->character);
         }
@@ -3506,6 +3520,7 @@ NANNY_FUNC(con_city_choice) {
 
         act("$n e' entrat$b nel gioco.", TRUE, d->character, 0, 0, TO_ROOM);
         SET_STATE(d, CON_PLYNG);
+        edit_broker_reconcile_login(d->character);
         if (!GetMaxLevel(d->character)) {
           do_start(d->character);
         }
@@ -3539,6 +3554,7 @@ NANNY_FUNC(con_city_choice) {
 
         act("$n has entered the game.", TRUE, d->character, 0, 0, TO_ROOM);
         SET_STATE(d, CON_PLYNG);
+        edit_broker_reconcile_login(d->character);
         if (!GetMaxLevel(d->character)) {
           do_start(d->character);
         }
@@ -3583,12 +3599,23 @@ NANNY_FUNC(con_delete_me) {
     if (pg && pg->id) {
       try {
         DB *db = Sql::getMysql();
+        /* Se era principe: i vassalli vanno letti PRIMA (dopo non si
+         * trovano piu') e avvisati con la posta dopo il commit. */
+        const std::vector<std::string> vassals = clan_vassal_names(deleted_name);
         odb::transaction t(db->begin());
         t.tracer(logTracer);
+        /* Cassette personale e di clan: FK ON DELETE CASCADE su toon;
+         * prima si leggono gli oggetti per scalare i limited. */
+        const VaultItemList vault_items = vault_collect_toon_items_tx(pg->id);
+        const VaultClanInfo clan_vault = vault_clan_info_tx(pg->id);
         legacy_delete_character_rows(db, pg->id);
         db->erase(*pg);
         t.commit();
-      } catch (const odb::exception &e) {
+        vault_release_limited(vault_items);
+        vault_forget_toon(deleted_name.c_str());
+        clan_mail_prince_left(deleted_name, vassals, clan_vault.exists,
+                              clan_vault.items);
+      } catch (const std::exception &e) {
         mudlog(LOG_SYSERR, "con_delete_me: DB delete failed for %s: %s",
                deleted_name.c_str(), e.what());
       }

@@ -2734,6 +2734,7 @@ const char* extra_bits2[] = {
 	"PROCAREA-REWARD",
 	"DUSTED",
 	"PAID-MALUS",
+	"VAULT",
 	"\n"
 };
 
@@ -2765,7 +2766,7 @@ const char* room_bits[] = {
 	"NO_ASTRAL",
 	"NO_REGAIN",
 	"INSTANCE",
-	"RESERVED",
+	"IS_CLAN",
 	"RESERVED",
 	"RESERVED",
 	"RESERVED",

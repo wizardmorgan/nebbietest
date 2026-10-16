@@ -6,6 +6,7 @@
 #define __UTILITY_HPP
 /***************************  System  include ************************************/
 #include <cstdio>
+#include <string>
 #include <boost/lexical_cast.hpp>
 /***************************  Local    include ************************************/
 namespace Alarmud {
@@ -35,6 +36,17 @@ bool hasAchievement(struct char_data* ch, int achievement_class, int display);
 std::string bufferAchie(struct char_data* ch, int achievement_type, int achievement_class, int lvl, int num, bool formato, int check);
 int race_achievement(int race);
 void restringReward(struct obj_data* obj, int obj_slot_number, int max_name, int val_random);
+/**
+ * Remap legacy achievement potions (1370) / dust (1373) onto Staff protos
+ * 37051-37073. Call after inventorio overlay at login. true se ha rimappato.
+ */
+[[nodiscard]] bool achie_reward_remap_obj(struct obj_data* obj);
+/** true se vnum e' una polvere achievement (legacy 1373 o Staff 37069-37073). */
+[[nodiscard]] bool is_achie_dust_vnum(int vnum) noexcept;
+/** Vnum Staff pozione da signature spell (value1/2/3), 0 se sconosciuta. */
+[[nodiscard]] int achie_potion_vnum_from_values(int v1, int v2, int v3) noexcept;
+/** Vnum Staff polvere da APPLY del pezzo, 0 se sconosciuta. */
+[[nodiscard]] int achie_dust_vnum_from_obj(const struct obj_data* obj) noexcept;
 void CheckAchie(struct char_data* ch, int achievement_type, int achievement_class, int amount = 1,
 				bool defer_save = false);
 struct LivelloAchie StringaAchie(int valore, int achievement_type, int achievement_class);
@@ -210,6 +222,8 @@ bool HasActiveSanctuary(struct char_data* ch);
 void SyncInnateAffects(struct char_data* ch);
 void SpaceForSkills(struct char_data* ch);
 void sprintbit(unsigned long vektor, const char* names[], char* result);
+/** Come sprintbit, ma ritorna std::string (vuoto → "NOBITS"). Preferire per codice nuovo. */
+std::string format_bit_names(unsigned long bits, const char* names[]);
 void sprintbit2(unsigned long vektor, const char* names[], unsigned long vektor2, const char* names2[], char* result);
 void sprinttype(int type, const char* names[], char* result);
 int SpellpowerFromInt(const struct char_data* ch);
