@@ -16,6 +16,7 @@ Workflow produzione (il tuo caso)
 ---------------------------------
   ./scripts/apply-production-world-patch.sh
   ./scripts/apply-production-world-patch.sh --check
+  ./scripts/verify-thief-reagent-shops.sh
 
 Ingredienti ladro (vnum 18072, 18001-18003, 18073-18074): solo in vendita, mai a terra.
   Vedi VNUMS.txt e OVERLAYS.txt — mai usare vnum con file in objects/.
