@@ -5333,7 +5333,7 @@ ACTION_FUNC(do_blast) {
 		send_to_char("Provi a focalizzare la tua energia, ma ottieni solo "
 					 "qualche scintilla!\n\r",ch);
 		LearnFromMistake(ch, SKILL_PSIONIC_BLAST, 0, 95);
-		WAIT_STATE(ch, PULSE_VIOLENCE * 2);   // blast
+		WAIT_STATE(ch, 12);   // blast
 		return;
 	}
 
@@ -5529,7 +5529,7 @@ ACTION_FUNC(do_blast) {
 		}
 	}
 	if(damage(ch, victim, dam, SKILL_PSIONIC_BLAST, 5) != SubjectDead) {
-		WAIT_STATE(ch, PULSE_VIOLENCE * 2);    // blast
+		WAIT_STATE(ch, 12);    // blast
 	}
 
     if(IS_IMMORTAL(ch) && IS_PC(victim))
@@ -5558,6 +5558,7 @@ ACTION_FUNC(do_hypnosis) {
 	char target_name[MAX_INPUT_LENGTH];
 	struct char_data* victim;
 	struct affected_type af;
+	int psi_level;
 
 	if(!ch->skills) {
 		return;
@@ -5569,6 +5570,7 @@ ACTION_FUNC(do_hypnosis) {
 			return;
 		}
 
+	psi_level = HasClass(ch, CLASS_PSI) ? GET_LEVEL(ch, PSI_LEVEL_IND) : GetMaxLevel(ch);
 
 	if(affected_by_spell(ch, SPELL_FEEBLEMIND)) {
 		send_to_char("Ehmm, cos'e'?\n\r", ch);
@@ -5584,11 +5586,9 @@ ACTION_FUNC(do_hypnosis) {
 		return;
 	}
 
-
 	only_argument(arg, target_name);
 
-	if(!*target_name)
-	{
+	if(!*target_name) {
 		send_to_char("Chi vorresti ipnotizzare?\n\r",ch);
 		return;
 	}
@@ -5611,7 +5611,7 @@ ACTION_FUNC(do_hypnosis) {
 		return;
 	}
 
-	if((GET_MANA(ch) < 25)  && GetMaxLevel(ch) < IMMORTALE) {
+	if((GET_MANA(ch) < 15) && GetMaxLevel(ch) < IMMORTALE) {
 		send_to_char("Hai bisogno di riposo.\n\r", ch);
 		return;
 	}
@@ -5622,7 +5622,7 @@ ACTION_FUNC(do_hypnosis) {
 		return;
 	}
 
-	if(victim->tmpabilities.intel < 8) {
+	if(victim->tmpabilities.intel < 4) {
 		send_to_char("Non sprecare il tuo tempo con questa creatura cosi' "
 					 "stupida.\n",ch);
 		return;
@@ -5632,60 +5632,76 @@ ACTION_FUNC(do_hypnosis) {
 		send_to_char("Il tuo tentativo di ipnosi e' ridicolo.\n\r",ch);
 		act("$n guarda negli occhi di $N, $n sembra addormentarsi!", FALSE, ch, 0,
 			victim,TO_ROOM);
-		GET_MANA(ch) -= 12;
+		GET_MANA(ch) -= 8;
 		alter_mana(ch,0);
 		LearnFromMistake(ch, SKILL_HYPNOSIS, 0, 95);
-		WAIT_STATE(ch, PULSE_VIOLENCE*3);
+		WAIT_STATE(ch, 12);
 		return;
 	}
 
-	/* Steve's easy level check addition */
-	if(GetMaxLevel(victim) > GetMaxLevel(ch)) {
-		send_to_char("Probabilmente otterrai solo un gran mal di testa.\n\r", ch);
-		GET_MANA(ch) -= 12;
+	if(GetMaxLevel(victim) > psi_level + 5) {
+		send_to_char("La mente di quella creatura e' troppo forte per te.\n\r", ch);
+		GET_MANA(ch) -= 8;
 		alter_mana(ch,0);
-		return;
-	}
-
-	if(IS_IMMORTAL(victim)) {
-		send_to_char("Non puoi ipnotizzare quella persona.\n\r", ch);
 		return;
 	}
 
 	if(saves_spell(victim, SAVING_SPELL) ||
 			(IS_AFFECTED(victim,AFF_CHARM) && !IS_AFFECTED(ch,AFF_CHARM))) {
 		send_to_char("Non riesci ad ipnotizzare quella persona.\n\r", ch);
-		GET_MANA(ch) -= 25;
+		GET_MANA(ch) -= 15;
 		alter_mana(ch,0);
 		FailCharm(victim, ch);
 		return;
 	}
 
-	GET_MANA(ch) -= 25;
+	GET_MANA(ch) -= 15;
 	alter_mana(ch,0);
 
 	act("$n ipnotizza $N!", TRUE, ch, 0, victim, TO_ROOM);
 	act("Tu hai ipnotizzato $N!", TRUE, ch, 0, victim, TO_CHAR);
+
 	if(IS_PC(victim)) {
 		act("$n ti ha ipnotizzato!", TRUE, ch, 0, victim, TO_VICT);
+		add_follower(victim, ch);
+		af.type = SPELL_CHARM_MONSTER;
+		af.duration = 24;
+		af.modifier = 0;
+		af.location = 0;
+		af.bitvector = AFF_CHARM;
+		affect_to_char(victim, &af);
+	}
+	else {
+		act("$n ti ha ipnotizzato!", TRUE, ch, 0, victim, TO_VICT);
+		if(victim->tmpabilities.intel >= 10) {
+			if(IS_SET(victim->specials.act, ACT_AGGRESSIVE)) {
+				REMOVE_BIT(victim->specials.act, ACT_AGGRESSIVE);
+			}
+			add_follower(victim, ch);
+			af.type = SPELL_CHARM_MONSTER;
+			af.duration = 12;
+			af.modifier = 0;
+			af.location = 0;
+			af.bitvector = AFF_CHARM;
+			affect_to_char(victim, &af);
+		}
+		else {
+			af.type = SKILL_HYPNOSIS;
+			af.duration = 8 + number(1, 6);
+			af.modifier = 0;
+			af.location = APPLY_NONE;
+			af.bitvector = 0;
+			affect_to_char(victim, &af);
+			if(victim->specials.fighting == ch) {
+				stop_fighting(victim);
+			}
+			if(Hates(victim, ch)) {
+				RemHated(victim, ch);
+			}
+		}
 	}
 
-	add_follower(victim, ch);
-	if(IS_SET(victim->specials.act, ACT_AGGRESSIVE)) {
-		REMOVE_BIT(victim->specials.act, ACT_AGGRESSIVE);
-	}
-	if(!IS_SET(victim->specials.act, ACT_SENTINEL)) {
-		SET_BIT(victim->specials.act, ACT_SENTINEL);
-	}
-
-	af.type = SPELL_CHARM_MONSTER;
-	af.duration = 36;
-	af.modifier = 0;
-	af.location = 0;
-	af.bitvector = AFF_CHARM;
-	affect_to_char(victim, &af);
-
-	WAIT_STATE(ch, PULSE_VIOLENCE * 3);
+	WAIT_STATE(ch, 12);
 }
 
 
@@ -6558,6 +6574,10 @@ ACTION_FUNC(do_psi_shield) {
 
 ACTION_FUNC(do_esp) {
 	struct affected_type af;
+	struct char_data* t;
+	struct room_data* rp;
+	int psi_level;
+	int duration;
 
 	if(!ch->skills) {
 		return;
@@ -6569,6 +6589,16 @@ ACTION_FUNC(do_esp) {
 			return;
 		}
 
+	if(arg && !strncasecmp(arg, "stop", 4)) {
+		if(affected_by_spell(ch, SKILL_ESP)) {
+			affect_from_char(ch, SKILL_ESP);
+			send_to_char("Chiudi la mente al pensiero altrui.\n\r", ch);
+		}
+		else {
+			send_to_char("Non stai usando l'ESP.\n\r", ch);
+		}
+		return;
+	}
 
 	if(affected_by_spell(ch,SPELL_FEEBLEMIND)) {
 		send_to_char("Der, what is that ?\n\r",ch);
@@ -6601,12 +6631,39 @@ ACTION_FUNC(do_esp) {
 	GET_MANA(ch) -=10;
 	alter_mana(ch,0);
 	act("You open your mind to read others thoughts.",FALSE,ch,0,0,TO_CHAR);
+
+	psi_level = HasClass(ch, CLASS_PSI) ? GET_LEVEL(ch, PSI_LEVEL_IND) : GetMaxLevel(ch);
+	duration = MAX(4, psi_level * 2);
 	af.type       = SKILL_ESP;
 	af.location   = APPLY_NONE;
 	af.modifier   = 0;
-	af.duration   = (int)GetMaxLevel(ch)/2;
+	af.duration   = duration;
 	af.bitvector  = 0;
 	affect_to_char(ch,&af);
+
+	rp = real_roomp(ch->in_room);
+	if(rp) {
+		for(t = rp->people; t; t = t->next_in_room) {
+			if(t == ch || !IS_AFFECTED(t, AFF_HIDE) || !CAN_SEE(ch, t)) {
+				continue;
+			}
+			if(number(1, 100) <= ch->skills[SKILL_ESP].learned) {
+				int reveal_chance = ch->skills[SKILL_ESP].learned - 50;
+
+				act("Percepisci una presenza nascosta nella stanza!", FALSE, ch, 0,
+					0, TO_CHAR);
+				act("$n sembra percepire la tua presenza nascosta!", FALSE, ch, 0,
+					t, TO_VICT);
+				if(ch->skills[SKILL_ESP].learned >= 90 && reveal_chance > 0 &&
+						number(1, 100) <= reveal_chance) {
+					REMOVE_BIT(t->specials.affected_by, AFF_HIDE);
+					act("La tua presenza nascosta e' rivelata alla mente di $n!", FALSE,
+						ch, 0, t, TO_VICT);
+				}
+				break;
+			}
+		}
+	}
 }
 
 ACTION_FUNC(do_sending) {

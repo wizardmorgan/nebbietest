@@ -313,6 +313,7 @@ IMM_PLUS1    16384   armi con meno di tohit +1
 IMM_PLUS2    32768   armi con meno di tohit +2
 IMM_PLUS3    65536   armi con meno di tohit +3
 IMM_PLUS4   131072   armi con meno di tohit +4
+IMM_HOLY    262144   danno sacro (monaci in forma, harm, cause wounds, holy word)
 
 Vedi anche: DANNI
 #
@@ -511,6 +512,65 @@ SETSEV
 This command will set a god's severity levels.  Basically, at 0 you get
 all wiz messages.  As you increase your severity level, you get fewer and
 fewer of the log messages until they are filtered out completely.
+#
+"POWERINDEX"
+
+Comando staff (livello immortale 52+):
+  powerindex [<livello_incantesimo> [<scala>]]
+
+Il power index (PI) e' un indicatore **neutro** riusabile per calibrare dinamicamente
+spell, skill, mob procedurali e altre meccaniche: non e' necessariamente un malus.
+Il cacaodemon evoca servitori piu' utili con PI alto (endgame) e resta accessibile
+con alleati modesti a livelli bassi; il mana leggermente superiore compensa in parte.
+
+NON confondere con il valore medio EQ storico (rent) mostrato da 'world'.
+
+Calcolo EQ online (condiviso da tutti gli spell che usano PI)
+------------------------------------------------------------
+Per ogni PG mortale connesso con GetCharBonusIndex > 0:
+  peso = clamp(sqrt(livello_max/40), 0.25, 1.0)
+  si accumulano EQ pesati per mediana, armonica e media aritmetica
+
+Gli immortali sono esclusi dal campione.
+
+EQ riferimento PI = 60% mediana pesata + 40% armonica pesata.
+Con <= 2 PG online il riferimento e' stabilizzato verso AverageEqIndex (rent).
+
+Fattore EQ mondo (soft cap, asintoto 4.0, anchor 3000):
+  raw = EQ_riferimento / 3000
+  factor = 1 + 3 * raw / (1 + raw)
+
+Fattore EQ caster (relativo al riferimento mondo):
+  ratio = tuo_EQ / EQ_riferimento
+  factor = 1 + 3 * ratio / (1 + ratio)
+
+Power index generico:
+  PI = livello_incantesimo * scala * fattore_EQ_mondo
+
+Cacaodemon (esempio consumatore):
+  fattore = 70% mondo + 30% caster (clamp 1..4)
+  PI = livello * magnitudine * fattore
+  Mana: 50 * fattore * (1 + 0.15 * (grado - 1))
+
+API codice (src/power_index.hpp)
+--------------------------------
+  PowerIndexWorldEq power_index_world_snapshot();
+  float power_index_eq_factor_from_reference(float eq_reference);
+  float power_index_caster_eq_factor(float caster_eq, float world_eq_reference);
+  float compute_power_index(int spell_level, int scale,
+                            const PowerIndexWorldEq* world = nullptr);
+
+Sintassi powerindex
+-------------------
+  powerindex
+      snapshot EQ (aritmetico, riferimento, mediana, armonica), fattori,
+      tabella PI scale 1-6 a livello 40, mana cacaodemon grado 6.
+
+  powerindex <livello> [<scala>]
+      tabella o PI singolo.
+
+Vedi anche: help cacaodemon, ckeq, world, docs/cacaodemon-powerindex-world.md
+
 #~
 
 

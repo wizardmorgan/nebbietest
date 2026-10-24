@@ -86,6 +86,7 @@ struct OtherSpecialProcEntry otherproc[] = {
 	{ "PrisonGuard",(genericspecial_func) PrisonGuard },
 	{ "PrydainGuard",(genericspecial_func) PrydainGuard },
 	{ "PsiGuildmaster",(genericspecial_func) PsiGuildmaster },
+	{ "MetapsionicGuildmaster",(genericspecial_func) MetapsionicGuildmaster },
 	{ "Pungiglione",(genericspecial_func) Pungiglione },
 	{ "Pungiglione_maggiore",(genericspecial_func) Pungiglione_maggiore },
 	{ "RangerGuildmaster",(genericspecial_func) RangerGuildmaster },

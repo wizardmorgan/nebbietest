@@ -987,6 +987,7 @@ M 0 3077 1 3070 *!003077 [il Maestro Barbaro] caricato nella stanza 003070 [La t
 M 0 3144 1 3004 *!003144 [La Ronda] caricato nella stanza 003004 [La zona occidentale della Piazza delle Nebbie]
 M 0 21363 1 3089 *!021363 [the paladin guildmaster] caricato nella stanza 003089 [La stanza del maestro dell'ordine dei Paladini]
 M 0 21366 1 3090 *!021366 [the psionist guildmaster] caricato nella stanza 003090 [Il signore del pensiero]
+M 0 21368 1 3090 *!021368 [Kaelith, maestro metapsionico] caricato nella stanza 003090 [Il signore del pensiero]
 M 0 21367 1 3088 *!021367 [the ranger guildmaster] caricato nella stanza 003088 [Il campo dei Ranger]
 *! Exits initializations
 D 0 3001 0 1 *! Uscita North della stanza 003001 [La piazza delle Nebbie]: Chiusa

@@ -4901,6 +4901,11 @@ MOBSPECIAL_FUNC(monk_master) {
 	return(FALSE);
 }
 
+static bool psi_silverleaf_immortal_teaches_level(ubyte skill_level) {
+	/* Livelli reali PSI (1..51); IMMORTALE nel registro = "non PSI". */
+	return skill_level > 0 && skill_level < IMMORTALE;
+}
+
 MOBSPECIAL_FUNC(DruidGuildMaster) {
 	int number, i, max, smax;
 	char buf[MAX_INPUT_LENGTH];
@@ -4969,13 +4974,60 @@ MOBSPECIAL_FUNC(DruidGuildMaster) {
 				}
 			} // for max
 
+			if(IS_IMMORTAL(ch) && GET_MOB_VNUM(guildmaster) == 641) {
+				send_to_char("Puoi praticare anche queste abilita' psioniche:\n\r", ch);
+				for(max = 1; max < IMMORTALE; max++) {
+					for(i = 0; *spells[i] != '\n'; i++) {
+						const ubyte psi_level = spell_info[i + 1].min_level_psi;
+						if(psi_level != max ||
+								!psi_silverleaf_immortal_teaches_level(psi_level)) {
+							continue;
+						}
+						sprintf(buf, "[%d] %s %s \n\r", psi_level, spells[i],
+								how_good(ch->skills[i + 1].learned));
+						send_to_char(buf, ch);
+					}
+				}
+			}
+
 			return(TRUE);
 
 		}
 		for(; isspace(*arg); arg++);
 		number = old_search_block(arg,0,strlen(arg),spells,FALSE);
-		if(number == -1
-				|| (HasClass(ch,CLASS_DRUID) && spell_info[ number ].min_level_druid <1)) { // SALVO non si praccano quelle sconosciute
+		if(number == -1) {
+			send_to_char("WHAT SPELL SHOULD I TEACH YOU?????...\n\r", ch);
+			return(TRUE);
+		}
+
+		if(IS_IMMORTAL(ch) && GET_MOB_VNUM(guildmaster) == 641 &&
+				psi_silverleaf_immortal_teaches_level(
+					spell_info[number].min_level_psi)) {
+			if(ch->specials.spells_to_learn <= 0) {
+				send_to_char("You do not seem to be able to practice now.\n\r", ch);
+				return(TRUE);
+			}
+			if(ch->skills[number].learned >= 45) {
+				send_to_char(
+					"You must use this skill to get any better.  I cannot train you further.\n\r",
+					ch);
+				SET_BIT(ch->skills[number].flags, SKILL_KNOWN);
+				return(TRUE);
+			}
+			send_to_char("You Practice for a while...\n\r", ch);
+			ch->specials.spells_to_learn--;
+			if(!IS_SET(ch->skills[number].flags, SKILL_KNOWN)) {
+				SET_BIT(ch->skills[number].flags, SKILL_KNOWN);
+			}
+			SET_BIT(ch->skills[number].flags, SKILL_KNOWN_PSI);
+			ch->skills[number].learned += int_app[(int)GET_INT(ch)].learn;
+			if(ch->skills[number].learned >= 95) {
+				send_to_char("You are now learned in this area.\n\r", ch);
+			}
+			return(TRUE);
+		}
+
+		if(HasClass(ch, CLASS_DRUID) && spell_info[number].min_level_druid < 1) {
 			send_to_char("WHAT SPELL SHOULD I TEACH YOU?????...\n\r", ch);
 			return(TRUE);
 		}
@@ -7466,178 +7518,213 @@ MOBSPECIAL_FUNC(XpMaster) {
 
 
 
-MOBSPECIAL_FUNC(PsiGuildmaster) {
+namespace {
 
+bool psi_gm_teaches_level(ubyte skill_level, bool metapsionic_gm) {
+	if(skill_level <= 0 || skill_level >= IMMORTALE) {
+		return false;
+	}
+	if(metapsionic_gm) {
+		return skill_level >= PSI_METAPSIONIC_MIN_LEVEL;
+	}
+	return skill_level <= PSI_GUILD_BASIC_MAX_LEVEL;
+}
+
+int psi_guildmaster_proc(struct char_data* ch, int cmd, char* arg,
+						 struct char_data* guildmaster, bool metapsionic_gm) {
 	int number, i, max;
 	char buf[MAX_INPUT_LENGTH];
-	struct char_data* guildmaster;
+	const int gm_teach_max =
+		(GetMaxLevel(guildmaster) < 10 ? 0 : GetMaxLevel(guildmaster) - 10);
 
 	if(!ch->skills) {
-		return(FALSE);
+		return FALSE;
 	}
-
 	if(check_soundproof(ch)) {
-		return(FALSE);
+		return FALSE;
 	}
-
 	if(IS_IMMORTAL(ch)) {
-		return(FALSE);
+		return FALSE;
 	}
-
-	guildmaster = FindMobInRoomWithFunction(ch->in_room, reinterpret_cast<genericspecial_func>(PsiGuildmaster));
-
 	if(!guildmaster) {
-		return(FALSE);
+		return FALSE;
 	}
-
 	if((cmd != CMD_PRACTICE) && (cmd != CMD_GAIN) && (cmd != CMD_GIVE)) {
-		return(FALSE);
+		return FALSE;
 	}
-
 	if(IS_NPC(ch)) {
-		act("$N tells you 'What do i look like, an animal trainer?'", FALSE,
-			ch, 0, guildmaster, TO_CHAR);
-		return(FALSE);
+		act("$N tells you 'What do i look like, an animal trainer?'", FALSE, ch, 0,
+			guildmaster, TO_CHAR);
+		return FALSE;
 	}
 
 	for(; *arg == ' '; arg++);
 
 	if(HasClass(ch, CLASS_PSI)) {
 		if(cmd == CMD_GAIN) {
-			if(GET_LEVEL(ch,PSI_LEVEL_IND) < (GetMaxLevel(guildmaster) < 10 ? 0 : GetMaxLevel(guildmaster)-10)) {
-				if(GET_EXP(ch)<
-						titles[PSI_LEVEL_IND][GET_LEVEL(ch, PSI_LEVEL_IND)+1].exp) {
+			if(GET_LEVEL(ch, PSI_LEVEL_IND) < gm_teach_max) {
+				if(GET_EXP(ch) < titles[PSI_LEVEL_IND][GET_LEVEL(ch, PSI_LEVEL_IND) + 1].exp) {
 					send_to_char("You are not yet ready to gain.\n\r", ch);
-					return(FALSE);
+					return FALSE;
 				}
-				else {
-					GainLevel(ch,PSI_LEVEL_IND);
-					return(TRUE);
-				}
+				GainLevel(ch, PSI_LEVEL_IND);
+				return TRUE;
+			}
+			if(metapsionic_gm) {
+				send_to_char("Non posso addestrarti oltre... devi trovare un altro maestro.\n\r",
+							 ch);
 			}
 			else {
-				send_to_char("I cannot train you.. You must find another.\n\r",ch);
+				send_to_char("Hai raggiunto il limite di questa scuola. Cerca un maestro metapsionico.\n\r",
+							 ch);
 			}
-			return(TRUE);
+			return TRUE;
 		}
 
-
 		if(!*arg) {
-			sprintf(buf,"You have got %d practice sessions left.\n\r",
+			sprintf(buf, "You have got %d practice sessions left.\n\r",
 					ch->specials.spells_to_learn);
 			send_to_char(buf, ch);
-			send_to_char("You can practise any of these skills:\n\r", ch);
-			for(max=1; max<=GET_LEVEL(ch,PSI_LEVEL_IND); max++) { // SALVO ordino le prac psiguild
-				for(i=0; *spells[i] != '\n'; i++) {
-					if(spell_info[i+1].min_level_psi != max) {
+			if(metapsionic_gm) {
+				send_to_char("Puoi praticare queste discipline metapsioniche:\n\r", ch);
+			}
+			else {
+				send_to_char("You can practise any of these skills:\n\r", ch);
+			}
+			for(max = 1; max <= GET_LEVEL(ch, PSI_LEVEL_IND); max++) {
+				for(i = 0; *spells[i] != '\n'; i++) {
+					const ubyte skill_level = spell_info[i + 1].min_level_psi;
+					if(skill_level != max) {
 						continue;
 					}
-					if(spell_info[i+1].min_level_psi &&
-							(spell_info[i+1].min_level_psi <=
-							 GET_LEVEL_CASTER(ch,PSI_LEVEL_IND)) &&
-							(spell_info[i+1].min_level_psi <=
-							 (GetMaxLevel(guildmaster) < 10 ? 0 : GetMaxLevel(guildmaster)-10))) {
-						sprintf(buf,"[%d] %s %s \n\r",
-								spell_info[i+1].min_level_psi,spells[i],
-								how_good(ch->skills[i+1].learned));
+					if(!psi_gm_teaches_level(skill_level, metapsionic_gm)) {
+						continue;
+					}
+					if(skill_level <= GET_LEVEL_CASTER(ch, PSI_LEVEL_IND) &&
+							skill_level <= gm_teach_max) {
+						sprintf(buf, "[%d] %s %s \n\r", skill_level, spells[i],
+								how_good(ch->skills[i + 1].learned));
 						send_to_char(buf, ch);
 					}
 				}
-			} // for max
-			return(TRUE);
+			}
+			return TRUE;
 		}
+
 		for(; isspace(*arg); arg++);
-		number = old_search_block(arg,0,strlen(arg),spells,FALSE);
-		if(number == -1
-				|| (HasClass(ch,CLASS_PSI) && spell_info[ number ].min_level_psi <1)) { // SALVO non si praccano quelle sconosciute
+		number = old_search_block(arg, 0, strlen(arg), spells, FALSE);
+		if(number == -1 || spell_info[number].min_level_psi < 1) {
 			send_to_char("You do not know of that skill...\n\r", ch);
-			return(TRUE);
+			return TRUE;
 		}
-		if(GET_LEVEL_CASTER(ch,PSI_LEVEL_IND) < spell_info[number].min_level_psi) {
+		if(!psi_gm_teaches_level(spell_info[number].min_level_psi, metapsionic_gm)) {
+			if(metapsionic_gm) {
+				do_say(guildmaster,
+					   "Insegno solo le discipline metapsioniche avanzate.", 0);
+			}
+			else {
+				do_say(guildmaster,
+					   "Per quella disciplina devi cercare un maestro metapsionico.", 0);
+			}
+			return TRUE;
+		}
+		if(GET_LEVEL_CASTER(ch, PSI_LEVEL_IND) < spell_info[number].min_level_psi) {
 			send_to_char("You do not know of this skill...\n\r", ch);
-			return(TRUE);
+			return TRUE;
 		}
-		if((GetMaxLevel(guildmaster) < 10 ? 0 : GetMaxLevel(guildmaster)-10) < spell_info[number].min_level_psi) {
+		if(gm_teach_max < spell_info[number].min_level_psi) {
 			do_say(guildmaster, "I don't know of this skill.", 0);
-			return(TRUE);
+			return TRUE;
 		}
 		if(ch->specials.spells_to_learn <= 0) {
 			send_to_char("You do not seem to be able to practice now.\n\r", ch);
-			return(TRUE);
+			return TRUE;
 		}
 		if(ch->skills[number].learned >= 45) {
-			send_to_char("You must use this spell to get any better.  I cannot train you further.\n\r", ch);
-			return(TRUE);
+			send_to_char(
+				"You must use this spell to get any better.  I cannot train you further.\n\r",
+				ch);
+			return TRUE;
 		}
+
 		send_to_char("You Practice for a while...\n\r", ch);
 		ch->specials.spells_to_learn--;
-
 
 		if(!IS_SET(ch->skills[number].flags, SKILL_KNOWN)) {
 			SET_BIT(ch->skills[number].flags, SKILL_KNOWN);
 			SET_BIT(ch->skills[number].flags, SKILL_KNOWN_PSI);
 		}
 
-		ch->skills[ number ].learned += int_app[(int)GET_INT(ch) ].learn;
+		ch->skills[number].learned += int_app[(int)GET_INT(ch)].learn;
 
 		if(ch->skills[number].learned >= 95) {
 			send_to_char("You are now learned in this area.\n\r", ch);
 		}
-		return(TRUE);
+		return TRUE;
 	}
-	/**** SALVO skills prince ****/
-	else if(IS_PRINCE(ch) && !HasClass(ch, CLASS_PSI) && cmd !=CMD_GAIN) {
+	else if(IS_PRINCE(ch) && !HasClass(ch, CLASS_PSI) && cmd != CMD_GAIN) {
 		if(!*arg) {
-			sprintf(buf,"Hai ancora %d sessioni di pratica.\n\r",
+			sprintf(buf, "Hai ancora %d sessioni di pratica.\n\r",
 					ch->specials.spells_to_learn);
 			send_to_char(buf, ch);
 			send_to_char("Puoi praticare questa skills:\n\r", ch);
-			sprintf(buf,"[%d] %s %s \n\r",
-					PRINCIPE,spells[SKILL_DOORWAY-1],
+			sprintf(buf, "[%d] %s %s \n\r", PRINCIPE, spells[SKILL_DOORWAY - 1],
 					how_good(ch->skills[SKILL_DOORWAY].learned));
 			send_to_char(buf, ch);
-			return(TRUE);
+			return TRUE;
 		}
 		for(; isspace(*arg); arg++);
-		number = old_search_block(arg,0,strlen(arg),spells,FALSE);
+		number = old_search_block(arg, 0, strlen(arg), spells, FALSE);
 		if(number == -1) {
 			send_to_char("Non conosco questa pratica...\n\r", ch);
-			return(TRUE);
+			return TRUE;
 		}
-		if(number !=SKILL_DOORWAY) {
+		if(number != SKILL_DOORWAY) {
 			send_to_char("Non posso insegnarti questa pratica...\n\r", ch);
-			return(TRUE);
+			return TRUE;
 		}
 		if(ch->specials.spells_to_learn <= 0) {
 			send_to_char("Non hai pratiche a disposizione.\n\r", ch);
-			return(TRUE);
+			return TRUE;
 		}
 		if(ch->skills[number].learned >= 45) {
 			send_to_char("Non posso aiutarti a migliorati ancora.\n\r", ch);
-			return(TRUE);
+			return TRUE;
 		}
 		send_to_char("Hai fatto pratica...\n\r", ch);
 		ch->specials.spells_to_learn--;
-
 
 		if(!IS_SET(ch->skills[number].flags, SKILL_KNOWN)) {
 			SET_BIT(ch->skills[number].flags, SKILL_KNOWN);
 			SET_BIT(ch->skills[number].flags, SKILL_KNOWN_PSI);
 		}
 
-		ch->skills[ number ].learned += int_app[(int)GET_INT(ch) ].learn;
+		ch->skills[number].learned += int_app[(int)GET_INT(ch)].learn;
 
 		if(ch->skills[number].learned >= 95) {
 			send_to_char("Hai imparato tutto.\n\r", ch);
 		}
 		return TRUE;
 	}
-	/**** fine skills prince ****/
-	else {
-		send_to_char("What do you think you are, a psionist!??\n\r", ch);
-	}
 
+	send_to_char("What do you think you are, a psionist!??\n\r", ch);
 	return FALSE;
+}
+
+} // namespace
+
+MOBSPECIAL_FUNC(PsiGuildmaster) {
+	struct char_data* guildmaster =
+		FindMobInRoomWithFunction(ch->in_room,
+								  reinterpret_cast<genericspecial_func>(PsiGuildmaster));
+	return psi_guildmaster_proc(ch, cmd, const_cast<char*>(arg), guildmaster, false);
+}
+
+MOBSPECIAL_FUNC(MetapsionicGuildmaster) {
+	struct char_data* guildmaster =
+		FindMobInRoomWithFunction(ch->in_room,
+								  reinterpret_cast<genericspecial_func>(MetapsionicGuildmaster));
+	return psi_guildmaster_proc(ch, cmd, const_cast<char*>(arg), guildmaster, true);
 }
 
 MOBSPECIAL_FUNC(PaladinGuildmaster) {

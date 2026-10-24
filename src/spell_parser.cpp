@@ -36,6 +36,8 @@
 #include "interpreter.hpp"
 #include "opinion.hpp"
 #include "regen.hpp"
+#include "spells.hpp"
+#include "proc_cacaodemon.hpp"
 
 namespace Alarmud {
 
@@ -52,6 +54,14 @@ struct spell_info_type spell_info[MAX_SPL_LIST];
 #define USE_MANA( ch, sn ) MAX( (int)spell_info[ sn ].min_usesmana, 100 /     MAX( 2,( (GetAverageLevel(ch)==51?4:2) + GET_LEVEL( ch, BestMagicClass( ch ) ) - SPELL_LEVEL( ch, sn ))))
 #define SPELLFAIL_MOD( cn, sn ) (int)((cn - sn) / 3 * 2)
 #define ABSNEUTRAL 350
+
+static int spell_cast_mana_cost(struct char_data* ch, int spl, const char* argument) {
+	if(spl == SPELL_CACAODEMON) {
+		const int magnitude = cacaodemon_magnitude_from_cast_arg(argument);
+		return cacaodemon_mana_cost(ch, magnitude > 0 ? magnitude : 1);
+	}
+	return static_cast<int>(USE_MANA(ch, spl));
+}
 
 const char* spells[]= {
 	"armor",               /* 1 */
@@ -366,6 +376,13 @@ const char* spells[]= {
 	"poisoncraft",
 	"mix throw",
 	"find the seam",
+	"ego whip",
+	"psychic vampirism",
+	"metapsionic surge",
+	"thought barrier",
+	"neural spike",
+	"mass confusion",
+	"cataclysm mind",
 	"\n"
 };
 
@@ -1727,47 +1744,64 @@ ACTION_FUNC(do_cast) {
 				}
 			}
 			/* Controllo sui livelli */
-			/* Trova il livello spell corrispondente */
+			/* Tra le classi idonee, usa il requisito minore */
+			caster_level = -1;
+			spell_level = IMMORTALE;
 			if((slev=spell_info[spl].min_level_magic) <=
-					(tlev=GET_LEVEL(ch,MAGE_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,MAGE_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_sorcerer) <=
-					(tlev=GET_LEVEL(ch,SORCERER_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,SORCERER_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_cleric) <=
-					(tlev=GET_LEVEL(ch,CLERIC_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,CLERIC_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_paladin) <=
-					(tlev=GET_LEVEL(ch,PALADIN_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,PALADIN_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_ranger) <=
-					(tlev=GET_LEVEL(ch,RANGER_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,RANGER_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_psi) <=
-					(tlev=GET_LEVEL(ch,PSI_LEVEL_IND)) &&
-					(tlev>caster_level)) {
-				caster_level=tlev;
-				spell_level=slev;
+					(tlev=GET_LEVEL(ch,PSI_LEVEL_IND))) {
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if((slev=spell_info[spl].min_level_druid) <=
 					(tlev=GET_LEVEL(ch, DRUID_LEVEL_IND))) {
-				caster_level=tlev;
-				spell_level=slev;
+				if(slev < spell_level ||
+						(slev == spell_level && tlev > caster_level)) {
+					caster_level=tlev;
+					spell_level=slev;
+				}
 			}
 			if(caster_level>10) {
 				caster_level-=(HowManyClasses(ch)-1);
@@ -2024,7 +2058,8 @@ ACTION_FUNC(do_cast) {
 			}
 			else {
 				if(GetMaxLevel(ch) < IMMORTALE) {
-					if(GET_MANA(ch) < (int)USE_MANA(ch, (int)spl) ||
+					const int mana_needed = spell_cast_mana_cost(ch, spl, argument);
+					if(GET_MANA(ch) < mana_needed ||
 							GET_MANA(ch) <=0)
                     {
                         if(cmd != CMD_MIND)
@@ -2133,7 +2168,7 @@ ACTION_FUNC(do_cast) {
 						act("Certo.. con tutta quella robaccia addosso...",
 							FALSE, ch, NULL, NULL, TO_CHAR);
 					}
-					cost = (int)USE_MANA(ch, (int)spl);
+					cost = spell_cast_mana_cost(ch, spl, argument);
 					if(cmd == CMD_RECALL) {
 						/* give chance to forget */
 						if(number(1,130) > ch->skills[spl].learned) {
@@ -2201,7 +2236,7 @@ ACTION_FUNC(do_cast) {
 				 * cast sia il motivo per cui il recall 'poly' non
 				 * dimenticava
 				 * */
-				cost = (int)USE_MANA(ch, (int)spl);
+				cost = spell_cast_mana_cost(ch, spl, argument);
 				if(cmd == CMD_RECALL) {  /* recall */
 					FORGET(ch, spl);
 				}
