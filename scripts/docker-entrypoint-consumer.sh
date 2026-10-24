@@ -84,6 +84,20 @@ if [ ! -f /app/mudroot/lib/myst.mob ]; then
   exit 1
 fi
 
+cd /app
+
+# Symlink help prima del patch (evita sync che trunca pages/helptbl se SRC == DST)
+if [ -f /app/pages/helptbl ]; then
+  ln -sfn /app/pages/helptbl /app/helptbl
+  mkdir -p /app/mudroot/lib
+  ln -sfn /app/pages/helptbl /app/mudroot/lib/helptbl
+fi
+if [ -f /app/pages/wizhelptbl ]; then
+  ln -sfn /app/pages/wizhelptbl /app/wizhelptbl
+  mkdir -p /app/mudroot/lib
+  ln -sfn /app/pages/wizhelptbl /app/mudroot/lib/wizhelptbl
+fi
+
 # Applica patch ladro se mudlib presente ma non ancora patchato
 if [ -x /app/scripts/apply-thief-world-patch.sh ]; then
   if ! /app/scripts/apply-thief-world-patch.sh --dir /app/mudroot/lib --check 2>/dev/null; then
@@ -94,13 +108,13 @@ fi
 
 export MYSQL_HOST MYSQL_PORT MYSQL_USER MYSQL_PASSWORD MYSQL_DB="${MYSQL_DB:-nebbie}"
 
-cd /app
-
-if [ -f /app/pages/helptbl ]; then
-  ln -sfn pages/helptbl /app/helptbl
-fi
-if [ -f /app/pages/wizhelptbl ]; then
-  ln -sfn pages/wizhelptbl /app/wizhelptbl
+if [ -x /app/scripts/validate-helptbl.sh ]; then
+  if ! /app/scripts/validate-helptbl.sh /app/mudroot/lib; then
+    echo "[consumer] ERROR: helptbl corrotto — risolvi con:"
+    echo "[consumer]   git checkout -- pages/helptbl mudroot/lib/helptbl"
+    echo "[consumer]   ./scripts/apply-production-world-patch.sh"
+    exit 1
+  fi
 fi
 
 if command -v ss >/dev/null 2>&1; then

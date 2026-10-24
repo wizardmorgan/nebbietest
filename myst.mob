@@ -1101,10 +1101,10 @@ silverleaf guildmaster master~
 the Druid Guildmaster~
 Silverleaf the druid guildmaster is standing here.
 ~
-She is young and vibrant, and, it is rumored, quite an exceptional lover.
-She emanates an aura of raw natural power quite unlike anything you have
-ever seen before.  Her eyes glitter as she appraises you, and your
-worth to the druidical cause
+She is young and vibrant, and emanates an aura of raw natural power.
+For mortal druids she teaches the druidic way; immortals who find her
+may study every psionic discipline here, including metapsionic arts.
+Her eyes glitter as she appraises you and your worth.
 ~
 1|2 0 0 A 1
 61 -10 -10 96 5d5+3
@@ -3480,11 +3480,25 @@ the psionist guildmaster~
 the psionist guildmaster is standing here.
 ~
 Bald and beautiful! You sense a powerful mind behind those dark blue
-eyes of his.
+eyes of his. Insegna le discipline psioniche fondamentali fino al
+livello 39.
 ~
 2 0 1000 A 5
 60 -15 -10 96 1d3+40
 -1 8000 1 1
+8 8 5 1|2|4|8 16|32|64|2048 0
+#21368
+psionist metapsionic gm guildmaster~
+Kaelith, maestro metapsionico~
+Kaelith, maestro delle discipline metapsioniche, e' immerso in trance.
+~
+I suoi occhi sono completamente bianchi e ogni pensiero sembra
+risuonare direttamente nella tua testa. Insegna solo le discipline
+metapsioniche avanzate, dal livello 40 in su.
+~
+2 0 1000 A 5
+60 -10 -10 96 1d3+45
+-1 8500 1 1
 8 8 5 1|2|4|8 16|32|64|2048 0
 #21367
 ranger gm guildmaster~

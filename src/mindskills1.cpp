@@ -27,7 +27,6 @@
 #include "handler.hpp"
 #include "interpreter.hpp"
 #include "magic.hpp"
-#include "magic3.hpp"
 #include "opinion.hpp"
 #include "regen.hpp"
 #include "spell_parser.hpp"
@@ -35,6 +34,46 @@
 
 namespace Alarmud {
 
+namespace {
+
+bool psi_ultra_blast_target(struct char_data* ch, struct char_data* t) {
+	if(!t || t == ch || IS_IMMORTAL(t) || in_group(ch, t)) {
+		return false;
+	}
+	if(ch->specials.fighting == t || t->specials.fighting == ch) {
+		return true;
+	}
+	if(Hates(t, ch) || Hates(ch, t)) {
+		return true;
+	}
+	if(IS_NPC(t) && IS_SET(t->specials.act, ACT_AGGRESSIVE) && CAN_SEE(t, ch)) {
+		return true;
+	}
+	return false;
+}
+
+void mind_scramble_degrade_skills(struct char_data* victim, int count, int amount) {
+	int n;
+
+	if(!victim || !victim->skills) {
+		return;
+	}
+
+	for(n = 0; n < count; n++) {
+		int tries = 0;
+		while(tries++ < 60) {
+			int i = number(0, MAX_SKILLS - 1);
+			if(victim->skills[i].learned > 0 &&
+					IS_SET(victim->skills[i].flags, SKILL_KNOWN)) {
+				victim->skills[i].learned =
+					MAX(0, victim->skills[i].learned - amount - number(0, 10));
+				break;
+			}
+		}
+	}
+}
+
+} // namespace
 
 /*
 ***        PSI Skills
@@ -279,6 +318,10 @@ void mind_telekinesis(byte level, struct char_data* ch,struct char_data* victim,
 
 	/* not fighting, shove him */
 	if(!ch->specials.fighting) {
+		if(dir_num < 1) {
+			send_to_char("Devi indicare una direzione valida!\n\r", ch);
+			return;
+		}
 		if(saves_spell(victim,SAVING_SPELL) ||
 				(IS_SET(victim->specials.act,ACT_SENTINEL) &&
 				 IS_SET(victim->specials.act,ACT_HUGE))) {
@@ -303,31 +346,58 @@ void mind_telekinesis(byte level, struct char_data* ch,struct char_data* victim,
 		}
 	} /* end was not fighting */
 	else {
-		/* was fighting, bash him */
-		if(saves_spell(victim,SAVING_SPELL) ||
-				IS_SET(victim->specials.act,ACT_HUGE)) {
+		int dam;
+		int sit_chance;
+		bool saved;
+
+		/* fighting: impulso telecinetico + possibilita' di far sedere */
+		saved = saves_spell(victim, SAVING_SPELL) != 0;
+		dam = dice(level, 4);
+		if(saved) {
+			dam >>= 1;
+		}
+		if(IS_SET(victim->specials.act, ACT_HUGE)) {
+			dam >>= 1;
+		}
+		if(dam > 0) {
+			act("Scagli un impulso telecinetico contro $N!", FALSE, ch, 0, victim,
+				TO_CHAR);
+			act("$n ti colpisce con un impulso telecinetico!", TRUE, ch, 0, victim,
+				TO_VICT);
+			act("$n scaglia un impulso telecinetico contro $N!", TRUE, ch, 0,
+				victim, TO_ROOM);
+			MissileDamage(ch, victim, dam, SKILL_TELEKINESIS, 5);
+		}
+		else if(saved) {
 			act("Non riesci a focalizzare la tua mente a sufficienza.", FALSE, ch,
 				0, victim, TO_CHAR);
 			act("$n fallisce nello spostarti con la forza della sua mente!", TRUE,
 				ch, 0, victim, TO_VICT);
 			act("$n cerca inutilmente di spostare $N con la forza della sua mente",
 				TRUE, ch, 0, victim, TO_ROOM);
-			/* do nothing */
 		}
-		else {
-			/* smack'em to the ground */
+
+		sit_chance = saved ? 30 : 55;
+		sit_chance += (int)level / 5;
+		if(IS_SET(victim->specials.act, ACT_HUGE)) {
+			sit_chance = 25;
+		}
+		if(sit_chance > 85) {
+			sit_chance = 85;
+		}
+
+		if(number(1, 100) <= sit_chance && GET_POS(victim) > POSITION_SITTING) {
 			act("Sbatti $N a terra con il solo pensiero!", FALSE, ch, 0, victim,
 				TO_CHAR);
-			act("$n ti alza e ti sbatte a terra con il solo pensiero!", TRUE, ch,
-				0, victim, TO_VICT);
+			act("$n ti sbatte a terra con il solo pensiero!", TRUE, ch, 0, victim,
+				TO_VICT);
 			act("$n sbatte $N a terra con il solo pensiero!", TRUE, ch, 0, victim,
 				TO_ROOM);
-
 			GET_POS(victim) = POSITION_SITTING;
 			if(!victim->specials.fighting) {
-				set_fighting(victim,ch);
+				set_fighting(victim, ch);
 			}
-			WAIT_STATE(victim, PULSE_VIOLENCE * 1);   // telekinesis
+			WAIT_STATE(victim, PULSE_VIOLENCE);
 		}
 	} /* end was fighting */
 }
@@ -508,10 +578,101 @@ void mind_mind_over_body(byte level, struct char_data* ch,
 	}
 }
 
-/* feeblemind*/
+/* mind scramble (mind wipe): effetti diversi su PG e mob */
 void mind_mind_wipe(byte level, struct char_data* ch,
 					struct char_data* victim, struct obj_data* obj) {
-	spell_feeblemind(level, ch, victim, obj);
+	struct affected_type af;
+	int dur;
+
+	(void)obj;
+
+	if(!ch || !victim) {
+		return;
+	}
+
+	if(affected_by_spell(victim, SKILL_MINDBLANK)) {
+		act("La mente di $N e' troppo protetta per essere cancellata.", FALSE, ch,
+			0, victim, TO_CHAR);
+		if(!victim->specials.fighting && victim != ch && !IS_PC(victim)) {
+			set_fighting(victim, ch);
+		}
+		return;
+	}
+
+	if(saves_spell(victim, SAVING_SPELL)) {
+		act("La mente di $N resiste al tuo assalto psionico.", FALSE, ch, 0,
+			victim, TO_CHAR);
+		act("$n tenta di frantumare la tua mente, ma tu resisti!", FALSE, ch, 0,
+			victim, TO_VICT);
+		if(!victim->specials.fighting && victim != ch) {
+			hit(victim, ch, TYPE_UNDEFINED);
+		}
+		return;
+	}
+
+	if(IS_PC(victim)) {
+		if(affected_by_spell(victim, SPELL_FEEBLEMIND)) {
+			send_to_char("La sua mente e' gia' in subbuglio.\n\r", ch);
+			return;
+		}
+
+		act("Assali la mente di $N lasciandola in subbuglio!", FALSE, ch, 0,
+			victim, TO_CHAR);
+		act("$n assala la tua mente: i pensieri si confondono!", FALSE, ch, 0,
+			victim, TO_VICT);
+		act("$n assala la mente di $N!", FALSE, ch, 0, victim, TO_NOTVICT);
+
+		af.type      = SPELL_FEEBLEMIND;
+		af.duration  = 18;
+		af.modifier  = -3;
+		af.location  = APPLY_INT;
+		af.bitvector = 0;
+		affect_to_char(victim, &af);
+
+		af.duration  = 18;
+		af.modifier  = 35;
+		af.location  = APPLY_SPELLFAIL;
+		af.bitvector = 0;
+		affect_to_char(victim, &af);
+
+		mind_scramble_degrade_skills(victim, level >= 40 ? 2 : 1, 15);
+		return;
+	}
+
+	if(affected_by_spell(victim, SKILL_MIND_WIPE)) {
+		send_to_char("La creatura e' gia' confusa dalla tua precedente assalto.\n\r",
+					 ch);
+		return;
+	}
+
+	dur = MAX(4, (int)level / 4);
+	act("Assali la mente di $N confondendone i riflessi!", FALSE, ch, 0, victim,
+		TO_CHAR);
+	act("$n assala la tua mente: i tuoi pensieri si confondono!", FALSE, ch, 0,
+		victim, TO_VICT);
+	act("$n assala la mente di $N!", FALSE, ch, 0, victim, TO_NOTVICT);
+
+	af.type      = SKILL_MIND_WIPE;
+	af.duration  = dur;
+	af.bitvector = 0;
+
+	af.location  = APPLY_HITROLL;
+	af.modifier  = -MAX(2, (int)level / 4);
+	affect_to_char(victim, &af);
+
+	af.location  = APPLY_DAMROLL;
+	af.modifier  = -MAX(2, (int)level / 5);
+	affect_to_char(victim, &af);
+
+	af.location  = APPLY_AC;
+	af.modifier  = MAX(2, (int)level / 3);
+	affect_to_char(victim, &af);
+
+	if(IS_CASTER_N(victim)) {
+		af.location  = APPLY_SPELLFAIL;
+		af.modifier  = 40;
+		affect_to_char(victim, &af);
+	}
 }
 
 
@@ -628,50 +789,57 @@ void mind_psychic_impersonation(byte level, struct char_data* ch,
 void mind_ultra_blast(byte level, struct char_data* ch,
 					  struct char_data* victim, struct obj_data* obj) {
 	int dam;
-	struct char_data* tmp_victim, *temp;
+	int tdam;
+	struct char_data* tmp_victim;
+	struct char_data* temp;
+	struct affected_type af;
 
 	assert(ch);
 	assert((level >= 1) && (level <= ABS_MAX_LVL));
+	(void)victim;
+	(void)obj;
 
-	/* damage = level d4, +level */
-	dam = dice(level,4);
-	dam +=level;
+	dam = dice(level, 6);
+	dam += level * 2;
 
 	act("Generi una spaventosa ondata di energia psionica!", FALSE,
-		ch,0,victim,TO_CHAR);
+		ch, 0, 0, TO_CHAR);
 	act("$n genera una spaventosa ondata di energia psionica!", FALSE,
-		ch,0,0,TO_ROOM);
+		ch, 0, 0, TO_ROOM);
 
 	for(tmp_victim = character_list; tmp_victim; tmp_victim = temp) {
 		temp = tmp_victim->next;
-		if((ch->in_room == tmp_victim->in_room) && (ch != tmp_victim)) {
-			if(!in_group(ch,tmp_victim) && !IS_IMMORTAL(tmp_victim)) {
-				if(!saves_spell(tmp_victim, SAVING_SPELL)) {
+		bool saved;
 
-					/* half damage if effected by TOWER OF IRON WILL */
-					if(affected_by_spell(tmp_victim,SKILL_TOWER_IRON_WILL)) {
-						dam >>=1;
-					}
-
-					MissileDamage(ch,tmp_victim,dam,SKILL_ULTRA_BLAST, 5);
-					/* damage here */
-				}
-				else {
-					dam >>=1;  /* half dam */
-
-					/* NO damage if effected by TOWER OF IRON WILL */
-					if(affected_by_spell(tmp_victim,SKILL_TOWER_IRON_WILL)) {
-						dam =0;
-					}
-
-					MissileDamage(ch,tmp_victim,dam,SKILL_ULTRA_BLAST, 5);
-				}
-			}
-			else {
-				act("Riesci ad evitare l'onda di energia!",FALSE, ch, 0, tmp_victim, TO_VICT);
-			}
+		if(ch->in_room != tmp_victim->in_room || !psi_ultra_blast_target(ch, tmp_victim)) {
+			continue;
 		}
-	}          /* end for */
+
+		saved = saves_spell(tmp_victim, SAVING_SPELL) != 0;
+		tdam = dam;
+		if(saved) {
+			tdam >>= 1;
+		}
+		if(affected_by_spell(tmp_victim, SKILL_TOWER_IRON_WILL)) {
+			tdam >>= 1;
+		}
+		if(tdam <= 0) {
+			act("Resisti alla psionica onda d'urto!", FALSE, ch, 0, tmp_victim,
+				TO_VICT);
+			continue;
+		}
+
+		MissileDamage(ch, tmp_victim, tdam, SKILL_ULTRA_BLAST, 5);
+
+		if(!saved) {
+			af.type      = SKILL_ULTRA_BLAST;
+			af.duration  = 2;
+			af.modifier  = -2;
+			af.location  = APPLY_HITROLL;
+			af.bitvector = 0;
+			affect_join(tmp_victim, &af, FALSE, FALSE);
+		}
+	}
 }
 
 /* massive single person attack */
@@ -720,6 +888,251 @@ void mind_domination(byte level, struct char_data* ch,
 {
     send_to_char("Work in progress :-)", ch);
     return;
+}
+
+void mind_ego_whip(byte level, struct char_data* ch,
+				   struct char_data* victim, struct obj_data* obj) {
+	struct affected_type af;
+	int dam;
+
+	(void)obj;
+	if(!ch || !victim) {
+		return;
+	}
+
+	dam = dice(level, 5);
+	if(saves_spell(victim, SAVING_SPELL)) {
+		dam >>= 1;
+	}
+	MissileDamage(ch, victim, dam, SKILL_EGO_WHIP, 5);
+
+	if(!saves_spell(victim, SAVING_SPELL)) {
+		af.type      = SKILL_EGO_WHIP;
+		af.duration  = MAX(3, (int)level / 8);
+		af.modifier  = -2;
+		af.location  = APPLY_INT;
+		af.bitvector = 0;
+		affect_join(victim, &af, FALSE, FALSE);
+		act("$N barcolla sotto il colpo del tuo frustino psichico!", FALSE, ch, 0,
+			victim, TO_CHAR);
+	}
+}
+
+void mind_psychic_vampirism(byte level, struct char_data* ch,
+							struct char_data* victim, struct obj_data* obj) {
+	int drain;
+
+	(void)obj;
+	if(!ch || !victim) {
+		return;
+	}
+
+	if(IS_PC(victim) && !IS_NPC(victim)) {
+		send_to_char("Non puoi prosciugare cosi' un altro giocatore.\n\r", ch);
+		return;
+	}
+
+	drain = MIN(GET_MANA(victim), MAX(10, (int)level * 3));
+	if(saves_spell(victim, SAVING_SPELL)) {
+		drain >>= 1;
+	}
+	if(drain <= 0) {
+		act("$N resiste al tuo assalto vampirico.", FALSE, ch, 0, victim, TO_CHAR);
+		return;
+	}
+
+	GET_MANA(victim) = MAX(0, GET_MANA(victim) - drain);
+	GET_MANA(ch) = MIN(GET_MAX_MANA(ch), GET_MANA(ch) + drain / 2);
+	act("Prosciugbi l'energia mentale di $N!", FALSE, ch, 0, victim, TO_CHAR);
+	act("$n prosciuga la tua energia mentale!", FALSE, ch, 0, victim, TO_VICT);
+	MissileDamage(ch, victim, MAX(1, drain / 4), SKILL_PSYCHIC_VAMPIRISM, 5);
+}
+
+void mind_metapsionic_surge(byte level, struct char_data* ch,
+							struct char_data* victim, struct obj_data* obj) {
+	struct affected_type af;
+
+	(void)obj;
+	if(!ch) {
+		return;
+	}
+	if(!victim) {
+		victim = ch;
+	}
+
+	if(affected_by_spell(victim, SKILL_METAPSIONIC_SURGE)) {
+		send_to_char("Sei gia' in stato di surge metapsionico.\n\r", ch);
+		return;
+	}
+
+	af.type      = SKILL_METAPSIONIC_SURGE;
+	af.duration  = MAX(4, (int)level / 4);
+	af.modifier  = MAX(2, (int)level / 10);
+	af.location  = APPLY_HITROLL;
+	af.bitvector = 0;
+	affect_to_char(victim, &af);
+
+	af.location  = APPLY_DAMROLL;
+	affect_to_char(victim, &af);
+
+	act("Un'ondata di potere metapsionico ti pervade!", FALSE, ch, 0, victim,
+		TO_VICT);
+	act("$n e' avvolt$B da un'ondata di potere metapsionico!", FALSE, ch, 0,
+		victim, TO_NOTVICT);
+}
+
+void mind_thought_barrier(byte level, struct char_data* ch,
+						  struct char_data* victim, struct obj_data* obj) {
+	struct affected_type af;
+
+	(void)obj;
+	if(!ch) {
+		return;
+	}
+	if(!victim) {
+		victim = ch;
+	}
+
+	if(affected_by_spell(victim, SKILL_THOUGHT_BARRIER)) {
+		send_to_char("La tua barriera mentale e' gia' attiva.\n\r", ch);
+		return;
+	}
+
+	af.type      = SKILL_THOUGHT_BARRIER;
+	af.duration  = MAX(5, (int)level / 3);
+	af.modifier  = -MAX(10, (int)level / 2);
+	af.location  = APPLY_AC;
+	af.bitvector = 0;
+	affect_to_char(victim, &af);
+
+	act("Intrecci una barriera di pensieri intorno a te.", FALSE, ch, 0, victim,
+		TO_VICT);
+	act("$n e' circondat$B da una barriera di pensieri.", FALSE, ch, 0, victim,
+		TO_NOTVICT);
+}
+
+void mind_neural_spike(byte level, struct char_data* ch,
+					   struct char_data* victim, struct obj_data* obj) {
+	int dam;
+
+	(void)obj;
+	if(!ch || !victim) {
+		return;
+	}
+
+	dam = dice(level, 8) + level;
+	if(saves_spell(victim, SAVING_SPELL)) {
+		dam >>= 1;
+		if(affected_by_spell(victim, SKILL_TOWER_IRON_WILL)) {
+			dam = 0;
+		}
+	}
+	if(affected_by_spell(victim, SKILL_TOWER_IRON_WILL)) {
+		dam >>= 1;
+	}
+	MissileDamage(ch, victim, dam, SKILL_NEURAL_SPIKE, 5);
+}
+
+void mind_mass_confusion(byte level, struct char_data* ch,
+						 struct char_data* victim, struct obj_data* obj) {
+	struct char_data* tmp;
+	struct affected_type af;
+	int dur;
+
+	(void)victim;
+	(void)obj;
+	if(!ch) {
+		return;
+	}
+
+	dur = MAX(3, (int)level / 6);
+	act("Scateni un turbine di impulsi confusi nella stanza!", FALSE, ch, 0, 0,
+		TO_CHAR);
+	act("$n scatena un turbine di impulsi psichici confusi!", FALSE, ch, 0, 0,
+		TO_ROOM);
+
+	for(tmp = real_roomp(ch->in_room)->people; tmp; tmp = tmp->next_in_room) {
+		if(tmp == ch || IS_IMMORTAL(tmp) || in_group(ch, tmp)) {
+			continue;
+		}
+		if(IS_PC(tmp)) {
+			continue;
+		}
+		if(saves_spell(tmp, SAVING_SPELL)) {
+			continue;
+		}
+
+		af.type      = SKILL_MASS_CONFUSION;
+		af.duration  = dur;
+		af.bitvector = 0;
+
+		af.location  = APPLY_HITROLL;
+		af.modifier  = -MAX(2, (int)level / 6);
+		affect_join(tmp, &af, FALSE, FALSE);
+
+		af.location  = APPLY_DAMROLL;
+		af.modifier  = -MAX(2, (int)level / 8);
+		affect_join(tmp, &af, FALSE, FALSE);
+
+		af.location  = APPLY_AC;
+		af.modifier  = MAX(2, (int)level / 4);
+		affect_join(tmp, &af, FALSE, FALSE);
+	}
+}
+
+void mind_cataclysm_mind(byte level, struct char_data* ch,
+						 struct char_data* victim, struct obj_data* obj) {
+	int dam;
+	int tdam;
+	struct char_data* tmp_victim;
+	struct char_data* temp;
+	struct affected_type af;
+
+	(void)victim;
+	(void)obj;
+	if(!ch) {
+		return;
+	}
+
+	dam = dice(level, 8) + level * 3;
+
+	act("Concentri ogni fibra della mente in un cataclisma psionico!", FALSE, ch,
+		0, 0, TO_CHAR);
+	act("$n scatena un cataclisma di pura energia mentale!", FALSE, ch, 0, 0,
+		TO_ROOM);
+
+	for(tmp_victim = character_list; tmp_victim; tmp_victim = temp) {
+		bool saved;
+
+		temp = tmp_victim->next;
+		if(ch->in_room != tmp_victim->in_room ||
+				!psi_ultra_blast_target(ch, tmp_victim)) {
+			continue;
+		}
+
+		saved = saves_spell(tmp_victim, SAVING_SPELL) != 0;
+		tdam = dam;
+		if(saved) {
+			tdam >>= 1;
+		}
+		if(affected_by_spell(tmp_victim, SKILL_TOWER_IRON_WILL)) {
+			tdam >>= 1;
+		}
+		if(tdam <= 0) {
+			continue;
+		}
+
+		MissileDamage(ch, tmp_victim, tdam, SKILL_CATACLYSM_MIND, 5);
+
+		if(!saved && IS_NPC(tmp_victim)) {
+			af.type      = SKILL_CATACLYSM_MIND;
+			af.duration  = 2;
+			af.modifier  = -3;
+			af.location  = APPLY_HITROLL;
+			af.bitvector = 0;
+			affect_join(tmp_victim, &af, FALSE, FALSE);
+		}
+	}
 }
 
 } // namespace Alarmud

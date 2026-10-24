@@ -116,6 +116,7 @@ Bitvector for 'affected_by'*/
 	constexpr unsigned long IMM_PLUS2                                    =32768;
 	constexpr unsigned long IMM_PLUS3                                    =65536;
 	constexpr unsigned long IMM_PLUS4                                    =131072;
+	constexpr unsigned long IMM_HOLY                                     =262144;
 // Flag type: E_ITEM2_FLAG -- start
 /*
 Bitvector for 'extra_flags2'*/
@@ -537,11 +538,12 @@ enum e_damage_type {
 	COLD_DAMAGE                                  =2,
 	ELEC_DAMAGE                                  =3,
 	BLOW_DAMAGE                                  =4,
-	ACID_DAMAGE                                  =5
+	ACID_DAMAGE                                  =5,
+	HOLY_DAMAGE                                  =6
 };
-#define E_DAMAGE_TYPE_COUNT 6
+#define E_DAMAGE_TYPE_COUNT 7
 #define E_DAMAGE_TYPE_MIN 0
-#define E_DAMAGE_TYPE_MAX 5
+#define E_DAMAGE_TYPE_MAX 6
 #define E_DAMAGE_TYPE_KEY "e_damage_type"
 
 #define E_DAMAGE_TYPE_ACCEPT_ZERO true

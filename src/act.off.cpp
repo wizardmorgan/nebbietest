@@ -37,6 +37,7 @@
 #include "maximums.hpp"
 #include "multiclass.hpp"
 #include "opinion.hpp"
+#include "proc_cacaodemon.hpp"
 #include "regen.hpp"
 #include "snew.hpp"
 #include "spell_parser.hpp"
@@ -671,6 +672,10 @@ bool off_order_victim_ready_for_command(struct char_data* victim) {
 }
 
 void off_order_obey_charmed(struct char_data* ch, struct char_data* victim, const std::string& command) {
+	if(cacaodemon_order_vigila(ch, victim, command)) {
+		off_order_send_ok(ch);
+		return;
+	}
 	off_order_send_ok(ch);
 	WAIT_STATE(victim, (19 - GET_CHR(ch)) * PULSE_VIOLENCE);
 	command_interpreter(victim, command.c_str());
@@ -708,6 +713,23 @@ void off_order_single_target(struct char_data* ch, struct char_data* victim,
 
 void off_order_followers(struct char_data* ch, const std::string& command) {
 	if(ch == nullptr) {
+		return;
+	}
+	if(cacaodemon_is_vigila_order(command)) {
+		const int orgRoom = ch->in_room;
+		bool found = false;
+		for(struct follow_type* k = ch->followers; k != nullptr; k = k->next) {
+			if(orgRoom == k->follower->in_room && IS_AFFECTED(k->follower, AFF_CHARM) &&
+					is_cacaodemon(k->follower) && k->follower->master == ch) {
+				found = true;
+				cacaodemon_order_vigila(ch, k->follower, command);
+			}
+		}
+		if(!found) {
+			send_to_char("Non hai un cacaodemon in stanza a cui dare quest'ordine.\n\r", ch);
+		} else {
+			off_order_send_ok(ch);
+		}
 		return;
 	}
 	if(!IS_IMMORTALE(ch)) {
@@ -882,17 +904,7 @@ int off_kick_race_message_index(struct char_data* victim) {
 }
 
 int off_kick_fighter_class(struct char_data* ch) {
-	int dummy = 0;
-	int carry = 0;
-	WEARING_N(ch, dummy, carry);
-	const unsigned carried =
-		static_cast<unsigned>(IS_CARRYING_N(ch)) + static_cast<unsigned>(carry);
-	if(HasClass(ch, CLASS_MONK) &&
-	   !((ch->equipment[WIELD]) &&
-	     (ch->equipment[WIELD]->obj_flags.type_flag == ITEM_WEAPON)) &&
-	   !((ch->equipment[HOLD]) &&
-	     (ch->equipment[HOLD]->obj_flags.type_flag == ITEM_WEAPON)) &&
-	   (carried < static_cast<unsigned>(MONK_MAX_RENT) + 5u)) {
+	if(MonkInFightingForm(ch)) {
 		return CLASS_MONK;
 	}
 	if(HasClass(ch, CLASS_BARBARIAN)) {
@@ -902,21 +914,21 @@ int off_kick_fighter_class(struct char_data* ch) {
 }
 
 void off_kick_adjust_damage(struct char_data* victim, int fighterClass, int& damage) {
-	if(fighterClass == CLASS_MONK) {
-		return;
-	}
-	if(IS_SET(victim->susc, IMM_BLUNT)) {
+	const unsigned long our_bit =
+		(fighterClass == CLASS_MONK) ? IMM_HOLY : IMM_BLUNT;
+
+	if(IS_SET(victim->susc, our_bit)) {
 		damage <<= 1;
 	}
-	if(IS_SET(victim->immune, IMM_BLUNT)) {
+	if(IS_SET(victim->immune, our_bit)) {
 		damage >>= 1;
 	}
 	if(fighterClass != CLASS_BARBARIAN) {
-		if(IS_SET(victim->M_immune, IMM_BLUNT)) {
+		if(IS_SET(victim->M_immune, our_bit)) {
 			damage = 0;
 		}
 	}
-	else if(IS_SET(victim->M_immune, IMM_BLUNT)) {
+	else if(IS_SET(victim->M_immune, our_bit)) {
 		damage >>= 1;
 	}
 }

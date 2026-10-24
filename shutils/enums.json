@@ -2099,6 +2099,10 @@
 			"ACID_DAMAGE": {
 				"value": 5,
 				"comment": ""
+			},
+			"HOLY_DAMAGE": {
+				"value": 6,
+				"comment": ""
 			}
 		},
 		"e_opinion_op": {
@@ -3596,6 +3600,10 @@
 			},
 			"IMM_PLUS4": {
 				"value": 131072,
+				"comment": ""
+			},
+			"IMM_HOLY": {
+				"value": 262144,
 				"comment": ""
 			}
 		},

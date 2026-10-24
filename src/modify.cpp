@@ -922,10 +922,22 @@ struct help_index_element* build_help_index(FILE* fl, int* num) {
 	char buf[81], tmp[81], *scan;
 	long pos;
 
+	auto strip_line_end = [](char* line) {
+		const size_t len = strlen(line);
+		if(len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+			line[len - 1] = '\0';
+		}
+		if(len > 1 && line[strlen(line) - 1] == '\r') {
+			line[strlen(line) - 1] = '\0';
+		}
+	};
+
 	for(;;) {
 		pos = ftell(fl);
-		fgets(buf, 81, fl);
-		*(buf + strlen(buf) - 1) = '\0';
+		if(!fgets(buf, sizeof(buf), fl)) {
+			break;
+		}
+		strip_line_end(buf);
 		scan = buf;
 		for(;;) {
 			/* extract the keywords */
@@ -948,14 +960,22 @@ struct help_index_element* build_help_index(FILE* fl, int* num) {
 			strcpy(list[nr].keyword, tmp);
 		}
 		/* skip the text */
-		do {
-			fgets(buf, 81, fl);
-		}
-		while(*buf != '#');
-		if(*(buf + 1) == '~') {
-			break;
+		for(;;) {
+			if(!fgets(buf, sizeof(buf), fl)) {
+				mudlog(LOG_ERROR, "help file truncated before # terminator");
+				*num = nr < 0 ? 0 : nr;
+				return list;
+			}
+			strip_line_end(buf);
+			if(buf[0] == '#') {
+				if(buf[1] == '~') {
+					goto sort_and_return;
+				}
+				break;
+			}
 		}
 	}
+sort_and_return:
 	/* we might as well sort the stuff */
 	do {
 		issorted = 1;
