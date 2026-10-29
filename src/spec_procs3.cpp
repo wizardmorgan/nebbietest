@@ -6,6 +6,7 @@
 /*$Id: spec_procs3.c,v 1.4 2002/03/23 17:15:15 Thunder Exp $
 */
 /***************************  System  include ************************************/
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cctype>
@@ -54,6 +55,7 @@
 #include "spells2.hpp"
 #include "trap.hpp"
 #include "utility.hpp"
+#include "maximums.hpp"
 namespace Alarmud {
 
 
@@ -3890,8 +3892,6 @@ MOBSPECIAL_FUNC(spTest) {
 }
 
 MOBSPECIAL_FUNC(Esattore) {
-	long xp;
-	char buf[512];
 	if(cmd != CMD_GIVE) {
 		return(FALSE);
 	}
@@ -3899,15 +3899,16 @@ MOBSPECIAL_FUNC(Esattore) {
 	 * superni 58 - 59 per esigere i pagamenti in xp
 	 * Per evitare abusi, deve essere il PC stesso che dona gli xp
 	 * */
-	xp=abs(atoi(arg)/HowManyClasses(ch));
+	const long long amount = parse_amount(arg != nullptr ? arg : "").value_or(0);
+	const long long xp = amount / std::max(HowManyClasses(ch), 1);
 	if(xp > GET_EXP(ch)) {
-		do_say(mob,"Non hai abbastanza esperienza",CMD_SAY);
+		do_say(mob, "Non hai abbastanza esperienza", CMD_SAY);
 		return(FALSE);
 	}
-	GET_EXP(ch)-=(xp);
-	sprintf(buf,"%s ha donato %ld punti esperienza (per ogni classe) per la gloria del Clan",
-			GET_NAME(ch),xp);
-	do_shout(mob,buf,CMD_SAY);
+	GET_EXP(ch) -= static_cast<int>(xp);
+	const std::string shout = std::string(GET_NAME(ch)) + " ha donato " + format_thousands(xp) +
+							  " punti esperienza (per ogni classe) per la gloria del Clan";
+	do_shout(mob, shout.c_str(), CMD_SAY);
 	return(TRUE);
 }
 
@@ -5453,22 +5454,28 @@ MOBSPECIAL_FUNC(MobCaccia) {
                                 switch(n) {
                                     case 0  :
                                         GET_GOLD(t) += premio[0];
-                                        reward = "$c0011Ricevi " + std::to_string(premio[0]) + " monete d'oro!$c0007\n\r";
+                                        reward = "$c0011Ricevi " + format_thousands(premio[0]) + " monete d'oro!$c0007\n\r";
                                         break;
-                                    case 1  :
-                                        GET_EXP(t) += premio[1]/HowManyClasses(t);
-                                        reward = "$c0011Ottieni " + std::to_string(premio[1]) + " punti esperienza!$c0007\n\r";
+                                    case 1  : {
+                                        /* add_exp_checked avvisa da se' (limite/gilda); "Ottieni" solo se entra qualcosa */
+                                        const int xp_added = add_exp_checked(t, premio[1] / std::max(1, HowManyClasses(t)));
+                                        if(xp_added > 0) {
+                                            reward = "$c0011Ottieni " + format_thousands(static_cast<long long>(xp_added) * std::max(1, HowManyClasses(t))) + " punti esperienza!$c0007\n\r";
+                                        }
                                         break;
+                                    }
                                     case 2  :
                                         GET_RUNEDEI(t) += premio[2];
                                         reward = std::string("$c0011Vieni marchiat") + SSLF(t) + " con " +
-                                                 std::to_string(premio[2]) + " run" +
+                                                 format_thousands(premio[2]) + " run" +
                                                  (premio[2] == 1 ? "a" : "e") + " degli Dei!$c0007\n\r";
                                         break;
                                     default:
                                         break;
                                 }
-                                send_to_char(reward.c_str(), t);
+                                if(!reward.empty()) {
+                                    send_to_char(reward.c_str(), t);
+                                }
                             }
                         }
                         save_char(t, AUTO_RENT, 0);
@@ -5753,22 +5760,28 @@ MOBSPECIAL_FUNC(MobSalvataggio) {
                                             switch(n) {
                                                 case 0  :
                                                     GET_GOLD(t) += premio[0];
-                                                    reward = "$c0011Ricevi " + std::to_string(premio[0]) + " monete d'oro!$c0007\n\r";
+                                                    reward = "$c0011Ricevi " + format_thousands(premio[0]) + " monete d'oro!$c0007\n\r";
                                                     break;
-                                                case 1  :
-                                                    GET_EXP(t) += premio[1]/HowManyClasses(t);
-                                                    reward = "$c0011Ottieni " + std::to_string(premio[1]) + " punti esperienza!$c0007\n\r";
+                                                case 1  : {
+                                                    /* add_exp_checked avvisa da se' (limite/gilda); "Ottieni" solo se entra qualcosa */
+                                                    const int xp_added = add_exp_checked(t, premio[1] / std::max(1, HowManyClasses(t)));
+                                                    if(xp_added > 0) {
+                                                        reward = "$c0011Ottieni " + format_thousands(static_cast<long long>(xp_added) * std::max(1, HowManyClasses(t))) + " punti esperienza!$c0007\n\r";
+                                                    }
                                                     break;
+                                                }
                                                 case 2  :
                                                     GET_RUNEDEI(t) += premio[2];
                                                     reward = std::string("$c0011Vieni marchiat") + SSLF(t) + " con " +
-                                                             std::to_string(premio[2]) + " run" +
+                                                             format_thousands(premio[2]) + " run" +
                                                              (premio[2] == 1 ? "a" : "e") + " degli Dei!$c0007\n\r";
                                                     break;
                                                 default:
                                                     break;
                                             }
-                                            send_to_char(reward.c_str(), t);
+                                            if(!reward.empty()) {
+                                    send_to_char(reward.c_str(), t);
+                                }
                                         }
                                     }
                                     save_char(t, AUTO_RENT, 0);

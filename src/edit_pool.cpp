@@ -648,6 +648,7 @@ void apply_totals_to_stats_sql(DB* db, unsigned long long toon_id,
 		/* Toon in registry ma stats non ancora importate (lazy migrate dopo
 		 * edit_pool_boot): crea stub cosi' il credit non viene perso. */
 		std::ostringstream ins;
+		body_digest_invalidate_all(); /* scrive character_stats fuori da save_char */
 		ins << "INSERT INTO character_stats (toon_id) VALUES (" << toon_id << ')';
 		try {
 			db->execute(ins.str().c_str());
@@ -670,6 +671,7 @@ void apply_totals_to_stats_sql(DB* db, unsigned long long toon_id,
 	pool.migrated = 1;
 
 	std::ostringstream upd;
+	body_digest_invalidate_all(); /* scrive character_stats fuori da save_char */
 	upd << "UPDATE character_stats SET "
 		<< "edit_hp=" << pool.edit_hp << ", edit_mana=" << pool.edit_mana
 		<< ", edit_move=" << pool.edit_move
@@ -1069,6 +1071,7 @@ bool edit_pool_persist_char(struct char_data* ch) {
 		return false;
 	}
 	std::ostringstream upd;
+	body_digest_invalidate_all(); /* scrive character_stats fuori da save_char */
 	upd << "UPDATE character_stats SET "
 		<< "edit_hp=" << ch->edit_pool.edit_hp
 		<< ", edit_mana=" << ch->edit_pool.edit_mana

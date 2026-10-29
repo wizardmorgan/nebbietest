@@ -3,6 +3,7 @@
 Implementato in:
 
 - `src/mob.editor.cpp`
+- `src/edit_broker_whitelist.inc` (Enable/Disable per location e per bit oedit)
 - `src/object_instance.cpp`
 - `src/object_instance.hpp`
 - `src/obj_value.cpp` (etichette `[delta]` / `[broker]` in show edits)
@@ -14,12 +15,31 @@ Implementato in:
 - Bit fuori listino (resi/imm/spell) → staff
 - Bit già presente su B → stop con nome bit
 - Non-stack non-arma già su B → stop
+- Fuori dalla **tabella** listino-edit (`SAVING_*` / `SAVE_ALL`, spellfail, CON, …):
+  non compaiono in lista e non si risolvono al pick. Caso tipico: baseline procarea con
+  `SAVE_ALL -5` poi tolto → senza whitelist `cur>base` inventava `SAVING_ALL by 5`.
+- Hit/Mana/Move e i regen: in tabella ma edit sul personaggio → non trasferibili sul pezzo.
+  Artifact e spell arma restano fuori dal path affect (flag / staff).
+- `ITEM2_PAID_MALUS` su A: il recupero malus proto (pagato a listino doppio) **non** è
+  trasferibile. Solo la parte sopra 0 (AC: sotto 0). Es. proto INT −3, pezzo a +2 →
+  `INT by 2`. Vale per tutte le location numeriche a segno / canali combat.
 
-### Accorpabili
+### Accorpabili (bitfield: 4 insiemi, coesistenza su B)
+Famiglie diverse **possono** stare assieme sul destinazione. Config in `edit_broker_whitelist.inc` (`BrokerBitClass` + Enable/Disable). SUSC: Disable finché non abilitate.
+
 - Resistenze (`APPLY_IMMUNE`): acid/elec/fire/cold/energy/drain/hold/poison + slash/pierce/blunt
 - Immunità (`APPLY_M_IMMUNE`): drain/charm/poison
 - Spell (`APPLY_SPELL` + `AFF2`): telepathy, darkness, waterbreath, truesight, invis, sense life, spy/scrying, prot evil, fly, danger sense
-- Numerici: hitroll, damroll, spellpower, armor, hit-n-dam, hit-n-sp, STR/DEX/INT/WIS/CHR
+- Suscettibilità (`APPLY_SUSC`): non trasferibili (Disable)
+
+Placement: pacchetti = slot su A con bit Enable del delta. Default Merge sullo stesso slot di B (o primo libero). `nuovo` (slot separati) solo se B ha abbastanza slot liberi (≥ pacchetti). Altrimenti solo Merge, o Separate forzato se Merge impossibile.
+
+### Accorpabili (numerici — tabella listino-edit, solo pezzo)
+- Stats: STR/DEX/INT/WIS/CHR
+- Affects pezzo: armor, hitroll, damroll, spellpower
+- Accorpamenti: hit-n-dam, hit-n-sp
+- Non trasferibili (pool PG): hit, mana, move, hit/mana/move regen
+- Tetti pezzo (sotto) restano su combat/stats/armor come prima
 
 ### Tetti pezzo (edit + broker, una volta ciascuno)
 | Canale | edit | broker |
@@ -34,7 +54,7 @@ Broker già su B: somma `broker_delta` dagli event `affect_transfer` con note `b
 
 ### Toon-wide
 - DAM+SP edit ≤ 30 (HITNDAM→dam, HITNSP→sp), come `show edits`
-- Net −A +B; rifiuta se projected > 30
+- Net −A +B; rifiuta se projected > 30 **e** projected > before (redistribuzione / net-zero ok anche se già oltre)
 
 ### PROCAREA-REWARD (baseline)
 - Prototipo broker/distruggi = **create-snapshot** (bonus rolled inclusi), non il template mondo 651xx.
@@ -45,3 +65,7 @@ Broker già su B: somma `broker_delta` dagli event `affect_transfer` con note `b
 
 ## History
 Detail transfer include `location=%d` e `broker_delta=%+d` per i transfer successivi.
+
+Reconcile (`broker_xfer_applied` → `broker_xfer_done` + `payment_xp`): XP e done
+nella stessa chiusura (offline stessa TX; online persist XP prima di done con restore
+se done fallisce) — niente doppio addebito su crash tra i due passi.

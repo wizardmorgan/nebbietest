@@ -103,7 +103,8 @@ unsigned long long object_instance_persist(obj_data* obj, int base_vnum,
  */
 bool object_instance_apply(obj_data* obj, unsigned long long instance_id);
 
-/** Sync rapido: se obj->db_instance_id, UPDATE istanza da obj live. */
+/** UPDATE istanza da obj live (path espliciti: odust, edit_pool strip, …).
+ *  Non usato al rent: verita' possesso = inventorio PG. */
 bool object_instance_sync(obj_data* obj, char_data* actor = nullptr);
 
 /** read_object(base) + apply; caller fa obj_to_char / extract. nullptr se manca/deleted. */
@@ -116,9 +117,10 @@ obj_data* object_instance_materialize(unsigned long long instance_id);
 obj_data* object_instance_materialize_create_baseline(unsigned long long instance_id);
 
 /**
- * Elenco wiz. deleted_list=false: solo attivi con numeri densi 1..N.
- * deleted_list=true: solo soft-deleted con numeri densi 1..M.
- * filter vuoto=tutti della lista; numerico=numero lista; altrimenti substring.
+ * Elenco wiz. deleted_list=false: attivi (numeri densi 1..N);
+ * deleted_list=true: soft-deleted (1..M).
+ * filter vuoto=tutti (una query sola); numerico=numero lista; altrimenti
+ * substring short/name/owner (filtrata in SQL).
  */
 void object_instance_show_list(char_data* ch, const char* filter,
 							   bool deleted_list = false);
@@ -200,6 +202,8 @@ bool object_instance_broker_transfer_mark_done(unsigned long long inst_b,
 
 /**
  * Chiude transfer applied senza done: addebita payment_xp e scrive done.
+ * Online: XP persistito prima di done, con restore se done fallisce.
+ * Offline: XP + done nella stessa TX (niente doppio addebito).
  * actor_name nullptr = tutti; altrimenti solo quel PG (case-insensitive).
  * notify_player: avvisa il PG online (false nel path transfer appena committed).
  * Ritorna quanti transfer sono stati chiusi.
@@ -237,6 +241,12 @@ unsigned object_instance_deleted_list_num(unsigned long long instance_id);
 void object_instance_boot_migrate();
 
 /**
+ * Boot: ripara object_instance container con weight < peso prototipo e senza
+ * evento update di cambio peso (bug sync guscio-contenuto). Idempotente.
+ */
+void object_instance_heal_container_weights();
+
+/**
  * Istanza attiva con legacy_edit_vnum = edit_vnum. 0 se assente.
  * out_base_vnum opzionale.
  */
@@ -246,8 +256,8 @@ unsigned long long object_instance_find_by_legacy_edit(unsigned edit_vnum,
 /**
  * Carica da inventorio/rent: instance_id, oppure 34k→legacy instance,
  * altrimenti read_object(vnum). nullptr se impossibile.
- * Se db_instance_id != 0 le stats sono gia' da object_instance
- * (non sovrascrivere con overlay inventorio/rent).
+ * Se db_instance_id != 0 applica object_instance; il caller puo' poi
+ * overlay-are values/flags/affect dal rent (rent vince; clan symbol no).
  */
 obj_data* object_instance_load_stored(int item_number,
 									  unsigned long long instance_id = 0);
@@ -336,6 +346,7 @@ inline unsigned object_instance_deleted_list_num(unsigned long long) {
 	return 0;
 }
 inline void object_instance_boot_migrate() {}
+inline void object_instance_heal_container_weights() {}
 inline unsigned long long object_instance_find_by_legacy_edit(unsigned,
 															 unsigned* = nullptr) {
 	return 0;

@@ -515,7 +515,18 @@ void command_interpreter(struct char_data *ch, const char *argument) {
              */
             if (no_specials || !special(ch, n->number, buf2)) {
               /* Finalmente viene esequito il comando */
-              ((*n->func)(ch, buf2, n->number));
+              /* skill da combattimento e comandi che ripetono la stessa
+               * riga (clone, get/drop/put/give all): righe uguali (xN) */
+              const bool batched =
+                  n->min_pos == POSITION_FIGHTING || n->number == CMD_CLONE ||
+                  n->number == CMD_GET || n->number == CMD_DROP ||
+                  n->number == CMD_PUT || n->number == CMD_GIVE;
+              if (batched) {
+                const OutputBatch batch;
+                ((*n->func)(ch, buf2, n->number));
+              } else {
+                ((*n->func)(ch, buf2, n->number));
+              }
             }
           }
         } else {
@@ -1108,7 +1119,7 @@ void assign_command_pointers() {
 	AddCommand( "pull",                 do_open_exit,       CMD_PULL,                   POSITION_STANDING,  1                       );
 	AddCommand( "stealth",              do_stealth,         CMD_STEALTH,                POSITION_DEAD,      DIO                     );  /*  225 */
 	AddCommand( "edit",                 do_edit,            CMD_EDIT,                   POSITION_DEAD,      MAESTRO_DEGLI_DEI       );
-	AddCommand( "@",                    do_set,             CMD_CHIOCCIOLA,             POSITION_DEAD,      MAESTRO_DEI_CREATORI    );
+	AddCommand( "@",                    do_set,             CMD_CHIOCCIOLA,             POSITION_DEAD,      MAESTRO_DEL_CREATO      ); /* 58; do_set allowlist Sirio/Tethys/Hephaistos, else 59 */
 	AddCommand( "rsave",                do_rsave,           CMD_RSAVE,                  POSITION_DEAD,      MAESTRO_DEGLI_DEI       );
 	AddCommand( "rload",                do_rload,           CMD_RLOAD,                  POSITION_DEAD,      MAESTRO_DEGLI_DEI       );
 	AddCommand( "track",                do_track,           CMD_TRACK,                  POSITION_DEAD,      1                       );  /*  230 */
@@ -2821,7 +2832,9 @@ NANNY_FUNC(con_register) {
      * do_start non parte più e le stat scelte in creazione non venivano
      * applicate */
     roll_abilities(d->character);
-    StartLevels(d->character);
+    /* Toon non ancora su DB: niente INSERT dello storico qui, lo semina
+     * level_hp_db_seed_new dopo Sql::save (blocco minimo). */
+    StartLevels(d->character, LevelHpRecord::Skip);
 
     try {
       // 2. Crea e popola il record del database 'toon'
@@ -2853,6 +2866,12 @@ NANNY_FUNC(con_register) {
       } else {
         mudlog(LOG_CONNECT, "con_register: new toon record for %s",
                pg->name.c_str());
+        /* Blocco minimo (con_register non rifattorizzata): StartLevels gira
+         * prima del toon, quindi lo storico HP dei livelli iniziali si scrive qui. */
+        if (!level_hp_db_seed_new(d->character)) {
+          mudlog(LOG_SYSERR, "con_register: storico HP non scritto per %s",
+                 pg->name.c_str());
+        }
       }
 
     } catch (const odb::exception &e) {
