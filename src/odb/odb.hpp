@@ -36,6 +36,7 @@ odbTypes(character_achievements);
 odbTypes(character_affects);
 odbTypes(character_aliases);
 odbTypes(character_classes);
+odbTypes(character_level_hp);
 odbTypes(character_core);
 odbTypes(character_death_snapshot);
 odbTypes(character_inventory);
