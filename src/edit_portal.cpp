@@ -558,15 +558,6 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 	return true;
 }
 
-[[nodiscard]] bool inventory_row_has_affect_overlay(const inventory_mysql_row& row) {
-	for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
-		if(row.elem.affected[j].location != 0 || row.elem.affected[j].modifier != 0) {
-			return true;
-		}
-	}
-	return false;
-}
-
 [[nodiscard]] struct obj_data* materialize_inventory_row(
 	const inventory_mysql_row& row) {
 	if(row.elem.item_number <= 0) {
@@ -578,34 +569,16 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 		return nullptr;
 	}
 	obj->db_inventory_id = row.id;
-	if(obj->db_instance_id != 0) {
-		/*
-		 * Instance e' la source of truth per stats/affects, ma la riga
-		 * character_inventory puo' ancora avere ITEM2_EDIT / ED* mentre
-		 * l'instance e' stata salvata senza flag o con ED gia' strippati.
-		 * Senza merge, pezzi EDIT "spariscono" dai filtri portale.
-		 */
-		if(IS_SET(row.elem.extra_flags2, ITEM2_EDIT)) {
-			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
-		}
-		if(IS_SET(row.elem.extra_flags2, ITEM2_PAID_MALUS)) {
-			SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PAID_MALUS);
-		}
-		/* Artifact: se l'inventario ha ancora ITEM_IMMUNE e l'instance no,
-		 * il listino perderebbe il +50% (es. quote 135 invece di 202). */
-		if(IS_SET(row.elem.extra_flags, ITEM_IMMUNE)) {
-			SET_BIT(obj->obj_flags.extra_flags, ITEM_IMMUNE);
-		}
-		if(obj->personal_owner[0] == '\0' && row.elem.name[0] != '\0') {
-			const std::string ed = object_instance_extract_ed_owner(row.elem.name);
-			if(!ed.empty()) {
-				strncpy(obj->personal_owner, ed.c_str(),
-						sizeof(obj->personal_owner) - 1);
-				obj->personal_owner[sizeof(obj->personal_owner) - 1] = '\0';
-			}
-		}
+
+	/*
+	 * Stessa regola di reception (c83c1d7): instance apply, poi overlay
+	 * inventorio su values/flags/affect/testi. Simbolo di clan: solo instance.
+	 * Cosi' quote/apply portal vedono cio' che il PG ha addosso in gioco.
+	 */
+	if(obj->db_instance_id != 0 && clan_symbol_is_obj(obj)) {
 		return obj;
 	}
+
 	obj->obj_flags.value[0] = row.elem.value[0];
 	obj->obj_flags.value[1] = row.elem.value[1];
 	obj->obj_flags.value[2] = row.elem.value[2];
@@ -627,11 +600,11 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 	obj->name = strdup(row.elem.name);
 	obj->short_description = strdup(row.elem.sd);
 	obj->description = strdup(row.elem.desc);
-	/* Empty character_inventory_affect must not zero proto affects. */
-	if(inventory_row_has_affect_overlay(row)) {
-		for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
-			obj->affected[j] = row.elem.affected[j];
-		}
+	hydrate_personal_owner_from_ed(obj, true);
+	/* Inventorio e' verita' possesso: copia sempre gli affect della riga
+	 * (anche se tutti zero), come in reception. */
+	for(int j = 0; j < MAX_OBJ_AFFECT; ++j) {
+		obj->affected[j] = row.elem.affected[j];
 	}
 	return obj;
 }
@@ -852,7 +825,7 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 			   "base_vnum, char_vnum, type_flag, wear_flags, extra_flags, "
 			   "extra_flags2, weight, cost, cost_per_day, timer, bitvector, "
 			   "value0, value1, value2, value3, obj_name, short_desc, description, "
-			   "owner_name, created_by_name, updated_by_name, deleted, "
+			   "owner_name, source, created_by_name, updated_by_name, deleted, "
 			   "created_at, updated_at) VALUES ("
 			<< base_vnum << ',' << char_vnum << ','
 			<< static_cast<int>(obj->obj_flags.type_flag) << ','
@@ -864,8 +837,8 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 			<< obj->obj_flags.bitvector << ',' << obj->obj_flags.value[0] << ','
 			<< obj->obj_flags.value[1] << ',' << obj->obj_flags.value[2] << ','
 			<< obj->obj_flags.value[3] << ',' << name_lit << ',' << sd_lit << ','
-			<< desc_lit << ',' << owner_sql
-			<< ", 'edit_portal', 'edit_portal', 0, NOW(), NOW())";
+			<< desc_lit << ',' << owner_sql << ", '" << kObjInstSourceGodEdit
+			<< "', 'edit_portal', 'edit_portal', 0, NOW(), NOW())";
 		if(!portal_mysql_insert(db, ins.str(), id, err, "portal:persist_inst_ins")) {
 			return false;
 		}
