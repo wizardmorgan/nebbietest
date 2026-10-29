@@ -461,30 +461,12 @@ void affect_modify(struct char_data* ch,byte loc, long mod, long bitv,bool add) 
 		return;
 	}
 
-	if(loc == APPLY_IMMUNE) {
-		if(add) {
-			SET_BIT(ch->immune, mod);
-		}
-		else {
-			REMOVE_BIT(ch->immune, mod);
-		}
-	}
-	else if(loc == APPLY_SUSC) {
-		if(add) {
-			SET_BIT(ch->susc, mod);
-		}
-		else {
-			REMOVE_BIT(ch->susc, mod);
-		}
-
-	}
-	else if(loc == APPLY_M_IMMUNE) {
-		if(add) {
-			SET_BIT(ch->M_immune, mod);
-		}
-		else {
-			REMOVE_BIT(ch->M_immune, mod);
-		}
+	/* IMMUNE / SUSC / M_IMMUNE: niente SET/REMOVE qui.
+	 * Li ricostruisce SyncImmunities (affect_total) da innate/base + eq + affect.
+	 * AddAffects (golem) deve OR-are i bit oggetto e CaptureImmunityBase. */
+	if(loc == APPLY_IMMUNE || loc == APPLY_SUSC || loc == APPLY_M_IMMUNE) {
+		(void)add;
+		(void)mod;
 	}
 	else if(loc == APPLY_SPELL) {
 		if(add) {
@@ -959,6 +941,10 @@ void affect_total(struct char_data* ch) {
 	for(af = ch->affected; af; af=af->next)
 		affect_modify(ch, af->location, af->modifier,
 					  af->bitvector, TRUE);
+
+	/* PC: rebuild immune/M_immune/susc from innate + eq + affects so that
+	 * REMOVE_BIT on one source cannot wipe overlapping innate/other sources. */
+	SyncImmunities(ch);
 
 	if(!HasClass(ch, CLASS_MONK)) {
 		GET_AC(ch) += dex_app[(int)GET_DEX(ch) ].defensive;
@@ -2678,36 +2664,32 @@ void extract_char_smarter(struct char_data* ch, long save_room,
 
 	GET_AC(ch) = 100;
 
-	if(!IS_NPC(ch) && ch->body_save_pending_since != 0 && ch->desc == nullptr && !skip_body_save) {
-		/* linkdead: il salvataggio qui sotto richiede il desc; salva ora gli xp in sospeso */
-		const int room = save_room == NOWHERE ? AUTO_RENT : static_cast<int>(save_room);
-		save_char(ch, room, 0);
+	/* Body save: connessi e linkdead sullo stesso percorso. Prima il ramo LD
+	 * salvava solo con pending != 0: morte da LD poteva perdere gli xp gia'
+	 * scalati in RAM (zero_rent scrive solo rent/extra). */
+	if(ch->desc && ch->desc->original) {
+		do_return(ch, "", 0);
 	}
-	if(ch->desc) {
-		if(ch->desc->original) {
-			do_return(ch, "", 0);
-		}
-
-		if(!skip_body_save) {
+	if(!IS_NPC(ch) && !skip_body_save) {
+		const int room = save_room == NOWHERE ? AUTO_RENT : static_cast<int>(save_room);
 #if USE_MYSQL
-			if(toon_is_migrated_by_name(GET_NAME(ch))) {
-				if(!save_migrated_pc_body_at_room(ch, static_cast<int>(save_room))) {
-					mudlog(LOG_SYSERR,
-						   "extract_char_smarter: save_migrated_pc_body_at_room failed for %s room %ld",
-						   GET_NAME(ch), save_room);
-				}
+		if(toon_is_migrated_by_name(GET_NAME(ch))) {
+			if(!save_migrated_pc_body_at_room(ch, room)) {
+				mudlog(LOG_SYSERR,
+					   "extract_char_smarter: save_migrated_pc_body_at_room failed for %s room %d%s",
+					   GET_NAME(ch), room, ch->desc ? "" : " (linkdead)");
 			}
-			else
+		}
+		else
 #endif
-			{
-				save_char(ch, static_cast<int>(save_room), 0);
-			}
+		{
+			save_char(ch, room, 0);
 		}
-		else {
-			mudlog(LOG_SAVE,
-				   "extract_char_smarter: skip body save for %s (already saved pre-strip)",
-				   GET_NAME(ch));
-		}
+	}
+	else if(!IS_NPC(ch) && skip_body_save) {
+		mudlog(LOG_SAVE,
+			   "extract_char_smarter: skip body save for %s (already saved pre-strip)",
+			   GET_NAME(ch));
 	}
 
 

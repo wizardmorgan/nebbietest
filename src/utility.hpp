@@ -195,6 +195,28 @@ bool HasActiveDetectEvil(struct char_data* ch);
 bool HasActiveProtEvil(struct char_data* ch);
 bool HasActiveSanctuary(struct char_data* ch);
 void SyncInnateAffects(struct char_data* ch);
+/** OR only: immune/M_immune/susc da razza (tabella, no side-effect). */
+void ApplyRaceImmunities(char_data* ch);
+/** OR only: immune/M_immune da classe (tabella monk/druid). */
+void ApplyClassImmunities(char_data* ch);
+void ApplyInnateImmunities(char_data* ch);
+/** Salva immune/M_immune/susc correnti in base_* (dopo load/create NPC). */
+void CaptureImmunityBase(char_data* ch);
+/**
+ * NPC @race: toglie da base_* tutti i bit di immunita' di razza (tabella).
+ * SyncImmunities riapplica la razza corrente. No-op su PC/poly.
+ */
+void StripRaceImmunityBase(char_data* ch, int race);
+/** OR su ch dei soli APPLY_IMMUNE/M_IMMUNE/SUSC di obj (eq non indossato, es. golem). */
+void OrObjectImmunities(char_data* ch, const obj_data* obj);
+/**
+ * Ricostruisce immune/M_immune/susc:
+ * PC (e poly): tabelle innate + eq + affect;
+ * NPC: base_* + ApplyInnateImmunities + eq + affect.
+ * Evita che REMOVE_BIT su una fonte cancelli innate/proto o altri item.
+ * Futuro: stesso hook per clamp resistenze -100..+100 sui PG.
+ */
+void SyncImmunities(char_data* ch);
 /**
  * Soft clamp allineamento per classi che perdevano la classe uscendo dalla fascia:
  * paladino >= 350, ranger >= -350, druido in [-600, 600] (intersezione se multi).
