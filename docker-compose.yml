@@ -8,7 +8,8 @@ services:
             - MYSQL_ROOT_PASSWORD=secret
             - MYSQL_DATABASE=nebbie
         ports:
-            - 3306:33306
+            # Host 3306 spesso occupato da MariaDB di sistema; interno resta 33306
+            - 33306:33306
         volumes:
             - ./mysql_data:/var/lib/mysql
         command: ["mysqld", "--port=33306"]
@@ -44,14 +45,14 @@ services:
             - /etc/group:/etc/group:ro
             - /etc/passwd:/etc/passwd:ro
         ports:
-            - "${SERVER_PORT:-4000}:${SERVER_PORT:-4000}"
+            - 4000:4000
             - 4001:4001
-            - 4002:4002
+            - "${SERVER_PORT:-4002}:${SERVER_PORT:-4002}"
             - 4003:4003
             - 8090:8090
             - 10000:10000
         environment:
-            - SERVER_PORT=${SERVER_PORT:-4000}
+            - SERVER_PORT=${SERVER_PORT:-4002}
             - EDIT_API_PORT=8090
             - EDIT_API_SECRET=${EDIT_API_SECRET:-nebbie-edit-dev-secret}
             - MYSQL_HOST=mysql

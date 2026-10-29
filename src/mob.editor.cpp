@@ -2925,32 +2925,10 @@ void clear_zero_modifier_slots(struct obj_data* obj) {
 
 /**
  * Prototipo per delta broker / distruggi su pezzi coinvolti nel trasferimento.
- * - non-procarea: prototipo mondo (come load_edit_prototype)
- * - procarea con instance: create-baseline (rolled al primo snapshot in DB)
- * - procarea senza instance: baseline sospesa = affect attuali sul pezzo vivo
- *   (niente commit DB; lo snapshot definitivo resta a conferma in execute_transfer)
+ * Delega a object_edit_load_baseline (contratto condiviso col portale).
  */
 [[nodiscard]] struct obj_data* load_broker_prototype(const struct obj_data* obj) {
-	if(!obj) {
-		return nullptr;
-	}
-	if(procarea_obj_is_reward(obj)) {
-#if USE_MYSQL
-		if(obj->db_instance_id != 0) {
-			return object_instance_materialize_create_baseline(obj->db_instance_id);
-		}
-#endif
-		struct obj_data* proto = load_edit_prototype(obj);
-		if(!proto) {
-			return nullptr;
-		}
-		for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
-			proto->affected[i].location = obj->affected[i].location;
-			proto->affected[i].modifier = obj->affected[i].modifier;
-		}
-		return proto;
-	}
-	return load_edit_prototype(obj);
+	return object_edit_load_baseline(obj);
 }
 
 [[nodiscard]] std::string apply_display_name(int loc) {

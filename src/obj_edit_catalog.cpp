@@ -19,6 +19,7 @@
 #include "object_instance.hpp"
 #include "obj_value.hpp"
 #include "clan_symbol.hpp"
+#include "procarea.hpp"
 #include "spell_parser.hpp"
 #include "structs.hpp"
 #include "typedefs.hpp"
@@ -64,13 +65,14 @@ namespace Alarmud {
 	}
 	ocopy->char_vnum = obj->char_vnum;
 	ocopy->sector = obj->sector;
-	/* Non collegare a instance/inventario: e' un scratch per AnalyzeObjEdit. */
-	ocopy->db_instance_id = 0;
+	/*
+	 * Conserva db_instance_id: serve a object_edit_load_baseline (create-baseline
+	 * premi procarea). Non collegare l'inventario (scratch di analisi).
+	 */
+	ocopy->db_instance_id = obj->db_instance_id;
 	ocopy->db_inventory_id = 0;
 	return ocopy;
 }
-
-[[nodiscard]] static struct obj_data* load_edit_prototype(const struct obj_data* obj);
 
 [[nodiscard]] static bool proto_vnum_is_tan(int vnum) noexcept {
 	return vnum == TAN_BAG || vnum == TAN_SHIELD || vnum == TAN_JACKET
@@ -379,12 +381,12 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 
 [[nodiscard]] static int prototype_display_current(const struct obj_data* obj,
 												   int location) noexcept {
-	struct obj_data* proto = load_edit_prototype(obj);
-	if(!proto) {
+	struct obj_data* baseline = object_edit_load_baseline(obj);
+	if(!baseline) {
 		return 0;
 	}
-	const int v = object_edit_display_current(proto, location);
-	extract_obj(proto);
+	const int v = object_edit_display_current(baseline, location);
+	extract_obj(baseline);
 	return v;
 }
 
@@ -414,6 +416,25 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 				  + std::to_string(proto_val) + "; richiesto extra "
 				  + std::to_string(delta) + ", totale " + std::to_string(target_modifier)
 				  + ")";
+			return false;
+		}
+	}
+	else if(spec.location == APPLY_HITROLL || spec.location == APPLY_DAMROLL ||
+			spec.location == APPLY_SPELLPOWER || spec.location == APPLY_HITNDAM ||
+			spec.location == APPLY_HITNSP) {
+		/*
+		 * Combat: il tetto listino " +2 oltre proto" vale solo per la quota [delta]
+		 * (wiz/portale). I [trasferimento] broker sono un budget a parte (+2) e
+		 * possono far superare +2 vs proto. Soft-max = edit+broker; i tetti wiz
+		 * veri (HR<=2, dam+sp<=2) sono in enforce_piece_combat_wiz_caps.
+		 */
+		const int soft_max = spec.max_total * 2;
+		if(delta < spec.min_total || delta > soft_max) {
+			err = std::string("extra fuori listino per ") + spec.label + " (consentito +"
+				  + std::to_string(spec.min_total) + "…+" + std::to_string(soft_max)
+				  + " oltre proto " + std::to_string(proto_val)
+				  + " incl. trasferimenti; richiesto extra +" + std::to_string(delta)
+				  + ", totale " + std::to_string(target_modifier) + ")";
 			return false;
 		}
 	}
@@ -1431,29 +1452,17 @@ int object_edit_hitroll_total(const struct obj_data* obj) noexcept {
 	return iVNum;
 }
 
-[[nodiscard]] static struct obj_data* load_edit_prototype(const struct obj_data* obj) {
-	const int iVNum = resolve_edit_prototype_vnum(obj);
-	if(iVNum <= 0) {
-		return nullptr;
-	}
-	const int rNum = real_object(iVNum);
-	if(rNum < 0) {
-		return nullptr;
-	}
-	return read_object(rNum, REAL);
-}
-
 int object_edit_damroll_edited_delta(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return 0;
 	}
 	const int cur = combat_damroll_total(obj);
-	struct obj_data* proto = load_edit_prototype(obj);
-	if(!proto) {
+	struct obj_data* baseline = object_edit_load_baseline(obj);
+	if(!baseline) {
 		return 0;
 	}
-	const int base = combat_damroll_total(proto);
-	extract_obj(proto);
+	const int base = combat_damroll_total(baseline);
+	extract_obj(baseline);
 	return std::max(0, cur - base);
 }
 
@@ -1462,12 +1471,12 @@ int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept {
 		return 0;
 	}
 	const int cur = combat_spellpower_total(obj);
-	struct obj_data* proto = load_edit_prototype(obj);
-	if(!proto) {
+	struct obj_data* baseline = object_edit_load_baseline(obj);
+	if(!baseline) {
 		return 0;
 	}
-	const int base = combat_spellpower_total(proto);
-	extract_obj(proto);
+	const int base = combat_spellpower_total(baseline);
+	extract_obj(baseline);
 	return std::max(0, cur - base);
 }
 
@@ -1476,12 +1485,12 @@ int object_edit_spellfail_total(const struct obj_data* obj) noexcept {
 }
 
 int object_edit_spellfail_prototype_total(const struct obj_data* obj) noexcept {
-	struct obj_data* proto = load_edit_prototype(obj);
-	if(!proto) {
+	struct obj_data* baseline = object_edit_load_baseline(obj);
+	if(!baseline) {
 		return 0;
 	}
-	const int base = sum_location_mod(proto, APPLY_SPELLFAIL);
-	extract_obj(proto);
+	const int base = sum_location_mod(baseline, APPLY_SPELLFAIL);
+	extract_obj(baseline);
 	return base;
 }
 
@@ -1489,14 +1498,14 @@ int object_edit_spellfail_edited_delta(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return 0;
 	}
-	/* Piu' negativo = piu' edit: proto 0, current −20 → delta 20. */
+	/* Piu' negativo = piu' edit: baseline 0, current −20 → delta 20. */
 	const int cur = sum_location_mod(obj, APPLY_SPELLFAIL);
-	struct obj_data* proto = load_edit_prototype(obj);
-	if(!proto) {
+	struct obj_data* baseline = object_edit_load_baseline(obj);
+	if(!baseline) {
 		return 0;
 	}
-	const int base = sum_location_mod(proto, APPLY_SPELLFAIL);
-	extract_obj(proto);
+	const int base = sum_location_mod(baseline, APPLY_SPELLFAIL);
+	extract_obj(baseline);
 	return std::max(0, base - cur);
 }
 
@@ -1505,12 +1514,12 @@ int object_edit_hitroll_edited_delta(const struct obj_data* obj) noexcept {
 		return 0;
 	}
 	const int cur = combat_hitroll_total(obj);
-	struct obj_data* proto = load_edit_prototype(obj);
-	if(!proto) {
+	struct obj_data* baseline = object_edit_load_baseline(obj);
+	if(!baseline) {
 		return 0;
 	}
-	const int base = combat_hitroll_total(proto);
-	extract_obj(proto);
+	const int base = combat_hitroll_total(baseline);
+	extract_obj(baseline);
 	return std::max(0, cur - base);
 }
 
@@ -1518,12 +1527,12 @@ int object_edit_damroll_prototype_total(const struct obj_data* obj) noexcept {
 	if(!obj) {
 		return 0;
 	}
-	struct obj_data* proto = load_edit_prototype(obj);
-	if(!proto) {
+	struct obj_data* baseline = object_edit_load_baseline(obj);
+	if(!baseline) {
 		return 0;
 	}
-	const int base = combat_damroll_total(proto);
-	extract_obj(proto);
+	const int base = combat_damroll_total(baseline);
+	extract_obj(baseline);
 	return base;
 }
 
@@ -1551,38 +1560,147 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 	return !ed.empty() && strcasecmp(ed.c_str(), toon_name) == 0;
 }
 
-[[nodiscard]] static bool enforce_char_dam_budget(const struct obj_data* after_obj,
-												  int other_worn_edited_dam,
-												  std::string& err) {
-	if(other_worn_edited_dam < 0 || !after_obj) {
+[[nodiscard]] static int broker_delta_clamped_for_piece(unsigned long long iid, int loc,
+													   int total_delta) noexcept {
+	if(iid == 0 || total_delta <= 0) {
+		return 0;
+	}
+	const long raw = object_instance_sum_broker_delta(iid, loc);
+	return static_cast<int>(
+		std::max(0L, std::min(static_cast<long>(total_delta), raw)));
+}
+
+/**
+ * Quota [delta] wiz vs [trasferimento] broker sui canali combat (come
+ * EditAffectBroker / AppendAffectDeltaLines). I trasferimenti non consumano
+ * i tetti pezzo del portale.
+ */
+struct PieceCombatWizBreakdown {
+	int hr_total = 0;
+	int dam_total = 0;
+	int sp_total = 0;
+	int hr_broker = 0;
+	int dam_broker = 0;
+	int sp_broker = 0;
+
+	[[nodiscard]] int hr_wiz() const noexcept {
+		return std::max(0, hr_total - hr_broker);
+	}
+	[[nodiscard]] int dam_wiz() const noexcept {
+		return std::max(0, dam_total - dam_broker);
+	}
+	[[nodiscard]] int sp_wiz() const noexcept {
+		return std::max(0, sp_total - sp_broker);
+	}
+};
+
+[[nodiscard]] static PieceCombatWizBreakdown piece_combat_wiz_breakdown(
+	const struct obj_data* obj, const struct obj_data* frozen_baseline = nullptr) {
+	PieceCombatWizBreakdown b {};
+	if(!obj) {
+		return b;
+	}
+	struct obj_data* owned_baseline = nullptr;
+	const struct obj_data* baseline = frozen_baseline;
+	if(!baseline) {
+		owned_baseline = object_edit_load_baseline(obj);
+		baseline = owned_baseline;
+	}
+	if(!baseline) {
+		return b;
+	}
+	b.hr_total =
+		std::max(0, combat_hitroll_total(obj) - combat_hitroll_total(baseline));
+	b.dam_total =
+		std::max(0, combat_damroll_total(obj) - combat_damroll_total(baseline));
+	b.sp_total =
+		std::max(0, combat_spellpower_total(obj) - combat_spellpower_total(baseline));
+	if(owned_baseline) {
+		extract_obj(owned_baseline);
+	}
+
+	const unsigned long long iid = obj->db_instance_id;
+	const int br_hr = broker_delta_clamped_for_piece(iid, APPLY_HITROLL, b.hr_total);
+	const int br_dam = broker_delta_clamped_for_piece(iid, APPLY_DAMROLL, b.dam_total);
+	const int br_sp = broker_delta_clamped_for_piece(iid, APPLY_SPELLPOWER, b.sp_total);
+	const int br_hd = broker_delta_clamped_for_piece(
+		iid, APPLY_HITNDAM, std::min(b.hr_total, b.dam_total));
+	const int br_hs = broker_delta_clamped_for_piece(
+		iid, APPLY_HITNSP, std::min(b.hr_total, b.sp_total));
+	b.hr_broker = std::min(b.hr_total, br_hr + br_hd + br_hs);
+	b.dam_broker = std::min(b.dam_total, br_dam + br_hd);
+	b.sp_broker = std::min(b.sp_total, br_sp + br_hs);
+	return b;
+}
+
+[[nodiscard]] static bool location_touches_piece_combat_caps(int location) noexcept {
+	return location == APPLY_HITROLL || location == APPLY_DAMROLL ||
+		   location == APPLY_SPELLPOWER || location == APPLY_HITNDAM ||
+		   location == APPLY_HITNSP;
+}
+
+/**
+ * Tetti pezzo sul solo [delta] wiz: HR<=2, dam+sp<=2.
+ * I [trasferimento] broker restano fuori (budget separato).
+ */
+[[nodiscard]] static bool enforce_piece_combat_wiz_caps(
+	const struct obj_data* after_obj, std::string& err,
+	const struct obj_data* frozen_baseline = nullptr) {
+	if(!after_obj) {
 		return true;
 	}
-	const int piece_dam = object_edit_damroll_edited_delta(after_obj);
-	const int total = other_worn_edited_dam + piece_dam;
-	if(total > kObjEditMaxDamrollEditableTotal) {
-		err = "tetto dam editabile personaggio superato (" + std::to_string(total) + "/"
-			  + std::to_string(kObjEditMaxDamrollEditableTotal)
-			  + "; altri pezzi EDIT +" + std::to_string(other_worn_edited_dam)
-			  + ", questo pezzo +" + std::to_string(piece_dam) + " vs proto)";
+	const PieceCombatWizBreakdown b =
+		piece_combat_wiz_breakdown(after_obj, frozen_baseline);
+	if(b.hr_wiz() > kObjEditMaxHitrollPerPiece) {
+		err = "tetto hitroll delta per pezzo superato (" + std::to_string(b.hr_wiz()) +
+			  "/" + std::to_string(kObjEditMaxHitrollPerPiece)
+			  + "; esclusi trasferimenti broker +" + std::to_string(b.hr_broker) + ")";
+		return false;
+	}
+	const int dam_sp_wiz = b.dam_wiz() + b.sp_wiz();
+	if(dam_sp_wiz > kObjEditMaxDamSpPerPiece) {
+		err = "tetto dam+spellpower delta per pezzo superato (" +
+			  std::to_string(dam_sp_wiz) + "/" + std::to_string(kObjEditMaxDamSpPerPiece)
+			  + "; dam delta +" + std::to_string(b.dam_wiz()) + " sp delta +"
+			  + std::to_string(b.sp_wiz()) + "; esclusi trasferimenti broker dam +"
+			  + std::to_string(b.dam_broker) + " sp +" + std::to_string(b.sp_broker)
+			  + ")";
 		return false;
 	}
 	return true;
 }
 
-[[nodiscard]] static bool enforce_char_sp_budget(const struct obj_data* after_obj,
-												 int other_worn_edited_sp,
-												 std::string& err) {
-	if(other_worn_edited_sp < 0 || !after_obj) {
+/** Tetto personaggio DAM+SP combinato <= 30 (come EditAffectBroker). */
+[[nodiscard]] static bool enforce_char_dam_sp_budget(
+	const struct obj_data* after_obj, int other_edited_dam, int other_edited_sp,
+	std::string& err, const struct obj_data* frozen_baseline = nullptr) {
+	if(!after_obj) {
 		return true;
 	}
-	const int piece_sp = object_edit_spellpower_edited_delta(after_obj);
-	const int total = other_worn_edited_sp + piece_sp;
-	if(total > kObjEditMaxSpellpowerEditableTotal) {
-		err = "tetto spellpower editabile personaggio superato (" +
-			  std::to_string(total) + "/" +
-			  std::to_string(kObjEditMaxSpellpowerEditableTotal)
-			  + "; altri pezzi EDIT +" + std::to_string(other_worn_edited_sp)
-			  + ", questo pezzo +" + std::to_string(piece_sp) + " vs proto)";
+	if(other_edited_dam < 0 && other_edited_sp < 0) {
+		return true;
+	}
+	const int od = other_edited_dam < 0 ? 0 : other_edited_dam;
+	const int os = other_edited_sp < 0 ? 0 : other_edited_sp;
+	int piece_dam = 0;
+	int piece_sp = 0;
+	if(frozen_baseline) {
+		piece_dam = std::max(
+			0, combat_damroll_total(after_obj) - combat_damroll_total(frozen_baseline));
+		piece_sp = std::max(0, combat_spellpower_total(after_obj) -
+								   combat_spellpower_total(frozen_baseline));
+	}
+	else {
+		piece_dam = object_edit_damroll_edited_delta(after_obj);
+		piece_sp = object_edit_spellpower_edited_delta(after_obj);
+	}
+	const int total = od + os + piece_dam + piece_sp;
+	if(total > kObjEditMaxDamSpEditableTotal) {
+		err = "tetto DAM+SP personaggio superato (" + std::to_string(total) + "/"
+			  + std::to_string(kObjEditMaxDamSpEditableTotal) + "; altri pezzi dam +"
+			  + std::to_string(od) + " sp +" + std::to_string(os) + ", questo pezzo dam +"
+			  + std::to_string(piece_dam) + " sp +" + std::to_string(piece_sp)
+			  + " vs baseline; hit-n-dam conta come dam, hit-n-sp come spellpower)";
 		return false;
 	}
 	return true;
@@ -1607,33 +1725,6 @@ bool object_edit_counts_toward_combat_budget(const struct obj_data* obj,
 	return true;
 }
 
-/**
- * Su un pezzo: dam (incl. hit-n-dam) XOR spellpower (incl. hit-n-sp).
- * Basta che il pezzo abbia dam/sp presente (anche da proto): per passare
- * all'altro bisogna prima «Rimuovi slot» sull'asse occupato.
- */
-[[nodiscard]] static bool enforce_dam_spellpower_mutex(const struct obj_data* before_obj,
-													   int location, bool clear_slot,
-													   std::string& err) {
-	if(!before_obj || clear_slot) {
-		return true;
-	}
-	const int dam_now = combat_damroll_total(before_obj);
-	const int sp_now = combat_spellpower_total(before_obj);
-	if(object_edit_location_affects_dam(location) && sp_now > 0) {
-		err = "su questo pezzo c'e' gia' spellpower (+" + std::to_string(sp_now) +
-			  ", hit-n-sp incluso): rimuovi prima quello slot, poi puoi editare dam";
-		return false;
-	}
-	if(object_edit_location_affects_spellpower(location) && dam_now > 0) {
-		err = "su questo pezzo c'e' gia' dam (+" + std::to_string(dam_now) +
-			  ", hit-n-dam incluso): rimuovi prima quello slot, poi puoi editare "
-			  "spellpower";
-		return false;
-	}
-	return true;
-}
-
 bool object_quote_affect_target(struct obj_data* obj, int location, int target_modifier,
 								long& xp_raw, int& pq, std::string& err,
 								int other_worn_edited_dam, int other_worn_edited_sp,
@@ -1641,9 +1732,6 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 								bool allow_combat_merge) {
 	if(!obj) {
 		err = "oggetto null";
-		return false;
-	}
-	if(!enforce_dam_spellpower_mutex(obj, location, clear_slot, err)) {
 		return false;
 	}
 	/*
@@ -1656,19 +1744,33 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS)
 		|| object_edit_recovers_listino_malus(obj, location, target_modifier, clear_slot);
 
+	/*
+	 * Baseline congelata prima dell'edit: per premi senza instance gli affect
+	 * vivi sono la baseline sospesa; dopo la mutazione del clone non vanno
+	 * rilette da object_edit_load_baseline(clone).
+	 */
+	struct obj_data* frozen_baseline = object_edit_load_baseline(obj);
+	if(!frozen_baseline) {
+		err = "baseline pezzo non disponibile";
+		return false;
+	}
+
 	struct obj_data* before_obj = portal_clone_obj_state(obj);
 	if(!before_obj) {
+		extract_obj(frozen_baseline);
 		err = "impossibile clonare oggetto";
 		return false;
 	}
 	if(use_paid_malus) {
 		portal_force_paid_malus(before_obj);
 	}
-	const ObjEditAnalysis before = AnalyzeObjEdit(before_obj);
+	const ObjEditAnalysis before =
+		AnalyzeObjEditAgainst(before_obj, frozen_baseline, true);
 	extract_obj(before_obj);
 
 	struct obj_data* clone = portal_clone_obj_state(obj);
 	if(!clone) {
+		extract_obj(frozen_baseline);
 		err = "impossibile clonare oggetto";
 		return false;
 	}
@@ -1678,25 +1780,33 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 	if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot,
 							  allow_combat_merge)) {
 		extract_obj(clone);
+		extract_obj(frozen_baseline);
 		return false;
 	}
-	if(object_edit_location_affects_dam(location)
-	   && !enforce_char_dam_budget(clone, other_worn_edited_dam, err)) {
+	if(location_touches_piece_combat_caps(location)
+	   && !enforce_piece_combat_wiz_caps(clone, err, frozen_baseline)) {
 		extract_obj(clone);
+		extract_obj(frozen_baseline);
 		return false;
 	}
-	if(object_edit_location_affects_spellpower(location)
-	   && !enforce_char_sp_budget(clone, other_worn_edited_sp, err)) {
+	if((object_edit_location_affects_dam(location)
+		|| object_edit_location_affects_spellpower(location))
+	   && !enforce_char_dam_sp_budget(clone, other_worn_edited_dam,
+									  other_worn_edited_sp, err, frozen_baseline)) {
 		extract_obj(clone);
+		extract_obj(frozen_baseline);
 		return false;
 	}
 	if(object_edit_location_affects_spellfail(location)
 	   && !enforce_char_spellfail_budget(clone, other_owned_edited_spellfail, err)) {
 		extract_obj(clone);
+		extract_obj(frozen_baseline);
 		return false;
 	}
-	const ObjEditAnalysis after = AnalyzeObjEdit(clone);
+	const ObjEditAnalysis after =
+		AnalyzeObjEditAgainst(clone, frozen_baseline, true);
 	extract_obj(clone);
+	extract_obj(frozen_baseline);
 
 	/* diff.valore e' gia' scalato e include class_mult + Artifact. */
 	xp_raw = std::max(0L, after.diff.valore - before.diff.valore);
@@ -1713,35 +1823,55 @@ bool object_apply_affect_target(struct obj_data* obj, int location, int target_m
 		err = "oggetto null";
 		return false;
 	}
-	if(!enforce_dam_spellpower_mutex(obj, location, clear_slot, err)) {
-		return false;
-	}
 	const bool recovers_malus =
 		object_edit_recovers_listino_malus(obj, location, target_modifier, clear_slot);
-	const bool need_budget = (object_edit_location_affects_dam(location)
-							  && other_worn_edited_dam >= 0)
-							 || (object_edit_location_affects_spellpower(location)
-								 && other_worn_edited_sp >= 0)
-							 || (object_edit_location_affects_spellfail(location)
-								 && other_owned_edited_spellfail >= 0);
+	const bool need_budget =
+		location_touches_piece_combat_caps(location)
+		|| ((object_edit_location_affects_dam(location)
+			 || object_edit_location_affects_spellpower(location))
+			&& (other_worn_edited_dam >= 0 || other_worn_edited_sp >= 0))
+		|| (object_edit_location_affects_spellfail(location)
+			&& other_owned_edited_spellfail >= 0);
 	if(need_budget) {
+		struct obj_data* frozen_baseline = object_edit_load_baseline(obj);
+		if(!frozen_baseline) {
+			err = "baseline pezzo non disponibile";
+			return false;
+		}
 		struct obj_data* clone = portal_clone_obj_state(obj);
 		if(!clone) {
+			extract_obj(frozen_baseline);
 			err = "impossibile clonare oggetto";
 			return false;
 		}
 		if(!apply_target_modifier(clone, location, target_modifier, err, clear_slot,
 								  allow_combat_merge)) {
 			extract_obj(clone);
+			extract_obj(frozen_baseline);
 			return false;
 		}
-		if(!enforce_char_dam_budget(clone, other_worn_edited_dam, err)
-		   || !enforce_char_sp_budget(clone, other_worn_edited_sp, err)
-		   || !enforce_char_spellfail_budget(clone, other_owned_edited_spellfail, err)) {
+		if(location_touches_piece_combat_caps(location)
+		   && !enforce_piece_combat_wiz_caps(clone, err, frozen_baseline)) {
 			extract_obj(clone);
+			extract_obj(frozen_baseline);
+			return false;
+		}
+		if((object_edit_location_affects_dam(location)
+			|| object_edit_location_affects_spellpower(location))
+		   && !enforce_char_dam_sp_budget(clone, other_worn_edited_dam,
+										  other_worn_edited_sp, err,
+										  frozen_baseline)) {
+			extract_obj(clone);
+			extract_obj(frozen_baseline);
+			return false;
+		}
+		if(!enforce_char_spellfail_budget(clone, other_owned_edited_spellfail, err)) {
+			extract_obj(clone);
+			extract_obj(frozen_baseline);
 			return false;
 		}
 		extract_obj(clone);
+		extract_obj(frozen_baseline);
 	}
 	if(!apply_target_modifier(obj, location, target_modifier, err, clear_slot,
 							  allow_combat_merge)) {

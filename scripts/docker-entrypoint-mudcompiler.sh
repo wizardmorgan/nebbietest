@@ -4,14 +4,22 @@ set -euo pipefail
 
 MYSQL_HOST="${MYSQL_HOST:-mysql}"
 MYSQL_PORT="${MYSQL_PORT:-33306}"
-SERVER_PORT="${SERVER_PORT:-4000}"
+SERVER_PORT="${SERVER_PORT:-4002}"
 DATA_DIR="${DATA_DIR:-mudroot/lib}"
 EDIT_API_PORT="${EDIT_API_PORT:-8090}"
 EDIT_API_SECRET="${EDIT_API_SECRET:-nebbie-edit-dev-secret}"
 
 echo "[mudcompiler] waiting MySQL ${MYSQL_HOST}:${MYSQL_PORT}..."
+mysql_ready() {
+  # Il container mudcompiler non ha sempre mysqladmin: basta TCP aperto.
+  if command -v mysqladmin >/dev/null 2>&1; then
+    mysqladmin ping -h "$MYSQL_HOST" -P "$MYSQL_PORT" -uroot -p"${MYSQL_PASSWORD:-secret}" --silent 2>/dev/null
+    return $?
+  fi
+  (echo >/dev/tcp/"${MYSQL_HOST}"/"${MYSQL_PORT}") >/dev/null 2>&1
+}
 for i in $(seq 1 90); do
-  if mysqladmin ping -h "$MYSQL_HOST" -P "$MYSQL_PORT" -uroot -p"${MYSQL_PASSWORD:-secret}" --silent 2>/dev/null; then
+  if mysql_ready; then
     echo "[mudcompiler] MySQL ready."
     break
   fi

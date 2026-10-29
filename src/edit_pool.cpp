@@ -758,6 +758,15 @@ void edit_pool_accumulate_obj_delta(const struct obj_data* obj,
 	if(!obj || !add) {
 		return;
 	}
+	/*
+	 * Premi Dimensione: HIT/MANA/MOVE/regen rolled al drop sono la baseline del
+	 * pezzo (come EditAffectBroker usa create-baseline / affect vivi), non
+	 * residuo pool vs proto mondo. Niente snapshot DB richiesto qui.
+	 */
+	if(obj_is_procarea_reward(obj)) {
+		(void)proto;
+		return;
+	}
 	const PoolTotals d = delta_vs_proto(obj, proto);
 	PoolTotals credit = d;
 	subtract_dust_from_delta(credit, dust_of_obj(obj));

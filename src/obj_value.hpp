@@ -62,12 +62,20 @@ inline constexpr double kObjValueClassMultTri = 2.0;
 /** Massimo listino edits per pezzo (STR/CON/WIS/INT/DEX/CHR). */
 inline constexpr int kObjEditMaxStatPerPiece = 3;
 
-/** Damroll/hitroll/spellpower per pezzo; tetti editabili sul personaggio. */
-inline constexpr int kObjEditMaxDamrollPerPiece = 2;
+/** Hitroll delta (wiz) per pezzo; i trasferimenti broker non consumano questo tetto. */
 inline constexpr int kObjEditMaxHitrollPerPiece = 2;
-inline constexpr int kObjEditMaxSpellpowerPerPiece = 2; /* come damroll */
-inline constexpr int kObjEditMaxDamrollEditableTotal = 30;
-inline constexpr int kObjEditMaxSpellpowerEditableTotal = 30; /* come damroll */
+/**
+ * Damroll/spellpower: sul pezzo la somma dei delta wiz (DAM+HITNDAM)+(SP+HITNSP)
+ * e' al massimo 2. I trasferimenti broker sono un budget separato e non contano.
+ * Le costanti per-canale restano 2 (max su un asse se l'altro e' 0).
+ */
+inline constexpr int kObjEditMaxDamrollPerPiece = 2;
+inline constexpr int kObjEditMaxSpellpowerPerPiece = 2;
+inline constexpr int kObjEditMaxDamSpPerPiece = 2;
+/** Tetto personaggio DAM+SP combinato (come EditAffectBroker / show edits). */
+inline constexpr int kObjEditMaxDamSpEditableTotal = 30;
+inline constexpr int kObjEditMaxDamrollEditableTotal = kObjEditMaxDamSpEditableTotal;
+inline constexpr int kObjEditMaxSpellpowerEditableTotal = kObjEditMaxDamSpEditableTotal;
 /** Hitroll editato totale (2/pezzo × 21 slot, escluso simbolo clan). */
 inline constexpr int kObjEditMaxHitrollEditableTotal = 42;
 

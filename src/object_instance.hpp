@@ -117,6 +117,15 @@ obj_data* object_instance_materialize(unsigned long long instance_id);
 obj_data* object_instance_materialize_create_baseline(unsigned long long instance_id);
 
 /**
+ * Baseline per delta edit / listino / tetti (stesso contratto di EditAffectBroker):
+ * - non-premio: prototipo mondo
+ * - premio + instance: create-baseline (rolled al primo persist)
+ * - premio senza instance: affect vivi come baseline sospesa (niente DB)
+ * Caller: extract_obj().
+ */
+[[nodiscard]] obj_data* object_edit_load_baseline(const obj_data* obj);
+
+/**
  * Elenco wiz. deleted_list=false: attivi (numeri densi 1..N);
  * deleted_list=true: soft-deleted (1..M).
  * filter vuoto=tutti (una query sola); numerico=numero lista; altrimenti
@@ -287,6 +296,9 @@ inline obj_data* object_instance_materialize(unsigned long long) {
 	return nullptr;
 }
 inline obj_data* object_instance_materialize_create_baseline(unsigned long long) {
+	return nullptr;
+}
+inline obj_data* object_edit_load_baseline(const obj_data*) {
 	return nullptr;
 }
 inline void object_instance_show_list(char_data*, const char*, bool = false) {}

@@ -102,8 +102,8 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] int object_edit_spellpower_total(const struct obj_data* obj) noexcept;
 
 /**
- * Dam/SP *editato* = max(0, totale_pezzo − totale_prototipo).
- * Conta solo il bonus aggiunto rispetto all'originale.
+ * Dam/SP *editato* = max(0, totale_pezzo − baseline).
+ * Baseline = create-baseline per premi procarea, proto mondo altrimenti.
  */
 [[nodiscard]] int object_edit_damroll_edited_delta(const struct obj_data* obj) noexcept;
 [[nodiscard]] int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept;

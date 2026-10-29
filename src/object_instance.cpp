@@ -1773,6 +1773,44 @@ obj_data* object_instance_materialize_create_baseline(unsigned long long instanc
 	return obj;
 }
 
+obj_data* object_edit_load_baseline(const struct obj_data* obj) {
+	if(!obj) {
+		return nullptr;
+	}
+
+	auto load_world_proto = [](const struct obj_data* o) -> struct obj_data* {
+		int iVNum = object_instance_resolve_base_vnum(o);
+		if(iVNum <= 0) {
+			iVNum = (o->item_number >= 0) ? obj_index[o->item_number].iVNum : 0;
+		}
+		const int rNum = real_object(iVNum);
+		if(rNum < 0) {
+			return nullptr;
+		}
+		return read_object(rNum, REAL);
+	};
+
+	if(procarea_obj_is_reward(obj)) {
+		if(obj->db_instance_id != 0) {
+			if(struct obj_data* baseline =
+				   object_instance_materialize_create_baseline(obj->db_instance_id)) {
+				return baseline;
+			}
+		}
+		/* Premio senza create usabile: baseline sospesa = affect vivi. */
+		struct obj_data* proto = load_world_proto(obj);
+		if(!proto) {
+			return nullptr;
+		}
+		for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+			proto->affected[i].location = obj->affected[i].location;
+			proto->affected[i].modifier = obj->affected[i].modifier;
+		}
+		return proto;
+	}
+	return load_world_proto(obj);
+}
+
 bool object_instance_sync(struct obj_data* obj, char_data* actor) {
 	if(!obj || obj->db_instance_id == 0) {
 		return false;

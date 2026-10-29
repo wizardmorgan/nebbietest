@@ -40,6 +40,7 @@
 #include "obj_value.hpp"
 #include "object_instance.hpp"
 #include "parser.hpp"
+#include "procarea.hpp"
 #include "reception.hpp"
 #include "Sql.hpp"
 #include "structs.hpp"
@@ -933,13 +934,18 @@ void portal_apply_personalize(struct obj_data* obj, const char* owner_name) {
 }
 
 /**
- * Save apply-affect result: create/update object_instance via raw mysql, then
- * refresh character_inventory (+ affects + instance_id link). Never uses ODB.
+ * Save apply-affect result: create/update object_instance, then refresh
+ * character_inventory (+ affects + instance_id link).
+ *
+ * Premi procarea al primo create: come EditAffectBroker, scrive create-baseline
+ * con gli affect pre-edit (reward_create_baseline) poi lo stato post-edit.
+ * Se reward_create_baseline e' null, la baseline coincide con after (es. solo
+ * flag artifact senza cambio affect).
  */
-[[nodiscard]] bool portal_save_edited_inventory_item(unsigned long long inventory_id,
-													 struct obj_data* after,
-													 std::string& err,
-													 const char* owner_name) {
+[[nodiscard]] bool portal_save_edited_inventory_item(
+	unsigned long long inventory_id, struct obj_data* after, std::string& err,
+	const char* owner_name,
+	const obj_affected_type* reward_create_baseline = nullptr) {
 	if(!after) {
 		err = "[portal:save] obj null";
 		return false;
@@ -961,7 +967,32 @@ void portal_apply_personalize(struct obj_data* obj, const char* owner_name) {
 	if(owner_name && *owner_name) {
 		portal_apply_personalize(after, owner_name);
 	}
-	if(!portal_persist_object_instance_mysql(after, base, owner_name, err)) {
+
+	const bool reward_first_create =
+		procarea_obj_is_reward(after) && after->db_instance_id == 0;
+	if(reward_first_create) {
+		SET_BIT(after->obj_flags.extra_flags2, ITEM2_PROCAREA_REWARD);
+		obj_affected_type post_affects[MAX_OBJ_AFFECT];
+		std::memcpy(post_affects, after->affected, sizeof(post_affects));
+		if(reward_create_baseline) {
+			std::memcpy(after->affected, reward_create_baseline, sizeof(post_affects));
+		}
+		const unsigned long long id = object_instance_persist(
+			after, base, 0, nullptr, true, "edit_portal");
+		if(id == 0) {
+			std::memcpy(after->affected, post_affects, sizeof(post_affects));
+			err = "[portal:save] create-baseline premio fallita";
+			return false;
+		}
+		after->db_instance_id = id;
+		std::memcpy(after->affected, post_affects, sizeof(post_affects));
+		if(object_instance_persist(after, base, id, nullptr, true, "edit_portal") ==
+		   0) {
+			err = "[portal:save] update post-baseline premio fallito";
+			return false;
+		}
+	}
+	else if(!portal_persist_object_instance_mysql(after, base, owner_name, err)) {
 		return false;
 	}
 	if(!persist_inventory_affects(inventory_id, after, err)) {
@@ -970,9 +1001,25 @@ void portal_apply_personalize(struct obj_data* obj, const char* owner_name) {
 	return true;
 }
 
+[[nodiscard]] ObjEditAnalysis analyze_portal_object(struct obj_data* obj) {
+	if(!obj) {
+		return {};
+	}
+	if(procarea_obj_is_reward(obj)) {
+		struct obj_data* baseline = object_edit_load_baseline(obj);
+		if(!baseline) {
+			return {};
+		}
+		ObjEditAnalysis report = AnalyzeObjEditAgainst(obj, baseline, true);
+		extract_obj(baseline);
+		return report;
+	}
+	return AnalyzeObjEdit(obj);
+}
+
 [[nodiscard]] Json analyze_to_json(const struct obj_data* obj) {
 	const ObjEditAnalysis a =
-		AnalyzeObjEdit(const_cast<struct obj_data*>(obj));
+		analyze_portal_object(const_cast<struct obj_data*>(obj));
 	Json j;
 	j["has_edit"] = a.has_edit;
 	j["owner_name"] = a.owner_name;
@@ -1316,6 +1363,18 @@ inline constexpr long kEditPortalPqPerMegaXp = kEditPoolPqPerMegaXp;
 	return j;
 }
 
+struct PoolResidualPiece {
+	unsigned long long inventory_id = 0;
+	int item_number = 0;
+	std::string short_desc;
+	int hit = 0;
+	int mana = 0;
+	int move = 0;
+	int hit_regen = 0;
+	int mana_regen = 0;
+	int move_regen = 0;
+};
+
 struct ToonInventoryEditScan {
 	int dam_total = 0;
 	int sp_total = 0;
@@ -1331,9 +1390,24 @@ struct ToonInventoryEditScan {
 	bool blunt_proto = false;
 	bool blunt_edit = false;
 	bool has_clan_symbol = false;
+	std::string clan_symbol_owner;
 	char_edit_pool_data pool_from_eq {};
 	int edited_pieces = 0;
+	std::vector<PoolResidualPiece> pool_residuals;
 };
+
+[[nodiscard]] std::string object_edit_owner_name(const struct obj_data* obj) {
+	if(!obj) {
+		return {};
+	}
+	if(obj->personal_owner[0] != '\0') {
+		return obj->personal_owner;
+	}
+	if(obj->name && obj->name[0] != '\0') {
+		return object_instance_extract_ed_owner(obj->name);
+	}
+	return {};
+}
 
 /**
  * Analisi inventario completa: budget combat, resistenze (proto vs edit),
@@ -1357,6 +1431,9 @@ struct ToonInventoryEditScan {
 			clan_symbol_is_obj(o) || o->obj_flags.type_flag == ITEM_CLAN_SYMBOL;
 		if(is_clan) {
 			s.has_clan_symbol = true;
+			if(s.clan_symbol_owner.empty()) {
+				s.clan_symbol_owner = object_edit_owner_name(o);
+			}
 		}
 		if(object_edit_counts_toward_combat_budget(o, toon_name.c_str())) {
 			++s.edited_pieces;
@@ -1394,7 +1471,30 @@ struct ToonInventoryEditScan {
 			note_res(static_cast<int>(IMM_BLUNT), s.res_blunt, s.blunt_proto,
 					 s.blunt_edit);
 
+			const char_edit_pool_data before = s.pool_from_eq;
 			edit_pool_accumulate_obj_delta(o, proto, &s.pool_from_eq);
+			const int d_hit = s.pool_from_eq.edit_hp - before.edit_hp;
+			const int d_mana = s.pool_from_eq.edit_mana - before.edit_mana;
+			const int d_move = s.pool_from_eq.edit_move - before.edit_move;
+			const int d_hr = s.pool_from_eq.edit_hp_regen - before.edit_hp_regen;
+			const int d_mr = s.pool_from_eq.edit_mana_regen - before.edit_mana_regen;
+			const int d_vr = s.pool_from_eq.edit_move_regen - before.edit_move_regen;
+			if(d_hit != 0 || d_mana != 0 || d_move != 0 || d_hr != 0 || d_mr != 0 ||
+			   d_vr != 0) {
+				PoolResidualPiece piece;
+				piece.inventory_id = r.id;
+				piece.item_number = r.elem.item_number;
+				piece.short_desc = r.elem.sd[0] ? r.elem.sd : (o->short_description
+																  ? o->short_description
+																  : "");
+				piece.hit = d_hit;
+				piece.mana = d_mana;
+				piece.move = d_move;
+				piece.hit_regen = d_hr;
+				piece.mana_regen = d_mr;
+				piece.move_regen = d_vr;
+				s.pool_residuals.push_back(std::move(piece));
+			}
 			if(proto) {
 				extract_obj(proto);
 			}
@@ -1459,6 +1559,23 @@ struct ToonInventoryEditScan {
 	pool["source"] = pool_on_character ? "character" : "objects";
 	pool["migrated"] = pool_on_character ? 1 : 0;
 	pool["residual_on_objects"] = residual_on_objects && pool_on_character;
+	{
+		Json residual_list = Json::array();
+		for(const PoolResidualPiece& p : scan.pool_residuals) {
+			Json j;
+			j["inventory_id"] = p.inventory_id;
+			j["item_number"] = p.item_number;
+			j["short_desc"] = p.short_desc;
+			j["hit"] = p.hit;
+			j["mana"] = p.mana;
+			j["move"] = p.move;
+			j["hit_regen"] = p.hit_regen;
+			j["mana_regen"] = p.mana_regen;
+			j["move_regen"] = p.move_regen;
+			residual_list.push_back(j);
+		}
+		pool["residual_objects"] = residual_list;
+	}
 	if(pool_on_character && residual_on_objects) {
 		pool["warning"] =
 			"Pool migrato sul PG ma restano delta HIT/MANA/MOVE/regen su oggetti "
@@ -1530,7 +1647,28 @@ struct ToonInventoryEditScan {
 	{
 		Json clan;
 		clan["present"] = has_clan_symbol;
-		clan["owner_kind"] = "unknown"; /* proprio principe vs toon: TODO */
+		const std::string& owner = scan.clan_symbol_owner;
+		clan["owner_name"] = owner;
+		const bool own =
+			has_clan_symbol && !owner.empty() &&
+			strcasecmp(owner.c_str(), toon_name.c_str()) == 0;
+		clan["own"] = own;
+		if(!has_clan_symbol) {
+			clan["owner_kind"] = "none";
+			clan["label"] = "No";
+		}
+		else if(own) {
+			clan["owner_kind"] = "own";
+			clan["label"] = std::string("SI - del clan di ") + toon_name;
+		}
+		else if(!owner.empty()) {
+			clan["owner_kind"] = "other";
+			clan["label"] = std::string("SI - del clan di ") + owner;
+		}
+		else {
+			clan["owner_kind"] = "unknown";
+			clan["label"] = "SI - del clan di (sconosciuto)";
+		}
 		out["clan_symbol"] = clan;
 	}
 	out["main_edits"] = main;
@@ -2040,12 +2178,12 @@ struct ToonInventoryEditScan {
 				dam_budget["other"] = other_dam;
 				dam_budget["char_total"] = other_dam + piece_for_total;
 				dam_budget["char_max"] = kObjEditMaxDamrollEditableTotal;
-				dam_budget["source"] = "owned_edit_delta_vs_proto";
+				dam_budget["source"] = "owned_edit_delta_vs_baseline";
 				dam_budget["contributors"] =
 					owned_dam_budget_contributors_json(rows, toon_name.c_str());
-				/* Mutex UI: presenza sul pezzo (proto o edit), non solo delta. */
 				dam_budget["piece_has_dam"] = object_edit_damroll_total(obj) > 0;
-				dam_budget["mutex_with_spellpower"] = true;
+				dam_budget["mutex_with_spellpower"] = false;
+				dam_budget["piece_dam_sp_max"] = kObjEditMaxDamSpPerPiece;
 				d["dam_budget"] = dam_budget;
 
 				const int piece_sp_delta = object_edit_spellpower_edited_delta(obj);
@@ -2059,10 +2197,14 @@ struct ToonInventoryEditScan {
 				sp_budget["other"] = other_sp;
 				sp_budget["char_total"] = other_sp + piece_sp_for_total;
 				sp_budget["char_max"] = kObjEditMaxSpellpowerEditableTotal;
-				sp_budget["source"] = "owned_edit_delta_vs_proto";
+				sp_budget["char_dam_sp_max"] = kObjEditMaxDamSpEditableTotal;
+				sp_budget["char_dam_sp_total"] =
+					(other_dam + piece_for_total) + (other_sp + piece_sp_for_total);
+				sp_budget["source"] = "owned_edit_delta_vs_baseline";
 				sp_budget["piece_has_spellpower"] =
 					object_edit_spellpower_total(obj) > 0;
-				sp_budget["mutex_with_dam"] = true;
+				sp_budget["mutex_with_dam"] = false;
+				sp_budget["piece_dam_sp_max"] = kObjEditMaxDamSpPerPiece;
 				d["sp_budget"] = sp_budget;
 
 				const int piece_sf_delta = object_edit_spellfail_edited_delta(obj);
@@ -2079,7 +2221,7 @@ struct ToonInventoryEditScan {
 				sf_budget["char_max"] = kObjEditMaxSpellfailEditableTotal;
 				sf_budget["step"] = kObjEditSpellfailStep;
 				sf_budget["mxp_per_step"] = 20;
-				sf_budget["source"] = "owned_edit_delta_vs_proto";
+				sf_budget["source"] = "owned_edit_delta_vs_baseline";
 				d["sf_budget"] = sf_budget;
 			}
 			{
@@ -2189,16 +2331,17 @@ struct ToonInventoryEditScan {
 			long xp_raw = 0;
 			int pq = 0;
 			std::string quote_err;
-			const int other_dam =
+			const bool touches_dam_sp =
 				object_edit_location_affects_dam(location)
-					? sum_owned_edited_damroll_excluding(rows, inventory_id,
-														toon_name.c_str())
-					: -1;
+				|| object_edit_location_affects_spellpower(location);
+			const int other_dam =
+				touches_dam_sp ? sum_owned_edited_damroll_excluding(
+									 rows, inventory_id, toon_name.c_str())
+							   : -1;
 			const int other_sp =
-				object_edit_location_affects_spellpower(location)
-					? sum_owned_edited_spellpower_excluding(rows, inventory_id,
-														   toon_name.c_str())
-					: -1;
+				touches_dam_sp ? sum_owned_edited_spellpower_excluding(
+									 rows, inventory_id, toon_name.c_str())
+							   : -1;
 			const int other_sf =
 				object_edit_location_affects_spellfail(location)
 					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
@@ -2426,16 +2569,18 @@ struct ToonInventoryEditScan {
 			long quote_xp = 0;
 			int quote_pq = 0;
 			std::string quote_err;
-			const int other_dam =
+			const bool touches_dam_sp =
 				object_edit_location_affects_dam(location)
-					? sum_owned_edited_damroll_excluding(rows, inventory_id,
-														target_name.c_str())
-					: -1;
+				|| object_edit_location_affects_spellpower(location);
+			/* Budget combinato DAM+SP: servono sempre entrambi i totali "other". */
+			const int other_dam =
+				touches_dam_sp ? sum_owned_edited_damroll_excluding(
+									 rows, inventory_id, target_name.c_str())
+							   : -1;
 			const int other_sp =
-				object_edit_location_affects_spellpower(location)
-					? sum_owned_edited_spellpower_excluding(rows, inventory_id,
-														   target_name.c_str())
-					: -1;
+				touches_dam_sp ? sum_owned_edited_spellpower_excluding(
+									 rows, inventory_id, target_name.c_str())
+							   : -1;
 			const int other_sf =
 				object_edit_location_affects_spellfail(location)
 					? sum_owned_edited_spellfail_excluding(rows, inventory_id,
@@ -2454,6 +2599,13 @@ struct ToonInventoryEditScan {
 			if(!after) {
 				extract_obj(obj);
 				return json_error("impossibile clonare oggetto", 500);
+			}
+			obj_affected_type reward_baseline_affs[MAX_OBJ_AFFECT];
+			const bool need_reward_baseline =
+				procarea_obj_is_reward(after) && after->db_instance_id == 0;
+			if(need_reward_baseline) {
+				std::memcpy(reward_baseline_affs, after->affected,
+							sizeof(reward_baseline_affs));
 			}
 			extract_obj(obj);
 
@@ -2498,7 +2650,8 @@ struct ToonInventoryEditScan {
 
 			std::string save_err;
 			const bool saved = portal_save_edited_inventory_item(
-				inventory_id, after, save_err, target_name.c_str());
+				inventory_id, after, save_err, target_name.c_str(),
+				need_reward_baseline ? reward_baseline_affs : nullptr);
 
 			Json d = analyze_to_json(after);
 			d["paid_xp"] = xp_cost;
