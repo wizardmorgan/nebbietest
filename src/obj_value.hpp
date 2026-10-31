@@ -79,7 +79,8 @@ inline constexpr int kObjEditMaxSpellpowerEditableTotal = kObjEditMaxDamSpEditab
 /** Hitroll editato totale (2/pezzo × 21 slot, escluso simbolo clan). */
 inline constexpr int kObjEditMaxHitrollEditableTotal = 42;
 
-/** Armor: step −10, fino a −40 per pezzo (listino ufficiale).
+/** Armor: step −10, fino a −40 di delta oltre il proto (listino ufficiale).
+ *  Il valore gia' presente sul pezzo non conta nel tetto: proto −10 + edit −40 = −50.
  *  Malus AC positivo: rimozione a 2× il costo del bonus equivalente. */
 inline constexpr int kObjEditArmorStep = -10;
 inline constexpr int kObjEditArmorMinTotal = -40;

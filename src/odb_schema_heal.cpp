@@ -732,14 +732,69 @@ void heal_v15_level_hp(DB* db) {
 	exec_ignore_exists(db, kCreateCharacterLevelHp);
 }
 
+/*
+ * Audit portale edit (sessione Node + eventi myst). Raw SQL, niente classi ODB:
+ * CREATE IF NOT EXISTS e' idempotente sull'open model v15.
+ */
+constexpr const char* kCreateEditPortalSession =
+	"CREATE TABLE IF NOT EXISTS `edit_portal_session` ("
+	"`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
+	"`session_key` VARCHAR(64) NOT NULL,"
+	"`opened_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+	"`closed_at` TIMESTAMP NULL DEFAULT NULL,"
+	"`actor_account_id` BIGINT UNSIGNED NULL,"
+	"`actor_email` VARCHAR(255) NULL,"
+	"`actor_toon_id` BIGINT UNSIGNED NULL,"
+	"`actor_toon_name` VARCHAR(32) NULL,"
+	"`actor_role` VARCHAR(16) NULL,"
+	"`actor_max_level` INT NULL,"
+	"`client_ip` VARCHAR(64) NULL,"
+	"`auth_via` VARCHAR(32) NULL,"
+	"`status` VARCHAR(16) NOT NULL DEFAULT 'open',"
+	"`summary_json` MEDIUMTEXT NULL,"
+	"PRIMARY KEY (`id`),"
+	"UNIQUE KEY `uq_edit_portal_session_key` (`session_key`),"
+	"KEY `idx_edit_portal_session_actor` (`actor_toon_id`),"
+	"KEY `idx_edit_portal_session_opened` (`opened_at`)"
+	") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+constexpr const char* kCreateEditPortalEvent =
+	"CREATE TABLE IF NOT EXISTS `edit_portal_event` ("
+	"`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
+	"`at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+	"`session_id` BIGINT UNSIGNED NULL,"
+	"`session_key` VARCHAR(64) NULL,"
+	"`kind` VARCHAR(48) NOT NULL,"
+	"`severity` VARCHAR(8) NOT NULL DEFAULT 'info',"
+	"`actor_toon_id` BIGINT UNSIGNED NULL,"
+	"`actor_name` VARCHAR(32) NULL,"
+	"`target_toon_id` BIGINT UNSIGNED NULL,"
+	"`target_name` VARCHAR(32) NULL,"
+	"`inventory_id` BIGINT UNSIGNED NULL,"
+	"`instance_id` BIGINT UNSIGNED NULL,"
+	"`detail_json` MEDIUMTEXT NULL,"
+	"`message` VARCHAR(512) NULL,"
+	"`telegram_sent` TINYINT NOT NULL DEFAULT 0,"
+	"PRIMARY KEY (`id`),"
+	"KEY `idx_edit_portal_event_session_at` (`session_key`, `at`),"
+	"KEY `idx_edit_portal_event_kind_at` (`kind`, `at`),"
+	"KEY `idx_edit_portal_event_telegram` (`telegram_sent`, `severity`, `at`)"
+	") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+void heal_v15_edit_portal_audit(DB* db) {
+	exec_ignore_exists(db, kCreateEditPortalSession);
+	exec_ignore_exists(db, kCreateEditPortalEvent);
+}
+
 void heal_v15(DB* db) {
 	/* v15: vault (raw SQL), colonne key_* -> senza prefisso, achievements.paid_level,
-	 * character_core.load_room INT, character_level_hp. */
+	 * character_core.load_room INT, character_level_hp, edit_portal_* audit. */
 	heal_v15_vault_plans(db);
 	heal_v15_unprefix_composite_keys(db);
 	heal_v15_achie_paid_level(db);
 	heal_v15_load_room_int(db);
 	heal_v15_level_hp(db);
+	heal_v15_edit_portal_audit(db);
 }
 
 using HealStepFn = void (*)(DB*);

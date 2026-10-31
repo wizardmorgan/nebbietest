@@ -1748,9 +1748,12 @@ void spell_dispel_magic(byte level, struct char_data* ch,
 			if(IS_SET(obj->obj_flags.extra_flags, ITEM_MAGIC)) {
 				REMOVE_BIT(obj->obj_flags.extra_flags, ITEM_MAGIC);
 			}
-			/* strip off everything */
-			for(i=0; i<MAX_OBJ_AFFECT; i++) {
-				obj->affected[i].location = 0;
+			/* strip off everything (location e modifier: altrimenti restano
+			 * slot fantasma location=0/mod!=0 che inventorio persiste e il
+			 * portale mostra come vuoti). */
+			for(i = 0; i < MAX_OBJ_AFFECT; i++) {
+				obj->affected[i].location = APPLY_NONE;
+				obj->affected[i].modifier = 0;
 			}
 		}
 

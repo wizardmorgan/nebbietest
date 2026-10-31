@@ -409,7 +409,8 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	const int abs_step = std::abs(spec.step) > 0 ? std::abs(spec.step) : 1;
 
 	if(spec.min_total < 0) {
-		/* Armor/spellfail: extra da min_total…0 (es. −40…0) oltre il proto. */
+		/* Armor/spellfail: extra da min_total…0 (es. −40…0) oltre il proto.
+		 * Il valore proto non consuma il tetto (delta puro). */
 		if(delta > 0 || delta < spec.min_total) {
 			err = std::string("extra fuori listino per ") + spec.label + " (consentito "
 				  + std::to_string(spec.min_total) + "…0 oltre proto "
@@ -769,11 +770,17 @@ static void portal_force_paid_malus(struct obj_data* obj) noexcept {
 		err = "oggetto null";
 		return false;
 	}
-	if(edit_pool_location_blocked_on_eq(location)) {
+	/*
+	 * Pool HIT/MANA/...: di regola solo sul PG. Eccezione: clear gratis di
+	 * affect nativi gia' presenti sul pezzo (premi Dimensione o proto mondo).
+	 */
+	const bool native_pool_clear =
+		clear_slot && (edit_pool_is_pool_apply(location) || location == APPLY_SAVE_ALL);
+	if(edit_pool_location_blocked_on_eq(location) && !native_pool_clear) {
 		err = "campo pool: edit sul personaggio, non sull'oggetto";
 		return false;
 	}
-	if(edit_system_blocked_on_object(location, target_modifier)) {
+	if(edit_system_blocked_on_object(location, target_modifier) && !native_pool_clear) {
 		err = "campo configurato sul personaggio";
 		return false;
 	}
@@ -827,14 +834,23 @@ static void portal_force_paid_malus(struct obj_data* obj) noexcept {
 	}
 
 	ObjEditListinoSpec spec;
-	if(!obj_edit_listino_spec(location, spec)) {
-		err = "campo non presente nel listino oggetto";
-		return false;
-	}
+	const bool in_listino = obj_edit_listino_spec(location, spec);
 
-	/* Rimuovi slot: solo effetti positivi (gratis). I malus si tolgono portando a 0. */
+	/* Rimuovi slot: solo effetti positivi (gratis). I malus si tolgono portando a 0.
+	 * HIT/MANA/MOVE/regen/SAVE_ALL nativi sul pezzo: clear gratis (fuori listino). */
 	if(clear_slot) {
 		const int cur = object_edit_display_current(obj, location);
+		if(native_pool_clear) {
+			if(find_affect_slot_for_location(obj, location) < 0 && cur == 0) {
+				err = "nessuno slot da rimuovere";
+				return false;
+			}
+			return clear_listino_affect(obj, location, err);
+		}
+		if(!in_listino) {
+			err = "campo non presente nel listino oggetto";
+			return false;
+		}
 		if(listino_current_is_malus(location, cur)) {
 			err = "per eliminare un malus porta il selettore a 0 (o un bonus); "
 				  "il costo e' il doppio del listino e lo slot si libera";
@@ -845,6 +861,11 @@ static void portal_force_paid_malus(struct obj_data* obj) noexcept {
 			return false;
 		}
 		return clear_listino_affect(obj, location, err);
+	}
+
+	if(!in_listino) {
+		err = "campo non presente nel listino oggetto";
+		return false;
 	}
 
 	const int current_total = object_edit_display_current(obj, location);
@@ -1172,6 +1193,7 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 	const int free_slots = count_free_affect_slots(obj);
 
 	Json entries = Json::array();
+	const bool is_reward = procarea_obj_is_reward(obj);
 	for(int i = 0; i < obj_edit_listino_scalar_count(); ++i) {
 		ObjEditListinoSpec spec;
 		if(!obj_edit_listino_scalar_at(i, spec)) {
@@ -1208,6 +1230,67 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		}
 		json_listino_pricing(j, spec);
 		entries.push_back(j);
+	}
+
+	/*
+	 * HIT/MANA/MOVE/regen/SAVE_ALL sul pezzo: fuori listino oggetto (pool PG).
+	 * Espone solo «Rimuovi slot» gratis se presenti — premi Dimensione e anche
+	 * pezzi mondo (es. old sandals MOVE +30).
+	 */
+	{
+		static const struct {
+			int location;
+			const char* id_reward;
+			const char* id_native;
+			const char* label_reward;
+			const char* label_native;
+		} native_clearables[] = {
+			{APPLY_HIT, "reward.hit", "native.hit", "Hit points (nativo Dimensione)",
+			 "Hit points (nativo pezzo)"},
+			{APPLY_MANA, "reward.mana", "native.mana", "Mana (nativo Dimensione)",
+			 "Mana (nativo pezzo)"},
+			{APPLY_MOVE, "reward.move", "native.move", "Move (nativo Dimensione)",
+			 "Move (nativo pezzo)"},
+			{APPLY_HIT_REGEN, "reward.hit_regen", "native.hit_regen",
+			 "Hit regen (nativo Dimensione)", "Hit regen (nativo pezzo)"},
+			{APPLY_MANA_REGEN, "reward.mana_regen", "native.mana_regen",
+			 "Mana regen (nativo Dimensione)", "Mana regen (nativo pezzo)"},
+			{APPLY_MOVE_REGEN, "reward.move_regen", "native.move_regen",
+			 "Move regen (nativo Dimensione)", "Move regen (nativo pezzo)"},
+			{APPLY_SAVE_ALL, "reward.save_all", "native.save_all",
+			 "Save all (nativo Dimensione)", "Save all (nativo pezzo)"},
+		};
+		for(const auto& rc : native_clearables) {
+			const int occupied_slot = find_affect_slot_for_location(obj, rc.location);
+			const int current_total = object_edit_display_current(obj, rc.location);
+			if(occupied_slot < 0 && current_total == 0) {
+				continue;
+			}
+			Json j;
+			j["id"] = is_reward ? rc.id_reward : rc.id_native;
+			j["label"] = is_reward ? rc.label_reward : rc.label_native;
+			j["location"] = rc.location;
+			j["step"] = 1;
+			j["min"] = current_total;
+			j["max"] = current_total;
+			j["proto"] = current_total;
+			j["relative"] = false;
+			j["kind"] = "scalar";
+			j["clear_only"] = true;
+			j["has_affect"] = true;
+			j["occupied_slot"] = occupied_slot;
+			j["can_add"] = false;
+			j["can_edit"] = true;
+			j["can_clear_slot"] = true;
+			j["current"] = current_total;
+			j["mxp_per_step"] = 0;
+			j["rune_per_step"] = 0;
+			j["hint"] = is_reward
+							? "Bonus nativo del premio: puoi solo liberare lo slot (gratis)"
+							: "Bonus nativo del pezzo (pool): puoi solo liberare lo slot "
+							  "(gratis), non modificarlo qui";
+			entries.push_back(j);
+		}
 	}
 
 	/*

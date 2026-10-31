@@ -551,7 +551,7 @@ std::size_t legacy_insert_rent(odb::database* db, unsigned long long toon_id,
 
 		for(int a = 0; a < MAX_OBJ_AFFECT; ++a) {
 			const obj_affected_type& oa = o.affected[a];
-			if(oa.location == 0 && oa.modifier == 0) {
+			if(oa.location == APPLY_NONE || oa.location == APPLY_SKIP || oa.modifier == 0) {
 				continue;
 			}
 			std::ostringstream aff;

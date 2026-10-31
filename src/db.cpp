@@ -81,6 +81,13 @@
 
 namespace Alarmud {
 
+/** Slot da non scrivere in inventorio: vuoto, skip, o location=0 con mod (dispel
+ *  parziale). Non persistere mai location APPLY_NONE con modifier != 0. */
+[[nodiscard]] static bool inventory_affect_row_is_empty(const obj_affected_type& oa) noexcept {
+	return oa.location == APPLY_NONE || oa.location == APPLY_SKIP || oa.modifier == 0;
+}
+
+
 // Helper function to get executable directory from argv[0] using C++17 filesystem
 static std::string get_executable_dir(const char* argv0) {
     namespace fs = std::filesystem;
@@ -1169,6 +1176,7 @@ std::string inventory_affect_select_row(const std::string& toon_id, int list_ind
 	return row.str();
 }
 
+
 void insert_inventory_affects_batch_tx(DB* db, const std::string& toon_id, int object_count,
 									   const struct obj_file_u& rent,
 									   bool soft_delete_supported) {
@@ -1176,7 +1184,7 @@ void insert_inventory_affects_batch_tx(DB* db, const std::string& toon_id, int o
 	for(int i = 0; i < object_count; ++i) {
 		for(int a = 0; a < MAX_OBJ_AFFECT; ++a) {
 			const obj_affected_type& oa = rent.objects[i].affected[a];
-			if(oa.location == 0 && oa.modifier == 0) {
+			if(inventory_affect_row_is_empty(oa)) {
 				continue;
 			}
 			select_rows.push_back(inventory_affect_select_row(
@@ -2094,9 +2102,9 @@ void save_rent_mysql_incremental_tx(DB* db, const std::string& toon_id,
 			}
 		for(int a = 0; a < MAX_OBJ_AFFECT; ++a) {
 				const obj_affected_type& oa = rent.objects[idx].affected[a];
-			if(oa.location == 0 && oa.modifier == 0) {
-				continue;
-			}
+				if(inventory_affect_row_is_empty(oa)) {
+					continue;
+				}
 				affect_rows.push_back(inventory_affect_select_row(
 					toon_id, idx, a, static_cast<int>(oa.location),
 					static_cast<int>(oa.modifier), soft_delete_supported));
@@ -6467,10 +6475,77 @@ bool load_character_inventory_mysql(unsigned long long toon_id,
 			}
 			rows[it->second].elem.affected[slot].location =
 				static_cast<sh_int>(sql_to_ll(row[2], 0));
+			/* modifier e' int nello struct: non truncare a sh_int (bitvector). */
 			rows[it->second].elem.affected[slot].modifier =
-				static_cast<sh_int>(sql_to_ll(row[3], 0));
+				static_cast<int>(sql_to_ll(row[3], 0));
 		}
 		mysql_free_result(res);
+	}
+
+	/*
+	 * Heal: dispel magic azzerava solo location lasciando i modifier. Ripristina
+	 * la location dal prototipo mondo se lo slot ha lo stesso modifier.
+	 */
+	for(auto& inv_row : rows) {
+		bool needs_heal = false;
+		for(int a = 0; a < MAX_OBJ_AFFECT; ++a) {
+			const auto& oa = inv_row.elem.affected[a];
+			if(oa.location == APPLY_NONE && oa.modifier != 0) {
+				needs_heal = true;
+				break;
+			}
+		}
+		if(!needs_heal || inv_row.elem.item_number <= 0) {
+			continue;
+		}
+		const int rnum = real_object(inv_row.elem.item_number);
+		if(rnum < 0) {
+			continue;
+		}
+		struct obj_data* proto = read_object(rnum, REAL);
+		if(!proto) {
+			continue;
+		}
+		int healed = 0;
+		for(int a = 0; a < MAX_OBJ_AFFECT; ++a) {
+			auto& oa = inv_row.elem.affected[a];
+			if(oa.location != APPLY_NONE || oa.modifier == 0) {
+				continue;
+			}
+			if(proto->affected[a].modifier == oa.modifier &&
+			   proto->affected[a].location != APPLY_NONE &&
+			   proto->affected[a].location != APPLY_SKIP) {
+				oa.location = proto->affected[a].location;
+				++healed;
+			}
+		}
+		extract_obj(proto);
+		if(healed > 0 && inv_row.id != 0) {
+			for(int a = 0; a < MAX_OBJ_AFFECT; ++a) {
+				const auto& oa = inv_row.elem.affected[a];
+				if(oa.location == APPLY_NONE || oa.location == APPLY_SKIP ||
+				   oa.modifier == 0) {
+					continue;
+				}
+				std::ostringstream upd;
+				upd << "UPDATE character_inventory_affect SET location="
+					<< static_cast<int>(oa.location)
+					<< " WHERE inventory_id=" << inv_row.id
+					<< " AND affect_slot=" << a
+					<< " AND location=0 AND modifier=" << oa.modifier;
+				try {
+					db->execute(upd.str().c_str());
+				}
+				catch(const odb::exception&) {
+					/* best-effort: memoria gia' guarita per questa sessione */
+				}
+			}
+			mudlog(LOG_CHECK,
+				   "load_character_inventory_mysql: healed %d affect location(s) "
+				   "inv_id=%llu vnum=%d",
+				   healed, static_cast<unsigned long long>(inv_row.id),
+				   inv_row.elem.item_number);
+		}
 	}
 
 	return true;
@@ -6851,7 +6926,7 @@ bool mark_scrapped_item_mysql(const char* name, const struct obj_data* obj) {
 
 		for(int a = 0; a < MAX_OBJ_AFFECT; ++a) {
 			const obj_affected_type& oa = obj->affected[a];
-			if(oa.location == 0 && oa.modifier == 0) {
+			if(inventory_affect_row_is_empty(oa)) {
 				continue;
 			}
 			std::ostringstream aff;
@@ -7136,7 +7211,7 @@ bool vault_inventory_add_rows_tx(struct char_data* ch, const std::string& toon_i
 		}
 		for(int a = 0; a < MAX_OBJ_AFFECT; ++a) {
 			const obj_affected_type& oa = e.affected[a];
-			if(oa.location == 0 && oa.modifier == 0) {
+			if(inventory_affect_row_is_empty(oa)) {
 				continue;
 			}
 			std::ostringstream aff;

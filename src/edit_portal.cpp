@@ -376,6 +376,169 @@ std::atomic<bool> g_http_running {false};
 	}
 }
 
+constexpr const char* kSqlCreateEditPortalSession =
+	"CREATE TABLE IF NOT EXISTS `edit_portal_session` ("
+	"`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
+	"`session_key` VARCHAR(64) NOT NULL,"
+	"`opened_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+	"`closed_at` TIMESTAMP NULL DEFAULT NULL,"
+	"`actor_account_id` BIGINT UNSIGNED NULL,"
+	"`actor_email` VARCHAR(255) NULL,"
+	"`actor_toon_id` BIGINT UNSIGNED NULL,"
+	"`actor_toon_name` VARCHAR(32) NULL,"
+	"`actor_role` VARCHAR(16) NULL,"
+	"`actor_max_level` INT NULL,"
+	"`client_ip` VARCHAR(64) NULL,"
+	"`auth_via` VARCHAR(32) NULL,"
+	"`status` VARCHAR(16) NOT NULL DEFAULT 'open',"
+	"`summary_json` MEDIUMTEXT NULL,"
+	"PRIMARY KEY (`id`),"
+	"UNIQUE KEY `uq_edit_portal_session_key` (`session_key`),"
+	"KEY `idx_edit_portal_session_actor` (`actor_toon_id`),"
+	"KEY `idx_edit_portal_session_opened` (`opened_at`)"
+	") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+constexpr const char* kSqlCreateEditPortalEvent =
+	"CREATE TABLE IF NOT EXISTS `edit_portal_event` ("
+	"`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
+	"`at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+	"`session_id` BIGINT UNSIGNED NULL,"
+	"`session_key` VARCHAR(64) NULL,"
+	"`kind` VARCHAR(48) NOT NULL,"
+	"`severity` VARCHAR(8) NOT NULL DEFAULT 'info',"
+	"`actor_toon_id` BIGINT UNSIGNED NULL,"
+	"`actor_name` VARCHAR(32) NULL,"
+	"`target_toon_id` BIGINT UNSIGNED NULL,"
+	"`target_name` VARCHAR(32) NULL,"
+	"`inventory_id` BIGINT UNSIGNED NULL,"
+	"`instance_id` BIGINT UNSIGNED NULL,"
+	"`detail_json` MEDIUMTEXT NULL,"
+	"`message` VARCHAR(512) NULL,"
+	"`telegram_sent` TINYINT NOT NULL DEFAULT 0,"
+	"PRIMARY KEY (`id`),"
+	"KEY `idx_edit_portal_event_session_at` (`session_key`, `at`),"
+	"KEY `idx_edit_portal_event_kind_at` (`kind`, `at`),"
+	"KEY `idx_edit_portal_event_telegram` (`telegram_sent`, `severity`, `at`)"
+	") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+void portal_audit_ensure_tables() {
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return;
+	}
+	std::string err;
+	(void)portal_mysql_exec(db, kSqlCreateEditPortalSession, err, "portal:audit_session_ddl");
+	(void)portal_mysql_exec(db, kSqlCreateEditPortalEvent, err, "portal:audit_event_ddl");
+}
+
+[[nodiscard]] std::string portal_audit_trunc(std::string s, std::size_t max_len) {
+	if(s.size() > max_len) {
+		s.resize(max_len);
+	}
+	return s;
+}
+
+[[nodiscard]] std::string portal_sql_nullable_ull(unsigned long long v) {
+	if(v == 0ULL) {
+		return "NULL";
+	}
+	return std::to_string(v);
+}
+
+[[nodiscard]] std::string portal_sql_nullable_str(const char* s, std::size_t max_len) {
+	if(!s || !*s) {
+		return "NULL";
+	}
+	return portal_sql_literal(portal_audit_trunc(s, max_len).c_str());
+}
+
+/**
+ * Scrive un evento in edit_portal_event. Best-effort: non fallisce la request.
+ * session_key / actor_* arrivano dal body Node (opzionali).
+ */
+void portal_audit_event(const Json& req, const char* kind, const char* severity,
+						const char* message, const Json* detail,
+						unsigned long long target_toon_id, const char* target_name,
+						unsigned long long inventory_id = 0,
+						unsigned long long instance_id = 0) {
+	if(!kind || !*kind) {
+		return;
+	}
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return;
+	}
+	const std::string session_key =
+		portal_audit_trunc(req.value("session_key", std::string()), 64);
+	const unsigned long long actor_toon_id = parse_json_ull(req, "actor_toon_id");
+	const std::string actor_name =
+		portal_audit_trunc(req.value("actor_name", std::string()), 32);
+	const std::string sev =
+		portal_audit_trunc(severity && *severity ? severity : "info", 8);
+	const std::string kind_s = portal_audit_trunc(kind, 48);
+	const std::string msg =
+		portal_audit_trunc(message && *message ? message : "", 512);
+	std::string detail_sql = "NULL";
+	if(detail && !detail->is_null()) {
+		try {
+			detail_sql = portal_sql_literal(detail->dump().c_str());
+		}
+		catch(...) {
+			detail_sql = "NULL";
+		}
+	}
+	std::ostringstream sql;
+	sql << "INSERT INTO edit_portal_event "
+		   "(session_key, kind, severity, actor_toon_id, actor_name, "
+		   "target_toon_id, target_name, inventory_id, instance_id, "
+		   "detail_json, message, telegram_sent) VALUES ("
+		<< (session_key.empty() ? "NULL" : portal_sql_literal(session_key.c_str()))
+		<< ", " << portal_sql_literal(kind_s.c_str()) << ", "
+		<< portal_sql_literal(sev.c_str()) << ", " << portal_sql_nullable_ull(actor_toon_id)
+		<< ", " << portal_sql_nullable_str(actor_name.c_str(), 32) << ", "
+		<< portal_sql_nullable_ull(target_toon_id) << ", "
+		<< portal_sql_nullable_str(target_name, 32) << ", "
+		<< portal_sql_nullable_ull(inventory_id) << ", "
+		<< portal_sql_nullable_ull(instance_id) << ", " << detail_sql << ", "
+		<< (msg.empty() ? "NULL" : portal_sql_literal(msg.c_str())) << ", 0)";
+	std::string err;
+	if(!portal_mysql_exec(db, sql.str(), err, "portal:audit_event")) {
+		mudlog(LOG_SYSERR, "edit_portal: audit_event fallito: %s", err.c_str());
+	}
+}
+
+[[nodiscard]] const char* portal_audit_severity_for_code(int code) {
+	if(code >= 500) {
+		return "crit";
+	}
+	if(code == 402 || code == 409) {
+		return "warn";
+	}
+	return "info";
+}
+
+[[nodiscard]] const char* portal_audit_kind_for_code(int code, const char* ok_kind) {
+	if(code == 402) {
+		return "pay.fail";
+	}
+	if(code >= 500) {
+		return "apply.error";
+	}
+	(void)ok_kind;
+	return "apply.fail";
+}
+
+[[nodiscard]] std::string portal_audit_fail(const Json& req, const char* msg, int code,
+											unsigned long long target_toon_id,
+											const char* target_name,
+											unsigned long long inventory_id = 0,
+											const Json* detail = nullptr) {
+	portal_audit_event(req, portal_audit_kind_for_code(code, nullptr),
+					   portal_audit_severity_for_code(code), msg, detail, target_toon_id,
+					   target_name, inventory_id, 0);
+	return json_error(msg, code);
+}
+
 [[nodiscard]] int max_level_for_toon(unsigned long long toon_id) {
 	DB* db = Sql::getMysql();
 	if(!db || toon_id == 0) {
@@ -1017,6 +1180,129 @@ void portal_apply_personalize(struct obj_data* obj, const char* owner_name) {
 	return AnalyzeObjEdit(obj);
 }
 
+constexpr long long kLabExpCap = 2000000000LL;
+constexpr int kLabGiveQtyMax = 20;
+
+[[nodiscard]] bool lab_actor_allowed(const Json& req, std::string& err) {
+	const unsigned long long actor_toon_id = parse_json_ull(req, "actor_toon_id");
+	if(actor_toon_id == 0ULL) {
+		err = "actor_toon_id richiesto per Lab";
+		return false;
+	}
+	const int lvl = max_level_for_toon(actor_toon_id);
+	if(lvl < kEditPortalLabLevel) {
+		err = "Lab riservato a staff livello 58+";
+		return false;
+	}
+	return true;
+}
+
+[[nodiscard]] bool lab_require_offline_target(unsigned long long target_toon_id,
+											 std::string& target_name,
+											 std::string& err) {
+	target_name = toon_name_by_id(target_toon_id);
+	if(target_name.empty()) {
+		err = "toon target non trovato";
+		return false;
+	}
+	if(is_toon_online_by_name(target_name)) {
+		err = "il toon target e collegato al mud";
+		return false;
+	}
+	return true;
+}
+
+[[nodiscard]] int lab_next_list_index(DB* db, unsigned long long toon_id) {
+	if(!db || toon_id == 0ULL) {
+		return -1;
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		const std::string sql =
+			"SELECT IFNULL(MAX(list_index) + 1, 0) FROM character_inventory "
+			"WHERE toon_id = " +
+			std::to_string(toon_id) + " AND (deleted = 0 OR deleted IS NULL)";
+		if(mysql_query(h, sql.c_str()) != 0) {
+			return -1;
+		}
+		MYSQL_RES* res = mysql_store_result(h);
+		if(!res) {
+			return -1;
+		}
+		MYSQL_ROW row = mysql_fetch_row(res);
+		const int next = row && row[0] ? std::atoi(row[0]) : 0;
+		mysql_free_result(res);
+		return next;
+	}
+	catch(...) {
+		return -1;
+	}
+}
+
+/**
+ * Inserisce un oggetto gia' materializzato nell'inventario offline del toon
+ * (wear_pos=0 = non indossato). Restituisce inventory id.
+ */
+[[nodiscard]] bool lab_insert_inventory_obj(unsigned long long toon_id,
+											struct obj_data* obj,
+											unsigned long long& out_inventory_id,
+											std::string& err) {
+	out_inventory_id = 0;
+	DB* db = Sql::getMysql();
+	if(!db || !obj || toon_id == 0ULL) {
+		err = "[lab:inv] parametri non validi";
+		return false;
+	}
+	const int list_index = lab_next_list_index(db, toon_id);
+	if(list_index < 0) {
+		err = "[lab:inv] list_index non calcolabile";
+		return false;
+	}
+	if(list_index >= MAX_OBJ_SAVE) {
+		err = "[lab:inv] inventario pieno (MAX_OBJ_SAVE)";
+		return false;
+	}
+	int item_number = object_instance_resolve_base_vnum(obj);
+	if(item_number <= 0) {
+		item_number = obj->char_vnum > 0 ? obj->char_vnum : 0;
+	}
+	if(item_number <= 0) {
+		err = "[lab:inv] vnum oggetto non valido";
+		return false;
+	}
+	const std::string name_lit =
+		portal_sql_literal(obj->name ? obj->name : "");
+	const std::string sd_lit =
+		portal_sql_literal(obj->short_description ? obj->short_description : "");
+	const std::string desc_lit =
+		portal_sql_literal(obj->description ? obj->description : "");
+	std::ostringstream ins;
+	ins << "INSERT INTO character_inventory ("
+		   "toon_id, list_index, item_number, value0, value1, value2, value3, "
+		   "extra_flags, extra_flags2, weight, timer, bitvector, "
+		   "obj_name, short_desc, description, wear_pos, depth, instance_id, "
+		   "deleted) VALUES ("
+		<< toon_id << ',' << list_index << ',' << item_number << ','
+		<< obj->obj_flags.value[0] << ',' << obj->obj_flags.value[1] << ','
+		<< obj->obj_flags.value[2] << ',' << obj->obj_flags.value[3] << ','
+		<< static_cast<int>(obj->obj_flags.extra_flags) << ','
+		<< static_cast<int>(obj->obj_flags.extra_flags2) << ','
+		<< obj->obj_flags.weight << ',' << obj->obj_flags.timer << ','
+		<< obj->obj_flags.bitvector << ',' << name_lit << ',' << sd_lit << ','
+		<< desc_lit << ", 0, 0, "
+		<< (obj->db_instance_id != 0 ? std::to_string(obj->db_instance_id) : "0")
+		<< ", 0)";
+	if(!portal_mysql_insert(db, ins.str(), out_inventory_id, err, "lab:inv_ins")) {
+		return false;
+	}
+	if(!persist_inventory_affects(out_inventory_id, obj, err)) {
+		return false;
+	}
+	return true;
+}
+
 [[nodiscard]] Json analyze_to_json(const struct obj_data* obj) {
 	const ObjEditAnalysis a =
 		analyze_portal_object(const_cast<struct obj_data*>(obj));
@@ -1059,9 +1345,7 @@ void portal_set_obj_string(char*& field, const std::string& value) {
 
 /**
  * Opzionale: name/short/long dal body JSON.
- * Restituisce true se almeno un campo e' presente nella richiesta.
- * Se present e testo diverso dall'attuale, require_paid deve essere true
- * (affect con costo listino > 0), altrimenti err.
+ * Solo insieme a un affect pagato (stesso apply): non si salvano da soli dopo.
  */
 [[nodiscard]] bool portal_apply_optional_text_fields(
 	struct obj_data* obj, const Json& req, bool affect_is_paid, std::string& err,
@@ -1598,17 +1882,44 @@ struct ToonInventoryEditScan {
 	main["res_pierce"] = resist_status_json(res_pierce, pierce_proto, pierce_edit);
 	main["res_blunt"] = resist_status_json(res_blunt, blunt_proto, blunt_edit);
 	{
+		/* Tetto personaggio unico DAM+SP (non 30 per canale). */
+		const int dam_sp_used = dam_total + sp_total;
+		const int dam_sp_cap = kObjEditMaxDamSpEditableTotal;
+		const int dam_sp_remaining = std::max(0, dam_sp_cap - dam_sp_used);
+		Json dam_sp;
+		dam_sp["used"] = dam_sp_used;
+		dam_sp["cap"] = dam_sp_cap;
+		dam_sp["remaining"] = dam_sp_remaining;
+		dam_sp["dam_used"] = dam_total;
+		dam_sp["sp_used"] = sp_total;
+		dam_sp["note"] =
+			"Tetto condiviso: dam editato + spellpower editato <= 30. "
+			"Su ogni pezzo: dam/hit-n-dam oppure spellpower/hit-n-sp, non entrambi";
+		main["dam_sp"] = dam_sp;
 		Json dam;
 		dam["used"] = dam_total;
-		dam["cap"] = kObjEditMaxDamrollEditableTotal;
-		dam["remaining"] = std::max(0, kObjEditMaxDamrollEditableTotal - dam_total);
-		dam["note"] = "Su ogni pezzo: dam/hit-n-dam oppure spellpower, non entrambi";
+		dam["cap"] = dam_sp_cap;
+		dam["remaining"] = dam_sp_remaining;
+		dam["shared_used"] = dam_sp_used;
+		dam["shared_cap"] = dam_sp_cap;
+		dam["note"] =
+			"Pool condiviso con spellpower: ancora " +
+			std::to_string(dam_sp_remaining) + " su " +
+			std::to_string(dam_sp_cap) + " (DAM+SP " +
+			std::to_string(dam_sp_used) + "/" + std::to_string(dam_sp_cap) +
+			"). Su ogni pezzo: dam/hit-n-dam oppure spellpower, non entrambi";
 		main["dam"] = dam;
 		Json sp;
 		sp["used"] = sp_total;
-		sp["cap"] = kObjEditMaxSpellpowerEditableTotal;
-		sp["remaining"] = std::max(0, kObjEditMaxSpellpowerEditableTotal - sp_total);
-		sp["note"] = "Su ogni pezzo: spellpower/hit-n-sp oppure dam, non entrambi";
+		sp["cap"] = dam_sp_cap;
+		sp["remaining"] = dam_sp_remaining;
+		sp["shared_used"] = dam_sp_used;
+		sp["shared_cap"] = dam_sp_cap;
+		sp["note"] =
+			"Pool condiviso con dam: ancora " + std::to_string(dam_sp_remaining) +
+			" su " + std::to_string(dam_sp_cap) + " (DAM+SP " +
+			std::to_string(dam_sp_used) + "/" + std::to_string(dam_sp_cap) +
+			"). Su ogni pezzo: spellpower/hit-n-sp oppure dam, non entrambi";
 		main["spellpower"] = sp;
 		Json hr;
 		hr["used"] = hr_total;
@@ -2167,6 +2478,14 @@ struct ToonInventoryEditScan {
 					rows, inventory_id, toon_name.c_str());
 				const int piece_for_total = piece_edit ? piece_delta : 0;
 
+				const int piece_sp_delta = object_edit_spellpower_edited_delta(obj);
+				const int other_sp = sum_owned_edited_spellpower_excluding(
+					rows, inventory_id, toon_name.c_str());
+				const int piece_sp_for_total = piece_edit ? piece_sp_delta : 0;
+				const int char_dam_total = other_dam + piece_for_total;
+				const int char_sp_total = other_sp + piece_sp_for_total;
+				const int char_dam_sp_total = char_dam_total + char_sp_total;
+
 				Json dam_budget;
 				dam_budget["piece"] = piece_delta;
 				dam_budget["piece_current"] = object_edit_damroll_total(obj);
@@ -2176,8 +2495,12 @@ struct ToonInventoryEditScan {
 				dam_budget["piece_edit"] = piece_edit;
 				dam_budget["piece_max"] = kObjEditMaxDamrollPerPiece;
 				dam_budget["other"] = other_dam;
-				dam_budget["char_total"] = other_dam + piece_for_total;
-				dam_budget["char_max"] = kObjEditMaxDamrollEditableTotal;
+				dam_budget["char_total"] = char_dam_total;
+				dam_budget["char_max"] = kObjEditMaxDamSpEditableTotal;
+				dam_budget["char_dam_sp_total"] = char_dam_sp_total;
+				dam_budget["char_dam_sp_max"] = kObjEditMaxDamSpEditableTotal;
+				dam_budget["char_remaining"] =
+					std::max(0, kObjEditMaxDamSpEditableTotal - char_dam_sp_total);
 				dam_budget["source"] = "owned_edit_delta_vs_baseline";
 				dam_budget["contributors"] =
 					owned_dam_budget_contributors_json(rows, toon_name.c_str());
@@ -2186,20 +2509,17 @@ struct ToonInventoryEditScan {
 				dam_budget["piece_dam_sp_max"] = kObjEditMaxDamSpPerPiece;
 				d["dam_budget"] = dam_budget;
 
-				const int piece_sp_delta = object_edit_spellpower_edited_delta(obj);
-				const int other_sp = sum_owned_edited_spellpower_excluding(
-					rows, inventory_id, toon_name.c_str());
-				const int piece_sp_for_total = piece_edit ? piece_sp_delta : 0;
 				Json sp_budget;
 				sp_budget["piece"] = piece_sp_delta;
 				sp_budget["piece_current"] = object_edit_spellpower_total(obj);
 				sp_budget["piece_max"] = kObjEditMaxSpellpowerPerPiece;
 				sp_budget["other"] = other_sp;
-				sp_budget["char_total"] = other_sp + piece_sp_for_total;
-				sp_budget["char_max"] = kObjEditMaxSpellpowerEditableTotal;
+				sp_budget["char_total"] = char_sp_total;
+				sp_budget["char_max"] = kObjEditMaxDamSpEditableTotal;
 				sp_budget["char_dam_sp_max"] = kObjEditMaxDamSpEditableTotal;
-				sp_budget["char_dam_sp_total"] =
-					(other_dam + piece_for_total) + (other_sp + piece_sp_for_total);
+				sp_budget["char_dam_sp_total"] = char_dam_sp_total;
+				sp_budget["char_remaining"] =
+					std::max(0, kObjEditMaxDamSpEditableTotal - char_dam_sp_total);
 				sp_budget["source"] = "owned_edit_delta_vs_baseline";
 				sp_budget["piece_has_spellpower"] =
 					object_edit_spellpower_total(obj) > 0;
@@ -2225,8 +2545,7 @@ struct ToonInventoryEditScan {
 				d["sf_budget"] = sf_budget;
 			}
 			{
-				/* Sempre editabile in UI: si salva solo insieme a un affect pagato
-				 * (stesso apply), mai come passo successivo gratuito. */
+				/* Sempre digitabili in UI: si salvano solo insieme a un affect pagato. */
 				Json text;
 				text["can_edit"] = true;
 				text["requires_paid_affect"] = true;
@@ -2443,48 +2762,68 @@ struct ToonInventoryEditScan {
 			const std::string flag = req.value("flag", "");
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
+			auto fail_affect = [&](const char* msg, int code) -> std::string {
+				return portal_audit_fail(req, msg, code, target_toon_id,
+										 target_name.c_str(), inventory_id);
+			};
+			auto ok_affect = [&](Json d, const char* kind) -> std::string {
+				unsigned long long instance_id = 0ULL;
+				const auto it_inst = d.find("instance_id");
+				if(it_inst != d.end() && it_inst->is_number()) {
+					instance_id = it_inst->get<unsigned long long>();
+				}
+				Json detail = d;
+				portal_audit_event(req, kind, "info", kind, &detail, target_toon_id,
+								   target_name.c_str(), inventory_id, instance_id);
+				return json_ok(d);
+			};
 			if(target_name.empty()) {
-				return json_error("toon target non trovato", 404);
+				return fail_affect("toon target non trovato", 404);
 			}
 			if(is_toon_online_by_name(target_name)) {
-				return json_error("il toon target e collegato al mud", 409);
+				return fail_affect("il toon target e collegato al mud", 409);
 			}
 
+			/* Pool su eq: bloccato, salvo clear gratis di affect nativi sul pezzo. */
+			const bool allow_native_pool_clear =
+				clear_slot &&
+				(edit_pool_is_pool_apply(location) || location == APPLY_SAVE_ALL);
 			if(flag.empty() &&
-			   edit_system_blocked_on_object(location, target_modifier)) {
+			   edit_system_blocked_on_object(location, target_modifier) &&
+			   !(allow_native_pool_clear)) {
 				if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE ||
 				   location == APPLY_SUSC) {
-					return json_error(
+					return fail_affect(
 						"questa resistenza e configurata sul personaggio — usa apply-resistance",
 						400);
 				}
 				if(edit_pool_is_pool_apply(location)) {
-					return json_error(
+					return fail_affect(
 						"hit/mana/move/regen vanno sul personaggio (edit pool), non sull'oggetto",
 						400);
 				}
-				return json_error("campo configurato sul personaggio, non sull'oggetto", 400);
+				return fail_affect("campo configurato sul personaggio, non sull'oggetto", 400);
 			}
 
 			std::vector<inventory_mysql_row> rows;
 			load_character_inventory_mysql(target_toon_id, rows);
 			inventory_mysql_row* row = find_inventory_row(rows, inventory_id);
 			if(!row) {
-				return json_error("oggetto non trovato nell'inventario", 404);
+				return fail_affect("oggetto non trovato nell'inventario", 404);
 			}
 
 			struct obj_data* obj = materialize_inventory_row(*row);
 			if(!obj) {
-				return json_error("impossibile materializzare oggetto", 500);
+				return fail_affect("impossibile materializzare oggetto", 500);
 			}
 			if(inventory_row_is_worn(row->elem.wearpos) &&
 			   !object_portal_allows_worn_edit(obj)) {
 				extract_obj(obj);
-				return json_error("oggetto indossato non editabile", 400);
+				return fail_affect("oggetto indossato non editabile", 400);
 			}
 			if(!object_portal_editable(obj, target_name.c_str())) {
 				extract_obj(obj);
-				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
+				return fail_affect("oggetto non editabile (RARO, tan, tipo o owner)", 400);
 			}
 			ensure_portal_listino_owner(obj, target_name);
 
@@ -2492,7 +2831,7 @@ struct ToonInventoryEditScan {
 				const bool already = IS_OBJ_STAT(obj, ITEM_IMMUNE);
 				if(already && !target_modifier) {
 					extract_obj(obj);
-					return json_error(
+					return fail_affect(
 						"Artifact non rimovibile una volta impostato", 400);
 				}
 				if(already && target_modifier) {
@@ -2508,17 +2847,17 @@ struct ToonInventoryEditScan {
 					extract_obj(obj);
 					(void)pay_xp;
 					(void)pay_rune;
-					return json_ok(d);
+					return ok_affect(d, "apply.affect");
 				}
 				if(!target_modifier) {
 					extract_obj(obj);
-					return json_error("Artifact: specificare target_modifier=1 per attivare",
+					return fail_affect("Artifact: specificare target_modifier=1 per attivare",
 									  400);
 				}
 				struct obj_data* after = materialize_inventory_row(*row);
 				if(!after) {
 					extract_obj(obj);
-					return json_error("impossibile clonare oggetto", 500);
+					return fail_affect("impossibile clonare oggetto", 500);
 				}
 				extract_obj(obj);
 				SET_BIT(after->obj_flags.extra_flags, ITEM_IMMUNE);
@@ -2532,7 +2871,7 @@ struct ToonInventoryEditScan {
 				if(!portal_apply_optional_text_fields(after, req, /*affect_is_paid=*/false,
 													  text_err, text_changed)) {
 					extract_obj(after);
-					return json_error(text_err.c_str(), 400);
+					return fail_affect(text_err.c_str(), 400);
 				}
 				/* Flag gratis; il +50% e' sul costo degli edit pagati (stesso
 				 * pacchetto o successivi) via AnalyzeObjEdit. */
@@ -2549,14 +2888,14 @@ struct ToonInventoryEditScan {
 				d["base_vnum"] = object_instance_resolve_base_vnum(after);
 				extract_obj(after);
 				if(!saved) {
-					return json_error(save_err.empty()
+					return fail_affect(save_err.empty()
 										  ? "[portal:save] salvataggio flag artifact fallito"
 										  : save_err.c_str(),
 									  500);
 				}
 				(void)pay_xp;
 				(void)pay_rune;
-				return json_ok(d);
+				return ok_affect(d, "apply.affect");
 			}
 
 			/* Stesso pending_artifact del quote: evita sotto-quote in apply. */
@@ -2592,13 +2931,13 @@ struct ToonInventoryEditScan {
 										   quote_pq, quote_err, other_dam, other_sp,
 										   clear_slot, other_sf, allow_combat_merge)) {
 				extract_obj(obj);
-				return json_error(quote_err.c_str(), 400);
+				return fail_affect(quote_err.c_str(), 400);
 			}
 
 			struct obj_data* after = materialize_inventory_row(*row);
 			if(!after) {
 				extract_obj(obj);
-				return json_error("impossibile clonare oggetto", 500);
+				return fail_affect("impossibile clonare oggetto", 500);
 			}
 			obj_affected_type reward_baseline_affs[MAX_OBJ_AFFECT];
 			const bool need_reward_baseline =
@@ -2614,7 +2953,7 @@ struct ToonInventoryEditScan {
 										   other_dam, other_sp, clear_slot, other_sf,
 										   allow_combat_merge)) {
 				extract_obj(after);
-				return json_error(apply_err.c_str(), 400);
+				return fail_affect(apply_err.c_str(), 400);
 			}
 			if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
 				SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
@@ -2627,7 +2966,7 @@ struct ToonInventoryEditScan {
 			if(!resolve_object_edit_payment(pay_xp, pay_rune, quote_xp, quote_pq, xp_cost,
 										   rune_cost, pay_resolve_err)) {
 				extract_obj(after);
-				return json_error(pay_resolve_err.c_str(), 402);
+				return fail_affect(pay_resolve_err.c_str(), 402);
 			}
 			const int quote_xp_i = static_cast<int>(std::max(0L, quote_xp));
 			const bool affect_is_paid = (quote_xp_i > 0) || (quote_pq > 0) ||
@@ -2638,14 +2977,14 @@ struct ToonInventoryEditScan {
 			if(!portal_apply_optional_text_fields(after, req, affect_is_paid, text_err,
 												  text_changed)) {
 				extract_obj(after);
-				return json_error(text_err.c_str(), 400);
+				return fail_affect(text_err.c_str(), 400);
 			}
 
 			const int max_level = max_level_for_toon(target_toon_id);
 			std::string pay_err;
 			if(!deduct_payment(target_toon_id, xp_cost, rune_cost, max_level, pay_err)) {
 				extract_obj(after);
-				return json_error(pay_err.c_str(), 402);
+				return fail_affect(pay_err.c_str(), 402);
 			}
 
 			std::string save_err;
@@ -2666,12 +3005,12 @@ struct ToonInventoryEditScan {
 			extract_obj(after);
 
 			if(!saved) {
-				return json_error(save_err.empty()
+				return fail_affect(save_err.empty()
 									  ? "[portal:save] pagamento eseguito ma salvataggio fallito"
 									  : save_err.c_str(),
 								  500);
 			}
-			return json_ok(d);
+			return ok_affect(d, "apply.affect");
 		}
 
 		if(path == "/internal/quote-object-text" ||
@@ -2689,34 +3028,44 @@ struct ToonInventoryEditScan {
 			const int pay_rune = parse_json_int(req, "pay_rune", 0);
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
+
+			auto fail_apply = [&](const char* msg, int code) -> std::string {
+				return portal_audit_fail(req, msg, code, target_toon_id,
+										 target_name.c_str(), 0);
+			};
+			auto ok_apply = [&](Json d) -> std::string {
+				portal_audit_event(req, "apply.pool", "info", "apply.pool", &d,
+								   target_toon_id, target_name.c_str(), 0, 0);
+				return json_ok(d);
+			};
 			if(target_name.empty()) {
-				return json_error("toon target non trovato", 404);
+				return fail_apply("toon target non trovato", 404);
 			}
 			if(is_toon_online_by_name(target_name)) {
-				return json_error("il toon target e collegato al mud", 409);
+				return fail_apply("il toon target e collegato al mud", 409);
 			}
 
 			EditPoolField pool_field {};
 			if(!edit_pool_parse_field_key(field.c_str(), pool_field)) {
-				return json_error("campo pool non valido", 400);
+				return fail_apply("campo pool non valido", 400);
 			}
 
 			if(!edit_system_pool_enabled(field.c_str())) {
-				return json_error("campo pool disabilitato in edit_system.json", 400);
+				return fail_apply("campo pool disabilitato in edit_system.json", 400);
 			}
 			if(edit_system_pool_target(field.c_str()) != EditSystemTarget::Character) {
-				return json_error(
+				return fail_apply(
 					"campo pool configurato sull'oggetto — usa apply-affect (APPLY)", 400);
 			}
 
 			DB* db = Sql::getMysql();
 			if(!db) {
-				return json_error("database non disponibile", 500);
+				return fail_apply("database non disponibile", 500);
 			}
 
 			char_edit_pool_data pool {};
 			if(!load_edit_pool_for_toon(target_toon_id, pool)) {
-				return json_error("character_stats non trovato", 404);
+				return fail_apply("character_stats non trovato", 404);
 			}
 
 			/*
@@ -2729,7 +3078,7 @@ struct ToonInventoryEditScan {
 				const ToonInventoryEditScan inv =
 					scan_toon_inventory_edits(target_toon_id, target_name);
 				if(pool_data_has_values(inv.pool_from_eq)) {
-					return json_error(
+					return fail_apply(
 						"Pool ancora sugli oggetti EDIT (migrazione incompleta). "
 						"Entra in gioco una volta: la migrazione sposta i valori "
 						"sul PG e li toglie dagli oggetti. Poi riprova dal portale.",
@@ -2743,10 +3092,10 @@ struct ToonInventoryEditScan {
 								   : current + parse_json_int(req, "delta", 0);
 			const int delta = target - current;
 			if(delta == 0) {
-				return json_error("nessuna modifica al pool", 400);
+				return fail_apply("nessuna modifica al pool", 400);
 			}
 			if(delta < 0) {
-				return json_error(
+				return fail_apply(
 					"non puoi ridurre il pool edit (solo aumentare rispetto all'attuale)",
 					400);
 			}
@@ -2757,13 +3106,13 @@ struct ToonInventoryEditScan {
 			}
 
 			if(!edit_pool_add_delta(&pool, pool_field, delta)) {
-				return json_error("delta pool rifiutato (cap listino)", 400);
+				return fail_apply("delta pool rifiutato (cap listino)", 400);
 			}
 
 			const int max_level = max_level_for_toon(target_toon_id);
 			std::string pay_err;
 			if(!deduct_payment(target_toon_id, pay_xp, pay_rune, max_level, pay_err)) {
-				return json_error(pay_err.c_str(), 402);
+				return fail_apply(pay_err.c_str(), 402);
 			}
 
 			try {
@@ -2782,12 +3131,13 @@ struct ToonInventoryEditScan {
 					<< ", edit_pool_migrated=1 WHERE toon_id = " << target_toon_id;
 				std::string sql_err;
 				if(!portal_mysql_exec(db, upd.str(), sql_err, "portal:apply_pool")) {
-					return json_error(sql_err.c_str(), 500);
+					return fail_apply(sql_err.c_str(), 500);
 				}
 			}
 			catch(const std::exception& e) {
-				return json_error(
-					(std::string("[portal:apply_pool] ") + e.what()).c_str(), 500);
+				const std::string emsg =
+					std::string("[portal:apply_pool] ") + e.what();
+				return fail_apply(emsg.c_str(), 500);
 			}
 
 			Json d;
@@ -2800,7 +3150,7 @@ struct ToonInventoryEditScan {
 			d["paid_xp"] = pay_xp;
 			d["paid_rune"] = pay_rune;
 			d["edit_pool_migrated"] = 1;
-			return json_ok(d);
+			return ok_apply(d);
 		}
 
 		if(path == "/internal/apply-resistance") {
@@ -2812,38 +3162,48 @@ struct ToonInventoryEditScan {
 			const int pay_rune = parse_json_int(req, "pay_rune", 0);
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
+
+			auto fail_apply = [&](const char* msg, int code) -> std::string {
+				return portal_audit_fail(req, msg, code, target_toon_id,
+										 target_name.c_str(), 0);
+			};
+			auto ok_apply = [&](Json d) -> std::string {
+				portal_audit_event(req, "apply.resistance", "info", "apply.resistance", &d,
+								   target_toon_id, target_name.c_str(), 0, 0);
+				return json_ok(d);
+			};
 			if(target_name.empty()) {
-				return json_error("toon target non trovato", 404);
+				return fail_apply("toon target non trovato", 404);
 			}
 			if(is_toon_online_by_name(target_name)) {
-				return json_error("il toon target e collegato al mud", 409);
+				return fail_apply("il toon target e collegato al mud", 409);
 			}
 			if(damage_type == 0) {
-				return json_error("damage_type (bit IMM_*) richiesto", 400);
+				return fail_apply("damage_type (bit IMM_*) richiesto", 400);
 			}
 			if(!edit_system_resistance_enabled(damage_type)) {
-				return json_error("resistenza disabilitata in edit_system.json", 400);
+				return fail_apply("resistenza disabilitata in edit_system.json", 400);
 			}
 			if(edit_system_resistance_target(damage_type) != EditSystemTarget::Character) {
-				return json_error(
+				return fail_apply(
 					"resistenza configurata sull'oggetto — usa apply-affect (APPLY_IMMUNE)", 400);
 			}
 
 			DB* db = Sql::getMysql();
 			if(!db) {
-				return json_error("database non disponibile", 500);
+				return fail_apply("database non disponibile", 500);
 			}
 
 			const int max_level = max_level_for_toon(target_toon_id);
 			std::string pay_err;
 			if(!deduct_payment(target_toon_id, pay_xp, pay_rune, max_level, pay_err)) {
-				return json_error(pay_err.c_str(), 402);
+				return fail_apply(pay_err.c_str(), 402);
 			}
 
 			std::string persist_err;
 			if(!legacy_upsert_character_resistance(db, target_toon_id,
 												   damage_type, value, persist_err)) {
-				return json_error(persist_err.c_str(), 500);
+				return fail_apply(persist_err.c_str(), 500);
 			}
 
 			Json d;
@@ -2851,7 +3211,7 @@ struct ToonInventoryEditScan {
 			d["value"] = value;
 			d["paid_xp"] = pay_xp;
 			d["paid_rune"] = pay_rune;
-			return json_ok(d);
+			return ok_apply(d);
 		}
 
 		if(path == "/internal/list-resistances") {
@@ -2914,6 +3274,267 @@ struct ToonInventoryEditScan {
 			Json d;
 			d["path"] = edit_system_config_path();
 			d["config"] = req["config"];
+			return json_ok(d);
+		}
+
+		if(path == "/internal/lab-set-stats") {
+			std::string lab_err;
+			if(!lab_actor_allowed(req, lab_err)) {
+				return json_error(lab_err.c_str(), 403);
+			}
+			const unsigned long long target_toon_id =
+				parse_json_ull(req, "target_toon_id");
+			std::string target_name;
+			if(!lab_require_offline_target(target_toon_id, target_name, lab_err)) {
+				const int code =
+					lab_err.find("collegato") != std::string::npos ? 409 : 404;
+				return portal_audit_fail(req, lab_err.c_str(), code, target_toon_id,
+										 target_name.c_str());
+			}
+			int exp = 0;
+			int rune = 0;
+			if(!load_stats_for_toon(target_toon_id, exp, rune)) {
+				return portal_audit_fail(req, "character_stats non trovato", 404,
+										 target_toon_id, target_name.c_str());
+			}
+			long long new_exp = exp;
+			long long new_rune = rune;
+			const bool has_exp = req.find("exp") != req.end() && !req["exp"].is_null();
+			const bool has_exp_delta =
+				req.find("exp_delta") != req.end() && !req["exp_delta"].is_null();
+			const bool has_rune =
+				req.find("rune") != req.end() && !req["rune"].is_null();
+			const bool has_rune_delta =
+				req.find("rune_delta") != req.end() && !req["rune_delta"].is_null();
+			if(!has_exp && !has_exp_delta && !has_rune && !has_rune_delta) {
+				return portal_audit_fail(
+					req, "specificare exp/exp_delta e/o rune/rune_delta", 400,
+					target_toon_id, target_name.c_str());
+			}
+			if(has_exp && has_exp_delta) {
+				return portal_audit_fail(req, "non usare exp e exp_delta insieme", 400,
+										 target_toon_id, target_name.c_str());
+			}
+			if(has_rune && has_rune_delta) {
+				return portal_audit_fail(req, "non usare rune e rune_delta insieme",
+										 400, target_toon_id, target_name.c_str());
+			}
+			if(has_exp) {
+				new_exp = parse_json_int(req, "exp", exp);
+			}
+			else if(has_exp_delta) {
+				new_exp = static_cast<long long>(exp) +
+						  parse_json_int(req, "exp_delta", 0);
+			}
+			if(has_rune) {
+				new_rune = parse_json_int(req, "rune", rune);
+			}
+			else if(has_rune_delta) {
+				new_rune = static_cast<long long>(rune) +
+						   parse_json_int(req, "rune_delta", 0);
+			}
+			if(new_exp < 0 || new_exp > kLabExpCap) {
+				return portal_audit_fail(req, "exp fuori range (0..2e9)", 400,
+										 target_toon_id, target_name.c_str());
+			}
+			if(new_rune < 0 || new_rune > kLabExpCap) {
+				return portal_audit_fail(req, "rune fuori range (0..2e9)", 400,
+										 target_toon_id, target_name.c_str());
+			}
+			DB* db = Sql::getMysql();
+			if(!db) {
+				return portal_audit_fail(req, "database non disponibile", 500,
+										 target_toon_id, target_name.c_str());
+			}
+			std::ostringstream upd;
+			upd << "UPDATE character_stats SET exp = " << new_exp
+				<< ", p_rune_dei = " << new_rune << " WHERE toon_id = "
+				<< target_toon_id;
+			std::string sql_err;
+			if(!portal_mysql_exec(db, upd.str(), sql_err, "lab:set_stats")) {
+				return portal_audit_fail(req, sql_err.c_str(), 500, target_toon_id,
+										 target_name.c_str());
+			}
+			Json d;
+			d["exp"] = static_cast<int>(new_exp);
+			d["rune"] = static_cast<int>(new_rune);
+			d["prev_exp"] = exp;
+			d["prev_rune"] = rune;
+			d["target_toon_id"] = target_toon_id;
+			d["target_name"] = target_name;
+			portal_audit_event(req, "lab.set_stats", "info", "lab.set_stats", &d,
+							   target_toon_id, target_name.c_str());
+			return json_ok(d);
+		}
+
+		if(path == "/internal/lab-search-objects") {
+			std::string lab_err;
+			if(!lab_actor_allowed(req, lab_err)) {
+				return json_error(lab_err.c_str(), 403);
+			}
+			std::string q = req.value("q", "");
+			while(!q.empty() && (q.front() == ' ' || q.front() == '\t')) {
+				q.erase(q.begin());
+			}
+			while(!q.empty() && (q.back() == ' ' || q.back() == '\t')) {
+				q.pop_back();
+			}
+			if(q.size() < 2) {
+				return json_error("digita almeno 2 caratteri", 400);
+			}
+			std::string qlow = q;
+			for(char& c : qlow) {
+				c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+			}
+			auto contains_ci = [](const char* hay, const std::string& needle) -> bool {
+				if(!hay || !*hay || needle.empty()) {
+					return false;
+				}
+				std::string h = hay;
+				for(char& c : h) {
+					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+				}
+				return h.find(needle) != std::string::npos;
+			};
+			Json results = Json::array();
+			constexpr int kLabSearchMax = 40;
+			for(int i = 0; i <= top_of_objt && static_cast<int>(results.size()) < kLabSearchMax;
+				++i) {
+				const char* nm = obj_index[i].name;
+				const char* sd = obj_index[i].short_desc;
+				if(!contains_ci(nm, qlow) && !contains_ci(sd, qlow)) {
+					continue;
+				}
+				Json row;
+				row["vnum"] = obj_index[i].iVNum;
+				row["name"] = nm ? nm : "";
+				row["short_desc"] = sd ? sd : "";
+				results.push_back(row);
+			}
+			Json d;
+			d["q"] = q;
+			d["results"] = results;
+			return json_ok(d);
+		}
+
+		if(path == "/internal/lab-give-vnum") {
+			std::string lab_err;
+			if(!lab_actor_allowed(req, lab_err)) {
+				return json_error(lab_err.c_str(), 403);
+			}
+			const unsigned long long target_toon_id =
+				parse_json_ull(req, "target_toon_id");
+			std::string target_name;
+			if(!lab_require_offline_target(target_toon_id, target_name, lab_err)) {
+				const int code =
+					lab_err.find("collegato") != std::string::npos ? 409 : 404;
+				return portal_audit_fail(req, lab_err.c_str(), code, target_toon_id,
+										 target_name.c_str());
+			}
+			const int vnum = parse_json_int(req, "vnum", 0);
+			int qty = parse_json_int(req, "qty", 1);
+			if(vnum <= 0 || real_object(vnum) < 0) {
+				return portal_audit_fail(req, "vnum oggetto non valido", 400,
+										 target_toon_id, target_name.c_str());
+			}
+			if(qty < 1) {
+				qty = 1;
+			}
+			if(qty > kLabGiveQtyMax) {
+				return portal_audit_fail(req, "qty massimo 20", 400, target_toon_id,
+										 target_name.c_str());
+			}
+			Json created = Json::array();
+			for(int i = 0; i < qty; ++i) {
+				struct obj_data* obj = read_object(vnum, VIRTUAL);
+				if(!obj) {
+					return portal_audit_fail(req, "read_object fallito", 500,
+											 target_toon_id, target_name.c_str());
+				}
+				unsigned long long inv_id = 0;
+				std::string ins_err;
+				if(!lab_insert_inventory_obj(target_toon_id, obj, inv_id, ins_err)) {
+					extract_obj(obj);
+					return portal_audit_fail(req, ins_err.c_str(), 500, target_toon_id,
+											 target_name.c_str());
+				}
+				Json row;
+				row["inventory_id"] = inv_id;
+				row["vnum"] = vnum;
+				row["short_desc"] =
+					obj->short_description ? obj->short_description : "";
+				created.push_back(row);
+				extract_obj(obj);
+			}
+			Json d;
+			d["created"] = created;
+			d["qty"] = qty;
+			d["vnum"] = vnum;
+			d["target_toon_id"] = target_toon_id;
+			d["target_name"] = target_name;
+			portal_audit_event(req, "lab.give_vnum", "info", "lab.give_vnum", &d,
+							   target_toon_id, target_name.c_str());
+			return json_ok(d);
+		}
+
+		if(path == "/internal/lab-clone-instance") {
+			std::string lab_err;
+			if(!lab_actor_allowed(req, lab_err)) {
+				return json_error(lab_err.c_str(), 403);
+			}
+			const unsigned long long target_toon_id =
+				parse_json_ull(req, "target_toon_id");
+			std::string target_name;
+			if(!lab_require_offline_target(target_toon_id, target_name, lab_err)) {
+				const int code =
+					lab_err.find("collegato") != std::string::npos ? 409 : 404;
+				return portal_audit_fail(req, lab_err.c_str(), code, target_toon_id,
+										 target_name.c_str());
+			}
+			const unsigned long long source_instance_id =
+				parse_json_ull(req, "instance_id");
+			if(source_instance_id == 0ULL) {
+				return portal_audit_fail(req, "instance_id richiesto", 400,
+										 target_toon_id, target_name.c_str());
+			}
+			struct obj_data* obj = object_instance_materialize(source_instance_id);
+			if(!obj) {
+				return portal_audit_fail(req, "istanza sorgente non trovata", 404,
+										 target_toon_id, target_name.c_str());
+			}
+			const unsigned long long source_id = obj->db_instance_id;
+			const int base = object_instance_resolve_base_vnum(obj);
+			obj->db_instance_id = 0;
+			if(base > 0) {
+				obj->char_vnum = base;
+			}
+			portal_apply_personalize(obj, target_name.c_str());
+			std::string persist_err;
+			if(!portal_persist_object_instance_mysql(obj, base > 0 ? base : obj->char_vnum,
+													 target_name.c_str(), persist_err)) {
+				extract_obj(obj);
+				return portal_audit_fail(req, persist_err.c_str(), 500, target_toon_id,
+										 target_name.c_str());
+			}
+			unsigned long long inv_id = 0;
+			std::string ins_err;
+			if(!lab_insert_inventory_obj(target_toon_id, obj, inv_id, ins_err)) {
+				extract_obj(obj);
+				return portal_audit_fail(req, ins_err.c_str(), 500, target_toon_id,
+										 target_name.c_str());
+			}
+			Json d;
+			d["source_instance_id"] = source_id;
+			d["new_instance_id"] = obj->db_instance_id;
+			d["inventory_id"] = inv_id;
+			d["base_vnum"] = base;
+			d["short_desc"] = obj->short_description ? obj->short_description : "";
+			d["target_toon_id"] = target_toon_id;
+			d["target_name"] = target_name;
+			extract_obj(obj);
+			portal_audit_event(req, "lab.clone_instance", "info", "lab.clone_instance",
+							   &d, target_toon_id, target_name.c_str(), inv_id,
+							   d["new_instance_id"].get<unsigned long long>());
 			return json_ok(d);
 		}
 
@@ -3055,6 +3676,7 @@ void edit_portal_process_pending() {
 void edit_portal_init() {
 #if USE_MYSQL
 	edit_system_config_init();
+	portal_audit_ensure_tables();
 	mudlog(LOG_CHECK, "edit_portal: API listening on port %d (%s=%d)",
 		   api_port(), kEditPortalApiVersionTag, kEditPortalApiVersion);
 	std::thread(http_thread_main).detach();
