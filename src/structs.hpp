@@ -481,6 +481,8 @@ struct obj_data {
 
 	/** character_inventory.id (MySQL); 0 = not yet persisted / new object. */
 	unsigned long long db_inventory_id;
+	/** character_inventory_overflow.id (MySQL); 0 = not in overflow set. */
+	unsigned long long db_overflow_id;
 	/** object_instance.id (MySQL); 0 = no instance / legacy edit-vnum path. */
 	unsigned long long db_instance_id;
 	/**
@@ -841,6 +843,8 @@ struct char_special_data {
 	struct char_data* misc;
 	struct char_data* fighting; /* Opponent                          */
     struct char_data* quest_ref; /*  For NPCs it stores the quest owner, For PCs it can be used to store his questor/target */
+	/* Staff OverflowClaim: ultimo list <nome> (buy/value senza nome usano questo). '' = proprio. */
+	char overflow_claim_ctx[33];
     float eq_val_idx; /* Eq Value Index: can be used to store the eq value in a moment and compare it later */
 
 	struct char_data* hunting;  /* Hunting person..                  */

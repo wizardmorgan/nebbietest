@@ -63,6 +63,7 @@
 #include "fight.hpp"
 #include "handler.hpp"
 #include "interpreter.hpp"
+#include "inventory_overflow.hpp"
 #include "mobact.hpp"
 #include "modify.hpp"
 #include "mob.editor.hpp"
@@ -607,6 +608,7 @@ void game_loop(int s) {
   event_process();
   edit_portal_process_pending();
   inventory_save_pulse(pulse);
+  inventory_overflow_checkpoint_pulse(pulse);
   body_save_pulse(); /* al massimo un PG per pulse (gain_exp rimandati) */
 
   if (!(pulse % PULSE_ZONE)) {
@@ -1627,7 +1629,14 @@ void close_socket(struct descriptor_data *d) {
       GET_POS(d->character) = POSITION_STANDING;
     }
     if (d->connected == CON_PLYNG) {
+      /* LD: persist 200+overflow, pezzi restano in RAM (riconnessione). */
+      InventoryOverflowHold ov_hold;
+      const bool ov_ok =
+          inventory_overflow_begin_persist(d->character, ov_hold);
       do_save(d->character, "", 0);
+      if (ov_ok) {
+        inventory_overflow_finish_persist(ov_hold, true);
+      }
       act("$n ha perso il senso della realta'.", TRUE, d->character, 0, 0,
           TO_ROOM);
       mudlog(LOG_CONNECT, "Closing link to: %s.", GET_NAME(d->character));
@@ -2068,10 +2077,13 @@ char* act_next_visible(char* p) {
   return (*p != '\0') ? p : nullptr;
 }
 
+} // namespace
+
 /*
  * Se il testo visibile inizia con un articolo IT/EN, abbassa le lettere
  * dell'articolo in loco (i $cNNNN in mezzo all'articolo vengono saltati).
  * CAP() in act() ripristina la maiuscola a inizio riga.
+ * Usabile anche fuori da act() quando si inserisce una short_desc a meta' frase.
  */
 const char* act_lower_leading_article(const char* name) {
   if(name == nullptr || *name == '\0') {
@@ -2119,8 +2131,6 @@ const char* act_lower_leading_article(const char* name) {
   }
   return buf;
 }
-
-} // namespace
 
 void ParseAct(const char *str, struct char_data *ch, struct char_data *to,
               void *vict_obj, struct obj_data *obj, char *buf)
