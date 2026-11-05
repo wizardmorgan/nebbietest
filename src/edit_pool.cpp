@@ -6,6 +6,7 @@
 #include "edit_system_config.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -1004,7 +1005,7 @@ edit_pool_quote edit_pool_quote_delta(EditPoolField field, int delta) noexcept {
 
 	/*
 	 * Unità "valore" raw come CheckValueObj (prima di kObjValueStorageScale).
-	 * Allineato ai commenti listino in obj_value.cpp.
+	 * Allineato ai commenti listino in obj_value.cpp / editpool_listino_unit.
 	 */
 	long unit_valore = 0;
 	switch(field) {
@@ -1031,6 +1032,89 @@ edit_pool_quote edit_pool_quote_delta(EditPoolField field, int delta) noexcept {
 	const long valore_raw = unit_valore * static_cast<long>(delta);
 	q.xp_raw = valore_raw * kObjValueStorageScale;
 	q.pq = 0;
+	q.mxp = q.xp_raw / 1000000L;
+	q.mxp_frac = (q.xp_raw % 1000000L) / 10000L;
+	return q;
+}
+
+bool edit_pool_listino_unit(EditPoolField field, long& xp_per_unit, int& rune_num,
+							int& rune_den) noexcept {
+	switch(field) {
+	case EditPoolField::Hp:
+		/* Hit [10] = 30M / 30 rune */
+		xp_per_unit = 3000000L;
+		rune_num = 3;
+		rune_den = 1;
+		return true;
+	case EditPoolField::Mana:
+		/* Mana [10] = 15M / 15 rune */
+		xp_per_unit = 1500000L;
+		rune_num = 3;
+		rune_den = 2;
+		return true;
+	case EditPoolField::Move:
+		/* Move [10] = 10M / 15 rune */
+		xp_per_unit = 1000000L;
+		rune_num = 3;
+		rune_den = 2;
+		return true;
+	case EditPoolField::HpRegen:
+		/* Hit Regen [5] = 15M / 15 rune */
+		xp_per_unit = 3000000L;
+		rune_num = 3;
+		rune_den = 1;
+		return true;
+	case EditPoolField::ManaRegen:
+		/* Mana Regen [5] = 15M / 15 rune */
+		xp_per_unit = 3000000L;
+		rune_num = 3;
+		rune_den = 1;
+		return true;
+	case EditPoolField::MoveRegen:
+		/* Move Regen [5] = 10M / 30 rune */
+		xp_per_unit = 2000000L;
+		rune_num = 6;
+		rune_den = 1;
+		return true;
+	}
+	return false;
+}
+
+double edit_pool_class_mult(int n_classes) noexcept {
+	if(n_classes >= 3) {
+		return kObjValueClassMultTri;
+	}
+	if(n_classes == 2) {
+		return kObjValueClassMultBi;
+	}
+	return 1.0;
+}
+
+edit_pool_quote edit_pool_quote_paid(EditPoolField field, int units,
+									 int n_classes) noexcept {
+	edit_pool_quote q;
+	units = std::abs(units);
+	long xp_per_unit = 0;
+	int rune_num = 0;
+	int rune_den = 1;
+	if(!edit_pool_listino_unit(field, xp_per_unit, rune_num, rune_den) ||
+	   rune_den <= 0 || units <= 0) {
+		return q;
+	}
+	if(n_classes < 1) {
+		n_classes = 1;
+	}
+	const double mult = edit_pool_class_mult(n_classes);
+	const double listino_xp =
+		static_cast<double>(xp_per_unit) * static_cast<double>(units);
+	const double listino_rune = static_cast<double>(rune_num) *
+								static_cast<double>(units) /
+								static_cast<double>(rune_den);
+	const double art_xp = listino_xp * 1.5;
+	const double art_rune = listino_rune * 1.5;
+	q.xp_raw = std::max(
+		0L, static_cast<long>(art_xp * mult / static_cast<double>(n_classes)));
+	q.pq = std::max(0, static_cast<int>(std::ceil(art_rune * mult)));
 	q.mxp = q.xp_raw / 1000000L;
 	q.mxp_frac = (q.xp_raw % 1000000L) / 10000L;
 	return q;

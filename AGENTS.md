@@ -1,12 +1,16 @@
 # Linee guida progetto (vincolanti)
 
-## Dove va il codice — senza eccezioni
+## Push remoto — blocco assoluto
 
-Salvo istruzione **esplicita** dell’utente in questo chat:
+**Nessun** `git push` su repo **`NebbieArcane/*`** (`Server`, `edit-portal`, altro) senza autorizzazione **esplicita in chat** che nomina quel repo.
 
-| Cosa | Dove pushare / PR |
+Push abituale autorizzabile: solo **`wizardmorgan/nebbietest`**. Commit locale ≠ ok al push.
+
+## Dove va il codice (destinazione logica; push solo se autorizzato)
+
+| Cosa | Destinazione quando autorizzato |
 |------|-------------------|
-| UI portale (`public/`, `server.js`, `package.json`, Dockerfile UI, docs UI, wordpress SSO UI) | **`NebbieArcane/edit-portal`** (SSH deploy key `EDIT_PORTAL_SSH_KEY`) |
+| UI portale (`public/`, `server.js`, `package.json`, Dockerfile UI, docs UI, wordpress SSO UI) | **`NebbieArcane/edit-portal`** — push **solo** se l’utente lo chiede esplicitamente |
 | Codice MUD / myst C++ (`src/edit_portal*`, `obj_edit_catalog*`, `obj_value*`, listino, sync Principi, **`scripts/mud-dev.sh`**, compose overlay mud) | **`wizardmorgan/nebbietest`** (tipicamente `feature/edit-portal`) |
 
 **Non** pushare UI sul fork mud.  

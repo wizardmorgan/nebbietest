@@ -110,6 +110,33 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 [[nodiscard]] int object_edit_hitroll_edited_delta(const struct obj_data* obj) noexcept;
 
 /**
+ * Breakdown delta combat pezzo vs baseline: full / broker / wiz.
+ * I tetti pezzo usano solo wiz (HR<=2, dam+sp<=2); il personaggio DAM+SP
+ * usa i delta full (come object_edit_*_edited_delta).
+ */
+struct ObjEditCombatWizCaps {
+	int hr_full = 0;
+	int dam_full = 0;
+	int sp_full = 0;
+	int hr_broker = 0;
+	int dam_broker = 0;
+	int sp_broker = 0;
+
+	[[nodiscard]] int hr_wiz() const noexcept {
+		return hr_full > hr_broker ? hr_full - hr_broker : 0;
+	}
+	[[nodiscard]] int dam_wiz() const noexcept {
+		return dam_full > dam_broker ? dam_full - dam_broker : 0;
+	}
+	[[nodiscard]] int sp_wiz() const noexcept {
+		return sp_full > sp_broker ? sp_full - sp_broker : 0;
+	}
+};
+
+[[nodiscard]] ObjEditCombatWizCaps
+object_edit_combat_wiz_caps(const struct obj_data* obj) noexcept;
+
+/**
  * Spellfail *editato* = max(0, proto − current) (piu' negativo = piu' edit).
  * Conta verso il tetto personaggio kObjEditMaxSpellfailEditableTotal.
  */

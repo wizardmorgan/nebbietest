@@ -15,9 +15,13 @@
 #include <cmath>
 #include <condition_variable>
 #include <cctype>
+#include <cstdlib>
+#include <ctime>
 #include <cstring>
 #include <deque>
+#include <fstream>
 #include <future>
+#include <iomanip>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -452,8 +456,74 @@ void portal_audit_ensure_tables() {
 	return portal_sql_literal(portal_audit_trunc(s, max_len).c_str());
 }
 
+/** File audit dedicato (una riga/azione). Default: /app/edit-portal-audit.log */
+[[nodiscard]] const char* portal_audit_log_path() noexcept {
+	const char* env = std::getenv("EDIT_PORTAL_AUDIT_LOG");
+	if(env != nullptr && env[0] != '\0') {
+		return env;
+	}
+	return "/app/edit-portal-audit.log";
+}
+
+void portal_audit_append_file(const std::string& kind, const std::string& sev,
+							  const std::string& actor_name,
+							  const std::string& target_name,
+							  unsigned long long inventory_id,
+							  unsigned long long instance_id,
+							  const std::string& session_key, const std::string& msg,
+							  const Json* detail) {
+	static std::mutex audit_file_mu;
+	std::lock_guard<std::mutex> lock(audit_file_mu);
+	std::ofstream out(portal_audit_log_path(), std::ios::out | std::ios::app);
+	if(!out) {
+		return;
+	}
+	using clock = std::chrono::system_clock;
+	const auto now = clock::now();
+	const std::time_t tt = clock::to_time_t(now);
+	std::tm tm {};
+#if defined(_WIN32)
+	gmtime_s(&tm, &tt);
+#else
+	gmtime_r(&tt, &tm);
+#endif
+	out << std::put_time(&tm, "%Y-%m-%dT%H:%M:%SZ") << ' ' << sev << ' ' << kind
+		<< " actor=" << (actor_name.empty() ? "-" : actor_name)
+		<< " target=" << (target_name.empty() ? "-" : target_name);
+	if(inventory_id != 0ULL) {
+		out << " inv=" << inventory_id;
+	}
+	if(instance_id != 0ULL) {
+		out << " inst=" << instance_id;
+	}
+	if(!session_key.empty()) {
+		out << " sess=" << session_key.substr(0, 12);
+	}
+	if(!msg.empty()) {
+		out << " msg=" << msg;
+	}
+	if(detail && !detail->is_null()) {
+		try {
+			std::string d = detail->dump();
+			if(d.size() > 400) {
+				d.resize(400);
+				d.append("...");
+			}
+			for(char& c : d) {
+				if(c == '\n' || c == '\r') {
+					c = ' ';
+				}
+			}
+			out << " detail=" << d;
+		}
+		catch(...) {
+		}
+	}
+	out << '\n';
+}
+
 /**
- * Scrive un evento in edit_portal_event. Best-effort: non fallisce la request.
+ * Scrive un evento in edit_portal_event + file audit. Best-effort.
  * session_key / actor_* arrivano dal body Node (opzionali).
  */
 void portal_audit_event(const Json& req, const char* kind, const char* severity,
@@ -462,10 +532,6 @@ void portal_audit_event(const Json& req, const char* kind, const char* severity,
 						unsigned long long inventory_id = 0,
 						unsigned long long instance_id = 0) {
 	if(!kind || !*kind) {
-		return;
-	}
-	DB* db = Sql::getMysql();
-	if(!db) {
 		return;
 	}
 	const std::string session_key =
@@ -478,6 +544,16 @@ void portal_audit_event(const Json& req, const char* kind, const char* severity,
 	const std::string kind_s = portal_audit_trunc(kind, 48);
 	const std::string msg =
 		portal_audit_trunc(message && *message ? message : "", 512);
+	const std::string target_s =
+		portal_audit_trunc(target_name && *target_name ? target_name : "", 32);
+
+	portal_audit_append_file(kind_s, sev, actor_name, target_s, inventory_id,
+							 instance_id, session_key, msg, detail);
+
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return;
+	}
 	std::string detail_sql = "NULL";
 	if(detail && !detail->is_null()) {
 		try {
@@ -497,7 +573,7 @@ void portal_audit_event(const Json& req, const char* kind, const char* severity,
 		<< portal_sql_literal(sev.c_str()) << ", " << portal_sql_nullable_ull(actor_toon_id)
 		<< ", " << portal_sql_nullable_str(actor_name.c_str(), 32) << ", "
 		<< portal_sql_nullable_ull(target_toon_id) << ", "
-		<< portal_sql_nullable_str(target_name, 32) << ", "
+		<< portal_sql_nullable_str(target_s.c_str(), 32) << ", "
 		<< portal_sql_nullable_ull(inventory_id) << ", "
 		<< portal_sql_nullable_ull(instance_id) << ", " << detail_sql << ", "
 		<< (msg.empty() ? "NULL" : portal_sql_literal(msg.c_str())) << ", 0)";
@@ -565,6 +641,36 @@ void portal_audit_event(const Json& req, const char* kind, const char* severity,
 	}
 	catch(...) {
 		return 0;
+	}
+}
+
+/** Quante classi con level > 0 (allineato a HowManyClasses offline). */
+[[nodiscard]] int class_count_for_toon(unsigned long long toon_id) {
+	DB* db = Sql::getMysql();
+	if(!db || toon_id == 0) {
+		return 1;
+	}
+	try {
+		odb::connection_ptr cp(db->connection());
+		auto& mc = static_cast<odb::mysql::connection&>(*cp);
+		MYSQL* h = mc.handle();
+		const std::string sql =
+			"SELECT COUNT(*) FROM character_classes WHERE toon_id = " +
+			std::to_string(toon_id) + " AND level > 0";
+		if(mysql_query(h, sql.c_str()) != 0) {
+			return 1;
+		}
+		MYSQL_RES* res = mysql_store_result(h);
+		if(!res) {
+			return 1;
+		}
+		MYSQL_ROW row = mysql_fetch_row(res);
+		const int n = row && row[0] ? std::atoi(row[0]) : 0;
+		mysql_free_result(res);
+		return n > 0 ? n : 1;
+	}
+	catch(...) {
+		return 1;
 	}
 }
 
@@ -722,6 +828,46 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 	return true;
 }
 
+/**
+ * Pagamento pool PG come editpool: XP e rune sono alternative (pq = costo
+ * rune completo), non rune additive sul listino oggetti.
+ * - solo rune: pay_xp==0 e pay_rune >= quote_pq → addebita quote_pq
+ * - XP / misto: pay_xp + pay_rune*1MXP >= quote_xp (senza obbligo pq)
+ */
+[[nodiscard]] bool resolve_editpool_payment(int pay_xp, int pay_rune, long quote_xp,
+											int quote_pq, int& xp_cost, int& rune_cost,
+											std::string& err) {
+	if(pay_xp < 0 || pay_rune < 0) {
+		err = "[portal:pay] pagamento non valido";
+		return false;
+	}
+	const int quote_xp_i = static_cast<int>(std::max(0L, quote_xp));
+	const int pq = std::max(0, quote_pq);
+	if(quote_xp_i <= 0 && pq <= 0) {
+		xp_cost = 0;
+		rune_cost = 0;
+		return true;
+	}
+	if(pay_xp == 0 && pay_rune > 0) {
+		if(pay_rune < pq) {
+			err = "[portal:pay] rune insufficienti per il listino pool (editpool)";
+			return false;
+		}
+		xp_cost = 0;
+		rune_cost = pq;
+		return true;
+	}
+	const long long covered = static_cast<long long>(pay_xp) +
+							  static_cast<long long>(pay_rune) * kObjEditRunePerMegaXp;
+	if(covered < static_cast<long long>(quote_xp_i)) {
+		err = "[portal:pay] copertura XP/Rune insufficiente rispetto al listino pool";
+		return false;
+	}
+	xp_cost = pay_xp;
+	rune_cost = pay_rune;
+	return true;
+}
+
 [[nodiscard]] struct obj_data* materialize_inventory_row(
 	const inventory_mysql_row& row) {
 	if(row.elem.item_number <= 0) {
@@ -822,6 +968,26 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 		}
 		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
 			total += object_edit_spellpower_edited_delta(o);
+		}
+		extract_obj(o);
+	}
+	return total;
+}
+
+[[nodiscard]] int sum_owned_edited_hitroll_excluding(
+	std::vector<inventory_mysql_row>& rows, unsigned long long exclude_inventory_id,
+	const char* toon_name) {
+	int total = 0;
+	for(auto& r : rows) {
+		if(r.id == exclude_inventory_id) {
+			continue;
+		}
+		struct obj_data* o = materialize_inventory_row(r);
+		if(!o) {
+			continue;
+		}
+		if(object_edit_counts_toward_combat_budget(o, toon_name)) {
+			total += object_edit_hitroll_edited_delta(o);
 		}
 		extract_obj(o);
 	}
@@ -1894,7 +2060,8 @@ struct ToonInventoryEditScan {
 		dam_sp["sp_used"] = sp_total;
 		dam_sp["note"] =
 			"Tetto condiviso: dam editato + spellpower editato <= 30. "
-			"Su ogni pezzo: dam/hit-n-dam oppure spellpower/hit-n-sp, non entrambi";
+			"Sul pezzo possono coesistere: somma delta wiz dam+sp <= 2 "
+			"(es. hit-n-sp 1 + dam 1)";
 		main["dam_sp"] = dam_sp;
 		Json dam;
 		dam["used"] = dam_total;
@@ -1907,7 +2074,7 @@ struct ToonInventoryEditScan {
 			std::to_string(dam_sp_remaining) + " su " +
 			std::to_string(dam_sp_cap) + " (DAM+SP " +
 			std::to_string(dam_sp_used) + "/" + std::to_string(dam_sp_cap) +
-			"). Su ogni pezzo: dam/hit-n-dam oppure spellpower, non entrambi";
+			"). Pezzo: dam e sp insieme ok se somma delta wiz <= 2";
 		main["dam"] = dam;
 		Json sp;
 		sp["used"] = sp_total;
@@ -1919,7 +2086,7 @@ struct ToonInventoryEditScan {
 			"Pool condiviso con dam: ancora " + std::to_string(dam_sp_remaining) +
 			" su " + std::to_string(dam_sp_cap) + " (DAM+SP " +
 			std::to_string(dam_sp_used) + "/" + std::to_string(dam_sp_cap) +
-			"). Su ogni pezzo: spellpower/hit-n-sp oppure dam, non entrambi";
+			"). Pezzo: dam e sp insieme ok se somma delta wiz <= 2";
 		main["spellpower"] = sp;
 		Json hr;
 		hr["used"] = hr_total;
@@ -2079,8 +2246,9 @@ struct ToonInventoryEditScan {
 						if(edit_pool_parse_field_key(field.c_str(), pf)) {
 							out["step"] = edit_pool_field_step(pf);
 							out["cap"] = edit_pool_field_cap(pf);
+							/* Step display: mono + artifact (class_mult sul quote reale). */
 							const edit_pool_quote step_quote =
-								edit_pool_quote_delta(pf, edit_pool_field_step(pf));
+								edit_pool_quote_paid(pf, edit_pool_field_step(pf), 1);
 							out["mxp_per_step"] = step_quote.mxp;
 							out["mxp_frac_per_step"] = step_quote.mxp_frac;
 							out["pq_per_step"] = step_quote.pq;
@@ -2190,30 +2358,45 @@ struct ToonInventoryEditScan {
 			}
 
 			const int current = pool_field_current(pool, pool_field);
-			const int target = req.find("new_value") != req.end()
-								   ? parse_json_int(req, "new_value", current)
-								   : current + parse_json_int(req, "delta", 0);
-			const int delta = target - current;
-			if(delta == 0) {
-				Json d = quote_from_pool(edit_pool_quote {});
-				d["field"] = field;
-				d["current"] = current;
-				d["target"] = target;
-				d["delta"] = 0;
-				return json_ok(d);
-			}
-			if(delta < 0) {
+			const int cap = edit_pool_field_cap(pool_field);
+			const int requested = req.find("new_value") != req.end()
+									  ? parse_json_int(req, "new_value", current)
+									  : current + parse_json_int(req, "delta", 0);
+			if(requested < current) {
 				return json_error(
 					"non puoi ridurre il pool edit (solo aumentare rispetto all'attuale)",
 					400);
 			}
+			/* Come editpool: clamp al cap listino, eccesso scartato (no overedit). */
+			const int target = std::min(requested, cap);
+			const int delta = target - current;
+			const int overflow = std::max(0, requested - target);
+			const int n_classes = class_count_for_toon(toon_id);
+			const int max_level = max_level_for_toon(toon_id);
+			const bool free_edit = max_level >= DIO_MINORE;
 
-			const edit_pool_quote quote = edit_pool_quote_delta(pool_field, delta);
+			edit_pool_quote quote {};
+			if(delta > 0 && !free_edit) {
+				quote = edit_pool_quote_paid(pool_field, delta, n_classes);
+			}
 			Json d = quote_from_pool(quote);
 			d["field"] = field;
 			d["current"] = current;
 			d["target"] = target;
+			d["requested"] = requested;
 			d["delta"] = delta;
+			d["overflow"] = overflow;
+			d["cap"] = cap;
+			d["n_classes"] = n_classes;
+			d["class_mult"] = edit_pool_class_mult(n_classes);
+			d["free_edit"] = free_edit ? 1 : 0;
+			d["payment_model"] = "editpool";
+			if(overflow > 0) {
+				d["note"] = "Cap listino: eccesso scartato (come editpool, no overedit)";
+			}
+			else if(free_edit && delta > 0) {
+				d["note"] = "Target livello >= 53: edit pool listino gratis (come editpool)";
+			}
 			return json_ok(d);
 		}
 
@@ -2485,9 +2668,18 @@ struct ToonInventoryEditScan {
 				const int char_dam_total = other_dam + piece_for_total;
 				const int char_sp_total = other_sp + piece_sp_for_total;
 				const int char_dam_sp_total = char_dam_total + char_sp_total;
+				const ObjEditCombatWizCaps wiz = object_edit_combat_wiz_caps(obj);
+				const int piece_hr_delta = object_edit_hitroll_edited_delta(obj);
+				const int other_hr = sum_owned_edited_hitroll_excluding(
+					rows, inventory_id, toon_name.c_str());
+				const int piece_hr_for_total = piece_edit ? piece_hr_delta : 0;
+				const int char_hr_total = other_hr + piece_hr_for_total;
 
 				Json dam_budget;
 				dam_budget["piece"] = piece_delta;
+				dam_budget["piece_full"] = piece_delta;
+				dam_budget["piece_wiz"] = wiz.dam_wiz();
+				dam_budget["piece_broker"] = wiz.dam_broker;
 				dam_budget["piece_current"] = object_edit_damroll_total(obj);
 				dam_budget["piece_proto"] = object_edit_damroll_prototype_total(obj);
 				dam_budget["piece_proto_vnum"] = object_edit_prototype_vnum(obj);
@@ -2507,10 +2699,14 @@ struct ToonInventoryEditScan {
 				dam_budget["piece_has_dam"] = object_edit_damroll_total(obj) > 0;
 				dam_budget["mutex_with_spellpower"] = false;
 				dam_budget["piece_dam_sp_max"] = kObjEditMaxDamSpPerPiece;
+				dam_budget["piece_hr_max"] = kObjEditMaxHitrollPerPiece;
 				d["dam_budget"] = dam_budget;
 
 				Json sp_budget;
 				sp_budget["piece"] = piece_sp_delta;
+				sp_budget["piece_full"] = piece_sp_delta;
+				sp_budget["piece_wiz"] = wiz.sp_wiz();
+				sp_budget["piece_broker"] = wiz.sp_broker;
 				sp_budget["piece_current"] = object_edit_spellpower_total(obj);
 				sp_budget["piece_max"] = kObjEditMaxSpellpowerPerPiece;
 				sp_budget["other"] = other_sp;
@@ -2526,6 +2722,22 @@ struct ToonInventoryEditScan {
 				sp_budget["mutex_with_dam"] = false;
 				sp_budget["piece_dam_sp_max"] = kObjEditMaxDamSpPerPiece;
 				d["sp_budget"] = sp_budget;
+
+				Json hr_budget;
+				hr_budget["piece"] = piece_hr_delta;
+				hr_budget["piece_full"] = piece_hr_delta;
+				hr_budget["piece_wiz"] = wiz.hr_wiz();
+				hr_budget["piece_broker"] = wiz.hr_broker;
+				hr_budget["piece_current"] = object_edit_hitroll_total(obj);
+				hr_budget["piece_max"] = kObjEditMaxHitrollPerPiece;
+				hr_budget["other"] = other_hr;
+				hr_budget["char_total"] = char_hr_total;
+				hr_budget["char_max"] = kObjEditMaxHitrollEditableTotal;
+				hr_budget["char_remaining"] =
+					std::max(0, kObjEditMaxHitrollEditableTotal - char_hr_total);
+				hr_budget["piece_edit"] = piece_edit;
+				hr_budget["source"] = "owned_edit_delta_vs_baseline";
+				d["hr_budget"] = hr_budget;
 
 				const int piece_sf_delta = object_edit_spellfail_edited_delta(obj);
 				const int other_sf = sum_owned_edited_spellfail_excluding(
@@ -3024,8 +3236,8 @@ struct ToonInventoryEditScan {
 		if(path == "/internal/apply-pool") {
 			const unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
 			const std::string field = req.value("field", "");
-			int pay_xp = parse_json_int(req, "pay_xp", 0);
-			const int pay_rune = parse_json_int(req, "pay_rune", 0);
+			const int req_pay_xp = parse_json_int(req, "pay_xp", 0);
+			const int req_pay_rune = parse_json_int(req, "pay_rune", 0);
 
 			const std::string target_name = toon_name_by_id(target_toon_id);
 
@@ -3087,31 +3299,51 @@ struct ToonInventoryEditScan {
 			}
 
 			const int current = pool_field_current(pool, pool_field);
-			const int target = req.find("new_value") != req.end()
-								   ? parse_json_int(req, "new_value", current)
-								   : current + parse_json_int(req, "delta", 0);
-			const int delta = target - current;
-			if(delta == 0) {
-				return fail_apply("nessuna modifica al pool", 400);
-			}
-			if(delta < 0) {
+			const int cap = edit_pool_field_cap(pool_field);
+			const int requested = req.find("new_value") != req.end()
+									  ? parse_json_int(req, "new_value", current)
+									  : current + parse_json_int(req, "delta", 0);
+			if(requested < current) {
 				return fail_apply(
 					"non puoi ridurre il pool edit (solo aumentare rispetto all'attuale)",
 					400);
 			}
-
-			if(pay_xp == 0 && pay_rune == 0) {
-				const edit_pool_quote quote = edit_pool_quote_delta(pool_field, delta);
-				pay_xp = static_cast<int>(quote.xp_raw);
-			}
-
-			if(!edit_pool_add_delta(&pool, pool_field, delta)) {
-				return fail_apply("delta pool rifiutato (cap listino)", 400);
+			/* Come editpool: solo fino al cap; niente spill in overedit_*. */
+			const int target = std::min(requested, cap);
+			const int delta = target - current;
+			if(delta == 0) {
+				return fail_apply(
+					requested > current
+						? "listino gia' al cap: nessuna unita' applicabile"
+						: "nessuna modifica al pool",
+					400);
 			}
 
 			const int max_level = max_level_for_toon(target_toon_id);
+			const int n_classes = class_count_for_toon(target_toon_id);
+			const bool free_edit = max_level >= DIO_MINORE;
+			const edit_pool_quote quote =
+				free_edit ? edit_pool_quote {}
+						  : edit_pool_quote_paid(pool_field, delta, n_classes);
+
+			int xp_cost = 0;
+			int rune_cost = 0;
+			std::string pay_cover_err;
+			if(!free_edit) {
+				if(!resolve_editpool_payment(req_pay_xp, req_pay_rune, quote.xp_raw,
+											 quote.pq, xp_cost, rune_cost,
+											 pay_cover_err)) {
+					return fail_apply(pay_cover_err.c_str(), 400);
+				}
+			}
+
+			if(!edit_pool_set_absolute(&pool, pool_field, target)) {
+				return fail_apply("delta pool rifiutato (cap listino)", 400);
+			}
+
 			std::string pay_err;
-			if(!deduct_payment(target_toon_id, pay_xp, pay_rune, max_level, pay_err)) {
+			if(!free_edit &&
+			   !deduct_payment(target_toon_id, xp_cost, rune_cost, max_level, pay_err)) {
 				return fail_apply(pay_err.c_str(), 402);
 			}
 
@@ -3147,8 +3379,10 @@ struct ToonInventoryEditScan {
 			d["edit_hp_regen"] = pool.edit_hp_regen;
 			d["edit_mana_regen"] = pool.edit_mana_regen;
 			d["edit_move_regen"] = pool.edit_move_regen;
-			d["paid_xp"] = pay_xp;
-			d["paid_rune"] = pay_rune;
+			d["paid_xp"] = xp_cost;
+			d["paid_rune"] = rune_cost;
+			d["delta"] = delta;
+			d["free_edit"] = free_edit ? 1 : 0;
 			d["edit_pool_migrated"] = 1;
 			return ok_apply(d);
 		}

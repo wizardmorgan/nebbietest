@@ -8,6 +8,7 @@ const path = require('path');
 const unixpass = require('unixpass');
 
 const fs = require('fs');
+const portalAudit = require('./lib/portal-audit');
 
 const PORT = parseInt(process.env.EDIT_WEB_PORT || '3080', 10);
 const SESSION_SECRET = process.env.EDIT_SESSION_SECRET || 'nebbie-edit-session-dev';
@@ -186,13 +187,24 @@ function formatHiddenBreakdown(breakdown) {
   return parts.join(', ');
 }
 
-async function mystPost(pathSuffix, body) {
+async function mystPost(pathSuffix, body, auditCtx = null) {
   const payload = { ...(body || {}) };
   if (payload.toon_id !== undefined && payload.toon_id !== null) {
     payload.toon_id = String(payload.toon_id);
   }
   if (payload.target_toon_id !== undefined && payload.target_toon_id !== null) {
     payload.target_toon_id = String(payload.target_toon_id);
+  }
+  if (auditCtx) {
+    if (auditCtx.sessionKey && !payload.session_key) {
+      payload.session_key = auditCtx.sessionKey;
+    }
+    if (auditCtx.actorToonId && !payload.actor_toon_id) {
+      payload.actor_toon_id = String(auditCtx.actorToonId);
+    }
+    if (auditCtx.actorName && !payload.actor_name) {
+      payload.actor_name = auditCtx.actorName;
+    }
   }
   const url = `${MYST_API_URL}${pathSuffix}`;
   try {
@@ -219,6 +231,79 @@ async function mystPost(pathSuffix, body) {
   } catch (err) {
     return { ok: false, error: `myst unreachable: ${err.message || err}` };
   }
+}
+
+function auditCtxFromReq(req) {
+  if (!req || !req.session || !req.session.auditSessionKey) return null;
+  return {
+    sessionKey: req.session.auditSessionKey,
+    actorToonId: req.session.sessionToonId || null,
+    actorName: req.session.sessionToonName || null,
+  };
+}
+
+async function closeAuditSession(req, reason) {
+  const key = req.session && req.session.auditSessionKey;
+  if (!key) return;
+  try {
+    await portalAudit.closeSession(dbPool, key, { reason });
+  } catch (err) {
+    console.warn('[portal-audit] closeSession:', err.message || err);
+  }
+  delete req.session.auditSessionKey;
+  delete req.session.auditSessionId;
+}
+
+async function openAuditSession(req) {
+  await closeAuditSession(req, 'reselect');
+  try {
+    const opened = await portalAudit.openSession(dbPool, {
+      actorAccountId: req.session.userId || null,
+      actorEmail: req.session.email || null,
+      actorToonId: req.session.sessionToonId || null,
+      actorToonName: req.session.sessionToonName || null,
+      actorRole: req.session.role || null,
+      actorMaxLevel: req.session.maxLevel || null,
+      clientIp: portalAudit.clientIpFromReq(req),
+      authVia: req.session.authVia || null,
+    });
+    req.session.auditSessionKey = opened.sessionKey;
+    req.session.auditSessionId = opened.sessionId;
+  } catch (err) {
+    console.warn('[portal-audit] openSession:', err.message || err);
+  }
+}
+
+/**
+ * Apply* verso myst: propaga session_key.
+ * Log Node solo se myst non ha risposto (unreachable / non-JSON): gli errori
+ * applicativi li scrive gia' edit_portal.cpp in edit_portal_event.
+ */
+async function mystApply(req, pathSuffix, body) {
+  const ctx = auditCtxFromReq(req);
+  const result = await mystPost(pathSuffix, body, ctx);
+  const transportFail =
+    !result.ok &&
+    typeof result.error === 'string' &&
+    (/unreachable/i.test(result.error) || /non JSON/i.test(result.error));
+  if (transportFail && ctx) {
+    try {
+      await portalAudit.logEvent(dbPool, {
+        sessionKey: ctx.sessionKey,
+        kind: 'node.myst.unreachable',
+        severity: 'crit',
+        actorToonId: ctx.actorToonId,
+        actorName: ctx.actorName,
+        targetToonId: body && body.target_toon_id ? Number(body.target_toon_id) : null,
+        message: result.error || 'myst unreachable',
+        detail: { path: pathSuffix },
+        notifyTelegram: true,
+      });
+    } catch (err) {
+      console.warn('[portal-audit] logEvent:', err.message || err);
+    }
+  }
+  return result;
 }
 
 function b64urlEncode(buf) {
@@ -313,6 +398,7 @@ async function establishSessionForEmail(req, email) {
     return { ok: false, error: 'account Mud non trovato per questa email' };
   }
   const user = rows[0];
+  await closeAuditSession(req, 'relogin');
   req.session.userId = user.id;
   req.session.email = user.email;
   req.session.authVia = 'wordpress_sso';
@@ -452,14 +538,23 @@ router.post('/api/login', async (req, res) => {
   if (!checkAccountPassword(password, hash)) {
     return res.status(401).json({ ok: false, error: 'credenziali non valide' });
   }
+  await closeAuditSession(req, 'relogin');
   req.session.userId = user.id;
   req.session.email = user.email;
   req.session.authVia = 'password';
   delete req.session.sessionToonId;
+  delete req.session.sessionToonName;
+  delete req.session.role;
+  delete req.session.maxLevel;
   res.json({ ok: true, email: user.email });
 });
 
-router.post('/api/logout', (req, res) => {
+router.post('/api/logout', async (req, res) => {
+  try {
+    await closeAuditSession(req, 'logout');
+  } catch (_) {
+    /* ignore */
+  }
   req.session.destroy(() => res.json({ ok: true }));
 });
 
@@ -587,13 +682,16 @@ router.post('/api/select-toon', requireAuth, async (req, res) => {
   req.session.sessionToonName = t.name;
   req.session.maxLevel = t.max_level;
   req.session.role = roleForLevel(t.max_level);
+  await openAuditSession(req);
   res.json({
     ok: true,
     toon: { id: t.id, name: t.name, maxLevel: t.max_level, role: req.session.role },
+    auditSessionKey: req.session.auditSessionKey || null,
   });
 });
 
-router.post('/api/deselect-toon', requireAuth, (req, res) => {
+router.post('/api/deselect-toon', requireAuth, async (req, res) => {
+  await closeAuditSession(req, 'deselect');
   delete req.session.sessionToonId;
   delete req.session.sessionToonName;
   delete req.session.role;
@@ -782,6 +880,7 @@ router.post('/api/quote-object-edit', requireAuth, requireSessionToon, async (re
     clear_slot: req.body.clearSlot ? 1 : 0,
     flag: req.body.flag || '',
     pending_artifact: req.body.pendingArtifact ? 1 : 0,
+    allow_combat_merge: req.body.allowCombatMerge ? 1 : 0,
   });
   res.status(result.ok ? 200 : 400).json(result);
 });
@@ -811,7 +910,7 @@ router.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, re
   if (req.session.role === 'limited') {
     return res.status(403).json({ ok: false, error: 'tier limited: apply non consentito' });
   }
-  const result = await mystPost('/internal/apply-affect', {
+  const result = await mystApply(req, '/internal/apply-affect', {
     target_toon_id: targetToonId,
     inventory_id: Number(req.body.inventoryId),
     location: Number(req.body.location),
@@ -821,6 +920,7 @@ router.post('/api/apply-affect', requireAuth, requireSessionToon, async (req, re
     pay_rune: Number(req.body.payRune || 0),
     flag: req.body.flag || '',
     pending_artifact: req.body.pendingArtifact ? 1 : 0,
+    allow_combat_merge: req.body.allowCombatMerge ? 1 : 0,
     obj_name: req.body.objName != null ? String(req.body.objName) : undefined,
     short_desc: req.body.shortDesc != null ? String(req.body.shortDesc) : undefined,
     description:
@@ -845,7 +945,7 @@ router.post('/api/apply-pool', requireAuth, requireSessionToon, async (req, res)
   if (req.session.role === 'limited') {
     return res.status(403).json({ ok: false, error: 'tier limited: apply non consentito' });
   }
-  const result = await mystPost('/internal/apply-pool', {
+  const result = await mystApply(req, '/internal/apply-pool', {
     target_toon_id: targetToonId,
     field: String(req.body.field || ''),
     new_value: req.body.newValue !== undefined ? Number(req.body.newValue) : undefined,
@@ -864,7 +964,7 @@ router.post('/api/apply-resistance', requireAuth, requireSessionToon, async (req
   if (req.session.role === 'limited') {
     return res.status(403).json({ ok: false, error: 'tier limited: apply non consentito' });
   }
-  const result = await mystPost('/internal/apply-resistance', {
+  const result = await mystApply(req, '/internal/apply-resistance', {
     target_toon_id: targetToonId,
     damage_type: Number(req.body.damageType),
     value: Number(req.body.value),
@@ -968,9 +1068,29 @@ if (BASE_PATH) {
   app.get('/', (_req, res) => res.redirect(`${BASE_PATH}/`));
 }
 
-app.listen(PORT, () => {
-  console.log(
-    `nebbie-edit-portal on http://0.0.0.0:${PORT}${BASE_PATH || ''} ` +
-      `(ssoRequired=${SSO_REQUIRED}, passwordLogin=${ALLOW_PASSWORD_LOGIN})`,
-  );
+async function start() {
+  try {
+    await portalAudit.ensureTables(dbPool);
+  } catch (err) {
+    console.warn('[portal-audit] ensureTables:', err.message || err);
+  }
+  setInterval(() => {
+    portalAudit.flushPendingTelegram(dbPool).catch((err) => {
+      console.warn('[portal-audit] flushTelegram:', err.message || err);
+    });
+  }, 15000);
+  app.listen(PORT, () => {
+    const tg = portalAudit.telegramConfigured()
+      ? 'telegram=on'
+      : `telegram=off (token/chat placeholder o EDIT_TELEGRAM_ENABLED!=1)`;
+    console.log(
+      `nebbie-edit-portal on http://0.0.0.0:${PORT}${BASE_PATH || ''} ` +
+        `(ssoRequired=${SSO_REQUIRED}, passwordLogin=${ALLOW_PASSWORD_LOGIN}, ${tg})`,
+    );
+  });
+}
+
+start().catch((err) => {
+  console.error('edit-portal start failed', err);
+  process.exit(1);
 });

@@ -100,13 +100,31 @@ struct edit_pool_quote {
 };
 
 /**
- * Costo listino per delta positivo sul pool PG (Hit/Mana/Move/regen).
- * Delta <= 0 → costo zero (riduzione non pagata).
- * Unità allineate a CheckValueObj / listino ufficiale (MXP per step).
- * PQ sul pool è 0: le rune entrano come modalità di pagamento alternativa.
+ * Costo listino grezzo (senza artifact/class) per delta positivo.
+ * Utile per display step; il pagamento ufficiale usa edit_pool_quote_paid.
  */
 [[nodiscard]] edit_pool_quote edit_pool_quote_delta(EditPoolField field,
 													int delta) noexcept;
+
+/**
+ * Unita' listino ufficiale (comando editpool / portale): XP raw per punto
+ * e rapporto rune (rune = units * num / den).
+ */
+[[nodiscard]] bool edit_pool_listino_unit(EditPoolField field, long& xp_per_unit,
+										  int& rune_num, int& rune_den) noexcept;
+
+/** Moltiplicatore mono/bi/tri (1 / 1.5 / 2). */
+[[nodiscard]] double edit_pool_class_mult(int n_classes) noexcept;
+
+/**
+ * Costo ufficiale editpool sul PG:
+ * - listino x 1.5 artifact (sempre)
+ * - XP = (listino x 1.5 x mult) / n_classes
+ * - rune = ceil(listino x 1.5 x mult)  (alternativa completa, non additiva)
+ * units <= 0 → zero.
+ */
+[[nodiscard]] edit_pool_quote edit_pool_quote_paid(EditPoolField field, int units,
+												   int n_classes) noexcept;
 
 /** Conversione MXP→rune nel portale (1 MXP listino ≈ 1e6 XP raw). */
 inline constexpr long kEditPoolPqPerMegaXp = 1000000L;

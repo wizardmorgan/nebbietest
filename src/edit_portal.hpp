@@ -18,7 +18,7 @@ inline constexpr int kEditPortalLimitedLevel = 51;
 /** Soglia Lab test kit (XP/oggetti/clone): sottoinsieme dello staff. */
 inline constexpr int kEditPortalLabLevel = 58;
 /** Incrementare quando cambia l'API HTTP interna del portale edit. */
-inline constexpr int kEditPortalApiVersion = 59;
+inline constexpr int kEditPortalApiVersion = 61;
 inline constexpr const char kEditPortalApiVersionTag[] = "portal_api_version";
 
 } // namespace Alarmud

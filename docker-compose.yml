@@ -55,6 +55,7 @@ services:
             - SERVER_PORT=${SERVER_PORT:-4002}
             - EDIT_API_PORT=8090
             - EDIT_API_SECRET=${EDIT_API_SECRET:-nebbie-edit-dev-secret}
+            - SLACK_DISABLE=${SLACK_DISABLE:-1}
             - MYSQL_HOST=mysql
             - MYSQL_DATABASE=nebbie
             - MYSQL_USER=root
@@ -63,6 +64,7 @@ services:
             - DATABASE_URL=mysql://root:secret@mysql:33306/nebbie
             - HOME=/app
             - EDIT_SYSTEM_CONFIG=/app/mudroot/lib/edit_system.json
+            - EDIT_PORTAL_AUDIT_LOG=${EDIT_PORTAL_AUDIT_LOG:-/app/edit-portal-audit.log}
         depends_on:
             mysql:
                 condition: service_healthy
@@ -91,6 +93,14 @@ services:
             - EDIT_ALLOW_PASSWORD_LOGIN=${EDIT_ALLOW_PASSWORD_LOGIN:-}
             - EDIT_COOKIE_SECURE=${EDIT_COOKIE_SECURE:-}
             - EDIT_DEV_MINT_SSO=${EDIT_DEV_MINT_SSO:-}
+            # Telegram: placeholder di default; attiva con EDIT_TELEGRAM_ENABLED=1 + token/chat reali
+            - EDIT_TELEGRAM_ENABLED=${EDIT_TELEGRAM_ENABLED:-0}
+            - EDIT_TELEGRAM_BOT_TOKEN=${EDIT_TELEGRAM_BOT_TOKEN:-REPLACE_ME_TELEGRAM_BOT_TOKEN}
+            - EDIT_TELEGRAM_CHAT_ID=${EDIT_TELEGRAM_CHAT_ID:-REPLACE_ME_TELEGRAM_CHAT_ID}
+            - EDIT_LAB_LEVEL=${EDIT_LAB_LEVEL:-58}
+            - EDIT_PORTAL_AUDIT_LOG=${EDIT_PORTAL_AUDIT_LOG:-/app/edit-portal-audit.log}
+        volumes:
+            - ${EDIT_PORTAL_AUDIT_HOST_PATH:-./edit-portal-audit.log}:/app/edit-portal-audit.log
         depends_on:
             mysql:
                 condition: service_healthy

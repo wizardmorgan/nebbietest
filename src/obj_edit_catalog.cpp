@@ -1716,6 +1716,18 @@ struct PieceCombatWizBreakdown {
 	return b;
 }
 
+ObjEditCombatWizCaps object_edit_combat_wiz_caps(const struct obj_data* obj) noexcept {
+	const PieceCombatWizBreakdown b = piece_combat_wiz_breakdown(obj, nullptr);
+	ObjEditCombatWizCaps out {};
+	out.hr_full = b.hr_total;
+	out.dam_full = b.dam_total;
+	out.sp_full = b.sp_total;
+	out.hr_broker = b.hr_broker;
+	out.dam_broker = b.dam_broker;
+	out.sp_broker = b.sp_broker;
+	return out;
+}
+
 [[nodiscard]] static bool location_touches_piece_combat_caps(int location) noexcept {
 	return location == APPLY_HITROLL || location == APPLY_DAMROLL ||
 		   location == APPLY_SPELLPOWER || location == APPLY_HITNDAM ||

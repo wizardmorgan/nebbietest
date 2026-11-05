@@ -8054,85 +8054,20 @@ std::unordered_map<struct char_data*, EditPoolPending> g_editpool_pending;
 	return pool.overedit_hp;
 }
 
-/**
- * Listino ufficiale (nebbiearcane.it / obj_value.cpp), costo per unita' raw.
- * rune_num/rune_den: rune = units * num / den (es. mana 3/2 -> 1.5 a unita').
- */
-[[nodiscard]] bool editpool_listino_unit(EditPoolField field, long& xp_per_unit,
-										 int& rune_num, int& rune_den) noexcept {
-	switch(field) {
-	case EditPoolField::Hp:
-		/* Hit [10] = 30M / 30 rune */
-		xp_per_unit = 3000000L;
-		rune_num = 3;
-		rune_den = 1;
-		return true;
-	case EditPoolField::Mana:
-		/* Mana [10] = 15M / 15 rune */
-		xp_per_unit = 1500000L;
-		rune_num = 3;
-		rune_den = 2;
-		return true;
-	case EditPoolField::Move:
-		/* Move [10] = 10M / 15 rune */
-		xp_per_unit = 1000000L;
-		rune_num = 3;
-		rune_den = 2;
-		return true;
-	case EditPoolField::HpRegen:
-		/* Hit Regen [5] = 15M / 15 rune */
-		xp_per_unit = 3000000L;
-		rune_num = 3;
-		rune_den = 1;
-		return true;
-	case EditPoolField::ManaRegen:
-		/* Mana Regen [5] = 15M / 15 rune */
-		xp_per_unit = 3000000L;
-		rune_num = 3;
-		rune_den = 1;
-		return true;
-	case EditPoolField::MoveRegen:
-		/* Move Regen [5] = 10M / 30 rune */
-		xp_per_unit = 2000000L;
-		rune_num = 6;
-		rune_den = 1;
-		return true;
-	}
-	return false;
-}
-
-/** Moltiplicatore listino mono/bi/tri (come obj_value / sito). */
+/** Moltiplicatore listino mono/bi/tri (come edit_pool_class_mult). */
 [[nodiscard]] double editpool_class_mult(struct char_data* vict) noexcept {
 	if(vict == nullptr) {
 		return 1.0;
 	}
-	const int n = HowManyClasses(vict);
-	if(n >= 3) {
-		return kObjValueClassMultTri;
-	}
-	if(n == 2) {
-		return kObjValueClassMultBi;
-	}
-	return 1.0;
+	return edit_pool_class_mult(HowManyClasses(vict));
 }
 
 /**
- * Costo sulle unita' applicate:
- * - listino ufficiale + sempre x1.5 artifact (edit PG indelebile)
- * - XP: (listino x 1.5 x mult) / n_classi
- * - rune: ceil(listino x 1.5 x mult)  - solo x mult, no /n_classi, sempre eccesso
+ * Costo sulle unita' applicate — delega a edit_pool_quote_paid (stesso listino
+ * del portale: artifact x1.5, xp/n_classi, rune=ceil).
  */
 [[nodiscard]] std::pair<long, int>
 editpool_cost_for_units(EditPoolField field, int units, struct char_data* vict) {
-	units = std::abs(units);
-	long xp_per_unit = 0;
-	int rune_num = 0;
-	int rune_den = 1;
-	if(!editpool_listino_unit(field, xp_per_unit, rune_num, rune_den) ||
-	   rune_den <= 0 || units <= 0) {
-		return {0, 0};
-	}
-
 	int n_classes = 1;
 	if(vict != nullptr) {
 		n_classes = HowManyClasses(vict);
@@ -8140,21 +8075,8 @@ editpool_cost_for_units(EditPoolField field, int units, struct char_data* vict) 
 			n_classes = 1;
 		}
 	}
-	const double mult = editpool_class_mult(vict);
-
-	const double listino_xp =
-		static_cast<double>(xp_per_unit) * static_cast<double>(units);
-	const double listino_rune = static_cast<double>(rune_num) *
-								static_cast<double>(units) /
-								static_cast<double>(rune_den);
-	/* Artifact +50%. */
-	const double art_xp = listino_xp * 1.5;
-	const double art_rune = listino_rune * 1.5;
-
-	const long xp = static_cast<long>(art_xp * mult /
-									  static_cast<double>(n_classes));
-	const int pq = static_cast<int>(std::ceil(art_rune * mult));
-	return {std::max(0L, xp), std::max(0, pq)};
+	const edit_pool_quote q = edit_pool_quote_paid(field, units, n_classes);
+	return {q.xp_raw, q.pq};
 }
 
 void send_editpool_usage(struct char_data* ch) {

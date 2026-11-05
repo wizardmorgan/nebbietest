@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
 COPY server.js ./
+COPY lib ./lib
 COPY public ./public
 ENV EDIT_WEB_PORT=3080
 EXPOSE 3080

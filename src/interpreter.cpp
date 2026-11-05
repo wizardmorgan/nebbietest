@@ -22,6 +22,7 @@
 #include <random>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unistd.h>
 /***************************  General include
  * ************************************/
@@ -1870,11 +1871,27 @@ void InterpretaRoll(struct descriptor_data *d, char *riga)
   return;
 }
 void slackNotify(const char *message, const char *emoj) {
-  slack::Slacking slack("xxx-xxx"); // where "xxx-xxx" is your Slack API token
-  // slack.set_proxy("http://10.0.22.1:8080");
-  slack.hook.Id = "/T9EQH2QB0/B9E96TMPV/rJPnMU8yqgv8NzbKWh8Twfgd";
-  slack.hook.channel_username_iconemoji("", "", emoj);
-  slack.hook.postMessage(message);
+  // Boot non deve bloccarsi se Slack e irraggiungibile (SYN hang su :443).
+  if (const char* disable = std::getenv("SLACK_DISABLE");
+      disable != nullptr && disable[0] != '\0' && disable[0] != '0') {
+    return;
+  }
+  if (message == nullptr) {
+    return;
+  }
+  const std::string msg(message);
+  const std::string emoji(emoj != nullptr ? emoj : "");
+  std::thread([msg, emoji]() {
+    try {
+      slack::Slacking slack("xxx-xxx"); // where "xxx-xxx" is your Slack API token
+      // slack.set_proxy("http://10.0.22.1:8080");
+      slack.hook.Id = "/T9EQH2QB0/B9E96TMPV/rJPnMU8yqgv8NzbKWh8Twfgd";
+      slack.hook.channel_username_iconemoji("", "", emoji.c_str());
+      slack.hook.postMessage(msg.c_str());
+    } catch (...) {
+      // Ignora errori di rete/Slack: non devono influenzare il mud.
+    }
+  }).detach();
 }
 void toonList(struct descriptor_data *d, const string &optional_message = "") {
   string message(optional_message);
