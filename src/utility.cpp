@@ -48,6 +48,8 @@
 #include "handler.hpp"
 #include "interpreter.hpp"
 #include "magic2.hpp"
+#include "phase_boss.hpp"
+#include "spec_mount_olymp.hpp"
 #include "mobact.hpp"
 #include "modify.hpp"
 #include "opinion.hpp"
@@ -945,6 +947,24 @@ int WeaponImmune(struct char_data* ch) {
 	}
 	return(FALSE);
 
+}
+
+void apply_wait_state(struct char_data* ch, int cycle) {
+	if(!ch || phase_boss_resists_crowd_control(ch)) {
+		return;
+	}
+#if not LAG_MOBILES
+	if(ch->desc) {
+		ch->desc->wait = (GetMaxLevel(ch) >= DEMIGOD) ? 0 : cycle;
+	}
+#else
+	if(ch->desc) {
+		ch->desc->wait = (GetMaxLevel(ch) >= DEMIGOD) ? 0 : cycle;
+	}
+	else {
+		ch->specials.tick_to_lag = cycle;
+	}
+#endif
 }
 
 unsigned IsImmune(struct char_data* ch, int bit) {
@@ -2680,6 +2700,12 @@ void SetHunting(struct char_data* ch, struct char_data* tch) {
 
 	if(!ch || !tch) {
 		mudlog(LOG_SYSERR, "!ch || !tch in SetHunting");
+		return;
+	}
+
+	/* Dei Olimpo: restano in sala, non inseguono dopo flee. */
+	if(IS_NPC(ch) && ch->nr >= 0
+			&& is_olympian_god_vnum(mob_index[ch->nr].iVNum)) {
 		return;
 	}
 
@@ -6351,6 +6377,7 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 		SKILL_RESCUE,
 		SKILL_TAN,
 		SKILL_BELLOW,
+		SKILL_HILT_SMASH,
 		0
 	};
 
@@ -6366,6 +6393,7 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 		SKILL_REMOVE_TRAP,
 		SKILL_TSPY,
 		SKILL_EAVESDROP,
+		SKILL_CHEAP_SHOT,
 		0
 	};
 
@@ -6383,6 +6411,7 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 		SKILL_DODGE,
 		SKILL_SWITCH_OPP,
 		SKILL_SPRING_LEAP,
+		SKILL_PRESSURE_POINT,
 		0
 	};
 
@@ -6405,6 +6434,7 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 		SKILL_TAN,
 		SKILL_HIDE,
 		SKILL_BELLOW,
+		SKILL_FURY_HOWL,
 		0
 	};
 
@@ -6438,6 +6468,9 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 	case CLASS_WARRIOR:
 		for(f=0; kwar[f]; f++) {
 			if(id == kwar[f]) {
+				if(id == SKILL_HILT_SMASH && liv < 15) {
+					return FALSE;
+				}
 				return TRUE;
 			}
 		}
@@ -6445,6 +6478,9 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 	case CLASS_THIEF:
 		for(f=0; kthi[f]; f++) {
 			if(id == kthi[f]) {
+				if(id == SKILL_CHEAP_SHOT && liv < 15) {
+					return FALSE;
+				}
 				return TRUE;
 			}
 		}
@@ -6457,6 +6493,9 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 	case CLASS_MONK:
 		for(f=0; kmon[f]; f++) {
 			if(id == kmon[f]) {
+				if(id == SKILL_PRESSURE_POINT && liv < 15) {
+					return FALSE;
+				}
 				return TRUE;
 			}
 		}
@@ -6464,6 +6503,9 @@ bool CheckPrac(int classe, int id, int liv) {  // SALVO implemento un controllo 
 	case CLASS_BARBARIAN:
 		for(f=0; kbar[f]; f++) {
 			if(id == kbar[f]) {
+				if(id == SKILL_FURY_HOWL && liv < 15) {
+					return FALSE;
+				}
 				return TRUE;
 			}
 		}

@@ -47,10 +47,12 @@
 #include "magicutils.hpp"
 #include "mobact.hpp"
 #include "opinion.hpp"
+#include "phase_boss.hpp"
 #include "reception.hpp"
 #include "regen.hpp"
 #include "procarea.hpp"
 #include "procarea_exp.hpp"
+#include "spec_mount_olymp.hpp"
 #include "spell_parser.hpp"
 #include "toon_migration.hpp"
 
@@ -733,6 +735,10 @@ bool CheckMirror(struct char_data* victim) {
 bool CheckEquilibrium(struct char_data* ch) {
 	int val;
 	int percent;
+
+	if(phase_boss_resists_crowd_control(ch)) {
+		return true;
+	}
 
 	if(!(GET_RACE(ch) == RACE_DWARF)) {
 		return(FALSE);
@@ -3502,6 +3508,35 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
                                 }
                                 CheckAchie(tmp, quest_idx, QUEST_ACHIE);
                             }
+                        }
+                    }
+                }
+
+            // Contatore dei dell'Olimpo (OTHER)
+                if(victim_vnum > 0 && is_olympian_god_vnum(victim_vnum))
+                {
+                    struct char_data* tmp;
+                    for(tmp = real_roomp(ch->in_room)->people; tmp; tmp = tmp->next_in_room)
+                    {
+                        if(IS_PC(tmp) && in_group(tmp, ch))
+                        {
+                            if(IS_POLY(tmp))
+                            {
+                                tmp->desc->original->specials.achievements[OTHER_ACHIE][ACHIE_OLYMP_GODS] += 1;
+                                if(!IS_SET(tmp->desc->original->specials.act, PLR_ACHIE))
+                                {
+                                    SET_BIT(tmp->desc->original->specials.act, PLR_ACHIE);
+                                }
+                            }
+                            else
+                            {
+                                tmp->specials.achievements[OTHER_ACHIE][ACHIE_OLYMP_GODS] += 1;
+                                if(!IS_SET(tmp->specials.act, PLR_ACHIE))
+                                {
+                                    SET_BIT(tmp->specials.act, PLR_ACHIE);
+                                }
+                            }
+                            CheckAchie(tmp, ACHIE_OLYMP_GODS, OTHER_ACHIE);
                         }
                     }
                 }
