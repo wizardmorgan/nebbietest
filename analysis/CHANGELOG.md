@@ -1,29 +1,166 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
-## 1.15.30 — 2026-09-29
+## 1.15.64 — 2026-11-08
 
-- **ngroupcmd (critico)**: trigger regex `^\[Nome\]` non scattava sulle righe gtell con
-  colori `$c0012[$c0015Martin$…]` (formato server). Un solo trigger substring
-  `dice al gruppo '` + parsing con `stripColors` (come autoloot/gruppo).
+- **usa / slot schiena**: `onWearBackLine` chiudeva il guard con
+  `endWeaponSwapGuard(false)` azzerando lo stash; un `Smetti di usare` zaino in
+  ritardo svuotava «sulla schiena» e il timeout non poteva ripristinare. Ora
+  `end(..., false)` spegne solo busy e lascia lo stash fino al restore del timeout.
 
-## 1.15.29 — 2026-09-29
+## 1.15.63 — 2026-11-08
 
-- **npackageupdate (critico)**: l'URL con `?cb=` non finiva in `.mpackage` → Mudlet rifiutava
-  `installPackage` dopo `uninstallPackage` (profilo senza dashboard e senza `n*`). URL pulito;
-  install al tick successivo via `_G.NebbieDashRunPendingPackageInstall` (sopravvive alla disinstallazione).
+- **Finestra floating chat** (`nchat`): raccoglie say, gt/gtell, tell, whisper,
+  ask, gossip, shout (formati `act.comm.cpp`). Preferenza `chat_window` in
+  `nebbie-dash-preferences.txt`.
 
-## 1.15.28 — 2026-09-29
+## 1.15.62 — 2026-11-08
 
-- **ngroupcmd**: trigger rapido su `[Nome] dice al gruppo 'frase'` (gtell). Comando
-  `ngroupcmd dro adrenalize` salva in `~/nebbie-group-cmds.txt` e invia `adrenalize chunli`
-  quando qualcuno dice `dro` in gruppo (`{name}` = speaker minuscolo). Anche `list`, `reload`,
-  `del`, `add`.
+- **Ident possesso (cedibile)**: give/drop aggiornano il DB solo se l’oggetto è
+  `cedibile`. Auto con flag identify `PROCAREA-REWARD`; override con
+  `nidentdb cedibile|noncedibile <oggetto>`. Match stretto (niente “Anello dei nani”
+  → “anello varco…”).
+- **usa / slot schiena**: evita che un `Smetti di usare` zaino in ritardo lasci
+  «sulla schiena» vuoto; stash + restore e timeout più lungo sul cambio arma.
 
-## 1.15.27 — 2026-09-29
+## 1.15.61 — 2026-11-08
 
-- **Autosplit (critico)**: due trigger sulla stessa riga `C'erano N monete.` (duplicati Mudlet)
-  chiamavano `onLootLine` due volte; il secondo importo si sommava al controllo gruppo gia' attivo
-  → `split` doppio (es. 150000 loot, split 300000). Dedupe 2 s per riga/importo.
+- Docs/messaggi: **non esiste** “Installa da URL” in Package Manager. Istruzioni corrette:
+  `lua installPackage("…")` o drag-and-drop del link sul profilo.
+
+## 1.15.60 — 2026-11-08
+
+- **npackageupdate**: non usa più solo jsDelivr `@main` (poteva restare stale, es.
+  1.15.56). Risolve lo SHA tip di `main` via GitHub API e scarica il `.mpackage`
+  pinnato a quel commit.
+
+## 1.15.59 — 2026-11-08
+
+- **Know al look in stanza**: accanto al nome mob già in archivio appende tag
+  `[L51 | SUSC:… | IMM:… | RESI:… | HR>+4]` (info critiche; resto in `nknowdb`).
+- **`+N` = soglia hitroll arma** (non un tipo): armi +0..+N → 0 danni; serve +N+1.
+  ENERGY resta un tipo; `+4` è separato (`hitrollResistMax` / `hitrollImmuneMax`).
+
+## 1.15.58 — 2026-11-08
+
+- **Know monster highlight**: evidenzia livello (`N^`), riga suscettibile (giallo su
+  rosso), resistente, immune; riepilogo `[Know]` a fine cast.
+- Se un tipo è sia immune sia resistente, in archivio/riepilogo resta solo **immune**.
+- Parser: tollera `HOLD .` / `POISON .`.
+
+## 1.15.57 — 2026-11-08
+
+- **Highlight `<impugnato>`**: colora solo la stringa `<impugnato>`, non il nome arma.
+- **Autosplit**: non invia più `group` a ogni loot/cadavere; `split <importo>` diretto.
+
+## 1.15.56 — 2026-11-08
+
+- **Identify omonimi**: stesso nome + stesse caratteristiche (tipo/flags/peso/valore/
+  rent/AC/dado/affects/…) → aggiorna la stessa entry; caratteristiche diverse →
+  nuova entry con suffisso `#2`, `#3`, …
+- **`nidentdb export <NomePg>`**: CSV di tutti gli identify del PG in
+  `profiles/ndashboard/<NomePg>-gg-mm-aaaa-hh-mm-ss.csv`.
+
+## 1.15.55 — 2026-11-08
+
+- **Archivio know monster** (`nknowdb` / `nknowdb race` / `nknowdbreload`): cattura il
+  blocco di `cast 'know monster'` e lo salva in `nebbie-know-db.lua` (cartella
+  condivisa `profiles/ndashboard`), stesso schema di `nidentdb`.
+- Merge dei campi tra cast a livelli diversi; numeri `GetApprox` aggiornati a ogni cast.
+- Evidenziazioni / testo extra su look o room listing: **non** in questa release
+  (criteri da definire).
+
+## 1.15.54 — 2026-11-08
+
+- **URL download**: canonico su **jsDelivr**
+  (`cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/...mpackage`).
+  `raw.githubusercontent.com` serviva ancora il `.mpackage` 1.15.51 dopo il push 1.15.53
+  (CDN, anche con `?cb=`).
+
+## 1.15.53 — 2026-11-08
+
+- **`npackageupdate` ripristinato**: scarica/reinstalla da
+  `wizardmorgan/nebbie-mudlet-dashboard` `main` (+ cache-bust).
+  Alias `npackageupdate` / `npackageupdate force|forza`.
+- Chiarito: la tab **Aggiornamenti** di Alt+O non elenca i package installati da URL
+  GitHub (solo mpkg ufficiale); usare `npackageupdate` o **Installa da URL**.
+- URL package allineato al repo personale (non nebbietest).
+
+## 1.15.52 — 2026-11-08
+
+- **Evidenziazioni testo** (da dadomud): gemme (colore + `[descrizione]`), metalli/minerali
+  (solo colore); aura/RESANK, disarm altri, sanc warning/gone, `<impugnato>`, dig humber /
+  filone esaurito. Preferenza `text_highlights`; suoni opzionali in `nebbie-dash-sounds.txt`.
+- Nessuna automazione dig/swap armi di dadomud: solo highlight (+ suono se configurato).
+
+## 1.15.51 — 2026-11-08
+
+- **Archivio identify condiviso**: ogni identify (spell o pergamena) viene salvato in tempo
+  reale in `profiles/ndashboard/nebbie-ident-db.lua` (comune a tutti i profili).
+- Cattura leggera: trigger di start su `La conoscenza ti pervade:`; catch-all attivo solo
+  durante il blocco; salvataggio deferred (0.2s) per non lagare.
+- **Possesso**: `Dai il … a X.` trasferisce l’oggetto; `Posi il ….` → “lasciato in terra”
+  e richiesta `nidentdb hold <NomePg>` (o `nidentdb hold <oggetto> <NomePg>`).
+- Comandi: `nidentdb [query]`, `nidentdb where <query>`, `nidentdb char <nome>`,
+  `nidentdb hold …`, `nidentdbreload`.
+
+## 1.15.50 — 2026-11-06
+
+- **Disarmo (armi trattenute da rune)**: su messaggio `... ti sfugge dalle mani, ma le rune ...`
+  invia solo `wield <keyword>` (no `get`). Keyword da `nebbie-item-keywords.txt` se serve.
+- Il messaggio classico `... vola dalla tua presa` resta `get` + `wield` come prima.
+
+## 1.15.49 — 2026-10-11
+
+- **Keys**: al boot/`nfix` rimuove i tasti legacy `nebbie-keypad * num/nav` (duplicati lasciati da
+  Mudlet dopo aggiornamento package 1.15.47 → 1.15.48). Comando `nkeys` forza la pulizia.
+
+## 1.15.48 — 2026-10-10
+
+- **Tastierino numerico**: movimento solo sui tasti **fisici** del numpad (2/4/6/8, 5, 9/3) con
+  modifier Keypad; rimossi i binding «nav» su codici freccia (intercettavano le frecce della
+  tastiera estesa su Mac). **Num Lock ON**.
+
+## 1.15.36 — 2026-10-05
+
+- **usa (critico)**: `usa flamberga` non usava più `boris`/`noor` sbagliati — rispetta
+  l'argomento digitato, risolve da `displayName`/`nebbie-item-keywords.txt` (es.
+  `flamberga boris`); zaino con stessa logica delle macro fame (`korred`, non ultima parola).
+
+## 1.15.35 — 2026-10-05
+
+- **npackageupdate**: scarica il `.mpackage` con **`downloadFile` + `?cb=`** e installa dal
+  file locale (GitHub raw serviva spesso la versione precedente con `installPackage(URL)`).
+- Include **1.15.34** (GUI Equip+Speedwalk sinistra, no spell) se eri rimasto a 1.15.33.
+
+## 1.15.34 — 2026-10-05
+
+- **GUI**: rimosso pannello **Spell attivi**; niente bordo destro — solo colonna sinistra
+  **Equip** (sopra) + **Speedwalk** (sotto). Altezze **proporzionali al testo** (righe stimate);
+  override manuale con **`nheights <10-90>`** o **`nheights auto`**. Larghezza unica **`nwidth`**.
+- **Equip**: slot vuoti evidenziati (**`▢ VUOTO ▢`** giallo/rosso).
+
+## 1.15.33 — 2026-10-05
+
+- **Config (semplificata)**: dati in **`.config/mudlet/profiles/ndashboard/`** (Windows:
+  `C:\Users\<utente>\.config\mudlet\profiles\ndashboard`), condivisa tra profili Mudlet.
+  File indice **`profiles/nebbie-dash-config-root.txt`** (percorso assoluto). Rimossi override
+  env/`~/NebbieDash`. Al boot: crea `ndashboard` + scheletri file testo vuoti/commentati.
+  Migrazione automatica da home profilo o da `~/NebbieDash`.
+
+## 1.15.32 — 2026-10-05
+
+- **npackageupdate (critico)**: dopo `uninstallPackage` lo script del package non arrivava mai a
+  `installPackage` (profilo senza comandi `n*`). Installazione differita su `_G` + `tempTimer` con
+  callback stringa; URL `.mpackage` senza `?cb=` (Mudlet rifiuta query dopo l'estensione).
+- Handler di backup su `sysUninstallPackage` per schedulare l'install se il timer principale fallisce.
+
+## 1.15.31 — 2026-10-05
+
+- **GUI**: rimosso pannello **Armi** (colonna equip a tutta altezza).
+- **usa**: alias `usa <keyword>` per cambio arma (stessa logica di prima, senza click).
+- **Config centralizzata**: tutti i file `nebbie-*` e dati PG in **`~/NebbieDash/`**
+  (condiviso tra profili Mudlet); migrazione automatica dalla home del profilo.
+  Comando **`nconfigdir`**; override con `NEBBIE_DASH_CONFIG` o `~/NebbieDash/config-root.txt`.
 
 ## 1.15.26 — 2026-09-27
 
