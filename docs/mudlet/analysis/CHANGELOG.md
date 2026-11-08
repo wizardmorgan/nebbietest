@@ -1,5 +1,108 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.64 — 2026-11-08
+
+- **usa / slot schiena**: `onWearBackLine` chiudeva il guard con
+  `endWeaponSwapGuard(false)` azzerando lo stash; un `Smetti di usare` zaino in
+  ritardo svuotava «sulla schiena» e il timeout non poteva ripristinare. Ora
+  `end(..., false)` spegne solo busy e lascia lo stash fino al restore del timeout.
+
+## 1.15.63 — 2026-11-08
+
+- **Finestra floating chat** (`nchat`): raccoglie say, gt/gtell, tell, whisper,
+  ask, gossip, shout (formati `act.comm.cpp`). Preferenza `chat_window` in
+  `nebbie-dash-preferences.txt`.
+
+## 1.15.62 — 2026-11-08
+
+- **Ident possesso (cedibile)**: give/drop aggiornano il DB solo se l’oggetto è
+  `cedibile`. Auto con flag identify `PROCAREA-REWARD`; override con
+  `nidentdb cedibile|noncedibile <oggetto>`. Match stretto (niente “Anello dei nani”
+  → “anello varco…”).
+- **usa / slot schiena**: evita che un `Smetti di usare` zaino in ritardo lasci
+  «sulla schiena» vuoto; stash + restore e timeout più lungo sul cambio arma.
+
+## 1.15.61 — 2026-11-08
+
+- Docs/messaggi: **non esiste** “Installa da URL” in Package Manager. Istruzioni corrette:
+  `lua installPackage("…")` o drag-and-drop del link sul profilo.
+
+## 1.15.60 — 2026-11-08
+
+- **npackageupdate**: non usa più solo jsDelivr `@main` (poteva restare stale, es.
+  1.15.56). Risolve lo SHA tip di `main` via GitHub API e scarica il `.mpackage`
+  pinnato a quel commit.
+
+## 1.15.59 — 2026-11-08
+
+- **Know al look in stanza**: accanto al nome mob già in archivio appende tag
+  `[L51 | SUSC:… | IMM:… | RESI:… | HR>+4]` (info critiche; resto in `nknowdb`).
+- **`+N` = soglia hitroll arma** (non un tipo): armi +0..+N → 0 danni; serve +N+1.
+  ENERGY resta un tipo; `+4` è separato (`hitrollResistMax` / `hitrollImmuneMax`).
+
+## 1.15.58 — 2026-11-08
+
+- **Know monster highlight**: evidenzia livello (`N^`), riga suscettibile (giallo su
+  rosso), resistente, immune; riepilogo `[Know]` a fine cast.
+- Se un tipo è sia immune sia resistente, in archivio/riepilogo resta solo **immune**.
+- Parser: tollera `HOLD .` / `POISON .`.
+
+## 1.15.57 — 2026-11-08
+
+- **Highlight `<impugnato>`**: colora solo la stringa `<impugnato>`, non il nome arma.
+- **Autosplit**: non invia più `group` a ogni loot/cadavere; `split <importo>` diretto.
+
+## 1.15.56 — 2026-11-08
+
+- **Identify omonimi**: stesso nome + stesse caratteristiche (tipo/flags/peso/valore/
+  rent/AC/dado/affects/…) → aggiorna la stessa entry; caratteristiche diverse →
+  nuova entry con suffisso `#2`, `#3`, …
+- **`nidentdb export <NomePg>`**: CSV di tutti gli identify del PG in
+  `profiles/ndashboard/<NomePg>-gg-mm-aaaa-hh-mm-ss.csv`.
+
+## 1.15.55 — 2026-11-08
+
+- **Archivio know monster** (`nknowdb` / `nknowdb race` / `nknowdbreload`): cattura il
+  blocco di `cast 'know monster'` e lo salva in `nebbie-know-db.lua` (cartella
+  condivisa `profiles/ndashboard`), stesso schema di `nidentdb`.
+- Merge dei campi tra cast a livelli diversi; numeri `GetApprox` aggiornati a ogni cast.
+- Evidenziazioni / testo extra su look o room listing: **non** in questa release
+  (criteri da definire).
+
+## 1.15.54 — 2026-11-08
+
+- **URL download**: canonico su **jsDelivr**
+  (`cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/...mpackage`).
+  `raw.githubusercontent.com` serviva ancora il `.mpackage` 1.15.51 dopo il push 1.15.53
+  (CDN, anche con `?cb=`).
+
+## 1.15.53 — 2026-11-08
+
+- **`npackageupdate` ripristinato**: scarica/reinstalla da
+  `wizardmorgan/nebbie-mudlet-dashboard` `main` (+ cache-bust).
+  Alias `npackageupdate` / `npackageupdate force|forza`.
+- Chiarito: la tab **Aggiornamenti** di Alt+O non elenca i package installati da URL
+  GitHub (solo mpkg ufficiale); usare `npackageupdate` o **Installa da URL**.
+- URL package allineato al repo personale (non nebbietest).
+
+## 1.15.52 — 2026-11-08
+
+- **Evidenziazioni testo** (da dadomud): gemme (colore + `[descrizione]`), metalli/minerali
+  (solo colore); aura/RESANK, disarm altri, sanc warning/gone, `<impugnato>`, dig humber /
+  filone esaurito. Preferenza `text_highlights`; suoni opzionali in `nebbie-dash-sounds.txt`.
+- Nessuna automazione dig/swap armi di dadomud: solo highlight (+ suono se configurato).
+
+## 1.15.51 — 2026-11-08
+
+- **Archivio identify condiviso**: ogni identify (spell o pergamena) viene salvato in tempo
+  reale in `profiles/ndashboard/nebbie-ident-db.lua` (comune a tutti i profili).
+- Cattura leggera: trigger di start su `La conoscenza ti pervade:`; catch-all attivo solo
+  durante il blocco; salvataggio deferred (0.2s) per non lagare.
+- **Possesso**: `Dai il … a X.` trasferisce l’oggetto; `Posi il ….` → “lasciato in terra”
+  e richiesta `nidentdb hold <NomePg>` (o `nidentdb hold <oggetto> <NomePg>`).
+- Comandi: `nidentdb [query]`, `nidentdb where <query>`, `nidentdb char <nome>`,
+  `nidentdb hold …`, `nidentdbreload`.
+
 ## 1.15.50 — 2026-11-06
 
 - **Disarmo (armi trattenute da rune)**: su messaggio `... ti sfugge dalle mani, ma le rune ...`

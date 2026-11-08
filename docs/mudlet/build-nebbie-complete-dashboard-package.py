@@ -2,8 +2,8 @@
 """Build script for the "nebbie-complete-dashboard-package" Mudlet package.
 
 Genera un .mpackage minimo (config.lua + XML root, formato documentato in
-docs/mudlet/analysis/MUDLET-WIKI-NOTES.md §7) a partire da:
-  - docs/mudlet/nebbie-complete-dashboard-package-core.lua (logica principale)
+analysis/MUDLET-WIKI-NOTES.md §7) a partire da:
+  - nebbie-complete-dashboard-package-core.lua (logica principale)
 
 A differenza di build-nebbie-package.py (legacy, ~2000 righe, generazione da
 sorgente C++), questo script e' intenzionalmente piccolo: il package nuovo non
@@ -37,7 +37,7 @@ def read_pkg_ver_from_core():
 
 PKG_VER = read_pkg_ver_from_core()
 PKG_URL = (
-    "https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/"
+    "https://cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/"
     f"{PKG_NAME}.mpackage"
 )
 PKG_CREATED = "2026-09-26"
@@ -100,8 +100,9 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   funzionalità nuove non venivano attivati finché non si riavviava
   completamente Mudlet.
 - **Speedwalk**: sezioni collassabili; formati `(desc) dirs` e `dirs (desc)`; `nspeedwalks` diagnostico.
-- **Aggiornamento package**: Gestione pacchetti Mudlet (**Alt+O**) — campo `website` nel package
-  (URL .mpackage); oppure GMCP `Client.GUI` al login (versione server = config.lua).
+- **Aggiornamento package**: comando **`npackageupdate`** (risolve SHA tip di `main`).
+  Manuale: `lua installPackage("…mpackage")` o drag-and-drop del link sul profilo
+  (non c’è un bottone “Installa da URL” in Alt+O).
 - **Cambio arma**: alias **`usa <parola-chiave>`** (sequenza borsa come
   nebbie-play-all; keyword da equip/`identify`/`nebbie-item-keywords.txt`).
   Il vecchio pannello "Armi" è stato rimosso (equip a tutta altezza).
@@ -110,6 +111,13 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   `C:/Users/<tu>/.config/mudlet/profiles/ndashboard`). Indice:
   **`profiles/nebbie-dash-config-root.txt`**. Comando **`nconfigdir`**; scheletri
   creati al primo avvio; migrazione da profilo singolo o da `~/NebbieDash`.
+- **Archivio identify** (`nidentdb`): salva in tempo reale ogni identify
+  (spell/pergamena) in `nebbie-ident-db.lua` condiviso; cerca per nome e
+  incrocia con l’equip in cache (`nidentdb where`).
+- **Archivio know monster** (`nknowdb`): salva il blocco di `cast 'know monster'`
+  in `nebbie-know-db.lua` condiviso; cerca per nome/razza/hate/susc.
+- **Evidenziazioni testo**: gemme/metalli + aura/disarm/sanc/dig/`<impugnato>`
+  (stile dadomud); `text_highlights` e suoni opzionali in `nebbie-dash-sounds.txt`.
 - **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
   comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
   perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
@@ -130,7 +138,7 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   scrive un log completo per ogni nome-toon in `<Toon>-YYYY-MM-DD.txt`.
 - **`nbatchverify`**: controlla i log batch rispetto al CSV e ai comandi attesi;
   report in `<Toon>-YYYY-MM-DD.verify.txt`. Script offline:
-  `docs/mudlet/tests/verify_batch_log.py`.
+  `tests/verify_batch_log.py`.
 - **`nidentbatch`**: `oload $3` poi identify/junk con **`$ed`** = **`ED`+nome-toon** ($1);
   output CSV giornaliero. **`nidentbatch resume`**: salta righe gia' nel CSV di oggi.
 
@@ -139,8 +147,7 @@ login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
 bloccato dopo un aggiornamento.
 
 Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
-`docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
-repository del progetto.
+`analysis/USAGE.md` e `analysis/CHANGELOG.md` in questo repository.
 """
 BUILD_DIR = os.path.join(HERE, "nebbie-complete-dashboard-package-build")
 XML_PATH = os.path.join(BUILD_DIR, f"{PKG_NAME}.xml")
@@ -199,6 +206,16 @@ ALIASES = [
     ("nebbie-dash-ident-batch", "^nidentbatch$", "NebbieDash.cmdIdentBatch()"),
     ("nebbie-dash-ident-batch-filter", "^nidentbatch (.+)$", "NebbieDash.cmdIdentBatch(matches[2])"),
     ("nebbie-dash-ident-batch-reload", "^nidentbatchreload$", "NebbieDash.cmdReloadIdentBatch()"),
+    ("nebbie-dash-ident-db", "^nidentdb$", "NebbieDash.cmdIdentDb(\"\")"),
+    ("nebbie-dash-ident-db-args", "^nidentdb (.+)$", "NebbieDash.cmdIdentDb(matches[2])"),
+    ("nebbie-dash-ident-db-reload", "^nidentdbreload$", "NebbieDash.cmdReloadIdentDb()"),
+    ("nebbie-dash-know-db", "^nknowdb$", "NebbieDash.cmdKnowDb(\"\")"),
+    ("nebbie-dash-know-db-args", "^nknowdb (.+)$", "NebbieDash.cmdKnowDb(matches[2])"),
+    ("nebbie-dash-know-db-reload", "^nknowdbreload$", "NebbieDash.cmdReloadKnowDb()"),
+    ("nebbie-dash-chat", "^nchat$", "NebbieDash.cmdChat(\"\")"),
+    ("nebbie-dash-chat-args", "^nchat (.+)$", "NebbieDash.cmdChat(matches[2])"),
+    ("nebbie-dash-package-update", "^npackageupdate(?: (force|forza))?$",
+     "NebbieDash.cmdPackageUpdate(matches[2])"),
 ]
 
 
