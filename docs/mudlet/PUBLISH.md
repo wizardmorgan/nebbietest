@@ -1,30 +1,19 @@
-# Pubblicare su `wizardmorgan/nebbie-mudlet-dashboard`
+# Pubblicazione (repo `wizardmorgan/nebbie-mudlet-dashboard`)
 
-**Download canonico** (Mudlet Alt+O → Installa da URL, campo `website` nel package, GMCP `Client.GUI`):
+**URL installazione Mudlet (unico canonico):**
 
-`https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage`
+`https://cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/nebbie-complete-dashboard-package.mpackage`
 
-Repo: **https://github.com/wizardmorgan/nebbie-mudlet-dashboard**
+(Alternativa GitHub raw, a volte in cache:  
+`https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage`)
 
-## Da `nebbietest` (cloud agent / CI)
-
-Dopo modifiche in `docs/mudlet/`:
-
-```bash
-./scripts/publish-nebbie-mudlet-dashboard.sh
-```
-
-Lo script: build `.mpackage`, sync su clone di `nebbie-mudlet-dashboard`, commit e push su `main`.
-
-Copia di sviluppo su nebbietest (branch `nebbie-mudlet-dashboard`):
-
-`https://github.com/wizardmorgan/nebbietest/tree/nebbie-mudlet-dashboard`
-
-## Da Mac (manuale)
-
-Stesso script, con `gh auth login` + `gh auth setup-git` se il push fallisce.
+## Da questo repository
 
 ```bash
-cd /path/to/nebbietest
-./scripts/publish-nebbie-mudlet-dashboard.sh
+python3 build-nebbie-complete-dashboard-package.py
+git add -A
+git commit -m "release: ..."
+git push origin main
 ```
+
+**Cloud Agent:** secret `WIZARDMORGAN_GITHUB_SSH_KEY` (deploy key con write) oppure PAT con **Contents: write** su questo repository.
