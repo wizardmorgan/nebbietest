@@ -58,6 +58,7 @@
 #include "create.hpp"
 #include "create.mob.hpp"
 #include "create.obj.hpp"
+#include "editor_term.hpp"
 #include "db.hpp"
 #include "events.hpp"
 #include "fight.hpp"
@@ -125,7 +126,7 @@ bool no_specials = false; /* Suppress ass. of special routines */
 long Uptime;              /* time that the game has been up */
 
 int maxdesc, avail_descs;
-int tics = 0; /* for extern checkpointing */
+volatile std::sig_atomic_t tics = 0; /* for extern checkpointing */
 int PORT = 0;
 
 uint64_t aTimeCheck[PULSE_MOBILE];
@@ -591,8 +592,13 @@ void game_loop(int s) {
        * il prompt e' completo. Serve per i trigger sul prompt e per la misura
        * del lag lato client.
        */
+      /*
+       * Anche dentro oedit/medit/redit: Mudlet tiene in sospeso le righe
+       * senza newline finche' non arriva GA o un \n. Telnet ignora il GA.
+       */
       if (point->str || point->showstr_point ||
-          point->connected == CON_PLYNG) {
+          point->connected == CON_PLYNG ||
+          IsEditorState(point->connected)) {
         static const char go_ahead[] = {static_cast<char>(IAC),
                                         static_cast<char>(GA), '\0'};
         write_to_descriptor(point->descriptor, go_ahead);
@@ -650,7 +656,8 @@ void game_loop(int s) {
     buglog(LOG_CHECK, "Valore medio eq in gioco: %f", AverageEqIndex(-1));
   }
 
-  tics++; /* tics since last checkpoint signal */
+  tics = tics + 1; /* tics since last checkpoint signal */
+  process_pending_signals();
   /**
    * Changed timing out select with thread_sleep as a first step to a
    * multithuread version We could at least move the non playing sockets to
@@ -815,14 +822,19 @@ void write_to_output_now(const char* txt, descriptor_data* t) {
 /**
  * Rimette insieme i pezzi accodati e li divide in righe. ParseAnsiColors
  * aggiunge il reset colore DOPO il \n\r (e act() manda un "$c0007" a parte):
- * quei codici vengono spostati prima del \n\r della riga a cui appartengono,
+ * quei reset vengono spostati prima del \n\r della riga a cui appartengono,
  * cosi' le righe colorate finiscono con \n\r e possono essere raggruppate.
+ * Solo i reset: il primo colore diverso apre la riga dopo e resta li'
+ * (altrimenti il (xN) di coalesce_batch prenderebbe il colore della riga dopo).
  */
 [[nodiscard]] std::vector<std::string> split_batch_lines(const std::vector<std::string>& chunks) {
   std::string all;
   for (const std::string& chunk : chunks) {
     all += chunk;
   }
+  /* Stesso reset che appende ParseAnsiColors; vuoto con SYS_NOANSI. */
+  const char* reset_seq = ansi_parse("0007");
+  const std::string reset = reset_seq != nullptr ? reset_seq : "";
   std::vector<std::string> lines;
   std::size_t pos = 0;
   while (pos < all.size()) {
@@ -833,10 +845,9 @@ void write_to_output_now(const char* txt, descriptor_data* t) {
     }
     std::size_t next = eol + 2;
     std::string trailing;
-    for (std::size_t len = ansi_sequence_length(all, next); len > 0;
-         len = ansi_sequence_length(all, next)) {
-      trailing += all.substr(next, len);
-      next += len;
+    while (!reset.empty() && all.compare(next, reset.size(), reset) == 0) {
+      trailing += reset;
+      next += reset.size();
     }
     lines.push_back(all.substr(pos, eol - pos) + trailing + "\n\r");
     pos = next;
@@ -1607,6 +1618,7 @@ void close_socket(struct descriptor_data *d) {
    * buffer e stacca d->str prima che d venga cancellato. */
   server_text_on_descriptor_close(d);
   edit_broker_on_descriptor_close(d);
+  EditorAbortText(d);
 
   if (d->descriptor == maxdesc) {
     --maxdesc;

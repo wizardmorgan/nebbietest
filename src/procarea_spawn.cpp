@@ -126,6 +126,7 @@ static struct obj_data* procarea_create_runtime_obj(int logical_vnum);
 
 static void procarea_link_boss_add(char_data* add, char_data* boss);
 static void procarea_link_anchor_add(char_data* add, char_data* anchor);
+[[nodiscard]] static bool procarea_is_runtime_mob(const char_data* mob);
 
 #include "procarea_mob_desc.inc"
 #include "procarea_themes.inc"
@@ -285,6 +286,68 @@ static constexpr float kProcPowerBandThresholds[PROCAREA_TEMPLATE_BANDS] = {
 	diff.depth_extra_pct =
 		std::max(cfg.solo_depth_floor, diff.depth_extra_pct - cfg.solo_depth_delta);
 	return diff;
+}
+
+/** Densita' gruppo: 50% a <=2 PG, lineare fino a 100% a 5+, poi piatto. */
+[[nodiscard]] static float procarea_party_density_mult(int party_size) {
+	const int n = std::clamp(party_size, 1, PROCAREA_PARTY_DENSITY_CAP);
+	if(n <= 2) {
+		return PROCAREA_PARTY_DENSITY_FLOOR;
+	}
+	if(n >= PROCAREA_PARTY_DENSITY_CAP) {
+		return 1.0f;
+	}
+	const float t = static_cast<float>(n - 2) /
+					static_cast<float>(PROCAREA_PARTY_DENSITY_CAP - 2);
+	return PROCAREA_PARTY_DENSITY_FLOOR + (1.0f - PROCAREA_PARTY_DENSITY_FLOOR) * t;
+}
+
+[[nodiscard]] static int procarea_density_scale_int(int value, float dens, int floor_v) {
+	return std::max(floor_v, static_cast<int>(std::lround(static_cast<float>(value) * dens)));
+}
+
+[[nodiscard]] static ProcAreaDifficulty procarea_difficulty_apply_party_density(
+	ProcAreaDifficulty diff, int party_size) {
+	const float dens = procarea_party_density_mult(party_size);
+	if(dens >= 0.999f) {
+		return diff;
+	}
+	diff.rooms_min = procarea_density_scale_int(diff.rooms_min, dens, 8);
+	diff.rooms_max = procarea_density_scale_int(diff.rooms_max, dens, 12);
+	diff.rooms_min = std::clamp(diff.rooms_min, 4, PROCAREA_ROOMS_MAX);
+	diff.rooms_max = std::clamp(diff.rooms_max, 4, PROCAREA_ROOMS_MAX);
+	if(diff.rooms_max < diff.rooms_min) {
+		diff.rooms_max = diff.rooms_min;
+	}
+	diff.corridor_spawn_pct = std::clamp(
+		procarea_density_scale_int(diff.corridor_spawn_pct, dens, 20), 5, 95);
+	diff.treasure_spawn_pct = std::clamp(
+		procarea_density_scale_int(diff.treasure_spawn_pct, dens, 30), 5, 98);
+	return diff;
+}
+
+/** Alza solo le % spawn (layout gia' fissato) se il party cresce prima del cristallo. */
+static void procarea_bump_pending_density_spawns(ProcAreaInstance& inst, int new_party_size) {
+	const int dens_old =
+		std::clamp(inst.party_size_at_density, 1, PROCAREA_PARTY_DENSITY_CAP);
+	const int dens_new = std::clamp(new_party_size, 1, PROCAREA_PARTY_DENSITY_CAP);
+	if(dens_new <= dens_old) {
+		return;
+	}
+	const float d_old = procarea_party_density_mult(dens_old);
+	const float d_new = procarea_party_density_mult(dens_new);
+	if(d_old <= 0.01f || d_new <= d_old) {
+		return;
+	}
+	const float ratio = d_new / d_old;
+	ProcAreaDifficulty& diff = inst.cached_diff;
+	diff.corridor_spawn_pct = std::clamp(
+		static_cast<int>(std::lround(diff.corridor_spawn_pct * ratio)), 5, 95);
+	diff.treasure_spawn_pct = std::clamp(
+		static_cast<int>(std::lround(diff.treasure_spawn_pct * ratio)), 5, 98);
+	mudlog(LOG_CHECK,
+		   "procarea: instance %d pending density bump %d->%d PG (spawn x%.2f)",
+		   inst.id, dens_old, dens_new, ratio);
 }
 [[nodiscard]] static bool procarea_archetype_fits_theme(unsigned long long mask, int theme_id) {
 	if(mask == 0) {
@@ -531,7 +594,7 @@ static void procarea_apply_band_combat(char_data* mob, int template_band, int ar
 
 	GET_LEVEL(mob, WARRIOR_LEVEL_IND) = combat.level;
 	mob->points.hitroll = static_cast<sbyte>(combat.hitroll);
-	mob->points.armor = combat.armor;
+	mob->points.armor = procarea_archetype_armor(band, archetype);
 	mob->points.max_hit = std::max(1, dice(combat.level, 8) + combat.hp_bonus);
 	mob->points.hit = mob->points.max_hit;
 	mob->specials.damnodice = static_cast<ubyte>(combat.dam_n);
@@ -1458,6 +1521,122 @@ static void procarea_apply_scaling_affects(char_data* mob, float eq_index, int t
 	return 1.0f + static_cast<float>(extra) * PROCAREA_PARTY_EXTRA_MULT;
 }
 
+[[nodiscard]] static bool procarea_room_has_pc(const struct room_data* rp) {
+	if(rp == nullptr) {
+		return false;
+	}
+	for(const char_data* ch = rp->people; ch != nullptr; ch = ch->next_in_room) {
+		if(IS_PC(ch)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+[[nodiscard]] static int procarea_room_runtime_mob_count(const struct room_data* rp) {
+	int count = 0;
+	if(rp == nullptr) {
+		return 0;
+	}
+	for(const char_data* mob = rp->people; mob != nullptr; mob = mob->next_in_room) {
+		if(procarea_is_runtime_mob(mob) && !is_hireling_mob(mob)) {
+			++count;
+		}
+	}
+	return count;
+}
+
+/** Rinforzi densita': Normal sparsi, mai in room con PG / entrance / boss. */
+static int procarea_spawn_density_reinforcements(ProcAreaInstance& inst, int need) {
+	if(need <= 0 || !inst.crystal_resolved) {
+		return 0;
+	}
+	if(inst.cached_layout.size() != inst.room_vnums.size()) {
+		return 0;
+	}
+
+	struct Candidate {
+		size_t index;
+		int mobs;
+	};
+	std::vector<Candidate> candidates;
+	candidates.reserve(inst.room_vnums.size());
+	for(size_t i = 0; i < inst.cached_layout.size(); ++i) {
+		const ProcArchetype type = inst.cached_layout[i].type;
+		if(type == ProcArchetype::Entrance || type == ProcArchetype::Boss) {
+			continue;
+		}
+		const long vnum = inst.room_vnums[i];
+		struct room_data* rp = real_roomp(vnum);
+		if(rp == nullptr || procarea_room_has_pc(rp)) {
+			continue;
+		}
+		candidates.push_back(Candidate{i, procarea_room_runtime_mob_count(rp)});
+	}
+	if(candidates.empty()) {
+		return 0;
+	}
+
+	const ProcAreaDifficulty& diff = inst.cached_diff;
+	int spawned = 0;
+	while(spawned < need && !candidates.empty()) {
+		int min_mobs = candidates[0].mobs;
+		for(const Candidate& c : candidates) {
+			min_mobs = std::min(min_mobs, c.mobs);
+		}
+		std::vector<size_t> pool;
+		for(size_t ci = 0; ci < candidates.size(); ++ci) {
+			if(candidates[ci].mobs == min_mobs) {
+				pool.push_back(ci);
+			}
+		}
+		const size_t pick = pool[static_cast<size_t>(number(0, static_cast<int>(pool.size()) - 1))];
+		const size_t room_i = candidates[pick].index;
+		const long vnum = inst.room_vnums[room_i];
+		const ProcArchetype type = inst.cached_layout[room_i].type;
+		const ProcMobClassContext ctx = (type == ProcArchetype::Treasure) ?
+											ProcMobClassContext::Treasure :
+											ProcMobClassContext::Corridor;
+
+		char_data* mob = procarea_spawn_scaled_mob(
+			vnum, diff.effective_band, diff.eq_index, diff.group_max_level, ProcMobKind::Normal,
+			inst.theme_id, &inst, false, -1, ctx, false, inst.party_power_mult, true);
+		if(mob == nullptr) {
+			break;
+		}
+		++spawned;
+		candidates[pick].mobs += 1;
+	}
+	return spawned;
+}
+
+static int procarea_try_density_reinforce(ProcAreaInstance& inst, int new_party_size) {
+	const int dens_old =
+		std::clamp(inst.party_size_at_density, 1, PROCAREA_PARTY_DENSITY_CAP);
+	const int dens_new = std::clamp(new_party_size, 1, PROCAREA_PARTY_DENSITY_CAP);
+	if(dens_new <= dens_old || inst.density_anchor_mobs <= 0 ||
+	   inst.density_size_at_anchor <= 0) {
+		return 0;
+	}
+	const float d_anchor = procarea_party_density_mult(inst.density_size_at_anchor);
+	const float d_new = procarea_party_density_mult(dens_new);
+	if(d_anchor <= 0.01f || d_new <= d_anchor) {
+		return 0;
+	}
+	const int target = static_cast<int>(
+		std::lround(static_cast<float>(inst.density_anchor_mobs) * d_new / d_anchor));
+	const int need = std::max(0, target - inst.density_quota_filled);
+	if(need <= 0) {
+		return 0;
+	}
+	const int spawned = procarea_spawn_density_reinforcements(inst, need);
+	inst.density_quota_filled += spawned;
+	mudlog(LOG_CHECK,
+		   "procarea: instance %d density reinforce %d->%d PG need %d spawned %d (quota %d/%d)",
+		   inst.id, dens_old, dens_new, need, spawned, inst.density_quota_filled, target);
+	return spawned;
+}
+
 [[nodiscard]] static float procarea_solo_kind_mult(ProcMobKind kind) {
 	switch(kind) {
 	case ProcMobKind::Boss:
@@ -1469,6 +1648,15 @@ static void procarea_apply_scaling_affects(char_data* mob, float eq_index, int t
 	}
 }
 
+/* Scala la distanza da "nudo" (AC 100): factor > 1 da' sempre piu' armatura,
+ * anche quando l'AC di partenza e' positiva. */
+static constexpr int PROCAREA_MIN_MOB_ARMOR = -150;
+
+[[nodiscard]] static int procarea_scale_armor(int armor, float factor) {
+	const int scaled = 100 - static_cast<int>(static_cast<float>(100 - armor) * factor);
+	return std::max(PROCAREA_MIN_MOB_ARMOR, scaled);
+}
+
 static void procarea_apply_power_delta(char_data* mob, float delta) {
 	if(mob == nullptr || delta <= 0.0f) {
 		return;
@@ -1478,7 +1666,7 @@ static void procarea_apply_power_delta(char_data* mob, float delta) {
 	mob->points.hit = std::max(1, static_cast<int>(mob->points.hit * delta));
 	mob->points.damroll = static_cast<sbyte>(std::clamp(
 		static_cast<int>(mob->points.damroll * delta), -30, 40));
-	mob->points.armor = static_cast<int>(mob->points.armor * delta);
+	mob->points.armor = procarea_scale_armor(mob->points.armor, delta);
 
 	const float dice_delta = std::sqrt(delta);
 	if(mob->specials.damnodice > 0) {
@@ -1691,7 +1879,7 @@ static void procarea_scale_mob(char_data* mob, float eq_index, int template_band
 
 	mob->points.damroll = static_cast<sbyte>(std::clamp(
 		static_cast<int>(mob->points.damroll * combat_ratio), -30, 40));
-	mob->points.armor = static_cast<int>(mob->points.armor * armor_ratio);
+	mob->points.armor = procarea_scale_armor(mob->points.armor, armor_ratio);
 
 	const float dice_ratio = std::sqrt(combat_ratio);
 	if(mob->specials.damnodice > 0) {
@@ -1990,7 +2178,7 @@ void break_treasure_seals(ProcAreaInstance& inst, const char_data* boss) {
 
 [[nodiscard]] static long procarea_reward_shield_vnum(int template_band) {
 	const int band = std::clamp(template_band, 0, PROCAREA_REWARD_SHIELD_COUNT - 1);
-	return PROCAREA_REWARD_SHIELD_VNUM_BASE + band;
+	return procarea_reward_shield_vnum_for_band(band);
 }
 
 [[nodiscard]] static int procarea_find_free_affect_slot(struct obj_data* obj) {
@@ -3925,6 +4113,14 @@ void populate_instance_after_crystal(ProcAreaInstance& inst) {
 			   inst.id);
 		return;
 	}
+	if(!inst.solo_mode) {
+		const int pcs_now = std::clamp(procarea_count_pcs_in_instance(inst), 1,
+									   PROCAREA_PARTY_SIZE_CAP);
+		if(pcs_now > inst.party_size_at_density) {
+			procarea_bump_pending_density_spawns(inst, pcs_now);
+			inst.party_size_at_density = pcs_now;
+		}
+	}
 	const ProcAreaDifficulty& diff = inst.cached_diff;
 	const int max_depth = inst.cached_max_depth;
 	for(size_t i = 0; i < inst.cached_layout.size(); ++i) {
@@ -3935,6 +4131,16 @@ void populate_instance_after_crystal(ProcAreaInstance& inst) {
 		const int depth = procarea_room_depth(inst.cached_layout, static_cast<int>(i));
 		procarea_populate_room(inst, diff, vnum, inst.cached_layout[i].type, depth, max_depth,
 							   inst.theme_id);
+	}
+	if(!inst.solo_mode) {
+		inst.density_anchor_mobs = count_mobs(inst);
+		inst.density_size_at_anchor =
+			std::clamp(inst.party_size_at_density, 1, PROCAREA_PARTY_DENSITY_CAP);
+		inst.density_quota_filled = inst.density_anchor_mobs;
+		mudlog(LOG_CHECK,
+			   "procarea: instance %d density anchor %d mobs at %d PG (dens %.2f)",
+			   inst.id, inst.density_anchor_mobs, inst.density_size_at_anchor,
+			   procarea_party_density_mult(inst.density_size_at_anchor));
 	}
 }
 
@@ -3991,6 +4197,7 @@ int create_instance(float group_eq_index, int group_max_level, long return_room,
 		diff.party_power_mult = 1.0f;
 	} else {
 		const int clamped_party = std::clamp(party_size, 1, PROCAREA_PARTY_SIZE_CAP);
+		diff = procarea_difficulty_apply_party_density(diff, clamped_party);
 		diff.party_power_mult = procarea_party_power_mult(clamped_party);
 	}
 	if(static_cast<int>(g_instances.size()) >= PROCAREA_MAX_ACTIVE) {
@@ -4057,13 +4264,22 @@ int create_instance(float group_eq_index, int group_max_level, long return_room,
 		inst.entry_max_hit = std::max(0, entry_max_hit);
 		inst.party_size_at_scale = 1;
 		inst.party_power_mult = 1.0f;
+		inst.party_size_at_density = 1;
+		inst.density_anchor_mobs = 0;
+		inst.density_size_at_anchor = 0;
+		inst.density_quota_filled = 0;
 	} else {
 		inst.solo_toughness_mult = 1.0f;
 		inst.solo_corridor_none_mult = 1.0f;
 		inst.solo_caster_keep_mult = 1.0f;
 		inst.solo_kit_label = "";
-		inst.party_size_at_scale = std::clamp(party_size, 1, PROCAREA_PARTY_SIZE_CAP);
+		const int clamped_party = std::clamp(party_size, 1, PROCAREA_PARTY_SIZE_CAP);
+		inst.party_size_at_scale = clamped_party;
 		inst.party_power_mult = diff.party_power_mult;
+		inst.party_size_at_density = clamped_party;
+		inst.density_anchor_mobs = 0;
+		inst.density_size_at_anchor = 0;
+		inst.density_quota_filled = 0;
 	}
 	inst.cached_diff = diff;
 	inst.cached_layout = layout;
@@ -4148,9 +4364,10 @@ int create_instance(float group_eq_index, int group_max_level, long return_room,
 			   inst.boss_vnum);
 	} else {
 		mudlog(LOG_CHECK,
-			   "procarea: created instance %d theme '%s' power %.0f (factor %.2f, party x%.2f) with %zu rooms (entrance %ld, boss %ld, crystal pending)",
+			   "procarea: created instance %d theme '%s' power %.0f (factor %.2f, party x%.2f dens %.2f) with %zu rooms (entrance %ld, boss %ld, crystal pending)",
 			   instance_id, theme.label, group_eq_index, diff.factor, diff.party_power_mult,
-			   layout.size(), inst.entrance_vnum, inst.boss_vnum);
+			   procarea_party_density_mult(inst.party_size_at_density), layout.size(),
+			   inst.entrance_vnum, inst.boss_vnum);
 	}
 	return instance_id;
 }
@@ -4162,28 +4379,57 @@ void sync_party_power_scale(ProcAreaInstance& inst) {
 
 	const int pc_count = procarea_count_pcs_in_instance(inst);
 	const int new_size = std::clamp(pc_count, 1, PROCAREA_PARTY_SIZE_CAP);
-	if(new_size <= inst.party_size_at_scale) {
+	if(new_size <= inst.party_size_at_scale && new_size <= inst.party_size_at_density) {
 		return;
 	}
 
-	const float old_mult = inst.party_power_mult;
-	const float new_mult = procarea_party_power_mult(new_size);
-	if(new_mult <= old_mult) {
+	bool reinforced = false;
+	bool toughened = false;
+
+	if(new_size > inst.party_size_at_density) {
+		if(inst.crystal_resolved) {
+			reinforced = procarea_try_density_reinforce(inst, new_size) > 0;
+		} else {
+			procarea_bump_pending_density_spawns(inst, new_size);
+		}
+		inst.party_size_at_density = new_size;
+	}
+
+	if(new_size > inst.party_size_at_scale) {
+		const float old_mult = inst.party_power_mult;
+		const float new_mult = procarea_party_power_mult(new_size);
+		if(new_mult > old_mult) {
+			const float delta = new_mult / old_mult;
+			inst.party_power_mult = new_mult;
+			inst.cached_diff.party_power_mult = new_mult;
+			if(inst.crystal_resolved) {
+				procarea_rescale_instance_mobs(inst, delta);
+			}
+			toughened = true;
+			mudlog(LOG_CHECK,
+				   "procarea: instance %d party scale %d PG (mult %.2f -> %.2f, delta %.3f)",
+				   inst.id, new_size, old_mult, new_mult, delta);
+		}
 		inst.party_size_at_scale = new_size;
-		return;
 	}
 
-	const float delta = new_mult / old_mult;
-	inst.party_power_mult = new_mult;
-	inst.party_size_at_scale = new_size;
-	procarea_rescale_instance_mobs(inst, delta);
-	procarea_echo_to_instance_pcs(
-		inst,
-		"\n\r$c0010La bruma effimera trema:\n\r"
-		"nuove presenze piegano l'aldila', e i suoi custodi si risvegliano piu' feroci.$c0007\n\r");
-	mudlog(LOG_CHECK,
-		   "procarea: instance %d party scale %d PG (mult %.2f -> %.2f, delta %.3f)",
-		   inst.id, new_size, old_mult, new_mult, delta);
+	if(reinforced && toughened) {
+		procarea_echo_to_instance_pcs(
+			inst,
+			"\n\r$c0010La bruma effimera trema:\n\r"
+			"nuove presenze piegano l'aldila': altri custodi emergono dalla nebbia,\n\r"
+			"e quelli gia' desti si risvegliano piu' feroci.$c0007\n\r");
+	} else if(reinforced) {
+		procarea_echo_to_instance_pcs(
+			inst,
+			"\n\r$c0010La bruma effimera trema:\n\r"
+			"nuove presenze piegano l'aldila', e altri custodi emergono dalla nebbia.$c0007\n\r");
+	} else if(toughened) {
+		procarea_echo_to_instance_pcs(
+			inst,
+			"\n\r$c0010La bruma effimera trema:\n\r"
+			"nuove presenze piegano l'aldila', e i suoi custodi si risvegliano piu' feroci.$c0007\n\r");
+	}
 }
 struct ProcRewardShieldTpl {
 	long vnum;
@@ -4199,70 +4445,70 @@ struct ProcRewardShieldTpl {
 
 static constexpr ProcRewardShieldTpl kProcRewardShields[PROCAREA_REWARD_SHIELD_COUNT] = {
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 0,
+		procarea_reward_shield_vnum_for_band(0),
 		"disco velo bruma opalescente",
 		"un disco opalescente del velo brumoso",
 		"Un disco giace abbandonato qui, la nebbia lo tiene composto sul pavimento.",
 		4, ITEM_RESISTANT, 0, 500, 0,
 	},
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 1,
+		procarea_reward_shield_vnum_for_band(1),
 		"scudo bruma crepuscolo",
 		"uno scudo del crepuscolo brumoso",
 		"Uno scudo e' stato lasciato cadere, lamiera sottile ma densa di vapori gelidi.",
 		5, ITEM_RESISTANT, 0, 950, 0,
 	},
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 2,
+		procarea_reward_shield_vnum_for_band(2),
 		"scudo runa sigillo pulsante",
 		"uno scudo dal sigillo pulsante",
 		"Uno scudo riposa sul pavimento, rune argentate pulsano sulla lamiera.",
 		5, ITEM_RESISTANT, 0, 1200, 0,
 	},
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 3,
+		procarea_reward_shield_vnum_for_band(3),
 		"scudo runa eco spenta",
 		"uno scudo dell'eco spenta",
 		"Uno scudo e' stato dimenticato in un angolo, il metallo trattiene un'eco di incantesimi interrotti.",
 		6, ITEM_RESISTANT, 0, 1700, 0,
 	},
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 4,
+		procarea_reward_shield_vnum_for_band(4),
 		"buckler nebbia piazza specchiata",
 		"un buckler dalla Piazza specchiata",
 		"Un buckler giace smarrito sulla pietra, la superficie riflette nebbia lontana da Myst.",
 		7, ITEM_RESISTANT, 0, 2200, 0,
 	},
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 5,
+		procarea_reward_shield_vnum_for_band(5),
 		"scudo nebbia soglia intermedia",
 		"uno scudo della soglia intermedia",
 		"Uno scudo e' caduto qui, semidimenticato, forgiato dove il velo e' piu' denso.",
 		8, ITEM_RESISTANT, 0, 2850, 0,
 	},
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 6,
+		procarea_reward_shield_vnum_for_band(6),
 		"pavese varco croce darkstar",
 		"un pavese dalla croce DarkStar",
 		"Un pavese giace abbandonato qui, sul bordo brilla la croce obliqua.",
 		9, ITEM_RESISTANT, 0, 3500, 0,
 	},
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 7,
+		procarea_reward_shield_vnum_for_band(7),
 		"scudo custode lamiera vigilata",
 		"uno scudo di lamiera vigilata",
 		"Uno scudo e' stato lasciato cadere, segni di guardie effimere che non hanno ceduto.",
 		9, ITEM_RESISTANT, 0, 4250, 0,
 	},
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 8,
+		procarea_reward_shield_vnum_for_band(8),
 		"scudo custode lamiera finale",
 		"uno scudo di lamiera finale",
 		"Uno scudo riposa sul pavimento, frammenti di sala finale fusi nella lamiera.",
 		10, ITEM_RESISTANT, 0, 5000, 0,
 	},
 	{
-		PROCAREA_REWARD_SHIELD_VNUM_BASE + 9,
+		procarea_reward_shield_vnum_for_band(9),
 		"scudo eclisse disco assorbente",
 		"uno scudo disco assorbente",
 		"Uno scudo e' stato dimenticato in un angolo, la lamiera assorbe la luce come il varco.",

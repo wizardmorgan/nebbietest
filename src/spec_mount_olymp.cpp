@@ -5,7 +5,10 @@
 /***************************  System  include ************************************/
 #include <algorithm>
 #include <array>
+#include <sstream>
 #include <string_view>
+#include <utility>
+#include <vector>
 /***************************  General include ************************************/
 #include "config.hpp"
 #include "typedefs.hpp"
@@ -23,7 +26,9 @@
 #include "fight.hpp"
 #include "handler.hpp"
 #include "interpreter.hpp"
+#include "procarea_rune_fragments.hpp"
 #include "spell_parser.hpp"
+#include "spells.hpp"
 #include "utility.hpp"
 
 namespace Alarmud {
@@ -97,6 +102,150 @@ constexpr std::array<OlympCourt, 19> kOlympCourts{{
 		[vnum](const OlympCourt& c) { return c.god_vnum == vnum; });
 }
 
+[[nodiscard]] bool isOlympAttendantVnum(int vnum) noexcept {
+	return std::any_of(kOlympCourts.begin(), kOlympCourts.end(),
+		[vnum](const OlympCourt& c) { return c.attendant_vnum == vnum; });
+}
+
+/** Dei con roll immunita' danno (corte + Efesto). */
+[[nodiscard]] bool isOlympDamageImmGodVnum(int vnum) noexcept {
+	return isOlympGodVnum(vnum) || vnum == kOlympEfestoVnum;
+}
+
+constexpr unsigned kOlympDamageImmMask =
+	IMM_FIRE | IMM_COLD | IMM_ELEC | IMM_ENERGY | IMM_ACID |
+	IMM_BLUNT | IMM_PIERCE | IMM_SLASH;
+
+constexpr unsigned kOlympPhysPool[] = {IMM_BLUNT, IMM_PIERCE, IMM_SLASH};
+constexpr unsigned kOlympMagPool[] = {
+	IMM_FIRE, IMM_COLD, IMM_ELEC, IMM_ENERGY, IMM_ACID};
+
+/** bit0 di generic: immunita' danno gia' rollate per questo spawn. */
+constexpr int kOlympImmRolledBit = 1;
+/** bit1/2: rinforzo corte in fight gia' riuscito (fase 1 / fase 2). */
+constexpr int kOlympAttPhase1Bit = 2;
+constexpr int kOlympAttPhase2Bit = 4;
+/** bits 8-15: ultimo HP% processato in fight (0xFF = non in tracking). */
+constexpr int kOlympAttLastPctShift = 8;
+constexpr int kOlympAttLastPctMask = 0xFF << kOlympAttLastPctShift;
+constexpr int kOlympAttLastPctUnset = 0xFF;
+
+constexpr int kOlympAttPhase1Hi = 30;
+constexpr int kOlympAttPhase1Lo = 21;
+constexpr int kOlympAttPhase2Hi = 20;
+constexpr int kOlympAttPhase2Lo = 5;
+constexpr int kOlympAttChanceBase = 10;
+constexpr int kOlympAttChanceStep = 2;
+
+[[nodiscard]] unsigned pick_random_bits(const unsigned* pool, int pool_n, int k) {
+	if(k <= 0 || pool == nullptr || pool_n <= 0) {
+		return 0;
+	}
+	if(k > pool_n) {
+		k = pool_n;
+	}
+	unsigned chosen[8] = {};
+	for(int i = 0; i < pool_n; ++i) {
+		chosen[i] = pool[i];
+	}
+	for(int i = pool_n - 1; i > 0; --i) {
+		const int j = number(0, i);
+		const unsigned tmp = chosen[i];
+		chosen[i] = chosen[j];
+		chosen[j] = tmp;
+	}
+	unsigned out = 0;
+	for(int i = 0; i < k; ++i) {
+		out |= chosen[i];
+	}
+	return out;
+}
+
+void olympian_roll_damage_immunities(char_data* god) {
+	if(god == nullptr || !IS_NPC(god) || god->nr < 0) {
+		return;
+	}
+	if(!isOlympDamageImmGodVnum(mob_index[god->nr].iVNum)) {
+		return;
+	}
+	if(god->generic & kOlympImmRolledBit) {
+		return;
+	}
+
+	const int lvl = GetMaxLevel(god);
+	int n_phys = 0;
+	int n_mag = 0;
+	long gold_lo = 20000;
+	long gold_hi = 50000;
+	if(lvl >= 60) {
+		/* Zeus */
+		n_phys = 2;
+		n_mag = 4;
+		gold_lo = 200000;
+		gold_hi = 300000;
+	}
+	else if(lvl >= 54) {
+		n_phys = 2;
+		n_mag = 3;
+		gold_lo = 85000;
+		gold_hi = 100000;
+	}
+	else if(lvl >= 53) {
+		n_phys = number(1, 2);
+		n_mag = (n_phys == 2) ? 2 : 4;
+		gold_lo = 55000;
+		gold_hi = 80000;
+	}
+	else {
+		/* 52 e sotto (dei minori) */
+		n_phys = 1;
+		n_mag = 3;
+		gold_lo = 20000;
+		gold_hi = 50000;
+	}
+
+	const unsigned rolled =
+		pick_random_bits(kOlympPhysPool, 3, n_phys) |
+		pick_random_bits(kOlympMagPool, 5, n_mag);
+
+	/* Togli resist/imm danno statiche; tieni status/+4 da .mob.
+	 * Roll = immunita'; tutto il resto del pool danno = resist. */
+	god->base_immune &= ~kOlympDamageImmMask;
+	god->base_M_immune &= ~kOlympDamageImmMask;
+	god->base_M_immune |= rolled;
+	god->base_immune |= (kOlympDamageImmMask & ~rolled);
+	god->points.gold = number(static_cast<int>(gold_lo), static_cast<int>(gold_hi));
+	god->generic |= kOlympImmRolledBit;
+	SyncImmunities(god);
+}
+
+void olympian_maybe_mirror_tank_fireshield(char_data* god) {
+	if(god == nullptr || !IS_NPC(god) || god->nr < 0) {
+		return;
+	}
+	if(!isOlympDamageImmGodVnum(mob_index[god->nr].iVNum)) {
+		return;
+	}
+	char_data* tank = god->specials.fighting;
+	if(tank == nullptr || !IS_AFFECTED(tank, AFF_FIRESHIELD)) {
+		return;
+	}
+	if(IS_SET(god->M_immune, IMM_FIRE)) {
+		return;
+	}
+	if(affected_by_spell(god, SPELL_FIRESHIELD) || IS_AFFECTED(god, AFF_FIRESHIELD)) {
+		return;
+	}
+	/* Affect silenzioso: niente emote/tell. */
+	affected_type af{};
+	af.type = SPELL_FIRESHIELD;
+	af.duration = static_cast<sh_int>(GetMaxLevel(god));
+	af.modifier = 0;
+	af.location = APPLY_NONE;
+	af.bitvector = AFF_FIRESHIELD;
+	affect_to_char(god, &af);
+}
+
 [[nodiscard]] bool isOlympKeyVnum(int vnum) noexcept {
 	return std::any_of(kOlympEntrances.begin(), kOlympEntrances.end(),
 		[vnum](const OlympEntrance& e) { return e.key_vnum == vnum; });
@@ -142,6 +291,52 @@ constexpr std::array<OlympCourt, 19> kOlympCourts{{
 	}
 	return exitIsLockedDoor(entranceExit(*it))
 		&& countExistingObjects(kOlympArtemisKeyVnum) == 0;
+}
+
+[[nodiscard]] bool isOlympWandererVnum(int vnum) noexcept {
+	return vnum >= 13894 && vnum <= 13899;
+}
+
+/** Altri erranti ancora vivi (su EVENT_DEATH il morente e' gia' POSITION_DEAD). */
+[[nodiscard]] int countOtherLiveOlympWanderers(const char_data* self) {
+	int n = 0;
+	for(char_data* t = character_list; t != nullptr; t = t->next) {
+		if(t == self || !IS_NPC(t) || t->nr < 0) {
+			continue;
+		}
+		if(!isOlympWandererVnum(mob_index[t->nr].iVNum)) {
+			continue;
+		}
+		if(GET_POS(t) <= POSITION_DEAD) {
+			continue;
+		}
+		++n;
+	}
+	return n;
+}
+
+/** Drop chiave Artemide: 10%, o garantito se e' l'ultimo errante vivo. */
+void tryDropArtemisKeyOnWandererDeath(char_data* mob) {
+	if(mob == nullptr || mob->in_room == NOWHERE
+	   || real_roomp(mob->in_room) == nullptr) {
+		return;
+	}
+	if(!needsArtemisKey()) {
+		return;
+	}
+	const bool last = countOtherLiveOlympWanderers(mob) == 0;
+	if(!last && number(1, 100) > 10) {
+		return;
+	}
+
+	auto* key = read_object(kOlympArtemisKeyVnum, VIRTUAL);
+	if(key == nullptr) {
+		mudlog(LOG_ERROR, "OlympianWanderer: cannot load key #%d",
+			   kOlympArtemisKeyVnum);
+		return;
+	}
+	obj_to_room(key, mob->in_room);
+	act("Dalla salma di $n cade $p.", FALSE, mob, key, 0, TO_ROOM);
 }
 
 [[nodiscard]] int pickOlympKeyDropVnum() {
@@ -253,6 +448,109 @@ void clearOlympianGodHunting(char_data* god) {
 	god->persist = 0;
 }
 
+[[nodiscard]] int olympAttLastPct(const char_data* god) noexcept {
+	return (god->generic & kOlympAttLastPctMask) >> kOlympAttLastPctShift;
+}
+
+void olympAttSetLastPct(char_data* god, int pct) noexcept {
+	god->generic = (god->generic & ~kOlympAttLastPctMask)
+		| ((pct & 0xFF) << kOlympAttLastPctShift);
+}
+
+void olympAttClearFightReinforce(char_data* god) noexcept {
+	god->generic &= ~(kOlympAttPhase1Bit | kOlympAttPhase2Bit | kOlympAttLastPctMask);
+	olympAttSetLastPct(god, kOlympAttLastPctUnset);
+}
+
+[[nodiscard]] int olympGodHitPct(char_data* god) noexcept {
+	const int maxHit = GET_MAX_HIT(god);
+	if(maxHit <= 0) {
+		return 0;
+	}
+	return std::max(0, (100 * GET_HIT(god)) / maxHit);
+}
+
+[[nodiscard]] bool spawnOlympAttendant(room_data* rp, char_data* god,
+		const OlympCourt* court) {
+	if(rp == nullptr || god == nullptr || court == nullptr) {
+		return false;
+	}
+	if(countAttendantsInRoom(rp, court->attendant_vnum) >= kOlympAttendantsMax) {
+		return false;
+	}
+	auto* att = read_mobile(court->attendant_vnum, VIRTUAL);
+	if(att == nullptr) {
+		mudlog(LOG_ERROR, "OlympianCourt: cannot load attendant #%d",
+			court->attendant_vnum);
+		return false;
+	}
+	char_to_room(att, rp->number);
+	att->specials.zone = god->specials.zone;
+	att->lStartRoom = rp->number;
+	att->mult_att = 0.0f;
+	if(att->master == nullptr) {
+		add_follower(att, god);
+	}
+	act("$n prende forma al fianco di $N.", FALSE, att, 0, god, TO_ROOM);
+	return true;
+}
+
+/**
+ * Tiro rinforzo a ogni HP% attraversato verso il basso.
+ * Fase1 30-21, fase2 20-5: chance = 10% + 2%*(hi-pct); 1 successo/fase.
+ * Corte piena: il successo consuma comunque la fase (niente refill dei morti).
+ */
+void tryOlympFightAttendantReinforce(room_data* rp, char_data* god,
+		const OlympCourt* court) {
+	if(rp == nullptr || god == nullptr || court == nullptr) {
+		return;
+	}
+
+	const int curPct = olympGodHitPct(god);
+	int lastPct = olympAttLastPct(god);
+	if(lastPct == kOlympAttLastPctUnset) {
+		olympAttSetLastPct(god, curPct);
+		return;
+	}
+	if(curPct >= lastPct) {
+		olympAttSetLastPct(god, curPct);
+		return;
+	}
+
+	for(int pct = lastPct - 1; pct >= curPct; --pct) {
+		int phaseBit = 0;
+		int phaseHi = 0;
+		if(pct >= kOlympAttPhase1Lo && pct <= kOlympAttPhase1Hi) {
+			phaseBit = kOlympAttPhase1Bit;
+			phaseHi = kOlympAttPhase1Hi;
+		}
+		else if(pct >= kOlympAttPhase2Lo && pct <= kOlympAttPhase2Hi) {
+			phaseBit = kOlympAttPhase2Bit;
+			phaseHi = kOlympAttPhase2Hi;
+		}
+		else {
+			continue;
+		}
+		if(god->generic & phaseBit) {
+			continue;
+		}
+
+		const int chance = kOlympAttChanceBase
+			+ kOlympAttChanceStep * (phaseHi - pct);
+		if(number(1, 100) > chance) {
+			continue;
+		}
+
+		if(!spawnOlympAttendant(rp, god, court)) {
+			continue;
+		}
+		act("$n invoca un servo della sua corte!", FALSE, god, 0, 0, TO_ROOM);
+		god->generic |= phaseBit;
+	}
+
+	olympAttSetLastPct(god, curPct);
+}
+
 void maintainOlympianCourt(room_data* rp, bool allowExtract) {
 	if(rp == nullptr) {
 		return;
@@ -270,13 +568,15 @@ void maintainOlympianCourt(room_data* rp, bool allowExtract) {
 	clearOlympianGodHunting(god);
 
 	/*
-	 * In combattimento: corte congelata (ne' spawn ne' despawn).
-	 * Serve se la divinita' e' stata ingaggiata sotto il 100% con i curatori
-	 * gia' presenti: restano anche se viene riportata al massimo.
+	 * In combattimento: niente despawn / niente refill dei morti.
+	 * Solo tiri di rinforzo a fasce HP (vedi tryOlympFightAttendantReinforce).
 	 */
 	if(god->specials.fighting != nullptr) {
+		tryOlympFightAttendantReinforce(rp, god, court);
 		return;
 	}
+
+	olympAttClearFightReinforce(god);
 
 	/* Fuori combattimento a HP pieni: i curatori spariscono (solo se safe). */
 	if(GET_HIT(god) >= GET_MAX_HIT(god)) {
@@ -289,26 +589,40 @@ void maintainOlympianCourt(room_data* rp, bool allowExtract) {
 	/* Fuori combattimento e ferita: fino a kOlympAttendantsMax. */
 	const int have = countAttendantsInRoom(rp, court->attendant_vnum);
 	for(int i = have; i < kOlympAttendantsMax; ++i) {
-		auto* att = read_mobile(court->attendant_vnum, VIRTUAL);
-		if(att == nullptr) {
-			mudlog(LOG_ERROR, "OlympianCourt: cannot load attendant #%d",
-				court->attendant_vnum);
+		if(!spawnOlympAttendant(rp, god, court)) {
 			return;
 		}
-		char_to_room(att, rp->number);
-		att->lStartRoom = rp->number;
-		att->mult_att = 0.0f;
-		if(att->master == nullptr) {
-			add_follower(att, god);
-		}
-		act("$n prende forma al fianco di $N.", FALSE, att, 0, god, TO_ROOM);
 	}
 }
 
 } // namespace
 
+bool is_olympus_area_vnum(int vnum) noexcept {
+	return (vnum >= kOlympZone1VnumMin && vnum <= kOlympZone1VnumMax)
+		|| (vnum >= kOlympZone2VnumMin && vnum <= kOlympZone2VnumMax);
+}
+
+bool is_olympus_npc(const char_data* ch) noexcept {
+	if(ch == nullptr || !IS_NPC(ch) || ch->nr < 0) {
+		return false;
+	}
+	return is_olympus_area_vnum(mob_index[ch->nr].iVNum);
+}
+
 bool is_olympian_god_vnum(int vnum) noexcept {
 	return isOlympGodVnum(vnum);
+}
+
+void olympian_ensure_god_stamina(char_data* god) {
+	if(god == nullptr || !IS_NPC(god)) {
+		return;
+	}
+	if(god->points.max_move < kOlympGodMaxMove) {
+		god->points.max_move = kOlympGodMaxMove;
+		god->points.move = kOlympGodMaxMove;
+	}
+	olympian_roll_damage_immunities(god);
+	olympian_maybe_mirror_tank_fireshield(god);
 }
 
 void olympian_maintain_court_room(room_data* rp) {
@@ -340,6 +654,151 @@ void olympian_clear_court_on_god_death(char_data* god) {
 	extractAttendantsInRoom(rp, court->attendant_vnum);
 }
 
+namespace {
+
+/**
+ * Pool QuestNebbie Olimpo (achievements_data): peso 2 base, 1 per armi/scudi.
+ * Tenere allineato a QuestNebbie[ACHIE_QUEST_OLIMPO].
+ */
+constexpr std::array<std::pair<int, int>, 23> kOlympQuestDrops{{
+	{13781, 1}, /* Egida Fulmine (scudo) */
+	{13782, 2}, /* veste */
+	{13783, 2}, /* diadema */
+	{13786, 2}, /* collana fiamme */
+	{13788, 2}, /* armatura Ares */
+	{13790, 1}, /* lancia Atena (arma) */
+	{13791, 2}, /* sandali */
+	{13792, 2}, /* brocca */
+	{13794, 1}, /* Egida Arcana (scudo) */
+	{13861, 1}, /* freccia (arma) */
+	{13862, 1}, /* falce (arma) */
+	{13863, 2}, /* anello focolare */
+	{13864, 2}, /* girocollo */
+	{13865, 2}, /* anello armonia */
+	{13866, 2}, /* corona alloro */
+	{13867, 2}, /* cintura */
+	{13868, 1}, /* bastone (arma) */
+	{13869, 2}, /* cestus */
+	{13870, 2}, /* calzari */
+	{13871, 2}, /* torcia */
+	{13872, 1}, /* martello (arma) */
+	{37074, 1}, /* ampolla destino - re roll hp */
+	{37075, 1}, /* pergamena ricordo - pergamena per annullare effetto ampolla destino */
+}};
+
+[[nodiscard]] int pickOlympQuestDropVnum() {
+	int total = 0;
+	for(const auto& e : kOlympQuestDrops) {
+		total += e.second;
+	}
+	if(total <= 0) {
+		return -1;
+	}
+	int roll = number(1, total);
+	for(const auto& e : kOlympQuestDrops) {
+		roll -= e.second;
+		if(roll <= 0) {
+			return e.first;
+		}
+	}
+	return kOlympQuestDrops.back().first;
+}
+
+} // namespace
+
+void olympian_zeus_death_treasure(char_data* god) {
+	if(god == nullptr || god->nr < 0) {
+		return;
+	}
+	if(GET_MOB_VNUM(god) != kOlympZeusVnum) {
+		return;
+	}
+	if(real_roomp(kOlympTreasureRoom) == nullptr) {
+		mudlog(LOG_ERROR, "olympian_zeus_death_treasure: missing room #%d",
+			   kOlympTreasureRoom);
+		return;
+	}
+
+	const int vnum = pickOlympQuestDropVnum();
+	if(vnum < 0) {
+		return;
+	}
+	auto* prize = read_object(vnum, VIRTUAL);
+	if(prize == nullptr) {
+		mudlog(LOG_ERROR, "olympian_zeus_death_treasure: cannot load #%d", vnum);
+		return;
+	}
+	obj_to_room(prize, kOlympTreasureRoom);
+	if(god->in_room != NOWHERE && real_roomp(god->in_room) != nullptr) {
+		act("Sotto la botola del trono risuona un fragore di ricchezze.",
+			FALSE, god, 0, 0, TO_ROOM);
+	}
+
+	send_to_all(
+		"\n\r$c0011Un tuono scuote i cieli: Zeus, Re degli Dei, e' caduto!$c0007\n\r\n\r");
+}
+
+void olympian_try_rune_fragment_drop(char_data* victim) {
+	if(victim == nullptr || !IS_NPC(victim) || victim->nr < 0) {
+		return;
+	}
+	if(!is_olympus_npc(victim)) {
+		return;
+	}
+	const int vnum = mob_index[victim->nr].iVNum;
+	if(isOlympAttendantVnum(vnum)) {
+		return;
+	}
+	if(victim->in_room == NOWHERE || real_roomp(victim->in_room) == nullptr) {
+		return;
+	}
+
+	const int lvl = GetMaxLevel(victim);
+	if(lvl <= 50) {
+		return;
+	}
+	const bool is_god = (GET_RACE(victim) == RACE_GOD);
+	const int god_mult = is_god ? 2 : 1;
+	const int chance_pct = std::min(100, (lvl - 50) * 10 * god_mult);
+	if(number(1, 100) > chance_pct) {
+		return;
+	}
+
+	int qty = (lvl - 50) * 100 * god_mult;
+	qty = qty * number(90, 110) / 100;
+	if(qty <= 0) {
+		return;
+	}
+
+	std::vector<char_data*> pcs;
+	for(char_data* ch = real_roomp(victim->in_room)->people; ch != nullptr;
+		ch = ch->next_in_room) {
+		if(IS_PC(ch)) {
+			pcs.push_back(ch);
+		}
+	}
+	if(pcs.empty()) {
+		return;
+	}
+
+	const int share = qty / static_cast<int>(pcs.size());
+	int remainder = qty % static_cast<int>(pcs.size());
+	for(char_data* pc : pcs) {
+		const int grant = share + (remainder > 0 ? 1 : 0);
+		if(remainder > 0) {
+			--remainder;
+		}
+		if(grant <= 0) {
+			continue;
+		}
+		const int new_total = procarea_rune_fragments_add(pc, grant);
+		std::ostringstream msg;
+		msg << "\n\r$c0010Un eco divino si spezza: $c0014+" << grant
+			<< " frammenti di runa$c0007 (totale " << new_total << ").\n\r";
+		send_to_char(msg.str().c_str(), pc);
+	}
+}
+
 MOBSPECIAL_FUNC(OlympianWanderer) {
 	if(mob == nullptr || mob->nr < 0) {
 		return FALSE;
@@ -368,19 +827,9 @@ MOBSPECIAL_FUNC(OlympianWanderer) {
 		break;
 	}
 
-	if(type == EVENT_TICK && needsArtemisKey()) {
-		constexpr std::array<int, 6> wanderers{{13894, 13895, 13896, 13897, 13898, 13899}};
-		const int chosen = wanderers[static_cast<std::size_t>(number(0, 5))];
-		if(vnum == chosen && needsArtemisKey()) {
-			auto* key = read_object(kOlympArtemisKeyVnum, VIRTUAL);
-			if(key == nullptr) {
-				mudlog(LOG_ERROR, "OlympianWanderer: cannot load key #%d",
-					kOlympArtemisKeyVnum);
-			}
-			else {
-				obj_to_char(key, mob);
-			}
-		}
+	if(type == EVENT_DEATH) {
+		tryDropArtemisKeyOnWandererDeath(mob);
+		return TRUE;
 	}
 	return FALSE;
 }
@@ -389,13 +838,14 @@ MOBSPECIAL_FUNC(OlympianAttendant) {
 	if(mob == nullptr) {
 		return FALSE;
 	}
+	/* Mai attaccare: zero attacchi e fuori combat (anche su COMMAND). */
 	mob->mult_att = 0.0f;
+	if(mob->specials.fighting != nullptr) {
+		stop_fighting(mob);
+	}
 
 	if(type != EVENT_TICK || !AWAKE(mob)) {
 		return FALSE;
-	}
-	if(mob->specials.fighting != nullptr) {
-		stop_fighting(mob);
 	}
 
 	auto* rp = real_roomp(mob->in_room);
@@ -414,7 +864,8 @@ MOBSPECIAL_FUNC(OlympianAttendant) {
 		return TRUE;
 	}
 	if(god->in_room != mob->in_room) {
-		return FALSE;
+		/* TRUE: non far partire AssistFriend/guardian nello stesso tick. */
+		return TRUE;
 	}
 
 	/*
@@ -434,13 +885,11 @@ MOBSPECIAL_FUNC(OlympianAttendant) {
 		maintainOlympianCourt(rp, true);
 	}
 
-	if(GET_HIT(god) >= GET_MAX_HIT(god)) {
-		return FALSE;
+	if(GET_HIT(god) < GET_MAX_HIT(god)) {
+		const int healed = number(50, 100);
+		GET_HIT(god) = std::min(GET_MAX_HIT(god), GET_HIT(god) + healed);
+		act("$n riversa energia divina su $N.", FALSE, mob, 0, god, TO_ROOM);
 	}
-
-	const int healed = number(50, 100);
-	GET_HIT(god) = std::min(GET_MAX_HIT(god), GET_HIT(god) + healed);
-	act("$n riversa energia divina su $N.", FALSE, mob, 0, god, TO_ROOM);
 
 	/* Stesso tick: se il heal ha portato il dio a full, dissolve subito. */
 	if(god->specials.fighting == nullptr
@@ -449,7 +898,12 @@ MOBSPECIAL_FUNC(OlympianAttendant) {
 		extract_char(mob);
 		return TRUE;
 	}
-	return FALSE;
+
+	/*
+	 * Sempre TRUE sul tick: altrimenti AssistFriend (SameRace/in_group) li
+	 * rimette in fight e colpiscono i PG dopo lo stop_fighting.
+	 */
+	return TRUE;
 }
 
 MOBSPECIAL_FUNC(OlympianKeyDrop) {
@@ -458,6 +912,7 @@ MOBSPECIAL_FUNC(OlympianKeyDrop) {
 	}
 
 	if(type == EVENT_TICK) {
+		olympian_ensure_god_stamina(mob);
 		maintainOlympianCourt(real_roomp(mob->in_room), true);
 		return FALSE;
 	}

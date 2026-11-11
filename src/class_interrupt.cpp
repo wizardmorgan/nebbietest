@@ -25,13 +25,14 @@
 #include "interpreter.hpp"
 #include "multiclass.hpp"
 #include "phase_boss.hpp"
+#include "regen.hpp"
 #include "spells.hpp"
 #include "utility.hpp"
 
 namespace Alarmud {
 namespace {
 
-constexpr int kInterruptPower = 40;
+constexpr int kInterruptPower = 25;
 /** CD condiviso su tutte le interrupt, in round di violenza (PULSE_VIOLENCE). */
 constexpr int kInterruptCooldownRounds = 5;
 constexpr int kTargetLagRounds = 1;
@@ -39,11 +40,31 @@ constexpr int kInterruptMinLevel = 15;
 
 std::unordered_map<const char_data*, unsigned long> g_interrupt_ready_pulse;
 
+constexpr int kMindSpikeMana = 15;
+constexpr int kInterruptMoveCost = 10;
+
+/* CD e pratica seguono il personaggio, non il corpo polimorfato/switched. */
+[[nodiscard]] char_data* interrupt_owner(char_data* ch) {
+	if(ch != nullptr && ch->desc != nullptr && ch->desc->original != nullptr) {
+		return ch->desc->original;
+	}
+	return ch;
+}
+
+[[nodiscard]] char_data* interrupt_skill_char(char_data* ch) {
+	char_data* const owner = interrupt_owner(ch);
+	if(owner != nullptr && owner->skills != nullptr) {
+		return owner;
+	}
+	return ch;
+}
+
 [[nodiscard]] bool interrupt_on_cooldown(char_data* ch) {
-	if(ch == nullptr) {
+	char_data* const key = interrupt_owner(ch);
+	if(key == nullptr) {
 		return false;
 	}
-	const auto it = g_interrupt_ready_pulse.find(ch);
+	const auto it = g_interrupt_ready_pulse.find(key);
 	if(it == g_interrupt_ready_pulse.end()) {
 		return false;
 	}
@@ -55,23 +76,62 @@ std::unordered_map<const char_data*, unsigned long> g_interrupt_ready_pulse;
 }
 
 void set_interrupt_cooldown(char_data* ch) {
-	if(ch == nullptr) {
+	char_data* const key = interrupt_owner(ch);
+	if(key == nullptr) {
 		return;
 	}
-	g_interrupt_ready_pulse[ch] =
+	g_interrupt_ready_pulse[key] =
 		pulse + static_cast<unsigned long>(kInterruptCooldownRounds) * PULSE_VIOLENCE;
 }
 
 [[nodiscard]] int interrupt_cooldown_rounds_left(char_data* ch) {
-	if(ch == nullptr) {
+	char_data* const key = interrupt_owner(ch);
+	if(key == nullptr) {
 		return 0;
 	}
-	const auto it = g_interrupt_ready_pulse.find(ch);
+	const auto it = g_interrupt_ready_pulse.find(key);
 	if(it == g_interrupt_ready_pulse.end() || pulse >= it->second) {
 		return 0;
 	}
 	const unsigned long left = it->second - pulse;
 	return static_cast<int>((left + PULSE_VIOLENCE - 1) / PULSE_VIOLENCE);
+}
+
+/* Pratica sull'originale; i messaggi vanno al corpo che agisce (il desc e' li'). */
+void interrupt_learn_from_mistake(char_data* ch, int sknum) {
+	char_data* const learner = interrupt_skill_char(ch);
+	if(learner == nullptr || learner->skills == nullptr) {
+		return;
+	}
+	if(learner == ch || learner->desc != nullptr) {
+		LearnFromMistake(learner, sknum, 0, 95);
+		if(ch != learner && ch->skills != nullptr) {
+			ch->skills[sknum].learned = learner->skills[sknum].learned;
+		}
+		return;
+	}
+	const int before = static_cast<int>(learner->skills[sknum].learned);
+	LearnFromMistake(learner, sknum, 1, 95);
+	if(ch->skills != nullptr) {
+		ch->skills[sknum].learned = learner->skills[sknum].learned;
+	}
+	if(static_cast<int>(learner->skills[sknum].learned) <= before) {
+		return;
+	}
+	send_to_char("Impari dai tuoi errori.\n\r", ch);
+	int cap = 95;
+	if(IS_IMMORTAL(learner)) {
+		cap = 100;
+	}
+	else if(HowManyClasses(learner) >= 3) {
+		cap = 81;
+	}
+	else if(HowManyClasses(learner) == 2) {
+		cap = 86;
+	}
+	if(static_cast<int>(learner->skills[sknum].learned) >= cap) {
+		send_to_char("Hai imparato tutto su questa abilita'!\n\r", ch);
+	}
 }
 
 int owning_class_level(const struct char_data* ch, unsigned long class_bits) {
@@ -181,13 +241,13 @@ constexpr InterruptDef kDefs[] = {
 	 "$c0014La parola divina fa esitare $N!$c0007",
 	 "$c0014La parola divina di $n fa esitare $N!$c0007",
 	 "$c0009La parola divina ti inchioda un istante!$c0007"},
-	{SPELL_NATURES_GRASP, CLASS_DRUID, true,
-	 "$c0010Evochi liane che strappano la concentrazione di $N!$c0007",
-	 "$c0010$n evoca liane che strappano la tua concentrazione!$c0007",
-	 "$c0010$n evoca liane che strappano la concentrazione di $N!$c0007",
-	 "$c0014Le liane strappano il filo magico di $N!$c0007",
-	 "$c0014Le liane di $n strappano il filo magico di $N!$c0007",
-	 "$c0009Le liane ti strappano la concentrazione!$c0007"},
+	{SPELL_THORNBIND, CLASS_DRUID, true,
+	 "$c0010Invochi spine che legano la concentrazione di $N!$c0007",
+	 "$c0010$n invoca spine che legano la tua concentrazione!$c0007",
+	 "$c0010$n invoca spine che legano la concentrazione di $N!$c0007",
+	 "$c0014Le spine legano il filo magico di $N!$c0007",
+	 "$c0014Le spine di $n legano il filo magico di $N!$c0007",
+	 "$c0009Le spine ti legano la concentrazione!$c0007"},
 	{SKILL_MIND_SPIKE, CLASS_PSI, false,
 	 "$c0013Scagli una lama psichica contro $N!$c0007",
 	 "$c0013$n scaglia una lama psichica contro di te!$c0007",
@@ -204,6 +264,26 @@ const InterruptDef* find_def(int id) {
 		}
 	}
 	return nullptr;
+}
+
+[[nodiscard]] bool interrupt_prereqs_blocked(char_data* ch, const InterruptDef& def) {
+	if(GetMaxLevel(ch) < IMMORTALE && !HasClass(ch, def.class_bits)) {
+		send_to_char("Questa tecnica non e' della tua classe.\n\r", ch);
+		return true;
+	}
+	if(GetMaxLevel(ch) < IMMORTALE && owning_class_level(ch, def.class_bits) < kInterruptMinLevel) {
+		send_to_char("Non hai ancora l'esperienza necessaria.\n\r", ch);
+		return true;
+	}
+	if(interrupt_on_cooldown(ch)) {
+		char buf[128];
+		snprintf(buf, sizeof(buf),
+				 "Devi ancora recuperare l'equilibrio (%d round).\n\r",
+				 interrupt_cooldown_rounds_left(ch));
+		send_to_char(buf, ch);
+		return true;
+	}
+	return false;
 }
 
 void apply_target_lag(struct char_data* ch, struct char_data* vict, const InterruptDef& def) {
@@ -234,33 +314,51 @@ void resolve_interrupt(struct char_data* ch, struct char_data* vict, int id, boo
 		return;
 	}
 
-	if(GetMaxLevel(ch) < IMMORTALE && !HasClass(ch, def->class_bits)) {
-		send_to_char("Questa tecnica non e' della tua classe.\n\r", ch);
+	if(interrupt_prereqs_blocked(ch, *def)) {
 		return;
 	}
 
-	if(GetMaxLevel(ch) < IMMORTALE && owning_class_level(ch, def->class_bits) < kInterruptMinLevel) {
-		send_to_char("Non hai ancora l'esperienza necessaria.\n\r", ch);
-		return;
-	}
-
-	if(interrupt_on_cooldown(ch)) {
-		char buf[128];
-		snprintf(buf, sizeof(buf),
-				 "Devi ancora recuperare l'equilibrio (%d round).\n\r",
-				 interrupt_cooldown_rounds_left(ch));
-		send_to_char(buf, ch);
-		return;
-	}
+	char_data* const learner = interrupt_skill_char(ch);
 
 	if(!from_spell) {
-		if(!ch->skills || !ch->skills[id].learned) {
+		/* Path comando: cast ha gia' TAR_VIOLENT / pace / PK. */
+		if(check_peaceful(ch, "C'e' troppa pace qui per essere violenti.\n\r")) {
+			return;
+		}
+		if(combat_denied_notify(ch, vict, id) || immortal_pc_denied_notify(ch, vict)) {
+			return;
+		}
+		if(!learner || !learner->skills || !learner->skills[id].learned) {
 			send_to_char("Non hai ancora imparato la tecnica giusta.\n\r", ch);
 			return;
 		}
-		if(number(1, 101) > ch->skills[id].learned) {
+		if(GetMaxLevel(interrupt_owner(ch)) < IMMORTALE) {
+			if(id == SKILL_MIND_SPIKE) {
+				if(GET_MANA(ch) < kMindSpikeMana) {
+					send_to_char("Non hai abbastanza $c0009energia mentale$c0007!\n\r", ch);
+					return;
+				}
+				GET_MANA(ch) -= kMindSpikeMana;
+				alter_mana(ch, 0);
+			}
+			else {
+				if(GET_MOVE(ch) < kInterruptMoveCost) {
+					send_to_char("Sei troppo stanco per farlo.\n\r", ch);
+					return;
+				}
+				GET_MOVE(ch) -= kInterruptMoveCost;
+				alter_move(ch, 0);
+			}
+		}
+		if(number(1, 101) > learner->skills[id].learned) {
 			send_to_char("Mancato!\n\r", ch);
 			WAIT_STATE(ch, PULSE_VIOLENCE);
+			/* Come bash/kick: il mancato apre il combat, senza cooldown. */
+			if(GET_POS(vict) > POSITION_DEAD) {
+				(void)SetCharFighting(ch, vict);
+				(void)SetVictFighting(ch, vict);
+			}
+			interrupt_learn_from_mistake(ch, id);
 			return;
 		}
 	}
@@ -269,16 +367,23 @@ void resolve_interrupt(struct char_data* ch, struct char_data* vict, int id, boo
 	act(def->emote_vict, FALSE, ch, 0, vict, TO_VICT);
 	act(def->emote_room, FALSE, ch, 0, vict, TO_NOTVICT);
 
+	/* Apre (o unisce) il combat: emote violenta senza fight lasciava il mob fermo. */
+	(void)SetCharFighting(ch, vict);
+	(void)SetVictFighting(ch, vict);
+
 	apply_target_lag(ch, vict, *def);
 	(void)phase_boss_try_interrupt(ch, vict, kInterruptPower);
 	set_interrupt_cooldown(ch);
 
-	if(!from_spell && !IS_NPC(ch) && !IS_IMMORTAL(ch) && !(number(0, 3))) {
-		if(ch->skills) {
-			ch->skills[id].learned++;
-			if(ch->skills[id].learned >= 95) {
+	if(!from_spell && learner && !IS_NPC(learner) && !IS_IMMORTAL(learner) && !(number(0, 3))) {
+		if(learner->skills) {
+			learner->skills[id].learned++;
+			if(learner->skills[id].learned >= 95) {
 				send_to_char("Hai padroneggiato questa tecnica!\n\r", ch);
-				ch->skills[id].learned = 95;
+				learner->skills[id].learned = 95;
+			}
+			if(ch != learner && ch->skills != nullptr) {
+				ch->skills[id].learned = learner->skills[id].learned;
 			}
 		}
 	}
@@ -315,6 +420,14 @@ bool is_class_interrupt_id(int id) noexcept {
 	return find_def(id) != nullptr;
 }
 
+bool class_interrupt_refuse_cast(char_data* ch, int spell_id) {
+	const InterruptDef* def = find_def(spell_id);
+	if(def == nullptr || ch == nullptr) {
+		return false;
+	}
+	return interrupt_prereqs_blocked(ch, *def);
+}
+
 void clear_class_interrupt_cooldown(char_data* ch) {
 	if(ch != nullptr) {
 		g_interrupt_ready_pulse.erase(ch);
@@ -322,6 +435,10 @@ void clear_class_interrupt_cooldown(char_data* ch) {
 }
 
 void do_hilt_smash(struct char_data* ch, const char* argument, int cmd) {
+	if(ch->equipment[WIELD] == nullptr) {
+		send_to_char("Ti serve un'arma impugnata per colpire con l'elsa.\n\r", ch);
+		return;
+	}
 	do_interrupt_skill(ch, argument, cmd, SKILL_HILT_SMASH);
 }
 
@@ -360,9 +477,9 @@ void spell_divine_rebuke(byte /*level*/, struct char_data* ch, struct char_data*
 	resolve_interrupt(ch, victim, SPELL_DIVINE_REBUKE, true);
 }
 
-void spell_natures_grasp(byte /*level*/, struct char_data* ch, struct char_data* victim,
-						 struct obj_data* /*obj*/) {
-	resolve_interrupt(ch, victim, SPELL_NATURES_GRASP, true);
+void spell_thornbind(byte /*level*/, struct char_data* ch, struct char_data* victim,
+					 struct obj_data* /*obj*/) {
+	resolve_interrupt(ch, victim, SPELL_THORNBIND, true);
 }
 
 void cast_holy_rebuke(byte level, struct char_data* ch, const char* /*arg*/, int type,
@@ -401,14 +518,14 @@ void cast_divine_rebuke(byte level, struct char_data* ch, const char* /*arg*/, i
 	}
 }
 
-void cast_natures_grasp(byte level, struct char_data* ch, const char* /*arg*/, int type,
-						struct char_data* tar_ch, struct obj_data* tar_obj) {
+void cast_thornbind(byte level, struct char_data* ch, const char* /*arg*/, int type,
+					struct char_data* tar_ch, struct obj_data* tar_obj) {
 	switch(type) {
 	case SPELL_TYPE_SPELL:
-		spell_natures_grasp(level, ch, tar_ch, tar_obj);
+		spell_thornbind(level, ch, tar_ch, tar_obj);
 		break;
 	default:
-		mudlog(LOG_SYSERR, "Serious screw-up in nature's grasp!");
+		mudlog(LOG_SYSERR, "Serious screw-up in thornbind!");
 		break;
 	}
 }

@@ -34,6 +34,7 @@
 #include "act.other.hpp"
 #include "act.wizard.hpp"
 #include "breath.hpp"
+#include "class_interrupt.hpp"
 #include "comm.hpp"
 #include "db.hpp"
 #include "fight.hpp"
@@ -377,7 +378,7 @@ const char* spells[]= {
 	"tactical strike",          /* 310 SKILL_TACTICAL_STRIKE */
 	"spellshatter",             /* 311 SPELL_SPELLSHATTER */
 	"divine rebuke",            /* 312 SPELL_DIVINE_REBUKE */
-	"nature's grasp",           /* 313 SPELL_NATURES_GRASP */
+	"thornbind",                /* 313 SPELL_THORNBIND */
 	"mind spike",               /* 314 SKILL_MIND_SPIKE */
 	"\n"
 };
@@ -682,8 +683,11 @@ int check_falling(struct char_data* ch) {
 
 	while(!done && count < 100) {
 
-		/* check for an exit down.  if there is one, go through it.  */
-		if(rp->dir_option[DOWN] && rp->dir_option[DOWN]->to_room > -1) {
+		/* check for an exit down.  if there is one (and open), go through it.  */
+		const bool down_open =
+			rp->dir_option[DOWN] && rp->dir_option[DOWN]->to_room > -1 &&
+			!IS_SET(rp->dir_option[DOWN]->exit_info, EX_CLOSED);
+		if(down_open) {
 			targ = real_roomp(rp->dir_option[DOWN]->to_room);
 		}
 		else {
@@ -1995,16 +1999,13 @@ int spellfail_ceiling(char_data* mind, char_data* ch, int spl, int caster_level,
 	return max;
 }
 
-/** Scala il mana dal corpo originale e allinea quello del poly. */
+/** Scala il mana dal corpo che lancia (anche se polimorfato). */
 void spend_cast_mana(char_data* mind, char_data* ch, int amount) {
 	if(!IS_PC(mind)) {
 		return;
 	}
-	GET_MANA(mind) -= amount;
-	alter_mana(mind, 0);
-	if(mind != ch) {
-		GET_MANA(ch) = GET_MANA(mind);
-	}
+	GET_MANA(ch) -= amount;
+	alter_mana(ch, 0);
 }
 
 [[nodiscard]] bool anti_magic_blocks(char_data* mind, char_data* ch, char_data* tar_char, int cmd) {
@@ -2260,6 +2261,11 @@ ACTION_FUNC(do_cast) {
 		return;
 	}
 
+	/* Spell interrupt: CD/classe/livello prima di mana, lag e say_spell. */
+	if(is_class_interrupt_id(spl) && class_interrupt_refuse_cast(ch, spl)) {
+		return;
+	}
+
 	const int cost = static_cast<int>(USE_MANA(mind, spl));
 	if(cmd == CMD_RECALL && !IS_IMMORTAL(mind)) {
 		if(!MEMORIZED(mind, spl)) {
@@ -2268,7 +2274,7 @@ ACTION_FUNC(do_cast) {
 		}
 	}
 	else if(cmd != CMD_RECALL && IS_PC(mind) && GetMaxLevel(mind) < IMMORTALE &&
-			(GET_MANA(mind) < cost || GET_MANA(mind) <= 0)) {
+			(GET_MANA(ch) < cost || GET_MANA(ch) <= 0)) {
 		if(cmd != CMD_MIND) {
 			send_to_char("Non hai abbastanza $c0011energia$c0007!\n\r", ch);
 		}
@@ -2401,7 +2407,12 @@ void check_falling_obj(struct obj_data* obj, int room) {
 
 	while(!done && count < 100) {
 
-		if(rp->dir_option[DOWN] && rp->dir_option[DOWN]->to_room > -1) {
+		/* Porta/botola chiusa = pavimento: non precipitare attraverso. */
+		const bool down_open =
+			rp->dir_option[DOWN] && rp->dir_option[DOWN]->to_room > -1 &&
+			!IS_SET(rp->dir_option[DOWN]->exit_info, EX_CLOSED);
+
+		if(down_open) {
 			targ = real_roomp(rp->dir_option[DOWN]->to_room);
 		}
 		else {

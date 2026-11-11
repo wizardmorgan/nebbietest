@@ -231,6 +231,9 @@ public:
   int weight;
   int timer;
   unsigned int bitvector;
+  /** Persistiti al deposito: fee claim senza dipendere da obj_index[].data lazy. -1 = sconosciuto. */
+  short type_flag;
+  int cost;
   std::string obj_name;
   std::string short_desc;
   std::string description;
@@ -366,6 +369,26 @@ public:
   odb::nullable<unsigned long long> instance_id;
   std::string short_desc;
   odb::nullable<long long> room_vnum;
+  odb::nullable<std::string> detail;
+};
+
+/**
+ * Storico modifiche all'edit pool del PG (character_stats: campi edit_ e overedit_).
+ * Append-only, nessuna FK su toon (sopravvive al nuke). Indici (toon_id, at)
+ * e (kind, at).
+ */
+class edit_pool_event {
+public:
+  unsigned long long id;
+  boost::posix_time::ptime at;
+  unsigned long long toon_id;
+  /** Snapshot nome al momento dell'evento (query senza join). */
+  odb::nullable<std::string> toon_name;
+  odb::nullable<unsigned long long> actor_toon_id;
+  odb::nullable<std::string> actor_name;
+  std::string kind;
+  odb::nullable<std::string> note;
+  /** Snapshot before/after dei 12 campi (tag hit=/mana=/… edit/over). TEXT. */
   odb::nullable<std::string> detail;
 };
 
@@ -636,6 +659,17 @@ public:
   std::string nuked_by;
 };
 
+/* Storico rinomine PG (comando rename). */
+class toon_name_history {
+public:
+  unsigned long long id;
+  unsigned long long toon_id;
+  std::string old_name;
+  std::string new_name;
+  boost::posix_time::ptime renamed_at;
+  odb::nullable<std::string> renamed_by;
+};
+
 /* user.ptr: accesso devel (devaccess). TINYINT, non solo 0/1. */
 namespace DevAccess {
 constexpr unsigned char Never = 0;   /* mai autorizzato */
@@ -872,6 +906,8 @@ public:
 #pragma db member(character_inventory_overflow::weight) not_null default(0)
 #pragma db member(character_inventory_overflow::timer) not_null default(0)
 #pragma db member(character_inventory_overflow::bitvector) not_null default(0)
+#pragma db member(character_inventory_overflow::type_flag) not_null default(-1)
+#pragma db member(character_inventory_overflow::cost) not_null default(0)
 #pragma db member(character_inventory_overflow::obj_name) type("varchar(128)") \
     not_null default("")
 #pragma db member(character_inventory_overflow::short_desc) type("varchar(128)") \
@@ -999,6 +1035,19 @@ public:
 #pragma db index(character_item_loss::"idx_item_loss_toon_at") members(toon_id, at)
 #pragma db index(character_item_loss::"idx_item_loss_instance") members(instance_id)
 
+#pragma db object(edit_pool_event) session(false)
+#pragma db member(edit_pool_event::id) id auto
+#pragma db member(edit_pool_event::at) type("TIMESTAMP") not_null
+#pragma db member(edit_pool_event::toon_id) not_null index
+#pragma db member(edit_pool_event::toon_name) type("varchar(32)") null
+#pragma db member(edit_pool_event::actor_toon_id) null
+#pragma db member(edit_pool_event::actor_name) type("varchar(32)") null
+#pragma db member(edit_pool_event::kind) type("varchar(32)") not_null
+#pragma db member(edit_pool_event::note) type("varchar(256)") null
+#pragma db member(edit_pool_event::detail) type("TEXT") null
+#pragma db index(edit_pool_event::"idx_edit_pool_event_toon_at") members(toon_id, at)
+#pragma db index(edit_pool_event::"idx_edit_pool_event_kind_at") members(kind, at)
+
 #pragma db object(vault_plan) session(false)
 #pragma db member(vault_plan::key) id column("")
 #pragma db member(vault_plan_key::scope) not_null
@@ -1021,8 +1070,10 @@ public:
 #pragma db member(vault::tier) not_null
 #pragma db member(vault::pay_mode) not_null
 #pragma db member(vault::paid_until) type("DATETIME") null
-#pragma db member(vault::created_at) type("TIMESTAMP") not_null
-#pragma db member(vault::updated_at) type("TIMESTAMP") not_null
+#pragma db member(vault::created_at) type("TIMESTAMP") not_null \
+	options("DEFAULT CURRENT_TIMESTAMP")
+#pragma db member(vault::updated_at) type("TIMESTAMP") not_null \
+	options("DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
 #pragma db index(vault::"uq_vault_owner") unique members(scope, owner_id)
 #pragma db index(vault::"idx_vault_toon") members(toon_id)
 #pragma db index(vault::"idx_vault_user") members(user_id)
@@ -1032,7 +1083,8 @@ public:
 #pragma db member(vault_item_key::vault_id) not_null
 #pragma db member(vault_item_key::item_number) not_null
 #pragma db member(vault_item::quantity) not_null default(0)
-#pragma db member(vault_item::updated_at) type("TIMESTAMP") not_null
+#pragma db member(vault_item::updated_at) type("TIMESTAMP") not_null \
+	options("DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
 
 #pragma db object(vault_log) session(false)
 #pragma db member(vault_log::id) id auto
@@ -1179,6 +1231,19 @@ public:
     not_null index
 #pragma db member(toon_nuke_blacklist::nuked_at) type("DATETIME") not_null
 #pragma db member(toon_nuke_blacklist::nuked_by) type("varchar(32)") not_null
+
+#pragma db object(toon_name_history) session(false)
+#pragma db member(toon_name_history::id) id auto
+#pragma db member(toon_name_history::toon_id) not_null
+#pragma db member(toon_name_history::old_name) type("varchar(32)") not_null
+#pragma db member(toon_name_history::new_name) type("varchar(32)") not_null
+#pragma db member(toon_name_history::renamed_at) type("DATETIME") not_null \
+	options("DEFAULT CURRENT_TIMESTAMP")
+#pragma db member(toon_name_history::renamed_by) type("varchar(32)") null
+#pragma db index(toon_name_history::"idx_toon_name_history_toon_id") \
+	members(toon_id)
+#pragma db index(toon_name_history::"idx_toon_name_history_old_name") \
+	members(old_name)
 
 #pragma db object(user) session(false)
 #pragma db member(user::id) id auto

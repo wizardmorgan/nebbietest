@@ -28,8 +28,15 @@ enum class PhaseBossInterruptResult {
 /** Mob con special PhaseBoss (o profilo bindato per vnum). */
 [[nodiscard]] bool phase_boss_is_boss(const struct char_data* ch) noexcept;
 
-/** Immuni a lag/atterramento/CC (bash, kick, gust, sleep, para, …).
- *  Le class-interrupt restano valide (solo soft/hard sul telegraph). */
+/**
+ * Bonus % danno enrage (0 se off / sopra soglia).
+ * Vale per melee e ability Special.
+ */
+[[nodiscard]] int phase_boss_enrage_bonus_pct(const struct char_data* ch) noexcept;
+
+/** Immuni a lag/atterramento/CC (WAIT_STATE, pos sitting, gust, sleep, para, …).
+ *  Bash su PhaseBoss fallisce sempre (rimbalzo); kick/springleap/disarm partono
+ *  (danno / strip arma) ma senza CC sul boss. Class-interrupt: soft/hard telegraph. */
 [[nodiscard]] bool phase_boss_resists_crowd_control(const struct char_data* ch) noexcept;
 
 /**

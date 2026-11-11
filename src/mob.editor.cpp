@@ -14,7 +14,8 @@
  * Ask <mob> trasferisci - wizard: give partenza, give destinazione, numero effetto, si/no
  * Ask <mob> distruggi - wizard: give oggetto, si/no
  * Ask <mob> rinomina - give, keywords/short/desc, pattern colori opz., si/no
- * (1 runa; proto match; colori: solid/lettere/parole/per-parola; somma 100k+110k+...)
+ * (1 runa; ingresso: no HAS-GEMS/ITEM2_INSERT, poi DB edit, poi EDIT+PERSONAL tuoi;
+ *  in uscita non riapplica EDIT/PERSONAL; colori: solid/lettere/parole/per-parola)
  * Give = gesto (oggetto resta al PG).
  * Ask: aiuto (comandi), info <obj>, dettagli [servizio], trasferisci/distruggi/rinomina.
  * Persist transfer: TX unica A+B + broker_xfer_applied; XP/done via reconcile
@@ -574,36 +575,6 @@ constexpr std::size_t kBlasphemyMaxDistance = 3;
 	}
 	/* Oltre alle liste: sacro + insulto vicini, o forme incollate. */
 	return rename_blasphemy_hit(words, allowed);
-}
-
-[[nodiscard]] bool cstr_eq_field(const char* a, const char* b) {
-	const char* aa = a ? a : "";
-	const char* bb = b ? b : "";
-	return std::strcmp(aa, bb) == 0;
-}
-
-[[nodiscard]] struct obj_data* load_edit_prototype(const struct obj_data* obj);
-
-[[nodiscard]] bool obj_texts_match_prototype(const obj_data* obj, std::string& err) {
-	err.clear();
-	if(!obj) {
-		err = "Oggetto non valido.";
-		return false;
-	}
-	struct obj_data* proto = load_edit_prototype(obj);
-	if(!proto) {
-		err = "Non riesco a leggere l'essenza originale di quel pezzo.";
-		return false;
-	}
-	const bool same = cstr_eq_field(obj->name, proto->name) &&
-					  cstr_eq_field(obj->short_description, proto->short_description) &&
-					  cstr_eq_field(obj->description, proto->description);
-	extract_obj(proto);
-	if(!same) {
-		err = "Ricordati che non posso cambiare il nome di un oggetto gia' rinominato.";
-		return false;
-	}
-	return true;
 }
 
 /** Parole della description in minuscolo (lettere e apostrofi, es. "li'"). */
@@ -2955,7 +2926,7 @@ void clear_zero_modifier_slots(struct obj_data* obj) {
 	return buf;
 }
 
-[[nodiscard]] bool match_bit_table(const char* names[], const std::string& key,
+[[nodiscard]] bool match_bit_table(const char* const* names, const std::string& key,
 								   unsigned& bit_out) {
 	if(!names || key.empty()) {
 		return false;
@@ -3009,6 +2980,42 @@ void clear_zero_modifier_slots(struct obj_data* obj) {
 		return cleaned.substr(0, pos);
 	}
 	return cleaned;
+}
+
+/** Match bit names greedily from word[wi..]: longest table name first. */
+[[nodiscard]] bool match_bit_table_greedy(const char* const* names,
+										  const std::vector<std::string>& words,
+										  std::size_t wi, unsigned& bit_out,
+										  std::size_t& words_consumed) {
+	bit_out = 0;
+	words_consumed = 0;
+	if(!names || wi >= words.size()) {
+		return false;
+	}
+	std::size_t best_n = 0;
+	unsigned best_bit = 0;
+	const std::size_t max_n = std::min(static_cast<std::size_t>(4), words.size() - wi);
+	for(std::size_t n = max_n; n >= 1; --n) {
+		std::string cand;
+		for(std::size_t i = 0; i < n; ++i) {
+			if(i != 0) {
+				cand.push_back(' ');
+			}
+			cand += words[wi + i];
+		}
+		unsigned b = 0;
+		if(match_bit_table(names, normalize_affect_key(cand), b)) {
+			best_n = n;
+			best_bit = b;
+			break; /* longest first */
+		}
+	}
+	if(best_n == 0) {
+		return false;
+	}
+	bit_out = best_bit;
+	words_consumed = best_n;
+	return true;
 }
 
 /**
@@ -3164,25 +3171,22 @@ void clear_zero_modifier_slots(struct obj_data* obj) {
 			}
 			else {
 				bool bits_ok = true;
-				for(std::size_t wi = static_cast<std::size_t>(nprefix); wi < words.size();
-					++wi) {
+				const char* const* bit_names = immunity_names;
+				if(loc == APPLY_SPELL) {
+					bit_names = affected_bits;
+				}
+				else if(loc == APPLY_AFF2) {
+					bit_names = affected_bits2;
+				}
+				for(std::size_t wi = static_cast<std::size_t>(nprefix); wi < words.size();) {
 					unsigned b = 0;
-					const std::string bk = normalize_affect_key(words[wi]);
-					bool matched = false;
-					if(loc == APPLY_SPELL) {
-						matched = match_bit_table(affected_bits, bk, b);
-					}
-					else if(loc == APPLY_AFF2) {
-						matched = match_bit_table(affected_bits2, bk, b);
-					}
-					else {
-						matched = match_bit_table(immunity_names, bk, b);
-					}
-					if(!matched) {
+					std::size_t consumed = 0;
+					if(!match_bit_table_greedy(bit_names, words, wi, b, consumed)) {
 						bits_ok = false;
 						break;
 					}
 					want |= b;
+					wi += consumed;
 				}
 				if(!bits_ok) {
 					continue;
@@ -3597,8 +3601,8 @@ struct BrokerTransferSnap {
 	}
 };
 
-[[nodiscard]] std::vector<std::string> collect_transferable_delta_labels(struct obj_data* obj) {
-	std::vector<std::string> out;
+[[nodiscard]] std::vector<AffectPick> collect_transferable_delta_picks(struct obj_data* obj) {
+	std::vector<AffectPick> out;
 	if(!obj) {
 		return out;
 	}
@@ -3606,6 +3610,17 @@ struct BrokerTransferSnap {
 	if(!proto) {
 		return out;
 	}
+
+	auto push_pick = [&](int loc, int delta, std::string label) {
+		if(delta == 0 || label.empty()) {
+			return;
+		}
+		AffectPick p;
+		p.location = loc;
+		p.delta = delta;
+		p.label = std::move(label);
+		out.push_back(std::move(p));
+	};
 
 	for(int loc = 0; apply_types[loc] && apply_types[loc][0] != '\n'; ++loc) {
 		if(loc == APPLY_NONE || loc == APPLY_SKIP) {
@@ -3625,7 +3640,7 @@ struct BrokerTransferSnap {
 			if(added == 0) {
 				continue;
 			}
-			auto push_bits_label = [&](unsigned bits) {
+			auto push_bits = [&](unsigned bits) {
 				if(bits == 0) {
 					return;
 				}
@@ -3634,10 +3649,11 @@ struct BrokerTransferSnap {
 										 names.back() == '\n')) {
 					names.pop_back();
 				}
-				out.push_back(apply_display_name(loc) + " " + names);
+				push_pick(loc, static_cast<int>(bits),
+						  apply_display_name(loc) + " " + names);
 			};
 			/* Location bitfield: una riga per location, solo bit Enable. */
-			push_bits_label(added & static_cast<unsigned>(broker_bits_enabled_for_loc(loc)));
+			push_bits(added & static_cast<unsigned>(broker_bits_enabled_for_loc(loc)));
 			continue;
 		}
 		long delta = obj_delta_vs_proto(obj, proto, loc);
@@ -3650,7 +3666,8 @@ struct BrokerTransferSnap {
 			delta = 0;
 		}
 		if(delta != 0) {
-			out.push_back(apply_display_name(loc) + " by " + std::to_string(delta));
+			push_pick(loc, static_cast<int>(delta),
+					  apply_display_name(loc) + " by " + std::to_string(delta));
 		}
 	}
 
@@ -3674,7 +3691,8 @@ struct BrokerTransferSnap {
 
 		auto push_by = [&](int loc, long amt) {
 			if(amt > 0) {
-				out.push_back(apply_display_name(loc) + " by " + std::to_string(amt));
+				push_pick(loc, static_cast<int>(amt),
+						  apply_display_name(loc) + " by " + std::to_string(amt));
 			}
 		};
 
@@ -3696,15 +3714,30 @@ struct BrokerTransferSnap {
 	}
 
 	extract_obj(proto);
-	/* Dedup preservando ordine */
-	std::vector<std::string> uniq;
+	/* Dedup per label preservando ordine */
+	std::vector<AffectPick> uniq;
 	uniq.reserve(out.size());
-	for(const auto& s : out) {
-		if(std::find(uniq.begin(), uniq.end(), s) == uniq.end()) {
-			uniq.push_back(s);
+	for(const auto& p : out) {
+		bool seen = false;
+		for(const auto& u : uniq) {
+			if(u.label == p.label && u.location == p.location && u.delta == p.delta) {
+				seen = true;
+				break;
+			}
+		}
+		if(!seen) {
+			uniq.push_back(p);
 		}
 	}
 	return uniq;
+}
+
+[[nodiscard]] std::vector<std::string> collect_transferable_delta_labels(struct obj_data* obj) {
+	std::vector<std::string> labels;
+	for(const auto& p : collect_transferable_delta_picks(obj)) {
+		labels.push_back(p.label);
+	}
+	return labels;
 }
 
 void show_edit_broker_usage(struct char_data* ch, struct char_data* mob) {
@@ -3825,10 +3858,8 @@ void show_edit_broker_details_destroy(struct char_data* ch, struct char_data* mo
 	broker_ambient_talk(ch, mob);
 	tell_from_jeweler(ch, mob, "Dettagli su $c0011distruggi$c0007:");
 	send_to_char(
-		"Elimini l'edit e ricevi subito il $c001125%$c0007 di quanto e' stato "
-		"pagato in piu'\n\r"
-		"rispetto al pezzo originale, poi diviso per il numero di classi "
-		"(sempre in esperienza).\n\r"
+		"Elimini l'edit e ricevi subito il $c001125%$c0007 di quanto l'hai pagato, "
+		"poi diviso per il numero di classi (sempre in esperienza).\n\r"
 		"Serve un pezzo $c0011EDIT$c0007, $c0011PERSONAL$c0007 e di tua "
 		"proprieta'.\n\r",
 		ch);
@@ -3842,9 +3873,9 @@ void show_edit_broker_details_rename(struct char_data* ch, struct char_data* mob
 	broker_ambient_talk(ch, mob);
 	tell_from_jeweler(ch, mob, "Dettagli su $c0011rinomina$c0007:");
 	std::ostringstream os;
-	os << "Costa $c00111 runa$c0007 degli Dei. Solo pezzi nel database "
-	   << "(name / short / description).\n\r"
-	   << "Ricordati che non posso cambiare il nome di un oggetto gia' rinominato.\n\r"
+	os << "Costa $c00111 runa$c0007 degli Dei. Solo su pezzi $c0011EDIT$c0007 e "
+	   << "$c0011PERSONAL$c0007 tuoi (vengono cambiati name / short / description).\n\r"
+	   << "Non posso rinominare un pezzo con gemme incastonate.\n\r"
 	   << "I colori li scrivi tu nel $c0011say$c0007 della short e della description:\n\r"
 	   << "  \\$c + 4 cifre = effetto, sfondo, colore 00-15.\n\r"
 	   << "  Es. \\$c0011 giallo, \\$c0009 rosso, \\$c0007 normale, "
@@ -3937,7 +3968,7 @@ struct EditBrokerPending {
 	unsigned long long id_a{};
 	unsigned long long id_b{};
 	unsigned long long id_c{};
-	std::vector<std::string> affect_labels;
+	std::vector<AffectPick> affect_picks;
 	std::string rename_keywords;
 	std::string rename_short;
 	std::string rename_desc;
@@ -4170,7 +4201,8 @@ void supersede_edit_broker_pending(char_data* ch, char_data* mob) {
 
 [[nodiscard]] bool build_transfer_plan(struct char_data* ch, struct char_data* mob,
 									   std::string_view aff_name, std::string_view name_a,
-									   std::string_view name_b, TransferPlan& out) {
+									   std::string_view name_b, TransferPlan& out,
+									   const AffectPick* pre_resolved = nullptr) {
 	if(!ch || !mob) {
 		return false;
 	}
@@ -4236,7 +4268,10 @@ void supersede_edit_broker_pending(char_data* ch, char_data* mob) {
 
 	AffectPick pick;
 	std::string err;
-	if(!resolve_affect_pick(obj_a, std::string(aff_name), pick, err)) {
+	if(pre_resolved != nullptr) {
+		pick = *pre_resolved;
+	}
+	else if(!resolve_affect_pick(obj_a, std::string(aff_name), pick, err)) {
 		tell_from_jeweler(ch, mob, err);
 		std::ostringstream log;
 		log << "EditAffectBroker transfer denied " << actor_name << ": " << err
@@ -5616,7 +5651,7 @@ bool apply_edit_broker_answer(char_data* ch, char_data* mob, BrokerConfirmAnswer
 		return false;
 	}
 
-	std::string chosen;
+	const AffectPick* chosen_pick = nullptr;
 	bool all_digits = !word.empty();
 	for(unsigned char c : word) {
 		if(!std::isdigit(c)) {
@@ -5626,11 +5661,11 @@ bool apply_edit_broker_answer(char_data* ch, char_data* mob, BrokerConfirmAnswer
 	}
 	if(all_digits) {
 		const int idx = parse_int(word).value_or(-1); /* -1: numero non valido */
-		if(idx < 1 || static_cast<std::size_t>(idx) > pending.affect_labels.size()) {
+		if(idx < 1 || static_cast<std::size_t>(idx) > pending.affect_picks.size()) {
 			tell_from_jeweler(ch, mob, "Numero non valido. Riprova, oppure di' no.");
 			return true;
 		}
-		chosen = pending.affect_labels[static_cast<std::size_t>(idx - 1)];
+		chosen_pick = &pending.affect_picks[static_cast<std::size_t>(idx - 1)];
 	}
 	else {
 		const std::string key = normalize_affect_key(word);
@@ -5642,14 +5677,14 @@ bool apply_edit_broker_answer(char_data* ch, char_data* mob, BrokerConfirmAnswer
 			full.pop_back();
 		}
 		const std::string full_key = normalize_affect_key(full);
-		for(const auto& lab : pending.affect_labels) {
-			const std::string lab_key = normalize_affect_key(lab);
+		for(const auto& p : pending.affect_picks) {
+			const std::string lab_key = normalize_affect_key(p.label);
 			if(lab_key == full_key || lab_key == key) {
-				chosen = lab;
+				chosen_pick = &p;
 				break;
 			}
 		}
-		if(chosen.empty()) {
+		if(chosen_pick == nullptr) {
 			tell_from_jeweler(ch, mob, "Non riconosco quell'effetto.");
 			tell_from_jeweler(ch, mob, "Usa il numero della lista, oppure di' no.");
 			return true;
@@ -5657,11 +5692,12 @@ bool apply_edit_broker_answer(char_data* ch, char_data* mob, BrokerConfirmAnswer
 	}
 
 	TransferPlan plan;
-	if(!build_transfer_plan(ch, mob, chosen, pending.name_a, pending.name_b, plan)) {
+	if(!build_transfer_plan(ch, mob, chosen_pick->label, pending.name_a, pending.name_b, plan,
+							chosen_pick)) {
 		cancel_edit_broker_pending(ch, mob, false);
 		return true;
 	}
-	pending.aff_name = chosen;
+	pending.aff_name = chosen_pick->label;
 	pending.step = EditBrokerStep::ConfirmTransfer;
 	pending.bit_place_ask = plan.bit_place_ask;
 	touch_edit_broker_pending(pending);
@@ -5969,6 +6005,8 @@ void preview_rename(char_data* ch, char_data* mob, const EditBrokerPending& pend
 	ask_edit_broker_confirm(ch, mob);
 }
 
+[[nodiscard]] bool rename_object_eligible(char_data* ch, char_data* mob, obj_data* obj);
+
 void execute_rename(char_data* ch, char_data* mob, EditBrokerPending& pending) {
 	if(!ch || !mob) {
 		return;
@@ -5980,23 +6018,9 @@ void execute_rename(char_data* ch, char_data* mob, EditBrokerPending& pending) {
 		tell_from_jeweler(ch, mob, "Ok, non faccio niente.");
 		return;
 	}
-	if(obj->db_instance_id == 0) {
+	if(!rename_object_eligible(ch, mob, obj)) {
 		broker_ambient_stop(ch, mob);
-		tell_from_jeweler(ch, mob, "L'oggetto non e' nel database edit.");
 		return;
-	}
-	if(GetMaxLevel(ch) < IMMORTALE) {
-		if(!(IS_OBJ_STAT2(obj, ITEM2_PERSONAL) && pers_on(ch, obj))) {
-			broker_ambient_stop(ch, mob);
-			tell_from_jeweler(ch, mob, "Il pezzo deve essere PERSONAL e tuo.");
-			return;
-		}
-		std::string perr;
-		if(!obj_texts_match_prototype(obj, perr)) {
-			broker_ambient_stop(ch, mob);
-			tell_from_jeweler(ch, mob, perr);
-			return;
-		}
 	}
 	std::string kw;
 	std::string sh;
@@ -6050,19 +6074,11 @@ void execute_rename(char_data* ch, char_data* mob, EditBrokerPending& pending) {
 	const std::string old_name = obj->name ? obj->name : "";
 	const std::string old_short = obj->short_description ? obj->short_description : "";
 	const std::string old_desc = obj->description ? obj->description : "";
-	/* Rollback completo se il persist fallisce: anche flag EDIT/PERSONAL e
-	 * proprietario messi qui sotto da SET_BIT/pers_obj (persist li deve vedere). */
-	const unsigned int old_flags2 = obj->obj_flags.extra_flags2;
-	std::array<char, sizeof(obj->personal_owner)> old_owner{};
-	std::memcpy(old_owner.data(), obj->personal_owner, old_owner.size());
+	/* In ingresso e' gia' EDIT+PERSONAL: non riapplicare flag. Rollback solo testi. */
 
 	set_obj_cstr(obj->name, kw);
 	set_obj_cstr(obj->short_description, sh);
 	set_obj_cstr(obj->description, ds);
-	SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
-	if(!IS_OBJ_STAT2(obj, ITEM2_PERSONAL)) {
-		pers_obj(mob, ch, obj, CMD_PERSONALIZE);
-	}
 
 	std::ostringstream detail;
 	detail << "channel=rinomina kind=rename"
@@ -6070,12 +6086,10 @@ void execute_rename(char_data* ch, char_data* mob, EditBrokerPending& pending) {
 		   << " keywords=" << kw << " rune=" << runes << " coins=" << coins
 		   << " blink=" << (pending.rename_blink ? 1 : 0);
 	detail << " colors=" << rename_said_palette(pending).size();
-	if(!persist_edit_obj(obj, ch, "rename", "rinomina", detail.str().c_str(), true)) {
+	if(!persist_edit_obj(obj, ch, "rename", "rinomina", detail.str().c_str(), false)) {
 		set_obj_cstr(obj->name, old_name);
 		set_obj_cstr(obj->short_description, old_short);
 		set_obj_cstr(obj->description, old_desc);
-		obj->obj_flags.extra_flags2 = old_flags2;
-		std::memcpy(obj->personal_owner, old_owner.data(), old_owner.size());
 		broker_ambient_stop(ch, mob);
 		tell_from_jeweler(ch, mob,
 						  "Salvataggio fallito: non tocco ne' rune, ne' coins, ne' nomi.");
@@ -6119,20 +6133,17 @@ void execute_rename(char_data* ch, char_data* mob, EditBrokerPending& pending) {
 	if(!ch || !mob || !obj) {
 		return false;
 	}
+	if(IS_OBJ_STAT2(obj, ITEM2_INSERT)) {
+		tell_from_jeweler(ch, mob, "Non posso rinominare un pezzo con gemme incastonate.");
+		return false;
+	}
 	if(obj->db_instance_id == 0) {
 		tell_from_jeweler(ch, mob, "Serve un pezzo gia' nel database edit.");
 		return false;
 	}
-	if(GetMaxLevel(ch) < IMMORTALE) {
-		if(!(IS_OBJ_STAT2(obj, ITEM2_PERSONAL) && pers_on(ch, obj))) {
-			tell_from_jeweler(ch, mob, "Il pezzo deve essere PERSONAL e tuo.");
-			return false;
-		}
-		std::string perr;
-		if(!obj_texts_match_prototype(obj, perr)) {
-			tell_from_jeweler(ch, mob, perr);
-			return false;
-		}
+	if(!obj_is_owned_edit(ch, obj)) {
+		tell_from_jeweler(ch, mob, "Il pezzo deve essere EDIT, PERSONAL e tuo.");
+		return false;
 	}
 	return true;
 }
@@ -6336,8 +6347,8 @@ bool handle_edit_broker_give(char_data* ch, char_data* mob, const char* arg) {
 			tell_from_jeweler(ch, mob, "Contatta lo staff.");
 			return true;
 		}
-		const auto labels = collect_transferable_delta_labels(obj);
-		if(labels.empty()) {
+		const auto picks = collect_transferable_delta_picks(obj);
+		if(picks.empty()) {
 			tell_from_jeweler(ch, mob,
 							  "Su questo pezzo non ci sono effetti trasferibili.");
 			tell_from_jeweler(ch, mob,
@@ -6347,7 +6358,7 @@ bool handle_edit_broker_give(char_data* ch, char_data* mob, const char* arg) {
 		}
 		pending.name_a = obj_vis_key(ch, obj);
 		pending.id_a = obj->db_instance_id;
-		pending.affect_labels = labels;
+		pending.affect_picks = picks;
 		pending.step = EditBrokerStep::WaitGiveB;
 		touch_edit_broker_pending(pending);
 		broker_ambient_examine(ch, mob, obj);
@@ -6394,7 +6405,14 @@ bool handle_edit_broker_give(char_data* ch, char_data* mob, const char* arg) {
 			tell_from_jeweler(ch, mob, os.str());
 		}
 		tell_from_jeweler(ch, mob, "Ecco gli effetti da spostare:");
-		show_numbered_affect_list(ch, mob, obj_a, pending.affect_labels, true);
+		{
+			std::vector<std::string> labels;
+			labels.reserve(pending.affect_picks.size());
+			for(const auto& p : pending.affect_picks) {
+				labels.push_back(p.label);
+			}
+			show_numbered_affect_list(ch, mob, obj_a, labels, true);
+		}
 		return true;
 	}
 

@@ -813,10 +813,7 @@ int SameRace(struct char_data* ch1, struct char_data* ch2) {
 }
 
 int AssistFriend(struct char_data* ch) {
-	struct char_data* damsel, *targ, *tmp_ch, *next;
-
-	damsel = 0;
-	targ = 0;
+	struct char_data* targ, *tmp_ch, *next;
 
 	if(isNullChar(ch)) { // SALVO controllo che non sia NULL
 		return TRUE;
@@ -846,26 +843,29 @@ int AssistFriend(struct char_data* ch) {
 				tmp_ch = next) {
 			next = tmp_ch->next_in_room;
 
-			if(tmp_ch->specials.fighting && MobFriend(ch, tmp_ch) &&
-					CAN_SEE(ch, tmp_ch)) {
-				damsel = tmp_ch;
-				break;
+			if(!tmp_ch->specials.fighting || !CAN_SEE(ch, tmp_ch)) {
+				continue;
 			}
-		}
+			/* Olimpo: alleati tra le due zone anche se razza diversa. */
+			const bool olymp_ally =
+				is_olympus_npc(ch) && is_olympus_npc(tmp_ch);
+			if(!MobFriend(ch, tmp_ch) && !olymp_ally) {
+				continue;
+			}
 
-		if(damsel) {
-			/*
-			 * check if the people in the room are fighting.
-			 */
-			targ = FindAnAttacker(damsel);
-			if(targ) {
-				if(targ->in_room == ch->in_room) {
-					if(!IS_AFFECTED(ch, AFF_CHARM) || ch->master != targ) {
-						hit(ch, targ, 0);
-						return TRUE;
-					}
-				}
+			targ = FindAnAttacker(tmp_ch);
+			if(targ == nullptr || targ->in_room != ch->in_room) {
+				continue;
 			}
+			/* Mai assist Olimpo-vs-Olimpo; sì assist contro PG / esterni. */
+			if(is_olympus_npc(ch) && is_olympus_npc(targ)) {
+				continue;
+			}
+			if(IS_AFFECTED(ch, AFF_CHARM) && ch->master == targ) {
+				continue;
+			}
+			hit(ch, targ, 0);
+			return TRUE;
 		}
 	}
 	return FALSE;
@@ -1232,11 +1232,8 @@ SCRIPT_FUNC(do_jmp) {
 	int i;
 	char buf[255];
 
-	for(i = 0; strcmp(gpScript_data[ch->script].script[i].line, "end\n"); i++) {
-		strcpy(buf,gpScript_data[ch->script].script[i].line);
-		if(buf[strlen(buf) - 1] == '\n') {
-			buf[strlen(buf) - 1] = '\0';
-		}
+	for(i = 0; strcmp(gpScript_data[ch->script].script[i].line, "end"); i++) {
+		snprintf(buf, sizeof(buf), "%s", gpScript_data[ch->script].script[i].line);
 
 		if(!strncmp(buf, arg, strlen(arg))) {
 			ch->commandp = i;
@@ -1254,11 +1251,8 @@ SCRIPT_FUNC(do_jsr) {
 	int i;
 	char buf[ 256 ];
 
-	for(i = 0; strcmp(gpScript_data[ch->script].script[i].line, "end\n"); i++) {
-		strcpy(buf,gpScript_data[ch->script].script[i].line);
-		if(buf[strlen(buf) - 1] == '\n') {
-			buf[strlen(buf) - 1] = '\0';
-		}
+	for(i = 0; strcmp(gpScript_data[ch->script].script[i].line, "end"); i++) {
+		snprintf(buf, sizeof(buf), "%s", gpScript_data[ch->script].script[i].line);
 
 		if(!strncmp(buf, arg, strlen(arg))) {
 			ch->commandp2 = ch->commandp + 1;

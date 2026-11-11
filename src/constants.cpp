@@ -126,7 +126,7 @@ const char* spell_wear_off_msg[] = {
 	/*	 41 SPELL_VENTRILOQUATE			*/	"!Ventriloquate!",
 	/*	 42 SPELL_WORD_OF_RECALL		*/	"!Word of Recall!",
 	/*	 43 SPELL_REMOVE_POISON			*/	"!Remove Poison!",
-	/*	 44 SPELL_SENSE_LIFE			*/	"Non percepisci piu' cosi' chiaramente quello che ti circonda.",
+	/*	 44 SPELL_SENSE_LIFE			*/	"La tua percezione delle forme di vita nascoste si affievolisce.",
 	/*	 45 SKILL_SNEAK					*/	"Smetti di muoverti silenziosamente.",
 	/*	 46 SKILL_HIDE					*/	"!Hide!",
 	/*	 47 SKILL_STEAL					*/	"!Steal!",
@@ -395,7 +395,7 @@ const char* spell_wear_off_msg[] = {
 	/*	310 SKILL_TACTICAL_STRIKE */	"!Tactical Strike!",
 	/*	311 SPELL_SPELLSHATTER */	"!Spellshatter!",
 	/*	312 SPELL_DIVINE_REBUKE */	"!Divine Rebuke!",
-	/*	313 SPELL_NATURES_GRASP */	"!Nature's Grasp!",
+	/*	313 SPELL_THORNBIND */	"!Thornbind!",
 	/*	314 SKILL_MIND_SPIKE */	"!Mind Spike!",
 											"\n"
 };
@@ -445,7 +445,7 @@ const char* spell_wear_off_room_msg[] = {
 	/*	 41 SPELL_VENTRILOQUATE			*/	"!Ventriloquate!",
 	/*	 42 SPELL_WORD_OF_RECALL		*/	"!Word of Recall!",
 	/*	 43 SPELL_REMOVE_POISON			*/	"!Remove Poison!",
-	/*	 44 SPELL_SENSE_LIFE			*/	"$n smette di guardarsi intorno.",
+	/*	 44 SPELL_SENSE_LIFE			*/	"$n sembra meno attento a cio' che lo circonda.",
 	/*	 45 SKILL_SNEAK					*/	"",  /* NO MESSAGE FOR SNEAK*/
 	/*	 46 SKILL_HIDE					*/	"!Hide!",
 	/*	 47 SKILL_STEAL					*/	"!Steal!",
@@ -714,7 +714,7 @@ const char* spell_wear_off_room_msg[] = {
 	/*	310 SKILL_TACTICAL_STRIKE */	"!Tactical Strike!",
 	/*	311 SPELL_SPELLSHATTER */	"!Spellshatter!",
 	/*	312 SPELL_DIVINE_REBUKE */	"!Divine Rebuke!",
-	/*	313 SPELL_NATURES_GRASP */	"!Nature's Grasp!",
+	/*	313 SPELL_THORNBIND */	"!Thornbind!",
 	/*	314 SKILL_MIND_SPIKE */	"!Mind Spike!",
 											"\n"
 };
@@ -1033,7 +1033,7 @@ const char* spell_wear_off_soon_msg[] = {
 	/*	310 SKILL_TACTICAL_STRIKE */	"!Tactical Strike!",
 	/*	311 SPELL_SPELLSHATTER */	"!Spellshatter!",
 	/*	312 SPELL_DIVINE_REBUKE */	"!Divine Rebuke!",
-	/*	313 SPELL_NATURES_GRASP */	"!Nature's Grasp!",
+	/*	313 SPELL_THORNBIND */	"!Thornbind!",
 	/*	314 SKILL_MIND_SPIKE */	"!Mind Spike!",
 											"\n"
 };
@@ -1352,7 +1352,7 @@ const char* spell_wear_off_soon_room_msg[] = {
 	/*	310 SKILL_TACTICAL_STRIKE */	"!Tactical Strike!",
 	/*	311 SPELL_SPELLSHATTER */	"!Spellshatter!",
 	/*	312 SPELL_DIVINE_REBUKE */	"!Divine Rebuke!",
-	/*	313 SPELL_NATURES_GRASP */	"!Nature's Grasp!",
+	/*	313 SPELL_THORNBIND */	"!Thornbind!",
 	/*	314 SKILL_MIND_SPIKE */	"!Mind Spike!",
 											"\n"
 
@@ -3966,7 +3966,7 @@ const char* spell_desc[] = {
 	/*	310 SKILL_TACTICAL_STRIKE */	"",
 	/*	311 SPELL_SPELLSHATTER */	"",
 	/*	312 SPELL_DIVINE_REBUKE */	"",
-	/*	313 SPELL_NATURES_GRASP */	"",
+	/*	313 SPELL_THORNBIND */	"",
 	/*	314 SKILL_MIND_SPIKE */	"",
 											"\n"
 };

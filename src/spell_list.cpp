@@ -839,7 +839,7 @@ void boot_spells() {
 		   /*Ranger      */ IMMORTALE,
 		   /*psIonic     */ IMMORTALE,
 		   /*mana        */ 5,
-		   /*target      */ TAR_CHAR_ROOM,
+		   /*target      */ TAR_SELF_ONLY,
 		   /*funzione    */ cast_sense_life,
 		   /*spell fail  */ 0,
 		   /*align       */ 0,
@@ -4645,8 +4645,8 @@ void boot_spells() {
 					IMMORTALE, IMMORTALE, cast_spellshatter);
 	interrupt_spell(SPELL_DIVINE_REBUKE, IMMORTALE, 15, IMMORTALE, IMMORTALE, IMMORTALE,
 					IMMORTALE, IMMORTALE, cast_divine_rebuke);
-	interrupt_spell(SPELL_NATURES_GRASP, IMMORTALE, IMMORTALE, 15, IMMORTALE, IMMORTALE,
-					IMMORTALE, IMMORTALE, cast_natures_grasp);
+	interrupt_spell(SPELL_THORNBIND, IMMORTALE, IMMORTALE, 15, IMMORTALE, IMMORTALE,
+					IMMORTALE, IMMORTALE, cast_thornbind);
 	interrupt_skill(SKILL_MIND_SPIKE, IMMORTALE, IMMORTALE, IMMORTALE, IMMORTALE,
 					IMMORTALE, IMMORTALE, 15);
 }

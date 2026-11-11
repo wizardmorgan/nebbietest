@@ -100,6 +100,7 @@ struct BossState {
 	int skill_cd = 0;
 	int fight_ticks = 0;
 	int add_count = 0;
+	bool enrage_entered = false;
 
 	[[nodiscard]] bool casting() const noexcept {
 		return ability_index >= 0 && windup_left > 0;
@@ -206,6 +207,24 @@ void aoe_damage(char_data* mob, int dam, int atype) {
 	}
 }
 
+/** Slam Egida: fail save PARA → a terra 2 round violenza. */
+void slam_knockdown(char_data* mob) {
+	for(char_data* vict : pcs_in_room(mob)) {
+		if(GET_POS(vict) <= POSITION_DEAD) {
+			continue;
+		}
+		if(saves_spell(vict, SAVING_PARA)) {
+			continue;
+		}
+		GET_POS(vict) = POSITION_SITTING;
+		WAIT_STATE(vict, PULSE_VIOLENCE * 2);
+		act("$c0001L'urto dell'Egida ti scaraventa a terra!$c0007",
+			FALSE, vict, nullptr, nullptr, TO_CHAR);
+		act("$c0001L'urto dell'Egida scaraventa $n a terra!$c0007",
+			FALSE, vict, nullptr, nullptr, TO_ROOM);
+	}
+}
+
 void act_room(char_data* mob, const char* msg) {
 	if(msg && msg[0]) {
 		act(msg, FALSE, mob, nullptr, nullptr, TO_ROOM);
@@ -265,6 +284,30 @@ void update_phase(char_data* mob, BossState& st) {
 	}
 }
 
+void update_enrage(char_data* mob, BossState& st) {
+	const auto& e = st.profile->enrage;
+	if(e.enter_hp <= 0 || st.enrage_entered) {
+		return;
+	}
+	if(hp_pct(mob) <= e.enter_hp) {
+		st.enrage_entered = true;
+		act_room(mob, e.enter_emote);
+		mudlog(LOG_CHECK, "PhaseBoss[%s] enrage (hp%%=%d) room=%d",
+			   std::string(st.profile->id), hp_pct(mob), mob->in_room);
+	}
+}
+
+[[nodiscard]] int apply_enrage_dam(char_data* mob, int dam) noexcept {
+	if(dam <= 0 || mob == nullptr) {
+		return dam;
+	}
+	const int bonus = phase_boss_enrage_bonus_pct(mob);
+	if(bonus <= 0) {
+		return dam;
+	}
+	return (dam * (100 + bonus)) / 100;
+}
+
 [[nodiscard]] int roll_damage(const AbilityDef& ab) noexcept {
 	int dam = ab.dam_base;
 	if(ab.dice_n > 0 && ab.dice_s > 0) {
@@ -273,11 +316,20 @@ void update_phase(char_data* mob, BossState& st) {
 	return dam;
 }
 
-[[nodiscard]] int soft_damage(const AbilityDef& ab, int full) noexcept {
-	if(ab.soft_den <= 0) {
-		return full / 3;
+/**
+ * Danno proporzionale agli HP cast rimasti, fino al pavimento soft_num/soft_den.
+ * dam = full * max(soft_frac, cast_hp_left / cast_hp_max). Hard (0) a parte.
+ */
+[[nodiscard]] int scaled_cast_damage(const AbilityDef& ab, int full, int cast_hp_left) noexcept {
+	if(full <= 0 || ab.cast_hp <= 0) {
+		return full;
 	}
-	return (full * ab.soft_num) / ab.soft_den;
+	const int rem = cast_hp_left > 0 ? cast_hp_left : 0;
+	const int by_rem = (full * rem) / ab.cast_hp;
+	const int soft_den = ab.soft_den > 0 ? ab.soft_den : 3;
+	const int soft_num = ab.soft_num > 0 ? ab.soft_num : 1;
+	const int by_soft = (full * soft_num) / soft_den;
+	return by_rem > by_soft ? by_rem : by_soft;
 }
 
 void resolve_cast(char_data* mob, BossState& st) {
@@ -303,12 +355,13 @@ void resolve_cast(char_data* mob, BossState& st) {
 		return;
 	}
 
-	const bool soft = (how == Resolve::Soft);
+	const bool interrupted = (how == Resolve::Soft);
 	const int full = roll_damage(ab);
-	const int dam = soft ? soft_damage(ab, full) : full;
+	int dam = interrupted ? scaled_cast_damage(ab, full, st.cast_hp) : full;
+	dam = apply_enrage_dam(mob, dam);
 	const int atype = dmg_attack_type(ab.dmg);
 
-	act_room(mob, soft ? ab.emote_soft : ab.emote_full);
+	act_room(mob, interrupted ? ab.emote_soft : ab.emote_full);
 
 	if(ab.target == PhaseBossTarget::Tank) {
 		char_data* tank = mob->specials.fighting;
@@ -318,6 +371,9 @@ void resolve_cast(char_data* mob, BossState& st) {
 	}
 	else {
 		aoe_damage(mob, dam, atype);
+		if(ab.key == "slam") {
+			slam_knockdown(mob);
+		}
 	}
 
 	st.clear_cast();
@@ -454,6 +510,7 @@ int phase_boss_engine(char_data* ch, int /*cmd*/, const char* /*arg*/, char_data
 	}
 
 	update_phase(mob, st);
+	update_enrage(mob, st);
 
 	if(st.busy()) {
 		tick_cast(mob, st);
@@ -529,6 +586,33 @@ bool phase_boss_is_boss(const char_data* ch) noexcept {
 	return phase_boss_find_by_vnum(mob_index[ch->nr].iVNum) != nullptr;
 }
 
+int phase_boss_enrage_bonus_pct(const char_data* ch) noexcept {
+	if(!phase_boss_is_boss(ch)) {
+		return 0;
+	}
+	const BossProfile* prof = nullptr;
+	if(ch->act_ptr != nullptr) {
+		prof = static_cast<const BossState*>(ch->act_ptr)->profile;
+	}
+	if(prof == nullptr && ch->nr >= 0) {
+		prof = phase_boss_find_by_vnum(mob_index[ch->nr].iVNum);
+	}
+	if(prof == nullptr) {
+		return 0;
+	}
+	const auto& e = prof->enrage;
+	if(e.enter_hp <= 0) {
+		return 0;
+	}
+	/* NPC: points.max_hit (hit_limit vuole char_data* non-const). */
+	const int mx = ch->points.max_hit;
+	const int pct = mx > 0 ? (100 * ch->points.hit) / mx : 100;
+	if(pct > e.enter_hp) {
+		return 0;
+	}
+	return e.base_bonus_pct + e.per_hp_pct * (e.enter_hp - pct);
+}
+
 bool phase_boss_resists_crowd_control(const char_data* ch) noexcept {
 	return phase_boss_is_boss(ch);
 }
@@ -546,10 +630,12 @@ MOBSPECIAL_FUNC(PhaseBoss) {
 	if(mob != nullptr && mob->nr >= 0
 			&& is_olympian_god_vnum(mob_index[mob->nr].iVNum)) {
 		if(type == EVENT_TICK) {
+			olympian_ensure_god_stamina(mob);
 			olympian_maintain_court_room(real_roomp(mob->in_room));
 		}
 		else if(type == EVENT_DEATH) {
 			olympian_clear_court_on_god_death(mob);
+			olympian_zeus_death_treasure(mob);
 		}
 	}
 	return phase_boss_engine(ch, cmd, arg, mob, type, nullptr);
