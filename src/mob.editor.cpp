@@ -2879,21 +2879,6 @@ void clear_zero_modifier_slots(struct obj_data* obj) {
 	}
 }
 
-[[nodiscard]] struct obj_data* load_edit_prototype(const struct obj_data* obj) {
-	if(!obj) {
-		return nullptr;
-	}
-	int iVNum = object_instance_resolve_base_vnum(obj);
-	if(iVNum <= 0) {
-		iVNum = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
-	}
-	const int rNum = real_object(iVNum);
-	if(rNum < 0) {
-		return nullptr;
-	}
-	return read_object(rNum, REAL);
-}
-
 /**
  * Prototipo per delta broker / distruggi su pezzi coinvolti nel trasferimento.
  * Delega a object_edit_load_baseline (contratto condiviso col portale).
