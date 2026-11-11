@@ -5,8 +5,8 @@ Guida rapida ai comandi (alias) del package, scritta dopo il primo test reale de
 
 ## Come installare/aggiornare
 
-Il file `.mpackage` aggiornato sta sul branch **`mudlet`** (non su `develop`):
-`docs/mudlet/nebbie-complete-dashboard-package.mpackage` nel repo GitHub.
+Il file `.mpackage` aggiornato e' su branch **`main`** di
+https://github.com/wizardmorgan/nebbie-mudlet-dashboard (`nebbie-complete-dashboard-package.mpackage`).
 
 **Versione**: in Package Manager deve coincidere con `[NebbieDash] vX.Y.Z pronto` (es. **1.15.8**).
 Se vedi numeri diversi, il `.mpackage` era vecchio (bug risolto in 1.15.8: `config.lua` ora
@@ -14,15 +14,18 @@ segue la stessa versione dello script).
 
 ### Installazione / aggiornamento
 
-1. **Package Manager (Alt+O)** — metodo principale da **1.15.40**:
-   - Seleziona `nebbie-complete-dashboard-package` nell’elenco.
-   - Se Mudlet mostra **Aggiorna**, usalo (legge l’URL dal campo `website` nel `config.lua` del package).
-   - Altrimenti: **Installa da URL** e incolla:
-     `https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage`
-   - Oppure trascina quel link sul profilo Mudlet (Mudlet 4.11+).
-   - Stesso nome package = upgrade senza disinstallare manualmente (se Mudlet lo propone).
-2. **In gioco (GMCP)**: con GMCP attivo, al login il server invia `Client.GUI` (URL + versione);
-   Mudlet può offrire il download se la versione installata è più vecchia (server Nebbie aggiornato).
+1. **In gioco — `npackageupdate`** (metodo consigliato da **1.15.53**): scarica il `.mpackage`
+   da GitHub raw (cache-bust) e lo reinstalla. Opzionale: `npackageupdate force`.
+2. **Command line Mudlet** (non esiste “Installa da URL” in Alt+O):
+   ```text
+   lua installPackage("https://cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/nebbie-complete-dashboard-package.mpackage")
+   ```
+   Oppure trascina il link `.mpackage` sul profilo (Mudlet 4.11+). Preferire URL
+   jsDelivr (meglio pinnata a uno SHA se `@main` è in cache). La tab **Aggiornamenti**
+   di Alt+O elenca solo il repository ufficiale mpkg, non i package GitHub.
+3. **In gioco (GMCP, opzionale)**: se il server Nebbie invia `Client.GUI` (URL + versione)
+   al login, Mudlet può offrire il download quando la versione installata è più vecchia.
+   Oggi il server non lo fa ancora: serve lavoro lato VPS/`myst`.
 
 Dopo ogni aggiornamento:
 
@@ -63,6 +66,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nclanslot <on\|off>` | Mostra/nasconde il 22° slot equip placeholder "simbolo del clan" (nascosto di default, non ancora confermato in un `eq` reale). |
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
+| `npackageupdate` | Scarica e reinstalla il `.mpackage` da GitHub (`main`). Opzionale: `npackageupdate force`. |
 | `c <spell> [bersaglio]` | Invia `cast '<spell>' <bersaglio>` — **sempre con bersaglio** (default: PG attivo). Es. `c heal` → `cast 'heal' NomiyaMaki`; `c heal bob` → `cast 'heal' bob`. |
 | `r <spell> [bersaglio]` | Come sopra con `recall` (sorcerer). |
 | `m <spell> [bersaglio]` | Come sopra con `mind` (psionico). |
@@ -84,6 +88,147 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nautofeed <on\|off>` | Attiva/disattiva la macro automatica fame/sete (default **on**), vedi sotto. |
 | `nhungermacros` | Ricarica le macro fame/sete dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nitemkeywords` | Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
+| `nidentdb [query]` | Cerca nell’archivio **identify** condiviso (`profiles/ndashboard/nebbie-ident-db.lua`). Si aggiorna da solo a ogni identify (spell o pergamena) di qualsiasi PG. |
+| `nidentdb where <query>` | Come sopra + possesso + chi ha l’oggetto in equip (cache `eq` / `nresync`). |
+| `nidentdb char <nome>` | Identify / possesso di quel personaggio. |
+| `nidentdb hold <NomePg>` | Dopo un `drop`: assegna l’oggetto lasciato in terra a un PG. |
+| `nidentdb hold <oggetto> <NomePg>` | Assegna possesso senza drop pendente. |
+| `nidentdbreload` | Ricarica l’archivio identify dal disco. |
+| `nidentdb export <NomePg>` | Esporta in CSV tutti gli identify di quel PG (`NomePg-gg-mm-aaaa-hh-mm-ss.csv`). |
+| `nidentsync` | Sync bidirezionale del DB identify con l’hub HTTPS sul VPS (pull a pagine + merge + push). |
+| `nidentpull` / `nidentpush` | Solo scarica/merge dall’hub, oppure solo invia il DB locale. |
+| `nidentsync url\|token\|status\|onboot` | Configura URL/token, stato, sync automatico al boot. |
+| `nknowdb [query]` | Cerca nell’archivio **know monster** condiviso (`nebbie-know-db.lua`). |
+| `nknowdb race <razza>` | Filtra per razza. |
+| `nknowdbreload` | Ricarica l’archivio know monster dal disco. |
+
+## Evidenziazioni testo (gemme / combat / dig)
+
+Portate da dadomud (solo colori e testi extra, **senza** automazioni dig).
+
+- **Gemme**: colora la riga e aggiunge `[descrizione]` (es. spinello blu → `[-2 SF]`).
+- **Metalli/minerali**: solo colore (pepite, ferro, carbone).
+- **Aura**: perdita sanctuary su altri → evidenzia + `RESANK <nome>` (×1 o ×3 se dispel).
+- **Disarm altri**: ok verde + “Grande … bel disarm!”; fail rosso + 3× “Mannaggia…”.
+- **Sanc proprio**: warning rosso/bianco; aura svanita bianco/rosso.
+- **`<impugnato>`** in eq: blu su verde.
+- **Dig**: “ACCIDENTI!!! Qualcosa si muove…” e “filone sembra esaurito!” colorati.
+
+Attiva/disattiva con `text_highlights = on|off` in `nebbie-dash-preferences.txt`
+(`npreferencesreload`). Suoni opzionali (path file) in `nebbie-dash-sounds.txt`
+(`humber`, `dig_done`, `sanc_gone`, `aura_loss`) — vuoto = silenzioso.
+
+## Archivio identify (`nidentdb`)
+
+Ogni volta che un personaggio fa `cast 'identify'` / `reci …` di una pergamena di
+identificazione, NebbieDash cattura il blocco che inizia con `La conoscenza ti pervade:`
+e lo salva in **`profiles/ndashboard/nebbie-ident-db.lua`** (stessa cartella condivisa di
+preferenze e cache PG). Non serve un comando per “salvare”: è automatico e silenzioso.
+
+**Possesso**:
+- `give …` → messaggio `Dai il … a Sirio.` trasferisce il possesso al destinatario.
+- `drop …` → messaggio `Posi il ….` marca **oggetto lasciato in terra** e chiede
+  `nidentdb hold <NomePg>` per indicare chi lo avrà in inventario.
+
+Consultazione:
+
+```
+nidentdb mantello
+nidentdb where mantello
+nidentdb char NomiyaMaki
+nidentdb hold Sirio
+nidentdb hold mantello Mirari
+nidentdb cedibile mantello
+nidentdb noncedibile anello
+nidentdb export Mirari
+nidentdbreload
+```
+
+Stesso nome oggetto ma **caratteristiche diverse** (affects, AC, flags, …) → entry separate
+con suffisso `#2`, `#3`, …; stesso nome **e** stesse stats → aggiorna l’entry esistente.
+
+**Cedibile / inventario**: `give`/`drop` aggiornano il possesso **solo** se l’entry è
+`cedibile`. Con identify che ha `PROCAREA-REWARD` il flag si attiva da solo; altrimenti
+`nidentdb cedibile <oggetto>` / `nidentdb noncedibile <oggetto>`. Il match sul nome è stretto
+(un “Anello dei nani” non deve più agganciare un “anello varco…” in archivio).
+
+### Sync multi-PC (hub VPS HTTPS)
+
+Il file locale resta la copia di lavoro. Per allineare PC diversi (casa, Tailscale,
+ufficio via stunnel) usa un hub sul VPS: vedi `tools/ident-sync-server/README.md`.
+
+```
+nidentsync url https://tuo.vps/nebbie-ident
+nidentsync token <segreto-lungo>
+nidentsync          # pull a pagine + merge + push
+nidentpull          # solo scarica
+nidentpush          # solo invia
+nidentsync status
+nidentsync onboot on|off
+```
+
+Preferenze equivalenti in `nebbie-dash-preferences.txt`: `ident_sync_url`,
+`ident_sync_token`, `ident_sync_on_boot`. Il merge tiene l’entry con `lastAt` più
+recente e unisce `byCharacter`. Serve Mudlet con `getHTTP`/`postHTTP`.
+
+`where` mostra anche il possesso tracciato e l’incrocio con la cache equip (serve aver fatto
+`nresync`/`neq` sui PG rilevanti).
+
+### Finestra gestore (`nidentui`)
+
+Dalla **1.15.66** puoi aprire una floating window per navigare e modificare il DB:
+
+```
+nidentui
+nidentui filter mantello
+nidentui char NomiyaMaki
+nidentui del anello varco
+nidentui reset
+nidentui off
+```
+
+In finestra (click): apri dettaglio, elimina (con conferma), toggle cedibile, sort/pagine,
+filtro solo-cedibili, filtro PG attivo, assegna possesso al PG corrente, export CSV.
+
+## Archivio know monster (`nknowdb`)
+
+Dalla **1.15.55** ogni `cast 'know monster'` riuscito su un NPC aggiorna
+`profiles/ndashboard/nebbie-know-db.lua` (condiviso tra profili). Formato dal server
+(`spell_know_monster`): razza, poi a seconda del livello caster exp / livello guerriero /
+hate / hp / susc / resist / immune / attacchi / dado danno (numeri approssimati).
+
+```
+nknowdb goblin
+nknowdb race Goblinoid
+nknowdbreload
+```
+
+I campi non rivelati dal cast corrente restano quelli di cast precedenti (merge).
+Colori / testo aggiuntivo in output stile dadomud: in seguito, con criteri dedicati.
+
+## Finestra chat (`nchat`)
+
+Dalla **1.15.63** una finestra floating raccoglie i canali di comunicazione:
+
+| Canale | Comandi di gioco |
+|--------|------------------|
+| say | `say` / `'` |
+| gtell | `gt` / `gtell` |
+| tell | `tell` |
+| whisper | `whisper` |
+| ask | `ask` |
+| gossip | `gossip` |
+| shout | `shout` |
+
+```
+nchat          # mostra / nasconde
+nchat on|off   # attiva (preferenza) o spegne trigger+finestra
+nchat clear    # svuota il log
+```
+
+Preferenza `chat_window = on|off` in `nebbie-dash-preferences.txt`. Trascinabile/ridimensionabile
+(Mudlet Adjustable.Container). Nota: l’echo parlante di `gossip` è uguale a `say` (`Tu dici '…'`),
+quindi in uscita compare come `[say]`; i gossip altrui (`vi dice`) sono etichettati correttamente.
 
 ## Cambio arma (`usa`)
 
@@ -92,11 +237,14 @@ l'equip a tutta altezza. Il pacchetto continua a ricordare per personaggio le ar
 (almeno una volta) e il tipo di danno quando lo scopri con `identify` — ma il cambio arma si fa con
 **`usa <parola-chiave>`** (es. `usa redentore`), non con un click.
 
-Sequenza automatica (come nebbie-play-all): `rem`+`put` dell'arma attuale (slot "impugnato" nel
-pannello Equip) nello zaino "sulla schiena", poi `get`+`wield` dell'arma richiesta. Parole chiave:
-override in `nebbie-item-keywords.txt` se presente, altrimenti euristica (stessa logica del recupero
-dopo disarmo). Se non impugni nulla, salta a `get`+`wield`. Se l'arma richiesta è già quella
-impugnata, non invia nulla.
+Sequenza automatica (come nebbie-play-all): `rem` zaino → `get` arma → `rem`/`put` arma
+attuale → `wield` → `wear` zaino. Parole chiave: override in `nebbie-item-keywords.txt` se
+presente, altrimenti euristica. Se non impugni nulla, salta a `get`+`wield`. Se l'arma
+richiesta è già quella impugnata, non invia nulla.
+
+Dalla **1.15.62** (corretto in **1.15.64**) lo slot «sulla schiena» non resta vuoto se il
+messaggio `Smetti di usare` dello zaino arriva in ritardo rispetto al `wear` (stash tenuto
+dopo la fine di busy fino al timeout restore; non serve `eq` a ogni `usa`).
 
 ## Cartella config (`profiles/ndashboard`)
 
@@ -190,6 +338,8 @@ GreenBlade,egida foresta EDGreenBlade,34512,15809
 | `nidentbatch` | Identify batch: stesso CSV input, output unico CSV risultati |
 | `nidentbatch greenblade` | Solo righe del toon indicato |
 | `nidentbatchreload` | Ricarica `nebbie-ident-batch-commands.txt` e CSV input |
+| `nidentdb …` | Archivio identify live (vedi sezione dedicata sopra) |
+| `nknowdb …` | Archivio know monster live (vedi sezione dedicata sopra) |
 
 ### Identify batch (`nidentbatch`) — solo Sirio connesso
 

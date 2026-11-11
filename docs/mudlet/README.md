@@ -1,11 +1,39 @@
-# Mudlet — dashboard spostata
+# Nebbie unified dashboard (Mudlet)
 
-Il package **`nebbie-complete-dashboard-package`** vive ora nel repo dedicato:
+Repository ufficiale del package Mudlet **`nebbie-complete-dashboard-package`** per Nebbie Arcane.
 
-**https://github.com/wizardmorgan/nebbie-mudlet-dashboard**
+## Installazione
 
-- Install / update: `nebbie-complete-dashboard-package.mpackage` su branch `main`
-- GMCP `Client.GUI` in `src/gmcp.cpp` punta a quell’URL
+URL canonico del pacchetto:
 
-In questa cartella restano riferimenti legacy (`nebbie-play-all`, SPEC vecchia, ecc.).  
-Non aggiornare più `nebbie-complete-dashboard-package-core.lua` qui: modifica solo `nebbie-mudlet-dashboard`.
+`https://cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/nebbie-complete-dashboard-package.mpackage`
+
+In Mudlet, nella command line:
+
+```text
+lua installPackage("https://cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/nebbie-complete-dashboard-package.mpackage")
+```
+
+Oppure trascina il link `.mpackage` sul profilo (Mudlet 4.11+). **Non** esiste un bottone “Installa da URL” in Package Manager (Alt+O).
+
+Aggiornamenti successivi: **`npackageupdate`** in gioco.
+
+## Sviluppo
+
+| File | Ruolo |
+|------|--------|
+| `nebbie-complete-dashboard-package-core.lua` | Logica Lua (sorgente) |
+| `build-nebbie-complete-dashboard-package.py` | Genera `.mpackage` + XML di build |
+| `tools/ident-sync-server/` | Hub HTTPS identify DB (VPS; `nidentsync`) |
+| `analysis/` | Requisiti, changelog, USAGE |
+| `tests/` | Smoke test parsing e verify batch |
+
+```bash
+python3 build-nebbie-complete-dashboard-package.py
+```
+
+Vedi `PUBLISH.md` per il push su `main`.
+
+## Scope
+
+Solo il package unified dashboard. I vecchi package Mudlet (`nebbie-play-all`, spells-skills, ecc.) non fanno parte di questo repository.
