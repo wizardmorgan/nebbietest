@@ -1695,6 +1695,15 @@ do
   local pLower = NebbieDash.parsePromptLine(
     "NomiyaMaki H: 532/532 M: 532/532 V: 100/100 x: 0 g:99 [[N]]>")
   check("goldalert: parse g: minuscolo", pLower and pLower.gold == 99)
+  -- Separatori migliaia IT (bug segnalato: G:20.473.670 letto come 20)
+  local pGrouped = NebbieDash.parsePromptLine(
+    "NomiyaMaki H: 818/818 M: 596/661 V: 151/224 x:-67.358.500 *:* *:* [[TD]] G:20.473.670 >>")
+  check("goldalert: parse G: con punti migliaia", pGrouped and pGrouped.gold == 20473670)
+  check("goldalert: parse x: con punti migliaia", pGrouped and pGrouped.xfield == -67358500)
+  check("goldalert: parseGroupedInt plain", NebbieDash.parseGroupedInt("20473670") == 20473670)
+  check("goldalert: parseGroupedInt dots", NebbieDash.parseGroupedInt("20.473.670") == 20473670)
+  check("goldalert: parseGroupedInt commas", NebbieDash.parseGroupedInt("20,473,670") == 20473670)
+  check("goldalert: parseGroupedInt negative", NebbieDash.parseGroupedInt("-67.358.500") == -67358500)
 
   NebbieDash.checkGoldAlertFromPrompt(500)
   check("goldalert: baseline no alert", #alertLog == 0)

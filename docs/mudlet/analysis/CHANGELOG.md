@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.73 — 2026-11-12
+
+- **ngoldalert / prompt**: numeri con separatori migliaia (`G:20.473.670`,
+  `x:-67.358.500`) — prima leggeva solo `20` / `-67`.
+
 ## 1.15.72 — 2026-11-12
 
 - **ngoldalert fix**: parsing `G:` / `g:` con spazio opzionale (`G: 123`);
