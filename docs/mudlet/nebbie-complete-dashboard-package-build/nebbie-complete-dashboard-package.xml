@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.72"
+local PKG_VER = "1.15.73"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -837,21 +837,42 @@ end
 -- il codice legacy richiede "H:%d+" senza spazio e "X:" maiuscolo; il prompt
 -- reale ha "H: %d+" con spazio e "x:" minuscolo — vedi Q&A.md Round 3).
 -- ---------------------------------------------------------------------------
+-- Numeri del prompt con separatori migliaia IT/EN: "20.473.670" / "20,473,670"
+-- (osservato su prompt reale NomiyaMaki: G:20.473.670 e x:-67.358.500).
+function NebbieDash.parseGroupedInt(raw)
+  if raw == nil then return nil end
+  raw = tostring(raw):match("^%s*(.-)%s*$") or ""
+  if raw == "" then return nil end
+  local sign = ""
+  if raw:sub(1, 1) == "-" then
+    sign = "-"
+    raw = raw:sub(2)
+  elseif raw:sub(1, 1) == "+" then
+    raw = raw:sub(2)
+  end
+  -- Solo cifre + separatori; rifiuta altro (evita di mangiare pezzi di prompt).
+  if not raw:match("^[%d%.,]+$") then return nil end
+  local digits = raw:gsub("[%.,]", "")
+  if digits == "" then return nil end
+  return tonumber(sign .. digits)
+end
+
 function NebbieDash.parsePromptLine(text)
   if not text or text == "" then return nil end
-  local name, hp, hpmax, mana, manamax, move, movemax, xfield =
-    text:match("^(%S+)%s+H:%s*(%d+)/(%d+)%s+M:%s*(%d+)/(%d+)%s+V:%s*(%d+)/(%d+)%s+[Xx]:%s*(%-?%d+)")
+  -- xfield: accettare punti/virgole migliaia (altrimenti x:-67.358.500 → -67).
+  local name, hp, hpmax, mana, manamax, move, movemax, xfieldRaw =
+    text:match("^(%S+)%s+H:%s*(%d+)/(%d+)%s+M:%s*(%d+)/(%d+)%s+V:%s*(%d+)/(%d+)%s+[Xx]:%s*(%-?[%d%.,]+)")
   if not name then return nil end
-  -- Spazio dopo G: e' opzionale (G:123 / G: 123); alcuni prompt usano g: minuscolo.
-  local gold = text:match("[Gg]:%s*(%d+)")
+  -- Spazio dopo G: opzionale; migliaia con . o , (G:20.473.670).
+  local goldRaw = text:match("[Gg]:%s*(%-?[%d%.,]+)")
   local codes = text:match("%[%[([^%]]*)%]%]")
   return {
     name = name,
     hp = tonumber(hp), hpmax = tonumber(hpmax),
     mana = tonumber(mana), manamax = tonumber(manamax),
     move = tonumber(move), movemax = tonumber(movemax),
-    xfield = tonumber(xfield),
-    gold = gold and tonumber(gold) or nil,
+    xfield = NebbieDash.parseGroupedInt(xfieldRaw),
+    gold = NebbieDash.parseGroupedInt(goldRaw),
     codes = codes,
   }
 end
