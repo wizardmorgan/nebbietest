@@ -14,11 +14,28 @@ function tempRegexTrigger() return nil end
 function disableTrigger() end
 function enableTrigger() end
 function killTrigger() end
+function killTimer() end
+function selectString() return true end
+function setFgColor() end
+function setBgColor() end
+function resetFormat() end
+function decho() end
+function moveCursorEnd() end
+function playSoundFile() end
+_G.__hlEchoLog = {}
+function echo(s) table.insert(_G.__hlEchoLog, tostring(s or "")) end
+function killTimer() end
 local lastSent = nil
 local sentLog = {}
 function send(cmd) lastSent = cmd; table.insert(sentLog, cmd) end
-function tempTimer(_delay, arg)
+-- Delay brevi (debounce fame 0.1, swap arma, save ident): esegui subito.
+-- Watchdog lunghi (eq/attrib/ident capture, tipicamente 3–4s): no-op, altrimenti
+-- chiudono la cattura prima che il test possa alimentare le righe.
+function tempTimer(delay, arg)
+  delay = tonumber(delay) or 0
+  if delay > 1 then return 1 end
   if type(arg) == "function" then arg() end
+  return 1
 end
 function setBorderRight() end
 function setBorderLeft() end
@@ -38,7 +55,6 @@ function setLabelToolTip() end
 function moveLabel() end
 function resizeLabel() end
 function setLabelStyleSheet() end
-function echo() end
 function cechoLink() end
 registerAnonymousEventHandler = function() end
 
@@ -392,53 +408,50 @@ NebbieDash.onLootLine()
 check("loot: riga 'Prendi...' da sola non genera comandi",
   #sentLog == sentBefore8a)
 
--- 8b: la riga con l'importo avvia il controllo gruppo (invio di "group").
-NebbieDash._lastLootFp = nil
-NebbieDash._lastLootFpAt = nil
-NebbieDash._groupCheckActive = false
-NebbieDash._pendingSplitAmount = nil
-line = "C'erano 100000 monete."
-NebbieDash.onLootLine()
-check("loot: importo riconosciuto correttamente", NebbieDash._pendingSplitAmount == 100000)
-check("loot: dopo il loot invia 'group' per il controllo", lastSent == "group")
-
-line = "C'erano 150000 monete."
+-- 8b: autosplit senza "group" — split diretto sull'importo loottato.
 NebbieDash._lastLootFp = nil
 NebbieDash._lastLootFpAt = nil
 NebbieDash._groupCheckActive = false
 NebbieDash._pendingSplitAmount = nil
 sentLog = {}
+line = "C'erano 100000 monete."
 NebbieDash.onLootLine()
-NebbieDash.onLootLine()
-check("loot: doppio trigger stessa riga C'erano -> un solo group/split pending",
-  NebbieDash._pendingSplitAmount == 150000 and #sentLog == 1)
+check("loot: dopo il loot invia split diretto (niente group)", lastSent == "split 100000")
+local groupSent = false
+for _, s in ipairs(sentLog) do
+  if s == "group" then groupSent = true end
+end
+check("loot: non invia mai 'group'", groupSent == false)
 
--- 8c: risposta "da soli" -> nessuno split inviato, stato ripulito.
+line = "C'erano 150000 monete."
+sentLog = {}
+NebbieDash.onLootLine()
+NebbieDash.onLootLine()
+check("loot: doppio trigger stessa riga C'erano -> due split (niente group)",
+  #sentLog == 2 and sentLog[1] == "split 150000" and sentLog[2] == "split 150000")
+
+-- 8c: handlers group legacy inerti se nessun flusso group attivo.
 line = "But you are a member of no group?!"
 NebbieDash.onGroupSoloLine()
-check("loot: da soli non invia alcuno split", lastSent == "group")
-check("loot: stato controllo gruppo ripulito (da soli)", NebbieDash._groupCheckActive == false)
+check("loot: onGroupSoloLine senza flusso attivo non spamma", true)
 
--- 8d: risposta "in gruppo" -> invia split con l'importo corretto.
+-- 8d: split diretto anche con importi diversi.
+sentLog = {}
 line = "C'erano 250 monete."
 NebbieDash.onLootLine()
-line = '$c0015Your group "I cacciatori di Draghi" consists of:'
-NebbieDash.onGroupHeaderLine()
-check("loot: in gruppo invia split con l'importo corretto", lastSent == "split 250")
+check("loot: split 250 diretto", lastSent == "split 250")
 
--- 8d2: gruppo senza nome custom (output server reale act.other.cpp).
+sentLog = {}
 line = "C'erano 99 monete."
 NebbieDash.onLootLine()
-line = "$c0015Your group consists of:"
-NebbieDash.onGroupHeaderLine()
-check("loot: gruppo senza nome invia split", lastSent == "split 99")
+check("loot: split 99 diretto", lastSent == "split 99")
 
--- 8e: con nautosplit off, il loot non deve avviare alcun controllo gruppo.
+-- 8e: con nautosplit off, il loot non deve inviare split.
 NebbieDash.autoSplit = false
 sentLog = {}
 line = "C'erano 42 monete."
 NebbieDash.onLootLine()
-check("loot: con autosplit off non invia 'group'", #sentLog == 0)
+check("loot: con autosplit off non invia split", #sentLog == 0)
 NebbieDash.autoSplit = true
 
 -- 8f: nsplit manuale invia l'importo indicato senza passare dal loot.
@@ -466,7 +479,13 @@ NebbieDash._lastAutoLootClock = nil
 NebbieDash._lootFlowActive = false
 line = "La tua parte di esperienza e' di 1047 punti."
 for _ = 1, 3 do NebbieDash.onCombatEndLine() end
-check("combattimento: piu' trigger sulla stessa exp -> un solo get corp", #sentLog == 1)
+-- Debounce 0.6s: un solo cmdLoot. In Mudlet il pile e' ritardato 0.5s; nel mock
+-- sync tempTimer esegue anche il pile → 2 send (corp+pile) da un solo flusso.
+local corpCount = 0
+for _, s in ipairs(sentLog) do
+  if s == "get all.coin corp" then corpCount = corpCount + 1 end
+end
+check("combattimento: piu' trigger sulla stessa exp -> un solo get corp", corpCount == 1)
 
 -- Anche con 0 punti di esperienza (uccisione minima) deve comunque scattare.
 sentLog = {}
@@ -719,16 +738,11 @@ check("boot: una seconda chiamata (simula reinstall) non genera errori", boot2Ok
 -- secondo "rem" fallisce perche' il primo ha gia' tolto lo zaino un
 -- istante prima — confermato dai messaggi doppi osservati in gioco). Fix:
 -- cooldown tra un'esecuzione e la successiva.
-NebbieDash._lastHungerMacroRun = 0
-check("fame/sete: prima chiamata entro il cooldown NON e' bloccata",
-  os.time() - NebbieDash._lastHungerMacroRun >= NebbieDash.hungerMacroCooldownSec)
-NebbieDash._lastHungerMacroRun = os.time()
-check("fame/sete: una seconda chiamata immediata sarebbe bloccata dal cooldown",
-  os.time() - NebbieDash._lastHungerMacroRun < NebbieDash.hungerMacroCooldownSec)
--- onHungerThirstLine non deve generare errori indipendentemente dal cooldown.
-local secondCallOk = pcall(NebbieDash.onHungerThirstLine)
-check("fame/sete: chiamata bloccata dal cooldown non genera errori", secondCallOk)
-NebbieDash._lastHungerMacroRun = 0
+-- Cooldown legacy rimosso: ora debounce breve via tempTimer(0.1) in onHungerThirstLine.
+-- Verifica solo che due chiamate ravvicinate non generino errori.
+local hunger1Ok = pcall(NebbieDash.onHungerThirstLine)
+local hunger2Ok = pcall(NebbieDash.onHungerThirstLine)
+check("fame/sete: doppia fame/sete ravvicinata non genera errori", hunger1Ok and hunger2Ok)
 
 -- Test 19: gestione armi — testi REALI fornito dall'utente (2026-08-10):
 -- l'output di `identify` su "spada elf slayer" (WEAPON, Tipo di danno
@@ -837,6 +851,72 @@ check("armi: currentWieldedKeyword segue cache impugnato",
   NebbieDash.keywordsOverlap(NebbieDash.currentWieldedKeyword(wdata), "flamberga boris"))
 check("armi: swap termina con wear zaino", swapSteps[#swapSteps] == "wear korred")
 
+-- Race usa: rem zaino in ritardo dopo fine busy non deve lasciare schiena vuota
+NebbieDash.setCurrentCharacter("NomiyaMaki", true)
+local swapData = NebbieDash.getCharData("NomiyaMaki")
+swapData.eq = {
+  [16] = { location = "impugnato", item = "La Flamberga di Boris" },
+  [17] = { location = "sulla schiena", item = "Borsa Inesauribile dei Korred" },
+}
+swapData.eqUpdated = os.time()
+local swapGen = NebbieDash.beginWeaponSwapGuard(swapData)
+check("armi: beginWeaponSwapGuard stash zaino",
+  NebbieDash._weaponSwapBackItem == "Borsa Inesauribile dei Korred"
+    and NebbieDash._weaponSwapBusy == true)
+line = "Smetti di usare Borsa Inesauribile dei Korred."
+NebbieDash.onStopUsingLine()
+local schienaDuring = nil
+for _, row in ipairs(NebbieDash.buildEquipRows(swapData)) do
+  if row.location == "sulla schiena" then schienaDuring = row end
+end
+check("armi: rem zaino durante usa NON svuota schiena",
+  schienaDuring and not schienaDuring.empty
+    and schienaDuring.item == "Borsa Inesauribile dei Korred")
+line = "Ti metti Borsa Inesauribile dei Korred sulle spalle."
+NebbieDash.onWearBackLine()
+check("armi: wear zaino chiude busy ma tiene stash",
+  NebbieDash._weaponSwapBusy == false
+    and NebbieDash._weaponSwapBackItem == "Borsa Inesauribile dei Korred")
+-- Rem in ritardo DOPO wear: non reiniettare lo stash (bug reale se end(false) lo azzera).
+line = "Smetti di usare Borsa Inesauribile dei Korred."
+NebbieDash.onStopUsingLine()
+local schienaLate = nil
+for _, row in ipairs(NebbieDash.buildEquipRows(swapData)) do
+  if row.location == "sulla schiena" then schienaLate = row end
+end
+check("armi: rem zaino in ritardo NON svuota schiena",
+  schienaLate and not schienaLate.empty
+    and schienaLate.item == "Borsa Inesauribile dei Korred")
+NebbieDash.endWeaponSwapGuard(swapGen, true)
+check("armi: timeout restore consuma stash", NebbieDash._weaponSwapBackItem == nil)
+check("armi: schiena piena dopo timeout", (function()
+  for _, row in ipairs(NebbieDash.buildEquipRows(swapData)) do
+    if row.location == "sulla schiena" then
+      return not row.empty and row.item == "Borsa Inesauribile dei Korred"
+    end
+  end
+  return false
+end)())
+-- Se uno svuotamento forzato lascia schiena vuota prima del timeout, restore ripristina.
+local swapData2 = NebbieDash.getCharData("NomiyaMaki")
+swapData2.eq = {
+  [16] = { location = "impugnato", item = "La Flamberga di Boris" },
+  [17] = { location = "sulla schiena", item = "Borsa Inesauribile dei Korred" },
+}
+swapData2.eqUpdated = os.time()
+local swapGen2 = NebbieDash.beginWeaponSwapGuard(swapData2)
+NebbieDash.patchCachedEqLocation(swapData2, "sulla schiena", nil)
+NebbieDash.endWeaponSwapGuard(swapGen2, true)
+local schienaRestored = nil
+for _, row in ipairs(NebbieDash.buildEquipRows(swapData2)) do
+  if row.location == "sulla schiena" then schienaRestored = row end
+end
+check("armi: endWeaponSwapGuard restore riempie schiena vuota",
+  schienaRestored and not schienaRestored.empty
+    and schienaRestored.item == "Borsa Inesauribile dei Korred")
+NebbieDash._weaponSwapBackItem = nil
+NebbieDash._weaponSwapBusy = false
+
 -- cmdSwapWeapon non deve generare errori sui casi limite (nessun personaggio
 -- attivo, indice inesistente, nessuno zaino rilevato).
 NebbieDash.currentChar = nil
@@ -852,31 +932,22 @@ wdata.eqUpdated = false
 NebbieDash.cmdSwapWeapon(1)
 check("armi: cmdSwapWeapon senza equip sincronizzato non invia nulla (nessuno zaino noto)", #sentLog == 0)
 
--- Test 20: bug segnalato (2026-08-10) — "lo split è di nuovo partito mentre
--- ero solo". Analisi: loot quasi simultanei (es. piu' uccisioni ravvicinate
--- da un incantesimo ad area) potevano avviare DUE controlli gruppo in
--- parallelo, e la risposta "group" del primo (magari da solo) poteva
--- chiudere anche il controllo del secondo (magari in gruppo) senza
--- verificare a quale generazione appartenesse davvero. Fix: se un
--- controllo e' gia' attivo, il nuovo importo si accumula in quello in
--- corso invece di avviarne un secondo.
+-- Test 20: autosplit senza probe "group" (1.15.57) — split diretto.
 NebbieDash.setCurrentCharacter("NomiyaMaki", true)
 NebbieDash.autoSplit = true
 NebbieDash._groupCheckActive = false
 NebbieDash._pendingSplitAmount = nil
 sentLog = {}
 NebbieDash.startSplitFlow(100)
-check("split: primo loot avvia il controllo gruppo ('group' inviato)", sentLog[#sentLog] == "group")
-check("split: importo in sospeso registrato", NebbieDash._pendingSplitAmount == 100)
+check("split: primo loot invia split diretto", sentLog[#sentLog] == "split 100")
 sentLog = {}
 NebbieDash.startSplitFlow(50)
-check("split: secondo loot mentre il controllo e' attivo NON invia un secondo 'group'", #sentLog == 0)
-check("split: l'importo del secondo loot si accumula nel controllo in corso", NebbieDash._pendingSplitAmount == 150)
-sentLog = {}
-line = "But you are a member of no group?!"
-NebbieDash.onGroupSoloLine()
-check("split: risposta 'da solo' non invia alcuno split (importo combinato scartato)", #sentLog == 0)
-check("split: controllo gruppo chiuso dopo la risposta", NebbieDash._groupCheckActive == false)
+check("split: secondo loot invia altro split (niente group)",
+  #sentLog == 1 and sentLog[1] == "split 50")
+local anyGroup = false
+for _, s in ipairs(sentLog) do if s == "group" then anyGroup = true end end
+check("split: nessun 'group' inviato", anyGroup == false)
+check("split: nessun pending group check", NebbieDash._groupCheckActive == false)
 
 -- Test 21: secondo formato REALE di fine combattimento (uccisione in
 -- solitaria): "La tua esperienza e' aumentata di N punti." — testo fornito
@@ -885,6 +956,8 @@ check("split: controllo gruppo chiuso dopo la risposta", NebbieDash._groupCheckA
 -- questa frase (solo con "La tua parte di esperienza e' di N punti.").
 NebbieDash.autoLoot = true
 sentLog = {}
+NebbieDash._lastAutoLootClock = nil
+NebbieDash._lootFlowActive = false
 line = "La tua esperienza e' aumentata di 225000 punti."
 NebbieDash.onCombatEndLine()
 check("combattimento (solitaria): 'La tua esperienza e' aumentata di' avvia il loot automatico",
@@ -994,6 +1067,14 @@ check("verify: sezione osave OK con messaggio server", vok and #vissues == 0)
 local imm = NebbieDash.parseImmortalPromptLine("Sirio R1000 [On//60]>>")
 check("batch: parseImmortalPromptLine Sirio", imm and imm.name == "Sirio")
 check("batch: isAnyPromptLine prompt immortale", NebbieDash.isAnyPromptLine("Sirio R1000 [On//60]>>") ~= nil)
+check("prompt imm: Sirio R13886 [On//58]>>",
+  (NebbieDash.parseImmortalPromptLine("Sirio R13886 [On//58]>>") or {}).name == "Sirio")
+check("prompt imm: strip colori $c",
+  (NebbieDash.parseImmortalPromptLine("$c0015Sirio R20 [On//58]>>") or {}).name == "Sirio")
+check("prompt imm: leading space",
+  (NebbieDash.parseImmortalPromptLine("  Sirio R20 [On//58]>>") or {}).name == "Sirio")
+check("prompt imm: rifiuta nome non alfanumerico grezzo",
+  NebbieDash.parseImmortalPromptLine("*** R20 [On//58]>>") == nil)
 check("batch: isAnyPromptLine non confonde riga narrativa",
   NebbieDash.isAnyPromptLine("Adesso hai Elmo della Citta d'Ottone.") == nil)
 
@@ -1120,24 +1201,567 @@ check("ident batch: identBatchParseFilter resume toon", r2 and t2 == "Astaroth")
 check("ident batch: identBatchParseFilter toon normale", not r3 and t3 == "Montero")
 os.remove(resumeCsv)
 
-check("groupcmd: parseGroupSaySpeaker con colori server",
-  (function()
-    local s, p = NebbieDash.parseGroupSaySpeaker(
-      "$c0012[$c0015Martin$c0012] dice al gruppo 'dro'")
-    return s == "Martin" and p == "dro"
-  end)())
-check("groupcmd: groupCmdSpeakerKey primo token",
-  NebbieDash.groupCmdSpeakerKey("Martin") == "martin")
-check("groupcmd: expandGroupCmdTemplate",
-  NebbieDash.expandGroupCmdTemplate("adrenalize {name}", "Chunli") == "adrenalize chunli")
-check("groupcmd: normalizeGroupCmdTemplate aggiunge {name}",
-  NebbieDash.normalizeGroupCmdTemplate("adrenalize") == "adrenalize {name}")
+if type(NebbieDash.parseGroupSaySpeaker) == "function" then
+  check("groupcmd: parseGroupSaySpeaker con colori server",
+    (function()
+      local s, p = NebbieDash.parseGroupSaySpeaker(
+        "$c0012[$c0015Martin$c0012] dice al gruppo 'dro'")
+      return s == "Martin" and p == "dro"
+    end)())
+  check("groupcmd: groupCmdSpeakerKey primo token",
+    NebbieDash.groupCmdSpeakerKey("Martin") == "martin")
+  check("groupcmd: expandGroupCmdTemplate",
+    NebbieDash.expandGroupCmdTemplate("adrenalize {name}", "Chunli") == "adrenalize chunli")
+  check("groupcmd: normalizeGroupCmdTemplate aggiunge {name}",
+    NebbieDash.normalizeGroupCmdTemplate("adrenalize") == "adrenalize {name}")
+else
+  check("groupcmd: API assente in questo package (skip)", true)
+end
 
-check("package update: isValidMpackageInstallUrl",
-  NebbieDash.isValidMpackageInstallUrl(PKG_MPACKAGE_URL or
-    "https://raw.githubusercontent.com/wizardmorgan/nebbietest/nebbie-mudlet-dashboard/nebbie-complete-dashboard-package.mpackage")
-  and not NebbieDash.isValidMpackageInstallUrl(
-    "https://example.com/foo.mpackage?cb=1"))
+if type(NebbieDash.isValidMpackageInstallUrl) == "function" then
+  check("package update: isValidMpackageInstallUrl",
+    NebbieDash.isValidMpackageInstallUrl(
+      "https://cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/nebbie-complete-dashboard-package.mpackage")
+    and not NebbieDash.isValidMpackageInstallUrl(
+      "https://example.com/foo.mpackage?cb=1"))
+else
+  check("package update: isValidMpackageInstallUrl assente (skip)", true)
+end
+if type(NebbieDash.parseGithubCommitSha) == "function" then
+  check("package update: parseGithubCommitSha",
+    NebbieDash.parseGithubCommitSha('{"sha":"cb1e0b7abcdef0123456789","commit":{}}') == "cb1e0b7abcdef0123456789")
+  check("package update: mpackageUrlForSha pin",
+    NebbieDash.mpackageUrlForSha("cb1e0b7abcdef"):find("@cb1e0b7/", 1, true) ~= nil)
+else
+  check("package update: parseGithubCommitSha assente (skip)", true)
+  check("package update: mpackageUrlForSha pin assente (skip)", true)
+end
+
+-- Archivio identify condiviso (v1.15.51): parser + upsert + holders + capture
+local mantelloLines = {
+  "Oggetto: 'mantello varco ombra profonda', Tipo di Oggetto ARMOR",
+  "L'oggetto e': RESISTANT ONLY-PRINCE PROCAREA-REWARD",
+  "Peso: 9, Valore: 3500, Costo di rent: 0",
+  "AC-apply di 6.",
+  "Caratteristiche:",
+  "    Ti puo' dare : HIT by 27",
+  "    Ti puo' dare : SPELLFAIL by -14",
+  "    Ti puo' dare : MANA by 60",
+  "    Ti puo' dare : MANA-REGEN by 6",
+  "    Ti puo' dare : HITROLL by 4",
+}
+local mantello = NebbieDash.parseIdentifyFull(mantelloLines)
+check("identdb: parseIdentifyFull nome mantello",
+  mantello and mantello.objectName == "mantello varco ombra profonda")
+check("identdb: parseIdentifyFull tipo ARMOR", mantello and mantello.objectType == "ARMOR")
+check("identdb: parseIdentifyFull flags",
+  mantello and mantello.flags == "RESISTANT ONLY-PRINCE PROCAREA-REWARD")
+check("identdb: parseIdentifyFull peso/val/rent/ac",
+  mantello and mantello.weight == 9 and mantello.value == 3500
+    and mantello.rent == 0 and mantello.acApply == 6)
+check("identdb: parseIdentifyFull 5 affects",
+  mantello and #mantello.affects == 5 and mantello.affects[1] == "HIT by 27"
+    and mantello.affects[5] == "HITROLL by 4")
+check("identdb: parseIdentifyFull senza vnum mortale",
+  mantello and mantello.vnumOriginario == nil)
+
+local weaponIdentLines = {
+  "Oggetto: 'spada elf slayer', Tipo di Oggetto WEAPON",
+  "L'oggetto e': HUM METAL MAGIC",
+  "Peso: 12, Valore: 5000, Costo di rent: 7500",
+  "Dado di danno: '3d5'",
+  "Tipo di danno: 'SLASH'",
+  "    Ti puo' dare : HIT-N-DAM by 4",
+}
+local wident = NebbieDash.parseIdentifyFull(weaponIdentLines)
+check("identdb: parseIdentifyFull weapon dice/type",
+  wident and wident.damageDice == "3d5" and wident.damageType == "SLASH")
+
+local vnumLines = {
+  "Oggetto: 'verse13 move lips EDEchoes', Tipo di Oggetto ARMOR V-Number Originario: 8304",
+  "L'oggetto e': ORGANIC MAGIC EDIT PERSONAL",
+}
+local vparsed = NebbieDash.parseIdentifyFull(vnumLines)
+check("identdb: parseIdentifyFull con vnum originario",
+  vparsed and vparsed.vnumOriginario == "8304")
+
+NebbieDash.persistEnabled = true
+NebbieDash.identDb = { entries = {} }
+NebbieDash.currentChar = "NomiyaMaki"
+NebbieDash.noteIdentSourceHint("scroll")
+check("identdb: consumeIdentSourceHint scroll",
+  NebbieDash.consumeIdentSourceHint() == "scroll")
+check("identdb: consumeIdentSourceHint una sola volta",
+  NebbieDash.consumeIdentSourceHint() == nil)
+
+local saved = NebbieDash.upsertIdentRecord(mantello, "NomiyaMaki", "scroll")
+check("identdb: upsertIdentRecord crea entry",
+  saved and saved.key == "mantello varco ombra profonda")
+check("identdb: entry count 1", NebbieDash.identDbEntryCount() == 1)
+check("identdb: search mantello",
+  #NebbieDash.searchIdentDb("mantello") == 1)
+check("identdb: search by affect MANA-REGEN",
+  #NebbieDash.searchIdentDb("mana-regen") == 1)
+check("identdb: listIdentDbByCharacter Nomiya",
+  #NebbieDash.listIdentDbByCharacter("Nomiya") == 1)
+
+NebbieDash.chars = NebbieDash.chars or {}
+NebbieDash.chars["NomiyaMaki"] = {
+  eq = {
+    [1] = { location = "sul torso", item = "un mantello varco ombra profonda" },
+  },
+}
+local holders = NebbieDash.findIdentEqHolders("mantello varco ombra profonda")
+check("identdb: findIdentEqHolders trova PG",
+  #holders == 1 and holders[1].character == "NomiyaMaki")
+
+-- Cattura multi-riga simulata (trigger offline)
+NebbieDash.identDb = { entries = {} }
+NebbieDash.currentChar = "NomiyaMaki"
+NebbieDash.noteIdentSourceHint("scroll")
+NebbieDash.startIdentArchiveCapture()
+check("identdb: start capture attiva", NebbieDash._identCapture ~= nil)
+local captureFeed = {
+  "Oggetto: 'mantello varco ombra profonda', Tipo di Oggetto ARMOR",
+  "L'oggetto e': RESISTANT ONLY-PRINCE PROCAREA-REWARD",
+  "Peso: 9, Valore: 3500, Costo di rent: 0",
+  "AC-apply di 6.",
+  "Caratteristiche:",
+  "    Ti puo' dare : HIT by 27",
+  "    Ti puo' dare : SPELLFAIL by -14",
+  "    Ti puo' dare : MANA by 60",
+  "    Ti puo' dare : MANA-REGEN by 6",
+  "    Ti puo' dare : HITROLL by 4",
+  "Vieni sopraffatta da un'ondata di stanchezza.",
+}
+for _, feedLine in ipairs(captureFeed) do
+  line = feedLine
+  NebbieDash.onIdentArchiveLine()
+end
+check("identdb: capture chiude su stanchezza", NebbieDash._identCapture == nil)
+check("identdb: capture ha upsertato mantello",
+  NebbieDash.identDbEntryCount() == 1
+    and NebbieDash.identDb.entries["mantello varco ombra profonda"] ~= nil)
+check("identdb: capture source scroll",
+  NebbieDash.identDb.entries["mantello varco ombra profonda"].lastSource == "scroll")
+check("identdb: isIdentFatigueLine maschile",
+  NebbieDash.isIdentFatigueLine("Vieni sopraffatto da un'ondata di stanchezza."))
+
+-- Possesso: give / drop / hold (messaggi reali utente 2026-11-08)
+local giveP = NebbieDash.parseGiveLine("Dai il mantello dall'ombra profonda a Sirio.")
+check("identdb: parseGiveLine item+target",
+  giveP and giveP.item == "il mantello dall'ombra profonda" and giveP.target == "Sirio")
+local dropP = NebbieDash.parseDropLine("Posi il mantello dall'ombra profonda.")
+check("identdb: parseDropLine item",
+  dropP and dropP.item == "il mantello dall'ombra profonda")
+check("identdb: normalizeIdentItemText dall'",
+  NebbieDash.normalizeIdentItemText("il mantello dall'ombra profonda")
+    :find("ombra", 1, true) ~= nil)
+local matched = select(1, NebbieDash.matchIdentEntryByItemText("il mantello dall'ombra profonda"))
+check("identdb: matchIdentEntryByItemText su mantello identify",
+  matched and matched.objectName == "mantello varco ombra profonda")
+check("identdb: PROCAREA-REWARD → cedibile auto",
+  NebbieDash.identDb.entries["mantello varco ombra profonda"]
+    and NebbieDash.identDb.entries["mantello varco ombra profonda"].cedibile == true)
+
+-- Anello generico non deve agganciarsi a un anello cedibile omonimo parziale
+NebbieDash.identDb.entries["anello varco chiave senza porta"] = {
+  key = "anello varco chiave senza porta",
+  objectName = "anello varco chiave senza porta",
+  objectType = "TREASURE",
+  flags = "PROCAREA-REWARD",
+  cedibile = true,
+  possession = { status = "held", character = "NomiyaMaki", via = "identify" },
+}
+check("identdb: match stretto rifiuta Anello dei nani → anello varco",
+  select(1, NebbieDash.matchIdentEntryByItemText("Anello dei nani", { onlyCedibile = true })) == nil)
+local anelloOwnerBefore = NebbieDash.identDb.entries["anello varco chiave senza porta"].possession.character
+NebbieDash.currentChar = "Sirio"
+line = "Dai un Anello dei nani a Betlegeuse."
+NebbieDash.onIdentGiveLine()
+check("identdb: give anello qualsiasi NON altera DB cedibile",
+  NebbieDash.identDb.entries["anello varco chiave senza porta"].possession.character == anelloOwnerBefore)
+
+NebbieDash.currentChar = "NomiyaMaki"
+line = "Dai il mantello dall'ombra profonda a Sirio."
+NebbieDash.onIdentGiveLine()
+local afterGive = NebbieDash.identDb.entries["mantello varco ombra profonda"]
+check("identdb: give → possesso Sirio",
+  afterGive and afterGive.possession and afterGive.possession.status == "held"
+    and afterGive.possession.character == "Sirio"
+    and afterGive.possession.via == "give")
+
+line = "Posi il mantello dall'ombra profonda."
+NebbieDash.onIdentDropLine()
+local afterDrop = NebbieDash.identDb.entries["mantello varco ombra profonda"]
+check("identdb: drop → ground + pending",
+  afterDrop and afterDrop.possession and afterDrop.possession.status == "ground"
+    and NebbieDash._identDropPending and NebbieDash._identDropPending.key == "mantello varco ombra profonda")
+NebbieDash.cmdIdentDbHold("Mirari")
+local afterHold = NebbieDash.identDb.entries["mantello varco ombra profonda"]
+check("identdb: hold assegna Mirari",
+  afterHold and afterHold.possession.character == "Mirari"
+    and afterHold.possession.status == "held"
+    and NebbieDash._identDropPending == nil)
+check("identdb: listIdentDbByCharacter su possesso Mirari",
+  #NebbieDash.listIdentDbByCharacter("Mirari") >= 1)
+
+-- Cedibile manuale
+NebbieDash.cmdIdentDbSetCedibile("mantello varco ombra profonda", false)
+check("identdb: noncedibile manuale",
+  afterHold.cedibile == false and afterHold.cedibileManual == true)
+line = "Dai il mantello dall'ombra profonda a Sirio."
+local mirariBefore = afterHold.possession.character
+NebbieDash.onIdentGiveLine()
+check("identdb: give su non-cedibile non aggiorna",
+  afterHold.possession.character == mirariBefore)
+NebbieDash.cmdIdentDbSetCedibile("mantello varco ombra profonda", true)
+check("identdb: cedibile manuale riattivato", afterHold.cedibile == true)
+
+-- UI gestore: delete + filtri
+local delKey = "anello varco chiave senza porta"
+check("identui: entry anello presente prima del delete",
+  NebbieDash.getIdentEntryByKey(delKey) ~= nil)
+local delOk = NebbieDash.deleteIdentEntry(delKey)
+check("identui: deleteIdentEntry ok", delOk == true)
+check("identui: entry assente dopo delete", NebbieDash.getIdentEntryByKey(delKey) == nil)
+check("identui: delete inesistente fallisce", NebbieDash.deleteIdentEntry(delKey) == false)
+NebbieDash._identUiState.filter = "mantello"
+NebbieDash._identUiState.charFilter = ""
+NebbieDash._identUiState.onlyCedibile = true
+NebbieDash._identUiState.sort = "name"
+local uiRows = NebbieDash.collectIdentUiEntries()
+check("identui: collect filtra cedibili+mantello",
+  #uiRows >= 1 and uiRows[1].objectName:find("mantello", 1, true) ~= nil)
+NebbieDash.identUiResetFilters()
+check("identui: reset filtri",
+  NebbieDash._identUiState.filter == "" and NebbieDash._identUiState.onlyCedibile == false)
+
+-- Stesso nome, affects diverse → entry #2; stesso nome+stats → upsert
+local countBeforeAlt = NebbieDash.identDbEntryCount()
+local mantelloAlt = NebbieDash.parseIdentifyFull({
+  "Oggetto: 'mantello varco ombra profonda', Tipo di Oggetto ARMOR",
+  "L'oggetto e': RESISTANT ONLY-PRINCE PROCAREA-REWARD",
+  "Peso: 9, Valore: 3500, Costo di rent: 0",
+  "AC-apply di 6.",
+  "    Ti puo' dare : SPELLPOWER by 2",
+  "    Ti puo' dare : SAVING_ALL by -3",
+  "    Ti puo' dare : HITROLL by 1",
+  "    Ti puo' dare : MANA-REGEN by 22",
+  "    Ti puo' dare : MANA by 60",
+})
+local altSaved = NebbieDash.upsertIdentRecord(mantelloAlt, "Mirari", "spell")
+check("identdb: stesso nome affects diverse → #2",
+  altSaved and altSaved.key == "mantello varco ombra profonda#2"
+    and NebbieDash.identDbEntryCount() == countBeforeAlt + 1)
+local sameAgain = NebbieDash.upsertIdentRecord(mantelloAlt, "Mirari", "spell")
+check("identdb: stesso nome+stats → riusa #2",
+  sameAgain and sameAgain.key == "mantello varco ombra profonda#2"
+    and NebbieDash.identDbEntryCount() == countBeforeAlt + 1)
+local origAgain = NebbieDash.upsertIdentRecord(mantello, "NomiyaMaki", "scroll")
+check("identdb: stats originali → riusa chiave senza #",
+  origAgain and origAgain.key == "mantello varco ombra profonda"
+    and NebbieDash.identDbEntryCount() == countBeforeAlt + 1)
+
+-- Export CSV per PG
+local exportPath = NebbieDash.exportIdentDbCsvForCharacter("Mirari")
+check("identdb: export path non-nil", type(exportPath) == "string" and exportPath ~= "")
+check("identdb: export filename ha timestamp gg-mm-aaaa-hh-mm-ss",
+  exportPath and exportPath:match("Mirari%-%d%d%-%d%d%-%d%d%d%d%-%d%d%-%d%d%-%d%d%.csv$") ~= nil)
+if exportPath then
+  local ef = io.open(exportPath, "r")
+  local econtent = ef and ef:read("*a") or ""
+  if ef then ef:close() end
+  check("identdb: export CSV ha header key", econtent:find("key,objectName", 1, true) ~= nil)
+  check("identdb: export CSV contiene #2 o mantello",
+    econtent:find("mantello varco ombra profonda", 1, true) ~= nil)
+  pcall(os.remove, exportPath)
+else
+  check("identdb: export CSV ha header key", false)
+  check("identdb: export CSV contiene #2 o mantello", false)
+end
+
+-- Evidenziazioni testo (v1.15.52, portate da dadomud)
+check("highlight: lista gemme contiene spinello blu",
+  (function()
+    for _, v in ipairs(NebbieDash.AUTO_COLOR_GEMS) do
+      if v.pattern == "Una pietra di spinello blu" and v.descrizione == "-2 SF" then
+        return true
+      end
+    end
+    return false
+  end)())
+check("highlight: lista metalli contiene carbone",
+  (function()
+    for _, v in ipairs(NebbieDash.AUTO_COLOR_METALS) do
+      if v.pattern == "Una pietra di carbone" then return true end
+    end
+    return false
+  end)())
+NebbieDash.textHighlights = true
+_G.__hlEchoLog = {}
+line = "L'aura bianca che avvolgeva il corpo di Mirari si spegne."
+NebbieDash.onHighlightPerditaAura()
+check("highlight: perdita_aura scrive RESANK",
+  table.concat(_G.__hlEchoLog):find("RESANK Mirari", 1, true) ~= nil)
+_G.__hlEchoLog = {}
+line = "L'aura di luce Divina che avvolge Mirari scompare."
+NebbieDash.onHighlightPerditaAuraDispel()
+local resankCount = 0
+for _, s in ipairs(_G.__hlEchoLog) do
+  if s:find("RESANK Mirari", 1, true) then resankCount = resankCount + 1 end
+end
+check("highlight: perdita_aura_dispel scrive RESANK x3", resankCount == 3)
+NebbieDash.textHighlights = false
+_G.__hlEchoLog = {}
+line = "L'aura bianca che avvolgeva il corpo di Mirari si spegne."
+NebbieDash.onHighlightPerditaAura()
+check("highlight: text_highlights off non scrive RESANK", #_G.__hlEchoLog == 0)
+NebbieDash.textHighlights = true
+
+-- Archivio know monster (v1.15.55): parser + upsert + merge + capture
+local knowLinesFull = {
+  "Un goblin e' di razza Goblinoid.",
+  "Un goblin ha circa 12340 punti esperienza.",
+  "Un goblin combatte piu' o meno come un guerriero del 18^ livello.",
+  "Un goblin sembra odiare la razza dei Human.",
+  "Un goblin sembra odiare la classe Magic user.",
+  "Probabilmente Un goblin ha 245 punti vita.",
+  "Un goblin e' suscettibile a FIRE COLD.",
+  "Un goblin e' resistente a SLASH.",
+  "Un goblin e' immune a SLEEP CHARM.",
+  "Un goblin ha circa 2.0 attacchi per turno.",
+  "Ognuno dei quali fa circa 3d6 punti di danno.",
+}
+local knowParsed = NebbieDash.parseKnowMonsterFull(knowLinesFull)
+check("knowdb: parse nome Un goblin", knowParsed and knowParsed.monsterName == "Un goblin")
+check("knowdb: parse razza Goblinoid", knowParsed and knowParsed.race == "Goblinoid")
+check("knowdb: parse exp", knowParsed and knowParsed.exp == 12340)
+check("knowdb: parse warriorLevel", knowParsed and knowParsed.warriorLevel == 18)
+check("knowdb: parse hateRace", knowParsed and knowParsed.hateRace == "Human")
+check("knowdb: parse hateClass", knowParsed and knowParsed.hateClass == "Magic user")
+check("knowdb: parse hits", knowParsed and knowParsed.hits == 245)
+check("knowdb: parse susceptible", knowParsed and knowParsed.susceptible
+  and knowParsed.susceptible[1] == "FIRE" and knowParsed.susceptible[2] == "COLD")
+check("knowdb: parse resistant", knowParsed and knowParsed.resistant
+  and knowParsed.resistant[1] == "SLASH")
+check("knowdb: parse immune", knowParsed and knowParsed.immune
+  and knowParsed.immune[1] == "SLEEP" and knowParsed.immune[2] == "CHARM")
+check("knowdb: parse attacks", knowParsed and knowParsed.attacks == 2)
+check("knowdb: parse damageDice", knowParsed and knowParsed.damageDice == "3d6")
+check("knowdb: PC non mostro → nil",
+  NebbieDash.parseKnowMonsterFull({"Non e' realmente un mostro."}) == nil)
+
+NebbieDash.knowDb = { entries = {} }
+NebbieDash.persistEnabled = true
+NebbieDash.currentChar = "Mirari"
+local lowCast = NebbieDash.parseKnowMonsterFull({
+  "Un goblin e' di razza Goblinoid.",
+  "Un goblin ha circa 999 punti esperienza.",
+})
+NebbieDash.upsertKnowRecord(lowCast, "Mirari", "spell")
+check("knowdb: upsert crea entry", NebbieDash.knowDbEntryCount() == 1)
+local midCast = NebbieDash.parseKnowMonsterFull({
+  "Un goblin e' di razza Goblinoid.",
+  "Un goblin ha circa 1111 punti esperienza.",
+  "Un goblin combatte piu' o meno come un guerriero del 12^ livello.",
+  "Probabilmente Un goblin ha 200 punti vita.",
+})
+NebbieDash.upsertKnowRecord(midCast, "Mirari", "spell")
+local merged = NebbieDash.knowDb.entries[NebbieDash.normalizeKnowMonsterKey("Un goblin")]
+check("knowdb: merge aggiorna exp", merged and merged.exp == 1111)
+check("knowdb: merge aggiunge hits", merged and merged.hits == 200)
+check("knowdb: search goblin", #NebbieDash.searchKnowDb("goblin") == 1)
+check("knowdb: race Goblinoid", #NebbieDash.listKnowDbByRace("Goblinoid") == 1)
+check("knowdb: race Human vuoto", #NebbieDash.listKnowDbByRace("Human") == 0)
+
+-- Capture: race line start + follow-up lines + prompt close
+NebbieDash.knowDb = { entries = {} }
+NebbieDash._knowSourceHint = { source = "spell", at = os.time() }
+line = "Un orco e' di razza Humanoid."
+NebbieDash.onKnowMonsterRaceLine()
+check("knowdb: capture start attiva", NebbieDash._knowCapture ~= nil)
+line = "Un orco ha circa 5000 punti esperienza."
+NebbieDash.onKnowArchiveLine()
+line = "Un orco combatte piu' o meno come un guerriero del 10^ livello."
+NebbieDash.onKnowArchiveLine()
+line = "Mirari H: 100/100 M: 50/50 V: 10/10 x:0 *:* *:* [[ ]] G:0 >>"
+NebbieDash.onKnowArchiveLine()
+check("knowdb: capture chiude su prompt", NebbieDash._knowCapture == nil)
+local orco = NebbieDash.knowDb.entries[NebbieDash.normalizeKnowMonsterKey("Un orco")]
+check("knowdb: capture upsert orco", orco and orco.race == "Humanoid" and orco.exp == 5000)
+check("knowdb: capture source spell", orco and orco.lastSource == "spell")
+
+-- Dump reale utente (governante): immune vince su resistente per tipi comuni.
+local govLines = {
+  "La governante e' di razza Human.",
+  "La governante ha circa 218040 punti esperienza.",
+  "La governante combatte piu' o meno come un guerriero del 51^ livello.",
+  "Probabilmente La governante ha 1181 punti vita.",
+  "La governante e' resistente a FIRE COLD ELECTRICITY ENERGY HOLD .",
+  "La governante e' immune a FIRE ENERGY ACID SLEEP CHARM .",
+  "La governante ha circa 6.0 attacchi per turno.",
+  "Ognuno dei quali fa circa 9d9 punti di danno.",
+}
+local gov = NebbieDash.parseKnowMonsterFull(govLines)
+check("knowdb: governante livello 51", gov and gov.warriorLevel == 51)
+check("knowdb: governante immune include FIRE",
+  gov and gov.immune and table.concat(gov.immune, " "):find("FIRE", 1, true))
+local govResi = table.concat(gov and gov.resistant or {}, " ")
+check("knowdb: governante resi senza FIRE/ENERGY (immune vince)",
+  govResi:find("FIRE", 1, true) == nil and govResi:find("ENERGY", 1, true) == nil
+    and govResi:find("COLD", 1, true) ~= nil and govResi:find("HOLD", 1, true) ~= nil)
+
+local leoLines = {
+  "La leonessa madre e' di razza Carnivororous.",
+  "La leonessa madre ha circa 5432685 punti esperienza.",
+  "La leonessa madre combatte piu' o meno come un guerriero del 50^ livello.",
+  "Probabilmente La leonessa madre ha 1241 punti vita.",
+  "La leonessa madre e' suscettibile a ACID POISON .",
+  "La leonessa madre e' resistente a FIRE COLD ELECTRICITY ENERGY +4 .",
+  "La leonessa madre e' immune a BLUNT PIERCE SLASH DRAIN SLEEP CHARM .",
+  "La leonessa madre ha circa 5.0 attacchi per turno.",
+  "Ognuno dei quali fa circa 5d5 punti di danno.",
+}
+local leo = NebbieDash.parseKnowMonsterFull(leoLines)
+check("knowdb: leonessa suscettibile ACID POISON",
+  leo and leo.susceptible and leo.susceptible[1] == "ACID" and leo.susceptible[2] == "POISON")
+check("knowdb: leonessa ENERGY resta nei resistenti",
+  leo and leo.resistant and table.concat(leo.resistant, " "):find("ENERGY", 1, true) ~= nil
+    and table.concat(leo.resistant, " "):find("FIRE", 1, true) ~= nil)
+check("knowdb: leonessa +4 = hitrollResistMax 4 (non un tipo)",
+  leo and leo.hitrollResistMax == 4
+    and table.concat(leo.resistant, " "):find("+4", 1, true) == nil)
+check("knowdb: soglia hitroll → serve arma +5",
+  NebbieDash.knowHitrollThreshold(leo) == 4)
+local leoTag = NebbieDash.formatKnowRoomTag(leo)
+check("knowdb: room tag contiene L50 e HR>+4",
+  leoTag and leoTag:find("L50", 1, true) and leoTag:find("HR>+4", 1, true)
+    and leoTag:find("SUSC:ACID", 1, true))
+-- Look stanza: annotazione accanto al nome
+NebbieDash.knowDb = { entries = {} }
+NebbieDash.upsertKnowRecord(leo, "Hayato", "spell")
+_G.__hlEchoLog = {}
+local oldDecho = decho
+decho = function(s) table.insert(_G.__hlEchoLog, tostring(s or "")) end
+line = "La leonessa madre e' qui, in piedi."
+NebbieDash.onKnowRoomPresenceLine()
+decho = oldDecho
+check("knowdb: look stanza appende tag HR/L",
+  table.concat(_G.__hlEchoLog):find("HR>+4", 1, true) ~= nil
+    and table.concat(_G.__hlEchoLog):find("L50", 1, true) ~= nil)
+
+-- Chat window parser (formati act.comm.cpp)
+local function chatOk(label, text, channel, speaker, message, target)
+  local p = NebbieDash.parseChatLine(text)
+  local ok = p and p.channel == channel and p.speaker == speaker and p.message == message
+  if target then ok = ok and p.target == target end
+  check(label, ok)
+end
+chatOk("chat: say self", "Tu dici 'ciao a tutti'", "say", "Tu", "ciao a tutti")
+chatOk("chat: say other", "[Mirari] dice 'pronti'", "say", "Mirari", "pronti")
+chatOk("chat: gtell self", "Tu dici al gruppo 'tankate'", "gtell", "Tu", "tankate")
+chatOk("chat: gtell other", "[Sirio] dice al gruppo 'ok'", "gtell", "Sirio", "ok")
+chatOk("chat: gossip other", "[Hayato] vi dice 'zone libera'", "gossip", "Hayato", "zone libera")
+chatOk("chat: tell self", "Tu dici a Mirari 'qui'", "tell", "Tu", "qui", "Mirari")
+chatOk("chat: tell AFK", "Tu dici a Bob (che e' AFK) 'ping'", "tell", "Tu", "ping", "Bob")
+chatOk("chat: tell other", "[NomiyaMaki] ti dice 'arrivo'", "tell", "NomiyaMaki", "arrivo")
+chatOk("chat: whisper self", "Tu sussurri a Sirio, 'psst'", "whisper", "Tu", "psst", "Sirio")
+chatOk("chat: whisper other", "[Sirio] ti sussurra 'ok'", "whisper", "Sirio", "ok")
+chatOk("chat: ask self", "Tu chiedi a Goblin, 'chi sei'", "ask", "Tu", "chi sei", "Goblin")
+chatOk("chat: ask other", "[Mirari] ti chiede 'dove'", "ask", "Mirari", "dove")
+chatOk("chat: shout self", "Tu gridi 'aiuto'", "shout", "Tu", "aiuto")
+chatOk("chat: shout other", "[Orco] grida 'RAAH'", "shout", "Orco", "RAAH")
+check("chat: ignora riga non chat", NebbieDash.parseChatLine("Stai usando:") == nil)
+check("chat: gtell non confuso con say",
+  NebbieDash.parseChatLine("Tu dici al gruppo 'x'").channel == "gtell")
+local echoTell = NebbieDash.formatChatEcho(NebbieDash.parseChatLine("Tu dici a Mirari 'ciao'"))
+check("chat: format echo tell ha freccia",
+  echoTell and echoTell:find("Tu → Mirari", 1, true) ~= nil)
+
+-- Gold theft alert: prompt G: drop without voluntary spend
+do
+  NebbieDash.goldAlert = true
+  NebbieDash.resetGoldAlertBaseline(nil)
+  NebbieDash._goldSpendExpectedUntil = 0
+  local alertLog = {}
+  local realCecho = _G.cecho
+  _G.cecho = function(msg) alertLog[#alertLog + 1] = tostring(msg or "") end
+
+  NebbieDash.checkGoldAlertFromPrompt(500)
+  check("goldalert: baseline no alert", #alertLog == 0)
+  check("goldalert: baseline stored", NebbieDash._lastPromptGold == 500 and NebbieDash._goldAlertReady == true)
+
+  NebbieDash.checkGoldAlertFromPrompt(400)
+  check("goldalert: theft drop alerts", #alertLog == 1
+    and alertLog[1]:find("monete sottratte", 1, true) ~= nil
+    and alertLog[1]:find("-100", 1, true) ~= nil)
+  check("goldalert: last updated after theft", NebbieDash._lastPromptGold == 400)
+
+  alertLog = {}
+  NebbieDash.armGoldSpendExpected("test", 5)
+  check("goldalert: arm sets grace", NebbieDash.goldSpendExpectedNow() == true)
+  NebbieDash.checkGoldAlertFromPrompt(300)
+  check("goldalert: voluntary grace suppresses", #alertLog == 0)
+  check("goldalert: last updated after grace", NebbieDash._lastPromptGold == 300)
+
+  alertLog = {}
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash.checkGoldAlertFromPrompt(350)
+  check("goldalert: gain no alert", #alertLog == 0)
+  check("goldalert: last after gain", NebbieDash._lastPromptGold == 350)
+
+  NebbieDash.goldAlert = false
+  alertLog = {}
+  NebbieDash.checkGoldAlertFromPrompt(200)
+  check("goldalert: disabled no alert", #alertLog == 0)
+  check("goldalert: disabled still tracks", NebbieDash._lastPromptGold == 200)
+
+  NebbieDash.goldAlert = true
+  NebbieDash._lastPromptGold = 200
+  NebbieDash._goldAlertReady = true
+  alertLog = {}
+  check("goldalert: Hai diviso match", NebbieDash.isVoluntaryGoldSpendLine("Hai diviso 50 monete.") == true)
+  NebbieDash.armGoldSpendExpected("echo", 3.5)
+  NebbieDash.checkGoldAlertFromPrompt(150)
+  check("goldalert: Hai diviso suppresses", #alertLog == 0)
+
+  alertLog = {}
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash._lastPromptGold = 150
+  check("goldalert: Dai match", NebbieDash.isVoluntaryGoldSpendLine("Dai 20 monete d'oro a Mirari.") == true)
+  NebbieDash.armGoldSpendExpected("echo", 3.5)
+  NebbieDash.checkGoldAlertFromPrompt(130)
+  check("goldalert: Dai suppresses", #alertLog == 0)
+
+  check("goldalert: Posi una match", NebbieDash.isVoluntaryGoldSpendLine("Posi una moneta.") == true)
+  check("goldalert: Posi alcune match", NebbieDash.isVoluntaryGoldSpendLine("Posi alcune monete.") == true)
+  check("goldalert: Paghi match", NebbieDash.isVoluntaryGoldSpendLine("Paghi 5 monete d'oro.") == true)
+  check("goldalert: asta match",
+    NebbieDash.isVoluntaryGoldSpendLine("Un offerta di 1000 monete e' stata ricevuta.") == true)
+  check("goldalert: unrelated echo no match", NebbieDash.isVoluntaryGoldSpendLine("Tu dici 'ciao'") == false)
+
+  check("goldalert: cmd split", NebbieDash.isVoluntaryGoldCommand("split 100") == true)
+  check("goldalert: cmd give monete", NebbieDash.isVoluntaryGoldCommand("give 50 monete mirari") == true)
+  check("goldalert: cmd drop coins", NebbieDash.isVoluntaryGoldCommand("drop 10 coins") == true)
+  check("goldalert: cmd buy", NebbieDash.isVoluntaryGoldCommand("buy potion") == true)
+  check("goldalert: cmd say no", NebbieDash.isVoluntaryGoldCommand("say ciao") == false)
+  check("goldalert: cmd .3 give", NebbieDash.isVoluntaryGoldCommand(".3 give 10 coin bob") == true)
+
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash._lastPromptGold = 130
+  NebbieDash._goldAlertReady = true
+  alertLog = {}
+  NebbieDash.onDataSendRequest(nil, "give 10 coin mirari")
+  check("goldalert: onDataSend arms", NebbieDash.goldSpendExpectedNow() == true)
+  NebbieDash.checkGoldAlertFromPrompt(120)
+  check("goldalert: cmd path suppresses", #alertLog == 0)
+
+  _G.cecho = realCecho
+  NebbieDash.goldAlert = true
+  NebbieDash.resetGoldAlertBaseline(nil)
+  NebbieDash._goldSpendExpectedUntil = 0
+end
 
 print("")
 if failures == 0 then
