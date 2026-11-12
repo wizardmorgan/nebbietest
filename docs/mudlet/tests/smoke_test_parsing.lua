@@ -1688,6 +1688,14 @@ do
   local realCecho = _G.cecho
   _G.cecho = function(msg) alertLog[#alertLog + 1] = tostring(msg or "") end
 
+  -- Parsing: spazio dopo G: (bug 1.15.71 → 1.15.72)
+  local pSpaced = NebbieDash.parsePromptLine(
+    "NomiyaMaki H: 532/532 M: 532/532 V: 100/100 x: 0 G: 12345 [[N]]>")
+  check("goldalert: parse G: con spazio", pSpaced and pSpaced.gold == 12345)
+  local pLower = NebbieDash.parsePromptLine(
+    "NomiyaMaki H: 532/532 M: 532/532 V: 100/100 x: 0 g:99 [[N]]>")
+  check("goldalert: parse g: minuscolo", pLower and pLower.gold == 99)
+
   NebbieDash.checkGoldAlertFromPrompt(500)
   check("goldalert: baseline no alert", #alertLog == 0)
   check("goldalert: baseline stored", NebbieDash._lastPromptGold == 500 and NebbieDash._goldAlertReady == true)
@@ -1756,6 +1764,26 @@ do
   check("goldalert: onDataSend arms", NebbieDash.goldSpendExpectedNow() == true)
   NebbieDash.checkGoldAlertFromPrompt(120)
   check("goldalert: cmd path suppresses", #alertLog == 0)
+
+  -- GMCP char.base.gold
+  alertLog = {}
+  NebbieDash.resetGoldAlertBaseline(nil)
+  NebbieDash._goldSpendExpectedUntil = 0
+  _G.gmcp = { char = { base = { gold = 900 } } }
+  NebbieDash.onGmcpCharBase()
+  check("goldalert: gmcp baseline", NebbieDash._lastPromptGold == 900 and NebbieDash._goldSeenVia == "gmcp")
+  _G.gmcp.char.base.gold = 800
+  NebbieDash.onGmcpCharBase()
+  check("goldalert: gmcp theft alerts", #alertLog == 1
+    and alertLog[1]:find("monete sottratte", 1, true) ~= nil)
+  _G.gmcp = nil
+
+  alertLog = {}
+  NebbieDash.resetGoldAlertBaseline(nil)
+  NebbieDash.cmdSetGoldAlert("")
+  check("goldalert: status senza arg stampa hint",
+    table.concat(alertLog):find("Nessun valore oro", 1, true) ~= nil
+      or table.concat(alertLog):find("Allarme monete", 1, true) ~= nil)
 
   _G.cecho = realCecho
   NebbieDash.goldAlert = true

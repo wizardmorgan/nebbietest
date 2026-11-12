@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.71"
+local PKG_VER = "1.15.72"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -842,7 +842,8 @@ function NebbieDash.parsePromptLine(text)
   local name, hp, hpmax, mana, manamax, move, movemax, xfield =
     text:match("^(%S+)%s+H:%s*(%d+)/(%d+)%s+M:%s*(%d+)/(%d+)%s+V:%s*(%d+)/(%d+)%s+[Xx]:%s*(%-?%d+)")
   if not name then return nil end
-  local gold = text:match("[Gg]:(%d+)")
+  -- Spazio dopo G: e' opzionale (G:123 / G: 123); alcuni prompt usano g: minuscolo.
+  local gold = text:match("[Gg]:%s*(%d+)")
   local codes = text:match("%[%[([^%]]*)%]%]")
   return {
     name = name,
@@ -890,6 +891,7 @@ function NebbieDash.onPromptLine()
   NebbieDash.setCurrentCharacter(parsed.name, false)
   NebbieDash._awaitingPromptAfterConnect = false
   if parsed.gold ~= nil then
+    NebbieDash._goldSeenVia = "prompt"
     NebbieDash.checkGoldAlertFromPrompt(parsed.gold)
   end
   NebbieDash.updateVitalsDisplay()
@@ -3476,7 +3478,7 @@ NebbieDash.HELP_TEXT = {
   { "nknowdbreload", "Ricarica nebbie-know-db.lua dalla cartella condivisa." },
   { "nchat", "Mostra/nascondi la finestra floating chat (say/gt/tell/whisper/ask/gossip/shout)." },
   { "nchat on|off|clear", "Attiva/disattiva o svuota la finestra chat." },
-  { "ngoldalert <on|off>", "Avvisa se ti sottraggono monete (ignora split/give/drop/pagamenti)." },
+  { "ngoldalert [on|off|status]", "Avvisa se ti sottraggono monete (ignora split/give/drop/pagamenti)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) per usa/disarmo." },
   { "nhelp", "Mostra/nascondi questa finestra." },
 }
@@ -3888,12 +3890,13 @@ end
 
 
 -- ---------------------------------------------------------------------------
--- Allarme monete sottratte (prompt G:)
+-- Allarme monete sottratte (prompt G: e/o GMCP char.base.gold)
 --
--- Il furto riuscito (do_steal) e' SILENZIOSO per la vittima: l'unico segnale
--- affidabile e' il calo di G: sul prompt. Sopprimiamo i cali attesi da
--- azioni volontarie (split, give coin, drop coin, pagamenti shop/asta) sia
--- dai comandi inviati sia dagli echo di conferma del MUD.
+-- Il furto riuscito (do_steal) e' SILENZIOSO per la vittima. Segnali:
+--   1) campo G:/g: sul prompt (serve G:%g o g:%g nel prompt del PG)
+--   2) GMCP char.base.gold (inviato dal server a ogni prompt se GMCP e' on)
+-- Sopprimiamo i cali attesi da azioni volontarie (split, give coin, drop coin,
+-- pagamenti shop/asta) sia dai comandi inviati sia dagli echo di conferma.
 -- ---------------------------------------------------------------------------
 NebbieDash.goldAlert = true
 NebbieDash.GOLD_SPEND_GRACE_SEC = 3.0
@@ -3963,6 +3966,27 @@ function NebbieDash.onDataSendRequest(_, cmd)
   end
 end
 
+function NebbieDash.readGmcpCharBaseGold()
+  if type(gmcp) ~= "table" then return nil end
+  local base = nil
+  if type(gmcp.char) == "table" and type(gmcp.char.base) == "table" then
+    base = gmcp.char.base
+  elseif type(gmcp.Char) == "table" and type(gmcp.Char.Base) == "table" then
+    base = gmcp.Char.Base
+  end
+  if not base then return nil end
+  local g = base.gold or base.Gold
+  if g == nil then return nil end
+  return tonumber(g)
+end
+
+function NebbieDash.onGmcpCharBase()
+  local gold = NebbieDash.readGmcpCharBaseGold()
+  if gold == nil then return end
+  NebbieDash._goldSeenVia = "gmcp"
+  NebbieDash.checkGoldAlertFromPrompt(gold)
+end
+
 function NebbieDash.checkGoldAlertFromPrompt(gold)
   if NebbieDash.goldAlert == false then
     NebbieDash._lastPromptGold = gold
@@ -3989,15 +4013,36 @@ function NebbieDash.checkGoldAlertFromPrompt(gold)
   end
 end
 
+function NebbieDash.printGoldAlertStatus()
+  local on = NebbieDash.goldAlert ~= false
+  cecho("<yellow>[NebbieDash] Allarme monete: <white>" .. (on and "on" or "off") .. "\n")
+  if NebbieDash._goldAlertReady and NebbieDash._lastPromptGold ~= nil then
+    cecho("<grey>Ultimo G: monitorato: <white>" .. tostring(NebbieDash._lastPromptGold) ..
+      "<grey> (via " .. tostring(NebbieDash._goldSeenVia or "prompt") .. ")\n")
+  else
+    cecho("<orange>Nessun valore oro visto ancora.\n")
+    cecho("<grey>Serve <white>G:%g<grey> (o <white>g:%g<grey>) nel prompt, oppure GMCP attivo ")
+    cecho("<grey>(il server manda <white>char.base.gold<grey> a ogni prompt).\n")
+    cecho("<grey>Esempio prompt: <white>prompt %N H:%h/%H M:%m/%M V:%v/%V x:%x G:%g >>\n")
+  end
+  if NebbieDash.goldSpendExpectedNow() then
+    cecho("<grey>Grace spesa volontaria attiva (split/give/drop/acquisto recenti).\n")
+  end
+end
+
 function NebbieDash.cmdSetGoldAlert(argStr)
   argStr = (argStr or ""):match("^%s*(.-)%s*$"):lower()
   if argStr == "on" then
     NebbieDash.goldAlert = true
   elseif argStr == "off" then
     NebbieDash.goldAlert = false
+  elseif argStr == "" or argStr == "status" or argStr == "stato" then
+    NebbieDash.printGoldAlertStatus()
+    cecho("<grey>Uso: ngoldalert <on|off|status>\n")
+    return
   else
-    cecho("<orange>[NebbieDash] Uso: ngoldalert <on|off> (attuale: " ..
-      ((NebbieDash.goldAlert ~= false) and "on" or "off") .. ")\n")
+    cecho("<orange>[NebbieDash] Uso: ngoldalert <on|off|status>\n")
+    NebbieDash.printGoldAlertStatus()
     return
   end
   NebbieDash.prefs = NebbieDash.prefs or {}
@@ -4005,6 +4050,7 @@ function NebbieDash.cmdSetGoldAlert(argStr)
   NebbieDash.savePreferencesFile()
   cecho("<green>[NebbieDash] Allarme monete sottratte: " ..
     ((NebbieDash.goldAlert ~= false) and "on" or "off") .. " <grey>(salvato).\n")
+  NebbieDash.printGoldAlertStatus()
 end
 
 
@@ -8624,6 +8670,9 @@ function NebbieDash.installTriggers()
     registerAnonymousEventHandler("sysInstallPackage", "NebbieDash.onInstallPackageEvent")
     registerAnonymousEventHandler("sysUninstallPackage", "NebbieDash.onUninstallPackageEvent")
     registerAnonymousEventHandler("sysDataSendRequest", "NebbieDash.onDataSendRequest")
+    -- GMCP char.base.gold (server lowercase; Mudlet puo' capitalizzare)
+    registerAnonymousEventHandler("gmcp.char.base", "NebbieDash.onGmcpCharBase")
+    registerAnonymousEventHandler("gmcp.Char.Base", "NebbieDash.onGmcpCharBase")
     NebbieDash._eventHandlersRegistered = true
   end
   NebbieDash.installSpellShortcutTriggers()
@@ -8960,6 +9009,13 @@ end]]></script>
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-dash-gold-alert</name>
+   <script><![CDATA[NebbieDash.cmdSetGoldAlert("")]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^ngoldalert$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-gold-alert-args</name>
    <script><![CDATA[NebbieDash.cmdSetGoldAlert(matches[2])]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>

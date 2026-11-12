@@ -82,7 +82,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nautoloot <on\|off>` | Attiva/disattiva il loot automatico alla fine di ogni combattimento a cui partecipi (default **on**). |
 | `nautosplit <on\|off>` | Attiva/disattiva lo split automatico col gruppo dopo ogni loot riuscito (default **on**). |
 | `nsplit <numero>` | Divide manualmente un importo col gruppo (equivalente a digitare `split <numero>`), utile per casi non coperti da `nloot`. |
-| `ngoldalert <on\|off>` | Avvisa se `G:` scende senza split/give/drop/pagamenti volontari (default **on**; furto silenzioso). |
+| `ngoldalert [on\|off\|status]` | Avvisa se l’oro scende senza split/give/drop/pagamenti volontari (default **on**). Serve `G:%g` nel prompt e/o GMCP. |
 | `nautostand <on\|off>` | Attiva/disattiva il rialzarsi automatico (`stand`) dopo una caduta (default **on**). |
 | `nautodisarm <on\|off>` | Attiva/disattiva il recupero automatico dell'arma dopo un disarmo (default **on**). |
 | `.<numero><comando>` | Ripete il comando N volte, es. `.4s` invia `s` quattro volte (funziona con qualsiasi comando: `.3 kill goblin` invia `kill goblin` tre volte). |

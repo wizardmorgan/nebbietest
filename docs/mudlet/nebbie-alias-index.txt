@@ -25,7 +25,7 @@ Package: nebbie-play-all v2.2.34 — vedi build-nebbie-package.py
   nattrib on/off       | sync automatico ogni 90s
   nloot                | look + corp/2.corp/… + pile/2.pile/…
   nloot on/off         | loot auto dopo kill mob
-  ngoldalert on/off    | avvisa se G: scende (ignora split/give)
+  ngoldalert [on|off]  | avvisa se oro scende (G:%g o GMCP)
   usa <arma>           | cambio arma da borsa sulla schiena
   nkey                 | elenco chiavi eq
   nkey add/del         | aggiungi/rimuovi chiave custom

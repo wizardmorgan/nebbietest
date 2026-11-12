@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.72 — 2026-11-12
+
+- **ngoldalert fix**: parsing `G:` / `g:` con spazio opzionale (`G: 123`);
+  monitoraggio anche via GMCP `char.base.gold`; alias `ngoldalert` senza
+  argomenti mostra stato/diagnostica (se non vedi mai un G:, manca `%g` nel
+  prompt o GMCP).
+
 ## 1.15.71 — 2026-11-12
 
 - **Allarme monete sottratte** (`ngoldalert`): monitora `G:` sul prompt e
