@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.74 — 2026-11-12
+
+- **ngoldalert**: niente falso positivo su acquisti shop tipo
+  `Dai 3.500 monete d'oro a …` (il punto migliaia faceva fallire il match
+  della spesa volontaria). Stesso fix per `Paghi` / offerte asta.
+
 ## 1.15.73 — 2026-11-12
 
 - **ngoldalert / prompt**: numeri con separatori migliaia (`G:20.473.670`,
