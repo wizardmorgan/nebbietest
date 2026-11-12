@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.74"
+local PKG_VER = "1.15.75"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3915,6 +3915,8 @@ end
 -- ---------------------------------------------------------------------------
 NebbieDash.goldAlert = true
 NebbieDash.GOLD_SPEND_GRACE_SEC = 3.0
+-- Rent: addebito pensione avviene al rientro in gioco (menu), oltre la grace breve.
+NebbieDash.GOLD_CHARGE_TTL_SEC = 1800
 
 function NebbieDash.armGoldSpendExpected(reason, seconds)
   local sec = tonumber(seconds) or NebbieDash.GOLD_SPEND_GRACE_SEC or 3.0
@@ -3928,6 +3930,30 @@ end
 function NebbieDash.goldSpendExpectedNow()
   local untilAt = NebbieDash._goldSpendExpectedUntil or 0
   return os.clock() <= untilAt
+end
+
+function NebbieDash.noteExpectedGoldCharge(amount, reason, ttlSec)
+  amount = tonumber(amount)
+  if not amount or amount <= 0 then return end
+  local ttl = tonumber(ttlSec) or NebbieDash.GOLD_CHARGE_TTL_SEC or 1800
+  NebbieDash._expectedGoldCharge = {
+    amount = amount,
+    reason = reason or "charge",
+    expires = os.time() + ttl,
+  }
+end
+
+function NebbieDash.consumeExpectedGoldCharge(delta)
+  local exp = NebbieDash._expectedGoldCharge
+  if not exp or not exp.amount then return false end
+  if exp.expires and os.time() > exp.expires then
+    NebbieDash._expectedGoldCharge = nil
+    return false
+  end
+  delta = tonumber(delta)
+  if not delta or delta ~= exp.amount then return false end
+  NebbieDash._expectedGoldCharge = nil
+  return true
 end
 
 function NebbieDash.resetGoldAlertBaseline(gold)
@@ -3951,6 +3977,8 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   if cmd:match("^buy%s+") or cmd:match("^purchase%s+") then return true end
   if cmd:match("^offer%s+") or cmd:match("^bid%s+") then return true end
   if cmd:match("^asta%s+") or cmd:match("^auction%s+") then return true end
+  -- rent: l'addebito reale arriva dopo il menu; vedi noteExpectedGoldCharge sulla riga pensione
+  if cmd == "rent" or cmd:match("^rent%s+") then return true end
   return false
 end
 
@@ -3969,6 +3997,13 @@ function NebbieDash.isVoluntaryGoldSpendLine(text)
   return false
 end
 
+function NebbieDash.parseRentPensionAmount(text)
+  text = NebbieDash.stripColors(text or ""):match("^%s*(.-)%s*$") or ""
+  -- reception.cpp: "Il conto della pensione e' di %ld monete."
+  local raw = text:match("^Il conto della pensione e' di ([%d%.,]+) monete")
+  return NebbieDash.parseGroupedInt(raw)
+end
+
 function NebbieDash.onGoldSpendConfirmLine()
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
   if NebbieDash.isVoluntaryGoldSpendLine(text) then
@@ -3976,9 +4011,23 @@ function NebbieDash.onGoldSpendConfirmLine()
   end
 end
 
+function NebbieDash.onRentPensionLine()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local amt = NebbieDash.parseRentPensionAmount(text)
+  if amt then
+    -- Sopravvive al menu rent → rientro (grace a clock non basta).
+    NebbieDash.noteExpectedGoldCharge(amt, "rent", NebbieDash.GOLD_CHARGE_TTL_SEC)
+  end
+end
+
 function NebbieDash.onDataSendRequest(_, cmd)
   if NebbieDash.isVoluntaryGoldCommand(cmd) then
-    NebbieDash.armGoldSpendExpected("cmd", 3.5)
+    -- rent: grace lunga di cortesia; l'importo preciso arriva dalla riga pensione
+    if (cmd or ""):lower():match("^%s*rent") then
+      NebbieDash.armGoldSpendExpected("rent", 120)
+    else
+      NebbieDash.armGoldSpendExpected("cmd", 3.5)
+    end
   end
 end
 
@@ -4018,6 +4067,10 @@ function NebbieDash.checkGoldAlertFromPrompt(gold)
   if gold >= prev then return end
   local delta = prev - gold
   if NebbieDash.goldSpendExpectedNow() then
+    return
+  end
+  -- Rent/pensione (o altri addebiti con importo noto) anche dopo menu/login.
+  if NebbieDash.consumeExpectedGoldCharge(delta) then
     return
   end
   cecho(string.format(
@@ -8558,7 +8611,7 @@ function NebbieDash.teardownTriggers()
     NebbieDash._combatEndTrig2,
     NebbieDash._goldHaiDivisoTrig, NebbieDash._goldDaiMonetaTrig, NebbieDash._goldDaiMoneteTrig,
     NebbieDash._goldPosiMonetaTrig, NebbieDash._goldPosiMoneteTrig, NebbieDash._goldPaghiTrig,
-    NebbieDash._goldAstaTrig,
+    NebbieDash._goldAstaTrig, NebbieDash._goldRentPensionTrig,
     NebbieDash._fallTrig, NebbieDash._disarmTrig, NebbieDash._hungerTrig, NebbieDash._thirstTrig,
     NebbieDash._wieldTrig, NebbieDash._identifyObjTrig, NebbieDash._identifyDmgTrig,
     NebbieDash._identKnowledgeTrig, NebbieDash._identSourceSpellTrig, NebbieDash._identSourceScrollTrig,
@@ -8618,6 +8671,9 @@ function NebbieDash.installTriggers()
   NebbieDash._goldPosiMoneteTrig = tempTrigger("Posi alcune monete.", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldPaghiTrig = tempTrigger("Paghi ", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldAstaTrig = tempTrigger("Un offerta di ", [[NebbieDash.onGoldSpendConfirmLine()]])
+  -- Rent: addebito pensione (reception.cpp) — importo esatto, anche dopo menu
+  NebbieDash._goldRentPensionTrig = tempTrigger("Il conto della pensione",
+    [[NebbieDash.onRentPensionLine()]])
   -- Trigger gruppo attivi solo durante startSplitFlow (vedi finishSplitFlow).
   -- Substring + validazione in handler (stripColors, pattern server reale):
   --   But you are a member of no group?!
