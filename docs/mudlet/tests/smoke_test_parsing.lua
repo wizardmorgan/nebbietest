@@ -1778,6 +1778,38 @@ do
     NebbieDash.isVoluntaryGoldSpendLine("Un offerta di 1.000 monete e' stata ricevuta.") == true)
   check("goldalert: unrelated echo no match", NebbieDash.isVoluntaryGoldSpendLine("Tu dici 'ciao'") == false)
 
+  -- Rent / pensione: addebito dopo menu — non basta la grace a clock
+  check("goldalert: parse pensione 3",
+    NebbieDash.parseRentPensionAmount("Il conto della pensione e' di 3 monete.") == 3)
+  check("goldalert: parse pensione migliaia",
+    NebbieDash.parseRentPensionAmount("Il conto della pensione e' di 3.500 monete.") == 3500)
+  check("goldalert: cmd rent", NebbieDash.isVoluntaryGoldCommand("rent") == true)
+  alertLog = {}
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash._expectedGoldCharge = nil
+  NebbieDash._lastPromptGold = 20553350
+  NebbieDash._goldAlertReady = true
+  _G.line = "Il conto della pensione e' di 3 monete."
+  NebbieDash.onRentPensionLine()
+  check("goldalert: pensione notes charge",
+    NebbieDash._expectedGoldCharge and NebbieDash._expectedGoldCharge.amount == 3)
+  -- Simula rientro lento: grace scaduta
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash.checkGoldAlertFromPrompt(20553347)
+  check("goldalert: pensione -3 suppresses", #alertLog == 0)
+  check("goldalert: pensione charge consumed", NebbieDash._expectedGoldCharge == nil)
+  -- Furto diverso importo non consuma / allerta
+  alertLog = {}
+  NebbieDash._lastPromptGold = 20553347
+  NebbieDash._goldAlertReady = true
+  NebbieDash.noteExpectedGoldCharge(3, "rent", 1800)
+  NebbieDash.checkGoldAlertFromPrompt(20553300) -- -47 ≠ 3
+  check("goldalert: pensione mismatch still alerts", #alertLog == 1)
+  check("goldalert: pensione mismatch keeps charge",
+    NebbieDash._expectedGoldCharge and NebbieDash._expectedGoldCharge.amount == 3)
+  NebbieDash._expectedGoldCharge = nil
+  _G.line = nil
+
   check("goldalert: cmd split", NebbieDash.isVoluntaryGoldCommand("split 100") == true)
   check("goldalert: cmd give monete", NebbieDash.isVoluntaryGoldCommand("give 50 monete mirari") == true)
   check("goldalert: cmd drop coins", NebbieDash.isVoluntaryGoldCommand("drop 10 coins") == true)

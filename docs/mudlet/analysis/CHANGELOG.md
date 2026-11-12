@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.75 — 2026-11-13
+
+- **ngoldalert**: niente falso positivo sul `rent` — riconosce
+  `Il conto della pensione e' di N monete.` e sopprime il calo G: di pari
+  importo al rientro in gioco (la grace breve non bastava per il menu).
+
 ## 1.15.74 — 2026-11-12
 
 - **ngoldalert**: niente falso positivo su acquisti shop tipo
