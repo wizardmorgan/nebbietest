@@ -2,7 +2,7 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.15.46)
+description = [[# Nebbie Dashboard (1.15.71)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
@@ -25,8 +25,8 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   bones", `nloot` anche a mano) e, se sei in gruppo, divide l'importo con
   `split` (disattivabili singolarmente con `nautoloot off`/`nautosplit off`).
 - **Rialzarsi e recupero arma automatici**: `stand` da solo dopo una caduta;
-  `get`/`wield` da soli dell'arma persa dopo un disarmo (disattivabili con
-  `nautostand off`/`nautodisarm off`).
+  dopo disarmo con arma a terra `get`/`wield`; se l'arma resta in mano (rune) solo `wield`
+  (disattivabili con `nautostand off`/`nautodisarm off`).
 - **Ripetizione comandi**: digita `.4s` per inviare `s` quattro volte (vale
   per qualunque comando, non solo i movimenti).
 - **Corretto**: il personaggio attivo si azzera subito alla (ri)connessione,
@@ -52,8 +52,9 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   funzionalità nuove non venivano attivati finché non si riavviava
   completamente Mudlet.
 - **Speedwalk**: sezioni collassabili; formati `(desc) dirs` e `dirs (desc)`; `nspeedwalks` diagnostico.
-- **Aggiornamento package**: Gestione pacchetti Mudlet (**Alt+O**) — campo `website` nel package
-  (URL .mpackage); oppure GMCP `Client.GUI` al login (versione server = config.lua).
+- **Aggiornamento package**: comando **`npackageupdate`** (risolve SHA tip di `main`).
+  Manuale: `lua installPackage("…mpackage")` o drag-and-drop del link sul profilo
+  (non c’è un bottone “Installa da URL” in Alt+O).
 - **Cambio arma**: alias **`usa <parola-chiave>`** (sequenza borsa come
   nebbie-play-all; keyword da equip/`identify`/`nebbie-item-keywords.txt`).
   Il vecchio pannello "Armi" è stato rimosso (equip a tutta altezza).
@@ -62,6 +63,13 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   `C:/Users/<tu>/.config/mudlet/profiles/ndashboard`). Indice:
   **`profiles/nebbie-dash-config-root.txt`**. Comando **`nconfigdir`**; scheletri
   creati al primo avvio; migrazione da profilo singolo o da `~/NebbieDash`.
+- **Archivio identify** (`nidentdb`): salva in tempo reale ogni identify
+  (spell/pergamena) in `nebbie-ident-db.lua` condiviso; cerca per nome e
+  incrocia con l’equip in cache (`nidentdb where`).
+- **Archivio know monster** (`nknowdb`): salva il blocco di `cast 'know monster'`
+  in `nebbie-know-db.lua` condiviso; cerca per nome/razza/hate/susc.
+- **Evidenziazioni testo**: gemme/metalli + aura/disarm/sanc/dig/`<impugnato>`
+  (stile dadomud); `text_highlights` e suoni opzionali in `nebbie-dash-sounds.txt`.
 - **Corretto (bug al primo avvio dopo installazione pulita)**: poteva
   comparire l'errore `attempt to index global 'NebbieDash' (a nil value)`
   perché lo script agganciato a `sysLoadEvent` poteva eseguirsi prima dello
@@ -82,7 +90,7 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   scrive un log completo per ogni nome-toon in `<Toon>-YYYY-MM-DD.txt`.
 - **`nbatchverify`**: controlla i log batch rispetto al CSV e ai comandi attesi;
   report in `<Toon>-YYYY-MM-DD.verify.txt`. Script offline:
-  `docs/mudlet/tests/verify_batch_log.py`.
+  `tests/verify_batch_log.py`.
 - **`nidentbatch`**: `oload $3` poi identify/junk con **`$ed`** = **`ED`+nome-toon** ($1);
   output CSV giornaliero. **`nidentbatch resume`**: salta righe gia' nel CSV di oggi.
 
@@ -91,9 +99,8 @@ login per sincronizzare equip e spell. Vedi `nfix` se qualcosa sembra
 bloccato dopo un aggiornamento.
 
 Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
-`docs/mudlet/analysis/USAGE.md` e `docs/mudlet/analysis/CHANGELOG.md` nel
-repository del progetto.
+`analysis/USAGE.md` e `analysis/CHANGELOG.md` in questo repository.
 ]]
-version = [[1.15.46]]
+version = [[1.15.71]]
 created = [[2026-09-26]]
-website = [[https://raw.githubusercontent.com/wizardmorgan/nebbie-mudlet-dashboard/main/nebbie-complete-dashboard-package.mpackage]]
+website = [[https://cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/nebbie-complete-dashboard-package.mpackage]]
