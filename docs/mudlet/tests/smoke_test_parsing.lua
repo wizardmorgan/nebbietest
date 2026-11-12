@@ -1751,11 +1751,31 @@ do
   NebbieDash.checkGoldAlertFromPrompt(130)
   check("goldalert: Dai suppresses", #alertLog == 0)
 
+  -- Falso positivo shop: give item → "Dai 3.500 monete d'oro a Leoven..."
+  check("goldalert: Dai shop migliaia match",
+    NebbieDash.isVoluntaryGoldSpendLine("Dai 3.500 monete d'oro a Leoven Arcanscape.") == true)
+  check("goldalert: Dai item non-oro no match",
+    NebbieDash.isVoluntaryGoldSpendLine("Dai un Artiglio del Cacciatore a Leoven Arcanscape.") == false)
+  alertLog = {}
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash._lastPromptGold = 20556850
+  NebbieDash._goldAlertReady = true
+  _G.line = "Dai 3.500 monete d'oro a Leoven Arcanscape."
+  NebbieDash.onGoldSpendConfirmLine()
+  check("goldalert: shop Dai arms grace", NebbieDash.goldSpendExpectedNow() == true)
+  NebbieDash.checkGoldAlertFromPrompt(20553350) -- -3500
+  check("goldalert: shop Dai suppresses alert", #alertLog == 0)
+  _G.line = nil
+
   check("goldalert: Posi una match", NebbieDash.isVoluntaryGoldSpendLine("Posi una moneta.") == true)
   check("goldalert: Posi alcune match", NebbieDash.isVoluntaryGoldSpendLine("Posi alcune monete.") == true)
   check("goldalert: Paghi match", NebbieDash.isVoluntaryGoldSpendLine("Paghi 5 monete d'oro.") == true)
+  check("goldalert: Paghi migliaia match",
+    NebbieDash.isVoluntaryGoldSpendLine("Paghi 3.500 monete d'oro.") == true)
   check("goldalert: asta match",
     NebbieDash.isVoluntaryGoldSpendLine("Un offerta di 1000 monete e' stata ricevuta.") == true)
+  check("goldalert: asta migliaia match",
+    NebbieDash.isVoluntaryGoldSpendLine("Un offerta di 1.000 monete e' stata ricevuta.") == true)
   check("goldalert: unrelated echo no match", NebbieDash.isVoluntaryGoldSpendLine("Tu dici 'ciao'") == false)
 
   check("goldalert: cmd split", NebbieDash.isVoluntaryGoldCommand("split 100") == true)

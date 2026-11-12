@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.73"
+local PKG_VER = "1.15.74"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3959,12 +3959,13 @@ function NebbieDash.isVoluntaryGoldSpendLine(text)
   if text == "" then return false end
   if text:match("^Hai diviso ") then return true end
   if text:match("^Dai una moneta ") then return true end
-  if text:match("^Dai %d+ monete d'oro a ") then return true end
+  -- Importi con migliaia: "Dai 3.500 monete d'oro a Leoven..." (acquisto shop)
+  if text:match("^Dai [%d%.,]+ monete") then return true end
   if text:match("^Posi una moneta%.%s*$") then return true end
   if text:match("^Posi alcune monete%.%s*$") then return true end
-  if text:match("^Paghi %d+ monete") then return true end
+  if text:match("^Paghi [%d%.,]+ monete") then return true end
   -- Asta: offerta accettata (il G: scende al prompt successivo)
-  if text:match("^Un offerta di %d+ monete e' stata ricevuta") then return true end
+  if text:match("^Un offerta di [%d%.,]+ monete e' stata ricevuta") then return true end
   return false
 end
 
