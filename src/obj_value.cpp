@@ -3,6 +3,7 @@
  *ALARMUD* See COPYING for licence information
  *ALARMUD*/
 #include "obj_value.hpp"
+#include "listino_db.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -68,6 +69,18 @@ namespace {
 
 /* Unita' listino per un solo APPLY (stessa tabella di CheckValueObj). */
 [[nodiscard]] long AffectSlotValue(int location, int mod) {
+	/* Se il listino DB e' in RAM, usa quelle unita' per le voci editabili
+	 * (tranne SPELLFAIL: CheckValueObj storicamente lascia 0; resta cosi'). */
+	if(listino_db_ready() && location != APPLY_SPELLFAIL) {
+		ObjEditListinoSpec spec;
+		if(listino_db_affect_by_location(location, spec)) {
+			if(location == APPLY_AC) {
+				return -static_cast<long>(mod) * spec.positive_unit_raw;
+			}
+			return SignedAffectCost(mod, spec.positive_unit_raw, spec.negative_unit_raw);
+		}
+	}
+
 	long valore = 0;
 	switch(location) {
 	case APPLY_NONE:
@@ -933,7 +946,7 @@ constexpr ListinoRow kObjEditListino[] = {
 constexpr int kObjEditListinoCount =
 	static_cast<int>(sizeof(kObjEditListino) / sizeof(kObjEditListino[0]));
 
-[[nodiscard]] const ListinoRow* find_listino_row(int location) noexcept {
+[[nodiscard]] const ListinoRow* find_listino_row_builtin(int location) noexcept {
 	for(int i = 0; i < kObjEditListinoCount; ++i) {
 		if(kObjEditListino[i].location == location) {
 			return &kObjEditListino[i];
@@ -945,7 +958,10 @@ constexpr int kObjEditListinoCount =
 } // namespace
 
 bool obj_edit_listino_spec(int location, ObjEditListinoSpec& out) noexcept {
-	const ListinoRow* row = find_listino_row(location);
+	if(listino_db_ready() && listino_db_affect_by_location(location, out)) {
+		return true;
+	}
+	const ListinoRow* row = find_listino_row_builtin(location);
 	if(!row) {
 		return false;
 	}
@@ -961,10 +977,16 @@ bool obj_edit_listino_spec(int location, ObjEditListinoSpec& out) noexcept {
 }
 
 int obj_edit_listino_scalar_count() noexcept {
+	if(listino_db_ready()) {
+		return listino_db_affect_count();
+	}
 	return kObjEditListinoCount;
 }
 
 bool obj_edit_listino_scalar_at(int index, ObjEditListinoSpec& out) noexcept {
+	if(listino_db_ready()) {
+		return listino_db_affect_at(index, out);
+	}
 	if(index < 0 || index >= kObjEditListinoCount) {
 		return false;
 	}
@@ -994,16 +1016,70 @@ long EditAffectDeltaListinoCost(struct obj_data* obj, int location, int delta_mo
 	long scaled = raw * kObjValueStorageScale;
 	const std::string owner = ResolveEditOwnerName(obj);
 	const int classes = ResolveOwnerClassCount(owner);
-	const double mult = ClassMultFromCount(classes);
+	double mult = ClassMultFromCount(classes);
+	if(listino_db_ready()) {
+		if(classes >= 3) {
+			mult = listino_db_param("class_mult_tri", kObjValueClassMultTri);
+		}
+		else if(classes == 2) {
+			mult = listino_db_param("class_mult_bi", kObjValueClassMultBi);
+		}
+		else {
+			mult = 1.0;
+		}
+	}
 	if(mult != 1.0) {
 		scaled = static_cast<long>(
 			std::llround(static_cast<double>(scaled) * mult));
 	}
 
-	/* Sempre +50% artifact sul listino edit (come editpool), anche se il pezzo
-	 * non ha ancora ITEM_IMMUNE. */
+	/* Sempre +artifact_mult sul listino edit (default 1.5), anche senza IMMUNE. */
 	if(scaled > 0) {
-		scaled = (scaled * 3) / 2;
+		const double art = listino_db_ready()
+							   ? listino_db_param("artifact_mult", 1.5)
+							   : 1.5;
+		scaled = static_cast<long>(std::llround(static_cast<double>(scaled) * art));
+	}
+	return scaled;
+}
+
+long EditArtifactFlagListinoCost(struct obj_data* obj) {
+	if(obj == nullptr) {
+		return 0;
+	}
+	const double raw_d =
+		listino_db_ready() ? listino_db_param("artifact_cost_raw", 10000.0) : 10000.0;
+	const long raw = static_cast<long>(std::llround(raw_d));
+	if(raw <= 0) {
+		return 0;
+	}
+	const double scale_d =
+		listino_db_ready()
+			? listino_db_param("storage_scale",
+							   static_cast<double>(kObjValueStorageScale))
+			: static_cast<double>(kObjValueStorageScale);
+	const long scale =
+		std::max(1L, static_cast<long>(std::llround(scale_d)));
+	long scaled = raw * scale;
+
+	const std::string owner = ResolveEditOwnerName(obj);
+	const int classes = ResolveOwnerClassCount(owner);
+	double mult = ClassMultFromCount(classes);
+	if(listino_db_ready()) {
+		if(classes >= 3) {
+			mult = listino_db_param("class_mult_tri", kObjValueClassMultTri);
+		}
+		else if(classes == 2) {
+			mult = listino_db_param("class_mult_bi", kObjValueClassMultBi);
+		}
+		else {
+			mult = 1.0;
+		}
+	}
+	/* Solo class_mult: il prezzo artifact non prende anche artifact_mult. */
+	if(mult != 1.0 && scaled > 0) {
+		scaled = static_cast<long>(
+			std::llround(static_cast<double>(scaled) * mult));
 	}
 	return scaled;
 }

@@ -26,6 +26,13 @@ services:
             - EDIT_ALLOW_PASSWORD_LOGIN=${EDIT_ALLOW_PASSWORD_LOGIN:-}
             - EDIT_COOKIE_SECURE=${EDIT_COOKIE_SECURE:-}
             - EDIT_DEV_MINT_SSO=${EDIT_DEV_MINT_SSO:-}
+            - EDIT_PORTAL_AUDIT_LOG=${EDIT_PORTAL_AUDIT_LOG:-/app/edit-portal-audit.log}
+            - EDIT_PORTAL_LOG=${EDIT_PORTAL_LOG:-/app/edit-portal.log}
+            - EDIT_PORTAL_LOG_LEVEL=${EDIT_PORTAL_LOG_LEVEL:-info}
+            - EDIT_SESSION_TTL_MINUTES=${EDIT_SESSION_TTL_MINUTES:-5}
+        volumes:
+            - ${EDIT_PORTAL_AUDIT_HOST_PATH:-./edit-portal-audit.log}:/app/edit-portal-audit.log
+            - ${EDIT_PORTAL_LOG_HOST_PATH:-./logs/edit-portal.log}:/app/edit-portal.log
         networks:
             - mud_stack
 

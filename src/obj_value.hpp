@@ -173,6 +173,13 @@ struct ObjEditListinoSpec {
 											  int delta_mod);
 
 /**
+ * Costo listino del solo flag ARTIFACT (scala storage): artifact_cost_raw *
+ * storage_scale * class_mult. Senza artifact_mult (+50%) e senza toccare
+ * ITEM2_EDIT / cost monete.
+ */
+[[nodiscard]] long EditArtifactFlagListinoCost(struct obj_data* obj);
+
+/**
  * Applica la scala storage legacy a un ExpValue raw (valore/derent * scale).
  */
 [[nodiscard]] ExpValue ScaleObjExpValue(const ExpValue& raw,

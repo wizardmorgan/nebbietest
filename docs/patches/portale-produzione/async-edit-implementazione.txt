@@ -1,0 +1,126 @@
+Implementazione 1+2+6 (stesso MySQL) — stato codice
+Data: 2026-11-13 (agg. Montero fase B)
+
+========================================================================
+DECISIONE
+========================================================================
+Stesso MySQL di gioco. Niente DB parallelo personaggi.
+Dettaglio in proposta-architettura-portale-montero.txt sezione 10.
+
+========================================================================
+FASE 1 — SEMAFORO MYST
+========================================================================
+Sorgenti (fork mud / wizardmorgan/nebbietest):
+  src/edit_portal_lock.hpp
+  src/edit_portal_lock.cpp
+  src/interpreter.cpp  (con_pwdok: blocco login se sessione open)
+
+Messaggio (ASCII): riquadro in interpreter (sessione aperta e/o job in corso).
+  Logout portale = chiusura corretta; TTL = rete di sicurezza.
+
+TTL: edit_portal_session.expires_at
+  EDIT_SESSION_TTL_MINUTES default 5.
+  Non scade se esistono job pending/running.
+  Login bloccato anche con solo job pending/running (senza sessione open).
+
+========================================================================
+FASE B (2026-11-13) — FUORI PULSE + APPLY VIA JOB
+========================================================================
+  myst:
+    portal_worker_main() elabora g_jobs (handle_internal) FUORI dal pulse.
+    edit_portal_process_pending() sul pulse = no-op (solo log emergenza).
+    portal_api_version = 62.
+
+  portale:
+    apply-affect/pool/resistance + lab mutate -> enqueue kind myst_apply
+    UI poll GET /api/jobs/:id (apiApply / waitForJob)
+    closeSession con job aperti -> close_after_jobs (drain), poi close
+    openSession rifiuta se job busy sullo stesso toon
+
+========================================================================
+FASE 2-3 — SERVIZIO + CODA (repo NebbieArcane/edit-portal)
+========================================================================
+  lib/portal-audit.js  — open/close/touch/expire sessioni lock + drain
+  lib/edit-jobs.js     — coda edit_portal_job + draft + worker
+  server.js            — API:
+    GET  /api/inventory-mysql
+    POST /api/session/touch
+    POST /api/jobs
+    GET  /api/jobs/:id
+    PUT  /api/draft
+    POST /api/apply-*  (enqueue myst_apply)
+
+Worker (EDIT_ASYNC_JOBS=1 default):
+  kind tx_probe       — TX di prova (FOR UPDATE su toon)
+  kind read_snapshot  — lettura inventorio MySQL
+  kind apply_draft    — commit bozza in TX (version check)
+  kind myst_apply     — proxy apply verso myst (fase B)
+
+Nota fase A (dopo B): migrare regole listino/apply in Node su TX MySQL
+senza materializzare oggetti in myst; spegnere path apply pesante player.
+
+Schema (heal v15 idempotente + ensureTables Node):
+  edit_portal_session (+ expires_at)
+  edit_portal_job
+  edit_portal_draft
+  edit_portal_event
+
+========================================================================
+FASE 5 — LOAD TEST
+========================================================================
+  edit-portal/scripts/load-test-async-edit.js
+
+  MYSQL_HOST=... MYSQL_USER=... MYSQL_PASSWORD=... MYSQL_DATABASE=nebbie \
+    node scripts/load-test-async-edit.js
+
+  Misura: open sessione x10, SELECT semaforo x10, job tx_probe x10.
+
+  Eseguito su VPS (MySQL 127.0.0.1:33306, N=10), 2026-11-13:
+    openAvgMs ~10.8
+    lockCheckAvgMs ~0.66 (allLocksBlocking=true)
+    jobAvgEnqMs ~3.1
+    jobAvgRunMs ~11.4
+  Conclusione: a 10 account il semaforo e' irrilevante sul path login;
+  i job restano fuori dal pulse di myst.
+
+========================================================================
+LISTINO: seed .inc → MySQL verita' → cache RAM myst
+========================================================================
+  Seed (solo se listino_affect vuota):
+    src/listino_seed.inc
+  Runtime:
+    src/listino_db.hpp / listino_db.cpp
+    tabelle: listino_affect, listino_pool, listino_param, listino_meta
+    param rilevanti: class_mult_*, artifact_mult (affect), artifact_cost_raw
+      (flag ARTIFACT da solo: 10000 raw = 100 MXP x class_mult, senza +50%,
+      senza ITEM2_EDIT, senza cost 20001)
+
+  myst: listino_db_init() in edit_portal_init; quote broker/editpool/portal
+        usano la cache RAM (non una SELECT per anteprima).
+        Reload: POST /internal/listino-reload
+
+  Portale (edit-portal):
+    lib/listino.js
+    GET  /api/listino
+    POST /api/staff/listino-reload  → bump revision + myst reload
+
+  EditAffectBroker: invariato sulla logica fee/whitelist; legge costi dalla
+  stessa cache (AffectSlotValue / EditAffectDeltaListinoCost / fee %).
+  Rinomina: ancora costi fissi in codice (non listino affect).
+
+========================================================================
+LOGGING PORTALE
+========================================================================
+  edit-portal-audit.log  — solo dominio (session/apply/listino.reload)
+  edit-portal.log        — operativo INFO/DEBUG
+
+  Env Node:
+    EDIT_PORTAL_LOG_LEVEL=info|debug   (default info)
+    EDIT_PORTAL_LOG=/app/edit-portal.log
+    EDIT_PORTAL_LOG_HOST_PATH=./edit-portal.log  (compose volume)
+
+  INFO: boot, session open/close, apply, myst timeout/fail, job enqueue/done,
+        listino read/reload, http 5xx
+  DEBUG: ogni /api http, myst request/response con ms, dettaglio job
+
+  myst: con EDIT_PORTAL_LOG_LEVEL=debug, listino_db stampa le voci in syslog.

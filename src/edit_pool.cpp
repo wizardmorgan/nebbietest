@@ -3,6 +3,7 @@
  *ALARMUD* See COPYING for licence information
  *ALARMUD*/
 #include "edit_pool.hpp"
+#include "listino_db.hpp"
 #include "edit_system_config.hpp"
 
 #include <algorithm>
@@ -967,6 +968,12 @@ void debit_one(sh_int* edit, sh_int* over, int amount) {
 } // namespace
 
 int edit_pool_field_cap(EditPoolField field) noexcept {
+	if(listino_db_ready()) {
+		ListinoPoolRow row;
+		if(listino_db_pool(edit_pool_field_key(field), row)) {
+			return row.cap;
+		}
+	}
 	switch(field) {
 	case EditPoolField::Hp:
 		return kEditPoolMaxHit;
@@ -985,6 +992,12 @@ int edit_pool_field_cap(EditPoolField field) noexcept {
 }
 
 int edit_pool_field_step(EditPoolField field) noexcept {
+	if(listino_db_ready()) {
+		ListinoPoolRow row;
+		if(listino_db_pool(edit_pool_field_key(field), row) && row.step > 0) {
+			return row.step;
+		}
+	}
 	switch(field) {
 	case EditPoolField::Hp:
 	case EditPoolField::Mana:
@@ -1090,6 +1103,16 @@ edit_pool_quote edit_pool_quote_delta(EditPoolField field, int delta) noexcept {
 
 bool edit_pool_listino_unit(EditPoolField field, long& xp_per_unit, int& rune_num,
 							int& rune_den) noexcept {
+	if(listino_db_ready()) {
+		ListinoPoolRow row;
+		if(listino_db_pool(edit_pool_field_key(field), row) && row.xp_per_unit > 0 &&
+		   row.rune_den > 0) {
+			xp_per_unit = row.xp_per_unit;
+			rune_num = row.rune_num;
+			rune_den = row.rune_den;
+			return true;
+		}
+	}
 	switch(field) {
 	case EditPoolField::Hp:
 		/* Hit [10] = 30M / 30 rune */
@@ -1133,10 +1156,12 @@ bool edit_pool_listino_unit(EditPoolField field, long& xp_per_unit, int& rune_nu
 
 double edit_pool_class_mult(int n_classes) noexcept {
 	if(n_classes >= 3) {
-		return kObjValueClassMultTri;
+		return listino_db_ready() ? listino_db_param("class_mult_tri", kObjValueClassMultTri)
+								  : kObjValueClassMultTri;
 	}
 	if(n_classes == 2) {
-		return kObjValueClassMultBi;
+		return listino_db_ready() ? listino_db_param("class_mult_bi", kObjValueClassMultBi)
+								  : kObjValueClassMultBi;
 	}
 	return 1.0;
 }
@@ -1161,8 +1186,10 @@ edit_pool_quote edit_pool_quote_paid(EditPoolField field, int units,
 	const double listino_rune = static_cast<double>(rune_num) *
 								static_cast<double>(units) /
 								static_cast<double>(rune_den);
-	const double art_xp = listino_xp * 1.5;
-	const double art_rune = listino_rune * 1.5;
+	const double art =
+		listino_db_ready() ? listino_db_param("artifact_mult", 1.5) : 1.5;
+	const double art_xp = listino_xp * art;
+	const double art_rune = listino_rune * art;
 	q.xp_raw = std::max(
 		0L, static_cast<long>(art_xp * mult / static_cast<double>(n_classes)));
 	q.pq = std::max(0, static_cast<int>(std::ceil(art_rune * mult)));

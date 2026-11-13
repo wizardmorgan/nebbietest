@@ -99,8 +99,11 @@ services:
             - EDIT_TELEGRAM_CHAT_ID=${EDIT_TELEGRAM_CHAT_ID:-REPLACE_ME_TELEGRAM_CHAT_ID}
             - EDIT_LAB_LEVEL=${EDIT_LAB_LEVEL:-58}
             - EDIT_PORTAL_AUDIT_LOG=${EDIT_PORTAL_AUDIT_LOG:-/app/edit-portal-audit.log}
+            - EDIT_PORTAL_LOG=${EDIT_PORTAL_LOG:-/app/edit-portal.log}
+            - EDIT_PORTAL_LOG_LEVEL=${EDIT_PORTAL_LOG_LEVEL:-info}
         volumes:
             - ${EDIT_PORTAL_AUDIT_HOST_PATH:-./edit-portal-audit.log}:/app/edit-portal-audit.log
+            - ${EDIT_PORTAL_LOG_HOST_PATH:-./logs/edit-portal.log}:/app/edit-portal.log
         depends_on:
             mysql:
                 condition: service_healthy

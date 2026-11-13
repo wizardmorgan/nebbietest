@@ -1,0 +1,243 @@
+Proposta architettura Portale Edit
+Per: Montero
+Da: lavoro su feature/edit-portal (wizardmorgan/nebbietest)
+Data: 2026-11-12
+
+========================================================================
+1. SCOPE (di cosa stiamo parlando)
+========================================================================
+
+Cosa E' in scope
+  - Un portale web con cui i GIOCATORI possono editare i propri personaggi
+    (listino ufficiale: pezzi, pool, ecc.).
+  - Uso "quando vogliono", con una regola fissa: il toon da editare deve
+    essere OFFLINE (non collegato al mud).
+  - Obiettivo tecnico: non far laggare myst mentre qualcuno usa il portale.
+  - Separazione chiara:
+      * myst  = gioco
+      * portale = edit via web + MySQL
+
+Cosa NON e' in scope (in questa proposta)
+  - Riscrivere editor in-game (oedit/medit/redit), broker, incastonatore.
+  - Cambiare le regole di listino "di gioco" se non serve allinearle al
+    portale in un secondo momento.
+  - Esporre l'API di edit del mud su Internet.
+  - Dettaglio implementativo UI (CSS, SSO WordPress, ecc.): si affronta
+    dopo aver concordato l'architettura.
+
+Nota sul lavoro gia' fatto
+  Esiste gia' un prototipo in cui l'API di edit vive DENTRO myst (thread
+  HTTP + lavoro delle richieste sul game loop). E' utile come prova delle
+  regole e come riferimento, ma NON e' l'architettura che proponiamo per
+  l'uso giocatori a regime, proprio per il tema lag (vedi sotto).
+
+
+========================================================================
+2. PERCHE' QUESTA NUOVA PROPOSTA
+========================================================================
+
+Requisito di prodotto
+  I giocatori devono poter usare il portale in qualsiasi momento (con toon
+  offline). Non e' uno strumento solo staff, usato di rado.
+
+Problema del prototipo attuale (API dentro myst)
+  - La parte HTTP e' su un thread a parte (ok).
+  - Il lavoro vero (letture/scritture MySQL, costruzione pezzi, quote,
+    apply) viene eseguito sul THREAD PRINCIPALE del mud, a ogni pulse.
+  - Con pochi usi staff il rischio e' basso.
+  - Con tanti giocatori le richieste si accumulano sullo stesso tick del
+    gioco: rischio concreto di hitch / lag di comandi e combat, perche'
+    myst e MySQL sono condivisi e il lavoro non e' "in sottofondo".
+
+Perche' non basta "toon offline"
+  - Offline evita di modificare un PG vivo in memoria (bene).
+  - NON toglie il lavoro pesante dal game loop: le query e i calcoli
+    restano sul tick di myst.
+
+Perche' non basta "un secondo thread dentro myst" cosi' com'e'
+  - Quote/list/apply oggi usano strutture globali del mud (prototipi
+    oggetti, liste, ecc.) pensate per un solo thread.
+  - Usarle da un worker senza riscrittura = rischio race/crash, non solo
+    "meno lag".
+
+Quindi
+  Per uso giocatori + poco impatto sul lag serve spostare la LOGICA del
+  portale FUORI dal game loop, lasciando a myst solo un ruolo di semaforo
+  (non far entrare il toon mentre si edita).
+
+
+========================================================================
+3. IDEA IN SINTESI (soluzione 1 + 2 + 6)
+========================================================================
+
+Tre pezzi insieme:
+
+  (1) Servizio Portale separato da myst
+      Processo a parte che conosce listino/tetti e parla con MySQL.
+
+  (2) Coda su database
+      Apply/pagamenti come job in tabella: il servizio le esegue senza
+      passare dal pulse di myst.
+
+  (6) Sessione di edit con toon bloccato al login
+      Finche' la sessione e' aperta, quel toon non puo' entrare in gioco.
+
+In una frase:
+  Il giocatore esce dal mud, apre il portale, edita; myst si limita a
+  impedire il rientro finche' la sessione e' aperta; quote e apply non
+  girano sul thread di gioco.
+
+
+========================================================================
+4. COME FUNZIONA (flusso)
+========================================================================
+
+A. Apertura sessione
+  1. Giocatore autenticato sulla UI sceglie un toon.
+  2. Il Servizio Portale controlla: toon valido, non in gioco.
+  3. Scrive in MySQL una sessione edit = aperta.
+  4. Da quel momento myst, al login di quel toon, rifiuta l'ingresso
+     (messaggio chiaro: "chiudi prima il portale" / sessione attiva).
+
+B. Consultazione (inventario, preventivi)
+  1. La UI parla col Servizio Portale (non con myst per la logica edit).
+  2. Il servizio legge MySQL e calcola i costi.
+  3. Myst non esegue quote sul game loop.
+
+C. Pagamento / apply
+  1. Conferma in UI -> job in tabella coda (pending).
+  2. Worker del servizio esegue la job su MySQL (transazione).
+  3. Esito done/failed -> UI mostra risultato.
+  4. Myst non materializza oggetti ne' applica edit sul pulse.
+
+D. Chiusura sessione
+  1. Logout UI, "chiudi edit", oppure timeout di inattivita'.
+  2. Sessione = chiusa (solo se non ci sono job ancora in corso, oppure
+     con regola esplicita di attesa/cancel).
+  3. Il toon puo' rientrare in mud e trova i dati gia' aggiornati in MySQL.
+
+
+========================================================================
+5. RUOLO DI OGNI COMPONENTE
+========================================================================
+
+UI (NebbieArcane/edit-portal)
+  - Interfaccia giocatore.
+  - Non contiene le regole di listino "vere": le chiede al servizio.
+
+Servizio Portale (nuovo)
+  - Unica autorita' per quote/apply del portale.
+  - Legge/scrive MySQL; gestisce sessioni e coda job.
+  - Non gira dentro myst.
+
+MySQL
+  - Dati personaggio/inventario come oggi.
+  - Tabelle aggiuntive: sessione edit, coda job, eventuale audit.
+
+myst (NebbieArcane/Server)
+  - Gioco.
+  - Al login: se sessione edit aperta su quel toon -> niente ingresso.
+  - Opzionale: aggiornare un flag online a enter/exit (per il servizio).
+  - A regime: niente API edit pesante sul pulse per questo flusso.
+
+
+========================================================================
+6. REGOLE DI SICUREZZA / COERENZA (da concordare)
+========================================================================
+
+  - Una sola sessione edit aperta per toon.
+  - Una sola job "running" per toon (niente apply paralleli sullo stesso PG).
+  - Apply solo con sessione aperta e toon non in gioco.
+  - Timeout sessione se il browser viene chiuso senza logout.
+  - Job in transazione: o l'edit (e il pagamento) vanno a buon fine, o si
+    annulla in modo chiaro; niente addebiti a meta'.
+  - Listino/tetti del portale: un'unica implementazione nel Servizio
+    Portale (allineamento con editpool/broker in-game = fase successiva,
+    se serve).
+
+
+========================================================================
+7. FASI DI LAVORO (ordine proposto)
+========================================================================
+
+  Fase 1 - Semaforo in myst
+    Sessione edit in DB + blocco login se sessione aperta.
+    Gia' utile anche se per un po' resta il prototipo attuale.
+
+  Fase 2 - Servizio in sola lettura
+    Lista inventario + quote da MySQL; UI punta al servizio.
+
+  Fase 3 - Coda apply
+    Pagamenti/apply come job; UI attende esito.
+
+  Fase 4 - Disaccoppiamento
+    Myst non espone piu' (o non usa piu') il path edit pesante sul pulse
+    per il portale giocatori.
+
+  Fase 5 - Prove
+    Race (login durante sessione, due tab), job lente, carico.
+
+
+========================================================================
+8. EFFETTI ATTESI
+========================================================================
+
+Lag di gioco
+  Obiettivo: il path portale non allunga i pulse di myst.
+  MySQL resta condiviso: va tenuto in salute; non e' "magia", ma togliere
+  quote/apply dal tick e' il punto centrale.
+
+Esperienza giocatore
+  Esci dal mud -> edita sul sito -> rientra.
+  Se lasci la sessione aperta, non entri finche' non la chiudi (o scade).
+
+Sforzo
+  Progetto medio: nuovo servizio + schema coda/sessione + semaforo myst +
+  adattamento UI. Il prototipo attuale resta riferimento delle REGOLE da
+  migrare, non l'architettura a regime.
+
+
+========================================================================
+9. COSA CHIEDIAMO
+========================================================================
+
+  1. Concordare che, per uso giocatori, l'API edit "dentro myst sul pulse"
+     non e' la base a lungo termine.
+  2. Ok di massima su 1+2+6 (servizio esterno + coda DB + sessione con
+     blocco login).
+  3. Priorita' sulla Fase 1 (semaforo) rispetto al resto, se vuoi un
+     primo passo piccolo e sicuro.
+
+Documento sul VPS:
+  /home/nebbie/NebbieArcane/nebbietest/docs/patches/portale-produzione/proposta-architettura-portale-montero.txt
+
+
+========================================================================
+10. DECISIONE DB (concordata): STESSO MySQL, NON DB parallelo
+========================================================================
+
+Verdetto
+  Un solo database di gioco (stessa istanza MySQL, schema personaggi
+  canonico). Tabelle portale aggiuntive nello stesso schema:
+    edit_portal_session  — lock/semaforo + TTL
+    edit_portal_job      — coda apply asincrona
+    edit_portal_draft    — bozza opzionale per sessione
+    edit_portal_event    — audit
+
+Perche' non un DB parallelo con copia PG
+  - "Dati sempre aggiornati" richiederebbe sync continua: e' proprio la
+    fonte di lag e di conflitti (XP, rent, login).
+  - A ~10 account contemporanei la scala non giustifica un secondo store.
+  - Il lag del prototipo viene dal lavoro sul PULSE di myst, non dal fatto
+    che MySQL sia condiviso.
+
+Modello sync (in pratica: evitare la sync)
+  1. Toon offline + sessione open = myst rifiuta il login (semaforo).
+  2. Unico scrittore del PG durante la sessione = servizio portale (job).
+  3. Apply in una transazione MySQL sulle tabelle canoniche.
+  4. Chiusura sessione -> login -> myst carica MySQL come oggi.
+
+Stima lag a 10 sessioni
+  - Check semaforo: 1 SELECT indexed, solo al tentativo di login (~1 ms).
+  - Quote/lista/apply: 0 sul pulse se eseguiti dal servizio/coda.
+  - Rischio residuo: solo carico MySQL (indici + una job running per toon).

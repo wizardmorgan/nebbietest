@@ -50,6 +50,7 @@
 #include <set>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
@@ -85,6 +86,7 @@
 #include "magic.hpp"
 #include "multiclass.hpp"
 #include "obj_value.hpp"
+#include "listino_db.hpp"
 #include "object_instance.hpp"
 #include "procarea.hpp"
 #include "spells.hpp"
@@ -2473,7 +2475,7 @@ MOBSPECIAL_FUNC(Incastonatore) {
 namespace {
 
 constexpr long kEditBrokerPrinceFloor = PRINCEEXP;
-constexpr int kEditBrokerPercentKeep = 25; /* fee = 25% listino; su GET_EXP poi /classi */
+constexpr int kEditBrokerPercentKeep = 25; /* fallback se listino_param assente */
 
 struct AffectPick {
 	int location{APPLY_NONE};
@@ -3323,9 +3325,19 @@ void clear_zero_modifier_slots(struct obj_data* obj) {
 	if(listino_cost <= 0) {
 		return 0;
 	}
-	/* 25% listino: evita (x*25)/100 che con -Werror=strict-overflow fallisce. */
-	static_assert(kEditBrokerPercentKeep == 25, "percent_of_listino assume 25%");
-	return listino_cost / 4;
+	int pct = kEditBrokerPercentKeep;
+	if(listino_db_ready()) {
+		pct = static_cast<int>(
+			std::lround(listino_db_param("broker_fee_percent",
+										 static_cast<double>(kEditBrokerPercentKeep))));
+	}
+	if(pct <= 0) {
+		return 0;
+	}
+	if(pct == 25) {
+		return listino_cost / 4;
+	}
+	return (listino_cost * static_cast<long>(pct)) / 100L;
 }
 
 /*

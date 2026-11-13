@@ -1425,10 +1425,12 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		entries.push_back(j);
 	}
 
-	/* Flag ARTIFACT (extra_bits / ITEM_IMMUNE): +50% sul costo finale listino
-	 * (gia' presente OPPURE aggiunto nello stesso pacchetto). Non rimovibile. */
+	/* Flag ARTIFACT: costo listino artifact_cost_raw x class_mult (no +50%
+	 * su questa voce); non marca ITEM2_EDIT ne' cost 20001. Non rimovibile. */
 	{
 		const bool is_artifact = IS_OBJ_STAT(obj, ITEM_IMMUNE);
+		const long art_xp =
+			is_artifact ? 0L : EditArtifactFlagListinoCost(const_cast<struct obj_data*>(obj));
 		Json j;
 		j["id"] = "artifact";
 		j["label"] = "Artifact";
@@ -1441,9 +1443,13 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["can_add"] = !is_artifact;
 		j["can_edit"] = !is_artifact;
 		j["can_remove"] = false;
+		j["xp_raw"] = art_xp;
+		j["mxp"] = art_xp / 1000000L;
 		j["hint"] = is_artifact
-						? "Permanente: +50% sul costo finale di ogni edit (listino)"
-						: "Flag gratis; +50% sul costo finale di questo edit; poi permanente";
+						? "Permanente. Gli edit affect successive usano il listino "
+						  "(artifact_mult sul pezzo/pacchetto)."
+						: "Costo listino (100 MXP base x class_mult). Non marca EDIT "
+						  "ne' [RARO]/ +50% solo sugli affect, non su questa voce.";
 		entries.push_back(j);
 	}
 

@@ -1,0 +1,152 @@
+Patch: introduzione del portale edit (solo C++ del mud + config)
+
+Percorso su VPS:
+  /home/nebbie/NebbieArcane/nebbietest/docs/patches/portale-produzione/
+  - portale-edit.patch
+  - LEGGIMI.txt
+
+========================================================================
+PERCHE' MANCA LA UI (e come si integra)
+========================================================================
+
+Il portale e' fatto di DUE pezzi, in DUE repo diversi:
+
+  1) MOTORE (questa patch) — codice C++ dentro myst
+     - Espone un'API HTTP interna (porta 8090) sul processo mud.
+     - Sa fare preventivi e applicare edit (pool, oggetti, resistenze, ...).
+     - Vive in NebbieArcane/Server (qui: patch su feature/comandi-immortali).
+
+  2) INTERFACCIA (UI) — sito web Node
+     - E' la pagina che aprono staff/principi nel browser.
+     - Chiama l'API del mud dietro le quinte.
+     - Vive in un altro repository: NebbieArcane/edit-portal
+       (NON in Server).
+
+Questa patch contiene solo il pezzo 1. Non contiene il pezzo 2 perche':
+  - non appartiene al repo Server / al branch mud;
+  - non si "applica" con git apply sul codice C++;
+  - si installa a parte (clone/deploy del repo UI + container o processo Node).
+
+In pratica, dopo aver messo SOLO questa patch in produzione:
+  - myst ha l'API del portale (motore acceso);
+  - se nessuno apre ancora la UI, i giocatori non vedono una pagina nuova:
+    il portale web non e' "acceso" finche' non deployi anche edit-portal;
+  - i comandi in-game gia' presenti (editpool, broker, ecc.) restano usabili
+    come oggi; non dipendono dalla pagina web.
+
+Come si integra la UI in un secondo passo (semplice):
+  a) Deploy di NebbieArcane/edit-portal (Node) sulla macchina/web (es. porta 3080
+     o dietro Apache/Nginx su un path tipo /edit/).
+  b) Configurare la UI affinche' parli col mud:
+       MYST_EDIT_API_URL  = indirizzo interno dell'API myst (es. http://mud:8090)
+       EDIT_API_SECRET    = LO STESSO segreto impostato su myst
+  c) Login/SSO come gia' previsto dal repo UI (password e/o WordPress).
+  d) Verificare: apri la pagina -> login -> quote/apply su un PG di test.
+
+Finche' (a)-(d) non sono fatti, la patch mud da sola non "apre" il portale
+ai giocatori: prepara solo il motore.
+
+========================================================================
+BASE E APPLICAZIONE
+========================================================================
+
+Base richiesta: NebbieArcane/Server feature/comandi-immortali
+  (applica pulita; verificato con git apply --check)
+Su develop NON applica: manca odb_schema_heal (storico editpool, commit 21551fd).
+Prima serve comandi-immortali in produzione, poi questa patch.
+
+Applicazione (in un clone di Server, su un branch di lavoro scelto da te):
+  git apply --check docs/patches/portale-produzione/portale-edit.patch
+  git apply docs/patches/portale-produzione/portale-edit.patch
+
+Cosa contiene (24 file)
+  Nuovi:    edit_portal, edit_system_config, obj_edit_catalog, Confs/edit_system.default.json
+  Modificati: obj_value, edit_pool, object_instance, mob.editor, act.wizard (solo editpool),
+              act.other, comm (init + loop), db, legacy_import, odb_schema_heal, odb.hpp, magic2
+
+Cosa NON contiene (e perche')
+  - UI Node / NebbieArcane/edit-portal, wordpress SSO plugin:
+      altro repo; si deployano a parte (vedi sezione sopra).
+  - mud-dev.sh, docker-compose di sviluppo, AGENTS.md, docs di lavoro:
+      solo utensili del fork di sviluppo, non servono in produzione.
+  - CMakeLists (copia binario), interpreter.cpp (Slack in thread):
+      non essenziali al portale; evitati per ridurre rumore.
+  - whitelist "Sirio" in do_oload:
+      modifica personale non legata al portale.
+  - clan_symbol.cpp:
+      Su feature/comandi-immortali (e quindi in produzione dopo quel merge)
+      il codice dei simboli di clan RESTA ESATTAMENTE QUELLO DI SERVER.
+      Non lo tocchiamo: il portale non usa quel file.
+      Nel fork di sviluppo c'erano anche delle modifiche extra ai simboli
+      (pulizia di copie inutili in certi casi). Non le abbiamo messe in
+      questa patch perche' non servono al portale. Non stiamo dicendo che
+      su comandi-immortali ci sia oggi un bug di doppioni: stiamo solo
+      dicendo che non importiamo da qui modifiche collaterali ai simboli.
+
+========================================================================
+RISCHI E NOTE PRIMA DEL DEPLOY IN PRODUZIONE
+========================================================================
+
+  1. Sicurezza API
+     - L'API del portale (dentro myst) apre una porta (di solito 8090) e
+       ascolta su tutte le schede di rete del server.
+     - Se non impostate un segreto (EDIT_API_SECRET), usa una password
+       di sviluppo nota ("nebbie-edit-dev-secret"): chiunque possa
+       raggiungere la 8090 potrebbe parlare con l'API.
+     - In produzione: mettete un segreto vero e fate in modo che la 8090
+       sia raggiungibile solo dalla macchina/rete della UI (non da
+       Internet). La UI usera' lo stesso segreto.
+
+  2. Database — cosa succede davvero
+     - Al primo avvio del mud con questa patch, se mancano, vengono create
+       DUE TABELLE NUOVE e VUOTE: edit_portal_session e edit_portal_event.
+       Servono solo a registrare sessioni/eventi del portale (audit).
+     - Le tabelle e i dati che avete gia' (PG, inventario, oggetti, ecc.)
+       NON vengono cancellati, rinominati o migrati da questo passo.
+     - "CREATE IF NOT EXISTS" = se le tabelle ci sono gia', non fa nulla;
+       se non ci sono, le crea. Punto.
+
+  3. Comportamenti che cambiano (cosa vede chi gioca / chi edita)
+     Questi non sono "rischi di perdita dati" a caso: sono correzioni
+     legate al fatto che il portale deve vedere pezzi e tetti in modo
+     coerente. In pratica:
+
+     a) Slot affect "vuoti" o inutili non vengono piu' risalvati
+        Nell'inventario (e sulle istanze oggetto) a volte restavano righe
+        tipo "bonus 0" o slot senza tipo ma con un numero. Da questa patch
+        in poi, al salvataggio quelle righe non vengono riscritte.
+        Effetto tipico: meno spazzatura in DB; i bonus veri restano.
+        Non toglie un +2 hitroll reale da un pezzo.
+
+     b) Flag "oggetto editato" (ITEM2_EDIT) non viene piu' appiccicato
+        in automatico a ogni pezzo istanziato
+        Prima, caricando certe istanze, il mud poteva segnare come
+        "editati" anche pezzi che non lo erano. Il portale usa quel flag
+        (insieme ad altro) per i massimali di dam/spell sul personaggio:
+        contare pezzi non editati faceva sembrare il PG oltre il tetto
+        (es. 56/30). Ora il flag resta solo se c'era gia'.
+        Effetto tipico: i tetti del portale tornano sensati; i pezzi
+        davvero editati restano editati.
+
+     c) Se esistono piu' "template" con lo stesso vecchio vnum di edit
+        (caso raro, dati sporchi), il mud sceglie quello con id piu' basso
+        invece di rischiare un errore. Caso normale: un solo template,
+        nessun cambiamento percepibile.
+
+     d) Dispel magic su un oggetto
+        Oltre a togliere il tipo di bonus, azzera anche il valore numerico
+        dello slot. Evita pezzi che dopo un dispel sembrano "vuoti" ma
+        tengono ancora un numero fantasma che confondeva il portale.
+        Effetto tipico: dopo dispel, lo slot e' davvero pulito.
+
+  4. Editpool / listino
+     - Il comando wiz editpool calcola i costi con la stessa funzione usata
+       dal portale. I prezzi dovrebbero essere gli stessi di prima.
+     - Conviene comunque rifare due preventivi noti (es. hit e mana, mono
+       e biclasse) e confrontarli col listino ufficiale prima del rilascio.
+
+  5. Compilazione
+     - Questa patch sul VPS non e' ancora stata compilata in questa
+       sessione.
+     - Prima del rilascio: compilare nel mudcompiler e provare almeno
+       l'API (ping, un quote pool, un quote oggetto).

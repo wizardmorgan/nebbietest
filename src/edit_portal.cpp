@@ -36,6 +36,7 @@
 #include "db.hpp"
 #include "edit_pool.hpp"
 #include "edit_system_config.hpp"
+#include "listino_db.hpp"
 #include "handler.hpp"
 #include "legacy_import.hpp"
 #include "logging.hpp"
@@ -70,7 +71,8 @@ struct EditPortalJob {
 std::mutex g_queue_mutex;
 std::condition_variable g_queue_cv;
 std::deque<EditPortalJob> g_jobs;
-std::atomic<bool> g_http_running {false};
+std::atomic<bool> g_portal_running {false};
+std::atomic<bool> g_worker_started {false};
 
 [[nodiscard]] std::string trim_http_value(std::string value) {
 	while(!value.empty() && (value.front() == ' ' || value.front() == '\t')) {
@@ -386,6 +388,7 @@ constexpr const char* kSqlCreateEditPortalSession =
 	"`session_key` VARCHAR(64) NOT NULL,"
 	"`opened_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
 	"`closed_at` TIMESTAMP NULL DEFAULT NULL,"
+	"`expires_at` TIMESTAMP NULL DEFAULT NULL,"
 	"`actor_account_id` BIGINT UNSIGNED NULL,"
 	"`actor_email` VARCHAR(255) NULL,"
 	"`actor_toon_id` BIGINT UNSIGNED NULL,"
@@ -399,7 +402,8 @@ constexpr const char* kSqlCreateEditPortalSession =
 	"PRIMARY KEY (`id`),"
 	"UNIQUE KEY `uq_edit_portal_session_key` (`session_key`),"
 	"KEY `idx_edit_portal_session_actor` (`actor_toon_id`),"
-	"KEY `idx_edit_portal_session_opened` (`opened_at`)"
+	"KEY `idx_edit_portal_session_opened` (`opened_at`),"
+	"KEY `idx_edit_portal_session_status_exp` (`status`, `expires_at`)"
 	") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 constexpr const char* kSqlCreateEditPortalEvent =
@@ -425,6 +429,38 @@ constexpr const char* kSqlCreateEditPortalEvent =
 	"KEY `idx_edit_portal_event_telegram` (`telegram_sent`, `severity`, `at`)"
 	") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
+constexpr const char* kSqlCreateEditPortalJob =
+	"CREATE TABLE IF NOT EXISTS `edit_portal_job` ("
+	"`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
+	"`session_key` VARCHAR(64) NOT NULL,"
+	"`toon_id` BIGINT UNSIGNED NOT NULL,"
+	"`kind` VARCHAR(48) NOT NULL,"
+	"`status` VARCHAR(16) NOT NULL DEFAULT 'pending',"
+	"`payload_json` MEDIUMTEXT NULL,"
+	"`result_json` MEDIUMTEXT NULL,"
+	"`error_message` VARCHAR(512) NULL,"
+	"`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+	"`started_at` TIMESTAMP NULL DEFAULT NULL,"
+	"`finished_at` TIMESTAMP NULL DEFAULT NULL,"
+	"PRIMARY KEY (`id`),"
+	"KEY `idx_edit_portal_job_status` (`status`, `id`),"
+	"KEY `idx_edit_portal_job_toon_status` (`toon_id`, `status`),"
+	"KEY `idx_edit_portal_job_session` (`session_key`)"
+	") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+constexpr const char* kSqlCreateEditPortalDraft =
+	"CREATE TABLE IF NOT EXISTS `edit_portal_draft` ("
+	"`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
+	"`session_key` VARCHAR(64) NOT NULL,"
+	"`toon_id` BIGINT UNSIGNED NOT NULL,"
+	"`base_version` VARCHAR(64) NULL,"
+	"`draft_json` MEDIUMTEXT NOT NULL,"
+	"`updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"
+	"PRIMARY KEY (`id`),"
+	"UNIQUE KEY `uq_edit_portal_draft_session` (`session_key`),"
+	"KEY `idx_edit_portal_draft_toon` (`toon_id`)"
+	") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
 void portal_audit_ensure_tables() {
 	DB* db = Sql::getMysql();
 	if(!db) {
@@ -433,6 +469,13 @@ void portal_audit_ensure_tables() {
 	std::string err;
 	(void)portal_mysql_exec(db, kSqlCreateEditPortalSession, err, "portal:audit_session_ddl");
 	(void)portal_mysql_exec(db, kSqlCreateEditPortalEvent, err, "portal:audit_event_ddl");
+	(void)portal_mysql_exec(db, kSqlCreateEditPortalJob, err, "portal:job_ddl");
+	(void)portal_mysql_exec(db, kSqlCreateEditPortalDraft, err, "portal:draft_ddl");
+	(void)portal_mysql_exec(
+		db,
+		"ALTER TABLE `edit_portal_session` ADD COLUMN `expires_at` TIMESTAMP NULL DEFAULT NULL "
+		"AFTER `closed_at`",
+		err, "portal:session_expires_at");
 }
 
 [[nodiscard]] std::string portal_audit_trunc(std::string s, std::size_t max_len) {
@@ -1274,7 +1317,8 @@ void portal_apply_personalize(struct obj_data* obj, const char* owner_name) {
 [[nodiscard]] bool portal_save_edited_inventory_item(
 	unsigned long long inventory_id, struct obj_data* after, std::string& err,
 	const char* owner_name,
-	const obj_affected_type* reward_create_baseline = nullptr) {
+	const obj_affected_type* reward_create_baseline = nullptr,
+	bool mark_edit = true) {
 	if(!after) {
 		err = "[portal:save] obj null";
 		return false;
@@ -1289,7 +1333,8 @@ void portal_apply_personalize(struct obj_data* obj, const char* owner_name) {
 		after->char_vnum <= HIGH_EDITED_ITEMS)) {
 		after->char_vnum = base;
 	}
-	if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
+	/* Solo flag Artifact: niente ITEM2_EDIT (non conta nei tetti dam/sp). */
+	if(mark_edit && !IS_OBJ_STAT2(after, ITEM2_EDIT)) {
 		SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
 	}
 	/* Stesso effetto di «personalize <obj> <toon>»: PERSONAL + owner del target. */
@@ -2835,7 +2880,9 @@ struct ToonInventoryEditScan {
 					return json_error(
 						"Artifact non rimovibile una volta impostato", 400);
 				}
-				Json d = quote_xp_json(0, 0);
+				const long xp_raw =
+					(target && !current) ? EditArtifactFlagListinoCost(obj) : 0L;
+				Json d = quote_xp_json(xp_raw, 0);
 				d["location"] = 0;
 				d["flag"] = "artifact";
 				d["target_modifier"] = target;
@@ -2843,10 +2890,11 @@ struct ToonInventoryEditScan {
 				d["target"] = target;
 				d["inventory_id"] = inventory_id;
 				d["note"] =
-					target
-						? "Artifact: flag gratis; +50% sul costo finale di questo edit "
-						  "(gia' presente o aggiunto nello stesso pacchetto)"
-						: "Artifact invariato";
+					target && !current
+						? "Artifact: costo listino (artifact_cost_raw x class_mult); "
+						  "senza +50% artifact_mult, senza ITEM2_EDIT, senza cost 20001"
+						: (current ? "Artifact gia' presente"
+								   : "Artifact invariato");
 				extract_obj(obj);
 				return json_ok(d);
 			}
@@ -3066,6 +3114,15 @@ struct ToonInventoryEditScan {
 					return fail_affect("Artifact: specificare target_modifier=1 per attivare",
 									  400);
 				}
+				const long quote_xp = EditArtifactFlagListinoCost(obj);
+				int xp_cost = 0;
+				int rune_cost = 0;
+				std::string pay_resolve_err;
+				if(!resolve_object_edit_payment(pay_xp, pay_rune, quote_xp, 0, xp_cost,
+											   rune_cost, pay_resolve_err)) {
+					extract_obj(obj);
+					return fail_affect(pay_resolve_err.c_str(), 402);
+				}
 				struct obj_data* after = materialize_inventory_row(*row);
 				if(!after) {
 					extract_obj(obj);
@@ -3073,40 +3130,43 @@ struct ToonInventoryEditScan {
 				}
 				extract_obj(obj);
 				SET_BIT(after->obj_flags.extra_flags, ITEM_IMMUNE);
-				if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
-					SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
-				}
-				/* Artifact gratis: eventuale testo in body e' rifiutato
-				 * (serve un affect pagato nello stesso apply). */
+				/* Solo ARTIFACT: niente ITEM2_EDIT, niente cost 20001 / [RARO]. */
+				const bool affect_is_paid = (quote_xp > 0) || (xp_cost > 0) ||
+											(rune_cost > 0);
 				bool text_changed = false;
 				std::string text_err;
-				if(!portal_apply_optional_text_fields(after, req, /*affect_is_paid=*/false,
-													  text_err, text_changed)) {
+				if(!portal_apply_optional_text_fields(after, req, affect_is_paid, text_err,
+													  text_changed)) {
 					extract_obj(after);
 					return fail_affect(text_err.c_str(), 400);
 				}
-				/* Flag gratis; il +50% e' sul costo degli edit pagati (stesso
-				 * pacchetto o successivi) via AnalyzeObjEdit. */
+				const int max_level = max_level_for_toon(target_toon_id);
+				std::string pay_err;
+				if(!deduct_payment(target_toon_id, xp_cost, rune_cost, max_level, pay_err)) {
+					extract_obj(after);
+					return fail_affect(pay_err.c_str(), 402);
+				}
 				std::string save_err;
 				const bool saved = portal_save_edited_inventory_item(
-					inventory_id, after, save_err, target_name.c_str());
+					inventory_id, after, save_err, target_name.c_str(), nullptr,
+					/*mark_edit=*/false);
 				Json d = analyze_to_json(after);
-				d["paid_xp"] = 0;
-				d["paid_rune"] = 0;
+				d["paid_xp"] = xp_cost;
+				d["paid_rune"] = rune_cost;
 				d["saved"] = saved;
 				d["flag"] = "artifact";
 				d["artifact"] = IS_OBJ_STAT(after, ITEM_IMMUNE) ? 1 : 0;
+				d["text_changed"] = text_changed;
 				d["instance_id"] = after->db_instance_id;
 				d["base_vnum"] = object_instance_resolve_base_vnum(after);
 				extract_obj(after);
 				if(!saved) {
 					return fail_affect(save_err.empty()
-										  ? "[portal:save] salvataggio flag artifact fallito"
+										  ? "[portal:save] pagamento eseguito ma salvataggio "
+											"flag artifact fallito"
 										  : save_err.c_str(),
 									  500);
 				}
-				(void)pay_xp;
-				(void)pay_rune;
 				return ok_affect(d, "apply.affect");
 			}
 
@@ -3511,6 +3571,30 @@ struct ToonInventoryEditScan {
 			return json_ok(d);
 		}
 
+		if(path == "/internal/listino-status") {
+			Json d;
+			d["ready"] = listino_db_ready();
+			d["affect_count"] = listino_db_affect_count();
+			d["seed_tag"] = listino_db_seed_tag();
+			d["broker_fee_percent"] =
+				listino_db_param("broker_fee_percent", 25.0);
+			d["artifact_mult"] = listino_db_param("artifact_mult", 1.5);
+			d["artifact_cost_raw"] =
+				listino_db_param("artifact_cost_raw", 10000.0);
+			return json_ok(d);
+		}
+
+		if(path == "/internal/listino-reload") {
+			if(!listino_db_reload()) {
+				return json_error("reload listino fallito", 500);
+			}
+			Json d;
+			d["ready"] = listino_db_ready();
+			d["affect_count"] = listino_db_affect_count();
+			d["seed_tag"] = listino_db_seed_tag();
+			return json_ok(d);
+		}
+
 		if(path == "/internal/lab-set-stats") {
 			std::string lab_err;
 			if(!lab_actor_allowed(req, lab_err)) {
@@ -3826,9 +3910,9 @@ void http_thread_main() {
 	}
 
 	mudlog(LOG_CHECK, "edit_portal: API listening on port %d", port);
-	g_http_running = true;
+	g_portal_running = true;
 
-	while(g_http_running) {
+	while(g_portal_running) {
 		const int client = accept(server_fd, nullptr, nullptr);
 		if(client < 0) {
 			continue;
@@ -3889,15 +3973,28 @@ void http_thread_main() {
 	close(server_fd);
 }
 
-} // namespace
-
-void edit_portal_process_pending() {
-	std::deque<EditPortalJob> local;
-	{
-		std::lock_guard<std::mutex> lock(g_queue_mutex);
-		local.swap(g_jobs);
-	}
-	for(auto& job : local) {
+/**
+ * Worker dedicato: elabora le richieste HTTP fuori dal pulse di gioco.
+ * Una job alla volta (coda seriale). Apply richiede toon offline.
+ */
+void portal_worker_main() {
+	mudlog(LOG_CHECK, "edit_portal: worker thread avviato (fuori dal pulse)");
+	while(g_portal_running) {
+		EditPortalJob job;
+		{
+			std::unique_lock<std::mutex> lock(g_queue_mutex);
+			g_queue_cv.wait(lock, [] {
+				return !g_jobs.empty() || !g_portal_running.load();
+			});
+			if(!g_portal_running && g_jobs.empty()) {
+				break;
+			}
+			if(g_jobs.empty()) {
+				continue;
+			}
+			job = std::move(g_jobs.front());
+			g_jobs.pop_front();
+		}
 		try {
 			job.response.set_value(handle_internal(job.path, job.body));
 		}
@@ -3905,14 +4002,35 @@ void edit_portal_process_pending() {
 			job.response.set_value(json_error("errore interno", 500));
 		}
 	}
+	mudlog(LOG_CHECK, "edit_portal: worker thread terminato");
+}
+
+} // namespace
+
+void edit_portal_process_pending() {
+	/* B1: il pulse non elabora piu' le job API. */
+	std::size_t pending = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_queue_mutex);
+		pending = g_jobs.size();
+	}
+	if(pending > 0 && !g_worker_started.load()) {
+		mudlog(LOG_SYSERR,
+			   "edit_portal: %zu job in coda ma worker non avviato (wiring)",
+			   pending);
+	}
 }
 
 void edit_portal_init() {
+	listino_db_init();
 #if USE_MYSQL
 	edit_system_config_init();
 	portal_audit_ensure_tables();
 	mudlog(LOG_CHECK, "edit_portal: API listening on port %d (%s=%d)",
 		   api_port(), kEditPortalApiVersionTag, kEditPortalApiVersion);
+	g_portal_running = true;
+	g_worker_started = true;
+	std::thread(portal_worker_main).detach();
 	std::thread(http_thread_main).detach();
 #else
 	mudlog(LOG_CHECK, "edit_portal: disabled (USE_MYSQL=0)");
