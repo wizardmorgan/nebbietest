@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.77 — 2026-11-16
+
+- **ngoldalert**: niente falso positivo su `prac learning` (acquisto sessioni dal
+  saggio, `Adesso puoi imparare di nuovo.....` / comando `prac`/`practice`).
+
 ## 1.15.76 — 2026-11-15
 
 - **ngoldalert**: niente falso positivo in morte (`G:` → 0, monete sul cadavere).

@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.76"
+local PKG_VER = "1.15.77"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3986,6 +3986,10 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   -- rent: l'addebito reale arriva dopo il menu; vedi noteExpectedGoldCharge sulla riga pensione
   if cmd == "rent" or cmd:match("^rent%s+") then return true end
   if cmd:match("^deposit%s+") or cmd == "deposit" then return true end
+  -- Sage / practice (prac learning = COSTO_PRAC 1e6, altre lezioni a pagamento)
+  if cmd:match("^prac%s+") or cmd == "prac" then return true end
+  if cmd:match("^practice%s+") or cmd == "practice" then return true end
+  if cmd:match("^practise%s+") or cmd == "practise" then return true end
   return false
 end
 
@@ -4001,6 +4005,9 @@ function NebbieDash.isVoluntaryGoldSpendLine(text)
   if text:match("^Paghi [%d%.,]+ monete") then return true end
   -- Asta: offerta accettata (il G: scende al prompt successivo)
   if text:match("^Un offerta di [%d%.,]+ monete e' stata ricevuta") then return true end
+  -- Sage: acquisto sessioni practice (spec_procs2.cpp learning)
+  if text:match("Adesso puoi imparare di nuovo") then return true end
+  if text:match("Per te un prezzo di favore") then return true end
   return false
 end
 
@@ -8697,7 +8704,7 @@ function NebbieDash.teardownTriggers()
     NebbieDash._combatEndTrig2,
     NebbieDash._goldHaiDivisoTrig, NebbieDash._goldDaiMonetaTrig, NebbieDash._goldDaiMoneteTrig,
     NebbieDash._goldPosiMonetaTrig, NebbieDash._goldPosiMoneteTrig, NebbieDash._goldPaghiTrig,
-    NebbieDash._goldAstaTrig, NebbieDash._goldRentPensionTrig,
+    NebbieDash._goldAstaTrig, NebbieDash._goldPracLearningTrig, NebbieDash._goldRentPensionTrig,
     NebbieDash._fallTrig, NebbieDash._disarmTrig, NebbieDash._hungerTrig, NebbieDash._thirstTrig,
     NebbieDash._wieldTrig, NebbieDash._identifyObjTrig, NebbieDash._identifyDmgTrig,
     NebbieDash._identKnowledgeTrig, NebbieDash._identSourceSpellTrig, NebbieDash._identSourceScrollTrig,
@@ -8757,6 +8764,9 @@ function NebbieDash.installTriggers()
   NebbieDash._goldPosiMoneteTrig = tempTrigger("Posi alcune monete.", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldPaghiTrig = tempTrigger("Paghi ", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldAstaTrig = tempTrigger("Un offerta di ", [[NebbieDash.onGoldSpendConfirmLine()]])
+  -- Sage practice a pagamento (prac learning → COSTO_PRAC)
+  NebbieDash._goldPracLearningTrig = tempTrigger("Adesso puoi imparare di nuovo",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
   -- Rent: addebito pensione (reception.cpp) — importo esatto, anche dopo menu
   NebbieDash._goldRentPensionTrig = tempTrigger("Il conto della pensione",
     [[NebbieDash.onRentPensionLine()]])

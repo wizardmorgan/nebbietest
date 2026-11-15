@@ -1825,6 +1825,18 @@ do
   check("goldalert: cmd give monete", NebbieDash.isVoluntaryGoldCommand("give 50 monete mirari") == true)
   check("goldalert: cmd drop coins", NebbieDash.isVoluntaryGoldCommand("drop 10 coins") == true)
   check("goldalert: cmd buy", NebbieDash.isVoluntaryGoldCommand("buy potion") == true)
+  check("goldalert: cmd prac learning", NebbieDash.isVoluntaryGoldCommand("prac learning") == true)
+  check("goldalert: cmd practice learning", NebbieDash.isVoluntaryGoldCommand("practice learning") == true)
+  check("goldalert: echo prac learning",
+    NebbieDash.isVoluntaryGoldSpendLine("Il saggio dice 'Adesso puoi imparare di nuovo.....'") == true)
+  alertLog = {}
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash._lastPromptGold = 22171305
+  NebbieDash._goldAlertReady = true
+  NebbieDash.onDataSendRequest(nil, "prac learning")
+  check("goldalert: prac cmd arms", NebbieDash.goldSpendExpectedNow() == true)
+  NebbieDash.checkGoldAlertFromPrompt(21171305) -- -1000000 COSTO_PRAC
+  check("goldalert: prac learning suppresses", #alertLog == 0)
   check("goldalert: cmd say no", NebbieDash.isVoluntaryGoldCommand("say ciao") == false)
   check("goldalert: cmd .3 give", NebbieDash.isVoluntaryGoldCommand(".3 give 10 coin bob") == true)
 
