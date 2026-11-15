@@ -23,9 +23,13 @@ segue la stessa versione dello script).
    Oppure trascina il link `.mpackage` sul profilo (Mudlet 4.11+). Preferire URL
    jsDelivr (meglio pinnata a uno SHA se `@main` è in cache). La tab **Aggiornamenti**
    di Alt+O elenca solo il repository ufficiale mpkg, non i package GitHub.
-3. **In gioco (GMCP, opzionale)**: se il server Nebbie invia `Client.GUI` (URL + versione)
-   al login, Mudlet può offrire il download quando la versione installata è più vecchia.
-   Oggi il server non lo fa ancora: serve lavoro lato VPS/`myst`.
+3. **Avviso automatico (da 1.15.79)**: al boot di Mudlet e alla connessione al MUD il
+   package confronta la tua `v…` con `PKG_VER` su GitHub (`main`). Se sei indietro:
+   `Nuova versione disponibile… Digita npackageupdate`. Controllo manuale:
+   **`npackagecheck`**. Non aggiorna da solo (serve `npackageupdate`).
+4. **GMCP `Client.GUI` (opzionale)**: il server Nebbie può mandare URL+versione al
+   login; Mudlet ha un dialog nativo. La versione lato server va tenuta allineata
+   alle release: il check GitHub del package resta la fonte affidabile.
 
 Dopo ogni aggiornamento:
 
@@ -67,6 +71,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
 | `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
 | `npackageupdate` | Scarica e reinstalla il `.mpackage` da GitHub (`main`). Opzionale: `npackageupdate force`. |
+| `npackagecheck` | Controlla se su GitHub c’è una versione più nuova (stesso check automatico di boot/connect). |
 | `c <spell> [bersaglio]` | Invia `cast '<spell>' <bersaglio>` — **sempre con bersaglio** (default: PG attivo). Es. `c heal` → `cast 'heal' NomiyaMaki`; `c heal bob` → `cast 'heal' bob`. |
 | `r <spell> [bersaglio]` | Come sopra con `recall` (sorcerer). |
 | `m <spell> [bersaglio]` | Come sopra con `mind` (psionico). |

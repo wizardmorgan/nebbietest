@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.78"
+local PKG_VER = "1.15.79"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -18,7 +18,10 @@ local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- (NON esiste un bottone "Installa da URL" in Package Manager).
 local PKG_MPACKAGE_URL =
   "https://cdn.jsdelivr.net/gh/" .. PKG_REPO .. "@main/" .. PKG_FILE
+-- Versione remota: preferire raw.githubusercontent (jsDelivr @main puo' restare stale).
 local PKG_CORE_RAW_URL =
+  "https://raw.githubusercontent.com/" .. PKG_REPO .. "/main/nebbie-complete-dashboard-package-core.lua"
+local PKG_CORE_JSDELIVR_URL =
   "https://cdn.jsdelivr.net/gh/" .. PKG_REPO .. "@main/nebbie-complete-dashboard-package-core.lua"
 local PKG_GITHUB_TIP_URL =
   "https://api.github.com/repos/" .. PKG_REPO .. "/commits/main"
@@ -91,6 +94,19 @@ function NebbieDash.parseGithubCommitSha(body)
 end
 
 function _G.NebbieDashOnPackageDownloadDone(_, saveTo)
+  -- Check versione remota (boot / npackagecheck): non confondere con update.
+  local vcheck = _G.NebbieDashPendingVerCheck
+  if vcheck and vcheck.saveTo and saveTo == vcheck.saveTo then
+    _G.NebbieDashPendingVerCheck = nil
+    if type(NebbieDash.finishRemotePackageCheckFromFile) == "function" then
+      NebbieDash.finishRemotePackageCheckFromFile(saveTo, {
+        force = vcheck.force,
+        quietOk = vcheck.quietOk,
+      })
+    end
+    return
+  end
+
   -- Fase 1: risoluzione tip di main via GitHub API.
   local resolve = _G.NebbieDashPendingRefResolve
   if resolve and resolve.saveTo and saveTo == resolve.saveTo then
@@ -140,6 +156,22 @@ function _G.NebbieDashOnPackageDownloadDone(_, saveTo)
 end
 
 function _G.NebbieDashOnPackageDownloadError(_, msg, saveTo)
+  local vcheck = _G.NebbieDashPendingVerCheck
+  if vcheck and vcheck.saveTo and saveTo == vcheck.saveTo then
+    _G.NebbieDashPendingVerCheck = nil
+    if type(NebbieDash.handleRemotePackageVersionResult) == "function" then
+      NebbieDash.handleRemotePackageVersionResult(nil, {
+        force = vcheck.force,
+        quietOk = vcheck.quietOk,
+      })
+    else
+      NebbieDash._remoteUpdateCheckPending = nil
+    end
+    if vcheck.force then
+      cecho("<red>[NebbieDash] Check versione fallito: " .. tostring(msg) .. "\n")
+    end
+    return
+  end
   local resolve = _G.NebbieDashPendingRefResolve
   if resolve and resolve.saveTo and saveTo == resolve.saveTo then
     _G.NebbieDashPendingRefResolve = nil
@@ -243,10 +275,16 @@ function NebbieDash.parsePkgVerFromCoreLua(text)
 end
 
 function NebbieDash.fetchRemotePackageVersionSync()
-  if type(getHttp) == "function" then
-    local ok, body = pcall(getHttp, PKG_CORE_RAW_URL .. "?cb=" .. tostring(os.time()))
+  if type(getHttp) ~= "function" then return nil end
+  local urls = {
+    PKG_CORE_RAW_URL .. "?cb=" .. tostring(os.time()),
+    PKG_CORE_JSDELIVR_URL .. "?cb=" .. tostring(os.time()),
+  }
+  for _, url in ipairs(urls) do
+    local ok, body = pcall(getHttp, url)
     if ok and type(body) == "string" then
-      return NebbieDash.parsePkgVerFromCoreLua(body)
+      local ver = NebbieDash.parsePkgVerFromCoreLua(body)
+      if ver then return ver end
     end
   end
   return nil
@@ -379,6 +417,122 @@ function NebbieDash.printPackageVersionHint()
       "<orange>. Usa <yellow>npackageupdate<orange> oppure:\n")
     NebbieDash.echoManualInstallHint(NebbieDash.PACKAGE_UPDATE_URL)
   end
+end
+
+-- Avviso se su GitHub (main) c'e' un PKG_VER piu' recente di quello in esecuzione.
+-- Usato al boot / alla connessione (throttled) e da `npackagecheck`.
+NebbieDash.REMOTE_PKG_CHECK_COOLDOWN = 6 * 3600
+
+function NebbieDash.announcePackageUpdateAvailable(remoteVer)
+  remoteVer = tostring(remoteVer or "?")
+  local localVer = tostring(NebbieDash.version or "?")
+  cecho("<yellow>[NebbieDash] Nuova versione disponibile: <white>v" .. remoteVer ..
+    "<yellow> (tua: <white>v" .. localVer ..
+    "<yellow>). Digita <white>npackageupdate<yellow> per aggiornare.\n")
+end
+
+function NebbieDash.handleRemotePackageVersionResult(remoteVer, opts)
+  opts = opts or {}
+  local force = opts.force and true or false
+  local quietOk = (opts.quietOk ~= false) and not force
+  NebbieDash._remoteUpdateCheckPending = nil
+  NebbieDash.uiState = NebbieDash.uiState or {}
+  NebbieDash.uiState.lastRemotePkgCheck = os.time()
+  if remoteVer and remoteVer ~= "" then
+    NebbieDash.uiState.lastRemotePkgVer = remoteVer
+  end
+  if type(NebbieDash.saveUiStore) == "function" then
+    pcall(NebbieDash.saveUiStore)
+  end
+  local localVer = NebbieDash.version or ""
+  if not remoteVer or remoteVer == "" then
+    if force or not quietOk then
+      cecho("<orange>[NebbieDash] Impossibile leggere la versione remota (rete/GitHub).\n")
+    end
+    return false
+  end
+  if NebbieDash.versionLessThan(localVer, remoteVer) then
+    NebbieDash._remoteUpdateReminded = true
+    NebbieDash.announcePackageUpdateAvailable(remoteVer)
+    return true
+  end
+  if force or not quietOk then
+    cecho("<green>[NebbieDash] Sei aggiornato: <white>v" .. localVer ..
+      "<green> (remoto main: <white>v" .. remoteVer .. "<green>).\n")
+  end
+  return false
+end
+
+function NebbieDash.shouldScheduleRemotePackageCheck(force)
+  if force then return true end
+  if NebbieDash._remoteUpdateCheckPending then return false end
+  NebbieDash.uiState = NebbieDash.uiState or {}
+  local now = os.time()
+  local last = tonumber(NebbieDash.uiState.lastRemotePkgCheck) or 0
+  local known = NebbieDash.uiState.lastRemotePkgVer
+  local localVer = NebbieDash.version or ""
+  if known and known ~= "" and NebbieDash.versionLessThan(localVer, known) then
+    if not NebbieDash._remoteUpdateReminded then
+      NebbieDash._remoteUpdateReminded = true
+      NebbieDash.announcePackageUpdateAvailable(known)
+    end
+  end
+  if (now - last) < (NebbieDash.REMOTE_PKG_CHECK_COOLDOWN or 21600) then
+    return false
+  end
+  if NebbieDash._remoteUpdateCheckDone then return false end
+  return true
+end
+
+function NebbieDash.finishRemotePackageCheckFromFile(saveTo, opts)
+  local body = ""
+  local f = io.open(saveTo, "r")
+  if f then
+    body = f:read("*a") or ""
+    f:close()
+  end
+  pcall(function() os.remove(saveTo) end)
+  local remoteVer = NebbieDash.parsePkgVerFromCoreLua(body)
+  return NebbieDash.handleRemotePackageVersionResult(remoteVer, opts)
+end
+
+function NebbieDash.scheduleRemotePackageUpdateCheck(opts)
+  opts = opts or {}
+  local force = opts.force and true or false
+  if not NebbieDash.shouldScheduleRemotePackageCheck(force) then
+    return false
+  end
+  NebbieDash._remoteUpdateCheckPending = true
+  NebbieDash._remoteUpdateCheckDone = true
+  NebbieDash.ensurePackageDownloadHandlers()
+
+  -- Preferisci downloadFile (async, non blocca Mudlet). Fallback getHttp sync.
+  if type(downloadFile) == "function" then
+    local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "."
+    local saveTo = home .. "/nebbie-dash-remote-ver.lua"
+    pcall(function() os.remove(saveTo) end)
+    _G.NebbieDashPendingVerCheck = {
+      saveTo = saveTo,
+      force = force,
+      quietOk = (opts.quietOk ~= false) and not force,
+    }
+    downloadFile(saveTo, PKG_CORE_RAW_URL .. "?cb=" .. tostring(os.time()))
+    return true
+  end
+
+  local remoteVer = NebbieDash.fetchRemotePackageVersionSync()
+  NebbieDash.handleRemotePackageVersionResult(remoteVer, {
+    force = force,
+    quietOk = (opts.quietOk ~= false) and not force,
+  })
+  return true
+end
+
+function NebbieDash.cmdPackageCheck(_argStr)
+  NebbieDash._remoteUpdateCheckDone = nil
+  NebbieDash._remoteUpdateCheckPending = nil
+  cecho("<grey>[NebbieDash] Controllo versione su GitHub (main)...\n")
+  NebbieDash.scheduleRemotePackageUpdateCheck({ force = true, quietOk = false })
 end
 
 -- ---------------------------------------------------------------------------
@@ -824,6 +978,12 @@ function NebbieDash.onConnectionEvent()
   NebbieDash._awaitingPromptAfterConnect = true
   NebbieDash._sanityNeqForChar = {}
   NebbieDash.refreshDashboard()
+  -- Avviso update: al connect (throttled 6h); reminder se gia' noto che sei indietro.
+  tempTimer(2.5, function()
+    if type(NebbieDash.scheduleRemotePackageUpdateCheck) == "function" then
+      NebbieDash.scheduleRemotePackageUpdateCheck({ quietOk = true })
+    end
+  end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -1245,7 +1405,7 @@ NebbieDash.SHORTCUT_RESERVED = {
   nidentbatch = true, nidentbatchreload = true, nspellaliases = true, nspellaliasesreload = true,
   nidentdb = true, nidentdbreload = true,
   nknowdb = true, nknowdbreload = true,
-  npackageupdate = true,
+  npackageupdate = true, npackagecheck = true,
   nchat = true,
   ngoldalert = true,
   nidentui = true,
@@ -3441,6 +3601,7 @@ NebbieDash.HELP_TEXT = {
   { "nresync", "Invia eq + attrib al gioco per risincronizzare i pannelli." },
   { "nfix", "Riavvia il package e rimuove pannelli legacy (Spell/Armi)." },
   { "npackageupdate [force]", "Scarica/reinstalla il .mpackage da GitHub (wizardmorgan/nebbie-mudlet-dashboard main)." },
+  { "npackagecheck", "Controlla se su GitHub (main) c'e' una versione piu' nuova; al boot/connect lo fa anche da solo." },
   { "ntriggers", "Reinstalla i trigger NebbieDash (fame/sete, prompt, loot, …) senza riavviare Mudlet." },
   { "nkeys", "Tastierino numerico (Nebbie Keypad) e shortcut spell da command line." },
   { "ngui", "Mostra/nascondi tutti i pannelli." },
@@ -8982,6 +9143,12 @@ function NebbieDash.boot()
   cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto (" ..
     tostring(NebbieDash.effectiveSidebarMode()) .. " sidebar). Usa <yellow>nresync<green> dopo il login.\n")
   NebbieDash.printPackageVersionHint()
+  -- Check GitHub: se main e' avanti, suggerisce npackageupdate (silenzioso se ok).
+  tempTimer(1.5, function()
+    if type(NebbieDash.scheduleRemotePackageUpdateCheck) == "function" then
+      NebbieDash.scheduleRemotePackageUpdateCheck({ quietOk = true })
+    end
+  end)
 end
 
 function NebbieDash.runFix()

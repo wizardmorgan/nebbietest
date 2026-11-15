@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.79 — 2026-11-16
+
+- **Avviso aggiornamento**: al boot Mudlet e alla connessione al MUD controlla
+  `PKG_VER` su GitHub (`main`). Se c'e' una versione piu' nuova, stampa
+  `Nuova versione disponibile… Digita npackageupdate`. Alias manuale:
+  **`npackagecheck`**. Throttle 6 ore (reminder immediato se gia' noto che sei
+  indietro). Non scarica da solo.
+
 ## 1.15.78 — 2026-11-16
 
 - **ngoldalert**: altre spese volontarie dal codice server — associa, mail,

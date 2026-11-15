@@ -1236,6 +1236,38 @@ else
   check("package update: parseGithubCommitSha assente (skip)", true)
   check("package update: mpackageUrlForSha pin assente (skip)", true)
 end
+if type(NebbieDash.parsePkgVerFromCoreLua) == "function" then
+  check("package check: parsePkgVerFromCoreLua",
+    NebbieDash.parsePkgVerFromCoreLua('local PKG_VER = "1.15.79"\n') == "1.15.79")
+  check("package check: versionLessThan",
+    NebbieDash.versionLessThan("1.15.78", "1.15.79") == true
+      and NebbieDash.versionLessThan("1.15.79", "1.15.79") == false
+      and NebbieDash.versionLessThan("1.16.0", "1.15.99") == false)
+  local echoLog = {}
+  local _cecho = cecho
+  cecho = function(s) table.insert(echoLog, tostring(s or "")) end
+  NebbieDash.uiState = NebbieDash.uiState or {}
+  NebbieDash.version = "1.15.78"
+  NebbieDash._remoteUpdateReminded = nil
+  local behind = NebbieDash.handleRemotePackageVersionResult("1.15.79", { quietOk = true })
+  local joined = table.concat(echoLog, "\n")
+  check("package check: announce when behind", behind == true
+    and joined:find("Nuova versione disponibile", 1, true) ~= nil
+    and joined:find("npackageupdate", 1, true) ~= nil)
+  echoLog = {}
+  NebbieDash.version = "1.15.79"
+  local current = NebbieDash.handleRemotePackageVersionResult("1.15.79", { quietOk = true })
+  check("package check: silent when current", current == false and #echoLog == 0)
+  echoLog = {}
+  NebbieDash.handleRemotePackageVersionResult("1.15.79", { force = true, quietOk = false })
+  joined = table.concat(echoLog, "\n")
+  check("package check: force says aggiornato",
+    joined:find("Sei aggiornato", 1, true) ~= nil)
+  cecho = _cecho
+  NebbieDash.version = NebbieDash._loadedVer or "1.15.79"
+else
+  check("package check: parsePkgVerFromCoreLua assente (skip)", true)
+end
 
 -- Archivio identify condiviso (v1.15.51): parser + upsert + holders + capture
 local mantelloLines = {

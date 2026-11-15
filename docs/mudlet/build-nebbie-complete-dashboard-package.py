@@ -220,6 +220,8 @@ ALIASES = [
     ("nebbie-dash-chat-args", "^nchat (.+)$", "NebbieDash.cmdChat(matches[2])"),
     ("nebbie-dash-package-update", "^npackageupdate(?: (force|forza))?$",
      "NebbieDash.cmdPackageUpdate(matches[2])"),
+    ("nebbie-dash-package-check", "^npackagecheck$",
+     "NebbieDash.cmdPackageCheck()"),
 ]
 
 
