@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.77"
+local PKG_VER = "1.15.78"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3990,6 +3990,12 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   if cmd:match("^prac%s+") or cmd == "prac" then return true end
   if cmd:match("^practice%s+") or cmd == "practice" then return true end
   if cmd:match("^practise%s+") or cmd == "practise" then return true end
+  -- Altri acquisti / spese volontarie (server)
+  if cmd:match("^associa%s+") or cmd == "associa" then return true end
+  if cmd:match("^associate%s+") or cmd == "associate" then return true end
+  if cmd:match("^mail%s+") or cmd == "mail" then return true end
+  -- Resurrect (magic2.cpp) costa oro al cast
+  if cmd:match("resurrect") then return true end
   return false
 end
 
@@ -4000,6 +4006,8 @@ function NebbieDash.isVoluntaryGoldSpendLine(text)
   if text:match("^Dai una moneta ") then return true end
   -- Importi con migliaia: "Dai 3.500 monete d'oro a Leoven..." (acquisto shop)
   if text:match("^Dai [%d%.,]+ monete") then return true end
+  -- Riparazione / servizi: "Dai a X N monete d'oro."
+  if text:match("^Dai a .+ [%d%.,]+ monete") then return true end
   if text:match("^Posi una moneta%.%s*$") then return true end
   if text:match("^Posi alcune monete%.%s*$") then return true end
   if text:match("^Paghi [%d%.,]+ monete") then return true end
@@ -4008,6 +4016,26 @@ function NebbieDash.isVoluntaryGoldSpendLine(text)
   -- Sage: acquisto sessioni practice (spec_procs2.cpp learning)
   if text:match("Adesso puoi imparare di nuovo") then return true end
   if text:match("Per te un prezzo di favore") then return true end
+  -- Principe: associa vassallo (act.off.cpp)
+  if text:match("Il che ti costa [%d%.,]+ monete") then return true end
+  -- Resurrect (magic2.cpp)
+  if text:match("Con un arcano rituale") then return true end
+  -- Rent editor (pedit.cpp)
+  if text:match("ho abbassato il costo d'affitto") then return true end
+  -- Banca gilda (gilde.cpp)
+  if text:match("contribuito alla prosperita' della gilda") then return true end
+  if text:match("deposita [%d%.,]+ monete nelle casse della gilda") then return true end
+  -- Slot machine (spec_procs2.cpp)
+  if text:match("tira la leva della slot machine") then return true end
+  if text:match("Gli slot cominciano a girare") then return true end
+  -- Guildmaster: monete → XP (prac <numero>)
+  if text:match("Hai scelto di usare: [%d%.,]+ monete") then return true end
+  -- Posta (mail.cpp, messaggi spesso in inglese)
+  if text:match("I'll take [%d%.,]+ coins for the delivery") then return true end
+  if text:match("starts to write a note") then return true end
+  -- Banca normale (spec_procs.cpp)
+  if text:match("^La ringraziamo%.") then return true end
+  if text:match("^Tassa applicata alla sua operazione:") then return true end
   return false
 end
 
@@ -8704,7 +8732,11 @@ function NebbieDash.teardownTriggers()
     NebbieDash._combatEndTrig2,
     NebbieDash._goldHaiDivisoTrig, NebbieDash._goldDaiMonetaTrig, NebbieDash._goldDaiMoneteTrig,
     NebbieDash._goldPosiMonetaTrig, NebbieDash._goldPosiMoneteTrig, NebbieDash._goldPaghiTrig,
-    NebbieDash._goldAstaTrig, NebbieDash._goldPracLearningTrig, NebbieDash._goldRentPensionTrig,
+    NebbieDash._goldAstaTrig, NebbieDash._goldPracLearningTrig,
+    NebbieDash._goldAssociaTrig, NebbieDash._goldResurrectTrig, NebbieDash._goldRentEditTrig,
+    NebbieDash._goldGuildDepTrig, NebbieDash._goldSlotTrig, NebbieDash._goldPracCoinsTrig,
+    NebbieDash._goldMailTrig, NebbieDash._goldBankThanksTrig, NebbieDash._goldDaiATrig,
+    NebbieDash._goldRentPensionTrig,
     NebbieDash._fallTrig, NebbieDash._disarmTrig, NebbieDash._hungerTrig, NebbieDash._thirstTrig,
     NebbieDash._wieldTrig, NebbieDash._identifyObjTrig, NebbieDash._identifyDmgTrig,
     NebbieDash._identKnowledgeTrig, NebbieDash._identSourceSpellTrig, NebbieDash._identSourceScrollTrig,
@@ -8766,6 +8798,25 @@ function NebbieDash.installTriggers()
   NebbieDash._goldAstaTrig = tempTrigger("Un offerta di ", [[NebbieDash.onGoldSpendConfirmLine()]])
   -- Sage practice a pagamento (prac learning → COSTO_PRAC)
   NebbieDash._goldPracLearningTrig = tempTrigger("Adesso puoi imparare di nuovo",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  -- Altri acquisti / servizi a pagamento (echo → grace)
+  NebbieDash._goldAssociaTrig = tempTrigger("Il che ti costa ",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldResurrectTrig = tempTrigger("Con un arcano rituale",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldRentEditTrig = tempTrigger("ho abbassato il costo d'affitto",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldGuildDepTrig = tempTrigger("prosperita' della gilda",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldSlotTrig = tempTrigger("leva della slot machine",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldPracCoinsTrig = tempTrigger("Hai scelto di usare:",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldMailTrig = tempTrigger("coins for the delivery",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldBankThanksTrig = tempTrigger("La ringraziamo.",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldDaiATrig = tempTrigger("Dai a ",
     [[NebbieDash.onGoldSpendConfirmLine()]])
   -- Rent: addebito pensione (reception.cpp) — importo esatto, anche dopo menu
   NebbieDash._goldRentPensionTrig = tempTrigger("Il conto della pensione",

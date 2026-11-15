@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.78 — 2026-11-16
+
+- **ngoldalert**: altre spese volontarie dal codice server — associa, mail,
+  resurrect, riparazioni (`Dai a … monete`), rent editor, deposito gilda,
+  slot machine, prac monete→XP, banca (`La ringraziamo`).
+
 ## 1.15.77 — 2026-11-16
 
 - **ngoldalert**: niente falso positivo su `prac learning` (acquisto sessioni dal

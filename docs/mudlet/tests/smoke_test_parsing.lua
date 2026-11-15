@@ -1837,6 +1837,24 @@ do
   check("goldalert: prac cmd arms", NebbieDash.goldSpendExpectedNow() == true)
   NebbieDash.checkGoldAlertFromPrompt(21171305) -- -1000000 COSTO_PRAC
   check("goldalert: prac learning suppresses", #alertLog == 0)
+  check("goldalert: cmd associa", NebbieDash.isVoluntaryGoldCommand("associa bob") == true)
+  check("goldalert: cmd mail", NebbieDash.isVoluntaryGoldCommand("mail bob") == true)
+  check("goldalert: cmd resurrect", NebbieDash.isVoluntaryGoldCommand("c resurrect corpo") == true)
+  check("goldalert: echo associa",
+    NebbieDash.isVoluntaryGoldSpendLine("Il che ti costa 50000 monete d'oro!") == true)
+  check("goldalert: echo Dai a riparazione",
+    NebbieDash.isVoluntaryGoldSpendLine("Dai a Fabbro 1200 monete d'oro.") == true)
+  check("goldalert: echo resurrect",
+    NebbieDash.isVoluntaryGoldSpendLine(
+      "Con un arcano rituale, Bob riporta in vita un cadavere.") == true)
+  check("goldalert: echo gilda",
+    NebbieDash.isVoluntaryGoldSpendLine(
+      "[Capo] ti dice 'Grazie di aver contribuito alla prosperita' della gilda'") == true)
+  check("goldalert: echo slot",
+    NebbieDash.isVoluntaryGoldSpendLine(
+      "Gli slot cominciano a girare come tiri la leva della slot machine") == true)
+  check("goldalert: echo banca",
+    NebbieDash.isVoluntaryGoldSpendLine("La ringraziamo.") == true)
   check("goldalert: cmd say no", NebbieDash.isVoluntaryGoldCommand("say ciao") == false)
   check("goldalert: cmd .3 give", NebbieDash.isVoluntaryGoldCommand(".3 give 10 coin bob") == true)
 
