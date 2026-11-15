@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.75"
+local PKG_VER = "1.15.76"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3979,6 +3979,7 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   if cmd:match("^asta%s+") or cmd:match("^auction%s+") then return true end
   -- rent: l'addebito reale arriva dopo il menu; vedi noteExpectedGoldCharge sulla riga pensione
   if cmd == "rent" or cmd:match("^rent%s+") then return true end
+  if cmd:match("^deposit%s+") or cmd == "deposit" then return true end
   return false
 end
 
@@ -4052,6 +4053,87 @@ function NebbieDash.onGmcpCharBase()
   NebbieDash.checkGoldAlertFromPrompt(gold)
 end
 
+function NebbieDash.hideGoldTheftBanner()
+  if NebbieDash._goldAlertLabelTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._goldAlertLabelTimer)
+  end
+  NebbieDash._goldAlertLabelTimer = nil
+  local name = "NebbieDashGoldAlert"
+  if type(hideWindow) == "function" then pcall(hideWindow, name) end
+  if type(deleteLabel) == "function" then
+    pcall(deleteLabel, name)
+  elseif type(deleteWindow) == "function" then
+    pcall(deleteWindow, name)
+  end
+end
+
+-- Banner floating centrato: l'avviso in coda al prompt si perde nel flusso.
+function NebbieDash.showGoldTheftBanner(prev, gold, delta)
+  if type(createLabel) ~= "function" then return end
+  NebbieDash.hideGoldTheftBanner()
+  local name = "NebbieDashGoldAlert"
+  local mw, mh = 1024, 768
+  if type(getMainWindowSize) == "function" then
+    local ok, a, b = pcall(getMainWindowSize)
+    if ok and a and b then mw, mh = a, b end
+  end
+  local w, h = 460, 78
+  local x = math.max(8, math.floor((mw - w) / 2))
+  local y = math.max(8, math.floor(mh * 0.12))
+  local okCreate = pcall(createLabel, name, x, y, w, h, 1)
+  if not okCreate then return end
+  if type(setLabelStyleSheet) == "function" then
+    pcall(setLabelStyleSheet, name, [[
+      background-color: rgba(150, 18, 18, 235);
+      border: 3px solid rgb(255, 210, 60);
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: bold;
+      color: white;
+      qproperty-alignment: 'AlignCenter';
+      padding: 10px;
+    ]])
+  end
+  local body = string.format("MONETE SOTTRATTE!\nG:%d  →  %d   (-%d)", prev, gold, delta)
+  if type(echo) == "function" then
+    pcall(echo, name, body)
+  end
+  if type(showWindow) == "function" then pcall(showWindow, name) end
+  if type(moveWindow) == "function" then pcall(moveWindow, name, x, y) end
+  if type(resizeWindow) == "function" then pcall(resizeWindow, name, w, h) end
+  if type(tempTimer) == "function" then
+    NebbieDash._goldAlertLabelTimer = tempTimer(7, [[NebbieDash.hideGoldTheftBanner()]])
+  end
+end
+
+function NebbieDash.announceGoldTheft(prev, gold, delta)
+  -- Differito a fine tick: cosi' non resta attaccato in coda alla riga del prompt.
+  local function paint()
+    if type(moveCursorEnd) == "function" then pcall(moveCursorEnd, "main") end
+    cecho("\n")
+    cecho("<red>########################################################\n")
+    cecho(string.format(
+      "<yellow>[NebbieDash] <white>*** <red>MONETE SOTTRATTE <white>***  G:%d → %d <red>(-%d)\n",
+      prev, gold, delta))
+    cecho("<red>########################################################\n")
+    cecho("\n")
+    NebbieDash.showGoldTheftBanner(prev, gold, delta)
+    if type(NebbieDash.playHighlightSound) == "function" then
+      pcall(NebbieDash.playHighlightSound, "gold_loss")
+    end
+    -- Anche nella finestra chat, se aperta (piu' facile da notare).
+    if NebbieDash.chatEnabled ~= false and type(NebbieDash.chatConsoleCecho) == "function" then
+      pcall(NebbieDash.chatConsoleCecho,
+        string.format("<red>[GOLD] sottratte: G:%d → %d (-%d)\n", prev, gold, delta))
+    end
+  end
+  if type(tempTimer) == "function" then
+    tempTimer(0, paint)
+  else
+    paint()
+  end
+end
+
 function NebbieDash.checkGoldAlertFromPrompt(gold)
   if NebbieDash.goldAlert == false then
     NebbieDash._lastPromptGold = gold
@@ -4066,6 +4148,10 @@ function NebbieDash.checkGoldAlertFromPrompt(gold)
   NebbieDash._lastPromptGold = gold
   if gold >= prev then return end
   local delta = prev - gold
+  -- Morte: make_corpse azzera GET_GOLD (fight.cpp) → G:0. Non e' un furto.
+  if gold == 0 then
+    return
+  end
   if NebbieDash.goldSpendExpectedNow() then
     return
   end
@@ -4073,13 +4159,7 @@ function NebbieDash.checkGoldAlertFromPrompt(gold)
   if NebbieDash.consumeExpectedGoldCharge(delta) then
     return
   end
-  cecho(string.format(
-    "<red>[NebbieDash] ATTENZIONE: monete sottratte! <white>G:%d <red>→ <white>%d <red>(-%d)\n",
-    prev, gold, delta))
-  -- Suono opzionale: gold_loss= in nebbie-dash-sounds.txt
-  if type(NebbieDash.playHighlightSound) == "function" then
-    pcall(NebbieDash.playHighlightSound, "gold_loss")
-  end
+  NebbieDash.announceGoldTheft(prev, gold, delta)
 end
 
 function NebbieDash.printGoldAlertStatus()

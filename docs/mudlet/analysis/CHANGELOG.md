@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.76 — 2026-11-15
+
+- **ngoldalert**: niente falso positivo in morte (`G:` → 0, monete sul cadavere).
+- **ngoldalert**: avviso più visibile — banner differito (non in coda al prompt),
+  overlay floating centrato ~7s, echo anche in finestra chat se aperta.
+
 ## 1.15.75 — 2026-11-13
 
 - **ngoldalert**: niente falso positivo sul `rent` — riconosce

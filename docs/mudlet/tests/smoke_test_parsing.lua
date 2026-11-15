@@ -1710,10 +1710,20 @@ do
   check("goldalert: baseline stored", NebbieDash._lastPromptGold == 500 and NebbieDash._goldAlertReady == true)
 
   NebbieDash.checkGoldAlertFromPrompt(400)
-  check("goldalert: theft drop alerts", #alertLog == 1
-    and alertLog[1]:find("monete sottratte", 1, true) ~= nil
-    and alertLog[1]:find("-100", 1, true) ~= nil)
+  local theftJoined = table.concat(alertLog)
+  check("goldalert: theft drop alerts",
+    theftJoined:find("MONETE SOTTRATTE", 1, true) ~= nil
+    and theftJoined:find("-100", 1, true) ~= nil)
   check("goldalert: last updated after theft", NebbieDash._lastPromptGold == 400)
+
+  -- Morte: G → 0 (make_corpse) non e' furto
+  alertLog = {}
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash._lastPromptGold = 400
+  NebbieDash._goldAlertReady = true
+  NebbieDash.checkGoldAlertFromPrompt(0)
+  check("goldalert: death G:0 no alert", #alertLog == 0)
+  check("goldalert: death tracks zero", NebbieDash._lastPromptGold == 0)
 
   alertLog = {}
   NebbieDash.armGoldSpendExpected("test", 5)
@@ -1804,7 +1814,8 @@ do
   NebbieDash._goldAlertReady = true
   NebbieDash.noteExpectedGoldCharge(3, "rent", 1800)
   NebbieDash.checkGoldAlertFromPrompt(20553300) -- -47 ≠ 3
-  check("goldalert: pensione mismatch still alerts", #alertLog == 1)
+  check("goldalert: pensione mismatch still alerts",
+    table.concat(alertLog):find("MONETE SOTTRATTE", 1, true) ~= nil)
   check("goldalert: pensione mismatch keeps charge",
     NebbieDash._expectedGoldCharge and NebbieDash._expectedGoldCharge.amount == 3)
   NebbieDash._expectedGoldCharge = nil
@@ -1835,8 +1846,8 @@ do
   check("goldalert: gmcp baseline", NebbieDash._lastPromptGold == 900 and NebbieDash._goldSeenVia == "gmcp")
   _G.gmcp.char.base.gold = 800
   NebbieDash.onGmcpCharBase()
-  check("goldalert: gmcp theft alerts", #alertLog == 1
-    and alertLog[1]:find("monete sottratte", 1, true) ~= nil)
+  check("goldalert: gmcp theft alerts",
+    table.concat(alertLog):find("MONETE SOTTRATTE", 1, true) ~= nil)
   _G.gmcp = nil
 
   alertLog = {}
