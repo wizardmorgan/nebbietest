@@ -35,6 +35,7 @@
 #include <charconv>
 #include <optional>
 #include <functional>
+#include <initializer_list>
 #include <string_view>
 #include <limits>
 #include <stdexcept>
@@ -2338,7 +2339,7 @@ std::string stat_object_type_values(struct obj_data* j) {
 		break;
 	case ITEM_SCROLL:
 		out = (boost::format(
-			"$c0005Spells : $c0014%d$c0005, $c0014%d$c0005, $c0014%d$c0005, $c0014%d")
+			"$c0005Level: $c0014%d $c0005Spells : $c0014%d$c0005, $c0014%d$c0005, $c0014%d")
 			% j->obj_flags.value[0] % j->obj_flags.value[1]
 			% j->obj_flags.value[2] % j->obj_flags.value[3]).str();
 		break;
@@ -2379,7 +2380,7 @@ std::string stat_object_type_values(struct obj_data* j) {
 		break;
 	case ITEM_POTION:
 		out = (boost::format(
-			"$c0005Spells : $c0014%d$c0005, $c0014%d$c0005, $c0014%d$c0005, $c0014%d")
+			"$c0005Level: $c0014%d $c0005Spells : $c0014%d$c0005, $c0014%d$c0005, $c0014%d")
 			% j->obj_flags.value[0] % j->obj_flags.value[1]
 			% j->obj_flags.value[2] % j->obj_flags.value[3]).str();
 		break;
@@ -2404,7 +2405,7 @@ std::string stat_object_type_values(struct obj_data* j) {
 			% stat_lookup_type(j->obj_flags.value[2], drinks)).str();
 		break;
 	case ITEM_NOTE:
-		out = (boost::format("$c0005Tounge : $c0014%d")
+		out = (boost::format("$c0005Tongue : $c0014%d")
 			% j->obj_flags.value[0]).str();
 		break;
 	case ITEM_KEY:
@@ -2710,29 +2711,48 @@ ACTION_FUNC(do_stat) {
 		return;
 	}
 
-	if(boost::iequals(target_name, "room")) {
-		stat_room(ch);
-		return;
+	/* l'output di stat e' lungo: lo si raccoglie e lo si manda col
+	 * paginatore, cosi' in VT100 non scorre via dalla regione di scroll */
+	struct descriptor_data* const d = ch->desc;
+	std::string captured;
+	const bool capture = (d != nullptr && d->page_capture == nullptr);
+	if(capture) {
+		d->page_capture = &captured;
 	}
 
-	int count = 1;
-	struct char_data* k = get_char_vis_world(ch, target_name.c_str(), &count);
-	if(k) {
-		stat_character(ch, k, cmd);
-		return;
-	}
+	const auto run = [&]() {
+		if(boost::iequals(target_name, "room")) {
+			stat_room(ch);
+			return;
+		}
 
-	struct obj_data* tmpV =
-		(struct obj_data*)get_obj_in_list_vis(ch, target_name.c_str(), ch->carrying);
-	struct obj_data* tmpW =
-		(struct obj_data*)get_obj_vis_world(ch, target_name.c_str(), &count);
-	if(tmpV || tmpW) {
-		struct obj_data* j = tmpV ? tmpV : tmpW;
-		stat_object(ch, j);
-		return;
-	}
+		int count = 1;
+		struct char_data* k = get_char_vis_world(ch, target_name.c_str(), &count);
+		if(k) {
+			stat_character(ch, k, cmd);
+			return;
+		}
 
-	send_to_char("Nessun mobile od oggetto con quel nome nel mondo.\n\r", ch);
+		struct obj_data* tmpV =
+			(struct obj_data*)get_obj_in_list_vis(ch, target_name.c_str(), ch->carrying);
+		struct obj_data* tmpW =
+			(struct obj_data*)get_obj_vis_world(ch, target_name.c_str(), &count);
+		if(tmpV || tmpW) {
+			struct obj_data* j = tmpV ? tmpV : tmpW;
+			stat_object(ch, j);
+			return;
+		}
+
+		send_to_char("Nessun mobile od oggetto con quel nome nel mondo.\n\r", ch);
+	};
+	run();
+
+	if(capture) {
+		d->page_capture = nullptr;
+		if(!captured.empty()) {
+			page_string(d, captured.c_str(), true);
+		}
+	}
 }
 
 ACTION_FUNC(do_ooedit) {
@@ -8347,7 +8367,14 @@ void editpool_send_confirm_hint(struct char_data* ch, const EditPoolPending& p) 
 }
 
 bool editpool_charge_or_refund(struct char_data* vict, const EditPoolPending& p,
-							   int pct_xp, int pct_rune, bool refund) {
+							   int pct_xp, int pct_rune, bool refund,
+							   long* out_xp, int* out_pq) {
+	if(out_xp != nullptr) {
+		*out_xp = 0;
+	}
+	if(out_pq != nullptr) {
+		*out_pq = 0;
+	}
 	if(pct_xp < 0 || pct_rune < 0 || pct_xp + pct_rune != 100) {
 		return false;
 	}
@@ -8371,6 +8398,12 @@ bool editpool_charge_or_refund(struct char_data* vict, const EditPoolPending& p,
 		if(pq_part > 0) {
 			GET_RUNEDEI(vict) += pq_part;
 		}
+		if(out_xp != nullptr) {
+			*out_xp = xp_part;
+		}
+		if(out_pq != nullptr) {
+			*out_pq = pq_part;
+		}
 		return true;
 	}
 
@@ -8387,7 +8420,34 @@ bool editpool_charge_or_refund(struct char_data* vict, const EditPoolPending& p,
 	if(pq_part > 0) {
 		GET_RUNEDEI(vict) -= pq_part;
 	}
+	if(out_xp != nullptr) {
+		*out_xp = xp_part;
+	}
+	if(out_pq != nullptr) {
+		*out_pq = pq_part;
+	}
 	return true;
+}
+
+/** Testo del costo effettivo: "pagati ...", "rimborsati ..." o "gratis". */
+[[nodiscard]] static std::string editpool_cost_text(bool need_pay, bool refund,
+													long xp, int pq) {
+	if(!need_pay) {
+		return "gratis";
+	}
+	std::ostringstream out;
+	out << (refund ? "rimborsati " : "pagati ");
+	if(xp > 0 && pq > 0) {
+		out << "$c0014" << format_thousands(xp) << "$c0007 xp e $c0014"
+			<< format_thousands(pq) << "$c0007 rune";
+	}
+	else if(pq > 0) {
+		out << "$c0014" << format_thousands(pq) << "$c0007 rune";
+	}
+	else {
+		out << "$c0014" << format_thousands(xp) << "$c0007 xp";
+	}
+	return out.str();
 }
 
 void editpool_commit(struct char_data* wiz, EditPoolPending p, int pct_xp,
@@ -8412,8 +8472,11 @@ void editpool_commit(struct char_data* wiz, EditPoolPending p, int pct_xp,
 	}
 
 	const bool need_pay = p.is_refund || !p.free_edit;
+	long paid_xp = 0;
+	int paid_pq = 0;
 	if(need_pay) {
-		if(!editpool_charge_or_refund(vict, p, pct_xp, pct_rune, p.is_refund)) {
+		if(!editpool_charge_or_refund(vict, p, pct_xp, pct_rune, p.is_refund,
+									  &paid_xp, &paid_pq)) {
 			send_to_char(
 				"Fondi insufficienti sul personaggio (o percentuali non "
 				"valide).\n\r",
@@ -8436,10 +8499,12 @@ void editpool_commit(struct char_data* wiz, EditPoolPending p, int pct_xp,
 	boost::format done(
 		"$c0010Editpool$c0007 applicato su $c0015%s$c0007 %s%s: "
 		"delta effettivo $c0014%+d$c0007 "
-		"(richiesto %+d, scartati %d). Persistenza MySQL: %s.\n\r");
+		"(richiesto %+d, scartati %d), %s. Persistenza MySQL: %s.\n\r");
+	const std::string cost_text =
+		editpool_cost_text(need_pay, p.is_refund, paid_xp, paid_pq);
 	done % GET_NAME(vict) % (p.on_over ? "over " : "") %
 		edit_pool_field_name(p.field) % p.applied % p.requested % p.overflow %
-		(ok ? "ok" : "FALLITA");
+		cost_text % (ok ? "ok" : "FALLITA");
 	send_to_char(done.str().c_str(), wiz);
 
 	if(vict != wiz) {
@@ -8448,6 +8513,27 @@ void editpool_commit(struct char_data* wiz, EditPoolPending p, int pct_xp,
 		note % GET_NAME(wiz) % (p.on_over ? "over " : "") %
 			edit_pool_field_name(p.field) % p.applied;
 		send_to_char(note.str().c_str(), vict);
+	}
+	/* anche se vict == wiz: il PG deve sapere cosa ha pagato o riavuto */
+	if(need_pay) {
+		std::ostringstream paid;
+		paid << (p.is_refund ? "Ti vengono restituiti " : "Hai pagato ");
+		if(paid_xp > 0 && paid_pq > 0) {
+			paid << "$c0014" << format_thousands(paid_xp)
+				 << "$c0007 punti esperienza e $c0014" << format_thousands(paid_pq)
+				 << "$c0007 rune degli dei";
+		}
+		else if(paid_pq > 0) {
+			paid << "$c0014" << format_thousands(paid_pq) << "$c0007 rune degli dei";
+		}
+		else {
+			paid << "$c0014" << format_thousands(paid_xp) << "$c0007 punti esperienza";
+		}
+		paid << ".\n\r";
+		send_to_char(paid.str().c_str(), vict);
+	}
+	else if(vict != wiz) {
+		send_to_char("La modifica non ti e' costata nulla.\n\r", vict);
 	}
 
 	{
@@ -8458,7 +8544,8 @@ void editpool_commit(struct char_data* wiz, EditPoolPending p, int pct_xp,
 			<< " overflow=" << p.overflow << " refund=" << p.is_refund
 			<< " free=" << p.free_edit << " xp%=" << pct_xp
 			<< " rune%=" << pct_rune << " cost_xp=" << p.cost_xp
-			<< " cost_pq=" << p.cost_pq;
+			<< " cost_pq=" << p.cost_pq << " paid_xp=" << paid_xp
+			<< " paid_pq=" << paid_pq;
 		if(!ok) {
 			log << " persist=FAIL";
 		}
@@ -8645,10 +8732,11 @@ ACTION_FUNC(do_editpool) {
 		const auto [xp, pq] = editpool_cost_for_units(*field, requested, vict);
 		boost::format warn(
 			"$c0011Inutile$c0007: aggiungere over non da' bonus in gioco.\n\r"
-			"Spesa teorica per %+d %s: $c0014%ld$c0007 xp oppure "
-			"$c0014%d$c0007 rune (listino+artifact, xp/classi, rune x mult).\n\r"
+			"Spesa teorica per %+d %s: $c0014%s$c0007 xp oppure "
+			"$c0014%s$c0007 rune (listino+artifact, xp/classi, rune x mult).\n\r"
 			"Nessuna modifica applicata.\n\r");
-		warn % requested % edit_pool_field_name(*field) % xp % pq;
+		warn % requested % edit_pool_field_name(*field) % format_thousands(xp) %
+			format_thousands(pq);
 		send_to_char(warn.str().c_str(), ch);
 		return;
 	}
@@ -8726,11 +8814,11 @@ ACTION_FUNC(do_editpool) {
 		"(richiesto %+d, applicato %+d, scartati %d)\n\r"
 		"  classi=$c0014%d$c0007 mult=$c0014%.1fx$c0007 "
 		"(xp=(listino x 1.5 x mult)/n, rune=ceil(listino x 1.5 x mult))\n\r"
-		"  spesa/rimborso (unita' applicate): $c0014%ld$c0007 xp  oppure  "
-		"$c0014%d$c0007 rune\n\r");
+		"  spesa/rimborso (unita' applicate): $c0014%s$c0007 xp  oppure  "
+		"$c0014%s$c0007 rune\n\r");
 	prev % GET_NAME(vict) % (on_over ? "over " : "") %
 		edit_pool_field_name(*field) % cur % after % requested % pend.applied %
-		pend.overflow % n_cls % mult % xp % pq;
+		pend.overflow % n_cls % mult % format_thousands(xp) % format_thousands(pq);
 	send_to_char(prev.str().c_str(), ch);
 
 	if(pend.overflow > 0 && !on_over && requested > 0) {
@@ -10992,11 +11080,19 @@ ACTION_FUNC(do_mforce) {
 	}
 }
 
-struct obj_data* clone_obj(struct obj_data* obj) {
+/**
+ * Clone dal prototipo con i nomi dell'originale (comportamento storico, usato
+ * da CloneChar per le ombre dei PG e come base di clone_obj_full):
+ * read_object del vnum e copia solo name/short/description.
+ */
+struct obj_data* clone_obj_proto(struct obj_data* obj) {
 	struct obj_data* ocopy = NULL;
 
 	if(obj->item_number >= 0) {
 		ocopy = read_object(obj->item_number, REAL);
+		if(ocopy == NULL) {
+			return NULL;
+		}
 		/* clear */
 		if(ocopy->name) {
 			free(ocopy->name);
@@ -11034,24 +11130,187 @@ struct obj_data* clone_obj(struct obj_data* obj) {
 	return ocopy;
 }
 
-void clone_container_obj(struct obj_data* to, struct obj_data* obj) {
-	struct obj_data* tmp, *ocopy;
+/**
+ * Prototipo puro (cloneoriginal): read_object del vnum e basta, niente
+ * stringhe ne' stato dell'originale. NULL se l'oggetto non ha prototipo.
+ */
+struct obj_data* clone_obj_pure(struct obj_data* obj) {
+	if(obj == NULL || obj->item_number < 0) {
+		return NULL;
+	}
+	return read_object(obj->item_number, REAL);
+}
 
-	for(tmp = obj->contains; tmp; tmp = tmp->next_content) {
-		if((ocopy = clone_obj(tmp)) != NULL) {
+/* Nome storico: resta il clone dal prototipo (CloneChar in snew.cpp). */
+struct obj_data* clone_obj(struct obj_data* obj) {
+	return clone_obj_proto(obj);
+}
+
+/**
+ * Clone con le modifiche: parte da clone_obj_proto (oggetto nuovo, in
+ * object_list, contatori e ex_description del prototipo) e copia lo stato
+ * editato dell'originale. Non copia: posizione e liste (in_room, carried_by,
+ * equipped_by, in_obj, contains, next*, eq_pos), id MySQL e digest
+ * (db_*_id, instance_digest: il clone e' un oggetto nuovo), timer (riparte
+ * da quello del prototipo), iGeneric/pGeneric delle procedure speciali,
+ * extra description e messaggi di wear proibito (restano del prototipo).
+ */
+struct obj_data* clone_obj_full(struct obj_data* obj) {
+	struct obj_data* ocopy = clone_obj_proto(obj);
+	if(ocopy == NULL) {
+		return NULL;
+	}
+
+	if(ocopy->action_description) {
+		free(ocopy->action_description);
+		ocopy->action_description = NULL;
+	}
+	if(obj->action_description) {
+		ocopy->action_description = strdup(obj->action_description);
+	}
+
+	const int proto_timer = ocopy->obj_flags.timer;
+	ocopy->obj_flags = obj->obj_flags; /* tipo, wear, extra/extra2, bitvector, value, peso, costi */
+	ocopy->obj_flags.timer = proto_timer;
+	for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+		ocopy->affected[i] = obj->affected[i];
+	}
+
+	ocopy->char_vnum = obj->char_vnum;
+	std::memcpy(ocopy->personal_owner, obj->personal_owner, sizeof(ocopy->personal_owner));
+	ocopy->personal_owner[sizeof(ocopy->personal_owner) - 1] = '\0';
+	ocopy->dust_hp = obj->dust_hp;
+	ocopy->dust_mana = obj->dust_mana;
+	ocopy->dust_move = obj->dust_move;
+	ocopy->dust_hp_regen = obj->dust_hp_regen;
+	ocopy->dust_mana_regen = obj->dust_mana_regen;
+	ocopy->dust_move_regen = obj->dust_move_regen;
+	ocopy->dust_spellfail = obj->dust_spellfail;
+
+	/* Edit fuori dai limiti di zona: anche il clone non conta nel prototipo. */
+	if(obj->zone_limit_exempt && !ocopy->zone_limit_exempt) {
+		object_exclude_from_zone_limit(ocopy);
+	}
+	return ocopy;
+}
+
+/**
+ * Somma degli APPLY a location loc che eq indossato e affect (spell) danno
+ * al mob (o al PG): serve a riportare hit/mana/move/AC/hitroll/damroll al
+ * valore base prima di rimettere l'eq clonato (equip_char li riapplica).
+ * Usata anche da CloneChar (snew.cpp) per le ombre dei PG.
+ */
+long clone_mob_applied(const struct char_data* mob, int loc) {
+	long tot = 0;
+	for(int j = 0; j < MAX_WEAR; ++j) {
+		const struct obj_data* eq = mob->equipment[j];
+		if(eq == nullptr) {
+			continue;
+		}
+		for(int i = 0; i < MAX_OBJ_AFFECT; ++i) {
+			if(eq->affected[i].location == loc) {
+				tot += eq->affected[i].modifier;
+			}
+		}
+	}
+	for(const struct affected_type* af = mob->affected; af != nullptr; af = af->next) {
+		if(af->location == loc) {
+			tot += af->modifier;
+		}
+	}
+	return tot;
+}
+
+namespace {
+
+using CloneObjFn = struct obj_data* (*)(struct obj_data*);
+
+/**
+ * Oggetti editati (flag EDIT, messo da oedit, osave db, editman): clone non
+ * li clona. EDIT vince anche se l'oggetto e' PERSONAL o HAS-GEMS
+ * (ITEM2_INSERT): quelli si clonano solo senza EDIT. cloneoriginal invece
+ * parte dal prototipo puro, quindi non blocca e non salta niente.
+ */
+[[nodiscard]] bool clone_obj_is_edit(const struct obj_data* obj) {
+	return obj != nullptr && IS_SET(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+}
+
+/**
+ * Clona il contenuto di obj dentro to, ricorsivo. Con skipped (clone) gli
+ * oggetti editati vengono saltati, con quello che contengono, e contati;
+ * senza (CloneChar, cloneoriginal) si clona tutto.
+ */
+void clone_container_with(struct obj_data* to, struct obj_data* obj, CloneObjFn fn,
+						  int* skipped = nullptr) {
+	for(struct obj_data* tmp = obj->contains; tmp; tmp = tmp->next_content) {
+		if(skipped != nullptr && clone_obj_is_edit(tmp)) {
+			++*skipped;
+			continue;
+		}
+		struct obj_data* ocopy = fn(tmp);
+		if(ocopy != NULL) {
 			if(tmp->contains) {
-				clone_container_obj(ocopy, tmp);
+				clone_container_with(ocopy, tmp, fn, skipped);
 			}
 			obj_to_obj(ocopy, to);
 		}
 	}
 }
 
-ACTION_FUNC(do_clone) {
+/**
+ * Clone "nuovo" del mob: oltre alle stringhe copia le stat base modificate
+ * rispetto al prototipo. Le stat che eq e spell alterano vengono depurate
+ * con clone_mob_applied; abilities sono gia' la base (tmpabilities = effettive).
+ */
+void clone_mob_stats(struct char_data* mcopy, const struct char_data* mob) {
+	auto base = [mob](long cur, std::initializer_list<int> locs) {
+		long v = cur;
+		for(int loc : locs) {
+			v -= clone_mob_applied(mob, loc);
+		}
+		return v;
+	};
+
+	mcopy->abilities = mob->abilities;
+	mcopy->tmpabilities = mob->abilities;
+
+	mcopy->points.max_hit = static_cast<sh_int>(base(mob->points.max_hit, {APPLY_HIT}));
+	mcopy->points.max_mana = static_cast<sh_int>(base(mob->points.max_mana, {APPLY_MANA}));
+	mcopy->points.max_move = static_cast<sh_int>(base(mob->points.max_move, {APPLY_MOVE}));
+	mcopy->points.hit = mcopy->points.max_hit;
+	mcopy->points.mana = mcopy->points.max_mana;
+	mcopy->points.move = mcopy->points.max_move;
+	mcopy->points.armor = static_cast<sh_int>(base(mob->points.armor, {APPLY_AC}));
+	mcopy->points.hitroll = static_cast<sbyte>(
+		base(mob->points.hitroll, {APPLY_HITROLL, APPLY_HITNDAM, APPLY_HITNSP}));
+	mcopy->points.damroll =
+		static_cast<sbyte>(base(mob->points.damroll, {APPLY_DAMROLL, APPLY_HITNDAM}));
+	mcopy->points.gold = mob->points.gold;
+	mcopy->points.exp = mob->points.exp;
+
+	for(int i = 0; i < ABS_MAX_CLASS; ++i) {
+		mcopy->player.level[i] = mob->player.level[i];
+	}
+	mcopy->specials.act = mob->specials.act;
+	SET_BIT(mcopy->specials.act, ACT_ISNPC);
+	mcopy->specials.alignment = mob->specials.alignment;
+	mcopy->specials.damnodice = mob->specials.damnodice;
+	mcopy->specials.damsizedice = mob->specials.damsizedice;
+}
+
+void do_clone_mode(struct char_data* ch, const char* arg, bool full) {
 	struct char_data* mob, *mcopy;
 	struct obj_data* obj, *ocopy;
 	char type[100], name[100], buf[100];
 	int j, i, count, where;
+	/* clone: copia con le modifiche; cloneoriginal: prototipo puro */
+	const CloneObjFn clone_fn = full ? clone_obj_full : clone_obj_pure;
+	const char* usage = full ? "uso: Clone <mob/obj> nome [count]\r\n"
+							 : "uso: Cloneoriginal <mob/obj> nome [count]\r\n";
+	const char* tag = full ? "" : " (originale)";
+	int skipped_edit = 0; /* oggetti editati saltati in eq/inventario/contenitori */
+	/* solo clone salta gli EDIT: cloneoriginal parte dal prototipo */
+	int* const skip = full ? &skipped_edit : nullptr;
 
 	if(IS_NPC(ch)) {
 		return;
@@ -11059,12 +11318,12 @@ ACTION_FUNC(do_clone) {
 
 	arg = one_argument(arg, type);
 	if(!*type) {
-		send_to_char("uso: Clone <mob/obj> nome [count]\r\n", ch);
+		send_to_char(usage, ch);
 		return;
 	}
 	arg = one_argument(arg, name);
 	if(!*name) {
-		send_to_char("uso: Clone <mob/obj> nome [count]\r\n", ch);
+		send_to_char(usage, ch);
 		return;
 	}
 	arg = one_argument(arg, buf);
@@ -11086,7 +11345,15 @@ ACTION_FUNC(do_clone) {
 			return;
 		}
 		if(IS_PC(mob)) {
-			CloneChar(mob, ch->in_room);
+			/* PG: ombra (CloneChar), uguale per clone e cloneoriginal */
+			for(i = 0; i < count; i++) {
+				if(CloneChar(mob, ch->in_room) == nullptr) {
+					send_to_char("Non riesci a creare l'ombra.\r\n", ch);
+					return;
+				}
+				act("$n crea l'ombra di $N!", FALSE, ch, 0, mob, TO_ROOM);
+				act("Hai creato l'ombra di $N.", FALSE, ch, 0, mob, TO_CHAR);
+			}
 			return;
 		}
 		if(mob->nr < 0) {
@@ -11095,57 +11362,72 @@ ACTION_FUNC(do_clone) {
 		}
 		for(i = 0; i < count; i++) {
 			mcopy = read_mobile(mob->nr, REAL);
-			/* clear */
-			if(mcopy->player.name) {
-				free(mcopy->player.name);
+			if(mcopy == NULL) {
+				return;
 			}
-			if(mcopy->player.short_descr) {
-				free(mcopy->player.short_descr);
-			}
-			if(mcopy->player.long_descr) {
-				free(mcopy->player.long_descr);
-			}
-			if(mcopy->player.description) {
-				free(mcopy->player.description);
+			/* clone: nomi e descrizioni dell'originale; cloneoriginal: quelli
+			 * del prototipo, come escono da read_mobile */
+			if(full) {
+				/* clear */
+				if(mcopy->player.name) {
+					free(mcopy->player.name);
+				}
+				if(mcopy->player.short_descr) {
+					free(mcopy->player.short_descr);
+				}
+				if(mcopy->player.long_descr) {
+					free(mcopy->player.long_descr);
+				}
+				if(mcopy->player.description) {
+					free(mcopy->player.description);
+				}
+
+				/* copy */
+				if(mob->player.name) {
+					mcopy->player.name = strdup(mob->player.name);
+				}
+				else {
+					mcopy->player.name = NULL;
+				}
+
+				if(mob->player.short_descr) {
+					mcopy->player.short_descr = strdup(mob->player.short_descr);
+				}
+				else {
+					mcopy->player.short_descr = NULL;
+				}
+
+				if(mob->player.long_descr) {
+					mcopy->player.long_descr = strdup(mob->player.long_descr);
+				}
+				else {
+					mcopy->player.long_descr = NULL;
+				}
+
+				if(mob->player.description) {
+					mcopy->player.description = strdup(mob->player.description);
+				}
+				else {
+					mcopy->player.description = NULL;
+				}
 			}
 
-			/* copy */
-			if(mob->player.name) {
-				mcopy->player.name = strdup(mob->player.name);
-			}
-			else {
-				mcopy->player.name = NULL;
-			}
-
-			if(mob->player.short_descr) {
-				mcopy->player.short_descr = strdup(mob->player.short_descr);
-			}
-			else {
-				mcopy->player.short_descr = NULL;
-			}
-
-			if(mob->player.long_descr) {
-				mcopy->player.long_descr = strdup(mob->player.long_descr);
-			}
-			else {
-				mcopy->player.long_descr = NULL;
-			}
-
-			if(mob->player.description) {
-				mcopy->player.description = strdup(mob->player.description);
-			}
-			else {
-				mcopy->player.description = NULL;
+			/* clone nuovo: stat base del mob (prima dell'eq, che le riapplica) */
+			if(full) {
+				clone_mob_stats(mcopy, mob);
 			}
 
 			/* clone EQ equiped */
 			for(j = 0; j < MAX_WEAR; j++) {
 				if(mob->equipment[j]) {
+					if(full && clone_obj_is_edit(mob->equipment[j])) {
+						++skipped_edit;
+						continue;
+					}
 					/* clone mob->equipment[j] */
-					if((ocopy = clone_obj(mob->equipment[j])) != NULL) {
+					if((ocopy = clone_fn(mob->equipment[j])) != NULL) {
 						if(mob->equipment[j]->contains) {
-							clone_container_obj(ocopy,
-												mob->equipment[j]);
+							clone_container_with(ocopy, mob->equipment[j], clone_fn, skip);
 						}
 						equip_char(mcopy, ocopy, j);
 					}
@@ -11155,9 +11437,13 @@ ACTION_FUNC(do_clone) {
 			/* clone EQ carried */
 			if(mob->carrying) {
 				for(obj = mob->carrying; obj; obj = obj->next_content) {
-					if((ocopy = clone_obj(obj)) != NULL) {
+					if(full && clone_obj_is_edit(obj)) {
+						++skipped_edit;
+						continue;
+					}
+					if((ocopy = clone_fn(obj)) != NULL) {
 						if(obj->contains) {
-							clone_container_obj(ocopy, obj);
+							clone_container_with(ocopy, obj, clone_fn, skip);
 						}
 						/* move obj to cloned mobs carrying */
 						obj_to_char(ocopy, mcopy);
@@ -11167,8 +11453,10 @@ ACTION_FUNC(do_clone) {
 
 			/* put */
 			char_to_room(mcopy, ch->in_room);
-			act("$n ha clonato $N!", FALSE, ch, 0, mob, TO_ROOM);
-			act("Hai clonato $N.", FALSE, ch, 0, mob, TO_CHAR);
+			/* il nome e' quello del clone (con cloneoriginal: del prototipo) */
+			act("$n ha clonato $N!", FALSE, ch, 0, mcopy, TO_ROOM);
+			snprintf(buf, sizeof(buf), "Hai clonato $N%s.", tag);
+			act(buf, FALSE, ch, 0, mcopy, TO_CHAR);
 		} /* end mob clone for */
 
 	}
@@ -11186,6 +11474,10 @@ ACTION_FUNC(do_clone) {
 		}
 		if(obj->item_number < 0) {
 			send_to_char("Non puoi clonarlo.\r\n", ch);
+			return;
+		}
+		if(full && clone_obj_is_edit(obj)) {
+			send_to_char("Non puoi clonare un oggetto editato.\r\n", ch);
 			return;
 		}
 		if(GetMaxLevel(ch) < MAESTRO_DEI_CREATORI) {
@@ -11207,9 +11499,12 @@ ACTION_FUNC(do_clone) {
 			}
 		}
 		for(i = 0; i < count; i++) {
-			ocopy = clone_obj(obj);
+			ocopy = clone_fn(obj);
+			if(ocopy == NULL) {
+				return;
+			}
 			if(obj->contains) {
-				clone_container_obj(ocopy, obj);
+				clone_container_with(ocopy, obj, clone_fn, skip);
 			}
 			/* put */
 			if(where == 1) {
@@ -11218,15 +11513,41 @@ ACTION_FUNC(do_clone) {
 			else {
 				obj_to_room(ocopy, ch->in_room);
 			}
-			act("$n ha clonato $p!", FALSE, ch, obj, 0, TO_ROOM);
-			act("Hai clonato $p.", FALSE, ch, obj, 0, TO_CHAR);
+			act("$n ha clonato $p!", FALSE, ch, ocopy, 0, TO_ROOM);
+			snprintf(buf, sizeof(buf), "Hai clonato $p%s.", tag);
+			act(buf, FALSE, ch, ocopy, 0, TO_CHAR);
 		}
 	}
 	else {
-		send_to_char("uso: Clone <mob/obj> nome [count]\r\n", ch);
+		send_to_char(usage, ch);
 		return;
 	}
-	return;
+	if(skipped_edit > 0) {
+		snprintf(buf, sizeof(buf), "(%d %s non clonat%s)\r\n", skipped_edit,
+				 skipped_edit == 1 ? "oggetto editato" : "oggetti editati",
+				 skipped_edit == 1 ? "o" : "i");
+		send_to_char(buf, ch);
+	}
+}
+
+} // namespace
+
+void clone_container_obj(struct obj_data* to, struct obj_data* obj) {
+	clone_container_with(to, obj, clone_obj_proto);
+}
+
+void clone_container_obj_full(struct obj_data* to, struct obj_data* obj) {
+	clone_container_with(to, obj, clone_obj_full);
+}
+
+/* clone: copia con le modifiche (oggetti, eq/inventario, stat base dei mob). */
+ACTION_FUNC(do_clone) {
+	do_clone_mode(ch, arg, true);
+}
+
+/* cloneoriginal: prototipo puro (oggetto, mob e il suo eq), EDIT compresi. */
+ACTION_FUNC(do_cloneoriginal) {
+	do_clone_mode(ch, arg, false);
 }
 
 ACTION_FUNC(do_viewfile) {
