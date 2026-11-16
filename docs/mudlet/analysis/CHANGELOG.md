@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.80 — 2026-11-16
+
+- **ngoldalert / shop EN**: niente falso positivo su tell tipo
+  `[Gwynyar] ti dice 'That'll be 3.750 coins, please.'` (e varianti myst.shp
+  IT/EN). Registra l'importo atteso (come il rent) perche' `G:` spesso scende
+  solo al prompt successivo, oltre la grace breve del comando `buy`.
+
 ## 1.15.79 — 2026-11-16
 
 - **Avviso aggiornamento**: al boot Mudlet e alla connessione al MUD controlla

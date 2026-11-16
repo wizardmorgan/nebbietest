@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.79"
+local PKG_VER = "1.15.80"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -4099,26 +4099,52 @@ function NebbieDash.goldSpendExpectedNow()
   return os.clock() <= untilAt
 end
 
-function NebbieDash.noteExpectedGoldCharge(amount, reason, ttlSec)
+function NebbieDash.enqueueExpectedGoldCharge(amount, reason, ttlSec)
   amount = tonumber(amount)
   if not amount or amount <= 0 then return end
   local ttl = tonumber(ttlSec) or NebbieDash.GOLD_CHARGE_TTL_SEC or 1800
-  NebbieDash._expectedGoldCharge = {
+  local entry = {
     amount = amount,
     reason = reason or "charge",
     expires = os.time() + ttl,
   }
+  NebbieDash._expectedGoldCharges = NebbieDash._expectedGoldCharges or {}
+  table.insert(NebbieDash._expectedGoldCharges, entry)
+  -- Retrocompat: ultimo addebito anche in forma singola (rent/status).
+  NebbieDash._expectedGoldCharge = entry
+end
+
+function NebbieDash.noteExpectedGoldCharge(amount, reason, ttlSec)
+  NebbieDash.enqueueExpectedGoldCharge(amount, reason, ttlSec)
 end
 
 function NebbieDash.consumeExpectedGoldCharge(delta)
+  delta = tonumber(delta)
+  if not delta then return false end
+  local now = os.time()
+  local q = NebbieDash._expectedGoldCharges
+  if type(q) == "table" then
+    for i = #q, 1, -1 do
+      local e = q[i]
+      if not e or (e.expires and now > e.expires) then
+        table.remove(q, i)
+      end
+    end
+    for i, exp in ipairs(q) do
+      if exp.amount == delta then
+        table.remove(q, i)
+        NebbieDash._expectedGoldCharge = q[#q]
+        return true
+      end
+    end
+  end
   local exp = NebbieDash._expectedGoldCharge
   if not exp or not exp.amount then return false end
-  if exp.expires and os.time() > exp.expires then
+  if exp.expires and now > exp.expires then
     NebbieDash._expectedGoldCharge = nil
     return false
   end
-  delta = tonumber(delta)
-  if not delta or delta ~= exp.amount then return false end
+  if delta ~= exp.amount then return false end
   NebbieDash._expectedGoldCharge = nil
   return true
 end
@@ -4160,12 +4186,30 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   return false
 end
 
+-- Importo da tell shopkeeper (shop.cpp message_buy / myst.shp).
+-- Es. "[Gwynyar] ti dice 'That'll be 3.750 coins, please.'"
+function NebbieDash.parseShopBuyGoldAmount(text)
+  text = NebbieDash.stripColors(text or ""):match("^%s*(.-)%s*$") or ""
+  if text == "" then return nil end
+  local raw =
+    text:match("[Tt]hat'll be%s+%-+%s*say%s+([%d%.,]+)%s+coins")
+    or text:match("[Tt]hat'll be%s+([%d%.,]+)%s+coins")
+    or text:match("[Pp]er sole%s+([%d%.,]+)%s+monete")
+    or text:match("[Ii]n totale fanno%s+([%d%.,]+)%s+monete")
+    or text:match("[Ss]ono%s+([%d%.,]+)%s+monete")
+    or text:match("sono solo%s*([%d%.,]+)%.?%s*monete")
+    or text:match("[Pp]er%s+([%d%.,]+)%s+monete ti ho rifilato")
+    or text:match("Derubato ancora una volta%.%.%. solo%s+([%d%.,]+)%s+monete")
+    or text:match("Mia moglie mi bastonera'%.%.%.%.%.(%d[%d%.,]*)%s+monete")
+  return NebbieDash.parseGroupedInt(raw)
+end
+
 function NebbieDash.isVoluntaryGoldSpendLine(text)
   text = NebbieDash.stripColors(text or ""):match("^%s*(.-)%s*$") or ""
   if text == "" then return false end
   if text:match("^Hai diviso ") then return true end
   if text:match("^Dai una moneta ") then return true end
-  -- Importi con migliaia: "Dai 3.500 monete d'oro a Leoven..." (acquisto shop)
+  -- Importi con migliaia: "Dai 3.500 monete d'oro a Leoven..." (give oro)
   if text:match("^Dai [%d%.,]+ monete") then return true end
   -- Riparazione / servizi: "Dai a X N monete d'oro."
   if text:match("^Dai a .+ [%d%.,]+ monete") then return true end
@@ -4174,6 +4218,9 @@ function NebbieDash.isVoluntaryGoldSpendLine(text)
   if text:match("^Paghi [%d%.,]+ monete") then return true end
   -- Asta: offerta accettata (il G: scende al prompt successivo)
   if text:match("^Un offerta di [%d%.,]+ monete e' stata ricevuta") then return true end
+  -- Shop buy (EN/IT): tell del mercante — vedi parseShopBuyGoldAmount
+  if NebbieDash.parseShopBuyGoldAmount(text) then return true end
+  if text:match("^You now have ") then return true end
   -- Sage: acquisto sessioni practice (spec_procs2.cpp learning)
   if text:match("Adesso puoi imparare di nuovo") then return true end
   if text:match("Per te un prezzo di favore") then return true end
@@ -4209,8 +4256,15 @@ end
 
 function NebbieDash.onGoldSpendConfirmLine()
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local shopAmt = NebbieDash.parseShopBuyGoldAmount(text)
+  if shopAmt then
+    -- G: puo' aggiornarsi solo al prossimo comando/prompt (oltre 3.5s).
+    NebbieDash.enqueueExpectedGoldCharge(shopAmt, "shop", 120)
+    NebbieDash.armGoldSpendExpected("shop", 30)
+    return
+  end
   if NebbieDash.isVoluntaryGoldSpendLine(text) then
-    NebbieDash.armGoldSpendExpected("echo", 3.5)
+    NebbieDash.armGoldSpendExpected("echo", 8)
   end
 end
 
@@ -4225,9 +4279,13 @@ end
 
 function NebbieDash.onDataSendRequest(_, cmd)
   if NebbieDash.isVoluntaryGoldCommand(cmd) then
+    local low = (cmd or ""):lower()
     -- rent: grace lunga di cortesia; l'importo preciso arriva dalla riga pensione
-    if (cmd or ""):lower():match("^%s*rent") then
+    if low:match("^%s*rent") then
       NebbieDash.armGoldSpendExpected("rent", 120)
+    elseif low:match("^%s*buy%s+") or low:match("^%s*purchase%s+") then
+      -- Shop: spesso G: scende solo al prompt successivo (dopo tell EN/IT).
+      NebbieDash.armGoldSpendExpected("buy", 30)
     else
       NebbieDash.armGoldSpendExpected("cmd", 3.5)
     end
@@ -8897,6 +8955,8 @@ function NebbieDash.teardownTriggers()
     NebbieDash._goldAssociaTrig, NebbieDash._goldResurrectTrig, NebbieDash._goldRentEditTrig,
     NebbieDash._goldGuildDepTrig, NebbieDash._goldSlotTrig, NebbieDash._goldPracCoinsTrig,
     NebbieDash._goldMailTrig, NebbieDash._goldBankThanksTrig, NebbieDash._goldDaiATrig,
+    NebbieDash._goldShopEnTrig, NebbieDash._goldShopItPerSoleTrig,
+    NebbieDash._goldShopItInTotaleTrig, NebbieDash._goldShopYouNowHaveTrig,
     NebbieDash._goldRentPensionTrig,
     NebbieDash._fallTrig, NebbieDash._disarmTrig, NebbieDash._hungerTrig, NebbieDash._thirstTrig,
     NebbieDash._wieldTrig, NebbieDash._identifyObjTrig, NebbieDash._identifyDmgTrig,
@@ -8978,6 +9038,15 @@ function NebbieDash.installTriggers()
   NebbieDash._goldBankThanksTrig = tempTrigger("La ringraziamo.",
     [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldDaiATrig = tempTrigger("Dai a ",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  -- Shop buy EN/IT (myst.shp message_buy via tell): G: spesso ritarda al prompt dopo
+  NebbieDash._goldShopEnTrig = tempTrigger("That'll be ",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldShopItPerSoleTrig = tempTrigger("Per sole ",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldShopItInTotaleTrig = tempTrigger("In totale fanno ",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldShopYouNowHaveTrig = tempTrigger("You now have ",
     [[NebbieDash.onGoldSpendConfirmLine()]])
   -- Rent: addebito pensione (reception.cpp) — importo esatto, anche dopo menu
   NebbieDash._goldRentPensionTrig = tempTrigger("Il conto della pensione",

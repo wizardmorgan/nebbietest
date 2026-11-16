@@ -1796,6 +1796,45 @@ do
   -- Falso positivo shop: give item → "Dai 3.500 monete d'oro a Leoven..."
   check("goldalert: Dai shop migliaia match",
     NebbieDash.isVoluntaryGoldSpendLine("Dai 3.500 monete d'oro a Leoven Arcanscape.") == true)
+  local gwynyar = "[Gwynyar] ti dice 'That'll be 3.750 coins, please.'"
+  check("goldalert: parse That'll be migliaia",
+    NebbieDash.parseShopBuyGoldAmount(gwynyar) == 3750)
+  check("goldalert: That'll be is voluntary",
+    NebbieDash.isVoluntaryGoldSpendLine(gwynyar) == true)
+  check("goldalert: Per sole match",
+    NebbieDash.parseShopBuyGoldAmount(
+      "[Bottegaio] ti dice 'Per sole 500 monete, lei ha fatto un ottimo affare.'") == 500)
+  check("goldalert: You now have voluntary",
+    NebbieDash.isVoluntaryGoldSpendLine(
+      "You now have una pergamena di identificazione (*1).") == true)
+  -- Scenario utente: tell shop EN → G: scende dopo, grace cmd gia' scaduta
+  NebbieDash._expectedGoldCharges = {}
+  NebbieDash._expectedGoldCharge = nil
+  NebbieDash._goldSpendExpectedUntil = 0
+  _G.line = gwynyar
+  NebbieDash.onGoldSpendConfirmLine()
+  check("goldalert: shop tell notes 3750",
+    NebbieDash._expectedGoldCharge and NebbieDash._expectedGoldCharge.amount == 3750)
+  -- Forza il path "importo atteso" (come quando la grace cmd e' gia' scaduta).
+  NebbieDash._goldSpendExpectedUntil = 0
+  alertLog = {}
+  NebbieDash.resetGoldAlertBaseline(21544024)
+  NebbieDash.checkGoldAlertFromPrompt(21540274)
+  check("goldalert: shop That'll be suppresses delayed G:", #alertLog == 0)
+  check("goldalert: shop charge consumed",
+    NebbieDash._expectedGoldCharge == nil
+      and #(NebbieDash._expectedGoldCharges or {}) == 0)
+  NebbieDash._expectedGoldCharges = {}
+  NebbieDash.enqueueExpectedGoldCharge(3750, "shop", 120)
+  NebbieDash.enqueueExpectedGoldCharge(3750, "shop", 120)
+  check("goldalert: shop queue size 2", #(NebbieDash._expectedGoldCharges) == 2)
+  check("goldalert: shop queue consume 1",
+    NebbieDash.consumeExpectedGoldCharge(3750) == true
+      and #(NebbieDash._expectedGoldCharges) == 1)
+  check("goldalert: shop queue consume 2",
+    NebbieDash.consumeExpectedGoldCharge(3750) == true
+      and #(NebbieDash._expectedGoldCharges or {}) == 0)
+  _G.line = nil
   check("goldalert: Dai item non-oro no match",
     NebbieDash.isVoluntaryGoldSpendLine("Dai un Artiglio del Cacciatore a Leoven Arcanscape.") == false)
   alertLog = {}
