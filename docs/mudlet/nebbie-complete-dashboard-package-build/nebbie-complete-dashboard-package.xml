@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.81"
+local PKG_VER = "1.15.82"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -4501,9 +4501,11 @@ function NebbieDash.parseLootCoinAmount(text)
   if text:match("^%S+%s+C'erano") or text:match("^%S+%s+C'era") then
     return nil
   end
-  local amount = text:match("^C'erano%s+(%d+)%s+monete%.%s*$")
-  if amount then
-    return tonumber(amount)
+  -- Migliaia con . o , (stesso problema di exp 28.845): altrimenti autosplit
+  -- non parte dopo get riuscito, es. "C'erano 60.000 monete."
+  local raw = text:match("^C'erano%s+([%d%.,]+)%s+monete%.%s*$")
+  if raw then
+    return NebbieDash.parseGroupedInt(raw)
   end
   if text:match("^C'era una miserabile moneta%.%s*$") then
     return 1

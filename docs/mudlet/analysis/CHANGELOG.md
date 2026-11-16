@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.82 — 2026-11-16
+
+- **nautosplit**: `C'erano 60.000 monete.` (migliaia con punto) non matchava
+  `%d+` → loot ok ma nessuno `split`. Ora usa `parseGroupedInt` come l'exp.
+
 ## 1.15.81 — 2026-11-16
 
 - **nautoloot**: riconosce `La tua esperienza e' aumentata di 28.845 punti.`

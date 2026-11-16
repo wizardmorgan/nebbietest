@@ -391,6 +391,14 @@ check("loot: parseLootCoinAmount moneta singola",
   NebbieDash.parseLootCoinAmount("C'era una miserabile moneta.") == 1)
 check("loot: parseLootCoinAmount ignora echo stanza",
   NebbieDash.parseLootCoinAmount("Qualcuno C'erano 10 monete.") == nil)
+check("loot: parseLootCoinAmount con migliaia",
+  NebbieDash.parseLootCoinAmount("C'erano 60.000 monete.") == 60000)
+check("loot: parseLootCoinAmount plain ancora ok",
+  NebbieDash.parseLootCoinAmount("C'erano 100000 monete.") == 100000)
+sentLog = {}
+line = "C'erano 60.000 monete."
+NebbieDash.onLootLine()
+check("loot: autosplit con migliaia", lastSent == "split 60000")
 check("loot: isGroupHeaderLine con nome gruppo",
   NebbieDash.isGroupHeaderLine('$c0015Your group "I cacciatori" consists of:'))
 check("loot: isGroupHeaderLine senza nome gruppo",
