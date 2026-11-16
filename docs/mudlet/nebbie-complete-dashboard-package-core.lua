@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.80"
+local PKG_VER = "1.15.81"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -4517,10 +4517,15 @@ end
 
 -- Solo le due righe di fine combattimento reali (non "La tua parte e' di N monete"
 -- dello split altrui, achievement, ecc.).
+-- N puo' avere punti/virgole migliaia (es. "28.845") anche se il server sprintf
+-- usa %d: alcuni client/proxy o formati locali li mostrano raggruppati; senza
+-- [%d%.,]+ isCombatExpLine falliva e nautoloot non partiva (caso Sauron).
 function NebbieDash.isCombatExpLine(text)
   text = NebbieDash.stripColors(text or ""):match("^%s*(.-)%s*$") or ""
-  if text:match("^La tua parte di esperienza e' di %d+ punti%.%s*$") then return true end
-  if text:match("^La tua esperienza e' aumentata di %d+ punti%.%s*$") then return true end
+  if text:match("^La tua parte di esperienza e' di [%d%.,]+ punti%.%s*$") then return true end
+  -- Variante senza "punti" (fight.cpp)
+  if text:match("^La tua parte di esperienza e' di [%d%.,]+%.%s*$") then return true end
+  if text:match("^La tua esperienza e' aumentata di [%d%.,]+ punti%.%s*$") then return true end
   return false
 end
 

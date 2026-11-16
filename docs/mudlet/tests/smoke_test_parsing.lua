@@ -495,6 +495,23 @@ NebbieDash._lootFlowActive = false
 NebbieDash.onCombatEndLine()
 check("combattimento: scatta anche con 0 punti esperienza", sentLog[1] == "get all.coin corp")
 
+-- Bug Sauron: "aumentata di 28.845 punti" (migliaia con punto) — prima isCombatExpLine
+-- richiedeva solo %d+ e nautoloot non partiva.
+check("combattimento: exp solitaria con migliaia",
+  NebbieDash.isCombatExpLine("La tua esperienza e' aumentata di 28.845 punti.") == true)
+check("combattimento: exp gruppo con migliaia",
+  NebbieDash.isCombatExpLine("La tua parte di esperienza e' di 1.047 punti.") == true)
+check("combattimento: exp senza 'punti'",
+  NebbieDash.isCombatExpLine("La tua parte di esperienza e' di 100.") == true)
+check("combattimento: achievement non e' exp",
+  NebbieDash.isCombatExpLine("Race Achievement #51 'Sterminiamoli tutti' 3179/15000.") == false)
+sentLog = {}
+line = "La tua esperienza e' aumentata di 28.845 punti."
+NebbieDash._lastAutoLootClock = nil
+NebbieDash._lootFlowActive = false
+NebbieDash.onCombatEndLine()
+check("combattimento: nautoloot con exp migliaia", sentLog[1] == "get all.coin corp")
+
 -- Con nautoloot off non deve inviare nulla.
 NebbieDash.autoLoot = false
 sentLog = {}

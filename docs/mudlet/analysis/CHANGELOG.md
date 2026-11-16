@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.81 — 2026-11-16
+
+- **nautoloot**: riconosce `La tua esperienza e' aumentata di 28.845 punti.`
+  (e parte di gruppo) con separatori migliaia — prima `%d+` falliva e il loot
+  automatico non partiva anche con `nautoloot on`.
+
 ## 1.15.80 — 2026-11-16
 
 - **ngoldalert / shop EN**: niente falso positivo su tell tipo
