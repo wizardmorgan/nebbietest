@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.82"
+local PKG_VER = "1.15.84"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -4186,6 +4186,18 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   return false
 end
 
+-- Importo offerta asta (auction.cpp + talk_auction Banditore).
+-- Server: "Un offerta di N monete e' stata ricevuta per ..."
+-- Linea reale: "[Il Banditore] 'Un offerta di 100 monete e' stata ricevuta..."
+-- (anche "Un'offerta" con apostrofo). Non ancorare a ^: c'e' il prefisso Banditore.
+function NebbieDash.parseAuctionBidAmount(text)
+  text = NebbieDash.stripColors(text or ""):match("^%s*(.-)%s*$") or ""
+  if text == "" then return nil end
+  -- Server: "Un offerta" (spazio); italiano corretto / display: "Un'offerta".
+  local raw = text:match("Un'?%s*offerta di ([%d%.,]+) monete e' stata ricevuta")
+  return NebbieDash.parseGroupedInt(raw)
+end
+
 -- Importo da tell shopkeeper (shop.cpp message_buy / myst.shp).
 -- Es. "[Gwynyar] ti dice 'That'll be 3.750 coins, please.'"
 function NebbieDash.parseShopBuyGoldAmount(text)
@@ -4216,8 +4228,8 @@ function NebbieDash.isVoluntaryGoldSpendLine(text)
   if text:match("^Posi una moneta%.%s*$") then return true end
   if text:match("^Posi alcune monete%.%s*$") then return true end
   if text:match("^Paghi [%d%.,]+ monete") then return true end
-  -- Asta: offerta accettata (il G: scende al prompt successivo)
-  if text:match("^Un offerta di [%d%.,]+ monete e' stata ricevuta") then return true end
+  -- Asta: tell Banditore — vedi parseAuctionBidAmount
+  if NebbieDash.parseAuctionBidAmount(text) then return true end
   -- Shop buy (EN/IT): tell del mercante — vedi parseShopBuyGoldAmount
   if NebbieDash.parseShopBuyGoldAmount(text) then return true end
   if text:match("^You now have ") then return true end
@@ -4256,6 +4268,12 @@ end
 
 function NebbieDash.onGoldSpendConfirmLine()
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local auctionAmt = NebbieDash.parseAuctionBidAmount(text)
+  if auctionAmt then
+    NebbieDash.enqueueExpectedGoldCharge(auctionAmt, "auction", 120)
+    NebbieDash.armGoldSpendExpected("auction", 30)
+    return
+  end
   local shopAmt = NebbieDash.parseShopBuyGoldAmount(text)
   if shopAmt then
     -- G: puo' aggiornarsi solo al prossimo comando/prompt (oltre 3.5s).
@@ -4286,6 +4304,9 @@ function NebbieDash.onDataSendRequest(_, cmd)
     elseif low:match("^%s*buy%s+") or low:match("^%s*purchase%s+") then
       -- Shop: spesso G: scende solo al prompt successivo (dopo tell EN/IT).
       NebbieDash.armGoldSpendExpected("buy", 30)
+    elseif low:match("^%s*bid%s+") or low:match("^%s*offer%s+")
+        or low:match("^%s*asta%s+") or low:match("^%s*auction%s+") then
+      NebbieDash.armGoldSpendExpected("bid", 30)
     else
       NebbieDash.armGoldSpendExpected("cmd", 3.5)
     end
@@ -9023,7 +9044,8 @@ function NebbieDash.installTriggers()
   NebbieDash._goldPosiMonetaTrig = tempTrigger("Posi una moneta.", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldPosiMoneteTrig = tempTrigger("Posi alcune monete.", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldPaghiTrig = tempTrigger("Paghi ", [[NebbieDash.onGoldSpendConfirmLine()]])
-  NebbieDash._goldAstaTrig = tempTrigger("Un offerta di ", [[NebbieDash.onGoldSpendConfirmLine()]])
+  -- Asta: substring "offerta di " copre "Un offerta" (server) e "Un'offerta".
+  NebbieDash._goldAstaTrig = tempTrigger("offerta di ", [[NebbieDash.onGoldSpendConfirmLine()]])
   -- Sage practice a pagamento (prac learning → COSTO_PRAC)
   NebbieDash._goldPracLearningTrig = tempTrigger("Adesso puoi imparare di nuovo",
     [[NebbieDash.onGoldSpendConfirmLine()]])

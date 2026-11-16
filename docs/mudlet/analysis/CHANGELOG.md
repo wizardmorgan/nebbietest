@@ -1,5 +1,16 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.84 — 2026-11-16
+
+- **ngoldalert / asta**: match anche `Un offerta` (spazio, come in auction.cpp),
+  oltre a `Un'offerta`.
+
+## 1.15.83 — 2026-11-16
+
+- **ngoldalert / asta**: il tell `[Il Banditore] 'Un offerta di N…'` non
+  matchava (ancora a inizio riga + apostrofo). Ora legge l'importo e sopprime
+  il calo G: del `bid` (anche ritardato al prompt successivo).
+
 ## 1.15.82 — 2026-11-16
 
 - **nautosplit**: `C'erano 60.000 monete.` (migliaia con punto) non matchava

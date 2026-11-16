@@ -1882,6 +1882,30 @@ do
     NebbieDash.isVoluntaryGoldSpendLine("Un offerta di 1000 monete e' stata ricevuta.") == true)
   check("goldalert: asta migliaia match",
     NebbieDash.isVoluntaryGoldSpendLine("Un offerta di 1.000 monete e' stata ricevuta.") == true)
+  local banditore =
+    "[Il Banditore] 'Un'offerta di 100 monete e' stata ricevuta per il medaglione del Profeta."
+  check("goldalert: parse Banditore Un'offerta",
+    NebbieDash.parseAuctionBidAmount(banditore) == 100)
+  check("goldalert: parse Banditore Un offerta",
+    NebbieDash.parseAuctionBidAmount(
+      "[Il Banditore] 'Un offerta di 100 monete e' stata ricevuta per X.") == 100)
+  check("goldalert: Banditore is voluntary",
+    NebbieDash.isVoluntaryGoldSpendLine(banditore) == true)
+  NebbieDash._expectedGoldCharges = {}
+  NebbieDash._expectedGoldCharge = nil
+  NebbieDash._goldSpendExpectedUntil = 0
+  _G.line = banditore
+  NebbieDash.onGoldSpendConfirmLine()
+  NebbieDash._goldSpendExpectedUntil = 0
+  alertLog = {}
+  NebbieDash.resetGoldAlertBaseline(22003261)
+  NebbieDash.checkGoldAlertFromPrompt(22003161)
+  check("goldalert: bid Banditore suppresses", #alertLog == 0)
+  check("goldalert: bid charge consumed",
+    NebbieDash._expectedGoldCharge == nil
+      and #(NebbieDash._expectedGoldCharges or {}) == 0)
+  _G.line = nil
+  check("goldalert: cmd bid", NebbieDash.isVoluntaryGoldCommand("bid 100") == true)
   check("goldalert: unrelated echo no match", NebbieDash.isVoluntaryGoldSpendLine("Tu dici 'ciao'") == false)
 
   -- Rent / pensione: addebito dopo menu — non basta la grace a clock
