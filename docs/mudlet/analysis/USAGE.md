@@ -81,6 +81,8 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nspellwarn <n>` | Sotto quanti tick residui una spell attiva nel pannello viene mostrata in rosso invece che verde (default 5). |
 | `nforgetspell <nome>` | Toglie una riga dall'elenco pannello in memoria (e da vecchi dati `knownSpellOrder` se presente); aggiorna anche `nebbie-cast-spells.txt` a mano per renderlo permanente. |
 | `nspeedwalks` | Ricarica gli speedwalk dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
+| `nswui` | Finestra floating speedwalk (lista path, pausa/riprendi). |
+| `nsw pause\|resume\|skip\|stop\|status` | Controlla la corsa speedwalk (pausa automatica su blocco/caduta/timeout). |
 | `nspeeddelay <secondi>` | Pausa tra un movimento e il successivo quando esegui uno speedwalk (default 0.35s). |
 | `nhelp` | Mostra/nasconde la finestra con l'elenco di tutti questi comandi (stessa finestra del tasto "? Comandi", vedi sotto). |
 | `nloot` | Prende le monete dal cadavere presente (prova sia `get all.coin corp` che `get all.coin pile`, per cadaveri normali e "pile of bones"). Normalmente non serve digitarlo: scatta da solo, vedi sotto. |
@@ -774,12 +776,21 @@ Il pannello aggiunge un terzo riquadro con gli speedwalk, letti da un file di te
 a mano:
 
 ```
-getMudletHomeDir()/nebbie-speedwalks.txt
+profiles/ndashboard/nebbie-speedwalks.txt
 ```
 
-(su macOS tipicamente qualcosa come `~/.config/mudlet/profiles/<NomeProfilo>/nebbie-speedwalks.txt`
-— alla prima installazione il file viene creato automaticamente con istruzioni ed un esempio
-commentato, se non esiste già).
+(stessa cartella condivisa degli identify — `nconfigdir`. Su macOS tipicamente
+`~/.config/mudlet/profiles/ndashboard/nebbie-speedwalks.txt`. Alla prima installazione
+il file viene creato con istruzioni ed un esempio commentato).
+
+**Pannello floating**: `nswui`. Corsa intelligente: dopo ogni passo attende `Uscite:` (o buio);
+se l’uscita è bloccata / cadi / timeout → pausa; poi `nsw resume` (riprova) o `nsw skip`.
+Il pannello laterale resta disponibile.
+
+**Sync tra PC**: i path stanno già in `ndashboard` come gli ident. La sync VPS HTTPS
+(`nidentsync`) **non è attiva** sul package in produzione (ramo laterale non mergiato);
+tra macchine oggi serve sincronizzare la cartella `ndashboard` a livello disco
+(Syncthing/share) oppure attivare più avanti l’hub VPS.
 
 **Formato di ogni riga** (deciso insieme, vedi `Q&A.md` Round 5):
 

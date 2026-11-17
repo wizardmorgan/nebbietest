@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.87"
+local PKG_VER = "1.15.88"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -901,6 +901,9 @@ function NebbieDash.toggleSpeedwalkSection(itemIndex)
     not NebbieDash.isSpeedwalkSectionCollapsed(item.key)
   NebbieDash.saveUiStore()
   NebbieDash.refreshSpeedwalkPanel()
+  if NebbieDash._swUiCreated and not NebbieDash._swUiHidden then
+    NebbieDash.refreshSwUi()
+  end
 end
 
 function NebbieDash.getCharData(name)
@@ -1414,6 +1417,8 @@ NebbieDash.SHORTCUT_RESERVED = {
   nchat = true,
   ngoldalert = true,
   nidentui = true,
+  nswui = true,
+  nsw = true,
   usa = true,
   nconfigdir = true,
   nsidebar = true,
@@ -1932,12 +1937,16 @@ function NebbieDash.cmdReloadSpeedwalks()
   local path = NebbieDash.speedwalkPath()
   local ok = NebbieDash.loadSpeedwalks()
   NebbieDash.refreshDashboard()
+  if NebbieDash._swUiCreated and not NebbieDash._swUiHidden then
+    NebbieDash.refreshSwUi()
+  end
   if not ok then
     cecho("<red>[NebbieDash] Impossibile leggere " .. path .. " — controlla permessi o percorso.\n")
     cecho("<grey>Modifica i file in <white>" .. NebbieDash.configRoot() .. "<grey> (cartella condivisa, vedi <yellow>nconfigdir<grey>).\n")
     return
   end
   cecho("<green>[NebbieDash] Speedwalk ricaricati: " .. #NebbieDash.speedwalks .. " — " .. path .. "\n")
+  cecho("<grey>File condiviso in ndashboard (come ident). VPS remota: non attiva su questo package — solo cartella locale/sync disco.\n")
   for _, item in ipairs(NebbieDash.speedwalkItems or {}) do
     if item.kind == "section" then
       cecho("<grey>  [sezione] <yellow>" .. item.title .. "\n")
@@ -1988,16 +1997,320 @@ function NebbieDash.cmdSetSpeedDelay(str)
   cecho("<green>[NebbieDash] Pausa tra i movimenti impostata a " .. delay .. "s.\n")
 end
 
--- Invia le direzioni di uno speedwalk una alla volta, con una pausa tra
--- l'una e l'altra (vedi NebbieDash.speedwalkDelay) invece di un unico invio
--- concatenato, per non rischiare di perdere passi per via del lag di
--- movimento del gioco.
+-- Motore speedwalk a stato: un passo alla volta, conferma movimento
+-- (Uscite: / buio) o fail-trigger → pausa con ripresa dall'indice.
+-- ---------------------------------------------------------------------------
+NebbieDash._swRun = NebbieDash._swRun or {
+  status = "idle", -- idle | running | paused
+  walkIndex = nil,
+  desc = "",
+  steps = {},
+  nextStep = 1,
+  awaitingMove = false,
+  pauseReason = nil,
+  timerId = nil,
+  waitTimerId = nil,
+  generation = 0,
+}
+
+function NebbieDash.swRunClearTimers()
+  local run = NebbieDash._swRun
+  if not run then return end
+  if run.timerId and type(killTimer) == "function" then
+    pcall(killTimer, run.timerId)
+  end
+  if run.waitTimerId and type(killTimer) == "function" then
+    pcall(killTimer, run.waitTimerId)
+  end
+  run.timerId = nil
+  run.waitTimerId = nil
+end
+
+function NebbieDash.swRunStatusLine()
+  local run = NebbieDash._swRun or {}
+  local total = #(run.steps or {})
+  local i = tonumber(run.nextStep) or 1
+  if (run.status or "idle") == "idle" or total == 0 then
+    return "idle"
+  end
+  local done = math.max(0, i - 1)
+  if run.awaitingMove then done = math.max(0, i - 1) end
+  local label = run.desc ~= "" and run.desc or ("#" .. tostring(run.walkIndex or "?"))
+  local st = run.status or "idle"
+  local extra = run.pauseReason and (" — " .. run.pauseReason) or ""
+  return string.format("%s  %s  %d/%d%s", st, label, done, total, extra)
+end
+
+function NebbieDash.swRunNotify(msg, color)
+  color = color or "green"
+  cecho("<" .. color .. ">[NebbieDash] " .. msg .. "\n")
+  if NebbieDash._swUiCreated and not NebbieDash._swUiHidden then
+    NebbieDash.refreshSwUi()
+  end
+end
+
+function NebbieDash.isSpeedwalkMoveOkLine(text)
+  text = NebbieDash.stripColors(text or "")
+  if text:match("^Uscite:") then return true end
+  if text:match("^E' molto buio qui") or text:match("^È molto buio qui") then return true end
+  return false
+end
+
+function NebbieDash.isSpeedwalkFailLine(text)
+  text = NebbieDash.stripColors(text or "")
+  if text:match("^Non puoi andare da quella parte") then return true, "uscita bloccata" end
+  if text:match("^La porta .+ chius") then return true, "porta chiusa" end
+  if text:match("e' chiusa") or text:match("è chiusa") then
+    if text:lower():match("porta") then return true, "porta chiusa" end
+  end
+  if text:match("^Non puoi vedere nulla, stai dormendo") then return true, "dormi" end
+  if text:match("^Non riesci a vedere un tubo") then return true, "cieco" end
+  if text:match("^Non vedi nient'altro che stelle") then return true, "incosciente" end
+  if text:match("^Inciampi e cadi per terra") then return true, "caduta" end
+  if text:match("^Ti disarmano e") then return true, "disarmato" end
+  return false, nil
+end
+
+function NebbieDash.swRunWatchdogSeconds()
+  local d = tonumber(NebbieDash.speedwalkDelay) or 0.35
+  return math.max(2.0, d * 5 + 1.0)
+end
+
+function NebbieDash.swRunArmWatchdog(gen)
+  local run = NebbieDash._swRun
+  if not run then return end
+  if run.waitTimerId and type(killTimer) == "function" then
+    pcall(killTimer, run.waitTimerId)
+  end
+  run.waitTimerId = nil
+  if type(tempTimer) ~= "function" then return end
+  run.waitTimerId = tempTimer(NebbieDash.swRunWatchdogSeconds(), function()
+    local r = NebbieDash._swRun
+    if not r or r.generation ~= gen then return end
+    if r.status == "running" and r.awaitingMove then
+      NebbieDash.swRunPause("timeout senza conferma stanza")
+    end
+  end)
+end
+
+function NebbieDash.swRunSendCurrent()
+  local run = NebbieDash._swRun
+  if not run or run.status ~= "running" then return end
+  local steps = run.steps or {}
+  local i = tonumber(run.nextStep) or 1
+  if i < 1 or i > #steps then
+    NebbieDash.swRunFinish(true)
+    return
+  end
+  local dir = steps[i]
+  run.awaitingMove = true
+  run.pauseReason = nil
+  run.lastSentCmd = dir
+  local gen = run.generation
+  if type(send) == "function" then
+    send(dir, false)
+  end
+  NebbieDash.swRunArmWatchdog(gen)
+  if NebbieDash._swUiCreated and not NebbieDash._swUiHidden then
+    NebbieDash.refreshSwUi()
+  end
+end
+
+function NebbieDash.swRunScheduleNext(delay)
+  local run = NebbieDash._swRun
+  if not run or run.status ~= "running" then return end
+  NebbieDash.swRunClearTimers()
+  local gen = run.generation
+  delay = tonumber(delay) or (NebbieDash.speedwalkDelay or 0.35)
+  if delay <= 0 or type(tempTimer) ~= "function" then
+    NebbieDash.swRunSendCurrent()
+    return
+  end
+  run.timerId = tempTimer(delay, function()
+    local r = NebbieDash._swRun
+    if not r or r.generation ~= gen or r.status ~= "running" then return end
+    NebbieDash.swRunSendCurrent()
+  end)
+end
+
+function NebbieDash.swRunFinish(ok)
+  local run = NebbieDash._swRun
+  if not run then return end
+  local desc = run.desc or ""
+  NebbieDash.swRunClearTimers()
+  run.status = "idle"
+  run.awaitingMove = false
+  run.pauseReason = nil
+  run.walkIndex = nil
+  run.steps = {}
+  run.nextStep = 1
+  run.generation = (run.generation or 0) + 1
+  if ok then
+    NebbieDash.swRunNotify("Speedwalk completato" .. (desc ~= "" and (": " .. desc) or ""), "green")
+  end
+  if NebbieDash._swUiCreated and not NebbieDash._swUiHidden then
+    NebbieDash.refreshSwUi()
+  end
+end
+
+function NebbieDash.swRunPause(reason)
+  local run = NebbieDash._swRun
+  if not run or run.status ~= "running" then return false end
+  NebbieDash.swRunClearTimers()
+  run.status = "paused"
+  run.awaitingMove = false
+  run.pauseReason = reason or "pausa"
+  NebbieDash.swRunNotify(
+    "Speedwalk in pausa @ passo " .. tostring(run.nextStep) .. "/" .. tostring(#(run.steps or {}))
+      .. (reason and (" (" .. reason .. ")") or "")
+      .. " — <yellow>nsw resume<green> / <yellow>nsw skip",
+    "orange")
+  return true
+end
+
+function NebbieDash.swRunResume(skipCurrent)
+  local run = NebbieDash._swRun
+  if not run or run.status ~= "paused" then
+    cecho("<orange>[NebbieDash] Nessuno speedwalk in pausa.\n")
+    return false
+  end
+  if skipCurrent then
+    run.nextStep = (tonumber(run.nextStep) or 1) + 1
+  end
+  if (tonumber(run.nextStep) or 1) > #(run.steps or {}) then
+    NebbieDash.swRunFinish(true)
+    return true
+  end
+  run.status = "running"
+  run.pauseReason = nil
+  run.generation = (run.generation or 0) + 1
+  NebbieDash.swRunNotify(
+    "Riprendo speedwalk @ passo " .. tostring(run.nextStep) .. "/" .. tostring(#run.steps)
+      .. (skipCurrent and " (skip)" or ""),
+    "green")
+  NebbieDash.swRunScheduleNext(0)
+  return true
+end
+
+function NebbieDash.swRunStop()
+  local run = NebbieDash._swRun
+  if not run or run.status == "idle" then
+    cecho("<grey>[NebbieDash] Nessuno speedwalk attivo.\n")
+    return false
+  end
+  local desc = run.desc or ""
+  NebbieDash.swRunClearTimers()
+  run.status = "idle"
+  run.awaitingMove = false
+  run.pauseReason = nil
+  run.steps = {}
+  run.nextStep = 1
+  run.walkIndex = nil
+  run.generation = (run.generation or 0) + 1
+  NebbieDash.swRunNotify("Speedwalk interrotto" .. (desc ~= "" and (": " .. desc) or ""), "orange")
+  return true
+end
+
+function NebbieDash.swRunOnMoveOk()
+  local run = NebbieDash._swRun
+  if not run or run.status ~= "running" or not run.awaitingMove then return end
+  run.awaitingMove = false
+  if run.waitTimerId and type(killTimer) == "function" then
+    pcall(killTimer, run.waitTimerId)
+  end
+  run.waitTimerId = nil
+  run.nextStep = (tonumber(run.nextStep) or 1) + 1
+  if run.nextStep > #(run.steps or {}) then
+    NebbieDash.swRunFinish(true)
+    return
+  end
+  NebbieDash.swRunScheduleNext(NebbieDash.speedwalkDelay or 0.35)
+end
+
+function NebbieDash.swRunOnFail(reason)
+  local run = NebbieDash._swRun
+  if not run or run.status ~= "running" then return end
+  NebbieDash.swRunPause(reason or "blocco")
+end
+
+function NebbieDash.onSpeedwalkGameLine()
+  local line = (type(line) == "string" and line)
+    or (matches and matches[1])
+    or ""
+  if NebbieDash.isSpeedwalkFailLine(line) then
+    local _, reason = NebbieDash.isSpeedwalkFailLine(line)
+    NebbieDash.swRunOnFail(reason)
+    return
+  end
+  if NebbieDash.isSpeedwalkMoveOkLine(line) then
+    NebbieDash.swRunOnMoveOk()
+  end
+end
+
+-- Avvia (o riavvia) uno speedwalk dal pannello / click.
 function NebbieDash.runSpeedwalk(index)
   local entry = NebbieDash.speedwalks[index]
   if not entry then return end
-  for i, dir in ipairs(entry.steps) do
-    tempTimer(NebbieDash.speedwalkDelay * (i - 1), function() send(dir, false) end)
+  local steps = entry.steps or {}
+  if #steps == 0 then
+    cecho("<orange>[NebbieDash] Speedwalk senza passi.\n")
+    return
   end
+  local run = NebbieDash._swRun
+  if run.status == "running" or run.status == "paused" then
+    NebbieDash.swRunClearTimers()
+  end
+  run.status = "running"
+  run.walkIndex = index
+  run.desc = entry.desc or ""
+  run.steps = {}
+  for _, s in ipairs(steps) do table.insert(run.steps, s) end
+  run.nextStep = 1
+  run.awaitingMove = false
+  run.pauseReason = nil
+  run.generation = (run.generation or 0) + 1
+  NebbieDash.swRunNotify(
+    "Speedwalk: <white>" .. run.desc .. "<green> (" .. #run.steps .. " passi) — "
+      .. "<yellow>nsw pause/stop/resume",
+    "green")
+  NebbieDash.swRunScheduleNext(0)
+end
+
+function NebbieDash.cmdNsw(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$") or ""
+  local mode, rest = argStr:match("^(%S+)%s*(.-)$")
+  mode = (mode or ""):lower()
+  rest = (rest or ""):match("^%s*(.-)%s*$") or ""
+  if mode == "" or mode == "status" or mode == "?" or mode == "help" then
+    local run = NebbieDash._swRun or {}
+    cecho("<green>[NebbieDash] Speedwalk: <white>" .. NebbieDash.swRunStatusLine() .. "\n")
+    cecho("<grey>  <yellow>nsw pause<grey> | <yellow>nsw resume<grey> | <yellow>nsw skip<grey> | <yellow>nsw stop\n")
+    cecho("<grey>  <yellow>nswui<grey> apre il pannello floating (path in profiles/ndashboard).\n")
+    if mode == "help" or mode == "?" then
+      cecho("<grey>Conferma passo: riga <white>Uscite:<grey> (o buio). Fail → pausa automatica.\n")
+    end
+    return
+  end
+  if mode == "pause" or mode == "pausa" then
+    if not NebbieDash.swRunPause("manuale") then
+      cecho("<orange>[NebbieDash] Nessuno speedwalk in corso da mettere in pausa.\n")
+    end
+    return
+  end
+  if mode == "resume" or mode == "riprendi" or mode == "continue" then
+    local skip = rest:lower() == "skip" or rest:lower() == "salta"
+    NebbieDash.swRunResume(skip)
+    return
+  end
+  if mode == "skip" or mode == "salta" then
+    NebbieDash.swRunResume(true)
+    return
+  end
+  if mode == "stop" or mode == "abort" or mode == "cancel" then
+    NebbieDash.swRunStop()
+    return
+  end
+  cecho("<orange>[NebbieDash] Uso: nsw status|pause|resume|skip|stop\n")
 end
 
 function NebbieDash.cmdShowEq()
@@ -3572,6 +3885,202 @@ function NebbieDash.cmdIdentUi(argStr)
   NebbieDash.refreshIdentUi()
 end
 
+-- ---------------------------------------------------------------------------
+-- Finestra floating speedwalk (nswui) — lista path + stato run/pause/resume.
+-- Path da profiles/ndashboard/nebbie-speedwalks.txt (stessa cartella degli ident).
+-- ---------------------------------------------------------------------------
+function NebbieDash.canUseSwUiWindow()
+  return NebbieDash.canUseChatWindow()
+end
+
+function NebbieDash.destroySwUiWindow()
+  if NebbieDash._swUiContainer then
+    if type(NebbieDash._swUiContainer.hide) == "function" then
+      pcall(function() NebbieDash._swUiContainer:hide() end)
+    end
+    if type(NebbieDash._swUiContainer.delete) == "function" then
+      pcall(function() NebbieDash._swUiContainer:delete() end)
+    end
+  end
+  for _, name in ipairs({ "NebbieDashSwUiContainer", "NebbieDashSwUi" }) do
+    if type(deleteWindow) == "function" then pcall(deleteWindow, name) end
+  end
+  NebbieDash._swUiContainer = nil
+  NebbieDash._swUiGeyser = nil
+  NebbieDash._swUiCreated = false
+  NebbieDash._swUiHidden = false
+end
+
+function NebbieDash.swUiCecho(text)
+  local g = NebbieDash._swUiGeyser
+  if g and type(g.cecho) == "function" then
+    g:cecho(text)
+  elseif type(cecho) == "function" then
+    cecho("NebbieDashSwUi", text)
+  end
+end
+
+function NebbieDash.swUiCechoLink(text, command, hint)
+  local g = NebbieDash._swUiGeyser
+  if g and type(g.cechoLink) == "function" then
+    g:cechoLink(text, command, hint or "", true)
+  elseif type(cechoLink) == "function" then
+    cechoLink("NebbieDashSwUi", text, command, hint or "", true)
+  else
+    NebbieDash.swUiCecho(text)
+  end
+end
+
+function NebbieDash.clearSwUiWindow()
+  if NebbieDash._swUiGeyser and type(NebbieDash._swUiGeyser.clear) == "function" then
+    pcall(function() NebbieDash._swUiGeyser:clear() end)
+  elseif type(clearWindow) == "function" then
+    pcall(clearWindow, "NebbieDashSwUi")
+  end
+end
+
+function NebbieDash.showSwUiWindow()
+  if NebbieDash._swUiContainer and type(NebbieDash._swUiContainer.show) == "function" then
+    pcall(function() NebbieDash._swUiContainer:show() end)
+  elseif type(showWindow) == "function" then
+    pcall(showWindow, "NebbieDashSwUiContainer")
+    pcall(showWindow, "NebbieDashSwUi")
+  end
+  NebbieDash._swUiHidden = false
+end
+
+function NebbieDash.hideSwUiWindow()
+  if NebbieDash._swUiContainer and type(NebbieDash._swUiContainer.hide) == "function" then
+    pcall(function() NebbieDash._swUiContainer:hide() end)
+  elseif type(hideWindow) == "function" then
+    pcall(hideWindow, "NebbieDashSwUiContainer")
+    pcall(hideWindow, "NebbieDashSwUi")
+  end
+  NebbieDash._swUiHidden = true
+end
+
+function NebbieDash.initSwUiWindow()
+  if not NebbieDash.canUseSwUiWindow() then
+    cecho("<orange>[NebbieDash] Finestra speedwalk non disponibile (serve Adjustable.Container / Geyser).\n")
+    return false
+  end
+  if NebbieDash._swUiCreated and NebbieDash._swUiContainer then
+    NebbieDash.showSwUiWindow()
+    NebbieDash.refreshSwUi()
+    return true
+  end
+  NebbieDash.destroySwUiWindow()
+  local w, h = 480, 420
+  NebbieDash._swUiContainer = Adjustable.Container:new({
+    name = "NebbieDashSwUiContainer",
+    x = "-500",
+    y = 60,
+    width = w,
+    height = h,
+    titleText = "Nebbie — Speedwalk",
+    titleTxtColor = "white",
+    adjLabelstyle = [[
+      background-color: rgb(12, 16, 22);
+      border: 2px solid rgb(50, 110, 140);
+      border-radius: 6px;
+    ]],
+  })
+  local pad = 4
+  local titleH = 22
+  NebbieDash._swUiGeyser = Geyser.MiniConsole:new({
+    name = "NebbieDashSwUi",
+    x = pad,
+    y = titleH,
+    width = "100%-" .. tostring(pad * 2),
+    height = "100%-" .. tostring(titleH + pad),
+  }, NebbieDash._swUiContainer)
+  NebbieDash._swUiGeyser:setColor(12, 16, 22, 255)
+  if type(setMiniConsoleFontSize) == "function" then
+    setMiniConsoleFontSize("NebbieDashSwUi", NebbieDash.fontSize or 10)
+  end
+  if type(enableScrollBar) == "function" then
+    enableScrollBar("NebbieDashSwUi", true)
+  end
+  if type(setMaxLines) == "function" then
+    setMaxLines("NebbieDashSwUi", 4000)
+  end
+  if type(NebbieDash._swUiContainer.load) == "function" then
+    pcall(function() NebbieDash._swUiContainer:load() end)
+  end
+  NebbieDash._swUiCreated = true
+  NebbieDash._swUiHidden = false
+  NebbieDash.refreshSwUi()
+  return true
+end
+
+function NebbieDash.refreshSwUi()
+  if not NebbieDash._swUiCreated or NebbieDash._swUiHidden then return end
+  NebbieDash.clearSwUiWindow()
+  NebbieDash.swUiCecho("<cyan><b>Speedwalk</b>  <grey>(" .. NebbieDash.speedwalkPath() .. ")\n")
+  NebbieDash.swUiCecho("<white>Stato: <yellow>" .. NebbieDash.swRunStatusLine() .. "\n")
+  NebbieDash.swUiCechoLink("<orange>[Pausa]", "NebbieDash.cmdNsw(\"pause\")", "nsw pause", true)
+  NebbieDash.swUiCecho("  ")
+  NebbieDash.swUiCechoLink("<green>[Riprendi]", "NebbieDash.cmdNsw(\"resume\")", "nsw resume", true)
+  NebbieDash.swUiCecho("  ")
+  NebbieDash.swUiCechoLink("<yellow>[Skip]", "NebbieDash.cmdNsw(\"skip\")", "nsw skip", true)
+  NebbieDash.swUiCecho("  ")
+  NebbieDash.swUiCechoLink("<red>[Stop]", "NebbieDash.cmdNsw(\"stop\")", "nsw stop", true)
+  NebbieDash.swUiCecho("  ")
+  NebbieDash.swUiCechoLink("<cyan>[Ricarica]", "NebbieDash.cmdReloadSpeedwalks()", "nspeedwalks", true)
+  NebbieDash.swUiCecho("\n<grey>────────────────────────────────────\n")
+  if #(NebbieDash.speedwalkItems or {}) == 0 and #(NebbieDash.speedwalks or {}) == 0 then
+    NebbieDash.swUiCecho("<grey>(nessun path — modifica nebbie-speedwalks.txt poi [Ricarica])\n")
+    return
+  end
+  for i, item in ipairs(NebbieDash.speedwalkItems or {}) do
+    if item.kind == "section" then
+      local collapsed = NebbieDash.isSpeedwalkSectionCollapsed(item.key)
+      local icon = collapsed and "▶" or "▼"
+      NebbieDash.swUiCechoLink("<yellow><b>" .. icon .. " " .. item.title .. "</b>",
+        string.format("NebbieDash.toggleSpeedwalkSection(%d)", i),
+        collapsed and "Espandi" or "Collassa", true)
+      NebbieDash.swUiCecho("\n")
+    elseif item.kind == "walk" then
+      if item.sectionKey and NebbieDash.isSpeedwalkSectionCollapsed(item.sectionKey) then
+        -- nascosto
+      else
+        local nsteps = item.steps and #item.steps or 0
+        NebbieDash.swUiCechoLink("<cyan>" .. tostring(item.desc),
+          string.format("NebbieDash.runSpeedwalk(%d)", item.walkIndex),
+          "Avvia: " .. tostring(item.desc), true)
+        NebbieDash.swUiCecho("<grey>  (" .. tostring(nsteps) .. ") " .. tostring(item.dirString or "") .. "\n")
+        if item.note and item.note ~= "" then
+          NebbieDash.swUiCecho("<grey>  (" .. item.note:gsub("\n", " / ") .. ")\n")
+        end
+      end
+    end
+  end
+end
+
+function NebbieDash.cmdSwUi(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$") or ""
+  local mode = (argStr:match("^(%S+)") or ""):lower()
+  if mode == "off" or mode == "hide" or mode == "close" then
+    if NebbieDash._swUiCreated then NebbieDash.hideSwUiWindow() end
+    cecho("<grey>[NebbieDash] Finestra Speedwalk nascosta (<yellow>nswui<grey> per riaprire).\n")
+    return
+  end
+  if mode == "help" or mode == "?" then
+    cecho("<green>[NebbieDash] nswui — pannello floating speedwalk\n")
+    cecho("<grey>  <yellow>nswui<grey>     apri / mostra\n")
+    cecho("<grey>  <yellow>nswui off<grey> nascondi\n")
+    cecho("<grey>  <yellow>nsw pause|resume|skip|stop|status\n")
+    cecho("<grey>Path: <white>" .. NebbieDash.speedwalkPath() .. "\n")
+    return
+  end
+  -- Rileggi dal disco (utile se ndashboard e' sincronizzata tra macchine).
+  NebbieDash.loadSpeedwalks()
+  if not NebbieDash.initSwUiWindow() then return end
+  NebbieDash.showSwUiWindow()
+  NebbieDash.refreshSwUi()
+  cecho("<green>[NebbieDash] Finestra Speedwalk aperta (<yellow>nsw help<green> per controllo corsa).\n")
+end
+
 function NebbieDash.equipDividerPointerY(event)
   if type(getMousePosition) == "function" then
     local _x, y = getMousePosition()
@@ -3898,7 +4407,9 @@ NebbieDash.HELP_TEXT = {
   { "nconfigdir", "Mostra cartella profiles/ndashboard e file indice nebbie-dash-config-root.txt." },
   { "nitemlen <n>", "Lunghezza massima delle descrizioni oggetti in equip." },
   { "nspellwarn <tick>", "(Legacy) soglia colore pannello spell rimosso — ignorato." },
-  { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk." },
+  { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk (ndashboard)." },
+  { "nswui", "Finestra floating speedwalk (lista path + pausa/riprendi)." },
+  { "nsw pause|resume|skip|stop|status", "Controlla la corsa speedwalk in corso." },
   { "nspeeddelay <secondi>", "Ritardo tra un comando e l'altro in uno speedwalk." },
   { "nclanslot <on|off>", "Mostra/nascondi lo slot 22 (simbolo del clan)." },
   { "nloot", "Prende le monete dal cadavere presente (normale o pile of bones)." },
@@ -4571,6 +5082,20 @@ function NebbieDash.onRentPensionLine()
 end
 
 function NebbieDash.onDataSendRequest(_, cmd)
+  local run = NebbieDash._swRun
+  if run and run.status == "running" then
+    local c = (cmd or ""):match("^%s*(.-)%s*$") or ""
+    if c ~= "" and c ~= (run.lastSentCmd or "") then
+      -- Controllo manuale durante la corsa → pausa (non i nostri send del motore).
+      local low = c:lower()
+      if low:match("^[neswud]$") or low:match("^[nesw][ew]$")
+          or low:match("^enter ") or low:match("^apri ") or low:match("^open ")
+          or low:match("^north") or low:match("^south") or low:match("^east")
+          or low:match("^west") or low:match("^up") or low:match("^down") then
+        NebbieDash.swRunPause("comando manuale: " .. c)
+      end
+    end
+  end
   if NebbieDash.isVoluntaryGoldCommand(cmd) then
     local low = (cmd or ""):lower()
     -- rent: grace lunga di cortesia; l'importo preciso arriva dalla riga pensione
@@ -4933,6 +5458,7 @@ end
 -- Shield su substring fissa (sempre attivo, riga singola, stesso principio
 -- degli altri trigger a riga singola di questo file).
 function NebbieDash.onFallLine()
+  NebbieDash.swRunOnFail("caduta")
   if not NebbieDash.autoStand then return end
   send("stand", false)
 end
@@ -4952,6 +5478,7 @@ function NebbieDash.resolveDisarmKeywords(weaponName)
 end
 
 function NebbieDash.onDisarmLine()
+  NebbieDash.swRunOnFail("disarmato")
   if not NebbieDash.autoDisarmRecover then return end
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
   text = NebbieDash.stripColors(text):match("^%s*(.-)%s*$") or ""
@@ -9411,6 +9938,10 @@ function NebbieDash.teardownTriggers()
     if id then pcall(function() killTrigger(id) end) end
   end
   NebbieDash._spellExpiryTrigs = {}
+  for _, id in ipairs(NebbieDash._swRunTrigs or {}) do
+    if id then pcall(function() killTrigger(id) end) end
+  end
+  NebbieDash._swRunTrigs = {}
   NebbieDash.teardownChatTriggers()
   NebbieDash.teardownTextHighlightTriggers()
   NebbieDash.teardownSpellShortcutTriggers()
@@ -9544,6 +10075,18 @@ function NebbieDash.installTriggers()
   end
   NebbieDash.installTextHighlightTriggers()
   NebbieDash.installChatTriggers()
+  -- Speedwalk: conferma stanza (Uscite:/buio) e fail espliciti.
+  NebbieDash._swRunTrigs = {}
+  local function swTrig(id)
+    if id then table.insert(NebbieDash._swRunTrigs, id) end
+  end
+  swTrig(tempTrigger("Uscite:", [[NebbieDash.onSpeedwalkGameLine()]]))
+  swTrig(tempTrigger("E' molto buio qui", [[NebbieDash.onSpeedwalkGameLine()]]))
+  swTrig(tempTrigger("È molto buio qui", [[NebbieDash.onSpeedwalkGameLine()]]))
+  swTrig(tempTrigger("Non puoi andare da quella parte", [[NebbieDash.onSpeedwalkGameLine()]]))
+  swTrig(tempTrigger("Non puoi vedere nulla, stai dormendo", [[NebbieDash.onSpeedwalkGameLine()]]))
+  swTrig(tempTrigger("Non riesci a vedere un tubo", [[NebbieDash.onSpeedwalkGameLine()]]))
+  swTrig(tempTrigger("Non vedi nient'altro che stelle", [[NebbieDash.onSpeedwalkGameLine()]]))
   if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
   if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
   -- Gli anonymous event handler restano registrati una volta sola (a

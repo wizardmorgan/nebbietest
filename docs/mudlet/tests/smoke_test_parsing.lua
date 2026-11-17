@@ -2101,6 +2101,38 @@ do
   NebbieDash._goldSpendExpectedUntil = 0
 end
 
+-- Speedwalk runner: conferma Uscite: / fail / pause / resume / skip
+do
+  check("sw: moveOk Uscite", NebbieDash.isSpeedwalkMoveOkLine("Uscite: nord est") == true)
+  check("sw: moveOk buio", NebbieDash.isSpeedwalkMoveOkLine("E' molto buio qui...") == true)
+  check("sw: not moveOk gossip", NebbieDash.isSpeedwalkMoveOkLine("[X] vi dice 'ciao'") == false)
+  local fail, reason = NebbieDash.isSpeedwalkFailLine("Non puoi andare da quella parte...")
+  check("sw: fail uscita", fail == true and reason == "uscita bloccata")
+
+  NebbieDash.speedwalks = {
+    { desc = "test path", dirString = "n,e,s", steps = { "n", "e", "s" } },
+  }
+  sentLog = {}
+  NebbieDash.runSpeedwalk(1)
+  check("sw: started running", NebbieDash._swRun.status == "running")
+  check("sw: first step sent", sentLog[1] == "n" and NebbieDash._swRun.awaitingMove == true)
+  check("sw: nextStep 1", NebbieDash._swRun.nextStep == 1)
+  NebbieDash.swRunOnMoveOk()
+  check("sw: after ok nextStep 2", NebbieDash._swRun.nextStep == 2)
+  check("sw: second step sent", sentLog[2] == "e")
+  NebbieDash.swRunOnFail("uscita bloccata")
+  check("sw: paused on fail", NebbieDash._swRun.status == "paused")
+  check("sw: paused at step 2", NebbieDash._swRun.nextStep == 2)
+  NebbieDash.swRunResume(false)
+  check("sw: resume retries step 2", NebbieDash._swRun.status == "running" and sentLog[#sentLog] == "e")
+  NebbieDash.swRunOnFail("di nuovo")
+  NebbieDash.swRunResume(true)
+  check("sw: skip to step 3", NebbieDash._swRun.nextStep == 3 and sentLog[#sentLog] == "s")
+  NebbieDash.swRunOnMoveOk()
+  check("sw: finished idle", NebbieDash._swRun.status == "idle")
+  check("sw: path in ndashboard", NebbieDash.speedwalkPath():find("ndashboard", 1, true) ~= nil)
+end
+
 print("")
 if failures == 0 then
   print("TUTTI I TEST OK (" .. #eqLines .. " righe eq, " .. #attribLines .. " righe attrib)")

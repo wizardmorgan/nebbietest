@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.88 — 2026-11-17
+
+- **nswui**: pannello floating speedwalk (lista path, sezioni, click per avviare).
+- **Motore speedwalk intelligente**: un passo alla volta; conferma con `Uscite:` /
+  buio; fail (uscita bloccata, caduta, disarmo, …) o timeout → pausa; ripresa con
+  `nsw resume` / `nsw skip` / `nsw stop`. Controllo manuale di movimento → pausa.
+- Path già in `profiles/ndashboard/nebbie-speedwalks.txt` (come gli ident). Sync
+  VPS remota **non** inclusa in questa release (ramo laterale ident-sync non mergiato).
+
 ## 1.15.87 — 2026-11-17
 
 - **nchat / clantell**: logga anche clan/casata (`Tu dici al clan/casata '…'`,
