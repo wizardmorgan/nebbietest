@@ -58,19 +58,25 @@ In Mudlet la base URL sarà ad es. `https://tuo.vps/nebbie-ident` (senza slash f
 
 ## Mudlet
 
-Nel file preferenze `profiles/ndashboard/nebbie-dash-preferences.txt`:
+URL di produzione: `https://nebbie.wizmorgan.it/nebbie-ident` (già default nel
+package). All’avvio, se manca il token, Mudlet chiede solo quello
+(`nidentsync token …`); `nidentsync skip` rimanda a dopo.
+
+Preferenze `profiles/ndashboard/nebbie-dash-preferences.txt`:
 
 ```
-ident_sync_url = https://tuo.vps/nebbie-ident
+ident_sync_url = https://nebbie.wizmorgan.it/nebbie-ident
 ident_sync_token = <stesso token del server>
 ident_sync_on_boot = off
+ident_sync_skip_prompt = off
 ```
 
-Poi in gioco:
+Comandi:
 
 - `nidentsync` — pull a pagine + merge + push
-- `nidentpull` — solo scarica/merge
-- `nidentpush` — solo invia il DB locale
+- `nidentpull` / `nidentpush`
+- `nidentsync token <segreto>` — salva token (+ sync)
+- `nidentsync skip` / `setup` — non chiedere all’avvio / ripropone
 - `nidentsync status` — URL mascherato + stato
 
 Non condividere il token; non finisce nei log del package (solo URL base).

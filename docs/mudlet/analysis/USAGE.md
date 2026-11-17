@@ -182,19 +182,26 @@ possesso, export CSV. Il comando di gioco `Distruggi …` sposta l’entry in De
 
 ### Sync VPS (`nidentsync`)
 
-Hub HTTPS tra PC (stesso schema del branch laterale, ora su `main`). Preferenze in
-`nebbie-dash-preferences.txt`:
+Hub HTTPS tra PC. URL di default fissa:
+`https://nebbie.wizmorgan.it/nebbie-ident`. All’avvio del profilo, se manca il
+token e non hai scelto «più tardi», compare un prompt: inserisci solo il token
+con `nidentsync token <segreto>` (oppure `nidentsync skip` / `dopo` per
+configurare in seguito). Preferenze in `nebbie-dash-preferences.txt`:
 
 ```
-ident_sync_url = https://tuo.vps/nebbie-ident
+ident_sync_url = https://nebbie.wizmorgan.it/nebbie-ident
 ident_sync_token = <segreto>
 ident_sync_on_boot = off
+ident_sync_skip_prompt = off
+ident_exclude_chars = Sirio
 ```
 
 Comandi: `nidentsync` (pull+merge+push), `nidentpull`, `nidentpush`,
-`nidentsync status|url …|token …|onboot on|off`.
-Server di riferimento: `tools/ident-sync-server/README.md` (va deployato sul VPS e
-configurato URL/token in Mudlet — non è “attivo” finché non lo fai).
+`nidentsync status|token …|skip|setup|onboot on|off` (anche `url …` se serve
+override). Server: `tools/ident-sync-server/README.md`.
+
+**Sirio / esclusi**: `ident_exclude_chars` (default `Sirio`) non salva identify,
+non li mostra in GUI e non li sincronizza.
 
 ## Archivio know monster (`nknowdb`)
 

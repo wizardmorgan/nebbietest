@@ -1,5 +1,15 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.90 — 2026-11-17
+
+- **Ident / Sirio**: personaggi in `ident_exclude_chars` (default `Sirio`) non
+  archiviano identify, non compaiono in GUI/filtri e non entrano in sync; entry
+  già solo-Sirio vanno in Deleted al load.
+- **Sync token all'avvio**: se manca il token, prompt con URL fissa
+  (`https://nebbie.wizmorgan.it/nebbie-ident`). Solo parametro: token via
+  `nidentsync token …`. `nidentsync skip` / link «più tardi» = configuri dopo
+  (`ident_sync_skip_prompt`). `nidentsync setup` ripropone il prompt.
+
 ## 1.15.89 — 2026-11-17
 
 - **Ident / soft-delete**: `nidentui` tab **Attivi | Deleted | Tutti**. Elimina → archivia

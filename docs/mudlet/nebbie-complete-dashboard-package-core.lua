@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.89"
+local PKG_VER = "1.15.90"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -687,12 +687,16 @@ function NebbieDash.ensurePreferencesFile()
     "chat_window = on\n" ..
     "# gold_alert = on           # avvisa se G: scende senza split/give/drop/pagamenti\n" ..
     "gold_alert = on\n" ..
-    "# ident_sync_url = https://tuo.vps/nebbie-ident\n" ..
+    "# ident_sync_url = https://nebbie.wizmorgan.it/nebbie-ident\n" ..
     "# ident_sync_token = <segreto>\n" ..
     "# ident_sync_on_boot = off\n" ..
-    "ident_sync_url = \n" ..
+    "# ident_sync_skip_prompt = off\n" ..
+    "# ident_exclude_chars = Sirio\n" ..
+    "ident_sync_url = https://nebbie.wizmorgan.it/nebbie-ident\n" ..
     "ident_sync_token = \n" ..
-    "ident_sync_on_boot = off\n"
+    "ident_sync_on_boot = off\n" ..
+    "ident_sync_skip_prompt = off\n" ..
+    "ident_exclude_chars = Sirio\n"
   )
   f:close()
 end
@@ -711,9 +715,11 @@ function NebbieDash.loadPreferences()
     text_highlights = true,
     chat_window = true,
     gold_alert = true,
-    ident_sync_url = "",
+    ident_sync_url = "https://nebbie.wizmorgan.it/nebbie-ident",
     ident_sync_token = "",
     ident_sync_on_boot = false,
+    ident_sync_skip_prompt = false,
+    ident_exclude_chars = "Sirio",
   }
   local path = NebbieDash.preferencesPath()
   if type(io.exists) == "function" and io.exists(path) then
@@ -742,6 +748,10 @@ function NebbieDash.loadPreferences()
             NebbieDash.prefs.ident_sync_token = val
           elseif key == "ident_sync_on_boot" then
             NebbieDash.prefs.ident_sync_on_boot = NebbieDash.parsePreferencesBool(val)
+          elseif key == "ident_sync_skip_prompt" then
+            NebbieDash.prefs.ident_sync_skip_prompt = NebbieDash.parsePreferencesBool(val)
+          elseif key == "ident_exclude_chars" then
+            NebbieDash.prefs.ident_exclude_chars = val
           end
         end
       end
@@ -753,6 +763,12 @@ function NebbieDash.loadPreferences()
   NebbieDash.textHighlights = NebbieDash.prefs.text_highlights ~= false
   NebbieDash.chatEnabled = NebbieDash.prefs.chat_window ~= false
   NebbieDash.goldAlert = NebbieDash.prefs.gold_alert ~= false
+  if not NebbieDash.prefs.ident_sync_url or NebbieDash.prefs.ident_sync_url == "" then
+    NebbieDash.prefs.ident_sync_url = "https://nebbie.wizmorgan.it/nebbie-ident"
+  end
+  if NebbieDash.prefs.ident_exclude_chars == nil or NebbieDash.prefs.ident_exclude_chars == "" then
+    NebbieDash.prefs.ident_exclude_chars = "Sirio"
+  end
 end
 
 function NebbieDash.savePreferencesFile()
@@ -768,9 +784,11 @@ function NebbieDash.savePreferencesFile()
     "text_highlights = " .. ((NebbieDash.prefs and NebbieDash.prefs.text_highlights ~= false) and "on" or "off") .. "\n" ..
     "chat_window = " .. ((NebbieDash.chatEnabled ~= false) and "on" or "off") .. "\n" ..
     "gold_alert = " .. ((NebbieDash.goldAlert ~= false) and "on" or "off") .. "\n" ..
-    "ident_sync_url = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_sync_url) or "") .. "\n" ..
+    "ident_sync_url = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_sync_url) or "https://nebbie.wizmorgan.it/nebbie-ident") .. "\n" ..
     "ident_sync_token = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_sync_token) or "") .. "\n" ..
-    "ident_sync_on_boot = " .. ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_on_boot) and "on" or "off") .. "\n"
+    "ident_sync_on_boot = " .. ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_on_boot) and "on" or "off") .. "\n" ..
+    "ident_sync_skip_prompt = " .. ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_skip_prompt) and "on" or "off") .. "\n" ..
+    "ident_exclude_chars = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_exclude_chars) or "Sirio") .. "\n"
   )
   f:close()
 end
@@ -3521,7 +3539,8 @@ function NebbieDash.identUiToolbar()
     "NebbieDash.identUiOpenSlotFilterPicker()",
     "Filtra per slot indossabile")
   NebbieDash.identUiCecho(" ")
-  if NebbieDash.currentChar and NebbieDash.currentChar ~= "" then
+  if NebbieDash.currentChar and NebbieDash.currentChar ~= ""
+      and not NebbieDash.isIdentExcludedChar(NebbieDash.currentChar) then
     NebbieDash.identUiCechoLink(
       "<magenta>[PG: " .. NebbieDash.currentChar .. "]",
       string.format("NebbieDash.identUiSetCharFilter(%q)", NebbieDash.currentChar),
@@ -4664,7 +4683,7 @@ NebbieDash.HELP_TEXT = {
   { "nidentui filter|slot|char|del|reset", "Filtri / archivia (Deleted) / reset nella finestra Ident." },
   { "nidentsync", "Sync identify DB con hub VPS (pull+merge+push)." },
   { "nidentpull / nidentpush", "Solo pull o solo push verso l'hub ident." },
-  { "nidentsync url|token|status|onboot", "Configura / mostra sync HTTPS (token in preferenze)." },
+  { "nidentsync token|skip|setup|status|onboot", "Token sync (URL fissa); skip=dopo; setup ripropone prompt." },
   { "nidentdb export <NomePg>", "CSV di tutti gli identify di un PG (file NomePg-gg-mm-aaaa-hh-mm-ss.csv)." },
   { "nidentdbreload", "Ricarica nebbie-ident-db.lua dalla cartella condivisa." },
   { "nknowdb [query]", "Cerca nell'archivio know monster condiviso (profiles/ndashboard)." },
@@ -6067,6 +6086,134 @@ function NebbieDash.migrateIdentCedibileFlags()
   end
 end
 
+-- Personaggi esclusi dall'archivio identify (default: Sirio, immortale batch).
+-- Non salvano identify, non compaiono in GUI/filtri, non entrano in sync;
+-- le entry gia' "di Sirio" vengono archiviate in Deleted.
+NebbieDash.IDENT_EXCLUDED_CHARS_DEFAULT = { "Sirio" }
+
+function NebbieDash.identExcludedCharSet()
+  local set = {}
+  local raw = (NebbieDash.prefs and NebbieDash.prefs.ident_exclude_chars) or ""
+  if raw == "" then
+    for _, name in ipairs(NebbieDash.IDENT_EXCLUDED_CHARS_DEFAULT or {}) do
+      set[tostring(name):lower()] = true
+    end
+    return set
+  end
+  for name in tostring(raw):gmatch("[^,]+") do
+    name = name:match("^%s*(.-)%s*$") or ""
+    if name ~= "" then set[name:lower()] = true end
+  end
+  return set
+end
+
+function NebbieDash.isIdentExcludedChar(name)
+  name = tostring(name or ""):match("^%s*(.-)%s*$") or ""
+  if name == "" then return false end
+  return NebbieDash.identExcludedCharSet()[name:lower()] == true
+end
+
+function NebbieDash.isIdentEntryFromExcludedChar(entry)
+  if type(entry) ~= "table" then return false end
+  if NebbieDash.isIdentExcludedChar(entry.lastCharacter) then return true end
+  local by = entry.byCharacter
+  if type(by) == "table" then
+    local n, allEx = 0, true
+    for who, _ in pairs(by) do
+      n = n + 1
+      if not NebbieDash.isIdentExcludedChar(who) then allEx = false end
+    end
+    if n > 0 and allEx then return true end
+  end
+  return false
+end
+
+-- Archivia entry identate (solo) da esclusi; toglie Sirio da byCharacter/possesso residui.
+function NebbieDash.purgeIdentEntriesFromExcludedChars()
+  NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
+  NebbieDash.identDb.entries = NebbieDash.identDb.entries or {}
+  local toArchive = {}
+  for key, entry in pairs(NebbieDash.identDb.entries) do
+    if type(entry) == "table" and NebbieDash.isIdentEntryFromExcludedChar(entry) then
+      table.insert(toArchive, key)
+    end
+  end
+  local archived = 0
+  for _, key in ipairs(toArchive) do
+    local entry = NebbieDash.identDb.entries[key]
+    if entry and not entry.archived then
+      NebbieDash.archiveIdentEntry(key, "excluded-char", "exclude-char")
+      archived = archived + 1
+    end
+  end
+  local scrubbed = 0
+  for _, entry in pairs(NebbieDash.identDb.entries) do
+    if type(entry) == "table" then
+      -- Non toccare entry gia' archiviate come excluded-char: restano
+      -- riconoscibili (lastCharacter/byCharacter Sirio) e restano fuori sync.
+      if entry.archiveReason == "excluded-char" then
+        -- leave as-is
+      else
+        local changed = false
+        if type(entry.byCharacter) == "table" then
+          for who, _ in pairs(entry.byCharacter) do
+            if NebbieDash.isIdentExcludedChar(who) then
+              entry.byCharacter[who] = nil
+              changed = true
+            end
+          end
+        end
+        if NebbieDash.isIdentExcludedChar(entry.lastCharacter) then
+          entry.lastCharacter = "unknown"
+          changed = true
+        end
+        local poss = entry.possession
+        if poss and NebbieDash.isIdentExcludedChar(poss.character) then
+          entry.possession = {
+            status = "unknown", character = nil, at = os.time(),
+            via = "exclude-char", from = poss.character,
+            displaySeen = poss.displaySeen,
+          }
+          changed = true
+        end
+        if changed then scrubbed = scrubbed + 1 end
+      end
+    end
+  end
+  if archived > 0 or scrubbed > 0 then
+    NebbieDash.scheduleIdentDbSave()
+  end
+  return archived, scrubbed
+end
+
+function NebbieDash.copyIdentEntriesForSync()
+  local out = {}
+  for key, entry in pairs((NebbieDash.identDb and NebbieDash.identDb.entries) or {}) do
+    if type(entry) == "table"
+        and entry.archiveReason ~= "excluded-char"
+        and not NebbieDash.isIdentEntryFromExcludedChar(entry) then
+      local copy = NebbieDash.deepCopyTable(entry)
+      if type(copy.byCharacter) == "table" then
+        for who, _ in pairs(copy.byCharacter) do
+          if NebbieDash.isIdentExcludedChar(who) then copy.byCharacter[who] = nil end
+        end
+      end
+      if copy.possession and NebbieDash.isIdentExcludedChar(copy.possession.character) then
+        copy.possession = {
+          status = "unknown", character = nil, at = copy.possession.at,
+          via = "exclude-char", from = copy.possession.character,
+          displaySeen = copy.possession.displaySeen,
+        }
+      end
+      if NebbieDash.isIdentExcludedChar(copy.lastCharacter) then
+        copy.lastCharacter = "unknown"
+      end
+      out[key] = copy
+    end
+  end
+  return out
+end
+
 function NebbieDash.loadIdentDb()
   NebbieDash.ensureConfigDir()
   NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
@@ -6079,6 +6226,7 @@ function NebbieDash.loadIdentDb()
       NebbieDash.identDb = loaded
       NebbieDash.identDb.entries = NebbieDash.identDb.entries or {}
       NebbieDash.migrateIdentCedibileFlags()
+      NebbieDash.purgeIdentEntriesFromExcludedChars()
     elseif ok and type(loaded) == "table" and loaded.objectName then
       -- file corrotto/parziale: ignora
     end
@@ -6262,6 +6410,7 @@ end
 
 function NebbieDash.upsertIdentRecord(parsed, character, source)
   if not parsed or not parsed.objectName then return nil end
+  if NebbieDash.isIdentExcludedChar(character) then return nil end
   local baseKey = NebbieDash.normalizeIdentObjectKey(parsed.objectName)
   if baseKey == "" then return nil end
   NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
@@ -6484,6 +6633,9 @@ end
 
 function NebbieDash.setIdentPossession(entry, status, character, via, displaySeen, fromChar)
   if not entry then return nil end
+  if status == "held" and NebbieDash.isIdentExcludedChar(character) then
+    return nil
+  end
   local now = os.time()
   local prev = entry.possession and entry.possession.character
   entry.possession = {
@@ -6715,6 +6867,9 @@ function NebbieDash.finishIdentArchiveCapture()
   if not cap then return end
   local parsed = NebbieDash.parseIdentifyFull(cap.lines)
   if not parsed then return end
+  if NebbieDash.isIdentExcludedChar(cap.character) then
+    return -- Sirio/esclusi: non archiviamo identify
+  end
   NebbieDash.upsertIdentRecord(parsed, cap.character, cap.source)
 end
 
@@ -6731,7 +6886,9 @@ function NebbieDash.searchIdentDb(query, opts)
   query = (query or ""):lower():match("^%s*(.-)%s*$") or ""
   local results = {}
   for _, entry in pairs((NebbieDash.identDb and NebbieDash.identDb.entries) or {}) do
-    if NebbieDash.isIdentArchived(entry) and opts.includeArchived ~= true then
+    if NebbieDash.isIdentEntryFromExcludedChar(entry) and opts.includeExcluded ~= true then
+      -- skip Sirio/esclusi
+    elseif NebbieDash.isIdentArchived(entry) and opts.includeArchived ~= true then
       -- skip Deleted
     elseif query == "" then
       table.insert(results, entry)
@@ -6764,10 +6921,13 @@ end
 function NebbieDash.listIdentDbByCharacter(charName, opts)
   opts = opts or {}
   charName = (charName or ""):match("^%s*(.-)%s*$") or ""
+  if NebbieDash.isIdentExcludedChar(charName) then return {} end
   local needle = charName:lower()
   local results = {}
   for _, entry in pairs((NebbieDash.identDb and NebbieDash.identDb.entries) or {}) do
-    if NebbieDash.isIdentArchived(entry) and opts.includeArchived ~= true then
+    if NebbieDash.isIdentEntryFromExcludedChar(entry) and opts.includeExcluded ~= true then
+      -- skip Sirio
+    elseif NebbieDash.isIdentArchived(entry) and opts.includeArchived ~= true then
       -- skip
     else
     local by = entry.byCharacter or {}
@@ -7253,6 +7413,8 @@ end
 -- Comandi: nidentsync | nidentpull | nidentpush | nidentsync status|url|token
 -- ---------------------------------------------------------------------------
 NebbieDash.IDENT_SYNC_PAGE_SIZE = 5
+-- URL sync fissa (solo il token e' richiesto all'utente).
+NebbieDash.IDENT_SYNC_DEFAULT_URL = "https://nebbie.wizmorgan.it/nebbie-ident"
 
 function NebbieDash.jsonEncode(value)
   if type(yajl) == "table" and type(yajl.to_string) == "function" then
@@ -7498,6 +7660,7 @@ function NebbieDash.mergeIdentDbFromRemoteEntries(remoteEntries)
       else unchanged = unchanged + 1 end
     end
   end
+  NebbieDash.purgeIdentEntriesFromExcludedChars()
   return inserted, updated, unchanged
 end
 
@@ -7656,7 +7819,7 @@ function NebbieDash.identSyncStartPush()
   st.expectPostUrl = url
   NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
   local payload = {
-    entries = NebbieDash.identDb.entries or {},
+    entries = NebbieDash.copyIdentEntriesForSync(),
   }
   local body = NebbieDash.jsonEncode(payload)
   if type(body) ~= "string" or body == "" then
@@ -7731,12 +7894,21 @@ function NebbieDash.cmdIdentSync(argStr)
   end
   if mode == "status" or mode == "info" then
     local ok, url = NebbieDash.identSyncConfigured()
+    local showUrl = url
+    if not showUrl or showUrl == "" then
+      showUrl = (NebbieDash.prefs and NebbieDash.prefs.ident_sync_url)
+        or NebbieDash.IDENT_SYNC_DEFAULT_URL
+        or "https://nebbie.wizmorgan.it/nebbie-ident"
+    end
     cecho("<green>[NebbieDash] Ident sync URL: <white>" ..
-      (ok and NebbieDash.identSyncMaskUrl(url) or "(non configurato)") .. "\n")
+      NebbieDash.identSyncMaskUrl(showUrl) ..
+      (ok and "" or " <grey>(token mancante)") .. "\n")
     cecho("<grey>Token: <white>" ..
       ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_token or "") ~= "" and "impostato" or "mancante") ..
       "<grey> — on_boot: <white>" ..
-      ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_on_boot) and "on" or "off") .. "\n")
+      ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_on_boot) and "on" or "off") ..
+      "<grey> — skip_prompt: <white>" ..
+      ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_skip_prompt) and "on" or "off") .. "\n")
     if NebbieDash.identSyncBusy() then
       cecho("<yellow>Stato: sync in corso.\n")
     end
@@ -7761,13 +7933,24 @@ function NebbieDash.cmdIdentSync(argStr)
   end
   if mode == "token" then
     if rest == "" then
-      cecho("<orange>[NebbieDash] Uso: nidentsync token <segreto>\n")
+      NebbieDash.promptIdentSyncTokenSetup(true)
       return
     end
+    NebbieDash.applyIdentSyncToken(rest)
+    return
+  end
+  if mode == "skip" or mode == "later" or mode == "dopo" then
     NebbieDash.prefs = NebbieDash.prefs or {}
-    NebbieDash.prefs.ident_sync_token = rest
+    NebbieDash.prefs.ident_sync_skip_prompt = true
     NebbieDash.savePreferencesFile()
-    cecho("<green>[NebbieDash] ident_sync_token salvato (non mostrato).\n")
+    cecho("<grey>[NebbieDash] Ok: non ripropongo il setup sync all'avvio. "
+      .. "Quando vuoi: <yellow>nidentsync token <segreto>\n")
+    return
+  end
+  if mode == "setup" or mode == "prompt" then
+    NebbieDash.prefs = NebbieDash.prefs or {}
+    NebbieDash.prefs.ident_sync_skip_prompt = false
+    NebbieDash.promptIdentSyncTokenSetup(true)
     return
   end
   if mode == "onboot" or mode == "boot" then
@@ -7782,7 +7965,7 @@ function NebbieDash.cmdIdentSync(argStr)
     cecho("<green>[NebbieDash] ident_sync_on_boot = " .. v .. "\n")
     return
   end
-  cecho("<orange>[NebbieDash] Uso: nidentsync [sync|pull|push|status|url …|token …|onboot on|off]\n")
+  cecho("<orange>[NebbieDash] Uso: nidentsync [sync|pull|push|status|token …|skip|setup|onboot on|off]\n")
 end
 
 function NebbieDash.cmdIdentPull()
@@ -7793,13 +7976,93 @@ function NebbieDash.cmdIdentPush()
   NebbieDash.cmdIdentSync("push")
 end
 
-function NebbieDash.maybeIdentSyncOnBoot()
-  if not (NebbieDash.prefs and NebbieDash.prefs.ident_sync_on_boot) then return end
-  if not NebbieDash.identSyncConfigured() then return end
-  if type(tempTimer) ~= "function" then return end
-  tempTimer(2.5, function()
-    if NebbieDash.identSyncBusy() then return end
+function NebbieDash.applyIdentSyncToken(token)
+  token = (token or ""):match("^%s*(.-)%s*$") or ""
+  if token == "" then
+    cecho("<orange>[NebbieDash] Token vuoto.\n")
+    return false
+  end
+  if token:lower() == "skip" or token:lower() == "dopo" or token:lower() == "later" then
+    NebbieDash.cmdIdentSync("skip")
+    return false
+  end
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  local defaultUrl = NebbieDash.IDENT_SYNC_DEFAULT_URL
+    or "https://nebbie.wizmorgan.it/nebbie-ident"
+  if not NebbieDash.prefs.ident_sync_url or NebbieDash.prefs.ident_sync_url == "" then
+    NebbieDash.prefs.ident_sync_url = defaultUrl
+  end
+  NebbieDash.prefs.ident_sync_token = token
+  NebbieDash.prefs.ident_sync_skip_prompt = true
+  NebbieDash.savePreferencesFile()
+  cecho("<green>[NebbieDash] Token sync salvato. URL: <white>"
+    .. NebbieDash.identSyncMaskUrl(NebbieDash.prefs.ident_sync_url) .. "\n")
+  cecho("<grey>Avvio sync… (<yellow>nidentsync status<grey> per verificare)\n")
+  if type(tempTimer) == "function" then
+    tempTimer(0.4, function()
+      if not NebbieDash.identSyncBusy() then
+        NebbieDash.startIdentSyncPull("sync")
+      end
+    end)
+  else
     NebbieDash.startIdentSyncPull("sync")
+  end
+  return true
+end
+
+-- Prompt all'avvio / su richiesta: chiede SOLO il token (URL fissa).
+function NebbieDash.promptIdentSyncTokenSetup(force)
+  local ok = NebbieDash.identSyncConfigured()
+  if ok and not force then return end
+  local url = (NebbieDash.prefs and NebbieDash.prefs.ident_sync_url)
+    or NebbieDash.IDENT_SYNC_DEFAULT_URL
+    or "https://nebbie.wizmorgan.it/nebbie-ident"
+  if url == "" then
+    url = "https://nebbie.wizmorgan.it/nebbie-ident"
+    NebbieDash.prefs = NebbieDash.prefs or {}
+    NebbieDash.prefs.ident_sync_url = url
+  end
+  cecho("\n<yellow>[NebbieDash] Sync identify non configurata (manca il token).\n")
+  cecho("<grey>URL (fissa): <white>" .. url .. "\n")
+  cecho("<grey>Inserisci il token con:\n")
+  cecho("  <yellow>nidentsync token <il-tuo-token>\n")
+  if type(cechoLink) == "function" then
+    cecho("<grey>Oppure: ")
+    cechoLink("<cyan>[più tardi]",
+      [[NebbieDash.cmdIdentSync("skip")]],
+      "Non chiedere più all'avvio; potrai configurare dopo", true)
+    cecho("  ")
+    cechoLink("<cyan>[ripeti istruzioni]",
+      [[NebbieDash.promptIdentSyncTokenSetup(true)]],
+      "Mostra di nuovo queste istruzioni", true)
+    cecho("\n")
+  else
+    cecho("<grey>Oppure: <yellow>nidentsync skip<grey> (configuri dopo)\n")
+  end
+  cecho("<grey>─────────────────────────────────────\n")
+end
+
+function NebbieDash.maybeIdentSyncOnBoot()
+  if type(tempTimer) ~= "function" then return end
+  tempTimer(2.0, function()
+    NebbieDash.prefs = NebbieDash.prefs or {}
+    -- Assicura URL di default anche su preferenze vecchie.
+    if not NebbieDash.prefs.ident_sync_url or NebbieDash.prefs.ident_sync_url == "" then
+      NebbieDash.prefs.ident_sync_url = NebbieDash.IDENT_SYNC_DEFAULT_URL
+        or "https://nebbie.wizmorgan.it/nebbie-ident"
+    end
+    local configured = NebbieDash.identSyncConfigured()
+    if not configured then
+      if NebbieDash.prefs.ident_sync_skip_prompt then
+        return
+      end
+      NebbieDash.promptIdentSyncTokenSetup(false)
+      return
+    end
+    if NebbieDash.prefs.ident_sync_on_boot then
+      if NebbieDash.identSyncBusy() then return end
+      NebbieDash.startIdentSyncPull("sync")
+    end
   end)
 end
 

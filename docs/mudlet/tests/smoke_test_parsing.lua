@@ -1521,13 +1521,19 @@ check("identdb: give anello qualsiasi NON altera DB cedibile",
   NebbieDash.identDb.entries["anello varco chiave senza porta"].possession.character == anelloOwnerBefore)
 
 NebbieDash.currentChar = "NomiyaMaki"
-line = "Dai il mantello dall'ombra profonda a Sirio."
+line = "Dai il mantello dall'ombra profonda a Betlegeuse."
 NebbieDash.onIdentGiveLine()
 local afterGive = NebbieDash.identDb.entries["mantello varco ombra profonda"]
-check("identdb: give → possesso Sirio",
+check("identdb: give → possesso Betlegeuse",
   afterGive and afterGive.possession and afterGive.possession.status == "held"
-    and afterGive.possession.character == "Sirio"
+    and afterGive.possession.character == "Betlegeuse"
     and afterGive.possession.via == "give")
+-- Sirio e' escluso: give verso Sirio non aggiorna il possesso
+local beforeSirioGive = afterGive.possession.character
+line = "Dai il mantello dall'ombra profonda a Sirio."
+NebbieDash.onIdentGiveLine()
+check("identdb: give → Sirio escluso non aggiorna possesso",
+  afterGive.possession.character == beforeSirioGive)
 
 line = "Posi il mantello dall'ombra profonda."
 NebbieDash.onIdentDropLine()
@@ -2139,7 +2145,7 @@ do
   -- seed stats equal fields on existing
   e.objectType = "ARMOR"
   e.vnumOriginario = "12345"
-  local up = NebbieDash.upsertIdentRecord(parsed, "Sirio", "spell")
+  local up = NebbieDash.upsertIdentRecord(parsed, "Testpg", "spell")
   check("ident: rename keeps key", up and up.key == "anello-test")
   check("ident: formerNames", up.formerNames and up.formerNames[1] == "un anello di test")
   check("ident: new name", up.objectName == "un anello rinominato")
@@ -2152,6 +2158,92 @@ do
     { lastAt = 2, objectName = "n", byCharacter = { B = { at = 2 } } })
   check("ident sync: merge newer wins", st == "updated" and merged.objectName == "n"
     and merged.byCharacter.A and merged.byCharacter.B)
+end
+
+-- Ident: esclusione Sirio + prompt sync token all'avvio
+do
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  NebbieDash.prefs.ident_exclude_chars = "Sirio"
+  check("ident exclude: Sirio default", NebbieDash.isIdentExcludedChar("Sirio") == true)
+  check("ident exclude: case", NebbieDash.isIdentExcludedChar("sirio") == true)
+  check("ident exclude: other ok", NebbieDash.isIdentExcludedChar("Testpg") == false)
+  local rejected = NebbieDash.upsertIdentRecord({
+    objectName = "una spada di sirio",
+    objectType = "WEAPON",
+    vnumOriginario = "999",
+    flags = "",
+    affects = {},
+  }, "Sirio", "spell")
+  check("ident exclude: upsert Sirio nil", rejected == nil)
+
+  NebbieDash.identDb = { entries = {} }
+  NebbieDash.identDb.entries["solo-sirio"] = {
+    key = "solo-sirio",
+    objectName = "un oggetto solo sirio",
+    objectType = "OTHER",
+    lastCharacter = "Sirio",
+    byCharacter = { Sirio = { at = 1 } },
+    lastAt = 1,
+  }
+  NebbieDash.identDb.entries["misto"] = {
+    key = "misto",
+    objectName = "un oggetto misto",
+    objectType = "OTHER",
+    lastCharacter = "Testpg",
+    byCharacter = { Sirio = { at = 1 }, Testpg = { at = 2 } },
+    lastAt = 2,
+    possession = { status = "held", character = "Sirio", at = 2 },
+  }
+  local archived, scrubbed = NebbieDash.purgeIdentEntriesFromExcludedChars()
+  check("ident exclude: purge archives Sirio-only", archived >= 1
+    and NebbieDash.isIdentArchived(NebbieDash.identDb.entries["solo-sirio"]))
+  check("ident exclude: scrubbed mixed", scrubbed >= 1
+    and NebbieDash.identDb.entries["misto"].byCharacter.Sirio == nil
+    and NebbieDash.identDb.entries["misto"].byCharacter.Testpg ~= nil)
+  local syncCopy = NebbieDash.copyIdentEntriesForSync()
+  check("ident exclude: sync skips Sirio-only", syncCopy["solo-sirio"] == nil)
+  check("ident exclude: sync keeps mixed scrubbed", syncCopy["misto"] ~= nil
+    and syncCopy["misto"].byCharacter.Sirio == nil)
+
+  check("ident sync: default URL set",
+    type(NebbieDash.IDENT_SYNC_DEFAULT_URL) == "string"
+      and NebbieDash.IDENT_SYNC_DEFAULT_URL:find("nebbie.wizmorgan.it", 1, true) ~= nil)
+
+  local realCecho = _G.cecho
+  local promptLog = {}
+  _G.cecho = function(msg) table.insert(promptLog, tostring(msg or "")) end
+  _G.cechoLink = nil
+  NebbieDash.prefs.ident_sync_url = NebbieDash.IDENT_SYNC_DEFAULT_URL
+  NebbieDash.prefs.ident_sync_token = ""
+  NebbieDash.prefs.ident_sync_skip_prompt = false
+  NebbieDash.promptIdentSyncTokenSetup(false)
+  check("ident sync: boot prompt mentions token",
+    table.concat(promptLog):find("nidentsync token", 1, true) ~= nil)
+  check("ident sync: boot prompt mentions skip",
+    table.concat(promptLog):find("nidentsync skip", 1, true) ~= nil
+      or table.concat(promptLog):find("più tardi", 1, true) ~= nil)
+
+  NebbieDash.cmdIdentSync("skip")
+  check("ident sync: skip sets flag", NebbieDash.prefs.ident_sync_skip_prompt == true)
+
+  local saveCalled = false
+  local realSave = NebbieDash.savePreferencesFile
+  NebbieDash.savePreferencesFile = function() saveCalled = true end
+  local realStart = NebbieDash.startIdentSyncPull
+  local startMode = nil
+  NebbieDash.startIdentSyncPull = function(mode) startMode = mode end
+  _G.tempTimer = nil
+  NebbieDash.applyIdentSyncToken("secret-test-token")
+  check("ident sync: apply token saves", saveCalled
+    and NebbieDash.prefs.ident_sync_token == "secret-test-token"
+    and NebbieDash.prefs.ident_sync_skip_prompt == true)
+  check("ident sync: apply token starts sync", startMode == "sync")
+  check("ident sync: apply token keeps default URL",
+    NebbieDash.prefs.ident_sync_url == NebbieDash.IDENT_SYNC_DEFAULT_URL)
+  NebbieDash.savePreferencesFile = realSave
+  NebbieDash.startIdentSyncPull = realStart
+  _G.cecho = realCecho
+  NebbieDash.prefs.ident_sync_token = ""
 end
 
 -- Speedwalk runner: conferma Uscite: / fail / pause / resume / skip
