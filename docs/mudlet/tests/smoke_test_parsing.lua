@@ -2216,12 +2216,18 @@ do
   NebbieDash.prefs.ident_sync_url = NebbieDash.IDENT_SYNC_DEFAULT_URL
   NebbieDash.prefs.ident_sync_token = ""
   NebbieDash.prefs.ident_sync_skip_prompt = false
+  NebbieDash._identSyncPromptAt = nil
   NebbieDash.promptIdentSyncTokenSetup(false)
   check("ident sync: boot prompt mentions token",
     table.concat(promptLog):find("nidentsync token", 1, true) ~= nil)
   check("ident sync: boot prompt mentions skip",
     table.concat(promptLog):find("nidentsync skip", 1, true) ~= nil
       or table.concat(promptLog):find("più tardi", 1, true) ~= nil)
+  local n1 = #promptLog
+  NebbieDash.promptIdentSyncTokenSetup(false)
+  check("ident sync: duplicate prompt suppressed", #promptLog == n1)
+  NebbieDash.promptIdentSyncTokenSetup(true)
+  check("ident sync: force prompt allowed", #promptLog > n1)
 
   NebbieDash.cmdIdentSync("skip")
   check("ident sync: skip sets flag", NebbieDash.prefs.ident_sync_skip_prompt == true)

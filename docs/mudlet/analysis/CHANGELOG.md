@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.91 — 2026-11-17
+
+- **Sync prompt**: durante `npackageupdate` `boot()` può partire più volte —
+  il prompt token compare **una sola volta** (debounce 90s + un solo timer).
+
 ## 1.15.90 — 2026-11-17
 
 - **Ident / Sirio**: personaggi in `ident_exclude_chars` (default `Sirio`) non

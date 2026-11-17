@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.90"
+local PKG_VER = "1.15.91"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -8014,6 +8014,16 @@ end
 function NebbieDash.promptIdentSyncTokenSetup(force)
   local ok = NebbieDash.identSyncConfigured()
   if ok and not force then return end
+  -- Durante npackageupdate boot() puo' partire 2–3 volte: un solo prompt.
+  if not force then
+    local now = os.time()
+    if NebbieDash._identSyncPromptAt and (now - NebbieDash._identSyncPromptAt) < 90 then
+      return
+    end
+    NebbieDash._identSyncPromptAt = now
+  else
+    NebbieDash._identSyncPromptAt = os.time()
+  end
   local url = (NebbieDash.prefs and NebbieDash.prefs.ident_sync_url)
     or NebbieDash.IDENT_SYNC_DEFAULT_URL
     or "https://nebbie.wizmorgan.it/nebbie-ident"
@@ -8044,7 +8054,13 @@ end
 
 function NebbieDash.maybeIdentSyncOnBoot()
   if type(tempTimer) ~= "function" then return end
-  tempTimer(2.0, function()
+  -- Un solo timer: boot ripetuti (install/PostInstall/sysInstall) lo riarmano.
+  if NebbieDash._identSyncBootTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._identSyncBootTimer)
+    NebbieDash._identSyncBootTimer = nil
+  end
+  NebbieDash._identSyncBootTimer = tempTimer(2.0, function()
+    NebbieDash._identSyncBootTimer = nil
     NebbieDash.prefs = NebbieDash.prefs or {}
     -- Assicura URL di default anche su preferenze vecchie.
     if not NebbieDash.prefs.ident_sync_url or NebbieDash.prefs.ident_sync_url == "" then
