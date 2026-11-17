@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.99 — 2026-11-17
+
+- **convertToUserWindow**: fix loop infinito. `mudlet.github.io` serve uno
+  **stub senza script** (Package Manager ok, `convertAdj` assente). Ora
+  scarichiamo la copia buona da `deps/` sul nostro repo (fallback raw GitHub
+  Mudlet); max **2** tentativi poi stop; path download unici; `nfix`
+  resetta `gaveUp`.
+
 ## 1.15.98 — 2026-11-17
 
 - **convertToUserWindow**: fix — dopo `npackageupdate` lo stato in memoria

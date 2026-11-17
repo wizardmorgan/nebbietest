@@ -46,10 +46,10 @@ community **`convertToUserWindow`** (doppio-click sulla barra titolo → UserWin
 
 In Mudlet i **package sono per profilo** (non uno solo per tutti). Dalla **1.15.94**,
 all’apertura di un profilo dove manca, NebbieDash lo **installa da solo**
-(una volta per quel profilo). Dalla **1.15.97** lo scarica con `downloadFile` e
-poi `installPackage` sul file locale; se compare in Package Manager ma non è
-caricato (`convertAdj` assente), fa **uninstall + reinstall**. Preferenza
-condivisa in `nebbie-dash-preferences.txt`:
+(una volta per quel profilo). Dalla **1.15.99** usa la copia in `deps/` del
+nostro repo (non `mudlet.github.io`, che pubblica uno stub senza script) e si
+ferma dopo al massimo 2 tentativi. Preferenza condivisa in
+`nebbie-dash-preferences.txt`:
 
 ```
 auto_install_convert_to_userwindow = on
@@ -62,12 +62,12 @@ mpkg install convertToUserWindow
 ```
 
 oppure
-`lua installPackage("https://mudlet.github.io/mudlet-package-repository/packages/convertToUserWindow.mpackage")`.
+`lua installPackage("https://raw.githubusercontent.com/Mudlet/mudlet-package-repository/main/packages/convertToUserWindow.mpackage")`.
 
 Se l’auto-install resta incompleta: `nfix` (ritenta) oppure disinstalla
-`convertToUserWindow` da Package Manager e rilancia `nfix` /
-`npackageupdate`. Dalla **1.15.98** un aggiornamento dashboard resetta lo
-stato CTUW in memoria così non resta bloccato dal tentativo precedente.
+`convertToUserWindow` da Package Manager e rilancia `nfix`. Se vedi un
+loop di messaggi CTUW su una versione &lt; 1.15.99, aggiorna subito con
+`npackageupdate` (o riavvia Mudlet e aggiorna).
 
 Alternativa avanzata Mudlet: importarlo come **modulo** (Alt+I) con sync su più
 profili — fuori scope del package Nebbie; l’auto-install per profilo è la via

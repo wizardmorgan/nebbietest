@@ -868,9 +868,11 @@ do
   local warnedDl = NebbieDash.warnMissingWindowMoveDeps(true)
   check("window-move: downloadFile when available",
     warnedDl == true and #downloadCalls == 1 and #installCalls == 0)
-  check("window-move: download URL mudlet.github.io",
-    (downloadCalls[1] and downloadCalls[1].url or ""):find("mudlet.github.io", 1, true) ~= nil)
-  check("window-move: download save path",
+  check("window-move: download URL from deps (not mudlet.github.io stub)",
+    (downloadCalls[1] and downloadCalls[1].url or ""):find(
+      "nebbie-mudlet-dashboard/main/deps/convertToUserWindow", 1, true) ~= nil
+      and not (downloadCalls[1].url or ""):find("mudlet.github.io", 1, true))
+  check("window-move: download save path unique",
     (downloadCalls[1] and downloadCalls[1].saveTo or ""):find("convertToUserWindow", 1, true) ~= nil)
   -- Simula sysDownloadDone → installPackage(file)
   local saveTo = downloadCalls[1].saveTo
@@ -898,9 +900,27 @@ do
   check("window-move: broken listed reinstalls",
     #installCalls == 1
       and (installCalls[1] or ""):find("convertToUserWindow", 1, true) ~= nil)
-  check("window-move: mentions uninstall incomplete",
-    table.concat(warnLog):find("install incompleta", 1, true) ~= nil
+  check("window-move: mentions uninstall without convertAdj",
+    table.concat(warnLog):find("senza convertAdj", 1, true) ~= nil
       or table.concat(warnLog):find("Disinstallo", 1, true) ~= nil)
+
+  -- Hard stop: niente loop infinito dopo max tentativi
+  NebbieDash._windowMoveWarnAt = nil
+  NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallAttempt = NebbieDash.CTUW_MAX_ATTEMPTS or 2
+  NebbieDash._ctuwGaveUp = nil
+  _G.convertAdj = nil
+  _G.getPackageInfo = function() return "" end
+  installCalls = {}
+  warnLog = {}
+  local blocked = NebbieDash.installConvertToUserWindow({})
+  check("window-move: max attempts blocks further install",
+    blocked == false and #installCalls == 0 and NebbieDash._ctuwGaveUp == true)
+  installCalls = {}
+  NebbieDash.maybeEnsureConvertToUserWindow()
+  check("window-move: maybeEnsure respects gaveUp", #installCalls == 0)
+  NebbieDash._ctuwGaveUp = nil
+  NebbieDash._ctuwInstallAttempt = 0
 
   NebbieDash.prefs.auto_install_convert_to_userwindow = false
   NebbieDash._windowMoveWarnAt = nil
