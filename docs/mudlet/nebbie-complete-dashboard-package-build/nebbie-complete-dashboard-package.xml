@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.97"
+local PKG_VER = "1.15.98"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -38,6 +38,14 @@ local _prevPkgVer = NebbieDash and NebbieDash._loadedVer
 if NebbieDash and _prevPkgVer and _prevPkgVer ~= PKG_VER then
   NebbieDash._mainLoaded = false
   NebbieDash._lastBootTime = nil
+  -- Stato CTUW vive nella tabella NebbieDash anche dopo uninstall/reinstall
+  -- del package: senza reset, un debounce 90s saltava l'auto-install in silenzio.
+  NebbieDash._windowMoveWarnAt = nil
+  NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallAttempt = 0
+  NebbieDash._ctuwDownloadSaveTo = nil
+  NebbieDash._ctuwInstallStartedAt = nil
+  NebbieDash._bootAnnounceAt = nil
 end
 
 NebbieDash = NebbieDash or {}
@@ -2853,30 +2861,26 @@ function NebbieDash.installConvertToUserWindow(opts)
 end
 
 -- All'apertura profilo: se manca convertToUserWindow, installalo (default) o avvisa.
+-- Il debounce 90s vale SOLO per i messaggi (Adjustable / auto-off), NON per
+-- l'install CTUW: saltare l'install in silenzio era il bug visto in 1.15.97.
 function NebbieDash.warnMissingWindowMoveDeps(force)
-  if not force then
-    local t = os.time()
-    if NebbieDash._windowMoveWarnAt and (t - NebbieDash._windowMoveWarnAt) < 90 then
-      -- Pending bloccato da un download morto: sblocca e riprova.
-      if NebbieDash._ctuwInstallPending and not NebbieDash.hasConvertToUserWindowPackage() then
-        local started = NebbieDash._ctuwInstallStartedAt or 0
-        if os.time() - started > 25 then
-          NebbieDash._ctuwInstallPending = nil
-        else
-          return false
-        end
-      else
-        return false
-      end
-    end
-  end
   local missingAdj = not (type(Adjustable) == "table" and type(Adjustable.Container) == "table")
   local missingCtuw = not NebbieDash.hasConvertToUserWindowPackage()
   local brokenListed = NebbieDash.convertToUserWindowListed() and missingCtuw
   if not missingAdj and not missingCtuw then return false end
-  NebbieDash._windowMoveWarnAt = os.time()
 
-  if missingAdj then
+  local announceMsg = force and true or false
+  if not announceMsg then
+    local t = os.time()
+    if not (NebbieDash._windowMoveWarnAt and (t - NebbieDash._windowMoveWarnAt) < 90) then
+      announceMsg = true
+      NebbieDash._windowMoveWarnAt = t
+    end
+  else
+    NebbieDash._windowMoveWarnAt = os.time()
+  end
+
+  if missingAdj and announceMsg then
     cecho("\n<orange>[NebbieDash] Manca <white>Adjustable.Container<orange> (Geyser). "
       .. "Aggiorna Mudlet (4.14+ consigliata).\n")
   end
@@ -2887,10 +2891,12 @@ function NebbieDash.warnMissingWindowMoveDeps(force)
 
   local auto = not (NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow == false)
   if not auto then
-    cecho("\n<orange>[NebbieDash] Manca <white>convertToUserWindow<orange> "
-      .. "(finestre staccabili). Auto-install disattivato.\n")
-    NebbieDash.echoConvertToUserWindowManualInstall()
-    cecho("<grey>─────────────────────────────────────\n")
+    if announceMsg then
+      cecho("\n<orange>[NebbieDash] Manca <white>convertToUserWindow<orange> "
+        .. "(finestre staccabili). Auto-install disattivato.\n")
+      NebbieDash.echoConvertToUserWindowManualInstall()
+      cecho("<grey>─────────────────────────────────────\n")
+    end
     return true
   end
 
@@ -2901,7 +2907,7 @@ function NebbieDash.warnMissingWindowMoveDeps(force)
   return true
 end
 
--- Chiamata anche su boot "silenzioso" (dopo npackageupdate multiplo): se manca, ritenta.
+-- Chiamata su ogni boot (anche silenzioso): se manca CTUW, ritenta.
 function NebbieDash.maybeEnsureConvertToUserWindow()
   if NebbieDash.hasConvertToUserWindowPackage() then return end
   local auto = not (NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow == false)
@@ -2910,6 +2916,7 @@ function NebbieDash.maybeEnsureConvertToUserWindow()
     local started = NebbieDash._ctuwInstallStartedAt or 0
     if os.time() - started < 25 then return end
     NebbieDash._ctuwInstallPending = nil
+    NebbieDash._ctuwDownloadSaveTo = nil
   end
   NebbieDash._ctuwInstallStartedAt = os.time()
   NebbieDash.installConvertToUserWindow({
@@ -11547,10 +11554,11 @@ function NebbieDash.boot(forceAnnounce)
   else
     -- Upgrade gia' annunciato al primo boot di questa install: scarta il flag.
     NebbieDash._upgradeFromVer = nil
-    -- Boot silenzioso (npackageupdate multiplo): ritenta CTUW se manca.
-    if type(NebbieDash.maybeEnsureConvertToUserWindow) == "function" then
-      NebbieDash.maybeEnsureConvertToUserWindow()
-    end
+  end
+  -- Sempre: se CTUW manca, installa (warnMissing gia' prova sul boot announce;
+  -- maybeEnsure e' no-op se pending fresco o gia' presente).
+  if type(NebbieDash.maybeEnsureConvertToUserWindow) == "function" then
+    NebbieDash.maybeEnsureConvertToUserWindow()
   end
   -- Check GitHub: se main e' avanti, suggerisce npackageupdate (silenzioso se ok).
   if NebbieDash._bootVerCheckTimer and type(killTimer) == "function" then

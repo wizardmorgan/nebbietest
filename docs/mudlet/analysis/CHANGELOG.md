@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.98 — 2026-11-17
+
+- **convertToUserWindow**: fix — dopo `npackageupdate` lo stato in memoria
+  (`_windowMoveWarnAt` / pending) poteva far **saltare in silenzio**
+  l’auto-install. Ora: reset CTUW ad ogni cambio versione; il debounce 90s
+  limita solo i messaggi, non l’install; `maybeEnsure` su ogni boot.
+
 ## 1.15.97 — 2026-11-17
 
 - **convertToUserWindow**: install più robusto — `downloadFile` +

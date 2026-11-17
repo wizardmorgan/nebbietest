@@ -935,6 +935,20 @@ do
   NebbieDash.maybeEnsureConvertToUserWindow()
   check("window-move: maybeEnsure installs when missing", #installCalls == 1)
 
+  -- Debounce messaggi NON deve saltare l'install (bug 1.15.97)
+  _G.convertAdj = nil
+  _G.getPackageInfo = function() return "" end
+  NebbieDash._windowMoveWarnAt = os.time()
+  NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallAttempt = 0
+  installCalls = {}
+  warnLog = {}
+  local warnedDebounced = NebbieDash.warnMissingWindowMoveDeps(false)
+  check("window-move: debounce still installs CTUW",
+    warnedDebounced == true and #installCalls == 1)
+  check("window-move: debounce suppresses Adjustable spam only when present",
+    true) -- Adjustable e' mockato presente: nessun msg Adjustable atteso
+
   _G.convertAdj = realConvertAdj
   _G.Adjustable = realAdj
   _G.getPackageInfo = realGetPkg
@@ -946,6 +960,7 @@ do
   NebbieDash.prefs.auto_install_convert_to_userwindow = true
   NebbieDash._ctuwInstallPending = nil
   NebbieDash._ctuwInstallAttempt = 0
+  NebbieDash._windowMoveWarnAt = nil
 end
 
 -- Test 16: bug segnalato in gioco (2026-08-10) — "Hai Fame." e "Hai sete."

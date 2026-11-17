@@ -66,7 +66,8 @@ oppure
 
 Se l’auto-install resta incompleta: `nfix` (ritenta) oppure disinstalla
 `convertToUserWindow` da Package Manager e rilancia `nfix` /
-`npackageupdate`.
+`npackageupdate`. Dalla **1.15.98** un aggiornamento dashboard resetta lo
+stato CTUW in memoria così non resta bloccato dal tentativo precedente.
 
 Alternativa avanzata Mudlet: importarlo come **modulo** (Alt+I) con sync su più
 profili — fuori scope del package Nebbie; l’auto-install per profilo è la via
