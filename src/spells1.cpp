@@ -24,6 +24,7 @@
 #include "magic2.hpp"
 #include "spells.hpp"
 #include "fight.hpp"
+#include "handler.hpp"
 namespace Alarmud {
 
 
@@ -31,6 +32,9 @@ namespace Alarmud {
 
 void cast_burning_hands(byte level, struct char_data* ch,const char* arg, int type,
 						struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, nullptr)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_WAND:
 	case SPELL_TYPE_SPELL:
@@ -47,6 +51,9 @@ void cast_burning_hands(byte level, struct char_data* ch,const char* arg, int ty
 
 void cast_call_lightning(byte level, struct char_data* ch,const char* arg, int type,
 						 struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 
 	switch(type) {
 	case SPELL_TYPE_SPELL:
@@ -77,7 +84,7 @@ void cast_call_lightning(byte level, struct char_data* ch,const char* arg, int t
 			staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
 			for(victim = real_roomp(ch->in_room)->people ;
 					victim ; victim = victim->next_in_room)
-				if(!in_group(victim,ch) && !area_target_untouchable(ch, victim)) {
+				if(!in_group(victim,ch) && !area_spell_untouchable(ch, victim)) {
 					spell_call_lightning(level, ch, victim, 0);
 				}
 		}
@@ -91,6 +98,9 @@ void cast_call_lightning(byte level, struct char_data* ch,const char* arg, int t
 
 void cast_chill_touch(byte level, struct char_data* ch,const char* arg, int type,
 					  struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 	case SPELL_TYPE_WAND:
@@ -105,6 +115,9 @@ void cast_chill_touch(byte level, struct char_data* ch,const char* arg, int type
 
 void cast_shocking_grasp(byte level, struct char_data* ch,const char* arg, int type,
 						 struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 	case SPELL_TYPE_WAND:
@@ -120,6 +133,9 @@ void cast_shocking_grasp(byte level, struct char_data* ch,const char* arg, int t
 
 void cast_colour_spray(byte level, struct char_data* ch,const char* arg, int type,
 					   struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_colour_spray(level, ch, victim, 0);
@@ -146,6 +162,9 @@ void cast_colour_spray(byte level, struct char_data* ch,const char* arg, int typ
 
 void cast_earthquake(byte level, struct char_data* ch,const char* arg, int type,
 					 struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, nullptr)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_WAND: //Acidus 2003, ora il quake si usa anche su armi
 	case SPELL_TYPE_SPELL:
@@ -162,6 +181,9 @@ void cast_earthquake(byte level, struct char_data* ch,const char* arg, int type,
 
 void cast_energy_drain(byte level, struct char_data* ch,const char* arg, int type,
 					   struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_energy_drain(level, ch, victim, 0);
@@ -186,7 +208,7 @@ void cast_energy_drain(byte level, struct char_data* ch,const char* arg, int typ
 		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
 		for(victim = real_roomp(ch->in_room)->people ;
 				victim ; victim = victim->next_in_room)
-			if(!in_group(ch,victim) && !area_target_untouchable(ch, victim))
+			if(!in_group(ch,victim) && !area_spell_untouchable(ch, victim))
 				if(victim != ch) {
 					spell_energy_drain(level, ch, victim, 0);
 				}
@@ -200,6 +222,9 @@ void cast_energy_drain(byte level, struct char_data* ch,const char* arg, int typ
 
 void cast_fireball(byte level, struct char_data* ch,const char* arg, int type,
 				   struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, nullptr)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_WAND:
 	case SPELL_TYPE_SPELL:
@@ -216,6 +241,9 @@ void cast_fireball(byte level, struct char_data* ch,const char* arg, int type,
 
 void cast_harm(byte level, struct char_data* ch,const char* arg, int type,
 			   struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_harm(level, ch, victim, 0);
@@ -227,7 +255,7 @@ void cast_harm(byte level, struct char_data* ch,const char* arg, int type,
 		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
 		for(victim = real_roomp(ch->in_room)->people ;
 				victim ; victim = victim->next_in_room)
-			if(!in_group(ch,victim) && !area_target_untouchable(ch, victim)) {
+			if(!in_group(ch,victim) && !area_spell_untouchable(ch, victim)) {
 				spell_harm(level, ch, victim, 0);
 			}
 		break;
@@ -240,6 +268,9 @@ void cast_harm(byte level, struct char_data* ch,const char* arg, int type,
 
 void cast_lightning_bolt(byte level, struct char_data* ch,const char* arg, int type,
 						 struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_lightning_bolt(level, ch, victim, 0);
@@ -265,6 +296,9 @@ void cast_lightning_bolt(byte level, struct char_data* ch,const char* arg, int t
 
 void cast_acid_blast(byte level, struct char_data* ch,const char* arg, int type,
 					 struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_acid_blast(level, ch, victim, 0);
@@ -290,6 +324,9 @@ void cast_acid_blast(byte level, struct char_data* ch,const char* arg, int type,
 
 void cast_cone_of_cold(byte level, struct char_data* ch,const char* arg, int type,
 					   struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, nullptr)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 	case SPELL_TYPE_SCROLL:
@@ -304,6 +341,9 @@ void cast_cone_of_cold(byte level, struct char_data* ch,const char* arg, int typ
 
 void cast_ice_storm(byte level, struct char_data* ch,const char* arg, int type,
 					struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, nullptr)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 	case SPELL_TYPE_SCROLL:
@@ -318,6 +358,9 @@ void cast_ice_storm(byte level, struct char_data* ch,const char* arg, int type,
 
 void cast_meteor_swarm(byte level, struct char_data* ch,const char* arg, int type,
 					   struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_meteor_swarm(level, ch, victim, 0);
@@ -343,6 +386,9 @@ void cast_meteor_swarm(byte level, struct char_data* ch,const char* arg, int typ
 
 void cast_flamestrike(byte level, struct char_data* ch,const char* arg, int type,
 					  struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_flamestrike(level, ch, victim, 0);
@@ -368,6 +414,9 @@ void cast_flamestrike(byte level, struct char_data* ch,const char* arg, int type
 
 void cast_magic_missile(byte level, struct char_data* ch,const char* arg, int type,
 						struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_magic_missile(level, ch, victim, 0);
@@ -394,6 +443,9 @@ void cast_magic_missile(byte level, struct char_data* ch,const char* arg, int ty
 
 void cast_cause_light(byte level, struct char_data* ch,const char* arg, int type,
 					  struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 	case SPELL_TYPE_WAND:
@@ -403,8 +455,8 @@ void cast_cause_light(byte level, struct char_data* ch,const char* arg, int type
 		spell_cause_light(level, ch, ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(victim = real_roomp(ch->in_room)->people ;
-				victim ; victim = victim->next_in_room)
+		for(victim = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
+				victim ; victim = skip_anti_magic(ch, victim->next_in_room))
 			if(!in_group(ch,victim)) {
 				spell_cause_light(level, ch, victim, 0);
 			}
@@ -417,6 +469,9 @@ void cast_cause_light(byte level, struct char_data* ch,const char* arg, int type
 
 void cast_cause_serious(byte level, struct char_data* ch,const char* arg, int type,
 						struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_cause_serious(level, ch, victim, 0);
@@ -437,7 +492,7 @@ void cast_cause_serious(byte level, struct char_data* ch,const char* arg, int ty
 		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
 		for(victim = real_roomp(ch->in_room)->people ;
 				victim ; victim = victim->next_in_room)
-			if(!in_group(ch,victim) && !area_target_untouchable(ch, victim)) {
+			if(!in_group(ch,victim) && !area_spell_untouchable(ch, victim)) {
 				spell_cause_serious(level, ch, victim, 0);
 			}
 		break;
@@ -450,6 +505,9 @@ void cast_cause_serious(byte level, struct char_data* ch,const char* arg, int ty
 
 void cast_cause_critic(byte level, struct char_data* ch,const char* arg, int type,
 					   struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_cause_critical(level, ch, victim, 0);
@@ -476,7 +534,7 @@ void cast_cause_critic(byte level, struct char_data* ch,const char* arg, int typ
 		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
 		for(victim = real_roomp(ch->in_room)->people ;
 				victim ; victim = victim->next_in_room)
-			if(!in_group(ch,victim) && !area_target_untouchable(ch, victim)) {
+			if(!in_group(ch,victim) && !area_spell_untouchable(ch, victim)) {
 				spell_cause_critical(level, ch, victim, 0);
 			}
 		break;
@@ -489,6 +547,9 @@ void cast_cause_critic(byte level, struct char_data* ch,const char* arg, int typ
 
 void cast_geyser(byte level, struct char_data* ch, const char* arg, int type,
 				 struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, nullptr)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 	case SPELL_TYPE_SCROLL:
@@ -505,6 +566,9 @@ void cast_geyser(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_green_slime(byte level, struct char_data* ch,const char* arg, int type,
 					  struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_green_slime(level, ch, victim, 0);
@@ -532,6 +596,9 @@ void cast_green_slime(byte level, struct char_data* ch,const char* arg, int type
 void cast_incendiary_cloud(byte level, struct char_data* ch,const char* arg,
 						   int type, struct char_data* victim,
 						   struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, nullptr)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_WAND:
 	case SPELL_TYPE_SPELL:
@@ -548,6 +615,9 @@ void cast_incendiary_cloud(byte level, struct char_data* ch,const char* arg,
 void cast_prismatic_spray(byte level, struct char_data* ch,const char* arg,
 						  int type, struct char_data* victim,
 						  struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, nullptr)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_WAND:
 	case SPELL_TYPE_SPELL:
@@ -563,6 +633,9 @@ void cast_prismatic_spray(byte level, struct char_data* ch,const char* arg,
 
 void cast_wizard_eye(byte level, struct char_data* ch,const char* arg, int type,
 					 struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_WAND:
 	case SPELL_TYPE_SPELL:
@@ -578,6 +651,9 @@ void cast_wizard_eye(byte level, struct char_data* ch,const char* arg, int type,
 
 void cast_disintegrate(byte level, struct char_data* ch,const char* arg, int type,
 					   struct char_data* victim, struct obj_data* tar_obj) {
+	if(blocked_by_anti_magic(ch, victim)) {
+		return;
+	}
 	switch(type) {
 	case SPELL_TYPE_WAND:
 	case SPELL_TYPE_SPELL:

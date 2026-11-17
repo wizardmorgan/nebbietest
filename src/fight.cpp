@@ -8,6 +8,7 @@
 /***************************  System  include ************************************/
 #include <cstdio>
 #include <cstring>
+#include <cctype>
 #include <cassert>
 #include <cstdlib>
 #include <ctime>
@@ -349,6 +350,61 @@ bool area_target_untouchable(char_data* ch, char_data* v) {
 		   (mob_untouchable(v) || victim_is_immortal_pc(v));
 }
 
+/* Globo anti-magia: lo attraversa solo un personaggio (non mob) di livello
+ * MAESTRO_DEGLI_DEI o piu', come in spell_dispel_magic. Se polimorfato conta
+ * il personaggio originale. */
+bool anti_magic_bypass(char_data* caster) {
+	if(caster == nullptr) {
+		return false;
+	}
+	char_data* real = caster;
+	if(IS_POLY(caster) && caster->desc != nullptr && caster->desc->original != nullptr) {
+		real = caster->desc->original;
+	}
+	return !IS_NPC(real) && GetMaxLevel(real) >= MAESTRO_DEGLI_DEI;
+}
+
+bool anti_magic_shields(char_data* caster, char_data* target) {
+	return target != nullptr && affected_by_spell(target, SPELL_ANTI_MAGIC_SHELL) &&
+		   !anti_magic_bypass(caster);
+}
+
+bool blocked_by_anti_magic(char_data* ch, char_data* victim) {
+	if(ch == nullptr) {
+		return false;
+	}
+	if(anti_magic_shields(ch, ch)) {
+		act("Il tuo incantesimo svanisce contro il tuo stesso globo $c0012anti-magia$c0007!",
+			FALSE, ch, nullptr, nullptr, TO_CHAR);
+		act("L'incantesimo di $n svanisce contro il suo stesso globo $c0012anti-magia$c0007.",
+			FALSE, ch, nullptr, nullptr, TO_ROOM);
+		return true;
+	}
+	if(victim != nullptr && victim != ch && anti_magic_shields(ch, victim)) {
+		act("Il tuo incantesimo svanisce contro il globo $c0012anti-magia$c0007 di $N!",
+			FALSE, ch, nullptr, victim, TO_CHAR);
+		act("L'incantesimo di $n svanisce contro il tuo globo $c0012anti-magia$c0007!",
+			FALSE, ch, nullptr, victim, TO_VICT);
+		act("L'incantesimo di $n svanisce contro il globo $c0012anti-magia$c0007 di $N.",
+			FALSE, ch, nullptr, victim, TO_NOTVICT);
+		return true;
+	}
+	return false;
+}
+
+bool area_spell_untouchable(char_data* ch, char_data* v) {
+	return area_target_untouchable(ch, v) ||
+		   (ch != nullptr && v != nullptr && v != ch && v->in_room == ch->in_room &&
+			anti_magic_shields(ch, v));
+}
+
+char_data* skip_anti_magic(char_data* ch, char_data* v) {
+	while(v != nullptr && v != ch && anti_magic_shields(ch, v)) {
+		v = v->next_in_room;
+	}
+	return v;
+}
+
 void area_skip_notice(char_data* ch, bool skipped) {
 	if(skipped && ch != nullptr) {
 		act(pick(kAreaSkipped), FALSE, ch, nullptr, nullptr, TO_CHAR);
@@ -370,7 +426,7 @@ void staff_skip_notice(char_data* ch, bool skip_group) {
 		if(skip_group && in_group(ch, u)) {
 			continue;
 		}
-		if(area_target_untouchable(ch, u)) {
+		if(area_spell_untouchable(ch, u)) {
 			skipped = true;
 			break;
 		}
@@ -2501,6 +2557,73 @@ int SetVictFighting(struct char_data* ch, struct char_data* v) {
  * DamageTrivia, letto e azzerato da DamageMessages. */
 static bool g_weapon_immunity_block = false;
 
+/* Poteri psionici: non sono magia, l'anti magic shell non li ferma.
+ * Non stanno in IsMagicSpell perche' li' decidono anche l'assorbimento. */
+static bool is_psionic_attack(int type) {
+	switch(type) {
+	case SKILL_MIND_BURN:
+	case SKILL_PSYCHIC_CRUSH:
+	case SKILL_ULTRA_BLAST:
+	case SKILL_DISINTEGRATE:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/* Nome italiano degli incantesimi di danno, con genere e numero per
+ * accordare articoli e verbi nei messaggi. Se manca, si usa
+ * "incantesimo <nome inglese>". */
+struct SpellNameIt {
+	const char* nome;
+	bool femminile;
+	bool plurale;
+};
+
+static SpellNameIt spell_name_it(int type) {
+	switch(type) {
+	case SPELL_ACID_BLAST:       return {"scarica acida", true, false};
+	case SPELL_ACID_BREATH:      return {"soffio acido", false, false};
+	case SPELL_BURNING_HANDS:    return {"mani di fuoco", true, true};
+	case SPELL_CALL_LIGHTNING:   return {"richiamo del fulmine", false, false};
+	case SPELL_CAUSE_CRITICAL:   return {"ferita critica", true, false};
+	case SPELL_CAUSE_LIGHT:      return {"ferita leggera", true, false};
+	case SPELL_CAUSE_SERIOUS:    return {"ferita grave", true, false};
+	case SPELL_CHAIN_LIGHTNING:  return {"fulmini a catena", false, true};
+	case SPELL_CHILL_TOUCH:      return {"tocco gelido", false, false};
+	case SPELL_COLOUR_SPRAY:     return {"raggio multicolore", false, false};
+	case SPELL_CONE_OF_COLD:     return {"cono di freddo", false, false};
+	case SPELL_DISINTEGRATE:     return {"raggio disintegrante", false, false};
+	case SPELL_EARTHQUAKE:       return {"terremoto", false, false};
+	case SPELL_ENERGY_DRAIN:     return {"prosciugamento vitale", false, false};
+	case SPELL_FIREBALL:         return {"palla di fuoco", true, false};
+	case SPELL_FIRESTORM:        return {"tempesta di fuoco", true, false};
+	case SPELL_FIRE_BREATH:      return {"soffio di fiamma", false, false};
+	case SPELL_FLAMESTRIKE:      return {"colonna di fiamme", true, false};
+	case SPELL_FROST_BREATH:     return {"soffio di gelo", false, false};
+	case SPELL_GAS_BREATH:       return {"soffio velenoso", false, false};
+	case SPELL_GEYSER:           return {"getto bollente", false, false};
+	case SPELL_GREEN_SLIME:      return {"melma verde", true, false};
+	case SPELL_HARM:             return {"ferita devastante", true, false};
+	case SPELL_HEAT_STUFF:       return {"incandescenza", true, false};
+	case SPELL_HOLY_WORD:        return {"parola sacra", true, false};
+	case SPELL_ICE_STORM:        return {"tempesta di ghiaccio", true, false};
+	case SPELL_INCENDIARY_CLOUD: return {"nube di fuoco", true, false};
+	case SPELL_LIGHTNING_BOLT:   return {"fulmine", false, false};
+	case SPELL_LIGHTNING_BREATH: return {"soffio elettrico", false, false};
+	case SPELL_MAGIC_MISSILE:    return {"dardo magico", false, false};
+	case SPELL_METEOR_SWARM:     return {"sciame di meteore", false, false};
+	case SPELL_MINOR_HARM:       return {"ferita lacerante", true, false};
+	case SPELL_POISON:           return {"veleno", false, false};
+	case SPELL_PRISMATIC_SPRAY:  return {"getto prismatico", false, false};
+	case SPELL_PWORD_KILL:       return {"parola della morte", true, false};
+	case SPELL_SHOCKING_GRASP:   return {"stretta folgorante", true, false};
+	case SPELL_SUNRAY:           return {"raggio solare", false, false};
+	case SPELL_UNHOLY_WORD:      return {"parola empia", true, false};
+	default:                     return {nullptr, false, false};
+	}
+}
+
 int DamageTrivia(struct char_data* ch, struct char_data* v,
 				 int dam, int type, int location, int* stuff_dam) {
 
@@ -2638,16 +2761,29 @@ int DamageTrivia(struct char_data* ch, struct char_data* v,
 
 	} /* else non-breath type hit/spell */
 	else {
-		if(affected_by_spell(v, SPELL_ANTI_MAGIC_SHELL) &&
-				IsMagicSpell(type)) {
-			sprintf(buf,"$N ridacchia come il %s da $n muore sul suo globo "
-					"anti-magia!", spells[ type - 1 ]);
+		if(anti_magic_shields(ch, v) &&
+				IsMagicSpell(type) && !is_psionic_attack(type)) {
+			SpellNameIt sn = spell_name_it(type);
+			char nome[256];
+			if(sn.nome == nullptr) {
+				snprintf(nome, sizeof(nome), "incantesimo %s", spells[ type - 1 ]);
+				sn = {nome, false, false};
+			}
+			const char* art = sn.plurale ? (sn.femminile ? "le" : "i")
+										 : (sn.femminile ? "la" : "il");
+			const char* tuo = sn.plurale ? (sn.femminile ? "le tue" : "i tuoi")
+										 : (sn.femminile ? "la tua" : "il tuo");
+			const char* spegne = sn.plurale ? "si spengono" : "si spegne";
+			sprintf(buf, "$N ridacchia mentre %s %s di $n %s sul suo globo "
+					"anti-magia!", art, sn.nome, spegne);
 			act(buf, FALSE, ch, 0, v, TO_NOTVICT);
-			sprintf(buf,"Il globo anti-magia di $N ferma il tuo %s",
-					spells[ type - 1 ]);
+			sprintf(buf, "%s %s %s contro il globo anti-magia di $N!",
+					tuo, sn.nome, spegne);
+			buf[0] = toupper(buf[0]);
 			act(buf, FALSE, ch, 0, v, TO_CHAR);
-			sprintf(buf,"Il tuo globo anti-magia ferma il %s di $n!",
-					spells[ type - 1 ]);
+			sprintf(buf, "%s %s di $n %s contro il tuo globo anti-magia!",
+					art, sn.nome, spegne);
+			buf[0] = toupper(buf[0]);
 			act(buf, FALSE, ch, 0, v, TO_VICT);
 			dam = -1;
 		}
@@ -5487,6 +5623,7 @@ int PreProcDam(struct char_data* ch, int type, int dam, int classe) {
 	case SPELL_METEOR_SWARM:
 	case SPELL_SUNRAY:
 	case SPELL_DISINTEGRATE:
+	case SKILL_DISINTEGRATE:
 	case TYPE_GENERIC_ENERGY:
 		Our_Bit = IMM_ENERGY;
 		break;
@@ -5956,6 +6093,7 @@ int GetItemDamageType(int type) {
 	case SPELL_METEOR_SWARM:
 	case SPELL_GAS_BREATH:
 	case SPELL_DISINTEGRATE:
+	case SKILL_DISINTEGRATE:
 	case TYPE_GENERIC_ENERGY:
 		return(BLOW_DAMAGE);
 		break;
