@@ -1556,14 +1556,18 @@ check("identdb: give su non-cedibile non aggiorna",
 NebbieDash.cmdIdentDbSetCedibile("mantello varco ombra profonda", true)
 check("identdb: cedibile manuale riattivato", afterHold.cedibile == true)
 
--- UI gestore: delete + filtri
+-- UI gestore: soft-delete (archivio) + filtri
 local delKey = "anello varco chiave senza porta"
 check("identui: entry anello presente prima del delete",
   NebbieDash.getIdentEntryByKey(delKey) ~= nil)
 local delOk = NebbieDash.deleteIdentEntry(delKey)
 check("identui: deleteIdentEntry ok", delOk == true)
-check("identui: entry assente dopo delete", NebbieDash.getIdentEntryByKey(delKey) == nil)
-check("identui: delete inesistente fallisce", NebbieDash.deleteIdentEntry(delKey) == false)
+check("identui: entry archiviata dopo delete",
+  NebbieDash.getIdentEntryByKey(delKey) ~= nil
+    and NebbieDash.isIdentArchived(NebbieDash.getIdentEntryByKey(delKey)))
+check("identui: search nasconde archiviati",
+  #NebbieDash.searchIdentDb("anello varco chiave") == 0)
+check("identui: second archive still ok", NebbieDash.deleteIdentEntry(delKey) == true)
 NebbieDash._identUiState.filter = "mantello"
 NebbieDash._identUiState.charFilter = ""
 NebbieDash._identUiState.slotFilter = ""
@@ -2099,6 +2103,55 @@ do
   NebbieDash.goldAlert = true
   NebbieDash.resetGoldAlertBaseline(nil)
   NebbieDash._goldSpendExpectedUntil = 0
+end
+
+-- Ident soft-delete / destroy / rename + JSON sync helpers
+do
+  NebbieDash.identDb = { entries = {} }
+  local e = {
+    key = "anello-test",
+    objectName = "un anello di test",
+    objectType = "ARMOR",
+    vnumOriginario = "12345",
+    flags = "",
+    affects = {},
+    lastAt = 100,
+  }
+  NebbieDash.identDb.entries[e.key] = e
+  local ok = NebbieDash.archiveIdentEntry(e.key, "manual", "manual")
+  check("ident: archive", ok and NebbieDash.isIdentArchived(e))
+  check("ident: search skips archived", #NebbieDash.searchIdentDb("") == 0)
+  check("ident: search include archived", #NebbieDash.searchIdentDb("", { includeArchived = true }) == 1)
+  NebbieDash.restoreIdentEntry(e.key)
+  check("ident: restore", not NebbieDash.isIdentArchived(e))
+  local destroyed = NebbieDash.markIdentDestroyedByItemText("un anello di test")
+  check("ident: destroy by text", destroyed and NebbieDash.isIdentArchived(destroyed)
+    and NebbieDash.identLifecycleStatus(destroyed) == "destroyed")
+  NebbieDash.restoreIdentEntry(e.key)
+  -- rename via same vnum+stats
+  local parsed = {
+    objectName = "un anello rinominato",
+    objectType = "ARMOR",
+    vnumOriginario = "12345",
+    flags = "",
+    affects = {},
+  }
+  -- seed stats equal fields on existing
+  e.objectType = "ARMOR"
+  e.vnumOriginario = "12345"
+  local up = NebbieDash.upsertIdentRecord(parsed, "Sirio", "spell")
+  check("ident: rename keeps key", up and up.key == "anello-test")
+  check("ident: formerNames", up.formerNames and up.formerNames[1] == "un anello di test")
+  check("ident: new name", up.objectName == "un anello rinominato")
+
+  local enc = NebbieDash.jsonEncodePure({ a = 1, b = "x", c = true })
+  local dec = NebbieDash.jsonDecodePure(enc)
+  check("ident sync: json roundtrip", type(dec) == "table" and dec.a == 1 and dec.b == "x" and dec.c == true)
+  local merged, st = NebbieDash.mergeIdentEntryLocal(
+    { lastAt = 1, byCharacter = { A = { at = 1 } } },
+    { lastAt = 2, objectName = "n", byCharacter = { B = { at = 2 } } })
+  check("ident sync: merge newer wins", st == "updated" and merged.objectName == "n"
+    and merged.byCharacter.A and merged.byCharacter.B)
 end
 
 -- Speedwalk runner: conferma Uscite: / fail / pause / resume / skip

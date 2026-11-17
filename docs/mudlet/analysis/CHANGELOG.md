@@ -1,5 +1,16 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.89 — 2026-11-17
+
+- **Ident / soft-delete**: `nidentui` tab **Attivi | Deleted | Tutti**. Elimina → archivia
+  (ripristinabile); purge definitivo solo da Deleted. `Distruggi …` (comando in gioco) marca
+  `destroyed` e sposta in Deleted.
+- **Rename oedit**: stesso `vnumOriginario` + stesse stats → aggiorna nome e tiene
+  `formerNames[]` (niente doppione cieco).
+- **Sync VPS**: `nidentsync` / `nidentpull` / `nidentpush` + preferenze
+  `ident_sync_url` / `ident_sync_token` / `ident_sync_on_boot`. Server in
+  `tools/ident-sync-server/`.
+
 ## 1.15.88 — 2026-11-17
 
 - **nswui**: pannello floating speedwalk (lista path, sezioni, click per avviare).

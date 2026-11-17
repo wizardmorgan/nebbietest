@@ -175,8 +175,26 @@ nidentui reset
 nidentui off
 ```
 
-In finestra (click): apri dettaglio, elimina (con conferma), toggle cedibile, sort/pagine,
-filtro solo-cedibili, filtro PG attivo, assegna possesso al PG corrente, export CSV.
+In finestra (click): tab **Attivi / Deleted / Tutti**, dettaglio, **archivia** (soft-delete
+ripristinabile) o purge definitivo da Deleted, toggle cedibile, sort/pagine, filtri,
+possesso, export CSV. Il comando di gioco `Distruggi …` sposta l’entry in Deleted come
+`destroyed`. Rename da oedit con stesso vnum+stats aggiorna il nome e tiene i nomi precedenti.
+
+### Sync VPS (`nidentsync`)
+
+Hub HTTPS tra PC (stesso schema del branch laterale, ora su `main`). Preferenze in
+`nebbie-dash-preferences.txt`:
+
+```
+ident_sync_url = https://tuo.vps/nebbie-ident
+ident_sync_token = <segreto>
+ident_sync_on_boot = off
+```
+
+Comandi: `nidentsync` (pull+merge+push), `nidentpull`, `nidentpush`,
+`nidentsync status|url …|token …|onboot on|off`.
+Server di riferimento: `tools/ident-sync-server/README.md` (va deployato sul VPS e
+configurato URL/token in Mudlet — non è “attivo” finché non lo fai).
 
 ## Archivio know monster (`nknowdb`)
 
