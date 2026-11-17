@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.87 — 2026-11-17
+
+- **nchat / clantell**: logga anche clan/casata (`Tu dici al clan/casata '…'`,
+  `[Nome] dice al clan/casata '…'`). Era pronto in 1.15.70 su un branch laterale
+  ma non era su `main`.
+
 ## 1.15.86 — 2026-11-17
 
 - **nautosplit**: di nuovo controlla `group` prima di `split`. Se sei da solo

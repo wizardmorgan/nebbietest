@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.86"
+local PKG_VER = "1.15.87"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -2377,8 +2377,9 @@ function NebbieDash.teardownGui()
 end
 
 -- ---------------------------------------------------------------------------
--- Finestra floating chat: raccoglie say / gtell / tell / whisper / ask /
--- gossip / shout (formati reali da act.comm.cpp). Indipendente dal sidebar.
+-- Finestra floating chat: raccoglie say / gtell / clantell / tell / whisper /
+-- ask / gossip / shout. Formati reali da act.comm.cpp (gtell/say/…) e canale
+-- clan/casata (parallelo a gtell; non c'e' comando "clantell" in myst).
 -- ---------------------------------------------------------------------------
 NebbieDash.chatEnabled = true
 NebbieDash._chatTrigs = NebbieDash._chatTrigs or {}
@@ -2386,6 +2387,7 @@ NebbieDash.CHAT_CHANNEL_COLORS = {
   say = "white",
   gossip = "yellow",
   gtell = "cyan",
+  clantell = "orange",
   tell = "magenta",
   whisper = "green",
   ask = "blue",
@@ -2503,7 +2505,7 @@ function NebbieDash.initChatWindow()
   NebbieDash._chatCreated = true
   NebbieDash._chatHidden = false
   NebbieDash.chatConsoleCecho(
-    "<grey>Canali: say · gt · tell · whisper · ask · gossip · shout\n"
+    "<grey>Canali: say · gt · clan · tell · whisper · ask · gossip · shout\n"
       .. "Comandi: <yellow>nchat<grey> (toggle) · <yellow>nchat clear<grey> · <yellow>nchat off\n")
 end
 
@@ -2515,6 +2517,15 @@ function NebbieDash.parseChatLine(text)
   local msg = text:match("^Tu dici al gruppo '(.+)'%s*$")
   if msg then
     return { channel = "gtell", speaker = "Tu", message = msg, self = true }
+  end
+  -- Clantell / casata (parallelo a gtell; formati tipici IT se il canale e' attivo).
+  msg = text:match("^Tu dici al clan '(.+)'%s*$")
+  if msg then
+    return { channel = "clantell", speaker = "Tu", message = msg, self = true }
+  end
+  msg = text:match("^Tu dici alla casata '(.+)'%s*$")
+  if msg then
+    return { channel = "clantell", speaker = "Tu", message = msg, self = true }
   end
 
   local target
@@ -2552,6 +2563,14 @@ function NebbieDash.parseChatLine(text)
   who, msg = text:match("^%[(.-)%] dice al gruppo '(.+)'%s*$")
   if who and msg then
     return { channel = "gtell", speaker = who, message = msg }
+  end
+  who, msg = text:match("^%[(.-)%] dice al clan '(.+)'%s*$")
+  if who and msg then
+    return { channel = "clantell", speaker = who, message = msg }
+  end
+  who, msg = text:match("^%[(.-)%] dice alla casata '(.+)'%s*$")
+  if who and msg then
+    return { channel = "clantell", speaker = who, message = msg }
   end
   who, msg = text:match("^%[(.-)%] vi dice '(.+)'%s*$")
   if who and msg then
@@ -2624,12 +2643,16 @@ function NebbieDash.installChatTriggers()
   if type(tempTrigger) ~= "function" then return end
   local patterns = {
     "Tu dici al gruppo '",
+    "Tu dici al clan '",
+    "Tu dici alla casata '",
     "Tu dici a ",
     "Tu sussurri a ",
     "Tu chiedi a ",
     "Tu gridi '",
     "Tu dici '",
     "] dice al gruppo '",
+    "] dice al clan '",
+    "] dice alla casata '",
     "] vi dice '",
     "] ti dice '",
     "] ti sussurra '",
@@ -2697,7 +2720,7 @@ function NebbieDash.cmdChat(argStr)
     return
   end
   cecho("<orange>[NebbieDash] Uso: <yellow>nchat<orange> | <yellow>nchat on|off|clear\n")
-  cecho("<grey>Raccoglie: say, gt/gtell, tell, whisper, ask, gossip, shout.\n")
+  cecho("<grey>Raccoglie: say, gt/gtell, clantell/casata, tell, whisper, ask, gossip, shout.\n")
 end
 
 -- ---------------------------------------------------------------------------
@@ -3910,7 +3933,7 @@ NebbieDash.HELP_TEXT = {
   { "nknowdb [query]", "Cerca nell'archivio know monster condiviso (profiles/ndashboard)." },
   { "nknowdb race <razza>", "Elenca mostri per razza (es. nknowdb race Goblinoid)." },
   { "nknowdbreload", "Ricarica nebbie-know-db.lua dalla cartella condivisa." },
-  { "nchat", "Mostra/nascondi la finestra floating chat (say/gt/tell/whisper/ask/gossip/shout)." },
+  { "nchat", "Mostra/nascondi la finestra floating chat (say/gt/clan/tell/whisper/ask/gossip/shout)." },
   { "nchat on|off|clear", "Attiva/disattiva o svuota la finestra chat." },
   { "ngoldalert [on|off|status]", "Avvisa se ti sottraggono monete (ignora split/give/drop/pagamenti)." },
   { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) per usa/disarmo." },

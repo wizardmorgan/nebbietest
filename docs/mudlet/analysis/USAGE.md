@@ -200,6 +200,7 @@ Dalla **1.15.63** una finestra floating raccoglie i canali di comunicazione:
 |--------|------------------|
 | say | `say` / `'` |
 | gtell | `gt` / `gtell` |
+| clantell | clan / casata (`Tu dici al clan/casata '…'`, `[Nome] dice al clan/casata '…'`) |
 | tell | `tell` |
 | whisper | `whisper` |
 | ask | `ask` |
