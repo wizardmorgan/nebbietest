@@ -819,6 +819,8 @@ do
   local realAdj = _G.Adjustable
   local realConvertAdj = _G.convertAdj
   local realInstall = _G.installPackage
+  local realUninstall = _G.uninstallPackage
+  local realDownload = _G.downloadFile
   local realReg = _G.registerAnonymousEventHandler
   _G.Adjustable = { Container = {} }
   _G.registerAnonymousEventHandler = function() end
@@ -829,7 +831,12 @@ do
   end
   _G.convertAdj = nil
   local installCalls = {}
+  local uninstallCalls = {}
+  local downloadCalls = {}
   _G.installPackage = function(url) table.insert(installCalls, url) end
+  _G.uninstallPackage = function(name) table.insert(uninstallCalls, name) end
+  -- Senza downloadFile: fallback installPackage(URL) (test smoke offline).
+  _G.downloadFile = nil
   local warnLog = {}
   local realCechoW = _G.cecho
   _G.cecho = function(msg) table.insert(warnLog, tostring(msg or "")) end
@@ -837,17 +844,71 @@ do
   NebbieDash.prefs.auto_install_convert_to_userwindow = true
   NebbieDash._windowMoveWarnAt = nil
   NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallAttempt = 0
   NebbieDash._ctuwInstallHandlerReady = nil
+  NebbieDash._ctuwDownloadHandlersReady = nil
   local warned = NebbieDash.warnMissingWindowMoveDeps(true)
   check("window-move: auto-install when missing", warned == true and #installCalls == 1)
   check("window-move: install URL convertToUserWindow",
     (installCalls[1] or ""):find("convertToUserWindow", 1, true) ~= nil)
   check("window-move: mentions auto install",
     table.concat(warnLog):find("Installo", 1, true) ~= nil)
+  check("window-move: no uninstall on fresh install", #uninstallCalls == 0)
+
+  -- downloadFile path: scarica file locale poi installPackage(path)
+  NebbieDash._windowMoveWarnAt = nil
+  NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallAttempt = 0
+  installCalls = {}
+  downloadCalls = {}
+  warnLog = {}
+  _G.downloadFile = function(saveTo, url)
+    table.insert(downloadCalls, { saveTo = saveTo, url = url })
+  end
+  local warnedDl = NebbieDash.warnMissingWindowMoveDeps(true)
+  check("window-move: downloadFile when available",
+    warnedDl == true and #downloadCalls == 1 and #installCalls == 0)
+  check("window-move: download URL mudlet.github.io",
+    (downloadCalls[1] and downloadCalls[1].url or ""):find("mudlet.github.io", 1, true) ~= nil)
+  check("window-move: download save path",
+    (downloadCalls[1] and downloadCalls[1].saveTo or ""):find("convertToUserWindow", 1, true) ~= nil)
+  -- Simula sysDownloadDone → installPackage(file)
+  local saveTo = downloadCalls[1].saveTo
+  NebbieDash.onCtuwDownloadDone(nil, saveTo)
+  check("window-move: installPackage after downloadDone",
+    #installCalls == 1 and installCalls[1] == saveTo)
+
+  -- Listed ma senza convertAdj → uninstall + reinstall
+  _G.downloadFile = nil
+  _G.getPackageInfo = function(name, key)
+    if name == "convertToUserWindow" then return "0.1" end
+    return ""
+  end
+  _G.convertAdj = nil
+  NebbieDash._windowMoveWarnAt = nil
+  NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallAttempt = 0
+  installCalls = {}
+  uninstallCalls = {}
+  warnLog = {}
+  local warnedBroken = NebbieDash.warnMissingWindowMoveDeps(true)
+  check("window-move: broken listed triggers uninstall",
+    warnedBroken == true and #uninstallCalls == 1
+      and uninstallCalls[1] == "convertToUserWindow")
+  check("window-move: broken listed reinstalls",
+    #installCalls == 1
+      and (installCalls[1] or ""):find("convertToUserWindow", 1, true) ~= nil)
+  check("window-move: mentions uninstall incomplete",
+    table.concat(warnLog):find("install incompleta", 1, true) ~= nil
+      or table.concat(warnLog):find("Disinstallo", 1, true) ~= nil)
 
   NebbieDash.prefs.auto_install_convert_to_userwindow = false
   NebbieDash._windowMoveWarnAt = nil
   NebbieDash._ctuwInstallPending = nil
+  _G.getPackageInfo = function(name, key)
+    if name == "convertToUserWindow" then return "" end
+    return ""
+  end
   installCalls = {}
   warnLog = {}
   local warnedManual = NebbieDash.warnMissingWindowMoveDeps(true)
@@ -863,13 +924,28 @@ do
   local warned2 = NebbieDash.warnMissingWindowMoveDeps(true)
   check("window-move: silent when convertAdj present", warned2 == false and #warnLog == 0
     and #installCalls == 0)
+
+  -- maybeEnsure su boot silenzioso
+  _G.convertAdj = nil
+  _G.getPackageInfo = function() return "" end
+  NebbieDash.prefs.auto_install_convert_to_userwindow = true
+  NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallAttempt = 0
+  installCalls = {}
+  NebbieDash.maybeEnsureConvertToUserWindow()
+  check("window-move: maybeEnsure installs when missing", #installCalls == 1)
+
   _G.convertAdj = realConvertAdj
   _G.Adjustable = realAdj
   _G.getPackageInfo = realGetPkg
   _G.installPackage = realInstall
+  _G.uninstallPackage = realUninstall
+  _G.downloadFile = realDownload
   _G.registerAnonymousEventHandler = realReg
   _G.cecho = realCechoW
   NebbieDash.prefs.auto_install_convert_to_userwindow = true
+  NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallAttempt = 0
 end
 
 -- Test 16: bug segnalato in gioco (2026-08-10) — "Hai Fame." e "Hai sete."

@@ -57,6 +57,8 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 
 - **Equip** sul bordo sinistro (`eq`, slot vuoti, colori posizione). Speedwalk
   nella finestra floating **`nswui`** (pausa/riprendi). Niente pannello spell GUI.
+- **convertToUserWindow** (finestre staccabili): auto-install per profilo con
+  download+install locale; se l’install e’ incompleta, uninstall+reinstall.
 - **Preferenze** `nebbie-dash-preferences.txt`: sync ident, chat, gold alert,
   `weapon_swap_delay`, `sanity_neq_on_login` (`npreferencesreload`).
 - **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +

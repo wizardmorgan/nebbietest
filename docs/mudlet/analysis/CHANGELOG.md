@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.97 — 2026-11-17
+
+- **convertToUserWindow**: install più robusto — `downloadFile` +
+  `installPackage(file)` (URL ufficiale mudlet.github.io, fallback GitHub);
+  se il package risulta in Package Manager ma `convertAdj` manca (download
+  senza install completa), **uninstall + reinstall**; watchdog 20s e secondo
+  tentativo; ritento anche sui boot silenziosi dopo `npackageupdate`.
+  `nfix` resetta lo stato pending.
+
 ## 1.15.96 — 2026-11-17
 
 - **GUI**: colonna sinistra = **solo Equip** (rimossa la lista speedwalk sotto).

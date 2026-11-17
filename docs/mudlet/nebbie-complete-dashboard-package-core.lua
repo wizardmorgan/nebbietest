@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.96"
+local PKG_VER = "1.15.97"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -2629,21 +2629,26 @@ function NebbieDash.canUseFloatingSidebar()
     and type(Geyser) == "table" and type(Geyser.MiniConsole) == "table"
 end
 
--- Package community (Edru): doppio-click su Adjustable.Container → UserWindow staccabile.
--- Nota Mudlet: i package sono PER PROFILO (non globali). Un "modulo" con sync
--- poterbbe condividere codice, ma convertToUserWindow e' distribuito come package.
--- Soluzione pratica: auto-install all'apertura se manca (una volta per profilo).
+-- Package community (Edru): doppio-click su Adjustable.Container → UserWindow.
+-- Package Mudlet = per profilo. URL ufficiale (come mpkg), non raw GitHub
+-- refs/heads (a volte il download parte e l'install non completa).
 NebbieDash.CONVERT_TO_USERWINDOW_PKG = "convertToUserWindow"
 NebbieDash.CONVERT_TO_USERWINDOW_URL =
-  "https://github.com/Mudlet/mudlet-package-repository/raw/refs/heads/main/packages/convertToUserWindow.mpackage"
+  "https://mudlet.github.io/mudlet-package-repository/packages/convertToUserWindow.mpackage"
+NebbieDash.CONVERT_TO_USERWINDOW_URL_FALLBACK =
+  "https://github.com/Mudlet/mudlet-package-repository/raw/main/packages/convertToUserWindow.mpackage"
+
+function NebbieDash.convertToUserWindowListed()
+  if type(getPackageInfo) ~= "function" then return false end
+  local v = getPackageInfo(NebbieDash.CONVERT_TO_USERWINDOW_PKG, "version")
+  return v ~= nil and tostring(v) ~= ""
+end
 
 function NebbieDash.hasConvertToUserWindowPackage()
+  -- Runtime reale: convertAdj.Init. Solo "listed" in Package Manager non basta
+  -- (install interrotta / XML non caricato).
   if type(convertAdj) == "table" and type(convertAdj.Init) == "function" then
     return true
-  end
-  if type(getPackageInfo) == "function" then
-    local v = getPackageInfo(NebbieDash.CONVERT_TO_USERWINDOW_PKG, "version")
-    if v and tostring(v) ~= "" then return true end
   end
   return false
 end
@@ -2661,11 +2666,28 @@ end
 function NebbieDash.onConvertToUserWindowInstalled(event, packageName)
   if packageName and packageName ~= NebbieDash.CONVERT_TO_USERWINDOW_PKG then return end
   NebbieDash._ctuwInstallPending = nil
-  if type(convertAdj) == "table" and type(convertAdj.Init) == "function" then
-    pcall(convertAdj.Init)
+  NebbieDash._ctuwInstallAttempt = 0
+  if type(tempTimer) == "function" then
+    -- Script del package possono arrivare un attimo dopo l'evento.
+    tempTimer(0.4, function()
+      if type(convertAdj) == "table" and type(convertAdj.Init) == "function" then
+        pcall(convertAdj.Init)
+      end
+      if NebbieDash.hasConvertToUserWindowPackage() then
+        cecho("<green>[NebbieDash] convertToUserWindow pronto su questo profilo. "
+          .. "Doppio-click sulla barra titolo per staccare le finestre.\n")
+      else
+        cecho("<orange>[NebbieDash] convertToUserWindow risulta in Package Manager ma "
+          .. "runtime assente — riprovo uninstall+reinstall.\n")
+        NebbieDash.installConvertToUserWindow({ force = true })
+      end
+    end)
+  else
+    if type(convertAdj) == "table" and type(convertAdj.Init) == "function" then
+      pcall(convertAdj.Init)
+    end
+    cecho("<green>[NebbieDash] convertToUserWindow installato su questo profilo.\n")
   end
-  cecho("<green>[NebbieDash] convertToUserWindow installato su questo profilo. "
-    .. "Doppio-click sulla barra titolo per staccare le finestre.\n")
 end
 
 function NebbieDash.ensureConvertToUserWindowHandlers()
@@ -2675,16 +2697,176 @@ function NebbieDash.ensureConvertToUserWindowHandlers()
   NebbieDash._ctuwInstallHandlerReady = true
 end
 
+function NebbieDash.ctuwDownloadPath()
+  local home = (type(getMudletHomeDir) == "function" and getMudletHomeDir()) or "/tmp"
+  return tostring(home):gsub("/+$", "") .. "/nebbie-dash-convertToUserWindow.mpackage"
+end
+
+function NebbieDash.onCtuwDownloadDone(_, saveTo)
+  if not NebbieDash._ctuwInstallPending then return end
+  if saveTo ~= NebbieDash._ctuwDownloadSaveTo then return end
+  NebbieDash._ctuwDownloadSaveTo = nil
+  if type(installPackage) ~= "function" then
+    NebbieDash._ctuwInstallPending = nil
+    cecho("<red>[NebbieDash] installPackage non disponibile dopo download CTUW.\n")
+    return
+  end
+  cecho("<grey>[NebbieDash] Installo convertToUserWindow dal file scaricato...\n")
+  local ok, err = pcall(installPackage, saveTo)
+  if not ok then
+    NebbieDash._ctuwInstallPending = nil
+    cecho("<red>[NebbieDash] installPackage(CTUW) fallita: " .. tostring(err) .. "\n")
+    NebbieDash.echoConvertToUserWindowManualInstall()
+  end
+end
+
+function NebbieDash.onCtuwDownloadError(_, msg, saveTo)
+  if not NebbieDash._ctuwInstallPending then return end
+  if saveTo and NebbieDash._ctuwDownloadSaveTo and saveTo ~= NebbieDash._ctuwDownloadSaveTo then
+    return
+  end
+  NebbieDash._ctuwDownloadSaveTo = nil
+  local attempt = NebbieDash._ctuwInstallAttempt or 1
+  if attempt < 2 then
+    cecho("<orange>[NebbieDash] Download CTUW fallito (" .. tostring(msg)
+      .. ") — riprovo con URL alternativo...\n")
+    NebbieDash._ctuwInstallPending = nil
+    NebbieDash.installConvertToUserWindow({
+      force = true,
+      url = NebbieDash.CONVERT_TO_USERWINDOW_URL_FALLBACK,
+    })
+    return
+  end
+  NebbieDash._ctuwInstallPending = nil
+  cecho("<red>[NebbieDash] Download convertToUserWindow fallito: " .. tostring(msg) .. "\n")
+  NebbieDash.echoConvertToUserWindowManualInstall()
+end
+
+function NebbieDash.ensureCtuwDownloadHandlers()
+  if NebbieDash._ctuwDownloadHandlersReady then return end
+  if type(registerAnonymousEventHandler) ~= "function" then return end
+  registerAnonymousEventHandler("sysDownloadDone", "NebbieDash.onCtuwDownloadDone")
+  registerAnonymousEventHandler("sysDownloadError", "NebbieDash.onCtuwDownloadError")
+  NebbieDash._ctuwDownloadHandlersReady = true
+end
+
+function NebbieDash.armCtuwInstallWatchdog()
+  if type(tempTimer) ~= "function" then return end
+  local attempt = NebbieDash._ctuwInstallAttempt or 1
+  tempTimer(20, function()
+    if not NebbieDash._ctuwInstallPending then return end
+    if NebbieDash.hasConvertToUserWindowPackage() then
+      NebbieDash._ctuwInstallPending = nil
+      return
+    end
+    NebbieDash._ctuwInstallPending = nil
+    NebbieDash._ctuwDownloadSaveTo = nil
+    if attempt < 2 then
+      cecho("<orange>[NebbieDash] convertToUserWindow non risulta installato "
+        .. "dopo 20s — uninstall+reinstall...\n")
+      NebbieDash.installConvertToUserWindow({ force = true })
+    else
+      cecho("<red>[NebbieDash] convertToUserWindow non installato dopo 2 tentativi.\n")
+      NebbieDash.echoConvertToUserWindowManualInstall()
+      cecho("<grey>─────────────────────────────────────\n")
+    end
+  end)
+end
+
+-- force=true: uninstall (se presente/rotto) poi reinstall. Usato anche dal watchdog.
+function NebbieDash.installConvertToUserWindow(opts)
+  opts = opts or {}
+  local force = opts.force and true or false
+  local url = opts.url or NebbieDash.CONVERT_TO_USERWINDOW_URL
+  if NebbieDash.hasConvertToUserWindowPackage() and not force then
+    return true
+  end
+  if NebbieDash._ctuwInstallPending and not force then
+    return false
+  end
+  if type(installPackage) ~= "function" then
+    cecho("<orange>[NebbieDash] installPackage non disponibile.\n")
+    NebbieDash.echoConvertToUserWindowManualInstall()
+    return false
+  end
+
+  NebbieDash.ensureConvertToUserWindowHandlers()
+  NebbieDash.ensureCtuwDownloadHandlers()
+  NebbieDash._ctuwInstallPending = true
+  NebbieDash._ctuwInstallAttempt = (NebbieDash._ctuwInstallAttempt or 0) + 1
+
+  local function startDownloadOrUrlInstall()
+    NebbieDash.armCtuwInstallWatchdog()
+    if type(downloadFile) == "function" and type(getMudletHomeDir) == "function" then
+      local saveTo = NebbieDash.ctuwDownloadPath()
+      NebbieDash._ctuwDownloadSaveTo = saveTo
+      cecho("<grey>[NebbieDash] Scarico <white>convertToUserWindow<grey>...\n")
+      local ok, err = pcall(downloadFile, saveTo, url)
+      if not ok then
+        NebbieDash._ctuwDownloadSaveTo = nil
+        cecho("<orange>[NebbieDash] downloadFile fallita (" .. tostring(err)
+          .. ") — provo installPackage(URL)...\n")
+        local ok2, err2 = pcall(installPackage, url)
+        if not ok2 then
+          NebbieDash._ctuwInstallPending = nil
+          cecho("<red>[NebbieDash] installPackage(URL) fallita: " .. tostring(err2) .. "\n")
+          NebbieDash.echoConvertToUserWindowManualInstall()
+        end
+      end
+      return
+    end
+    cecho("<grey>[NebbieDash] installPackage(URL) convertToUserWindow...\n")
+    local ok, err = pcall(installPackage, url)
+    if not ok then
+      NebbieDash._ctuwInstallPending = nil
+      cecho("<red>[NebbieDash] Auto-install fallita: " .. tostring(err) .. "\n")
+      NebbieDash.echoConvertToUserWindowManualInstall()
+    end
+  end
+
+  -- Se Package Manager lo elenca ma convertAdj manca (download senza install
+  -- completa), uninstall+reinstall. Altrimenti solo download+installPackage(file).
+  local listed = NebbieDash.convertToUserWindowListed()
+  local broken = listed and not NebbieDash.hasConvertToUserWindowPackage()
+  if listed and type(uninstallPackage) == "function" then
+    cecho("<yellow>[NebbieDash] Disinstallo convertToUserWindow "
+      .. (broken and "(install incompleta) " or "")
+      .. "e reinstallo...\n")
+    pcall(uninstallPackage, NebbieDash.CONVERT_TO_USERWINDOW_PKG)
+    if type(tempTimer) == "function" then
+      tempTimer(0.9, startDownloadOrUrlInstall)
+    else
+      startDownloadOrUrlInstall()
+    end
+  else
+    cecho("\n<yellow>[NebbieDash] Installo <white>convertToUserWindow<yellow> "
+      .. "su questo profilo (Mudlet: i package non sono condivisi tra profili)...\n")
+    startDownloadOrUrlInstall()
+  end
+  return true
+end
+
 -- All'apertura profilo: se manca convertToUserWindow, installalo (default) o avvisa.
 function NebbieDash.warnMissingWindowMoveDeps(force)
   if not force then
     local t = os.time()
     if NebbieDash._windowMoveWarnAt and (t - NebbieDash._windowMoveWarnAt) < 90 then
-      return false
+      -- Pending bloccato da un download morto: sblocca e riprova.
+      if NebbieDash._ctuwInstallPending and not NebbieDash.hasConvertToUserWindowPackage() then
+        local started = NebbieDash._ctuwInstallStartedAt or 0
+        if os.time() - started > 25 then
+          NebbieDash._ctuwInstallPending = nil
+        else
+          return false
+        end
+      else
+        return false
+      end
     end
   end
   local missingAdj = not (type(Adjustable) == "table" and type(Adjustable.Container) == "table")
   local missingCtuw = not NebbieDash.hasConvertToUserWindowPackage()
+  local brokenListed = NebbieDash.convertToUserWindowListed() and missingCtuw
   if not missingAdj and not missingCtuw then return false end
   NebbieDash._windowMoveWarnAt = os.time()
 
@@ -2706,29 +2888,27 @@ function NebbieDash.warnMissingWindowMoveDeps(force)
     return true
   end
 
-  if NebbieDash._ctuwInstallPending then
-    return true
-  end
-  if type(installPackage) ~= "function" then
-    cecho("\n<orange>[NebbieDash] Manca <white>convertToUserWindow<orange> "
-      .. "e installPackage non e' disponibile.\n")
-    NebbieDash.echoConvertToUserWindowManualInstall()
-    cecho("<grey>─────────────────────────────────────\n")
-    return true
-  end
-
-  NebbieDash.ensureConvertToUserWindowHandlers()
-  NebbieDash._ctuwInstallPending = true
-  cecho("\n<yellow>[NebbieDash] Installo <white>convertToUserWindow<yellow> "
-    .. "su questo profilo (Mudlet: i package non sono condivisi tra profili)...\n")
-  local ok, err = pcall(installPackage, NebbieDash.CONVERT_TO_USERWINDOW_URL)
-  if not ok then
-    NebbieDash._ctuwInstallPending = nil
-    cecho("<red>[NebbieDash] Auto-install fallita: " .. tostring(err) .. "\n")
-    NebbieDash.echoConvertToUserWindowManualInstall()
-    cecho("<grey>─────────────────────────────────────\n")
-  end
+  NebbieDash._ctuwInstallStartedAt = os.time()
+  NebbieDash.installConvertToUserWindow({
+    force = force or brokenListed or false,
+  })
   return true
+end
+
+-- Chiamata anche su boot "silenzioso" (dopo npackageupdate multiplo): se manca, ritenta.
+function NebbieDash.maybeEnsureConvertToUserWindow()
+  if NebbieDash.hasConvertToUserWindowPackage() then return end
+  local auto = not (NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow == false)
+  if not auto then return end
+  if NebbieDash._ctuwInstallPending then
+    local started = NebbieDash._ctuwInstallStartedAt or 0
+    if os.time() - started < 25 then return end
+    NebbieDash._ctuwInstallPending = nil
+  end
+  NebbieDash._ctuwInstallStartedAt = os.time()
+  NebbieDash.installConvertToUserWindow({
+    force = NebbieDash.convertToUserWindowListed() and true or false,
+  })
 end
 
 function NebbieDash.effectiveSidebarMode()
@@ -11361,6 +11541,10 @@ function NebbieDash.boot(forceAnnounce)
   else
     -- Upgrade gia' annunciato al primo boot di questa install: scarta il flag.
     NebbieDash._upgradeFromVer = nil
+    -- Boot silenzioso (npackageupdate multiplo): ritenta CTUW se manca.
+    if type(NebbieDash.maybeEnsureConvertToUserWindow) == "function" then
+      NebbieDash.maybeEnsureConvertToUserWindow()
+    end
   end
   -- Check GitHub: se main e' avanti, suggerisce npackageupdate (silenzioso se ok).
   if NebbieDash._bootVerCheckTimer and type(killTimer) == "function" then
@@ -11381,6 +11565,9 @@ function NebbieDash.runFix()
   NebbieDash._lastBootTime = nil
   NebbieDash._bootAnnounceAt = nil
   NebbieDash._windowMoveWarnAt = nil
+  NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallAttempt = 0
+  NebbieDash._ctuwDownloadSaveTo = nil
   NebbieDash.teardownGui()
   NebbieDash.boot(true)
   cecho("<green>[NebbieDash] nfix completato.\n")

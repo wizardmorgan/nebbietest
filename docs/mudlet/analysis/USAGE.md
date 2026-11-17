@@ -46,7 +46,10 @@ community **`convertToUserWindow`** (doppio-click sulla barra titolo → UserWin
 
 In Mudlet i **package sono per profilo** (non uno solo per tutti). Dalla **1.15.94**,
 all’apertura di un profilo dove manca, NebbieDash lo **installa da solo**
-(una volta per quel profilo). Preferenza condivisa in `nebbie-dash-preferences.txt`:
+(una volta per quel profilo). Dalla **1.15.97** lo scarica con `downloadFile` e
+poi `installPackage` sul file locale; se compare in Package Manager ma non è
+caricato (`convertAdj` assente), fa **uninstall + reinstall**. Preferenza
+condivisa in `nebbie-dash-preferences.txt`:
 
 ```
 auto_install_convert_to_userwindow = on
@@ -58,7 +61,12 @@ Metti `off` per disattivare l’auto-install e vedere solo l’avviso. Manuale:
 mpkg install convertToUserWindow
 ```
 
-oppure `lua installPackage("https://github.com/Mudlet/mudlet-package-repository/raw/refs/heads/main/packages/convertToUserWindow.mpackage")`.
+oppure
+`lua installPackage("https://mudlet.github.io/mudlet-package-repository/packages/convertToUserWindow.mpackage")`.
+
+Se l’auto-install resta incompleta: `nfix` (ritenta) oppure disinstalla
+`convertToUserWindow` da Package Manager e rilancia `nfix` /
+`npackageupdate`.
 
 Alternativa avanzata Mudlet: importarlo come **modulo** (Alt+I) con sync su più
 profili — fuori scope del package Nebbie; l’auto-install per profilo è la via

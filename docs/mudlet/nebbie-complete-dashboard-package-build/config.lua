@@ -2,19 +2,20 @@ mpackage = [[nebbie-complete-dashboard-package]]
 author = [[Nebbie Arcane]]
 icon = [[nebbie-dash-icon.png]]
 title = [[Nebbie Dashboard — equip, spell attivi e speedwalk per Nebbie Arcane]]
-description = [[# Nebbie Dashboard (1.15.86)
+description = [[# Nebbie Dashboard (1.15.97)
 
 Pannello laterale per **Nebbie Arcane**, con supporto multi-personaggio (un
 profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
 
-- **Equip + Speedwalk** (dock sinistro o pannello **float** trascinabile): equip da
-  `eq` con slot vuoti evidenziati e colori per posizione; speedwalk cliccabili.
-  Altezze proporzionali al testo (`nheights auto`); niente pannello spell GUI.
-- **Preferenze** `nebbie-dash-preferences.txt`: `nsidebar`, `weapon_swap_delay`,
-  `sanity_neq_on_login` (`npreferencesreload`).
+- **Equip** sul bordo sinistro (`eq`, slot vuoti, colori posizione). Speedwalk
+  nella finestra floating **`nswui`** (pausa/riprendi). Niente pannello spell GUI.
+- **convertToUserWindow** (finestre staccabili): auto-install per profilo con
+  download+install locale; se l’install e’ incompleta, uninstall+reinstall.
+- **Preferenze** `nebbie-dash-preferences.txt`: sync ident, chat, gold alert,
+  `weapon_swap_delay`, `sanity_neq_on_login` (`npreferencesreload`).
 - **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
   **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
-- Layout: larghezza `nwidth`; altezza Equip/Speedwalk `nheights` o automatica.
+- Layout: larghezza colonna Equip `nwidth` / `nwidth auto`.
 - Tasto **"? Comandi"** in cima allo schermo: apre/chiude un elenco di tutti
   i comandi disponibili (anche `nhelp`).
 - Numero di riga tra parentesi quadre nel pannello equip, come nel testo di
@@ -101,6 +102,6 @@ bloccato dopo un aggiornamento.
 Documentazione completa (tutti i comandi, formato file speedwalk, changelog):
 `analysis/USAGE.md` e `analysis/CHANGELOG.md` in questo repository.
 ]]
-version = [[1.15.86]]
+version = [[1.15.97]]
 created = [[2026-09-26]]
 website = [[https://cdn.jsdelivr.net/gh/wizardmorgan/nebbie-mudlet-dashboard@main/nebbie-complete-dashboard-package.mpackage]]
