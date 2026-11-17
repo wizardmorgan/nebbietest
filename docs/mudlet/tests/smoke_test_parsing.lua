@@ -1216,6 +1216,20 @@ check("prompt imm: leading space",
   (NebbieDash.parseImmortalPromptLine("  Sirio R20 [On//58]>>") or {}).name == "Sirio")
 check("prompt imm: rifiuta nome non alfanumerico grezzo",
   NebbieDash.parseImmortalPromptLine("*** R20 [On//58]>>") == nil)
+check("prompt imm: Nome Rroom>> senza brackets",
+  (NebbieDash.parseImmortalPromptLine("Sirio R1000>>") or {}).name == "Sirio")
+_G.gmcp = { char = { base = { name = "Sirio", gold = 1 } } }
+check("prompt imm: Rroom [flags]>> da GMCP",
+  (NebbieDash.parseImmortalPromptLine("R1000 [On//60]>>") or {}).name == "Sirio")
+check("prompt imm: Rroom>> da GMCP",
+  (NebbieDash.parseImmortalPromptLine("R42>>") or {}).name == "Sirio")
+check("gmcp: readGmcpCharBaseName", NebbieDash.readGmcpCharBaseName() == "Sirio")
+local prevCharGmcp = NebbieDash.currentChar
+NebbieDash.currentChar = nil
+NebbieDash.onGmcpCharBase()
+check("gmcp: onGmcpCharBase imposta Sirio", NebbieDash.currentChar == "Sirio")
+NebbieDash.currentChar = prevCharGmcp
+_G.gmcp = nil
 check("batch: isAnyPromptLine non confonde riga narrativa",
   NebbieDash.isAnyPromptLine("Adesso hai Elmo della Citta d'Ottone.") == nil)
 

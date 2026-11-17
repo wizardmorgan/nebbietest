@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.95 — 2026-11-17
+
+- **Sirio / login**: riconoscimento PG anche da **GMCP `char.base.name`** (menu
+  account e riconnessione da altro PC). Prompt immortali senza `%N` (`R###>>`,
+  `R### […]>>` = prompt #40/#41) e `Nome R###>>` senza brackets.
+
 ## 1.15.94 — 2026-11-17
 
 - **convertToUserWindow**: all’apertura profilo, se manca, **installazione

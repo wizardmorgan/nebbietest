@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.94"
+local PKG_VER = "1.15.95"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -1080,18 +1080,41 @@ function NebbieDash.parsePromptLine(text)
   }
 end
 
--- Prompt immortale/builder (es. Sirio): "Sirio R1000 [On//60]>>" — confermato
--- dall'utente 2026-09-21. Il trigger " M:" non matcha mai questo formato, quindi
--- nbatch (che attendeva onPromptLine) andava in timeout anche con prompt visibile.
+-- Prompt immortale/builder (es. Sirio). Formati reali (comm.cpp / prompt #):
+--   "Sirio R1000 [On//60]>>"   default Dio  (%N R%R [%iI/%iN/%iS]>>)
+--   "Sirio R1000>>"            nome + room senza flag
+--   "R1000 [On//60]>>"         prompt #41 (senza nome)
+--   "R1000>>"                  prompt #40 (senza nome)
+-- Il trigger " M:" non matcha mai questi formati.
 -- NOTA: tempRegexTrigger usa PCRE, NON pattern Lua (%s/%d).
 function NebbieDash.parseImmortalPromptLine(text)
   if not text or text == "" then return nil end
   text = NebbieDash.stripColors(text):match("^%s*(.-)%s*$") or ""
-  local name = text:match("^(%S+)%s+R%d+%s+%[[^%]]+%]%s*>>%s*$")
-  if not name then return nil end
-  -- Evita nomi contaminati da residui colore se strip fallisce in parte.
-  if not name:match("^[%a][%w_%-]*$") then return nil end
-  return { name = name, immortal = true }
+  local function okName(n)
+    return type(n) == "string" and n:match("^[%a][%w_%-]*$") ~= nil
+  end
+  -- Nome + Rroom + [flags]>>
+  local name, room = text:match("^(%S+)%s+R(%d+)%s+%[[^%]]*%]%s*>>%s*$")
+  if okName(name) then
+    return { name = name, immortal = true, room = tonumber(room) }
+  end
+  -- Nome + Rroom>> (senza brackets)
+  name, room = text:match("^(%S+)%s+R(%d+)%s*>>%s*$")
+  if okName(name) then
+    return { name = name, immortal = true, room = tonumber(room) }
+  end
+  -- Solo Rroom [flags]>>  o  Rroom>>  (prompt 40/41): nome da GMCP / currentChar
+  room = text:match("^R(%d+)%s+%[[^%]]*%]%s*>>%s*$")
+    or text:match("^R(%d+)%s*>>%s*$")
+  if room then
+    local fromGmcp = NebbieDash.readGmcpCharBaseName and NebbieDash.readGmcpCharBaseName()
+    local who = fromGmcp or NebbieDash.currentChar
+    if okName(who) then
+      return { name = who, immortal = true, room = tonumber(room), namelessPrompt = true }
+    end
+    return { name = nil, immortal = true, room = tonumber(room), namelessPrompt = true }
+  end
+  return nil
 end
 
 function NebbieDash.isAnyPromptLine(text)
@@ -1111,6 +1134,13 @@ function NebbieDash.onPromptLine()
     parsed = NebbieDash.parseImmortalPromptLine(text)
   end
   if not parsed then return end
+  if not parsed.name or parsed.name == "" then
+    local fromGmcp = NebbieDash.readGmcpCharBaseName and NebbieDash.readGmcpCharBaseName()
+    if fromGmcp and fromGmcp ~= "" then
+      parsed.name = fromGmcp
+    end
+  end
+  if not parsed.name or parsed.name == "" then return end
   NebbieDash.stats = parsed
   NebbieDash.setCurrentCharacter(parsed.name, false)
   NebbieDash._awaitingPromptAfterConnect = false
@@ -5470,21 +5500,44 @@ function NebbieDash.onDataSendRequest(_, cmd)
   end
 end
 
-function NebbieDash.readGmcpCharBaseGold()
+function NebbieDash.readGmcpCharBase()
   if type(gmcp) ~= "table" then return nil end
-  local base = nil
   if type(gmcp.char) == "table" and type(gmcp.char.base) == "table" then
-    base = gmcp.char.base
-  elseif type(gmcp.Char) == "table" and type(gmcp.Char.Base) == "table" then
-    base = gmcp.Char.Base
+    return gmcp.char.base
   end
+  if type(gmcp.Char) == "table" and type(gmcp.Char.Base) == "table" then
+    return gmcp.Char.Base
+  end
+  return nil
+end
+
+function NebbieDash.readGmcpCharBaseGold()
+  local base = NebbieDash.readGmcpCharBase()
   if not base then return nil end
   local g = base.gold or base.Gold
   if g == nil then return nil end
   return tonumber(g)
 end
 
+function NebbieDash.readGmcpCharBaseName()
+  local base = NebbieDash.readGmcpCharBase()
+  if not base then return nil end
+  local n = base.name or base.Name
+  if type(n) ~= "string" then return nil end
+  n = n:match("^%s*(.-)%s*$") or ""
+  if n == "" then return nil end
+  if not n:match("^[%a][%w_%-]*$") then return nil end
+  return n
+end
+
 function NebbieDash.onGmcpCharBase()
+  -- Nome PG: affidabile al login da menu / riconnessione (anche se il prompt
+  -- immortale e' senza %N, es. prompt #40/#41, o il trigger testo non scatta).
+  local name = NebbieDash.readGmcpCharBaseName()
+  if name then
+    NebbieDash.setCurrentCharacter(name, false)
+    NebbieDash._awaitingPromptAfterConnect = false
+  end
   local gold = NebbieDash.readGmcpCharBaseGold()
   if gold == nil then return end
   NebbieDash._goldSeenVia = "gmcp"
@@ -11126,6 +11179,7 @@ end
 function NebbieDash.teardownTriggers()
   local ids = {
     NebbieDash._promptTrig, NebbieDash._promptImmTrig, NebbieDash._promptImmTrig2,
+    NebbieDash._promptImmTrig3, NebbieDash._promptImmTrig4,
     NebbieDash._eqOpenTrig, NebbieDash._attribOpenTrig,
     NebbieDash._eqLineTrig, NebbieDash._attribLineTrig, NebbieDash._lootLineTrig,
     NebbieDash._lootLineTrig2, NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
@@ -11182,6 +11236,10 @@ function NebbieDash.installTriggers()
   NebbieDash._promptImmTrig = tempRegexTrigger("\\]\\s*>>\\s*$", [[NebbieDash.onPromptLine()]])
   -- Cintura: substring su "]>>" (formati senza spazi tra ] e >>).
   NebbieDash._promptImmTrig2 = tempTrigger("]>>", [[NebbieDash.onPromptLine()]])
+  -- Prompt #40 "R1000>>" (senza ]): altrimenti niente trigger e Sirio resta sconosciuto.
+  NebbieDash._promptImmTrig3 = tempRegexTrigger("^R\\d+\\s*>>\\s*$", [[NebbieDash.onPromptLine()]])
+  -- "Nome R1000>>" senza brackets.
+  NebbieDash._promptImmTrig4 = tempRegexTrigger("\\sR\\d+\\s*>>\\s*$", [[NebbieDash.onPromptLine()]])
   NebbieDash._eqOpenTrig = tempTrigger("Stai usando:", [[NebbieDash.startEqCapture()]])
   NebbieDash._attribOpenTrig = tempTrigger("Spells attivi", [[NebbieDash.startAttribCapture()]])
   NebbieDash._eqLineTrig = tempRegexTrigger("^", [[NebbieDash.onEqCaptureLine()]])
