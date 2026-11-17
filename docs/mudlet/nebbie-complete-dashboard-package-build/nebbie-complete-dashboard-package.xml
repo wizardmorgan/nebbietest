@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.84"
+local PKG_VER = "1.15.85"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -1147,8 +1147,13 @@ function NebbieDash.finishEqCapture()
   data.eqUpdated = os.time()
   NebbieDash.refreshHungerBackKeywordFromEq(data, true)
   NebbieDash.saveStore()
+  local wearLearned = NebbieDash.syncIdentWearSlotsFromEqSlots(cap.slots)
   NebbieDash.refreshDashboard()
   cecho("<green>[NebbieDash] " .. NebbieDash.formatEquipCaptureSummary(data, slotCount) .. "\n")
+  if wearLearned and wearLearned > 0 then
+    cecho("<grey>[NebbieDash] Ident: aggiornati <white>" .. tostring(wearLearned)
+      .. "<grey> slot da eq.\n")
+  end
 end
 
 function NebbieDash.countSlots(slots)
@@ -2708,11 +2713,12 @@ end
 NebbieDash._identUiState = NebbieDash._identUiState or {
   filter = "",
   charFilter = "",
+  slotFilter = "",
   onlyCedibile = false,
-  sort = "name", -- name | recent | type
+  sort = "name", -- name | recent | type | slot
   page = 1,
   pageSize = 12,
-  view = "list", -- list | detail
+  view = "list", -- list | detail | slots
   selectedKey = nil,
   pendingDeleteKey = nil,
 }
@@ -2738,6 +2744,66 @@ function NebbieDash.destroyIdentUiWindow()
   NebbieDash._identUiCreated = false
   NebbieDash._identUiHidden = false
   NebbieDash._identUiRows = nil
+  NebbieDash._identUiLastW = nil
+  if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._identUiResizeTimer)
+  end
+  NebbieDash._identUiResizeTimer = nil
+end
+
+-- Wrap colonne della mini-console Ident in base alla larghezza pixel corrente.
+function NebbieDash.updateIdentUiWrap()
+  local name = "NebbieDashIdentUi"
+  local w = nil
+  local g = NebbieDash._identUiGeyser
+  if g and type(g.get_width) == "function" then
+    local ok, gw = pcall(function() return g:get_width() end)
+    if ok then w = tonumber(gw) end
+  end
+  if not w and type(getWindowSize) == "function" then
+    local ok, a = pcall(getWindowSize, name)
+    if ok then w = tonumber(a) end
+  end
+  w = w or 560
+  local fw = 8
+  if type(calcFontSize) == "function" then
+    local ok, a = pcall(calcFontSize, name)
+    if ok and tonumber(a) and tonumber(a) > 0 then
+      fw = tonumber(a)
+    else
+      ok, a = pcall(calcFontSize, NebbieDash.fontSize or 10)
+      if ok and tonumber(a) and tonumber(a) > 0 then fw = tonumber(a) end
+    end
+  end
+  local cols = math.max(40, math.floor(w / math.max(fw, 1)) - 2)
+  if type(setWindowWrap) == "function" then
+    pcall(setWindowWrap, name, cols)
+  end
+  if g and type(g.setWrap) == "function" then
+    pcall(function() g:setWrap(cols) end)
+  end
+  NebbieDash._identUiWrapCols = cols
+  return cols, w
+end
+
+-- Poll leggero: Adjustable.Container non ha un resize event portabile su tutte
+-- le versioni Mudlet. Se la larghezza cambia, rifa wrap + refresh.
+function NebbieDash.armIdentUiResizeWatch()
+  if NebbieDash._identUiResizeTimer then return end
+  if not NebbieDash._identUiCreated or NebbieDash._identUiHidden then return end
+  NebbieDash._identUiResizeTimer = tempTimer(0.4, function()
+    NebbieDash._identUiResizeTimer = nil
+    if not NebbieDash._identUiCreated or NebbieDash._identUiHidden then return end
+    local _, w = NebbieDash.updateIdentUiWrap()
+    w = tonumber(w) or 0
+    local last = tonumber(NebbieDash._identUiLastW) or 0
+    if math.abs(w - last) >= 8 then
+      NebbieDash._identUiLastW = w
+      NebbieDash.refreshIdentUi()
+      return
+    end
+    NebbieDash.armIdentUiResizeWatch()
+  end)
 end
 
 function NebbieDash.identUiCecho(text)
@@ -2776,6 +2842,7 @@ function NebbieDash.showIdentUiWindow()
     pcall(showWindow, "NebbieDashIdentUi")
   end
   NebbieDash._identUiHidden = false
+  NebbieDash.armIdentUiResizeWatch()
 end
 
 function NebbieDash.hideIdentUiWindow()
@@ -2786,6 +2853,10 @@ function NebbieDash.hideIdentUiWindow()
     pcall(hideWindow, "NebbieDashIdentUi")
   end
   NebbieDash._identUiHidden = true
+  if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._identUiResizeTimer)
+  end
+  NebbieDash._identUiResizeTimer = nil
 end
 
 function NebbieDash.initIdentUiWindow()
@@ -2838,7 +2909,9 @@ function NebbieDash.initIdentUiWindow()
   end
   NebbieDash._identUiCreated = true
   NebbieDash._identUiHidden = false
+  NebbieDash.updateIdentUiWrap()
   NebbieDash.refreshIdentUi()
+  NebbieDash.armIdentUiResizeWatch()
   return true
 end
 
@@ -2883,6 +2956,7 @@ function NebbieDash.collectIdentUiEntries()
       local hay = table.concat({
         e.objectName or "", e.objectType or "", e.flags or "",
         table.concat(e.affects or {}, " "),
+        table.concat(NebbieDash.identWearSlotsList(e), " "),
       }, " "):lower()
       if hay:find(q, 1, true) then table.insert(filtered, e) end
     end
@@ -2895,6 +2969,16 @@ function NebbieDash.collectIdentUiEntries()
     end
     results = filtered
   end
+  if st.slotFilter and st.slotFilter ~= "" then
+    local needle = st.slotFilter:lower()
+    local filtered = {}
+    for _, e in ipairs(results) do
+      if NebbieDash.identEntryMatchesWearSlotFilter(e, needle) then
+        table.insert(filtered, e)
+      end
+    end
+    results = filtered
+  end
   local sort = st.sort or "name"
   table.sort(results, function(a, b)
     if sort == "recent" then
@@ -2903,6 +2987,11 @@ function NebbieDash.collectIdentUiEntries()
     if sort == "type" then
       local ta, tb = a.objectType or "", b.objectType or ""
       if ta ~= tb then return ta < tb end
+    end
+    if sort == "slot" then
+      local sa = NebbieDash.primaryIdentWearSlot(a) or "\xff"
+      local sb = NebbieDash.primaryIdentWearSlot(b) or "\xff"
+      if sa ~= sb then return sa < sb end
     end
     return (a.objectName or "") < (b.objectName or "")
   end)
@@ -2926,11 +3015,19 @@ function NebbieDash.identUiToolbar()
   NebbieDash.identUiCechoLink("<yellow>[sort data]", "NebbieDash.identUiSetSort(\"recent\")", "Ordina per ultimo ident")
   NebbieDash.identUiCecho(" ")
   NebbieDash.identUiCechoLink("<yellow>[sort tipo]", "NebbieDash.identUiSetSort(\"type\")", "Ordina per tipo")
+  NebbieDash.identUiCecho(" ")
+  NebbieDash.identUiCechoLink("<yellow>[sort slot]", "NebbieDash.identUiSetSort(\"slot\")", "Ordina per slot indossabile")
   NebbieDash.identUiCecho("\n")
   NebbieDash.identUiCechoLink(
     st.onlyCedibile and "<green>[cedibili: ON]" or "<grey>[cedibili: off]",
     "NebbieDash.identUiToggleCedibileFilter()",
     "Mostra solo oggetti cedibili")
+  NebbieDash.identUiCecho(" ")
+  local slotLab = (st.slotFilter ~= "" and st.slotFilter) or "tutti"
+  NebbieDash.identUiCechoLink(
+    "<cyan>[slot: " .. slotLab .. "]",
+    "NebbieDash.identUiOpenSlotFilterPicker()",
+    "Filtra per slot indossabile")
   NebbieDash.identUiCecho(" ")
   if NebbieDash.currentChar and NebbieDash.currentChar ~= "" then
     NebbieDash.identUiCechoLink(
@@ -2943,21 +3040,27 @@ function NebbieDash.identUiToolbar()
   NebbieDash.identUiCecho("\n")
   -- Niente <...> letterali in cecho (sono tag colore); usiamo [arg].
   NebbieDash.identUiCecho(
-    "<grey>Comandi: <yellow>nidentui filter [testo]<grey> · <yellow>nidentui char [Pg]<grey> · "
-      .. "<yellow>nidentui del [ogg]\n")
+    "<grey>Comandi: <yellow>nidentui filter [testo]<grey> · <yellow>nidentui slot [pos]<grey> · "
+      .. "<yellow>nidentui char [Pg]<grey> · <yellow>nidentui del [ogg]\n")
+  NebbieDash.identUiCecho(
+    "<grey>Allarga la finestra: il testo si riadatta da solo. Slot: da eq (neq) o tag manuale.\n")
   NebbieDash.identUiCecho("<grey>─────────────────────────────────────\n")
 end
 
 function NebbieDash.refreshIdentUi()
   if not NebbieDash._identUiCreated or NebbieDash._identUiHidden then return end
+  NebbieDash.updateIdentUiWrap()
   NebbieDash.clearIdentUiWindow()
   NebbieDash.identUiToolbar()
   local st = NebbieDash._identUiState
-  if st.view == "detail" and st.selectedKey then
+  if st.view == "slots" and st.selectedKey then
+    NebbieDash.renderIdentUiSlotPicker(st.selectedKey)
+  elseif st.view == "detail" and st.selectedKey then
     NebbieDash.renderIdentUiDetail(st.selectedKey)
   else
     NebbieDash.renderIdentUiList()
   end
+  NebbieDash.armIdentUiResizeWatch()
 end
 
 function NebbieDash.renderIdentUiList()
@@ -3001,14 +3104,19 @@ function NebbieDash.renderIdentUiList()
     end
     local ced = entry.cedibile and " <green>●" or " <grey>○"
     local rare = entry.rare and " <orange>R" or ""
+    local slotTxt = ""
+    local slots = NebbieDash.identWearSlotsList(entry)
+    if #slots > 0 then
+      slotTxt = " <cyan>[" .. table.concat(slots, "/") .. "]"
+    end
     NebbieDash.identUiCecho(string.format("<grey>%2d. ", rowIdx))
     NebbieDash.identUiCechoLink(
       "<yellow>" .. (entry.objectName or "?"),
       string.format("NebbieDash.identUiOpenRow(%d)", rowIdx),
       "Apri dettaglio")
     NebbieDash.identUiCecho(string.format(
-      " <white>(%s)%s%s%s\n",
-      entry.objectType or "?", ced, rare, possTxt))
+      " <white>(%s)%s%s%s%s\n",
+      entry.objectType or "?", ced, rare, slotTxt, possTxt))
     NebbieDash.identUiCecho("    ")
     NebbieDash.identUiCechoLink(
       "<red>[x]",
@@ -3019,10 +3127,14 @@ function NebbieDash.renderIdentUiList()
       entry.cedibile and "<green>[ced]" or "<grey>[ced]",
       string.format("NebbieDash.identUiToggleCedibileRow(%d)", rowIdx),
       "Toggle cedibile")
+    NebbieDash.identUiCecho(" ")
+    NebbieDash.identUiCechoLink(
+      "<cyan>[slot]",
+      string.format("NebbieDash.identUiOpenSlotEditor(%d)", rowIdx),
+      "Imposta slot indossabile")
     if entry.affects and #entry.affects > 0 then
-      local short = table.concat(entry.affects, " | ")
-      if #short > 70 then short = short:sub(1, 67) .. "…" end
-      NebbieDash.identUiCecho(" <grey>" .. short)
+      -- Niente troncatura fissa: il wrap della mini-console segue la larghezza.
+      NebbieDash.identUiCecho("\n    <grey>" .. table.concat(entry.affects, " | "))
     end
     NebbieDash.identUiCecho("\n")
   end
@@ -3039,6 +3151,13 @@ function NebbieDash.renderIdentUiDetail(key)
   NebbieDash._identUiRows = { entry }
   for _, lineTxt in ipairs(NebbieDash.formatIdentDbEntry(entry, true)) do
     NebbieDash.identUiCecho(lineTxt .. "\n")
+  end
+  local slots = NebbieDash.identWearSlotsList(entry)
+  if #slots > 0 then
+    NebbieDash.identUiCecho("  <grey>slot:<cyan> " .. table.concat(slots, ", ")
+      .. (entry.wearSlotsManual and " <grey>(manuale)" or " <grey>(da eq/tag)") .. "\n")
+  else
+    NebbieDash.identUiCecho("  <grey>slot:<white> (sconosciuto — indossa + neq, oppure [imposta slot])\n")
   end
   NebbieDash.identUiCecho("<grey>─────────────────────────────────────\n")
   NebbieDash.identUiCecho("<white>Azioni: ")
@@ -3064,6 +3183,18 @@ function NebbieDash.renderIdentUiDetail(key)
     entry.cedibile and "<green>[togli cedibile]" or "<yellow>[rendi cedibile]",
     "NebbieDash.identUiToggleCedibileRow(1)",
     "Toggle flag cedibile")
+  NebbieDash.identUiCecho(" ")
+  NebbieDash.identUiCechoLink(
+    "<cyan>[imposta slot]",
+    "NebbieDash.identUiOpenSlotEditor(1)",
+    "Scegli slot indossabile")
+  if #slots > 0 then
+    NebbieDash.identUiCecho(" ")
+    NebbieDash.identUiCechoLink(
+      "<grey>[pulisci slot]",
+      "NebbieDash.identUiClearWearSlots()",
+      "Rimuovi slot salvati")
+  end
   NebbieDash.identUiCecho("\n")
   if NebbieDash.currentChar and NebbieDash.currentChar ~= "" then
     NebbieDash.identUiCechoLink(
@@ -3190,10 +3321,121 @@ function NebbieDash.identUiSetCharFilter(charName)
   NebbieDash.refreshIdentUi()
 end
 
+function NebbieDash.identUiSetSlotFilter(slotLabel)
+  local st = NebbieDash._identUiState
+  slotLabel = NebbieDash.normalizeWearSlotLabel(slotLabel or "")
+  if st.slotFilter == slotLabel then
+    st.slotFilter = ""
+  else
+    st.slotFilter = slotLabel
+  end
+  st.page = 1
+  st.view = "list"
+  st.selectedKey = nil
+  NebbieDash.refreshIdentUi()
+end
+
+function NebbieDash.identUiOpenSlotFilterPicker()
+  local st = NebbieDash._identUiState
+  st.view = "list"
+  st.selectedKey = nil
+  NebbieDash.clearIdentUiWindow()
+  NebbieDash.identUiToolbar()
+  NebbieDash.identUiCecho("<green>Filtro slot — scegli una posizione (o reset):\n")
+  NebbieDash.identUiCechoLink(
+    "<grey>[tutti / reset slot]",
+    "NebbieDash.identUiSetSlotFilter(\"\")",
+    "Togli filtro slot")
+  NebbieDash.identUiCecho("\n")
+  for _, loc in ipairs(NebbieDash.identWearSlotChoices()) do
+    NebbieDash.identUiCechoLink(
+      "<cyan>[" .. loc .. "]",
+      string.format("NebbieDash.identUiSetSlotFilter(%q)", loc),
+      "Filtra oggetti per " .. loc)
+    NebbieDash.identUiCecho("  ")
+  end
+  NebbieDash.identUiCecho("\n")
+  NebbieDash.identUiCechoLink("<grey>[« lista]", "NebbieDash.identUiShowList()", "Torna alla lista")
+  NebbieDash.identUiCecho("\n")
+end
+
+function NebbieDash.identUiOpenSlotEditor(idx)
+  local entry = NebbieDash._identUiRows and NebbieDash._identUiRows[idx]
+  if not entry or not entry.key then return end
+  local st = NebbieDash._identUiState
+  st.view = "slots"
+  st.selectedKey = entry.key
+  st.pendingDeleteKey = nil
+  NebbieDash.refreshIdentUi()
+end
+
+function NebbieDash.renderIdentUiSlotPicker(key)
+  local entry = NebbieDash.getIdentEntryByKey(key)
+  if not entry then
+    NebbieDash._identUiState.view = "list"
+    NebbieDash.renderIdentUiList()
+    return
+  end
+  NebbieDash._identUiRows = { entry }
+  NebbieDash.identUiCecho("<green>Imposta slot per <yellow>" .. (entry.objectName or "?") .. "\n")
+  local cur = NebbieDash.identWearSlotsList(entry)
+  if #cur > 0 then
+    NebbieDash.identUiCecho("<grey>Attuali: <cyan>" .. table.concat(cur, ", ") .. "\n")
+  else
+    NebbieDash.identUiCecho("<grey>Attuali: (nessuno)\n")
+  end
+  NebbieDash.identUiCecho("<grey>Click = imposta quello slot (sostituisce). Si possono aggiungere altri da eq.\n")
+  for _, loc in ipairs(NebbieDash.identWearSlotChoices()) do
+    local mark = ""
+    for _, s in ipairs(cur) do
+      if s == loc then mark = " <green>✓"; break end
+    end
+    NebbieDash.identUiCechoLink(
+      "<cyan>[" .. loc .. "]" .. mark,
+      string.format("NebbieDash.identUiApplyWearSlot(%q)", loc),
+      "Imposta slot " .. loc)
+    NebbieDash.identUiCecho("\n")
+  end
+  NebbieDash.identUiCechoLink(
+    "<grey>[pulisci slot]",
+    "NebbieDash.identUiClearWearSlots()",
+    "Rimuovi tutti gli slot")
+  NebbieDash.identUiCecho("  ")
+  NebbieDash.identUiCechoLink(
+    "<yellow>[« dettaglio]",
+    "NebbieDash.identUiOpenRow(1)",
+    "Torna al dettaglio")
+  NebbieDash.identUiCecho("\n")
+end
+
+function NebbieDash.identUiApplyWearSlot(loc)
+  local key = NebbieDash._identUiState.selectedKey
+  local entry = NebbieDash.getIdentEntryByKey(key)
+  if not entry then return end
+  NebbieDash.setIdentWearSlotsManual(entry, { loc })
+  cecho(string.format(
+    "<green>[NebbieDash] Slot <white>%s<green> → <cyan>%s\n",
+    entry.objectName or "?", loc))
+  NebbieDash._identUiState.view = "detail"
+  NebbieDash.refreshIdentUi()
+end
+
+function NebbieDash.identUiClearWearSlots()
+  local key = NebbieDash._identUiState.selectedKey
+  local entry = NebbieDash.getIdentEntryByKey(key)
+  if not entry then return end
+  entry.wearSlots = {}
+  entry.wearSlotsManual = true
+  NebbieDash.scheduleIdentDbSave()
+  cecho("<green>[NebbieDash] Slot azzerati per <white>" .. (entry.objectName or "?") .. "\n")
+  NebbieDash.refreshIdentUi()
+end
+
 function NebbieDash.identUiResetFilters()
   local st = NebbieDash._identUiState
   st.filter = ""
   st.charFilter = ""
+  st.slotFilter = ""
   st.onlyCedibile = false
   st.sort = "name"
   st.page = 1
@@ -3239,6 +3481,20 @@ function NebbieDash.cmdIdentUi(argStr)
     return
   end
 
+  if mode == "slot" or mode == "wear" then
+    local slotArg = (rest or ""):match("^%s*(.-)%s*$") or ""
+    if slotArg == "" or slotArg == "all" or slotArg == "tutti" or slotArg == "reset" then
+      NebbieDash._identUiState.slotFilter = ""
+    else
+      NebbieDash._identUiState.slotFilter = NebbieDash.normalizeWearSlotLabel(slotArg)
+    end
+    NebbieDash._identUiState.page = 1
+    NebbieDash._identUiState.view = "list"
+    if not NebbieDash.initIdentUiWindow() then return end
+    NebbieDash.refreshIdentUi()
+    return
+  end
+
   if mode == "reset" then
     NebbieDash.identUiResetFilters()
     if not NebbieDash.initIdentUiWindow() then return end
@@ -3273,11 +3529,13 @@ function NebbieDash.cmdIdentUi(argStr)
     cecho("<green>[NebbieDash] nidentui — gestore floating archivio identify\n")
     cecho("<grey>  <yellow>nidentui<grey>              apri / mostra finestra\n")
     cecho("<grey>  <yellow>nidentui filter [testo]<grey>  filtra nome/flags/affects\n")
+    cecho("<grey>  <yellow>nidentui slot [pos]<grey>     filtra per slot (es. dito, impugnato)\n")
     cecho("<grey>  <yellow>nidentui char [Pg]<grey>     filtra per personaggio\n")
     cecho("<grey>  <yellow>nidentui del [oggetto]<grey>  elimina (se univoco)\n")
     cecho("<grey>  <yellow>nidentui reset<grey>         azzera filtri\n")
     cecho("<grey>  <yellow>nidentui off<grey>            nascondi finestra\n")
-    cecho("<grey>In finestra: click nome=dettaglio, [x]=elimina, [ced]=cedibile, sort/pagine.\n")
+    cecho("<grey>In finestra: nome=dettaglio, [slot]=tag manuale, sort slot, wrap al resize.\n")
+    cecho("<grey>Slot automatici: dopo <yellow>neq/nresync<grey> se l'oggetto e' in equip.\n")
     return
   end
 
@@ -3652,7 +3910,7 @@ NebbieDash.HELP_TEXT = {
   { "nidentdb noncedibile <ogg>", "Toglie il flag cedibile (give/drop non lo toccano)." },
   { "nidentdb del <ogg>", "Elimina una entry identify (se la query e' univoca)." },
   { "nidentui", "Finestra floating per gestire l'archivio identify (lista, filtri, elimina)." },
-  { "nidentui filter|char|del|reset", "Filtri / elimina / reset nella finestra Ident." },
+  { "nidentui filter|slot|char|del|reset", "Filtri (anche per slot) / elimina / reset nella finestra Ident." },
   { "nidentdb export <NomePg>", "CSV di tutti gli identify di un PG (file NomePg-gg-mm-aaaa-hh-mm-ss.csv)." },
   { "nidentdbreload", "Ricarica nebbie-ident-db.lua dalla cartella condivisa." },
   { "nknowdb [query]", "Cerca nell'archivio know monster condiviso (profiles/ndashboard)." },
@@ -5055,6 +5313,12 @@ function NebbieDash.loadIdentDb()
       -- file corrotto/parziale: ignora
     end
   end
+  -- Riprendi slot da cache eq gia' nota (A), senza attendere un nuovo neq.
+  for _, data in pairs(NebbieDash.chars or {}) do
+    if data and data.eq then
+      NebbieDash.syncIdentWearSlotsFromEqSlots(data.eq)
+    end
+  end
 end
 
 function NebbieDash.saveIdentDb()
@@ -5675,6 +5939,7 @@ function NebbieDash.searchIdentDb(query)
         entry.flags or "",
         entry.vnumOriginario or "",
         table.concat(entry.affects or {}, " "),
+        table.concat(NebbieDash.identWearSlotsList(entry), " "),
         entry.lastCharacter or "",
         possChar,
         possStatus,
@@ -5722,6 +5987,131 @@ function NebbieDash.listIdentDbByCharacter(charName)
     return (a.lastAt or 0) > (b.lastAt or 0)
   end)
   return results
+end
+
+-- ---------------------------------------------------------------------------
+-- Slot indossabili sull'archivio identify.
+-- L'identify del MUD non stampa wear_flags: impariamo dallo slot di `eq`
+-- (A) e/o da tag manuale in nidentui (B).
+-- ---------------------------------------------------------------------------
+function NebbieDash.normalizeWearSlotLabel(loc)
+  loc = tostring(loc or ""):lower():match("^%s*(.-)%s*$") or ""
+  return loc
+end
+
+function NebbieDash.identWearSlotChoices()
+  local seen, out = {}, {}
+  for _, loc in ipairs(NebbieDash.EQ_SLOT_ORDER or {}) do
+    local n = NebbieDash.normalizeWearSlotLabel(loc)
+    if n ~= "" and not seen[n] then
+      seen[n] = true
+      table.insert(out, n)
+    end
+  end
+  if NebbieDash.showClanSlot then
+    local n = NebbieDash.normalizeWearSlotLabel(NebbieDash.EQ_SLOT_CLAN)
+    if n ~= "" and not seen[n] then table.insert(out, n) end
+  end
+  return out
+end
+
+function NebbieDash.identWearSlotsList(entry)
+  if not entry then return {} end
+  local out, seen = {}, {}
+  for _, loc in ipairs(entry.wearSlots or {}) do
+    local n = NebbieDash.normalizeWearSlotLabel(loc)
+    if n ~= "" and not seen[n] then
+      seen[n] = true
+      table.insert(out, n)
+    end
+  end
+  return out
+end
+
+function NebbieDash.primaryIdentWearSlot(entry)
+  local slots = NebbieDash.identWearSlotsList(entry)
+  return slots[1]
+end
+
+function NebbieDash.identEntryMatchesWearSlotFilter(entry, needle)
+  needle = NebbieDash.normalizeWearSlotLabel(needle)
+  if needle == "" then return true end
+  for _, loc in ipairs(NebbieDash.identWearSlotsList(entry)) do
+    if loc == needle or loc:find(needle, 1, true) then return true end
+  end
+  return false
+end
+
+function NebbieDash.addIdentWearSlot(entry, location, source)
+  if not entry then return false end
+  local loc = NebbieDash.normalizeWearSlotLabel(location)
+  if loc == "" or loc == "?" then return false end
+  entry.wearSlots = entry.wearSlots or {}
+  for _, s in ipairs(entry.wearSlots) do
+    if NebbieDash.normalizeWearSlotLabel(s) == loc then return false end
+  end
+  table.insert(entry.wearSlots, loc)
+  if source == "manual" then
+    entry.wearSlotsManual = true
+  elseif not entry.wearSlotsSource then
+    entry.wearSlotsSource = source or "eq"
+  end
+  return true
+end
+
+function NebbieDash.setIdentWearSlotsManual(entry, locations)
+  if not entry then return end
+  local out, seen = {}, {}
+  for _, loc in ipairs(locations or {}) do
+    local n = NebbieDash.normalizeWearSlotLabel(loc)
+    if n ~= "" and not seen[n] then
+      seen[n] = true
+      table.insert(out, n)
+    end
+  end
+  entry.wearSlots = out
+  entry.wearSlotsManual = true
+  entry.wearSlotsSource = "manual"
+  NebbieDash.scheduleIdentDbSave()
+end
+
+function NebbieDash.identItemMatchesEqText(ident, eqItemText)
+  if not ident or not eqItemText or eqItemText == "" then return false end
+  local key = NebbieDash.normalizeIdentObjectKey(ident.objectName or "")
+  if key == "" then return false end
+  local itemLow = tostring(eqItemText):lower():match("^%s*(.-)%s*$") or ""
+  if itemLow == "" then return false end
+  if itemLow == key then return true end
+  if itemLow:find(key, 1, true) or key:find(itemLow, 1, true) then return true end
+  return NebbieDash.keywordsOverlap(itemLow, key)
+end
+
+-- Dopo un eq riuscito: aggiunge agli identify matchati lo slot visto in equip.
+function NebbieDash.syncIdentWearSlotsFromEqSlots(slots)
+  if not slots then return 0 end
+  NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
+  NebbieDash.identDb.entries = NebbieDash.identDb.entries or {}
+  local added = 0
+  for _, eqEntry in pairs(slots) do
+    local item = type(eqEntry) == "table" and (eqEntry.item or "") or tostring(eqEntry or "")
+    local loc = type(eqEntry) == "table" and (eqEntry.location or "") or ""
+    if item ~= "" and loc ~= "" then
+      for _, ident in pairs(NebbieDash.identDb.entries) do
+        if NebbieDash.identItemMatchesEqText(ident, item) then
+          if NebbieDash.addIdentWearSlot(ident, loc, "eq") then
+            added = added + 1
+          end
+        end
+      end
+    end
+  end
+  if added > 0 then
+    NebbieDash.scheduleIdentDbSave()
+    if NebbieDash._identUiCreated and not NebbieDash._identUiHidden then
+      NebbieDash.refreshIdentUi()
+    end
+  end
+  return added
 end
 
 -- Incrocia nome identify con la cache eq dei personaggi (neq/nresync).
@@ -5792,6 +6182,12 @@ function NebbieDash.formatIdentDbEntry(entry, withHolders)
   end
   if entry.affects and #entry.affects > 0 then
     table.insert(lines, "  <grey>affects:<white> " .. table.concat(entry.affects, " | "))
+  end
+  local wear = NebbieDash.identWearSlotsList(entry)
+  if #wear > 0 then
+    local tag = entry.wearSlotsManual and "manuale" or "eq/tag"
+    table.insert(lines, "  <grey>slot:<cyan> " .. table.concat(wear, ", ")
+      .. " <grey>(" .. tag .. ")")
   end
   local when = entry.lastAt and os.date("%Y-%m-%d %H:%M", entry.lastAt) or "?"
   local src = entry.lastSource and (" (" .. entry.lastSource .. ")") or ""

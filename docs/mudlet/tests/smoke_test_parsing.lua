@@ -1372,6 +1372,52 @@ local holders = NebbieDash.findIdentEqHolders("mantello varco ombra profonda")
 check("identdb: findIdentEqHolders trova PG",
   #holders == 1 and holders[1].character == "NomiyaMaki")
 
+-- Slot wear: imparati da eq + tag manuale
+check("identdb: wear slot choices non vuote",
+  #(NebbieDash.identWearSlotChoices()) >= 15)
+local wearEntry = NebbieDash.identDb.entries["mantello varco ombra profonda"]
+NebbieDash.chars["NomiyaMaki"].eq[1] = {
+  location = "intorno al corpo",
+  item = "un mantello varco ombra profonda",
+}
+local learned = NebbieDash.syncIdentWearSlotsFromEqSlots(NebbieDash.chars["NomiyaMaki"].eq)
+check("identdb: sync wear da eq", learned >= 1)
+check("identdb: wear slot da eq",
+  NebbieDash.primaryIdentWearSlot(wearEntry) == "intorno al corpo")
+NebbieDash.setIdentWearSlotsManual(wearEntry, { "sul dito destro" })
+check("identdb: wear slot manuale",
+  NebbieDash.primaryIdentWearSlot(wearEntry) == "sul dito destro"
+    and wearEntry.wearSlotsManual == true)
+-- eq puo' ancora aggiungere altri slot senza cancellare il manuale
+NebbieDash.chars["NomiyaMaki"].eq[2] = {
+  location = "impugnato",
+  item = "mantello varco ombra profonda",
+}
+NebbieDash.syncIdentWearSlotsFromEqSlots(NebbieDash.chars["NomiyaMaki"].eq)
+local slotsNow = NebbieDash.identWearSlotsList(wearEntry)
+local hasDito, hasImp = false, false
+for _, s in ipairs(slotsNow) do
+  if s == "sul dito destro" then hasDito = true end
+  if s == "impugnato" then hasImp = true end
+end
+check("identdb: manuale + eq aggiunge", hasDito and hasImp)
+NebbieDash._identUiState = NebbieDash._identUiState or {}
+NebbieDash._identUiState.slotFilter = "dito"
+NebbieDash._identUiState.filter = ""
+NebbieDash._identUiState.charFilter = ""
+NebbieDash._identUiState.onlyCedibile = false
+NebbieDash._identUiState.sort = "slot"
+local filtered = NebbieDash.collectIdentUiEntries()
+check("identdb: collectIdentUi filtro slot",
+  #filtered >= 1 and NebbieDash.identEntryMatchesWearSlotFilter(filtered[1], "dito"))
+check("identdb: updateIdentUiWrap senza crash",
+  (function()
+    local cols = NebbieDash.updateIdentUiWrap()
+    return type(cols) == "number" and cols >= 40
+  end)())
+NebbieDash._identUiState.slotFilter = ""
+NebbieDash._identUiState.sort = "name"
+
 -- Cattura multi-riga simulata (trigger offline)
 NebbieDash.identDb = { entries = {} }
 NebbieDash.currentChar = "NomiyaMaki"
@@ -1485,6 +1531,7 @@ check("identui: entry assente dopo delete", NebbieDash.getIdentEntryByKey(delKey
 check("identui: delete inesistente fallisce", NebbieDash.deleteIdentEntry(delKey) == false)
 NebbieDash._identUiState.filter = "mantello"
 NebbieDash._identUiState.charFilter = ""
+NebbieDash._identUiState.slotFilter = ""
 NebbieDash._identUiState.onlyCedibile = true
 NebbieDash._identUiState.sort = "name"
 local uiRows = NebbieDash.collectIdentUiEntries()
@@ -1492,7 +1539,9 @@ check("identui: collect filtra cedibili+mantello",
   #uiRows >= 1 and uiRows[1].objectName:find("mantello", 1, true) ~= nil)
 NebbieDash.identUiResetFilters()
 check("identui: reset filtri",
-  NebbieDash._identUiState.filter == "" and NebbieDash._identUiState.onlyCedibile == false)
+  NebbieDash._identUiState.filter == ""
+    and NebbieDash._identUiState.onlyCedibile == false
+    and NebbieDash._identUiState.slotFilter == "")
 
 -- Stesso nome, affects diverse → entry #2; stesso nome+stats → upsert
 local countBeforeAlt = NebbieDash.identDbEntryCount()

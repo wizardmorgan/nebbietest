@@ -95,6 +95,8 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nhungermacros` | Ricarica le macro fame/sete dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nitemkeywords` | Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nidentdb [query]` | Cerca nell’archivio **identify** condiviso (`profiles/ndashboard/nebbie-ident-db.lua`). Si aggiorna da solo a ogni identify (spell o pergamena) di qualsiasi PG. |
+| `nidentui` | Finestra floating Ident DB. Allarga la finestra per leggere righe lunghe (wrap automatico). |
+| `nidentui slot [pos]` | Filtra per slot indossabile (es. `dito`, `impugnato`). Slot da `eq` e/o tag `[imposta slot]`. |
 | `nidentdb where <query>` | Come sopra + possesso + chi ha l’oggetto in equip (cache `eq` / `nresync`). |
 | `nidentdb char <nome>` | Identify / possesso di quel personaggio. |
 | `nidentdb hold <NomePg>` | Dopo un `drop`: assegna l’oggetto lasciato in terra a un PG. |

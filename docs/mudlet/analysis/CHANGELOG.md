@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.85 — 2026-11-17
+
+- **nidentui resize**: allargando la finestra il testo si riadatta (`setWindowWrap`
+  + refresh); niente più troncatura fissa a 70 caratteri sugli affects.
+- **nidentui slot**: catalogazione per posizione indossabile — imparata da `eq`
+  (`neq`/`nresync`) e/o tag manuale `[imposta slot]`. Filtri
+  `nidentui slot …` / `[slot: …]`, sort `[sort slot]`.
+
 ## 1.15.84 — 2026-11-16
 
 - **ngoldalert / asta**: match anche `Un offerta` (spazio, come in auction.cpp),
