@@ -396,8 +396,13 @@ check("loot: parseLootCoinAmount con migliaia",
 check("loot: parseLootCoinAmount plain ancora ok",
   NebbieDash.parseLootCoinAmount("C'erano 100000 monete.") == 100000)
 sentLog = {}
+NebbieDash._groupCheckActive = false
+NebbieDash._pendingSplitAmount = nil
 line = "C'erano 60.000 monete."
 NebbieDash.onLootLine()
+check("loot: autosplit migliaia → group", lastSent == "group")
+line = "Your group consists of:"
+NebbieDash.onGroupHeaderLine()
 check("loot: autosplit con migliaia", lastSent == "split 60000")
 check("loot: isGroupHeaderLine con nome gruppo",
   NebbieDash.isGroupHeaderLine('$c0015Your group "I cacciatori" consists of:'))
@@ -416,7 +421,7 @@ NebbieDash.onLootLine()
 check("loot: riga 'Prendi...' da sola non genera comandi",
   #sentLog == sentBefore8a)
 
--- 8b: autosplit senza "group" — split diretto sull'importo loottato.
+-- 8b: autosplit con probe "group" — split solo se in gruppo.
 NebbieDash._lastLootFp = nil
 NebbieDash._lastLootFpAt = nil
 NebbieDash._groupCheckActive = false
@@ -424,35 +429,64 @@ NebbieDash._pendingSplitAmount = nil
 sentLog = {}
 line = "C'erano 100000 monete."
 NebbieDash.onLootLine()
-check("loot: dopo il loot invia split diretto (niente group)", lastSent == "split 100000")
-local groupSent = false
-for _, s in ipairs(sentLog) do
-  if s == "group" then groupSent = true end
-end
-check("loot: non invia mai 'group'", groupSent == false)
+check("loot: dopo il loot invia group (probe)", lastSent == "group")
+check("loot: pending split 100000", NebbieDash._pendingSplitAmount == 100000)
+line = 'Your group "I cacciatori" consists of:'
+NebbieDash.onGroupHeaderLine()
+check("loot: in gruppo → split 100000", lastSent == "split 100000")
+check("loot: flusso gruppo chiuso", NebbieDash._groupCheckActive == false)
 
-line = "C'erano 150000 monete."
+-- Da soli: group → no group → niente split
 sentLog = {}
+NebbieDash._groupCheckActive = false
+NebbieDash._pendingSplitAmount = nil
+line = "C'erano 60.000 monete."
 NebbieDash.onLootLine()
-NebbieDash.onLootLine()
-check("loot: doppio trigger stessa riga C'erano -> due split (niente group)",
-  #sentLog == 2 and sentLog[1] == "split 150000" and sentLog[2] == "split 150000")
+check("loot: solo → group", lastSent == "group")
+line = "But you are a member of no group?!"
+NebbieDash.onGroupSoloLine()
+local anySplit = false
+for _, s in ipairs(sentLog) do
+  if tostring(s):match("^split ") then anySplit = true end
+end
+check("loot: da solo nessun split", anySplit == false)
+check("loot: autosplit con migliaia pending assorbito",
+  NebbieDash._pendingSplitAmount == nil)
 
--- 8c: handlers group legacy inerti se nessun flusso group attivo.
+-- Loot doppio durante lo stesso check: accumula, un solo split
+sentLog = {}
+NebbieDash._groupCheckActive = false
+NebbieDash._pendingSplitAmount = nil
+line = "C'erano 150000 monete."
+NebbieDash.onLootLine()
+NebbieDash.onLootLine()
+check("loot: doppio C'erano → un solo group",
+  #sentLog == 1 and sentLog[1] == "group")
+check("loot: importi accumulati", NebbieDash._pendingSplitAmount == 300000)
+line = "Your group consists of:"
+NebbieDash.onGroupHeaderLine()
+check("loot: split somma 300000", lastSent == "split 300000")
+
+-- 8c: handlers group inerti se nessun flusso attivo.
 line = "But you are a member of no group?!"
 NebbieDash.onGroupSoloLine()
 check("loot: onGroupSoloLine senza flusso attivo non spamma", true)
 
--- 8d: split diretto anche con importi diversi.
+-- 8d: importi diversi via probe
 sentLog = {}
+NebbieDash._groupCheckActive = false
 line = "C'erano 250 monete."
 NebbieDash.onLootLine()
-check("loot: split 250 diretto", lastSent == "split 250")
+line = "Your group consists of:"
+NebbieDash.onGroupHeaderLine()
+check("loot: split 250 in gruppo", lastSent == "split 250")
 
 sentLog = {}
 line = "C'erano 99 monete."
 NebbieDash.onLootLine()
-check("loot: split 99 diretto", lastSent == "split 99")
+line = "Your group consists of:"
+NebbieDash.onGroupHeaderLine()
+check("loot: split 99 in gruppo", lastSent == "split 99")
 
 -- 8e: con nautosplit off, il loot non deve inviare split.
 NebbieDash.autoSplit = false
@@ -957,22 +991,23 @@ wdata.eqUpdated = false
 NebbieDash.cmdSwapWeapon(1)
 check("armi: cmdSwapWeapon senza equip sincronizzato non invia nulla (nessuno zaino noto)", #sentLog == 0)
 
--- Test 20: autosplit senza probe "group" (1.15.57) — split diretto.
+-- Test 20: autosplit con probe "group" — accumulo se check gia' attivo.
 NebbieDash.setCurrentCharacter("NomiyaMaki", true)
 NebbieDash.autoSplit = true
 NebbieDash._groupCheckActive = false
 NebbieDash._pendingSplitAmount = nil
 sentLog = {}
 NebbieDash.startSplitFlow(100)
-check("split: primo loot invia split diretto", sentLog[#sentLog] == "split 100")
+check("split: primo loot invia group", sentLog[#sentLog] == "group")
+check("split: check attivo", NebbieDash._groupCheckActive == true)
 sentLog = {}
 NebbieDash.startSplitFlow(50)
-check("split: secondo loot invia altro split (niente group)",
-  #sentLog == 1 and sentLog[1] == "split 50")
-local anyGroup = false
-for _, s in ipairs(sentLog) do if s == "group" then anyGroup = true end end
-check("split: nessun 'group' inviato", anyGroup == false)
-check("split: nessun pending group check", NebbieDash._groupCheckActive == false)
+check("split: secondo loot non reinviia group", #sentLog == 0)
+check("split: pending accumulato 150", NebbieDash._pendingSplitAmount == 150)
+line = "Your group consists of:"
+NebbieDash.onGroupHeaderLine()
+check("split: un solo split somma", lastSent == "split 150")
+check("split: flusso chiuso", NebbieDash._groupCheckActive == false)
 
 -- Test 21: secondo formato REALE di fine combattimento (uccisione in
 -- solitaria): "La tua esperienza e' aumentata di N punti." — testo fornito

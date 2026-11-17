@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.85"
+local PKG_VER = "1.15.86"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -8088,28 +8088,24 @@ function NebbieDash.armSplitWatchdog(gen)
   end)
 end
 
--- Se un controllo gruppo e' GIA' in corso (loot quasi simultanei, es. piu'
--- uccisioni ravvicinate da un incantesimo ad area come "chain lightning" che
--- colpisce piu' mostri in un colpo), NON avviarne un secondo in parallelo:
--- prima si sovrascriveva _pendingSplitAmount/si incrementava la generazione
--- SENZA che onGroupSoloLine()/onGroupHeaderLine() verificassero a quale
--- generazione appartenesse davvero la risposta "group" arrivata, cosi' una
--- risposta "But you are a member of no group?!" relativa al PRIMO loot
--- (da solo) poteva chiudere anche il controllo del SECONDO loot (magari in
--- gruppo, o viceversa) — rischio concreto di split inviato/non inviato in
--- base a un controllo in realta' scaduto. Si accumula semplicemente
--- l'importo nel controllo gia' in corso: un solo controllo gruppo, un solo
--- split (con la somma totale) quando arriva la risposta.
--- Autosplit senza probe "group" (prima: a ogni cadavere/loot inviava group).
--- Split diretto sull'importo; se non sei in gruppo il MUD risponde da solo.
+-- Probe "group" prima dello split: da soli non inviamo split (richiesta utente).
+-- Se un controllo e' GIA' in corso (loot ravvicinati), NON avviarne un secondo:
+-- accumula l'importo; un solo "group", un solo split (somma) se sei in gruppo.
 function NebbieDash.startSplitFlow(amount)
-  if not amount then return end
+  amount = tonumber(amount)
+  if not amount or amount <= 0 then return end
   if NebbieDash._groupCheckActive then
-    NebbieDash.finishSplitFlow(false)
+    NebbieDash._pendingSplitAmount = (NebbieDash._pendingSplitAmount or 0) + amount
+    return
   end
-  NebbieDash.armGoldSpendExpected("autosplit", 3.5)
-  send("split " .. tostring(amount), false)
-  cecho("<green>[NebbieDash] Split automatico: " .. amount .. " monete.\n")
+  NebbieDash._pendingSplitAmount = amount
+  NebbieDash._groupCheckActive = true
+  NebbieDash._groupCheckGen = (NebbieDash._groupCheckGen or 0) + 1
+  local gen = NebbieDash._groupCheckGen
+  if NebbieDash._groupSoloTrig then pcall(enableTrigger, NebbieDash._groupSoloTrig) end
+  if NebbieDash._groupHeaderTrig then pcall(enableTrigger, NebbieDash._groupHeaderTrig) end
+  NebbieDash.armSplitWatchdog(gen)
+  send("group", false)
 end
 
 function NebbieDash.finishSplitFlow(grouped)
@@ -8122,6 +8118,8 @@ function NebbieDash.finishSplitFlow(grouped)
     NebbieDash.armGoldSpendExpected("autosplit", 3.5)
     send("split " .. tostring(amount), false)
     cecho("<green>[NebbieDash] Split automatico: " .. amount .. " monete.\n")
+  elseif amount and not grouped then
+    cecho("<grey>[NebbieDash] Nessuno split (non sei in gruppo).\n")
   end
 end
 

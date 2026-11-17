@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.86 — 2026-11-17
+
+- **nautosplit**: di nuovo controlla `group` prima di `split`. Se sei da solo
+  non manda split (solo messaggio grigio). Loot multipli in coda accumulano
+  l'importo in un solo controllo gruppo.
+
 ## 1.15.85 — 2026-11-17
 
 - **nidentui resize**: allargando la finestra il testo si riadatta (`setWindowWrap`
