@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.0"
+local PKG_VER = "1.16.1"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -5800,13 +5800,13 @@ end
 -- Prima automazione di gioco (oltre a equip/spell/speedwalk), richiesta
 -- esplicitamente dall'utente con testi REALI copiati dal gioco (nessuna
 -- regex qui e' inventata):
---   - `get all.coin corp` su un cadavere normale risponde con due righe, es.
---     "Prendi gold coins da il corpo di Il grande drago verde delle
---     foreste." poi "C'erano 100000 monete."; su un bersaglio senza
---     cadavere di quel tipo risponde "Non vedi nessun corp."
---   - `get all.coin pile` e' l'equivalente per i cadaveri di non-morti
---     ("pile of bones"/"dust pile bones", vedi fight.cpp), stessa dinamica
---     ("Non vedi nessun pile." se non c'e' nulla da quel nome).
+--   - `get all.coin corp` su un cadavere: 1 mucchio → "Prendi … da $p." +
+--     "C'erano N monete." (o "C'era una miserabile moneta."); ≥2 mucchi →
+--     una sola riga di riepilogo (NebbieArcane Server act.obj_get.cpp):
+--     "Raccogli da $p K mucchi di monete, TOT monete in tutto."
+--     (da terra: "Raccogli K mucchi di monete, TOT monete in tutto.")
+--     Gli altri in stanza vedono "$n raccoglie …" SENZA "in tutto" → no split.
+--   - `get all.coin pile` per non-morti ("pile of bones"), stessa dinamica.
 --   - `group` risponde "But you are a member of no group?!" da soli, oppure
 --     un blocco che inizia con `Your group "<nome>" consists of:` se in
 --     gruppo.
@@ -5830,7 +5830,11 @@ end
 function NebbieDash.parseLootCoinAmount(text)
   text = NebbieDash.stripColors(text or "")
   text = text:match("^%s*(.-)%s*$") or ""
+  -- Echo stanza / tell: "Qualcuno C'erano …" o "$n raccoglie …"
   if text:match("^%S+%s+C'erano") or text:match("^%S+%s+C'era") then
+    return nil
+  end
+  if text:match("^%S+%s+[Rr]accoglie") then
     return nil
   end
   -- Migliaia con . o , (stesso problema di exp 28.845): altrimenti autosplit
@@ -5841,6 +5845,18 @@ function NebbieDash.parseLootCoinAmount(text)
   end
   if text:match("^C'era una miserabile moneta%.%s*$") then
     return 1
+  end
+  -- ≥2 mucchi nello stesso get (riepilogo server, senza riga C'erano):
+  -- "Raccogli da il corpo di … 2 mucchi di monete, 60.000 monete in tutto."
+  local _piles, total = text:match(
+    "^Raccogli da .- (%d+) mucchi di monete, ([%d%.,]+) monete in tutto%.?%s*$")
+  if total then
+    return NebbieDash.parseGroupedInt(total)
+  end
+  _piles, total = text:match(
+    "^Raccogli (%d+) mucchi di monete, ([%d%.,]+) monete in tutto%.?%s*$")
+  if total then
+    return NebbieDash.parseGroupedInt(total)
   end
   return nil
 end
@@ -11299,7 +11315,8 @@ function NebbieDash.teardownTriggers()
     NebbieDash._promptImmTrig3, NebbieDash._promptImmTrig4,
     NebbieDash._eqOpenTrig, NebbieDash._attribOpenTrig,
     NebbieDash._eqLineTrig, NebbieDash._attribLineTrig, NebbieDash._lootLineTrig,
-    NebbieDash._lootLineTrig2, NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
+    NebbieDash._lootLineTrig2, NebbieDash._lootLineTrig3,
+    NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
     NebbieDash._combatEndTrig2,
     NebbieDash._goldHaiDivisoTrig, NebbieDash._goldDaiMonetaTrig, NebbieDash._goldDaiMoneteTrig,
     NebbieDash._goldPosiMonetaTrig, NebbieDash._goldPosiMoneteTrig, NebbieDash._goldPaghiTrig,
@@ -11369,6 +11386,8 @@ function NebbieDash.installTriggers()
   -- finche' non serve un controllo (dopo un loot riuscito).
   NebbieDash._lootLineTrig = tempTrigger("C'erano", [[NebbieDash.onLootLine()]])
   NebbieDash._lootLineTrig2 = tempTrigger("C'era una miserabile moneta", [[NebbieDash.onLootLine()]])
+  -- ≥2 mucchi: "Raccogli … monete in tutto." (no riga C'erano).
+  NebbieDash._lootLineTrig3 = tempTrigger("monete in tutto", [[NebbieDash.onLootLine()]])
   -- Conferme spesa volontaria → grace period per allarme G:
   NebbieDash._goldHaiDivisoTrig = tempTrigger("Hai diviso ", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldDaiMonetaTrig = tempTrigger("Dai una moneta ", [[NebbieDash.onGoldSpendConfirmLine()]])

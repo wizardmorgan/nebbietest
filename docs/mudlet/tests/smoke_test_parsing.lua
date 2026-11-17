@@ -395,6 +395,20 @@ check("loot: parseLootCoinAmount con migliaia",
   NebbieDash.parseLootCoinAmount("C'erano 60.000 monete.") == 60000)
 check("loot: parseLootCoinAmount plain ancora ok",
   NebbieDash.parseLootCoinAmount("C'erano 100000 monete.") == 100000)
+-- ≥2 mucchi: riepilogo server (no C'erano) — caso Sauron
+check("loot: Raccogli da corpo N mucchi … in tutto",
+  NebbieDash.parseLootCoinAmount(
+    "Raccogli da il corpo di la bocca di Sauron 2 mucchi di monete, 60.000 monete in tutto.")
+    == 60000)
+check("loot: Raccogli N mucchi da terra … in tutto",
+  NebbieDash.parseLootCoinAmount(
+    "Raccogli 3 mucchi di monete, 12.500 monete in tutto.") == 12500)
+check("loot: ignora echo stanza raccoglie",
+  NebbieDash.parseLootCoinAmount(
+    "NomiyaMaki raccoglie da il corpo di Sauron 2 mucchi di monete.") == nil)
+check("loot: Prendi … da sola senza importo → nil",
+  NebbieDash.parseLootCoinAmount(
+    "Prendi gold coins da il corpo di kronathar il sacerdote della terra.") == nil)
 sentLog = {}
 NebbieDash._groupCheckActive = false
 NebbieDash._pendingSplitAmount = nil
@@ -495,6 +509,18 @@ line = "C'erano 42 monete."
 NebbieDash.onLootLine()
 check("loot: con autosplit off non invia split", #sentLog == 0)
 NebbieDash.autoSplit = true
+
+-- 8e2: riepilogo multi-mucchio → Bottino + split flow
+sentLog = {}
+NebbieDash._groupCheckActive = false
+NebbieDash._pendingSplitAmount = nil
+line = "Raccogli da il corpo di la bocca di Sauron 2 mucchi di monete, 60.000 monete in tutto."
+NebbieDash.onLootLine()
+check("loot: Raccogli multi → group", lastSent == "group")
+check("loot: Raccogli multi pending 60000", NebbieDash._pendingSplitAmount == 60000)
+line = "Your group consists of:"
+NebbieDash.onGroupHeaderLine()
+check("loot: Raccogli multi → split 60000", lastSent == "split 60000")
 
 -- 8f: nsplit manuale invia l'importo indicato senza passare dal loot.
 NebbieDash.cmdSplit("777")

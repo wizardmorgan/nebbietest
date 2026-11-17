@@ -322,7 +322,7 @@ Alla fine di ogni combattimento a cui partecipi (riconosciuto da due messaggi re
 tua parte di esperienza è di N punti." per la quota di gruppo, oppure "La tua esperienza è aumentata
 di N punti." per un'uccisione in solitaria — anche con N=0), se `nautoloot` è attivo (default sì) il
 pacchetto prende da solo le monete dal cadavere presente. Appena il gioco conferma il bottino
-(`C'erano N monete.`), se `nautosplit` è attivo (default sì) e sei in gruppo, invia da solo `split N`
+(`C'erano N monete.` oppure, con ≥2 mucchi, `Raccogli … monete in tutto.`), se `nautosplit` è attivo (default sì) e sei in gruppo, invia da solo `split N`
 con l'importo appena raccolto — verificando prima che tu sia in gruppo leggendo l'output del comando
 `group`. Se non sei in gruppo, il bottino resta semplicemente tuo, senza inviare nulla. Se più loot
 scattano quasi contemporaneamente (es. un incantesimo ad area che uccide più mostri in un colpo), gli
@@ -442,7 +442,7 @@ presenti nel CSV di oggi e continua con le righe rimanenti in append. Opzionale 
 **Timing oload**: se compaiono sysmess o lag tra `oload` e `Adesso hai ...`, il batch attende
 entrambi (messaggio + prompt) prima di proseguire — non si ferma più al prompt intermedio.
 
-**Autosplit**: dopo `C'erano N monete.` (o `C'era una miserabile moneta.`) il pacchetto invia
+**Autosplit**: dopo `C'erano N monete.` / `C'era una miserabile moneta.` / `Raccogli … monete in tutto.` il pacchetto invia
 `group` e, se sei in gruppo, `split N`. Funziona anche con risposta **`Your group consists of:`**
 (senza nome gruppo) e con codici colore Nebbie (`$c0015...`).
 

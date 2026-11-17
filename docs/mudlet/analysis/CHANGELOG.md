@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.1 — 2026-11-17
+
+- **nautosplit / loot**: riconosce il riepilogo multi-mucchio del server
+  (`Raccogli da … N mucchi di monete, TOT monete in tutto.` e variante da
+  terra). Prima solo `C'erano N monete.` → niente Bottino/split con ≥2
+  mucchi (es. Sauron). Ignora echo stanza `$n raccoglie …`.
+
 ## 1.16.0 — 2026-11-17
 
 - **nidentui / slot wear**: slot bilaterali unificati in un solo nome —
