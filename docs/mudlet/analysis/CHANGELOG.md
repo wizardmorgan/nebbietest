@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.93 — 2026-11-17
+
+- **Boot**: se manca `convertToUserWindow` (package per staccare/spostare le
+  finestre floating con doppio-click), avviso all’apertura del profilo con
+  istruzioni `mpkg install` / `installPackage`. Anche se manca
+  `Adjustable.Container` (Mudlet troppo vecchio).
+
 ## 1.15.92 — 2026-11-17
 
 - **Boot announce**: durante `npackageupdate` il messaggio «v… pronto» (e l’hint

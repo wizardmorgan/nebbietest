@@ -39,6 +39,18 @@ Dopo ogni aggiornamento:
 
 Installazione da file locale: bottone `+` nel Package Manager e scegli il `.mpackage` scaricato da GitHub.
 
+### Dipendenza: finestre mobili (`convertToUserWindow`)
+
+Per staccare/spostare le finestre floating (chat, ident, speedwalk) serve il package
+community **`convertToUserWindow`** (doppio-click sulla barra titolo → UserWindow).
+Se manca, all’apertura del profilo NebbieDash mostra un avviso. Installazione:
+
+```text
+mpkg install convertToUserWindow
+```
+
+oppure `lua installPackage("https://github.com/Mudlet/mudlet-package-repository/raw/refs/heads/main/packages/convertToUserWindow.mpackage")`.
+
 ## Icona e descrizione nella "Gestione pacchetti"
 
 Dalla 1.3.0 il pacchetto include un'icona e una descrizione interna, visibili aprendo

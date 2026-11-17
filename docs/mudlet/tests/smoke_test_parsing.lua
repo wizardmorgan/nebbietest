@@ -813,6 +813,35 @@ end
 check("boot: forceAnnounce ristampa pronto", pronto3 == 2)
 _G.cecho = realCechoBoot
 
+-- convertToUserWindow dependency warning
+do
+  local realGetPkg = _G.getPackageInfo
+  _G.getPackageInfo = function(name, key)
+    if name == "convertToUserWindow" then return "" end
+    if realGetPkg then return realGetPkg(name, key) end
+    return ""
+  end
+  _G.convertAdj = nil
+  local warnLog = {}
+  local realCechoW = _G.cecho
+  _G.cecho = function(msg) table.insert(warnLog, tostring(msg or "")) end
+  NebbieDash._windowMoveWarnAt = nil
+  local warned = NebbieDash.warnMissingWindowMoveDeps(true)
+  check("window-move: warns when convertToUserWindow missing", warned == true)
+  check("window-move: mentions package name",
+    table.concat(warnLog):find("convertToUserWindow", 1, true) ~= nil)
+  check("window-move: mentions mpkg",
+    table.concat(warnLog):find("mpkg install", 1, true) ~= nil)
+  _G.convertAdj = { Init = function() end }
+  NebbieDash._windowMoveWarnAt = nil
+  warnLog = {}
+  local warned2 = NebbieDash.warnMissingWindowMoveDeps(true)
+  check("window-move: silent when convertAdj present", warned2 == false and #warnLog == 0)
+  _G.convertAdj = nil
+  _G.getPackageInfo = realGetPkg
+  _G.cecho = realCechoW
+end
+
 -- Test 16: bug segnalato in gioco (2026-08-10) — "Hai Fame." e "Hai sete."
 -- arrivano spesso INSIEME, facendo scattare entrambi i trigger e avviando
 -- la macro DUE VOLTE in parallelo (le due sequenze si accavallano: il

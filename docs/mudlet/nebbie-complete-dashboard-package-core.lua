@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.92"
+local PKG_VER = "1.15.93"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -2587,6 +2587,51 @@ end
 function NebbieDash.canUseFloatingSidebar()
   return type(Adjustable) == "table" and type(Adjustable.Container) == "table"
     and type(Geyser) == "table" and type(Geyser.MiniConsole) == "table"
+end
+
+-- Package community (Edru): doppio-click su Adjustable.Container → UserWindow staccabile.
+NebbieDash.CONVERT_TO_USERWINDOW_PKG = "convertToUserWindow"
+NebbieDash.CONVERT_TO_USERWINDOW_URL =
+  "https://github.com/Mudlet/mudlet-package-repository/raw/refs/heads/main/packages/convertToUserWindow.mpackage"
+
+function NebbieDash.hasConvertToUserWindowPackage()
+  if type(convertAdj) == "table" and type(convertAdj.Init) == "function" then
+    return true
+  end
+  if type(getPackageInfo) == "function" then
+    local v = getPackageInfo(NebbieDash.CONVERT_TO_USERWINDOW_PKG, "version")
+    if v and tostring(v) ~= "" then return true end
+  end
+  return false
+end
+
+-- All'apertura profilo: avvisa se manca cio' che serve a spostare le finestre floating.
+function NebbieDash.warnMissingWindowMoveDeps(force)
+  if not force then
+    local t = os.time()
+    if NebbieDash._windowMoveWarnAt and (t - NebbieDash._windowMoveWarnAt) < 90 then
+      return false
+    end
+  end
+  local missingAdj = not (type(Adjustable) == "table" and type(Adjustable.Container) == "table")
+  local missingCtuw = not NebbieDash.hasConvertToUserWindowPackage()
+  if not missingAdj and not missingCtuw then return false end
+  NebbieDash._windowMoveWarnAt = os.time()
+  cecho("\n<orange>[NebbieDash] Dipendenza finestre mobili assente.\n")
+  if missingAdj then
+    cecho("<grey>Manca <white>Adjustable.Container<grey> (Geyser). Aggiorna Mudlet a una "
+      .. "versione recente (4.14+ consigliata).\n")
+  end
+  if missingCtuw then
+    cecho("<grey>Per staccare/spostare chat, ident, speedwalk (doppio-click → UserWindow) "
+      .. "installa il package <white>convertToUserWindow<grey>:\n")
+    cecho("  <yellow>mpkg install convertToUserWindow\n")
+    cecho("<grey>oppure:\n")
+    cecho("<white>lua installPackage(\"" .. NebbieDash.CONVERT_TO_USERWINDOW_URL .. "\")\n")
+    cecho("<grey>Poi: doppio-click sulla barra titolo della finestra floating.\n")
+  end
+  cecho("<grey>─────────────────────────────────────\n")
+  return true
 end
 
 function NebbieDash.effectiveSidebarMode()
@@ -11323,6 +11368,7 @@ function NebbieDash.boot(forceAnnounce)
     cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto (" ..
       tostring(NebbieDash.effectiveSidebarMode()) .. " sidebar). Usa <yellow>nresync<green> dopo il login.\n")
     NebbieDash.printPackageVersionHint()
+    NebbieDash.warnMissingWindowMoveDeps(forceAnnounce and true or false)
   else
     -- Upgrade gia' annunciato al primo boot di questa install: scarta il flag.
     NebbieDash._upgradeFromVer = nil
@@ -11345,6 +11391,7 @@ end
 function NebbieDash.runFix()
   NebbieDash._lastBootTime = nil
   NebbieDash._bootAnnounceAt = nil
+  NebbieDash._windowMoveWarnAt = nil
   NebbieDash.teardownGui()
   NebbieDash.boot(true)
   cecho("<green>[NebbieDash] nfix completato.\n")
