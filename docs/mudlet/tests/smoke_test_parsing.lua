@@ -816,6 +816,9 @@ _G.cecho = realCechoBoot
 -- convertToUserWindow dependency warning
 do
   local realGetPkg = _G.getPackageInfo
+  local realAdj = _G.Adjustable
+  local realConvertAdj = _G.convertAdj
+  _G.Adjustable = { Container = {} }
   _G.getPackageInfo = function(name, key)
     if name == "convertToUserWindow" then return "" end
     if realGetPkg then return realGetPkg(name, key) end
@@ -837,7 +840,8 @@ do
   warnLog = {}
   local warned2 = NebbieDash.warnMissingWindowMoveDeps(true)
   check("window-move: silent when convertAdj present", warned2 == false and #warnLog == 0)
-  _G.convertAdj = nil
+  _G.convertAdj = realConvertAdj
+  _G.Adjustable = realAdj
   _G.getPackageInfo = realGetPkg
   _G.cecho = realCechoW
 end
