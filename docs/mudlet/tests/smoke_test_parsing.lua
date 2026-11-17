@@ -785,11 +785,33 @@ check("trigger: teardown chiamabile piu' volte senza errori", teardownOk)
 
 -- boot() deve essere richiamabile piu' volte senza errori (idempotente),
 -- simulando esattamente cio' che succede reinstallando il package a caldo.
+local bootEcho = {}
+local realCechoBoot = _G.cecho
+_G.cecho = function(msg) table.insert(bootEcho, tostring(msg or "")) end
+NebbieDash._bootAnnounceAt = nil
 local boot1Ok = pcall(NebbieDash.boot)
 check("boot: prima chiamata non genera errori", boot1Ok)
+local pronto1 = 0
+for _, m in ipairs(bootEcho) do
+  if m:find("pronto", 1, true) then pronto1 = pronto1 + 1 end
+end
+check("boot: prima chiamata annuncia pronto", pronto1 == 1)
 NebbieDash._lastBootTime = nil -- forza una vera riesecuzione (non solo il dedupe temporale)
 local boot2Ok = pcall(NebbieDash.boot)
 check("boot: una seconda chiamata (simula reinstall) non genera errori", boot2Ok)
+local pronto2 = 0
+for _, m in ipairs(bootEcho) do
+  if m:find("pronto", 1, true) then pronto2 = pronto2 + 1 end
+end
+check("boot: seconda chiamata non ripete pronto", pronto2 == 1)
+NebbieDash._lastBootTime = nil
+pcall(NebbieDash.boot, true)
+local pronto3 = 0
+for _, m in ipairs(bootEcho) do
+  if m:find("pronto", 1, true) then pronto3 = pronto3 + 1 end
+end
+check("boot: forceAnnounce ristampa pronto", pronto3 == 2)
+_G.cecho = realCechoBoot
 
 -- Test 16: bug segnalato in gioco (2026-08-10) — "Hai Fame." e "Hai sete."
 -- arrivano spesso INSIEME, facendo scattare entrambi i trigger e avviando

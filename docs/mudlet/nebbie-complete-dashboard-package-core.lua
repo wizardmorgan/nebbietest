@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.91"
+local PKG_VER = "1.15.92"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -11260,7 +11260,8 @@ function NebbieDash.migrateSharedConfigFiles()
   NebbieDash.ensureDefaultConfigFiles()
 end
 
-function NebbieDash.boot()
+-- forceAnnounce: true da nfix (messaggio "pronto" anche se boot recente).
+function NebbieDash.boot(forceAnnounce)
   local now = os.time()
   if NebbieDash._mainLoaded and NebbieDash._lastBootTime and (now - NebbieDash._lastBootTime) < 2 then
     return
@@ -11298,27 +11299,53 @@ function NebbieDash.boot()
   NebbieDash._mainLoaded = true
   NebbieDash.ensurePackageDownloadHandlers()
   NebbieDash.ensurePackageUpdateEventHandler()
-  if NebbieDash._upgradeFromVer then
-    cecho("<yellow>[NebbieDash] Aggiornamento v" .. NebbieDash._upgradeFromVer ..
-      " → v" .. NebbieDash.version .. ".\n")
-    cecho("<grey>[NebbieDash] Prossimi aggiornamenti: <yellow>npackageupdate<grey>. "
-      .. "Se la barra e' nera: <yellow>nfix<grey>.\n")
+  -- npackageupdate richiama boot() 2–3 volte (script + sysInstall + PostInstall):
+  -- UI si rimonta, ma i messaggi utente restano una sola volta.
+  local announce = true
+  if not forceAnnounce then
+    local t = os.time()
+    if NebbieDash._bootAnnounceAt and (t - NebbieDash._bootAnnounceAt) < 90 then
+      announce = false
+    else
+      NebbieDash._bootAnnounceAt = t
+    end
+  else
+    NebbieDash._bootAnnounceAt = os.time()
+  end
+  if announce then
+    if NebbieDash._upgradeFromVer then
+      cecho("<yellow>[NebbieDash] Aggiornamento v" .. NebbieDash._upgradeFromVer ..
+        " → v" .. NebbieDash.version .. ".\n")
+      cecho("<grey>[NebbieDash] Prossimi aggiornamenti: <yellow>npackageupdate<grey>. "
+        .. "Se la barra e' nera: <yellow>nfix<grey>.\n")
+      NebbieDash._upgradeFromVer = nil
+    end
+    cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto (" ..
+      tostring(NebbieDash.effectiveSidebarMode()) .. " sidebar). Usa <yellow>nresync<green> dopo il login.\n")
+    NebbieDash.printPackageVersionHint()
+  else
+    -- Upgrade gia' annunciato al primo boot di questa install: scarta il flag.
     NebbieDash._upgradeFromVer = nil
   end
-  cecho("<green>[NebbieDash] v" .. NebbieDash.version .. " pronto (" ..
-    tostring(NebbieDash.effectiveSidebarMode()) .. " sidebar). Usa <yellow>nresync<green> dopo il login.\n")
-  NebbieDash.printPackageVersionHint()
   -- Check GitHub: se main e' avanti, suggerisce npackageupdate (silenzioso se ok).
-  tempTimer(1.5, function()
-    if type(NebbieDash.scheduleRemotePackageUpdateCheck) == "function" then
-      NebbieDash.scheduleRemotePackageUpdateCheck({ quietOk = true })
-    end
-  end)
+  if NebbieDash._bootVerCheckTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._bootVerCheckTimer)
+    NebbieDash._bootVerCheckTimer = nil
+  end
+  if type(tempTimer) == "function" then
+    NebbieDash._bootVerCheckTimer = tempTimer(1.5, function()
+      NebbieDash._bootVerCheckTimer = nil
+      if type(NebbieDash.scheduleRemotePackageUpdateCheck) == "function" then
+        NebbieDash.scheduleRemotePackageUpdateCheck({ quietOk = true })
+      end
+    end)
+  end
 end
 
 function NebbieDash.runFix()
   NebbieDash._lastBootTime = nil
+  NebbieDash._bootAnnounceAt = nil
   NebbieDash.teardownGui()
-  NebbieDash.boot()
+  NebbieDash.boot(true)
   cecho("<green>[NebbieDash] nfix completato.\n")
 end

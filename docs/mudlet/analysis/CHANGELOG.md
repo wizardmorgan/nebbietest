@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.92 — 2026-11-17
+
+- **Boot announce**: durante `npackageupdate` il messaggio «v… pronto» (e l’hint
+  versioni) compare **una sola volta**; `nfix` lo ristampa sempre.
+
 ## 1.15.91 — 2026-11-17
 
 - **Sync prompt**: durante `npackageupdate` `boot()` può partire più volte —
