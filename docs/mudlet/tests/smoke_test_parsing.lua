@@ -1626,10 +1626,23 @@ check("identdb: sync wear da eq", learned >= 1)
 check("identdb: wear slot da eq",
   NebbieDash.primaryIdentWearSlot(wearEntry) == "intorno al corpo")
 NebbieDash.setIdentWearSlotsManual(wearEntry, { "sul dito destro" })
-check("identdb: wear slot manuale",
-  NebbieDash.primaryIdentWearSlot(wearEntry) == "sul dito destro"
+check("identdb: wear slot manuale (L/R → alle dita)",
+  NebbieDash.primaryIdentWearSlot(wearEntry) == "alle dita"
     and wearEntry.wearSlotsManual == true)
+check("identdb: dito sinistro collassa allo stesso slot",
+  NebbieDash.normalizeWearSlotLabel("sul dito sinistro") == "alle dita")
+check("identdb: polsi/orecchie collassano",
+  NebbieDash.normalizeWearSlotLabel("al polso destro") == "ai polsi"
+    and NebbieDash.normalizeWearSlotLabel("all'orecchio sinistro") == "alle orecchie")
+-- eq su entrambe le dita non duplica
+NebbieDash.setIdentWearSlotsManual(wearEntry, {})
+NebbieDash.addIdentWearSlot(wearEntry, "sul dito destro", "eq")
+NebbieDash.addIdentWearSlot(wearEntry, "sul dito sinistro", "eq")
+check("identdb: L+R dito → una sola entry alle dita",
+  #NebbieDash.identWearSlotsList(wearEntry) == 1
+    and NebbieDash.primaryIdentWearSlot(wearEntry) == "alle dita")
 -- eq puo' ancora aggiungere altri slot senza cancellare il manuale
+NebbieDash.setIdentWearSlotsManual(wearEntry, { "sul dito destro" })
 NebbieDash.chars["NomiyaMaki"].eq[2] = {
   location = "impugnato",
   item = "mantello varco ombra profonda",
@@ -1638,10 +1651,22 @@ NebbieDash.syncIdentWearSlotsFromEqSlots(NebbieDash.chars["NomiyaMaki"].eq)
 local slotsNow = NebbieDash.identWearSlotsList(wearEntry)
 local hasDito, hasImp = false, false
 for _, s in ipairs(slotsNow) do
-  if s == "sul dito destro" then hasDito = true end
+  if s == "alle dita" then hasDito = true end
   if s == "impugnato" then hasImp = true end
 end
 check("identdb: manuale + eq aggiunge", hasDito and hasImp)
+local choices = NebbieDash.identWearSlotChoices()
+local nDito, nPolso, nOrec = 0, 0, 0
+for _, c in ipairs(choices) do
+  if c == "alle dita" then nDito = nDito + 1 end
+  if c == "ai polsi" then nPolso = nPolso + 1 end
+  if c == "alle orecchie" then nOrec = nOrec + 1 end
+  if c:find("dito destro", 1, true) or c:find("dito sinistro", 1, true) then
+    nDito = nDito + 10
+  end
+end
+check("identdb: choices hanno alle dita/polsi/orecchie una volta",
+  nDito == 1 and nPolso == 1 and nOrec == 1)
 NebbieDash._identUiState = NebbieDash._identUiState or {}
 NebbieDash._identUiState.slotFilter = "dito"
 NebbieDash._identUiState.filter = ""

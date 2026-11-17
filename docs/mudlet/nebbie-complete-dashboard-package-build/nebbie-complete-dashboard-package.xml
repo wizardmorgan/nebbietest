@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.99"
+local PKG_VER = "1.16.0"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -7230,8 +7230,24 @@ end
 -- L'identify del MUD non stampa wear_flags: impariamo dallo slot di `eq`
 -- (A) e/o da tag manuale in nidentui (B).
 -- ---------------------------------------------------------------------------
+-- Slot bilaterali (L/R) → un solo nome in UI/DB ident (dito, polso, orecchio).
+-- Accetta anche forme corte da filtro (`nidentui slot dito`).
 function NebbieDash.normalizeWearSlotLabel(loc)
   loc = tostring(loc or ""):lower():match("^%s*(.-)%s*$") or ""
+  -- Apostrofo tipografico → ASCII (output Mudlet a volte differisce).
+  loc = loc:gsub("’", "'"):gsub("‘", "'")
+  if loc == "sul dito destro" or loc == "sul dito sinistro"
+      or loc == "alle dita" or loc == "dito" or loc == "dita" then
+    return "alle dita"
+  end
+  if loc == "al polso destro" or loc == "al polso sinistro"
+      or loc == "ai polsi" or loc == "polso" or loc == "polsi" then
+    return "ai polsi"
+  end
+  if loc == "all'orecchio destro" or loc == "all'orecchio sinistro"
+      or loc == "alle orecchie" or loc == "orecchio" or loc == "orecchie" then
+    return "alle orecchie"
+  end
   return loc
 end
 

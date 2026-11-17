@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.0 — 2026-11-17
+
+- **nidentui / slot wear**: slot bilaterali unificati in un solo nome —
+  dito L/R → **alle dita**, polso L/R → **ai polsi**, orecchio L/R →
+  **alle orecchie** (lista, dettaglio, editor, filtro `nidentui slot dito`).
+
 ## 1.15.99 — 2026-11-17
 
 - **convertToUserWindow**: fix loop infinito. `mudlet.github.io` serve uno
