@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.96 — 2026-11-17
+
+- **GUI**: colonna sinistra = **solo Equip** (rimossa la lista speedwalk sotto).
+  Speedwalk solo via **`nswui`**. `nheights` / `nleftheights` / `nspellwarn`
+  segnalano obsoleto.
+- **nhelp**: elenco aggiornato (nswui/nsw, nidentsync, nchat, ngoldalert, …);
+  puliti comandi legacy.
+
 ## 1.15.95 — 2026-11-17
 
 - **Sirio / login**: riconoscimento PG anche da **GMCP `char.base.name`** (menu

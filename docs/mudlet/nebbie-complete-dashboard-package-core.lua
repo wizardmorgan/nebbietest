@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.95"
+local PKG_VER = "1.15.96"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -2041,7 +2041,7 @@ function NebbieDash.cmdReloadSpeedwalks()
   if #NebbieDash.speedwalks == 0 and #skipped == 0 then
     cecho("<grey>Aggiungi righe attive (non commentate) tipo: (nome percorso) u,3w,n,s\n")
   end
-  cecho("<grey>Layout: altezza Equip/Speedwalk auto (testo) — <yellow>nheights 40<grey> / <yellow>nheights auto<grey>; larghezza <yellow>nwidth auto<grey> / <yellow>nlayout<grey>. Sezione: <yellow>(>> titolo)<grey>.\n")
+  cecho("<grey>Lista path: <yellow>nswui<grey> — larghezza Equip <yellow>nwidth auto<grey>. Sezione file: <yellow>(>> titolo)<grey>.\n")
 end
 
 -- Ripetizione generica di un comando digitato direttamente al prompt, es.
@@ -2445,8 +2445,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Dashboard (miniconsole su bordo destro — MUDLET-WIKI-NOTES.md §6)
 -- ---------------------------------------------------------------------------
--- Dashboard: un solo bordo sinistro — Equip sopra, Speedwalk sotto (niente pannello spell).
--- Larghezza e ripartizione verticale si adattano al testo visibile.
+-- Dashboard: bordo sinistro = solo Equip. Speedwalk → finestra floating `nswui`.
 NebbieDash.guiWidthEquip = 260
 NebbieDash.guiWidthRight = 0
 NebbieDash.fontSize = 11
@@ -2559,13 +2558,14 @@ function NebbieDash.guiVisible()
   return NebbieDash._guiCreated == true and NebbieDash._guiHidden ~= true
 end
 
--- Ripartizione verticale Equip / Speedwalk (bordo sinistro).
-NebbieDash.guiRatios = { equip = 0.5, manualEquip = false }
+-- Legacy (pre-1.15.96 ripartizione Equip/Speedwalk): tenuti per nheights no-op / migrazione.
+NebbieDash.guiRatios = { equip = 1.0, manualEquip = false }
 NebbieDash.dividerPx = 4
-NebbieDash.GUI_WINDOWS = { "NebbieDashEquip", "NebbieDashSpeedwalks" }
+NebbieDash.GUI_WINDOWS = { "NebbieDashEquip" }
 NebbieDash.ALL_GUI_ELEMENTS = {
-  "NebbieDashEquip", "NebbieDashSpeedwalks",
-  "NebbieDashDivider",
+  "NebbieDashEquip",
+  -- Rimuovere residui di versioni precedenti:
+  "NebbieDashSpeedwalks", "NebbieDashDivider",
 }
 
 function NebbieDash.estimateEquipContentLines(data)
@@ -2762,6 +2762,7 @@ function NebbieDash.panelCechoLink(win, text, command, hint, paste)
 end
 
 function NebbieDash.destroyFloatSidebarArtifacts()
+  local wasFloat = NebbieDash._floatSidebarCreated or NebbieDash._sidebarContainer ~= nil
   if NebbieDash._sidebarContainer then
     if type(NebbieDash._sidebarContainer.delete) == "function" then
       pcall(function() NebbieDash._sidebarContainer:delete() end)
@@ -2769,7 +2770,10 @@ function NebbieDash.destroyFloatSidebarArtifacts()
       pcall(function() NebbieDash._sidebarContainer:hide() end)
     end
   end
-  for _, name in ipairs({ "NebbieDashSidebarContainer", "NebbieDashEquip", "NebbieDashSpeedwalks" }) do
+  -- Non cancellare NebbieDashEquip del dock sinistro: solo artefatti float.
+  local names = { "NebbieDashSidebarContainer", "NebbieDashSpeedwalks", "NebbieDashDivider" }
+  if wasFloat then table.insert(names, "NebbieDashEquip") end
+  for _, name in ipairs(names) do
     if type(deleteWindow) == "function" then pcall(deleteWindow, name) end
   end
   NebbieDash._sidebarContainer = nil
@@ -4527,17 +4531,17 @@ function NebbieDash.initDockSidebar()
   setBorderLeft(NebbieDash.guiWidthEquip)
   setBorderRight(0)
   createMiniConsole("NebbieDashEquip", 0, 0, NebbieDash.guiWidthEquip, 0)
-  createMiniConsole("NebbieDashSpeedwalks", 0, 0, NebbieDash.guiWidthEquip, 0)
   if type(enableScrollBar) == "function" then
     enableScrollBar("NebbieDashEquip", true)
-    enableScrollBar("NebbieDashSpeedwalks", true)
   end
   if type(setMaxLines) == "function" then
     setMaxLines("NebbieDashEquip", 400)
-    setMaxLines("NebbieDashSpeedwalks", 500)
   end
-  -- enableClickthrough = 0: altrimenti il mouse passa alle miniconsole sotto e il drag non funziona.
-  createLabel("NebbieDashDivider", 0, 0, NebbieDash.guiWidthEquip, NebbieDash.dividerPx, 1, 0)
+  -- Rimuovi pannello speedwalk / divider di versioni precedenti (ora c'e' nswui).
+  for _, win in ipairs({ "NebbieDashSpeedwalks", "NebbieDashDivider" }) do
+    if type(deleteWindow) == "function" then pcall(deleteWindow, win)
+    elseif type(hideWindow) == "function" then pcall(hideWindow, win) end
+  end
 end
 
 function NebbieDash.initFloatSidebar()
@@ -4584,10 +4588,13 @@ function NebbieDash.initFloatSidebar()
 end
 
 function NebbieDash.destroyLegacyGuiWindows()
-  NebbieDash.destroyFloatSidebarArtifacts()
+  if NebbieDash._floatSidebarCreated or NebbieDash._sidebarContainer then
+    NebbieDash.destroyFloatSidebarArtifacts()
+  end
   local legacy = {
     "NebbieDashSpells", "NebbieDashWeapons", "NebbieDashDividerLeft",
     "NebbieDashAttrib", "NebbieDashSidebarContainer",
+    "NebbieDashSpeedwalks", "NebbieDashDivider",
   }
   for _, win in ipairs(legacy) do
     if type(deleteWindow) == "function" then
@@ -4610,11 +4617,9 @@ function NebbieDash.initGUI()
     setMiniConsoleFontSize(win, NebbieDash.fontSize)
     setBackgroundColor(win, 15, 15, 15, 255)
   end
-  setBackgroundColor("NebbieDashDivider", 90, 90, 100, 255)
-  NebbieDash.setupEquipDividerDrag()
   NebbieDash._guiCreated = true
-  NebbieDash.positionGUI()
   NebbieDash.destroyLegacyGuiWindows()
+  NebbieDash.positionGUI()
   NebbieDash.refreshDashboard()
   -- getMainWindowSize() puo' non essere ancora affidabile nello stesso istante
   -- in cui la GUI viene creata (geometria Qt non ancora assestata all'avvio
@@ -4645,28 +4650,9 @@ function NebbieDash.computeEquipMaxChars(data)
   return maxChars
 end
 
--- Larghezza bordo sinistro da contenuto Equip + Speedwalk.
+-- Larghezza bordo sinistro da contenuto Equip.
 function NebbieDash.computeSidebarMaxChars(data)
   local maxChars = NebbieDash.computeEquipMaxChars(data)
-  for _, item in ipairs(NebbieDash.speedwalkItems or {}) do
-    if item.kind == "section" then
-      maxChars = math.max(maxChars, #item.title + 3)
-    elseif item.kind == "walk" then
-      maxChars = math.max(maxChars, #item.desc + 4)
-      if item.dirString and item.dirString ~= "" then
-        maxChars = math.max(maxChars, math.min(#item.dirString, 72) + 4)
-      end
-    end
-  end
-  if not NebbieDash.speedwalkItems or #NebbieDash.speedwalkItems == 0 then
-    for _, entry in ipairs(NebbieDash.speedwalks or {}) do
-      maxChars = math.max(maxChars, #entry.desc + 4)
-      if entry.dirString then
-        maxChars = math.max(maxChars, math.min(#entry.dirString, 72) + 4)
-      end
-    end
-  end
-  maxChars = math.max(maxChars, #("Speedwalk") + 2)
   return math.min(maxChars, NebbieDash.autoWidthRightMaxChars or 58)
 end
 
@@ -4696,18 +4682,8 @@ function NebbieDash.positionGUI()
   local _w, h = getMainWindowSize()
   h = h or 600
   local sideW = NebbieDash.guiWidthEquip or 260
-  local name = NebbieDash.currentChar
-  local data = name and NebbieDash.getCharData(name) or nil
-  local usableH = math.max(0, h - NebbieDash.dividerPx)
-  local equipRatio = NebbieDash.computeSidebarEquipRatio(data)
-  local equipH = math.floor(usableH * equipRatio)
-  local speedwalkH = usableH - equipH
   moveWindow("NebbieDashEquip", 0, 0)
-  resizeWindow("NebbieDashEquip", sideW, equipH)
-  moveWindow("NebbieDashDivider", 0, equipH)
-  resizeWindow("NebbieDashDivider", sideW, NebbieDash.dividerPx)
-  moveWindow("NebbieDashSpeedwalks", 0, equipH + NebbieDash.dividerPx)
-  resizeWindow("NebbieDashSpeedwalks", sideW, speedwalkH)
+  resizeWindow("NebbieDashEquip", sideW, h)
   NebbieDash.positionHelpButton()
 end
 
@@ -4768,73 +4744,44 @@ end
 NebbieDash.HELP_TEXT = {
   { "c / r / m <spell> [bersaglio]", "Lancia spell (nclass PG); senza bersaglio = PG attivo." },
   { "<shortcut> [bersaglio]", "Alias globali da nebbie-spell-shortcuts.txt (stile zMUD)." },
-  { "nspellaliases", "Elenco shortcut + spell nel pannello self-cast." },
-  { "nspellaliasesreload", "Ricarica nebbie-spell-shortcuts.txt e nebbie-cast-spells.txt." },
-  { "neq", "Mostra l'equip corrente (dati salvati)." },
-  { "nattrib", "Mostra le spell attive correnti (dati salvati)." },
-  { "nresync", "Invia eq + attrib al gioco per risincronizzare i pannelli." },
-  { "nfix", "Riavvia il package e rimuove pannelli legacy (Spell/Armi)." },
-  { "npackageupdate [force]", "Scarica/reinstalla il .mpackage da GitHub (wizardmorgan/nebbie-mudlet-dashboard main)." },
-  { "npackagecheck", "Controlla se su GitHub (main) c'e' una versione piu' nuova; al boot/connect lo fa anche da solo." },
-  { "ntriggers", "Reinstalla i trigger NebbieDash (fame/sete, prompt, loot, …) senza riavviare Mudlet." },
-  { "nkeys", "Tastierino numerico (Nebbie Keypad) e shortcut spell da command line." },
-  { "ngui", "Mostra/nascondi tutti i pannelli." },
-  { "nlayout", "Ripristina larghezze/font/proporzioni di default." },
-  { "nchar <nome>", "Forza manualmente il personaggio attivo." },
-  { "nclass <cast|recall|mind>", "Imposta il comando di lancio per il personaggio attivo." },
-  { "nfont <6-24>", "Imposta la dimensione del font dei pannelli." },
-  { "nwidth [auto|<px>]", "Larghezza colonna Equip+Speedwalk (dock o float); default auto." },
-  { "nsidebar dock", "Layout bordo sinistro (unico supportato); rimuove eventuali pannelli float residui + nfix." },
-  { "npreferencesreload", "Ricarica preferenze + suoni highlight; reinstalla evidenziazioni testo." },
-  { "nheights <10-90>|auto", "Altezza Equip vs Speedwalk: auto = proporzione al testo; o % Equip manuale." },
-  { "usa <parola-chiave>", "Cambio arma da zaino (rem/get/wield — come nebbie-play-all)." },
-  { "nconfigdir", "Mostra cartella profiles/ndashboard e file indice nebbie-dash-config-root.txt." },
-  { "nitemlen <n>", "Lunghezza massima delle descrizioni oggetti in equip." },
-  { "nspellwarn <tick>", "(Legacy) soglia colore pannello spell rimosso — ignorato." },
-  { "nspeedwalks", "Ricarica il file di configurazione degli speedwalk (ndashboard)." },
-  { "nswui", "Finestra floating speedwalk (lista path + pausa/riprendi)." },
-  { "nsw pause|resume|skip|stop|status", "Controlla la corsa speedwalk in corso." },
-  { "nspeeddelay <secondi>", "Ritardo tra un comando e l'altro in uno speedwalk." },
-  { "nclanslot <on|off>", "Mostra/nascondi lo slot 22 (simbolo del clan)." },
-  { "nloot", "Prende le monete dal cadavere presente (normale o pile of bones)." },
-  { "nautoloot <on|off>", "Attiva/disattiva il loot automatico alla fine di ogni combattimento." },
-  { "nautosplit <on|off>", "Attiva/disattiva lo split automatico col gruppo dopo ogni loot riuscito." },
-  { "nsplit <numero>", "Divide manualmente un importo col gruppo (equivalente a 'split')." },
-  { "nautostand <on|off>", "Attiva/disattiva il rialzarsi automatico ('stand') dopo una caduta." },
-  { "nautodisarm <on|off>", "Attiva/disattiva il recupero automatico dell'arma dopo un disarmo." },
-  { ".<numero><comando>", "Ripete il comando N volte, es. '.4s' invia 's' quattro volte." },
-  { "nautofeed <on|off>", "Attiva/disattiva la macro automatica fame/sete (per personaggio, vedi file macro)." },
-  { "nhungermacros", "Ricarica le macro fame/sete dal file di configurazione." },
-  { "nitemkeywords", "Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione." },
-  { "nforgetspell <nome>", "Rimuove una spell memorizzata per errore dall'elenco del personaggio attivo." },
-  { "nbatch [nome-toon]", "Esegue comandi admin da CSV (profilo Sirio; inizia con nchar Sirio)." },
-  { "nbatchreload", "Ricarica nebbie-batch-commands.txt e nebbie-batch-items.csv." },
-  { "nbatchverify [toon] [data]", "Verifica log batch vs CSV (es. nbatchverify GreenBlade 2026-09-21)." },
-  { "nidentbatch [nome-toon]", "Identify batch: oload $3, stat/identify/junk con $o (keyword oload)." },
-  { "nidentbatch resume [nome-toon]", "Riprende identify batch saltando righe gia' nel CSV di oggi." },
-  { "nidentbatchreload", "Ricarica nebbie-ident-batch-commands.txt e nebbie-batch-items.csv." },
-  { "nidentdb [query]", "Cerca nell'archivio identify condiviso (profiles/ndashboard)." },
-  { "nidentdb where <query>", "Come nidentdb + possesso + chi ha l'oggetto in equip (cache eq)." },
-  { "nidentdb char <nome>", "Identify / possesso di quel personaggio." },
-  { "nidentdb hold <NomePg>", "Dopo un drop: assegna l'oggetto a terra a un PG." },
-  { "nidentdb hold <ogg> <Pg>", "Assegna possesso identify a un PG (senza drop pendente)." },
-  { "nidentdb cedibile <ogg>", "Marca l'oggetto come cedibile (inventario give/drop)." },
-  { "nidentdb noncedibile <ogg>", "Toglie il flag cedibile (give/drop non lo toccano)." },
-  { "nidentdb del <ogg>", "Elimina una entry identify (se la query e' univoca)." },
-  { "nidentui", "Finestra floating per gestire l'archivio identify (lista, filtri, elimina)." },
-  { "nidentui filter|slot|char|del|reset", "Filtri / archivia (Deleted) / reset nella finestra Ident." },
-  { "nidentsync", "Sync identify DB con hub VPS (pull+merge+push)." },
-  { "nidentpull / nidentpush", "Solo pull o solo push verso l'hub ident." },
-  { "nidentsync token|skip|setup|status|onboot", "Token sync (URL fissa); skip=dopo; setup ripropone prompt." },
-  { "nidentdb export <NomePg>", "CSV di tutti gli identify di un PG (file NomePg-gg-mm-aaaa-hh-mm-ss.csv)." },
-  { "nidentdbreload", "Ricarica nebbie-ident-db.lua dalla cartella condivisa." },
-  { "nknowdb [query]", "Cerca nell'archivio know monster condiviso (profiles/ndashboard)." },
-  { "nknowdb race <razza>", "Elenca mostri per razza (es. nknowdb race Goblinoid)." },
-  { "nknowdbreload", "Ricarica nebbie-know-db.lua dalla cartella condivisa." },
-  { "nchat", "Mostra/nascondi la finestra floating chat (say/gt/clan/tell/whisper/ask/gossip/shout)." },
-  { "nchat on|off|clear", "Attiva/disattiva o svuota la finestra chat." },
-  { "ngoldalert [on|off|status]", "Avvisa se ti sottraggono monete (ignora split/give/drop/pagamenti)." },
-  { "identify <arma>", "(comando di gioco) Rileva il tipo di danno (slash/blunt/pierce) per usa/disarmo." },
+  { "nspellaliases / nspellaliasesreload", "Elenco shortcut; ricarica file shortcut/cast." },
+  { "neq / nattrib / nresync", "Mostra equip/spell salvati; nresync invia eq+attrib al MUD." },
+  { "nfix", "Riavvia il package (pulisce pannelli legacy)." },
+  { "npackageupdate [force]", "Aggiorna il .mpackage da GitHub (main)." },
+  { "npackagecheck", "Controlla se su GitHub c'e' una versione piu' nuova." },
+  { "ntriggers", "Reinstalla i trigger senza riavviare Mudlet." },
+  { "nkeys", "Info tastierino numerico / shortcut da command line." },
+  { "ngui", "Mostra/nascondi il pannello Equip." },
+  { "nlayout", "Ripristina larghezza/font di default." },
+  { "nchar <nome>", "Forza il personaggio attivo (es. nchar Sirio)." },
+  { "nclass <c|r|m>", "Prefisso lancio spell per il PG attivo (cast/recall/mind)." },
+  { "nfont <6-24>", "Font del pannello Equip." },
+  { "nwidth [auto|<px>]", "Larghezza colonna Equip (bordo sinistro)." },
+  { "npreferencesreload", "Ricarica preferenze e highlight da ndashboard." },
+  { "nconfigdir", "Mostra cartella profiles/ndashboard." },
+  { "nitemlen <n>", "Lunghezza max descrizioni oggetti in equip." },
+  { "nclanslot <on|off>", "Mostra/nascondi lo slot simbolo del clan." },
+  { "usa <keyword>", "Cambio arma da zaino (rem/get/wield)." },
+  { "nswui [off]", "Finestra floating speedwalk (lista path + pausa/riprendi)." },
+  { "nsw pause|resume|skip|stop|status", "Controlla la corsa speedwalk." },
+  { "nspeedwalks", "Ricarica nebbie-speedwalks.txt (ndashboard)." },
+  { "nspeeddelay <sec>", "Ritardo tra passi speedwalk / ripetizioni .Ncmd." },
+  { "nloot / nautoloot / nautosplit", "Loot monete; auto a fine fight; split gruppo." },
+  { "nsplit <n>", "Split manuale col gruppo." },
+  { "nautostand / nautodisarm", "Stand dopo caduta; recupero arma dopo disarmo." },
+  { ".<n><comando>", "Ripete il comando N volte (es. .4s)." },
+  { "nautofeed / nhungermacros", "Macro fame/sete; ricarica file macro." },
+  { "nitemkeywords", "Ricarica parole chiave oggetti (ndashboard)." },
+  { "nforgetspell <nome>", "Toglie una spell dall'elenco del PG attivo." },
+  { "nchat [on|off|clear]", "Finestra floating chat (say/gt/clan/tell/…)." },
+  { "ngoldalert [on|off|status]", "Allarme se G: scende senza spesa volontaria." },
+  { "nidentui [filter|slot|char|del|reset]", "Finestra floating archivio identify." },
+  { "nidentdb …", "Cerca/hold/cedibile/export identify (vedi USAGE)." },
+  { "nidentsync [token|skip|setup|status|…]", "Sync identify con hub VPS (token)." },
+  { "nidentpull / nidentpush", "Solo pull o solo push verso l'hub." },
+  { "nknowdb [query|race …]", "Archivio know monster (ndashboard)." },
+  { "nbatch / nidentbatch …", "Batch admin/identify (profilo Sirio)." },
+  { "identify <arma>", "(gioco) Tipo danno per usa/disarmo." },
   { "nhelp", "Mostra/nascondi questa finestra." },
 }
 
@@ -4931,14 +4878,14 @@ function NebbieDash.cmdSetFont(sizeStr)
   cecho("<green>[NebbieDash] Font pannello impostato a " .. size .. ".\n")
 end
 
--- Larghezza bordo sinistro (Equip + Speedwalk impilati).
+-- Larghezza bordo sinistro (colonna Equip).
 function NebbieDash.cmdSetWidth(argStr)
   argStr = (argStr or ""):match("^%s*(.-)%s*$")
   if argStr == "" or argStr:lower() == "auto" then
     NebbieDash.autoWidthEquip = true
     NebbieDash.autoWidthRight = true
     NebbieDash.refreshDashboard()
-    cecho("<green>[NebbieDash] Larghezza bordo sinistro: automatica.\n")
+    cecho("<green>[NebbieDash] Larghezza colonna Equip: automatica.\n")
     return
   end
   local width = tonumber(argStr)
@@ -4954,37 +4901,16 @@ function NebbieDash.cmdSetWidth(argStr)
     setBorderRight(0)
     NebbieDash.positionGUI()
   end
-  cecho("<green>[NebbieDash] Larghezza bordo sinistro impostata a " .. width .. " (manuale).\n")
+  cecho("<green>[NebbieDash] Larghezza colonna Equip impostata a " .. width .. " (manuale).\n")
 end
 
-function NebbieDash.cmdSetHeights(pctStr)
-  pctStr = (pctStr or ""):match("^%s*(.-)%s*$"):lower()
-  if pctStr == "auto" then
-    NebbieDash.guiRatios = NebbieDash.guiRatios or {}
-    NebbieDash.guiRatios.manualEquip = false
-    NebbieDash.persistGuiRatios()
-    if NebbieDash._guiCreated then NebbieDash.positionGUI() end
-    cecho("<green>[NebbieDash] Altezza Equip/Speedwalk: automatica (proporzione al testo).\n")
-    return
-  end
-  local pct = tonumber(pctStr)
-  if not pct or pct < 10 or pct > 90 then
-    local cur = NebbieDash.guiRatios.manualEquip and math.floor((NebbieDash.guiRatios.equip or 0.5) * 100)
-      or "auto"
-    cecho("<orange>[NebbieDash] Uso: nheights <10-90> (% altezza Equip) oppure <yellow>nheights auto<grey> (attuale: "
-      .. tostring(cur) .. ")\n")
-    return
-  end
-  NebbieDash.guiRatios = NebbieDash.guiRatios or {}
-  NebbieDash.guiRatios.equip = pct / 100
-  NebbieDash.guiRatios.manualEquip = true
-  NebbieDash.persistGuiRatios()
-  if NebbieDash._guiCreated then NebbieDash.positionGUI() end
-  cecho("<green>[NebbieDash] Equip al " .. pct .. "% dell'altezza sinistra (Speedwalk: " .. (100 - pct) .. "%).\n")
+function NebbieDash.cmdSetHeights(_pctStr)
+  cecho("<grey>[NebbieDash] nheights: lo speedwalk non e' piu' nella colonna sinistra. "
+    .. "Usa <yellow>nswui<grey> per la lista path.\n")
 end
 
 function NebbieDash.cmdSetLeftHeights(_pctStr)
-  cecho("<grey>[NebbieDash] nleftheights: pannello armi rimosso — la colonna equip usa tutta l'altezza.\n")
+  cecho("<grey>[NebbieDash] nleftheights: obsoleto — la colonna sinistra e' solo Equip.\n")
 end
 
 function NebbieDash.cmdConfigDir(_arg)
@@ -5050,15 +4976,8 @@ function NebbieDash.cmdSetItemLen(lenStr)
   cecho("<green>[NebbieDash] Lunghezza max descrizione oggetto impostata a " .. len .. ".\n")
 end
 
-function NebbieDash.cmdSetSpellWarn(ticksStr)
-  local ticks = tonumber(ticksStr)
-  if not ticks or ticks < 0 or ticks > 999 then
-    cecho("<orange>[NebbieDash] Uso: nspellwarn <numero tra 0 e 999> (attuale: " .. NebbieDash.spellWarnTicks .. ")\n")
-    return
-  end
-  NebbieDash.spellWarnTicks = ticks
-  NebbieDash.refreshDashboard()
-  cecho("<green>[NebbieDash] Soglia colore rosso spell impostata a " .. ticks .. " tick.\n")
+function NebbieDash.cmdSetSpellWarn(_ticksStr)
+  cecho("<grey>[NebbieDash] nspellwarn: obsoleto (pannello spell GUI rimosso).\n")
 end
 
 -- Rimuove manualmente una spell dall'elenco "conosciuto" del personaggio
@@ -5174,67 +5093,12 @@ function NebbieDash.refreshDashboard()
   NebbieDash.renderEquipPanel(name, NebbieDash.getCharData(name))
 end
 
+-- Speedwalk non e' piu' nella colonna sinistra: aggiorna solo nswui se aperta.
 function NebbieDash.refreshSpeedwalkPanel()
-  if not NebbieDash._guiCreated or NebbieDash._guiHidden then return end
-  NebbieDash.clearPanel("NebbieDashSpeedwalks")
-  NebbieDash.panelCecho("NebbieDashSpeedwalks", "<cyan><b>Speedwalk</b>\n")
-  if #(NebbieDash.speedwalkItems or {}) == 0 and #NebbieDash.speedwalks == 0 then
-    NebbieDash.panelCecho("NebbieDashSpeedwalks",
-      "<grey>(nessuno — scrivili in " .. NebbieDash.speedwalkPath() .. " poi digita <yellow>nspeedwalks<grey>)\n")
-    NebbieDash.positionGUI()
-    return
+  if NebbieDash._swUiCreated and not NebbieDash._swUiHidden
+      and type(NebbieDash.refreshSwUi) == "function" then
+    NebbieDash.refreshSwUi()
   end
-  for i, item in ipairs(NebbieDash.speedwalkItems or {}) do
-    if item.kind == "section" then
-      local collapsed = NebbieDash.isSpeedwalkSectionCollapsed(item.key)
-      local icon = collapsed and "▶" or "▼"
-      NebbieDash.panelCechoLink("NebbieDashSpeedwalks", "<yellow><b>" .. icon .. " " .. item.title .. "</b>",
-        string.format("NebbieDash.toggleSpeedwalkSection(%d)", i),
-        (collapsed and "Espandi sezione" or "Collassa sezione") ..
-          " — nel file: (>> " .. item.title .. ")", true)
-      NebbieDash.panelCecho("NebbieDashSpeedwalks", "\n")
-    elseif item.kind == "walk" then
-      if item.sectionKey and NebbieDash.isSpeedwalkSectionCollapsed(item.sectionKey) then
-        -- nascosto finche' la sezione e' collassata
-      else
-        local preview = item.dirString or ""
-        local descCols = NebbieDash.panelWrapCols("left", 0)
-        local lineCols = NebbieDash.panelWrapCols("left", 2)
-        local noteCols = NebbieDash.panelWrapCols("left", 4)
-        local dirLines = NebbieDash.wrapPanelText(preview, lineCols)
-        for idx, dline in ipairs(NebbieDash.wrapPanelText(item.desc, descCols)) do
-          if idx == 1 then
-            NebbieDash.panelCechoLink("NebbieDashSpeedwalks", "<cyan>" .. dline,
-              string.format("NebbieDash.runSpeedwalk(%d)", item.walkIndex),
-              "Clicca per andare: " .. item.desc .. " (" .. preview .. ")", true)
-            NebbieDash.panelCecho("NebbieDashSpeedwalks", "\n")
-          else
-            NebbieDash.panelCecho("NebbieDashSpeedwalks", "<cyan>  " .. dline .. "\n")
-          end
-        end
-        for _, dline in ipairs(dirLines) do
-          NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>  " .. dline .. "\n")
-        end
-        if item.note and item.note ~= "" then
-          local noteLines = NebbieDash.wrapPanelText(item.note, noteCols)
-          if #noteLines == 1 then
-            NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>  (" .. noteLines[1] .. ")\n")
-          else
-            for ni, nline in ipairs(noteLines) do
-              if ni == 1 then
-                NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>  (" .. nline .. "\n")
-              elseif ni == #noteLines then
-                NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>    " .. nline .. ")\n")
-              else
-                NebbieDash.panelCecho("NebbieDashSpeedwalks", "<grey>    " .. nline .. "\n")
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-  NebbieDash.positionGUI()
 end
 
 function NebbieDash.updateVitalsDisplay()

@@ -83,13 +83,14 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `neq` | Invia solo `eq` e aggiorna il pannello equip. |
 | `nattrib` | Invia solo `attrib` e aggiorna il pannello spell. |
 | `nchar <nome>` | Forza manualmente il personaggio attivo (es. `nchar NomiyaMaki`), utile se il rilevamento automatico dal prompt non è ancora scattato (nessun comando ancora digitato in gioco). |
-| `ngui` | Mostra/nasconde il pannello laterale (bordo destro). |
-| `nlayout` | Ripristina larghezza (320px) e font (11pt) di default del pannello. |
+| `ngui` | Mostra/nasconde il pannello Equip (bordo sinistro). |
+| `nlayout` | Ripristina larghezza/font di default del pannello Equip. |
 | `nfont <numero>` | Cambia la dimensione del testo nel pannello (6–24, default 11). |
-| `nwidth <equip\|right> <numero>` | Fissa una larghezza manuale (150–900px) per la colonna equip (sinistra) o spell/speedwalk (destra), **disattivando** l'adattamento automatico per quella colonna. Senza indicare `equip`/`right` agisce sulla destra (retrocompatibilità). |
-| `nwidth <equip\|right> auto` | Riattiva la larghezza automatica per quella colonna (default per entrambe): si allarga/restringe da sola in base al contenuto più lungo visibile, senza mai superare il 60% della finestra di Mudlet. |
-| `nheights <percentuale>` | Regola quanta altezza della colonna destra va a "Spell attivi" (10–90, il resto va a "Speedwalk"; default 40). |
-| `nleftheights <percentuale>` | *(Legacy, da 1.15.31)* non fa più nulla: il pannello Armi è stato rimosso; la colonna equip usa tutta l'altezza. |
+| `nwidth <numero\|auto>` | Larghezza colonna Equip (150–900px) oppure `auto`. |
+| `nswui` | Finestra floating speedwalk (lista path + pausa/riprendi). |
+| `nsw pause\|resume\|skip\|stop\|status` | Controlla la corsa speedwalk. |
+| `nidentsync …` | Sync identify VPS (`token` / `skip` / `setup` / `status`). |
+| `nchat` / `ngoldalert` | Finestra chat floating; allarme monete. |
 | `usa <parola-chiave>` | Cambio arma da zaino (`rem`/`put`/`get`/`wield` come nebbie-play-all). Es. `usa redentore`. |
 | `nconfigdir` | Mostra **`profiles/ndashboard`** e il file **`profiles/nebbie-dash-config-root.txt`** (percorso da aprire in Explorer). |
 | `nclanslot <on\|off>` | Mostra/nasconde il 22° slot equip placeholder "simbolo del clan" (nascosto di default, non ancora confermato in un `eq` reale). |
@@ -271,10 +272,10 @@ quindi in uscita compare come `[say]`; i gossip altrui (`vi dice`) sono etichett
 
 ## Cambio arma (`usa`)
 
-Dalla **1.15.31** non c'è più il pannello "Armi" sotto l'Equip: la colonna sinistra mostra solo
-l'equip a tutta altezza. Il pacchetto continua a ricordare per personaggio le armi che hai impugnato
-(almeno una volta) e il tipo di danno quando lo scopri con `identify` — ma il cambio arma si fa con
-**`usa <parola-chiave>`** (es. `usa redentore`), non con un click.
+Dalla **1.15.31** non c'è più il pannello "Armi"; dalla **1.15.96** nemmeno lo speedwalk sotto
+l'Equip: la colonna sinistra è **solo Equip**. Path speedwalk → **`nswui`**. Il pacchetto continua
+a ricordare per personaggio le armi impugnate e il tipo di danno da `identify` — il cambio arma
+si fa con **`usa <parola-chiave>`** (es. `usa redentore`), non con un click.
 
 Sequenza automatica (come nebbie-play-all): `rem` zaino → `get` arma → `rem`/`put` arma
 attuale → `wield` → `wear` zaino. Parole chiave: override in `nebbie-item-keywords.txt` se
@@ -855,11 +856,10 @@ direzioni separate da virgola (descrizione cliccabile)
 ```
 
 Una riga **`(>> titolo di sezione)`** (prefisso **`>>`** obbligatorio dentro le parentesi) apre un
-**gruppo collassabile** nel pannello Speedwalk (clic su ▼/▶). I percorsi sotto restano in quella
+**gruppo collassabile** in **`nswui`** (clic su ▼/▶). I percorsi sotto restano in quella
 sezione fino alla prossima riga `(>> …)`.
 
-Lo stato aperto/chiuso si salva in `getMudletHomeDir()/nebbie-dash-ui.lua`. Altezza spell/speedwalk:
-**`nheights 70`** (più spell, meno speedwalk — default 62/38).
+Lo stato aperto/chiuso si salva in `profiles/ndashboard/nebbie-dash-ui.lua`.
 
 **Note** (solo visualizzazione): parentesi **in coda** al percorso `… (testo nota)` oppure riga
 separata `(testo nota)` — **senza** `>>`.
