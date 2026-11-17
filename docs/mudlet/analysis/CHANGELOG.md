@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.15.94 — 2026-11-17
+
+- **convertToUserWindow**: all’apertura profilo, se manca, **installazione
+  automatica** su quel profilo (`installPackage` URL ufficiale). I package
+  Mudlet restano per-profilo; non esiste un install globale. Preferenza
+  `auto_install_convert_to_userwindow = off` per solo avviso.
+
 ## 1.15.93 — 2026-11-17
 
 - **Boot**: se manca `convertToUserWindow` (package per staccare/spostare le

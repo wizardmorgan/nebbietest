@@ -43,13 +43,26 @@ Installazione da file locale: bottone `+` nel Package Manager e scegli il `.mpac
 
 Per staccare/spostare le finestre floating (chat, ident, speedwalk) serve il package
 community **`convertToUserWindow`** (doppio-click sulla barra titolo → UserWindow).
-Se manca, all’apertura del profilo NebbieDash mostra un avviso. Installazione:
+
+In Mudlet i **package sono per profilo** (non uno solo per tutti). Dalla **1.15.94**,
+all’apertura di un profilo dove manca, NebbieDash lo **installa da solo**
+(una volta per quel profilo). Preferenza condivisa in `nebbie-dash-preferences.txt`:
+
+```
+auto_install_convert_to_userwindow = on
+```
+
+Metti `off` per disattivare l’auto-install e vedere solo l’avviso. Manuale:
 
 ```text
 mpkg install convertToUserWindow
 ```
 
 oppure `lua installPackage("https://github.com/Mudlet/mudlet-package-repository/raw/refs/heads/main/packages/convertToUserWindow.mpackage")`.
+
+Alternativa avanzata Mudlet: importarlo come **modulo** (Alt+I) con sync su più
+profili — fuori scope del package Nebbie; l’auto-install per profilo è la via
+semplice.
 
 ## Icona e descrizione nella "Gestione pacchetti"
 

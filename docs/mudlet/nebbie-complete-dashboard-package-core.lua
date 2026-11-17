@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.15.93"
+local PKG_VER = "1.15.94"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -692,11 +692,13 @@ function NebbieDash.ensurePreferencesFile()
     "# ident_sync_on_boot = off\n" ..
     "# ident_sync_skip_prompt = off\n" ..
     "# ident_exclude_chars = Sirio\n" ..
+    "# auto_install_convert_to_userwindow = on  # installa convertToUserWindow se manca\n" ..
     "ident_sync_url = https://nebbie.wizmorgan.it/nebbie-ident\n" ..
     "ident_sync_token = \n" ..
     "ident_sync_on_boot = off\n" ..
     "ident_sync_skip_prompt = off\n" ..
-    "ident_exclude_chars = Sirio\n"
+    "ident_exclude_chars = Sirio\n" ..
+    "auto_install_convert_to_userwindow = on\n"
   )
   f:close()
 end
@@ -720,6 +722,7 @@ function NebbieDash.loadPreferences()
     ident_sync_on_boot = false,
     ident_sync_skip_prompt = false,
     ident_exclude_chars = "Sirio",
+    auto_install_convert_to_userwindow = true,
   }
   local path = NebbieDash.preferencesPath()
   if type(io.exists) == "function" and io.exists(path) then
@@ -752,6 +755,8 @@ function NebbieDash.loadPreferences()
             NebbieDash.prefs.ident_sync_skip_prompt = NebbieDash.parsePreferencesBool(val)
           elseif key == "ident_exclude_chars" then
             NebbieDash.prefs.ident_exclude_chars = val
+          elseif key == "auto_install_convert_to_userwindow" then
+            NebbieDash.prefs.auto_install_convert_to_userwindow = NebbieDash.parsePreferencesBool(val)
           end
         end
       end
@@ -768,6 +773,9 @@ function NebbieDash.loadPreferences()
   end
   if NebbieDash.prefs.ident_exclude_chars == nil or NebbieDash.prefs.ident_exclude_chars == "" then
     NebbieDash.prefs.ident_exclude_chars = "Sirio"
+  end
+  if NebbieDash.prefs.auto_install_convert_to_userwindow == nil then
+    NebbieDash.prefs.auto_install_convert_to_userwindow = true
   end
 end
 
@@ -788,7 +796,9 @@ function NebbieDash.savePreferencesFile()
     "ident_sync_token = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_sync_token) or "") .. "\n" ..
     "ident_sync_on_boot = " .. ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_on_boot) and "on" or "off") .. "\n" ..
     "ident_sync_skip_prompt = " .. ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_skip_prompt) and "on" or "off") .. "\n" ..
-    "ident_exclude_chars = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_exclude_chars) or "Sirio") .. "\n"
+    "ident_exclude_chars = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_exclude_chars) or "Sirio") .. "\n" ..
+    "auto_install_convert_to_userwindow = " ..
+      ((NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow ~= false) and "on" or "off") .. "\n"
   )
   f:close()
 end
@@ -2590,6 +2600,9 @@ function NebbieDash.canUseFloatingSidebar()
 end
 
 -- Package community (Edru): doppio-click su Adjustable.Container → UserWindow staccabile.
+-- Nota Mudlet: i package sono PER PROFILO (non globali). Un "modulo" con sync
+-- poterbbe condividere codice, ma convertToUserWindow e' distribuito come package.
+-- Soluzione pratica: auto-install all'apertura se manca (una volta per profilo).
 NebbieDash.CONVERT_TO_USERWINDOW_PKG = "convertToUserWindow"
 NebbieDash.CONVERT_TO_USERWINDOW_URL =
   "https://github.com/Mudlet/mudlet-package-repository/raw/refs/heads/main/packages/convertToUserWindow.mpackage"
@@ -2605,7 +2618,34 @@ function NebbieDash.hasConvertToUserWindowPackage()
   return false
 end
 
--- All'apertura profilo: avvisa se manca cio' che serve a spostare le finestre floating.
+function NebbieDash.echoConvertToUserWindowManualInstall()
+  cecho("<grey>Installazione manuale:\n")
+  cecho("  <yellow>mpkg install convertToUserWindow\n")
+  cecho("<grey>oppure:\n")
+  cecho("<white>lua installPackage(\"" .. NebbieDash.CONVERT_TO_USERWINDOW_URL .. "\")\n")
+  cecho("<grey>Poi: doppio-click sulla barra titolo della finestra floating.\n")
+  cecho("<grey>Preferenza: <white>auto_install_convert_to_userwindow = off"
+    .. "<grey> in nebbie-dash-preferences.txt per non installare da soli.\n")
+end
+
+function NebbieDash.onConvertToUserWindowInstalled(event, packageName)
+  if packageName and packageName ~= NebbieDash.CONVERT_TO_USERWINDOW_PKG then return end
+  NebbieDash._ctuwInstallPending = nil
+  if type(convertAdj) == "table" and type(convertAdj.Init) == "function" then
+    pcall(convertAdj.Init)
+  end
+  cecho("<green>[NebbieDash] convertToUserWindow installato su questo profilo. "
+    .. "Doppio-click sulla barra titolo per staccare le finestre.\n")
+end
+
+function NebbieDash.ensureConvertToUserWindowHandlers()
+  if NebbieDash._ctuwInstallHandlerReady then return end
+  if type(registerAnonymousEventHandler) ~= "function" then return end
+  registerAnonymousEventHandler("sysInstallPackage", "NebbieDash.onConvertToUserWindowInstalled")
+  NebbieDash._ctuwInstallHandlerReady = true
+end
+
+-- All'apertura profilo: se manca convertToUserWindow, installalo (default) o avvisa.
 function NebbieDash.warnMissingWindowMoveDeps(force)
   if not force then
     local t = os.time()
@@ -2617,20 +2657,47 @@ function NebbieDash.warnMissingWindowMoveDeps(force)
   local missingCtuw = not NebbieDash.hasConvertToUserWindowPackage()
   if not missingAdj and not missingCtuw then return false end
   NebbieDash._windowMoveWarnAt = os.time()
-  cecho("\n<orange>[NebbieDash] Dipendenza finestre mobili assente.\n")
+
   if missingAdj then
-    cecho("<grey>Manca <white>Adjustable.Container<grey> (Geyser). Aggiorna Mudlet a una "
-      .. "versione recente (4.14+ consigliata).\n")
+    cecho("\n<orange>[NebbieDash] Manca <white>Adjustable.Container<orange> (Geyser). "
+      .. "Aggiorna Mudlet (4.14+ consigliata).\n")
   end
-  if missingCtuw then
-    cecho("<grey>Per staccare/spostare chat, ident, speedwalk (doppio-click → UserWindow) "
-      .. "installa il package <white>convertToUserWindow<grey>:\n")
-    cecho("  <yellow>mpkg install convertToUserWindow\n")
-    cecho("<grey>oppure:\n")
-    cecho("<white>lua installPackage(\"" .. NebbieDash.CONVERT_TO_USERWINDOW_URL .. "\")\n")
-    cecho("<grey>Poi: doppio-click sulla barra titolo della finestra floating.\n")
+
+  if not missingCtuw then
+    return missingAdj
   end
-  cecho("<grey>─────────────────────────────────────\n")
+
+  local auto = not (NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow == false)
+  if not auto then
+    cecho("\n<orange>[NebbieDash] Manca <white>convertToUserWindow<orange> "
+      .. "(finestre staccabili). Auto-install disattivato.\n")
+    NebbieDash.echoConvertToUserWindowManualInstall()
+    cecho("<grey>─────────────────────────────────────\n")
+    return true
+  end
+
+  if NebbieDash._ctuwInstallPending then
+    return true
+  end
+  if type(installPackage) ~= "function" then
+    cecho("\n<orange>[NebbieDash] Manca <white>convertToUserWindow<orange> "
+      .. "e installPackage non e' disponibile.\n")
+    NebbieDash.echoConvertToUserWindowManualInstall()
+    cecho("<grey>─────────────────────────────────────\n")
+    return true
+  end
+
+  NebbieDash.ensureConvertToUserWindowHandlers()
+  NebbieDash._ctuwInstallPending = true
+  cecho("\n<yellow>[NebbieDash] Installo <white>convertToUserWindow<yellow> "
+    .. "su questo profilo (Mudlet: i package non sono condivisi tra profili)...\n")
+  local ok, err = pcall(installPackage, NebbieDash.CONVERT_TO_USERWINDOW_URL)
+  if not ok then
+    NebbieDash._ctuwInstallPending = nil
+    cecho("<red>[NebbieDash] Auto-install fallita: " .. tostring(err) .. "\n")
+    NebbieDash.echoConvertToUserWindowManualInstall()
+    cecho("<grey>─────────────────────────────────────\n")
+  end
   return true
 end
 

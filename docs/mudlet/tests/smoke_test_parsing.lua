@@ -813,37 +813,63 @@ end
 check("boot: forceAnnounce ristampa pronto", pronto3 == 2)
 _G.cecho = realCechoBoot
 
--- convertToUserWindow dependency warning
+-- convertToUserWindow dependency warning / auto-install
 do
   local realGetPkg = _G.getPackageInfo
   local realAdj = _G.Adjustable
   local realConvertAdj = _G.convertAdj
+  local realInstall = _G.installPackage
+  local realReg = _G.registerAnonymousEventHandler
   _G.Adjustable = { Container = {} }
+  _G.registerAnonymousEventHandler = function() end
   _G.getPackageInfo = function(name, key)
     if name == "convertToUserWindow" then return "" end
     if realGetPkg then return realGetPkg(name, key) end
     return ""
   end
   _G.convertAdj = nil
+  local installCalls = {}
+  _G.installPackage = function(url) table.insert(installCalls, url) end
   local warnLog = {}
   local realCechoW = _G.cecho
   _G.cecho = function(msg) table.insert(warnLog, tostring(msg or "")) end
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  NebbieDash.prefs.auto_install_convert_to_userwindow = true
   NebbieDash._windowMoveWarnAt = nil
+  NebbieDash._ctuwInstallPending = nil
+  NebbieDash._ctuwInstallHandlerReady = nil
   local warned = NebbieDash.warnMissingWindowMoveDeps(true)
-  check("window-move: warns when convertToUserWindow missing", warned == true)
-  check("window-move: mentions package name",
-    table.concat(warnLog):find("convertToUserWindow", 1, true) ~= nil)
-  check("window-move: mentions mpkg",
+  check("window-move: auto-install when missing", warned == true and #installCalls == 1)
+  check("window-move: install URL convertToUserWindow",
+    (installCalls[1] or ""):find("convertToUserWindow", 1, true) ~= nil)
+  check("window-move: mentions auto install",
+    table.concat(warnLog):find("Installo", 1, true) ~= nil)
+
+  NebbieDash.prefs.auto_install_convert_to_userwindow = false
+  NebbieDash._windowMoveWarnAt = nil
+  NebbieDash._ctuwInstallPending = nil
+  installCalls = {}
+  warnLog = {}
+  local warnedManual = NebbieDash.warnMissingWindowMoveDeps(true)
+  check("window-move: manual when auto off", warnedManual == true and #installCalls == 0)
+  check("window-move: mentions mpkg when auto off",
     table.concat(warnLog):find("mpkg install", 1, true) ~= nil)
+
   _G.convertAdj = { Init = function() end }
   NebbieDash._windowMoveWarnAt = nil
+  NebbieDash._ctuwInstallPending = nil
   warnLog = {}
+  installCalls = {}
   local warned2 = NebbieDash.warnMissingWindowMoveDeps(true)
-  check("window-move: silent when convertAdj present", warned2 == false and #warnLog == 0)
+  check("window-move: silent when convertAdj present", warned2 == false and #warnLog == 0
+    and #installCalls == 0)
   _G.convertAdj = realConvertAdj
   _G.Adjustable = realAdj
   _G.getPackageInfo = realGetPkg
+  _G.installPackage = realInstall
+  _G.registerAnonymousEventHandler = realReg
   _G.cecho = realCechoW
+  NebbieDash.prefs.auto_install_convert_to_userwindow = true
 end
 
 -- Test 16: bug segnalato in gioco (2026-08-10) — "Hai Fame." e "Hai sete."
