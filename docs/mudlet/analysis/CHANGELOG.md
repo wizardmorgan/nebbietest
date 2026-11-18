@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.18 — 2026-11-18
+
+- **nchat**: cattura anche **sign** (`Tu hai detto '…'`,
+  `[Nome], con i segni, dice '…'`).
+
 ## 1.16.17 — 2026-11-18
 
 - **nchat**: cattura anche **telepathy** (`Tu mandi a … il pensiero '…'`,

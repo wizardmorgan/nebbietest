@@ -278,6 +278,7 @@ Dalla **1.15.63** una finestra floating raccoglie i canali di comunicazione:
 | tell | `tell` |
 | send | `sending` / `messenger` (`Mandi a … il messaggio '…'`, `[Nome] ti manda il messaggio '…'`) |
 | telep | `telepathy` (`Tu mandi a … il pensiero '…'`, `[Nome] ti manda il pensiero '…'`) |
+| sign | `sign` (`Tu hai detto '…'`, `[Nome], con i segni, dice '…'`) |
 | whisper | `whisper` |
 | ask | `ask` |
 | gossip | `gossip` |

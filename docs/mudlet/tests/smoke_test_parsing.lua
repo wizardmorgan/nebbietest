@@ -2159,6 +2159,15 @@ local echoTelep = NebbieDash.formatChatEcho(
 check("chat: format echo telep ha freccia",
   echoTelep and echoTelep:find("Tu → Mirari", 1, true) ~= nil
     and echoTelep:find("[telep]", 1, true) ~= nil)
+chatOk("chat: sign self", "Tu hai detto 'ciao'", "sign", "Tu", "ciao")
+chatOk("chat: sign other", "[Mirari], con i segni, dice 'ok'", "sign", "Mirari", "ok")
+check("chat: sign non confuso con say",
+  NebbieDash.parseChatLine("Tu hai detto 'x'").channel == "sign"
+    and NebbieDash.parseChatLine("Tu dici 'x'").channel == "say"
+    and NebbieDash.parseChatLine("[A], con i segni, dice 'y'").channel == "sign"
+    and NebbieDash.parseChatLine("[A] dice 'y'").channel == "say")
+check("chat: sign ignora gesti non capiti",
+  NebbieDash.parseChatLine("Mirari muove le mani in modo molto buffo.") == nil)
 chatOk("chat: whisper self", "Tu sussurri a Sirio, 'psst'", "whisper", "Tu", "psst", "Sirio")
 chatOk("chat: whisper other", "[Sirio] ti sussurra 'ok'", "whisper", "Sirio", "ok")
 chatOk("chat: ask self", "Tu chiedi a Goblin, 'chi sei'", "ask", "Tu", "chi sei", "Goblin")
@@ -2722,9 +2731,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.17+",
+check("package version 1.16.18+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.17"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.18"))
 
 -- Re-identify sposta possesso da un toon all'altro.
 do

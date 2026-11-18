@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.17"
+local PKG_VER = "1.16.18"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3111,6 +3111,7 @@ NebbieDash.CHAT_CHANNEL_COLORS = {
   tell = "magenta",
   send = "violet",
   telep = "LightSkyBlue",
+  sign = "LightCyan",
   whisper = "green",
   ask = "blue",
   shout = "red",
@@ -3291,6 +3292,12 @@ function NebbieDash.parseChatLine(text)
     return { channel = "shout", speaker = "Tu", message = msg, self = true }
   end
 
+  -- Skill sign (act.comm.cpp do_sign): echo parlante distinto da say.
+  msg = text:match("^Tu hai detto '(.+)'%s*$")
+  if msg then
+    return { channel = "sign", speaker = "Tu", message = msg, self = true }
+  end
+
   -- Gossip e say: stesso echo parlante "Tu dici '…'" (gossip giallo in gioco).
   msg = text:match("^Tu dici '(.+)'%s*$")
   if msg then
@@ -3337,6 +3344,11 @@ function NebbieDash.parseChatLine(text)
   who, msg = text:match("^%[(.-)%] grida '(.+)'%s*$")
   if who and msg then
     return { channel = "shout", speaker = who, message = msg }
+  end
+  -- Sign language room broadcast (solo se il ricevente capisce i segni).
+  who, msg = text:match("^%[(.-)%], con i segni, dice '(.+)'%s*$")
+  if who and msg then
+    return { channel = "sign", speaker = who, message = msg }
   end
   who, msg = text:match("^%[(.-)%] dice '(.+)'%s*$")
   if who and msg then
@@ -3397,6 +3409,7 @@ function NebbieDash.installChatTriggers()
     "Tu sussurri a ",
     "Tu chiedi a ",
     "Tu gridi '",
+    "Tu hai detto '",
     "Tu dici '",
     "] dice al gruppo '",
     "] dice al clan '",
@@ -3408,6 +3421,7 @@ function NebbieDash.installChatTriggers()
     "] ti sussurra '",
     "] ti chiede '",
     "] grida '",
+    "], con i segni, dice '",
     "] dice '",
   }
   for _, pat in ipairs(patterns) do
@@ -5505,7 +5519,7 @@ NebbieDash.HELP_TEXT = {
   { "nautofeed / nhungermacros", "Macro fame/sete; ricarica file macro." },
   { "nitemkeywords", "Ricarica parole chiave oggetti (ndashboard)." },
   { "nforgetspell <nome>", "Toglie una spell dall'elenco del PG attivo." },
-  { "nchat [on|off|clear]", "Finestra floating chat (say/gt/clan/tell/send/telep/…)." },
+  { "nchat [on|off|clear]", "Finestra floating chat (say/gt/clan/tell/send/telep/sign/…)." },
   { "ngoldalert [on|off|status]", "Allarme se G: scende senza spesa volontaria." },
   { "nidentui [filter|slot|char|del|reset]", "Finestra floating archivio identify." },
   { "nidentdb …", "Cerca/hold/cedibile/export identify (vedi USAGE)." },
