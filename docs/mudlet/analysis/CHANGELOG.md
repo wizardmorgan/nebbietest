@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.15 — 2026-11-18
+
+- **nidentdb**: se un toon re-identa un pezzo già in DB assegnato a un altro
+  toon, il **possesso passa** a chi identa (messaggio in console; filtro PG
+  usa il detentore attuale, non lo storico `byCharacter`).
+- **Sync VPS**: resta **manuale** (`nidentsync`) salvo `ident_sync_on_boot =
+  on` all’apertura profilo — non parte da solo a ogni identify.
+
 ## 1.16.14 — 2026-11-18
 
 - **ngoldalert**: non segnala più come furto `account buy …` (cassetta

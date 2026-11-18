@@ -2699,9 +2699,47 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.14+",
+check("package version 1.16.15+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.14"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.15"))
+
+-- Re-identify sposta possesso da un toon all'altro.
+do
+  NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
+  NebbieDash.identDb.entries = NebbieDash.identDb.entries or {}
+  local parsed = {
+    objectName = "anello trasferimento test",
+    objectType = "TREASURE",
+    flags = "PROCAREA-REWARD",
+    weight = 1, value = 1, rent = 0,
+    affects = { "HITROLL by 1" },
+  }
+  local first = NebbieDash.upsertIdentRecord(parsed, "Mirari", "spell")
+  check("ident transfer: primo possesso Mirari",
+    first and first.possession and first.possession.character == "Mirari")
+  local second = NebbieDash.upsertIdentRecord(parsed, "NomiyaMaki", "spell")
+  check("ident transfer: stesso key",
+    second and first and second.key == first.key)
+  check("ident transfer: possesso → NomiyaMaki",
+    second.possession and second.possession.character == "NomiyaMaki"
+      and second.possession.via == "identify"
+      and second.possession.from == "Mirari")
+  check("ident transfer: lastCharacter NomiyaMaki",
+    second.lastCharacter == "NomiyaMaki")
+  local forNomiya = NebbieDash.listIdentDbByCharacter("NomiyaMaki")
+  local forMirari = NebbieDash.listIdentDbByCharacter("Mirari")
+  local nomiyaHas, mirariHas = false, false
+  for _, e in ipairs(forNomiya) do
+    if e.key == second.key then nomiyaHas = true end
+  end
+  for _, e in ipairs(forMirari) do
+    if e.key == second.key then mirariHas = true end
+  end
+  check("ident transfer: filtro PG solo detentore", nomiyaHas == true and mirariHas == false)
+  check("ident transfer: history ancora in byCharacter",
+    second.byCharacter and second.byCharacter.Mirari ~= nil
+      and second.byCharacter.NomiyaMaki ~= nil)
+end
 
 -- Archivio: resta su tab/pagina; goto first/last.
 do

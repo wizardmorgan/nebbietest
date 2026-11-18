@@ -238,6 +238,15 @@ Comandi: `nidentsync` (pull+merge+push), `nidentpull`, `nidentpush`,
 `nidentsync status|token …|skip|setup|onboot on|off` (anche `url …` se serve
 override). Server: `tools/ident-sync-server/README.md`.
 
+**Allineamento remoto**: di default **non** è automatico a ogni identify —
+salva solo in locale. Per aggiornare il VPS lancia `nidentsync` (o
+`nidentpush`). Opzionale: `nidentsync onboot on` / `ident_sync_on_boot = on`
+sincronizza all’apertura del profilo Mudlet.
+
+**Possesso tra toon**: se re-identi un pezzo già in DB tenuto da un altro tuo
+PG, il possesso passa a chi sta identando (filtro `char` / UI seguono il
+detentore attuale).
+
 **Sirio / esclusi**: `ident_exclude_chars` (default `Sirio`) non salva identify,
 non li mostra in GUI e non li sincronizza.
 

@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.14"
+local PKG_VER = "1.16.15"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -7262,26 +7262,26 @@ function NebbieDash.upsertIdentRecord(parsed, character, source)
   existing.affects = parsed.affects or {}
   existing.statsSig = NebbieDash.identStatsSignature(parsed)
   existing.lastAt = now
-  existing.lastCharacter = character or existing.lastCharacter or "unknown"
   existing.lastSource = source or existing.lastSource
   existing.byCharacter = existing.byCharacter or {}
-  local who = character or "unknown"
+  local who = character or NebbieDash.currentChar or "unknown"
+  if who == "" then who = "unknown" end
+  existing.lastCharacter = who
   existing.byCharacter[who] = {
     at = now,
-    source = source or existing.byCharacter[who] and existing.byCharacter[who].source,
+    source = source or (existing.byCharacter[who] and existing.byCharacter[who].source),
   }
-  -- Identify implica che il PG ha l'oggetto a portata: aggiorna possesso.
-  existing.possession = {
-    status = "held",
-    character = who,
-    at = now,
-    via = "identify",
-    from = existing.possession and existing.possession.character,
-    displaySeen = existing.possession and existing.possession.displaySeen,
-  }
+  -- Identify = pezzo di chi lo identa: sposta possesso anche se era di un altro toon.
+  local prevHolder = existing.possession and existing.possession.character
+  NebbieDash.setIdentPossession(existing, "held", who, "identify", nil, prevHolder)
+  if prevHolder and prevHolder ~= "" and prevHolder:lower() ~= tostring(who):lower()
+      and not NebbieDash.isIdentExcludedChar(prevHolder) then
+    cecho(string.format(
+      "<grey>[NebbieDash] Ident: <white>%s<grey> possesso <yellow>%s<grey> → <green>%s\n",
+      existing.objectName or key, prevHolder, who))
+  end
   NebbieDash.applyCedibileFromFlags(existing, existing.flags)
   NebbieDash.identDb.entries[key] = existing
-  NebbieDash.scheduleIdentDbSave()
   if NebbieDash._identUiCreated and not NebbieDash._identUiHidden then
     NebbieDash.refreshIdentUi()
   end
@@ -7666,10 +7666,12 @@ function NebbieDash.finishIdentArchiveCapture()
   if not cap then return end
   local parsed = NebbieDash.parseIdentifyFull(cap.lines)
   if not parsed then return end
-  if NebbieDash.isIdentExcludedChar(cap.character) then
+  -- Preferisci currentChar al momento della chiusura (switch PG mid-capture).
+  local who = NebbieDash.currentChar or cap.character or "unknown"
+  if NebbieDash.isIdentExcludedChar(who) then
     return -- Sirio/esclusi: non archiviamo identify
   end
-  NebbieDash.upsertIdentRecord(parsed, cap.character, cap.source)
+  NebbieDash.upsertIdentRecord(parsed, who, cap.source)
 end
 
 function NebbieDash.identDbEntryCount()
@@ -7717,39 +7719,44 @@ function NebbieDash.searchIdentDb(query, opts)
   return results
 end
 
+-- true se l'entry "appartiene" a charName per filtri UI/export.
+-- Con possesso held: conta SOLO il detentore attuale (re-identify sposta il pezzo).
+-- Senza possesso held: lastCharacter, poi (se includeHistory) byCharacter.
+function NebbieDash.identEntryMatchesCharacter(entry, charName, opts)
+  opts = opts or {}
+  if type(entry) ~= "table" then return false end
+  charName = (charName or ""):match("^%s*(.-)%s*$") or ""
+  if charName == "" then return true end
+  local needle = charName:lower()
+  local function nameHit(who)
+    if not who or who == "" then return false end
+    local w = tostring(who):lower()
+    return w == needle or w:find(needle, 1, true) ~= nil
+  end
+  local poss = entry.possession
+  if poss and poss.status == "held" and poss.character and poss.character ~= "" then
+    return nameHit(poss.character)
+  end
+  if nameHit(entry.lastCharacter) then return true end
+  if opts.includeHistory == false then return false end
+  for who, _ in pairs(entry.byCharacter or {}) do
+    if nameHit(who) then return true end
+  end
+  return false
+end
+
 function NebbieDash.listIdentDbByCharacter(charName, opts)
   opts = opts or {}
   charName = (charName or ""):match("^%s*(.-)%s*$") or ""
   if NebbieDash.isIdentExcludedChar(charName) then return {} end
-  local needle = charName:lower()
   local results = {}
   for _, entry in pairs((NebbieDash.identDb and NebbieDash.identDb.entries) or {}) do
     if NebbieDash.isIdentEntryFromExcludedChar(entry) and opts.includeExcluded ~= true then
       -- skip Sirio
     elseif NebbieDash.isIdentArchived(entry) and opts.includeArchived ~= true then
       -- skip
-    else
-    local by = entry.byCharacter or {}
-    local hit = false
-    if needle == "" then
-      hit = true
-    else
-      for who, _ in pairs(by) do
-        if who:lower() == needle or who:lower():find(needle, 1, true) then
-          hit = true
-          break
-        end
-      end
-      if not hit and entry.lastCharacter
-          and entry.lastCharacter:lower():find(needle, 1, true) then
-        hit = true
-      end
-      local pc = entry.possession and entry.possession.character
-      if not hit and pc and pc:lower():find(needle, 1, true) then
-        hit = true
-      end
-    end
-    if hit then table.insert(results, entry) end
+    elseif NebbieDash.identEntryMatchesCharacter(entry, charName, opts) then
+      table.insert(results, entry)
     end
   end
   table.sort(results, function(a, b)
