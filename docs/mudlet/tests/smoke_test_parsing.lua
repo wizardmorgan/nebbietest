@@ -1707,7 +1707,7 @@ check("identdb: updateIdentUiWrap senza crash",
     local cols = NebbieDash.updateIdentUiWrap()
     return type(cols) == "number" and cols >= 40
   end)())
--- nidentui alive/recreate: riferimenti stale non devono passare per "vivi"
+-- nidentui alive: probe get_width (CTUW puo' togliere la chiave da windowList)
 do
   local realAdj = _G.Adjustable
   local realGeyser = _G.Geyser
@@ -1715,10 +1715,15 @@ do
   NebbieDash._identUiContainer = { show = function() end, hide = function() end }
   NebbieDash._identUiGeyser = { get_width = function() error("dead") end }
   _G.Geyser = { windowList = {}, MiniConsole = { new = function() end } }
-  check("identui: stale refs not alive", NebbieDash.identUiWindowAlive() == false)
-  _G.Geyser.windowList["NebbieDashIdentUiContainer"] = {}
+  check("identui: dead get_width not alive", NebbieDash.identUiWindowAlive() == false)
+  -- Vivace anche se NON e' in windowList top-level (caso CTUW UserWindow).
   NebbieDash._identUiGeyser = { get_width = function() return 560 end }
-  check("identui: listed window is alive", NebbieDash.identUiWindowAlive() == true)
+  check("identui: get_width ok even if not in windowList",
+    NebbieDash.identUiWindowAlive() == true)
+  NebbieDash._identUiGeyser = { } -- no get_width
+  _G.Geyser.windowList["NebbieDashIdentUiContaineruserWindow"] = {}
+  check("identui: CTUW userWindow in list counts alive",
+    NebbieDash.identUiWindowAlive() == true)
   NebbieDash._identUiCreated = false
   NebbieDash._identUiContainer = nil
   NebbieDash._identUiGeyser = nil

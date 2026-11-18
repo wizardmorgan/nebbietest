@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.3 — 2026-11-18
+
+- **nidentui + convertToUserWindow**: il check `Geyser.windowList` poteva
+  dichiarare morta una UI staccata in UserWindow; destroy non puliva
+  `*userWindow`; `convertAdj.Init` richiamato da noi ri-wrappava
+  `Adjustable.Container.new` e poteva romperlo. Ora: alive via `get_width`,
+  detach/delete del UserWindow CTUW, niente Init ridondante, fallback
+  `Geyser.UserWindow` se Adjustable fallisce, `nidentui debug`.
+
 ## 1.16.2 — 2026-11-18
 
 - **nidentui**: fix apertura inaffidabile — dopo `:load()` la finestra poteva

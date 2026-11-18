@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.2"
+local PKG_VER = "1.16.3"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -2687,11 +2687,10 @@ function NebbieDash.onConvertToUserWindowInstalled(event, packageName)
   if packageName and packageName ~= NebbieDash.CONVERT_TO_USERWINDOW_PKG then return end
   NebbieDash._ctuwInstallPending = nil
   if type(tempTimer) == "function" then
-    -- Script del package possono arrivare un attimo dopo l'evento.
+    -- NON chiamare convertAdj.Init qui: il package lo fa gia' su sysInstall/
+    -- sysLoadEvent, e Init ri-wrappa Adjustable.Container.new a ogni chiamata
+    -- (rompe nidentui/nswui dopo qualche reload).
     tempTimer(1.0, function()
-      if type(convertAdj) == "table" and type(convertAdj.Init) == "function" then
-        pcall(convertAdj.Init)
-      end
       if NebbieDash.hasConvertToUserWindowPackage() then
         NebbieDash._ctuwGaveUp = nil
         NebbieDash._ctuwInstallAttempt = 0
@@ -2699,8 +2698,6 @@ function NebbieDash.onConvertToUserWindowInstalled(event, packageName)
           .. "Doppio-click sulla barra titolo per staccare le finestre.\n")
         return
       end
-      -- Stub mudlet.github.io o XML vuoto: listed ma senza convertAdj.
-      -- Un solo retry con URL fallback, poi stop (niente loop infinito).
       local attempt = NebbieDash._ctuwInstallAttempt or 1
       if NebbieDash._ctuwGaveUp or attempt >= (NebbieDash.CTUW_MAX_ATTEMPTS or 2) then
         NebbieDash.ctuwMarkGaveUp("package installato ma convertAdj assente")
@@ -2714,8 +2711,7 @@ function NebbieDash.onConvertToUserWindowInstalled(event, packageName)
       })
     end)
   else
-    if type(convertAdj) == "table" and type(convertAdj.Init) == "function" then
-      pcall(convertAdj.Init)
+    if NebbieDash.hasConvertToUserWindowPackage() then
       cecho("<green>[NebbieDash] convertToUserWindow installato su questo profilo.\n")
     else
       NebbieDash.ctuwMarkGaveUp("convertAdj assente dopo install")
@@ -3469,30 +3465,62 @@ NebbieDash._identUiState = NebbieDash._identUiState or {
 }
 
 function NebbieDash.canUseIdentUiWindow()
-  return NebbieDash.canUseChatWindow()
+  if type(Geyser) ~= "table" or type(Geyser.MiniConsole) ~= "table" then
+    return false
+  end
+  if type(Adjustable) == "table" and type(Adjustable.Container) == "table" then
+    return true
+  end
+  -- Fallback senza Adjustable (o se CTUW ha rotto Container:new).
+  return type(Geyser.UserWindow) == "table"
 end
 
+NebbieDash.IDENT_UI_CONTAINER = "NebbieDashIdentUiContainer"
+NebbieDash.IDENT_UI_CONSOLE = "NebbieDashIdentUi"
+-- convertToUserWindow crea "<name>userWindow" al doppio-click.
+NebbieDash.IDENT_UI_USERWINDOW = "NebbieDashIdentUiContaineruserWindow"
+
 -- true se i riferimenti Lua puntano ancora a window Geyser vive.
--- Dopo npackageupdate / convertToUserWindow i pointer restano non-nil ma
--- la window e' gia' distrutta → senza questo check nidentui "apre" a vuoto.
+-- Probe get_width prima di Geyser.windowList: con CTUW il container puo'
+-- vivere dentro un UserWindow e non risultare come chiave top-level.
 function NebbieDash.identUiWindowAlive()
   if not NebbieDash._identUiCreated then return false end
   if not NebbieDash._identUiContainer or not NebbieDash._identUiGeyser then return false end
-  if type(Geyser) == "table" and type(Geyser.windowList) == "table" then
-    if Geyser.windowList["NebbieDashIdentUiContainer"]
-        or Geyser.windowList["NebbieDashIdentUi"] then
-      return true
-    end
-    return false
-  end
   if type(NebbieDash._identUiGeyser.get_width) == "function" then
     local ok, w = pcall(function() return NebbieDash._identUiGeyser:get_width() end)
-    return ok and tonumber(w) ~= nil
+    if ok and tonumber(w) ~= nil then return true end
+    return false
+  end
+  if type(Geyser) == "table" and type(Geyser.windowList) == "table" then
+    local list = Geyser.windowList
+    return list[NebbieDash.IDENT_UI_CONTAINER] ~= nil
+      or list[NebbieDash.IDENT_UI_CONSOLE] ~= nil
+      or list[NebbieDash.IDENT_UI_USERWINDOW] ~= nil
   end
   return true
 end
 
+function NebbieDash.detachIdentUiFromUserWindow()
+  local c = NebbieDash._identUiContainer
+  if not c then return end
+  pcall(function()
+    if c.isUserWindow then
+      if type(c.unlockContainer) == "function" then c:unlockContainer() end
+      if type(c.changeContainer) == "function" and type(Geyser) == "table" then
+        c:changeContainer(Geyser)
+      end
+      if type(c.setPercent) == "function" then c:setPercent(true, true) end
+      c.isUserWindow = false
+    end
+    local uw = c.userwindow
+    if uw and type(uw.hide) == "function" then pcall(function() uw:hide() end) end
+    if uw and type(uw.delete) == "function" then pcall(function() uw:delete() end) end
+    c.userwindow = nil
+  end)
+end
+
 function NebbieDash.destroyIdentUiWindow()
+  NebbieDash.detachIdentUiFromUserWindow()
   if NebbieDash._identUiContainer then
     if type(NebbieDash._identUiContainer.hide) == "function" then
       pcall(function() NebbieDash._identUiContainer:hide() end)
@@ -3501,13 +3529,19 @@ function NebbieDash.destroyIdentUiWindow()
       pcall(function() NebbieDash._identUiContainer:delete() end)
     end
   end
-  for _, name in ipairs({ "NebbieDashIdentUiContainer", "NebbieDashIdentUi" }) do
+  for _, name in ipairs({
+    NebbieDash.IDENT_UI_CONTAINER,
+    NebbieDash.IDENT_UI_CONSOLE,
+    NebbieDash.IDENT_UI_USERWINDOW,
+  }) do
     if type(deleteWindow) == "function" then pcall(deleteWindow, name) end
+    if type(closeUserWindow) == "function" then pcall(closeUserWindow, name) end
   end
   NebbieDash._identUiContainer = nil
   NebbieDash._identUiGeyser = nil
   NebbieDash._identUiCreated = false
   NebbieDash._identUiHidden = true
+  NebbieDash._identUiBackend = nil
   NebbieDash._identUiRows = nil
   NebbieDash._identUiLastW = nil
   if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
@@ -3600,22 +3634,44 @@ function NebbieDash.clearIdentUiWindow()
 end
 
 function NebbieDash.showIdentUiWindow()
-  if NebbieDash._identUiContainer and type(NebbieDash._identUiContainer.show) == "function" then
-    pcall(function() NebbieDash._identUiContainer:show() end)
+  local c = NebbieDash._identUiContainer
+  -- Se convertToUserWindow l'ha staccata, mostra anche il parent UserWindow.
+  if c and c.isUserWindow and c.userwindow and type(c.userwindow.show) == "function" then
+    pcall(function() c.userwindow:show() end)
+  end
+  if c and type(c.show) == "function" then
+    pcall(function() c:show() end)
   elseif type(showWindow) == "function" then
-    pcall(showWindow, "NebbieDashIdentUiContainer")
-    pcall(showWindow, "NebbieDashIdentUi")
+    pcall(showWindow, NebbieDash.IDENT_UI_CONTAINER)
+    pcall(showWindow, NebbieDash.IDENT_UI_CONSOLE)
+    pcall(showWindow, NebbieDash.IDENT_UI_USERWINDOW)
+  end
+  if c and type(c.raise) == "function" then
+    pcall(function() c:raise() end)
+  end
+  if type(raiseWindow) == "function" then
+    pcall(raiseWindow, NebbieDash.IDENT_UI_CONTAINER)
+    pcall(raiseWindow, NebbieDash.IDENT_UI_CONSOLE)
+    pcall(raiseWindow, NebbieDash.IDENT_UI_USERWINDOW)
+  end
+  if type(openUserWindow) == "function" then
+    pcall(openUserWindow, NebbieDash.IDENT_UI_USERWINDOW)
   end
   NebbieDash._identUiHidden = false
   NebbieDash.armIdentUiResizeWatch()
 end
 
 function NebbieDash.hideIdentUiWindow()
-  if NebbieDash._identUiContainer and type(NebbieDash._identUiContainer.hide) == "function" then
-    pcall(function() NebbieDash._identUiContainer:hide() end)
+  local c = NebbieDash._identUiContainer
+  if c and c.isUserWindow and c.userwindow and type(c.userwindow.hide) == "function" then
+    pcall(function() c.userwindow:hide() end)
+  end
+  if c and type(c.hide) == "function" then
+    pcall(function() c:hide() end)
   elseif type(hideWindow) == "function" then
-    pcall(hideWindow, "NebbieDashIdentUiContainer")
-    pcall(hideWindow, "NebbieDashIdentUi")
+    pcall(hideWindow, NebbieDash.IDENT_UI_CONTAINER)
+    pcall(hideWindow, NebbieDash.IDENT_UI_CONSOLE)
+    pcall(hideWindow, NebbieDash.IDENT_UI_USERWINDOW)
   end
   NebbieDash._identUiHidden = true
   if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
@@ -3624,9 +3680,90 @@ function NebbieDash.hideIdentUiWindow()
   NebbieDash._identUiResizeTimer = nil
 end
 
+function NebbieDash.createIdentUiShell(w, h)
+  w = w or 560
+  h = h or 420
+  local backend = nil
+  local container = nil
+  local errAdj, errUw = nil, nil
+
+  if type(Adjustable) == "table" and type(Adjustable.Container) == "table" then
+    local ok, res = pcall(function()
+      return Adjustable.Container:new({
+        name = NebbieDash.IDENT_UI_CONTAINER,
+        x = "-580",
+        y = 80,
+        width = w,
+        height = h,
+        titleText = "Nebbie — Ident DB",
+        titleTxtColor = "white",
+        adjLabelstyle = [[
+          background-color: rgb(14, 14, 20);
+          border: 2px solid rgb(120, 90, 50);
+          border-radius: 6px;
+        ]],
+      })
+    end)
+    if ok and res then
+      container = res
+      backend = "adjustable"
+    else
+      errAdj = tostring(res)
+    end
+  end
+
+  -- Fallback: UserWindow nativo (niente CTUW / Adjustable). Utile se
+  -- convertAdj.Init ha ri-wrappato Container:new fino a romperlo.
+  if not container and type(Geyser) == "table" and type(Geyser.UserWindow) == "table" then
+    local ok, res = pcall(function()
+      return Geyser.UserWindow:new({
+        name = NebbieDash.IDENT_UI_CONTAINER,
+        x = "-580",
+        y = 80,
+        width = w,
+        height = h,
+      })
+    end)
+    if ok and res then
+      container = res
+      backend = "userwindow"
+      pcall(function()
+        if type(res.setTitle) == "function" then
+          res:setTitle("Nebbie — Ident DB")
+        end
+      end)
+    else
+      errUw = tostring(res)
+    end
+  end
+
+  if not container then
+    return nil, nil, "Adjustable=" .. tostring(errAdj) .. " UserWindow=" .. tostring(errUw)
+  end
+
+  local pad = 4
+  local titleH = (backend == "adjustable") and 22 or 4
+  local okMc, mcOrErr = pcall(function()
+    return Geyser.MiniConsole:new({
+      name = NebbieDash.IDENT_UI_CONSOLE,
+      x = pad,
+      y = titleH,
+      width = "100%-" .. tostring(pad * 2),
+      height = "100%-" .. tostring(titleH + pad),
+    }, container)
+  end)
+  if not okMc or not mcOrErr then
+    pcall(function()
+      if type(container.delete) == "function" then container:delete() end
+    end)
+    return nil, nil, "MiniConsole=" .. tostring(mcOrErr)
+  end
+  return container, mcOrErr, backend
+end
+
 function NebbieDash.initIdentUiWindow()
   if not NebbieDash.canUseIdentUiWindow() then
-    cecho("<orange>[NebbieDash] Finestra ident non disponibile (serve Adjustable.Container / Geyser).\n")
+    cecho("<orange>[NebbieDash] Finestra ident non disponibile (serve Geyser MiniConsole).\n")
     return false
   end
   if NebbieDash.identUiWindowAlive() then
@@ -3634,62 +3771,39 @@ function NebbieDash.initIdentUiWindow()
     NebbieDash.refreshIdentUi()
     return true
   end
-  -- Riferimenti stale (reload package / window distrutta): ricrea da zero.
+  -- Riferimenti stale / leftover CTUW UserWindow: pulizia aggressiva.
   NebbieDash.destroyIdentUiWindow()
-  local w, h = 560, 420
-  local okNew, containerOrErr = pcall(function()
-    return Adjustable.Container:new({
-      name = "NebbieDashIdentUiContainer",
-      x = "-580",
-      y = 80,
-      width = w,
-      height = h,
-      titleText = "Nebbie — Ident DB",
-      titleTxtColor = "white",
-      adjLabelstyle = [[
-        background-color: rgb(14, 14, 20);
-        border: 2px solid rgb(120, 90, 50);
-        border-radius: 6px;
-      ]],
-    })
-  end)
-  if not okNew or not containerOrErr then
+  local container, mc, backendOrErr = NebbieDash.createIdentUiShell(560, 420)
+  if not container or not mc then
     cecho("<red>[NebbieDash] Creazione Ident UI fallita: "
-      .. tostring(containerOrErr) .. "\n")
+      .. tostring(backendOrErr) .. "\n")
+    cecho("<grey>Prova <yellow>nidentui rebuild<grey>. Se persiste, disinstalla "
+      .. "temporaneamente convertToUserWindow e rilancia.\n")
     NebbieDash.destroyIdentUiWindow()
     return false
   end
-  NebbieDash._identUiContainer = containerOrErr
-  local pad = 4
-  local titleH = 22
-  local okMc, mcOrErr = pcall(function()
-    return Geyser.MiniConsole:new({
-      name = "NebbieDashIdentUi",
-      x = pad,
-      y = titleH,
-      width = "100%-" .. tostring(pad * 2),
-      height = "100%-" .. tostring(titleH + pad),
-    }, NebbieDash._identUiContainer)
-  end)
-  if not okMc or not mcOrErr then
-    cecho("<red>[NebbieDash] MiniConsole Ident UI fallita: " .. tostring(mcOrErr) .. "\n")
-    NebbieDash.destroyIdentUiWindow()
-    return false
-  end
-  NebbieDash._identUiGeyser = mcOrErr
+  NebbieDash._identUiContainer = container
+  NebbieDash._identUiGeyser = mc
+  NebbieDash._identUiBackend = backendOrErr
   pcall(function() NebbieDash._identUiGeyser:setColor(14, 14, 18, 255) end)
   if type(setMiniConsoleFontSize) == "function" then
-    pcall(setMiniConsoleFontSize, "NebbieDashIdentUi", NebbieDash.fontSize or 10)
+    pcall(setMiniConsoleFontSize, NebbieDash.IDENT_UI_CONSOLE, NebbieDash.fontSize or 10)
   end
   if type(enableScrollBar) == "function" then
-    pcall(enableScrollBar, "NebbieDashIdentUi", true)
+    pcall(enableScrollBar, NebbieDash.IDENT_UI_CONSOLE, true)
   end
   if type(setMaxLines) == "function" then
-    pcall(setMaxLines, "NebbieDashIdentUi", 4000)
+    pcall(setMaxLines, NebbieDash.IDENT_UI_CONSOLE, 4000)
   end
-  -- load() ripristina pos/size ma puo' lasciarla nascosta (bug "serve 2x nidentui").
-  if type(NebbieDash._identUiContainer.load) == "function" then
+  -- load() solo su Adjustable: ripristina pos/size (poi forziamo show).
+  if backendOrErr == "adjustable"
+      and type(NebbieDash._identUiContainer.load) == "function" then
     pcall(function() NebbieDash._identUiContainer:load() end)
+    -- load di uno stato "UserWindow" CTUW puo' lasciare isUserWindow incoerente:
+    -- stacca eventuali resti e resta floating Adjustable.
+    if NebbieDash._identUiContainer.isUserWindow then
+      NebbieDash.detachIdentUiFromUserWindow()
+    end
   end
   NebbieDash._identUiCreated = true
   NebbieDash.showIdentUiWindow()
@@ -4454,7 +4568,38 @@ function NebbieDash.cmdIdentUi(argStr)
   if mode == "rebuild" or mode == "force" or mode == "new" then
     NebbieDash.destroyIdentUiWindow()
     if not NebbieDash.initIdentUiWindow() then return end
-    cecho("<green>[NebbieDash] Finestra Ident ricostruita.\n")
+    cecho("<green>[NebbieDash] Finestra Ident ricostruita"
+      .. (NebbieDash._identUiBackend and (" (" .. NebbieDash._identUiBackend .. ")") or "")
+      .. ".\n")
+    return
+  end
+
+  if mode == "debug" or mode == "status" then
+    cecho("<green>[NebbieDash] nidentui debug\n")
+    cecho("<grey>  created=<white>" .. tostring(NebbieDash._identUiCreated)
+      .. "<grey> hidden=<white>" .. tostring(NebbieDash._identUiHidden)
+      .. "<grey> alive=<white>" .. tostring(NebbieDash.identUiWindowAlive())
+      .. "<grey> backend=<white>" .. tostring(NebbieDash._identUiBackend) .. "\n")
+    cecho("<grey>  container=<white>" .. tostring(NebbieDash._identUiContainer ~= nil)
+      .. "<grey> geyser=<white>" .. tostring(NebbieDash._identUiGeyser ~= nil) .. "\n")
+    local c = NebbieDash._identUiContainer
+    if c then
+      cecho("<grey>  isUserWindow=<white>" .. tostring(c.isUserWindow)
+        .. "<grey> hasUserwindow=<white>" .. tostring(c.userwindow ~= nil) .. "\n")
+    end
+    cecho("<grey>  convertAdj=<white>"
+      .. tostring(type(convertAdj) == "table" and type(convertAdj.Init) == "function")
+      .. "<grey> Adjustable.Container=<white>"
+      .. tostring(type(Adjustable) == "table" and type(Adjustable.Container) == "table")
+      .. "\n")
+    if type(Geyser) == "table" and type(Geyser.windowList) == "table" then
+      local list = Geyser.windowList
+      cecho("<grey>  windowList container=<white>"
+        .. tostring(list[NebbieDash.IDENT_UI_CONTAINER] ~= nil)
+        .. "<grey> console=<white>" .. tostring(list[NebbieDash.IDENT_UI_CONSOLE] ~= nil)
+        .. "<grey> userWindow=<white>"
+        .. tostring(list[NebbieDash.IDENT_UI_USERWINDOW] ~= nil) .. "\n")
+    end
     return
   end
 
@@ -4528,6 +4673,7 @@ function NebbieDash.cmdIdentUi(argStr)
     cecho("<grey>  <yellow>nidentui del [oggetto]<grey>  elimina (se univoco)\n")
     cecho("<grey>  <yellow>nidentui reset<grey>         azzera filtri\n")
     cecho("<grey>  <yellow>nidentui rebuild<grey>       ricrea la finestra (se non si apre)\n")
+    cecho("<grey>  <yellow>nidentui debug<grey>         stato window / CTUW\n")
     cecho("<grey>  <yellow>nidentui off<grey>            nascondi finestra\n")
     cecho("<grey>In finestra: nome=dettaglio, [slot]=tag manuale, sort slot, wrap al resize.\n")
     cecho("<grey>Slot automatici: dopo <yellow>neq/nresync<grey> se l'oggetto e' in equip.\n")
