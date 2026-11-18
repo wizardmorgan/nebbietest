@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.13 — 2026-11-18
+
+- **nidentui archivio**: dopo conferma resta su **stesso tab e stessa pagina**
+  (non salta più ad Archiviati / pagina 1).
+- **nidentui pagine**: tasti `[«« inizio]` e `[fine »»]`.
+- **Slot manuali**: eq/resync/rebuild **non** riaggiungono slot se
+  `wearSlotsManual`; repair al load se un tag manuale aveva N>1 slot
+  (effetto del bug precedente).
+
 ## 1.16.12 — 2026-11-18
 
 - **nidentui**: gli **archiviati** restano **solo** in `[Archiviati]` (niente

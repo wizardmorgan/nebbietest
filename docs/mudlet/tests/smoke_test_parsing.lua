@@ -1690,14 +1690,16 @@ check("identdb: dito sinistro collassa allo stesso slot",
 check("identdb: polsi/orecchie collassano",
   NebbieDash.normalizeWearSlotLabel("al polso destro") == "ai polsi"
     and NebbieDash.normalizeWearSlotLabel("all'orecchio sinistro") == "alle orecchie")
--- eq su entrambe le dita non duplica
-NebbieDash.setIdentWearSlotsManual(wearEntry, {})
+-- eq su entrambe le dita non duplica (senza lock manuale)
+wearEntry.wearSlots = {}
+wearEntry.wearSlotsManual = false
+wearEntry.wearSlotsSource = nil
 NebbieDash.addIdentWearSlot(wearEntry, "sul dito destro", "eq")
 NebbieDash.addIdentWearSlot(wearEntry, "sul dito sinistro", "eq")
 check("identdb: L+R dito → una sola entry alle dita",
   #NebbieDash.identWearSlotsList(wearEntry) == 1
     and NebbieDash.primaryIdentWearSlot(wearEntry) == "alle dita")
--- eq puo' ancora aggiungere altri slot senza cancellare il manuale
+-- Tag manuale: eq/resync NON devono aggiungere altri slot (bug rebuild).
 NebbieDash.setIdentWearSlotsManual(wearEntry, { "sul dito destro" })
 NebbieDash.chars["NomiyaMaki"].eq[2] = {
   location = "impugnato",
@@ -1705,12 +1707,15 @@ NebbieDash.chars["NomiyaMaki"].eq[2] = {
 }
 NebbieDash.syncIdentWearSlotsFromEqSlots(NebbieDash.chars["NomiyaMaki"].eq)
 local slotsNow = NebbieDash.identWearSlotsList(wearEntry)
-local hasDito, hasImp = false, false
-for _, s in ipairs(slotsNow) do
-  if s == "alle dita" then hasDito = true end
-  if s == "impugnato" then hasImp = true end
-end
-check("identdb: manuale + eq aggiunge", hasDito and hasImp)
+check("identdb: manuale blocca sync eq",
+  #slotsNow == 1 and slotsNow[1] == "alle dita" and wearEntry.wearSlotsManual == true)
+-- Repair overflow da sync pre-1.16.13
+wearEntry.wearSlots = { "alle dita", "impugnato", "tenuto" }
+wearEntry.wearSlotsManual = true
+check("identdb: repair manual overflow",
+  NebbieDash.repairManualWearSlotsOverflow() >= 1
+    and #NebbieDash.identWearSlotsList(wearEntry) == 1
+    and NebbieDash.primaryIdentWearSlot(wearEntry) == "alle dita")
 local choices = NebbieDash.identWearSlotChoices()
 local nDito, nPolso, nOrec = 0, 0, 0
 for _, c in ipairs(choices) do
@@ -2666,9 +2671,37 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.12+",
+check("package version 1.16.13+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.12"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.13"))
+
+-- Archivio: resta su tab/pagina; goto first/last.
+do
+  local st = NebbieDash.ensureIdentUiState()
+  st.tab = "active"
+  st.page = 3
+  st.view = "detail"
+  st.pendingDeleteKey = "archivio-ui-attivo"
+  NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
+  NebbieDash.identDb.entries = NebbieDash.identDb.entries or {}
+  NebbieDash.identDb.entries["archivio-ui-attivo"] = NebbieDash.identDb.entries["archivio-ui-attivo"] or {
+    key = "archivio-ui-attivo",
+    objectName = "spada attiva test",
+    objectType = "WEAPON",
+    affects = {},
+  }
+  local origRefresh = NebbieDash.refreshIdentUi
+  NebbieDash.refreshIdentUi = function() end
+  NebbieDash.identUiConfirmDelete()
+  check("identui archive: resta tab active", st.tab == "active")
+  check("identui archive: conserva pagina", st.page == 3)
+  check("identui archive: torna a list", st.view == "list")
+  NebbieDash.identUiGotoPage(1)
+  check("identui goto: prima pagina", st.page == 1)
+  NebbieDash.identUiGotoPage(99)
+  check("identui goto: pagina richiesta", st.page == 99)
+  NebbieDash.refreshIdentUi = origRefresh
+end
 
 -- Archiviati solo nel tab Archiviati, mai in Attivi.
 do

@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.12"
+local PKG_VER = "1.16.13"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -4318,14 +4318,24 @@ function NebbieDash.renderIdentUiList()
     NebbieDash.identUiCecho("<orange>(nessuna entry — prova nidentui reset oppure identify in gioco)\n")
     return
   end
-  if st.page > 1 then
-    NebbieDash.identUiCechoLink("<cyan>[« prec]", "NebbieDash.identUiPage(-1)", "Pagina precedente")
-    NebbieDash.identUiCecho("  ")
-  end
-  if st.page < pages then
-    NebbieDash.identUiCechoLink("<cyan>[succ »]", "NebbieDash.identUiPage(1)", "Pagina successiva")
-  end
-  if st.page > 1 or st.page < pages then
+  if pages > 1 then
+    if st.page > 1 then
+      NebbieDash.identUiCechoLink(
+        "<cyan>[«« inizio]", "NebbieDash.identUiGotoPage(1)", "Prima pagina")
+      NebbieDash.identUiCecho("  ")
+      NebbieDash.identUiCechoLink(
+        "<cyan>[« prec]", "NebbieDash.identUiPage(-1)", "Pagina precedente")
+      NebbieDash.identUiCecho("  ")
+    end
+    if st.page < pages then
+      NebbieDash.identUiCechoLink(
+        "<cyan>[succ »]", "NebbieDash.identUiPage(1)", "Pagina successiva")
+      NebbieDash.identUiCecho("  ")
+      NebbieDash.identUiCechoLink(
+        "<cyan>[fine »»]",
+        string.format("NebbieDash.identUiGotoPage(%d)", pages),
+        "Ultima pagina")
+    end
     NebbieDash.identUiCecho("\n")
   end
 
@@ -4527,21 +4537,26 @@ function NebbieDash.identUiSetTab(tab)
 end
 
 function NebbieDash.identUiConfirmDelete()
-  local key = NebbieDash._identUiState.pendingDeleteKey
+  local st = NebbieDash.ensureIdentUiState()
+  local key = st.pendingDeleteKey
   if not key then return end
   local entry = NebbieDash.getIdentEntryByKey(key)
   local name = entry and entry.objectName or key
+  -- Conserva tab + pagina correnti (non saltare ad Archiviati / pagina 1).
+  local keepTab = st.tab or "active"
+  local keepPage = tonumber(st.page) or 1
   local ok = NebbieDash.archiveIdentEntry(key, "manual", "manual")
   if ok then
-    cecho("<green>[NebbieDash] Ident archiviato in Deleted: <white>" .. tostring(name)
-      .. "<green> (ripristinabile).\n")
+    cecho("<green>[NebbieDash] Ident archiviato (vedi <yellow>[Archiviati]<green>): <white>"
+      .. tostring(name) .. "<green> (ripristinabile).\n")
   else
     cecho("<orange>[NebbieDash] Archivio fallito per <white>" .. tostring(key) .. "\n")
   end
-  NebbieDash._identUiState.pendingDeleteKey = nil
-  NebbieDash._identUiState.view = "list"
-  NebbieDash._identUiState.selectedKey = nil
-  NebbieDash._identUiState.tab = "deleted"
+  st.pendingDeleteKey = nil
+  st.view = "list"
+  st.selectedKey = nil
+  st.tab = keepTab
+  st.page = keepPage
   NebbieDash.refreshIdentUi()
 end
 
@@ -4766,8 +4781,15 @@ function NebbieDash.identUiResetFilters()
 end
 
 function NebbieDash.identUiPage(delta)
-  local st = NebbieDash._identUiState
+  local st = NebbieDash.ensureIdentUiState()
   st.page = (st.page or 1) + (delta or 0)
+  st.view = "list"
+  NebbieDash.refreshIdentUi()
+end
+
+function NebbieDash.identUiGotoPage(page)
+  local st = NebbieDash.ensureIdentUiState()
+  st.page = math.max(1, tonumber(page) or 1)
   st.view = "list"
   NebbieDash.refreshIdentUi()
 end
@@ -6952,16 +6974,40 @@ function NebbieDash.loadIdentDb()
       NebbieDash.identDb.entries = NebbieDash.identDb.entries or {}
       NebbieDash.migrateIdentCedibileFlags()
       NebbieDash.purgeIdentEntriesFromExcludedChars()
+      NebbieDash.repairManualWearSlotsOverflow()
     elseif ok and type(loaded) == "table" and loaded.objectName then
       -- file corrotto/parziale: ignora
     end
   end
   -- Riprendi slot da cache eq gia' nota (A), senza attendere un nuovo neq.
+  -- (salta entry con wearSlotsManual — vedi syncIdentWearSlotsFromEqSlots).
   for _, data in pairs(NebbieDash.chars or {}) do
     if data and data.eq then
       NebbieDash.syncIdentWearSlotsFromEqSlots(data.eq)
     end
   end
+end
+
+-- Il sync eq pre-1.16.13 poteva aggiungere slot a entry gia' taggate a mano.
+-- Il picker manuale imposta un solo slot: se manuale e N>1, tieni il primo.
+function NebbieDash.repairManualWearSlotsOverflow()
+  local entries = NebbieDash.identDb and NebbieDash.identDb.entries
+  if type(entries) ~= "table" then return 0 end
+  local fixed = 0
+  for _, entry in pairs(entries) do
+    if entry and entry.wearSlotsManual then
+      local list = NebbieDash.identWearSlotsList(entry)
+      if #list > 1 then
+        entry.wearSlots = { list[1] }
+        entry.wearSlotsSource = "manual"
+        fixed = fixed + 1
+      end
+    end
+  end
+  if fixed > 0 then
+    NebbieDash.scheduleIdentDbSave()
+  end
+  return fixed
 end
 
 function NebbieDash.saveIdentDb()
@@ -7755,6 +7801,11 @@ end
 
 function NebbieDash.addIdentWearSlot(entry, location, source)
   if not entry then return false end
+  -- Tag manuale: eq/resync non devono riaggiungere altri slot (dopo rebuild
+  -- loadIdentDb richiamava sync eq e ripristinava i multi-slot).
+  if entry.wearSlotsManual and source ~= "manual" then
+    return false
+  end
   local loc = NebbieDash.normalizeWearSlotLabel(location)
   if loc == "" or loc == "?" then return false end
   entry.wearSlots = entry.wearSlots or {}
@@ -7798,6 +7849,7 @@ function NebbieDash.identItemMatchesEqText(ident, eqItemText)
 end
 
 -- Dopo un eq riuscito: aggiunge agli identify matchati lo slot visto in equip.
+-- Salta entry con wearSlotsManual (il tag utente ha priorita').
 function NebbieDash.syncIdentWearSlotsFromEqSlots(slots)
   if not slots then return 0 end
   NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
@@ -7808,7 +7860,8 @@ function NebbieDash.syncIdentWearSlotsFromEqSlots(slots)
     local loc = type(eqEntry) == "table" and (eqEntry.location or "") or ""
     if item ~= "" and loc ~= "" then
       for _, ident in pairs(NebbieDash.identDb.entries) do
-        if NebbieDash.identItemMatchesEqText(ident, item) then
+        if not ident.wearSlotsManual
+            and NebbieDash.identItemMatchesEqText(ident, item) then
           if NebbieDash.addIdentWearSlot(ident, loc, "eq") then
             added = added + 1
           end
