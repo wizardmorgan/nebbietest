@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.6 — 2026-11-18
+
+- **nidentui rebuild**: fix crash Mudlet — teardown UserWindow nativo senza
+  combinare `:delete` + `deleteWindow` + `closeUserWindow` (double-free Qt);
+  niente detach CTUW su backend `userwindow`; ricrea deferred (`tempTimer 0.2`);
+  geometria sempre in `"Npx"`.
+
 ## 1.16.5 — 2026-11-18
 
 - **nidentui**: size/pos di default `560x480` @ `(80,80)` su create/rebuild;

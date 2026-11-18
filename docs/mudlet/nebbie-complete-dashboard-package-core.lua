@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.5"
+local PKG_VER = "1.16.6"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3504,7 +3504,10 @@ function NebbieDash.identUiWindowAlive()
   return true
 end
 
+-- Solo per Adjustable convertito da CTUW (non per Geyser.UserWindow nativo:
+-- lì isUserWindow=true e unlock/changeContainer/delete del parent crashano Mudlet).
 function NebbieDash.detachIdentUiFromUserWindow()
+  if NebbieDash._identUiBackend == "userwindow" then return end
   local c = NebbieDash._identUiContainer
   if not c then return end
   pcall(function()
@@ -3517,30 +3520,29 @@ function NebbieDash.detachIdentUiFromUserWindow()
       c.isUserWindow = false
     end
     local uw = c.userwindow
-    if uw and type(uw.hide) == "function" then pcall(function() uw:hide() end) end
-    if uw and type(uw.delete) == "function" then pcall(function() uw:delete() end) end
+    if uw and uw ~= c then
+      if type(uw.hide) == "function" then pcall(function() uw:hide() end) end
+      if type(uw.delete) == "function" then pcall(function() uw:delete() end) end
+    end
     c.userwindow = nil
   end)
 end
 
+-- Teardown sicuro: su UserWindow nativo NON combinare :delete + deleteWindow +
+-- closeUserWindow sullo stesso nome (double-free Qt → crash Mudlet).
 function NebbieDash.destroyIdentUiWindow()
-  NebbieDash.detachIdentUiFromUserWindow()
-  if NebbieDash._identUiContainer then
-    if type(NebbieDash._identUiContainer.hide) == "function" then
-      pcall(function() NebbieDash._identUiContainer:hide() end)
-    end
-    if type(NebbieDash._identUiContainer.delete) == "function" then
-      pcall(function() NebbieDash._identUiContainer:delete() end)
-    end
+  if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._identUiResizeTimer)
   end
-  for _, name in ipairs({
-    NebbieDash.IDENT_UI_CONTAINER,
-    NebbieDash.IDENT_UI_CONSOLE,
-    NebbieDash.IDENT_UI_USERWINDOW,
-  }) do
-    if type(deleteWindow) == "function" then pcall(deleteWindow, name) end
-    if type(closeUserWindow) == "function" then pcall(closeUserWindow, name) end
-  end
+  NebbieDash._identUiResizeTimer = nil
+
+  local backend = NebbieDash._identUiBackend
+  local container = NebbieDash._identUiContainer
+  local name = NebbieDash.IDENT_UI_CONTAINER
+  local console = NebbieDash.IDENT_UI_CONSOLE
+  local ctuwName = NebbieDash.IDENT_UI_USERWINDOW
+
+  -- Scollega i ref Lua subito: timer/refresh non devono toccare widget in delete.
   NebbieDash._identUiContainer = nil
   NebbieDash._identUiGeyser = nil
   NebbieDash._identUiCreated = false
@@ -3548,10 +3550,47 @@ function NebbieDash.destroyIdentUiWindow()
   NebbieDash._identUiBackend = nil
   NebbieDash._identUiRows = nil
   NebbieDash._identUiLastW = nil
-  if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
-    pcall(killTimer, NebbieDash._identUiResizeTimer)
+
+  if backend == "userwindow" then
+    if container and type(container.hide) == "function" then
+      pcall(function() container:hide() end)
+    end
+    -- Una sola API di chiusura per la UserWindow nativa.
+    if type(closeUserWindow) == "function" then
+      pcall(closeUserWindow, name)
+    elseif container and type(container.delete) == "function" then
+      pcall(function() container:delete() end)
+    elseif type(deleteWindow) == "function" then
+      pcall(deleteWindow, name)
+    end
+    if type(deleteWindow) == "function" then
+      pcall(deleteWindow, console)
+    end
+    return
   end
-  NebbieDash._identUiResizeTimer = nil
+
+  -- Adjustable / CTUW / sconosciuto: detach CTUW poi hide+delete (come nswui).
+  NebbieDash._identUiBackend = backend
+  NebbieDash._identUiContainer = container
+  NebbieDash.detachIdentUiFromUserWindow()
+  NebbieDash._identUiContainer = nil
+  NebbieDash._identUiBackend = nil
+
+  if container then
+    if type(container.hide) == "function" then
+      pcall(function() container:hide() end)
+    end
+    if type(container.delete) == "function" then
+      pcall(function() container:delete() end)
+    end
+  end
+  for _, winName in ipairs({ name, console, ctuwName }) do
+    if type(deleteWindow) == "function" then pcall(deleteWindow, winName) end
+  end
+  -- Solo il wrapper CTUW, non di nuovo il container già delete-ato.
+  if type(closeUserWindow) == "function" then
+    pcall(closeUserWindow, ctuwName)
+  end
 end
 
 -- Wrap colonne della mini-console Ident in base alla larghezza pixel corrente.
@@ -3655,15 +3694,18 @@ function NebbieDash.wipeIdentUiSavedState()
 end
 
 function NebbieDash.forceIdentUiGeometry(w, h, x, y)
-  w = w or NebbieDash.IDENT_UI_W or 560
-  h = h or NebbieDash.IDENT_UI_H or 480
-  x = x or NebbieDash.IDENT_UI_X or 80
-  y = y or NebbieDash.IDENT_UI_Y or 80
+  w = tonumber(w) or NebbieDash.IDENT_UI_W or 560
+  h = tonumber(h) or NebbieDash.IDENT_UI_H or 480
+  x = tonumber(x) or NebbieDash.IDENT_UI_X or 80
+  y = tonumber(y) or NebbieDash.IDENT_UI_Y or 80
   local c = NebbieDash._identUiContainer
   if not c then return end
+  -- Geyser preferisce stringhe con unita' ("560px"); i numeri nudi possono
+  -- far fallire resize/move su UserWindow.
+  local ws, hs, xs, ys = w .. "px", h .. "px", x .. "px", y .. "px"
   pcall(function()
-    if type(c.resize) == "function" then c:resize(w, h) end
-    if type(c.move) == "function" then c:move(x, y) end
+    if type(c.resize) == "function" then c:resize(ws, hs) end
+    if type(c.move) == "function" then c:move(xs, ys) end
   end)
   if type(resizeWindow) == "function" then
     pcall(resizeWindow, NebbieDash.IDENT_UI_CONTAINER, w, h)
@@ -3712,10 +3754,17 @@ function NebbieDash.showIdentUiWindow(opts)
     pcall(raiseWindow, NebbieDash.IDENT_UI_CONSOLE)
     pcall(raiseWindow, NebbieDash.IDENT_UI_USERWINDOW)
   end
-  -- UserWindow nativo: openUserWindow sul nome del container.
+  -- UserWindow nativo: openUserWindow se nascosta/chiusa, non a ogni show
+  -- ridondante sullo stesso tick di :new (open doppio → crash Qt).
   if type(openUserWindow) == "function" then
-    pcall(openUserWindow, NebbieDash.IDENT_UI_CONTAINER)
-    pcall(openUserWindow, NebbieDash.IDENT_UI_USERWINDOW)
+    if NebbieDash._identUiBackend == "userwindow" then
+      if opts.forceOpen or NebbieDash._identUiHidden then
+        pcall(openUserWindow, NebbieDash.IDENT_UI_CONTAINER)
+      end
+    else
+      pcall(openUserWindow, NebbieDash.IDENT_UI_CONTAINER)
+      pcall(openUserWindow, NebbieDash.IDENT_UI_USERWINDOW)
+    end
   end
   NebbieDash._identUiHidden = false
   NebbieDash.armIdentUiResizeWatch()
@@ -3741,10 +3790,12 @@ function NebbieDash.hideIdentUiWindow()
 end
 
 function NebbieDash.createIdentUiShell(w, h)
-  w = w or NebbieDash.IDENT_UI_W or 560
-  h = h or NebbieDash.IDENT_UI_H or 480
-  local x = NebbieDash.IDENT_UI_X or 80
-  local y = NebbieDash.IDENT_UI_Y or 80
+  w = tonumber(w) or NebbieDash.IDENT_UI_W or 560
+  h = tonumber(h) or NebbieDash.IDENT_UI_H or 480
+  local x = tonumber(NebbieDash.IDENT_UI_X) or 80
+  local y = tonumber(NebbieDash.IDENT_UI_Y) or 80
+  -- Sempre "Npx": Geyser.UserWindow e' piu' stabile con unita' esplicite.
+  local xs, ys, ws, hs = x .. "px", y .. "px", w .. "px", h .. "px"
   local backend = nil
   local container = nil
   local errUw, errAdj = nil, nil
@@ -3756,10 +3807,10 @@ function NebbieDash.createIdentUiShell(w, h)
     local ok, res = pcall(function()
       return Geyser.UserWindow:new({
         name = NebbieDash.IDENT_UI_CONTAINER,
-        x = x,
-        y = y,
-        width = w,
-        height = h,
+        x = xs,
+        y = ys,
+        width = ws,
+        height = hs,
       })
     end)
     if ok and res then
@@ -3779,8 +3830,8 @@ function NebbieDash.createIdentUiShell(w, h)
     local ok, res = pcall(function()
       return Adjustable.Container:new({
         name = NebbieDash.IDENT_UI_CONTAINER,
-        x = x,
-        y = y,
+        x = xs,
+        y = ys,
         width = w,
         height = h,
         titleText = "Nebbie — Ident DB",
@@ -4622,14 +4673,27 @@ function NebbieDash.cmdIdentUi(argStr)
   end
 
   if mode == "rebuild" or mode == "force" or mode == "new" then
+    -- Distruggi subito, ricrea al tick successivo: ricreare una UserWindow
+    -- con lo stesso nome nello stesso evento Lua puo' far crashare Mudlet.
     NebbieDash.destroyIdentUiWindow()
-    if not NebbieDash.initIdentUiWindow() then return end
-    NebbieDash.showIdentUiWindow({ resetGeom = true })
-    cecho("<green>[NebbieDash] Finestra Ident ricostruita"
-      .. (NebbieDash._identUiBackend and (" (" .. NebbieDash._identUiBackend .. ")") or "")
-      .. " "
-      .. tostring(NebbieDash.IDENT_UI_W) .. "x" .. tostring(NebbieDash.IDENT_UI_H)
-      .. ".\n")
+    local function finishRebuild()
+      if not NebbieDash.initIdentUiWindow() then
+        cecho("<red>[NebbieDash] nidentui rebuild fallito (vedi messaggio sopra).\n")
+        return
+      end
+      NebbieDash.showIdentUiWindow({ resetGeom = true })
+      cecho("<green>[NebbieDash] Finestra Ident ricostruita"
+        .. (NebbieDash._identUiBackend and (" (" .. NebbieDash._identUiBackend .. ")") or "")
+        .. " "
+        .. tostring(NebbieDash.IDENT_UI_W) .. "x" .. tostring(NebbieDash.IDENT_UI_H)
+        .. ".\n")
+    end
+    if type(tempTimer) == "function" then
+      cecho("<grey>[NebbieDash] nidentui rebuild: ricreo tra un attimo...\n")
+      tempTimer(0.2, finishRebuild)
+    else
+      finishRebuild()
+    end
     return
   end
 

@@ -50,6 +50,15 @@ function resizeWindow() end
 function clearWindow() end
 function hideWindow() end
 function showWindow() end
+_G.__closeUserWindowLog = {}
+_G.__deleteWindowLog = {}
+function closeUserWindow(name)
+  table.insert(_G.__closeUserWindowLog, tostring(name or ""))
+end
+function deleteWindow(name)
+  table.insert(_G.__deleteWindowLog, tostring(name or ""))
+end
+function openUserWindow() end
 function setLabelClickCallback() end
 function setLabelToolTip() end
 function moveLabel() end
@@ -2574,6 +2583,74 @@ do
   check("sw: finished idle", NebbieDash._swRun.status == "idle")
   check("sw: path in ndashboard", NebbieDash.speedwalkPath():find("ndashboard", 1, true) ~= nil)
 end
+
+-- nidentui destroy: UserWindow nativo → solo closeUserWindow (niente delete+close).
+do
+  _G.__closeUserWindowLog = {}
+  _G.__deleteWindowLog = {}
+  local deletedSelf = false
+  NebbieDash._identUiBackend = "userwindow"
+  NebbieDash._identUiCreated = true
+  NebbieDash._identUiContainer = {
+    hide = function() end,
+    delete = function() deletedSelf = true end,
+    isUserWindow = true,
+    userwindow = nil,
+  }
+  NebbieDash._identUiGeyser = { get_width = function() return 560 end }
+  NebbieDash.destroyIdentUiWindow()
+  check("identui destroy UW: closeUserWindow chiamato",
+    #_G.__closeUserWindowLog == 1
+      and _G.__closeUserWindowLog[1] == NebbieDash.IDENT_UI_CONTAINER)
+  check("identui destroy UW: non chiama container:delete", deletedSelf == false)
+  check("identui destroy UW: non close sul wrapper CTUW",
+    (function()
+      for _, n in ipairs(_G.__closeUserWindowLog) do
+        if n == NebbieDash.IDENT_UI_USERWINDOW then return false end
+      end
+      return true
+    end)())
+  check("identui destroy UW: console deleteWindow ok",
+    (function()
+      for _, n in ipairs(_G.__deleteWindowLog) do
+        if n == NebbieDash.IDENT_UI_CONSOLE then return true end
+      end
+      return false
+    end)())
+  check("identui destroy UW: flags azzerati",
+    NebbieDash._identUiCreated == false and NebbieDash._identUiContainer == nil
+      and NebbieDash._identUiBackend == nil)
+end
+
+-- nidentui rebuild: deferred via tempTimer (0.2s → eseguito subito nel mock).
+do
+  local initCalls = 0
+  local origInit = NebbieDash.initIdentUiWindow
+  NebbieDash.initIdentUiWindow = function()
+    initCalls = initCalls + 1
+    NebbieDash._identUiCreated = true
+    NebbieDash._identUiBackend = "userwindow"
+    NebbieDash._identUiContainer = { show = function() end, resize = function() end, move = function() end }
+    NebbieDash._identUiGeyser = {}
+    return true
+  end
+  local origShow = NebbieDash.showIdentUiWindow
+  local showReset = false
+  NebbieDash.showIdentUiWindow = function(opts)
+    showReset = opts and opts.resetGeom == true
+  end
+  NebbieDash.cmdIdentUi("rebuild")
+  check("identui rebuild: init dopo defer", initCalls == 1)
+  check("identui rebuild: resetGeom su show", showReset == true)
+  NebbieDash.initIdentUiWindow = origInit
+  NebbieDash.showIdentUiWindow = origShow
+end
+
+check("identui: default size 560x480",
+  NebbieDash.IDENT_UI_W == 560 and NebbieDash.IDENT_UI_H == 480)
+check("package version 1.16.6+",
+  type(NebbieDash.version) == "string"
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.6"))
 
 print("")
 if failures == 0 then
