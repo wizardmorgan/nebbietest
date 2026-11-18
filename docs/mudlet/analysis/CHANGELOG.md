@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.5 — 2026-11-18
+
+- **nidentui**: size/pos di default `560x480` @ `(80,80)` su create/rebuild;
+  reset automatico se geometria sballata (stato post-chiusura Mudlet).
+  UserWindow resta una finestra OS (può aprirsi “fuori” da Mudlet: normale).
+- **Slot wear**: aggiunti **`come luce`** e **`incoccata`** (eqWhere server)
+  al picker manuale e alla lista equip.
+
 ## 1.16.4 — 2026-11-18
 
 - **nidentui**: con Adjustable+CTUW la UI poteva risultare `alive=true` ma

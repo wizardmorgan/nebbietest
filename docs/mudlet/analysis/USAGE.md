@@ -132,7 +132,7 @@ Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, ve
 | `nhungermacros` | Ricarica le macro fame/sete dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nitemkeywords` | Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
 | `nidentdb [query]` | Cerca nell’archivio **identify** condiviso (`profiles/ndashboard/nebbie-ident-db.lua`). Si aggiorna da solo a ogni identify (spell o pergamena) di qualsiasi PG. |
-| `nidentui` | Finestra floating Ident DB. Allarga la finestra per leggere righe lunghe (wrap automatico). Se non si apre: `nidentui rebuild` / `nidentui debug`. |
+| `nidentui` | Finestra Ident DB (UserWindow OS, può stare fuori da Mudlet). Default `560×480`. Se non si apre / size sballato: `nidentui rebuild`. |
 | `nidentui slot [pos]` | Filtra per slot indossabile (es. `dito`/`alle dita`, `polsi`, `orecchie`, `impugnato`). Dito/polso/orecchio L+R sono un solo nome. Slot da `eq` e/o tag `[imposta slot]`. |
 | `nidentdb where <query>` | Come sopra + possesso + chi ha l’oggetto in equip (cache `eq` / `nresync`). |
 | `nidentdb char <nome>` | Identify / possesso di quel personaggio. |

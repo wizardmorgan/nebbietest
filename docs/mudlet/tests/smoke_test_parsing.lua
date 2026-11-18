@@ -186,15 +186,15 @@ check("eq anomalo: slot 8 usa la location dalla riga (non la tabella statica 'ai
 
 -- Test 3c: buildEquipRows segna correttamente gli slot vuoti (richiesta:
 -- "adesso si leggono tutti gli slot ma non mi segna cosa è vuoto"). Su
--- TestAnomalo sono occupati solo 2 dei 21 slot canonici.
+-- TestAnomalo sono occupati solo 2 dei 23 slot canonici (luce+incoccata).
 local rowsAnomalo = NebbieDash.buildEquipRows(dataAnomalo)
-check("equip rows: 21 righe (nessuno slot clan, disattivato di default)", #rowsAnomalo == 21)
+check("equip rows: 23 righe (luce+incoccata, senza clan)", #rowsAnomalo == 23)
 local occupied, empty = 0, 0
 for _, row in ipairs(rowsAnomalo) do
   if row.empty then empty = empty + 1 else occupied = occupied + 1 end
 end
 check("equip rows: 2 occupati", occupied == 2)
-check("equip rows: 19 vuoti", empty == 19)
+check("equip rows: 21 vuoti", empty == 21)
 for _, row in ipairs(rowsAnomalo) do
   if row.location == "ai piedi" then
     check("equip rows: 'ai piedi' occupato con l'oggetto giusto",
@@ -205,14 +205,25 @@ for _, row in ipairs(rowsAnomalo) do
   end
 end
 
--- Test 3d: con tutti i 21 slot occupati (NomiyaMaki), nessuna riga deve
--- risultare vuota.
+-- Test 3d: eq NomiyaMaki (21 posizioni tipiche) — vuoti solo luce/incoccata
+-- se non presenti nel dump.
 local rowsFull = NebbieDash.buildEquipRows(data)
-local emptyFull = 0
+local emptyFull, emptyNames = 0, {}
 for _, row in ipairs(rowsFull) do
-  if row.empty then emptyFull = emptyFull + 1 end
+  if row.empty then
+    emptyFull = emptyFull + 1
+    emptyNames[row.location] = true
+  end
 end
-check("equip rows: eq completo -> zero slot vuoti", emptyFull == 0)
+check("equip rows: eq completo -> solo luce/incoccata vuoti",
+  emptyFull == 2 and emptyNames["come luce"] and emptyNames["incoccata"])
+check("identdb: choices includono come luce",
+  (function()
+    for _, c in ipairs(NebbieDash.identWearSlotChoices()) do
+      if c == "come luce" then return true end
+    end
+    return false
+  end)())
 
 NebbieDash.setCurrentCharacter("NomiyaMaki", true)
 

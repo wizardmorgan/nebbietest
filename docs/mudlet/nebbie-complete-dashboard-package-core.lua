@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.4"
+local PKG_VER = "1.16.5"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -545,18 +545,15 @@ function NebbieDash.cmdPackageCheck(_argStr)
 end
 
 -- ---------------------------------------------------------------------------
--- Elenco canonico delle posizioni indossabili note (21, da REQUIREMENTS.md
--- §5/M4, output reale `eq`), in un ordine di visualizzazione fisso. Usato per
--- mostrare anche gli slot NON occupati ("(vuoto)") — l'occupazione si decide
--- confrontando il TESTO della posizione con quello letto dalla riga `eq`
--- reale (mai il numero di slot del gioco, che e' solo un contatore
--- progressivo sugli oggetti indossati, non un identificatore di posizione:
--- vedi bug corretto in LOG.md, "conteggio slot sbagliato").
--- NebbieDash.EQ_SLOTS e' un alias mantenuto per compatibilita' con
--- migrateStore() (dati salvati da versioni precedenti, indicizzati per
--- numero, mai per etichetta).
+-- Elenco canonico delle posizioni indossabili (eqWhere[] server / constants.cpp),
+-- in un ordine di visualizzazione fisso. Usato per mostrare anche gli slot NON
+-- occupati ("(vuoto)") e per il picker manuale nidentui [slot].
+-- L'occupazione si decide confrontando il TESTO della posizione con quello
+-- letto dalla riga `eq` reale (mai il numero di slot del gioco).
+-- NebbieDash.EQ_SLOTS e' un alias per migrateStore() (dati vecchi per indice).
 -- ---------------------------------------------------------------------------
 NebbieDash.EQ_SLOT_ORDER = {
+  "come luce",
   "sul dito destro",
   "sul dito sinistro",
   "intorno al collo",
@@ -578,6 +575,7 @@ NebbieDash.EQ_SLOT_ORDER = {
   "all'orecchio destro",
   "all'orecchio sinistro",
   "davanti agli occhi",
+  "incoccata",
 }
 NebbieDash.EQ_SLOTS = NebbieDash.EQ_SLOT_ORDER
 -- Slot aggiuntivo indicato dall'utente ma non ancora osservato/confermato in
@@ -3479,6 +3477,12 @@ NebbieDash.IDENT_UI_CONTAINER = "NebbieDashIdentUiContainer"
 NebbieDash.IDENT_UI_CONSOLE = "NebbieDashIdentUi"
 -- convertToUserWindow crea "<name>userWindow" al doppio-click.
 NebbieDash.IDENT_UI_USERWINDOW = "NebbieDashIdentUiContaineruserWindow"
+-- Size/pos di default (UserWindow = finestra OS; senza default resta lo stato
+-- sballato dell'ultima chiusura Mudlet).
+NebbieDash.IDENT_UI_W = 560
+NebbieDash.IDENT_UI_H = 480
+NebbieDash.IDENT_UI_X = 80
+NebbieDash.IDENT_UI_Y = 80
 
 -- true se i riferimenti Lua puntano ancora a window Geyser vive.
 -- Probe get_width prima di Geyser.windowList: con CTUW il container puo'
@@ -3650,31 +3654,44 @@ function NebbieDash.wipeIdentUiSavedState()
   end
 end
 
-function NebbieDash.forceIdentUiGeometry(w, h)
-  w = w or 560
-  h = h or 420
+function NebbieDash.forceIdentUiGeometry(w, h, x, y)
+  w = w or NebbieDash.IDENT_UI_W or 560
+  h = h or NebbieDash.IDENT_UI_H or 480
+  x = x or NebbieDash.IDENT_UI_X or 80
+  y = y or NebbieDash.IDENT_UI_Y or 80
   local c = NebbieDash._identUiContainer
   if not c then return end
   pcall(function()
     if type(c.resize) == "function" then c:resize(w, h) end
-    if type(c.move) == "function" then c:move("-580px", 80) end
+    if type(c.move) == "function" then c:move(x, y) end
   end)
   if type(resizeWindow) == "function" then
     pcall(resizeWindow, NebbieDash.IDENT_UI_CONTAINER, w, h)
   end
   if type(moveWindow) == "function" then
-    local mw = 1024
-    if type(getMainWindowSize) == "function" then
-      local ok, a = pcall(getMainWindowSize)
-      if ok and tonumber(a) then mw = tonumber(a) end
-    end
-    pcall(moveWindow, NebbieDash.IDENT_UI_CONTAINER, math.max(0, mw - w - 20), 80)
+    pcall(moveWindow, NebbieDash.IDENT_UI_CONTAINER, x, y)
   end
 end
 
-function NebbieDash.showIdentUiWindow()
+-- true se w/h sono inutilizzabili (stato sballato post-chiusura Mudlet).
+function NebbieDash.identUiGeometryLooksBroken()
   local c = NebbieDash._identUiContainer
-  NebbieDash.forceIdentUiGeometry(560, 420)
+  if not c then return true end
+  local w, h = nil, nil
+  pcall(function()
+    if type(c.get_width) == "function" then w = tonumber(c:get_width()) end
+    if type(c.get_height) == "function" then h = tonumber(c:get_height()) end
+  end)
+  if not w or not h then return false end
+  return w < 120 or h < 80 or w > 4000 or h > 3000
+end
+
+function NebbieDash.showIdentUiWindow(opts)
+  opts = opts or {}
+  local c = NebbieDash._identUiContainer
+  if opts.resetGeom or NebbieDash.identUiGeometryLooksBroken() then
+    NebbieDash.forceIdentUiGeometry()
+  end
   -- Se convertToUserWindow l'ha staccata, mostra anche il parent UserWindow.
   if c and c.isUserWindow and c.userwindow and type(c.userwindow.show) == "function" then
     pcall(function() c.userwindow:show() end)
@@ -3724,20 +3741,23 @@ function NebbieDash.hideIdentUiWindow()
 end
 
 function NebbieDash.createIdentUiShell(w, h)
-  w = w or 560
-  h = h or 420
+  w = w or NebbieDash.IDENT_UI_W or 560
+  h = h or NebbieDash.IDENT_UI_H or 480
+  local x = NebbieDash.IDENT_UI_X or 80
+  local y = NebbieDash.IDENT_UI_Y or 80
   local backend = nil
   local container = nil
   local errUw, errAdj = nil, nil
 
   -- Preferisci UserWindow nativo: immune a convertToUserWindow e allo
   -- Adjustable:load() che lascia la finestra "alive" ma invisibile.
+  -- Posizione assoluta (px): evita geometria "fuori schermo" ereditata.
   if type(Geyser) == "table" and type(Geyser.UserWindow) == "table" then
     local ok, res = pcall(function()
       return Geyser.UserWindow:new({
         name = NebbieDash.IDENT_UI_CONTAINER,
-        x = "-580px",
-        y = "80px",
+        x = x,
+        y = y,
         width = w,
         height = h,
       })
@@ -3759,8 +3779,8 @@ function NebbieDash.createIdentUiShell(w, h)
     local ok, res = pcall(function()
       return Adjustable.Container:new({
         name = NebbieDash.IDENT_UI_CONTAINER,
-        x = "-580px",
-        y = 80,
+        x = x,
+        y = y,
         width = w,
         height = h,
         titleText = "Nebbie — Ident DB",
@@ -3818,7 +3838,8 @@ function NebbieDash.initIdentUiWindow()
   end
   NebbieDash.destroyIdentUiWindow()
   NebbieDash.wipeIdentUiSavedState()
-  local container, mc, backendOrErr = NebbieDash.createIdentUiShell(560, 420)
+  local container, mc, backendOrErr = NebbieDash.createIdentUiShell(
+    NebbieDash.IDENT_UI_W, NebbieDash.IDENT_UI_H)
   if not container or not mc then
     cecho("<red>[NebbieDash] Creazione Ident UI fallita: "
       .. tostring(backendOrErr) .. "\n")
@@ -3841,7 +3862,7 @@ function NebbieDash.initIdentUiWindow()
   end
   -- Mai Adjustable:load() su Ident UI (fonte dello stato invisibile).
   NebbieDash._identUiCreated = true
-  NebbieDash.showIdentUiWindow()
+  NebbieDash.showIdentUiWindow({ resetGeom = true })
   NebbieDash.updateIdentUiWrap()
   NebbieDash.refreshIdentUi()
   NebbieDash.armIdentUiResizeWatch()
@@ -4603,8 +4624,11 @@ function NebbieDash.cmdIdentUi(argStr)
   if mode == "rebuild" or mode == "force" or mode == "new" then
     NebbieDash.destroyIdentUiWindow()
     if not NebbieDash.initIdentUiWindow() then return end
+    NebbieDash.showIdentUiWindow({ resetGeom = true })
     cecho("<green>[NebbieDash] Finestra Ident ricostruita"
       .. (NebbieDash._identUiBackend and (" (" .. NebbieDash._identUiBackend .. ")") or "")
+      .. " "
+      .. tostring(NebbieDash.IDENT_UI_W) .. "x" .. tostring(NebbieDash.IDENT_UI_H)
       .. ".\n")
     return
   end
