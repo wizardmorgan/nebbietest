@@ -212,10 +212,11 @@ nidentui debug
 nidentui off
 ```
 
-In finestra (click): tab **Attivi / Deleted / Tutti**, dettaglio, **archivia** (soft-delete
-ripristinabile) o purge definitivo da Deleted, toggle cedibile, sort/pagine, filtri,
-possesso, export CSV. Il comando di gioco `Distruggi …` sposta l’entry in Deleted come
-`destroyed`. Rename da oedit con stesso vnum+stats aggiorna il nome e tiene i nomi precedenti.
+In finestra (click): tab **Attivi / Archiviati** (gli archiviati solo in Archiviati),
+dettaglio, **archivia** (soft-delete ripristinabile) o purge definitivo da Archiviati,
+toggle cedibile, sort/pagine, filtri, possesso, export CSV. Il comando di gioco
+`Distruggi …` sposta l’entry in Archiviati come `destroyed`. Rename da oedit con
+stesso vnum+stats aggiorna il nome e tiene i nomi precedenti.
 
 ### Sync VPS (`nidentsync`)
 
