@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.1"
+local PKG_VER = "1.16.2"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3472,6 +3472,26 @@ function NebbieDash.canUseIdentUiWindow()
   return NebbieDash.canUseChatWindow()
 end
 
+-- true se i riferimenti Lua puntano ancora a window Geyser vive.
+-- Dopo npackageupdate / convertToUserWindow i pointer restano non-nil ma
+-- la window e' gia' distrutta → senza questo check nidentui "apre" a vuoto.
+function NebbieDash.identUiWindowAlive()
+  if not NebbieDash._identUiCreated then return false end
+  if not NebbieDash._identUiContainer or not NebbieDash._identUiGeyser then return false end
+  if type(Geyser) == "table" and type(Geyser.windowList) == "table" then
+    if Geyser.windowList["NebbieDashIdentUiContainer"]
+        or Geyser.windowList["NebbieDashIdentUi"] then
+      return true
+    end
+    return false
+  end
+  if type(NebbieDash._identUiGeyser.get_width) == "function" then
+    local ok, w = pcall(function() return NebbieDash._identUiGeyser:get_width() end)
+    return ok and tonumber(w) ~= nil
+  end
+  return true
+end
+
 function NebbieDash.destroyIdentUiWindow()
   if NebbieDash._identUiContainer then
     if type(NebbieDash._identUiContainer.hide) == "function" then
@@ -3487,7 +3507,7 @@ function NebbieDash.destroyIdentUiWindow()
   NebbieDash._identUiContainer = nil
   NebbieDash._identUiGeyser = nil
   NebbieDash._identUiCreated = false
-  NebbieDash._identUiHidden = false
+  NebbieDash._identUiHidden = true
   NebbieDash._identUiRows = nil
   NebbieDash._identUiLastW = nil
   if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
@@ -3609,51 +3629,70 @@ function NebbieDash.initIdentUiWindow()
     cecho("<orange>[NebbieDash] Finestra ident non disponibile (serve Adjustable.Container / Geyser).\n")
     return false
   end
-  if NebbieDash._identUiCreated and NebbieDash._identUiContainer then
+  if NebbieDash.identUiWindowAlive() then
     NebbieDash.showIdentUiWindow()
     NebbieDash.refreshIdentUi()
     return true
   end
+  -- Riferimenti stale (reload package / window distrutta): ricrea da zero.
   NebbieDash.destroyIdentUiWindow()
   local w, h = 560, 420
-  NebbieDash._identUiContainer = Adjustable.Container:new({
-    name = "NebbieDashIdentUiContainer",
-    x = "-580",
-    y = 80,
-    width = w,
-    height = h,
-    titleText = "Nebbie — Ident DB",
-    titleTxtColor = "white",
-    adjLabelstyle = [[
-      background-color: rgb(14, 14, 20);
-      border: 2px solid rgb(120, 90, 50);
-      border-radius: 6px;
-    ]],
-  })
+  local okNew, containerOrErr = pcall(function()
+    return Adjustable.Container:new({
+      name = "NebbieDashIdentUiContainer",
+      x = "-580",
+      y = 80,
+      width = w,
+      height = h,
+      titleText = "Nebbie — Ident DB",
+      titleTxtColor = "white",
+      adjLabelstyle = [[
+        background-color: rgb(14, 14, 20);
+        border: 2px solid rgb(120, 90, 50);
+        border-radius: 6px;
+      ]],
+    })
+  end)
+  if not okNew or not containerOrErr then
+    cecho("<red>[NebbieDash] Creazione Ident UI fallita: "
+      .. tostring(containerOrErr) .. "\n")
+    NebbieDash.destroyIdentUiWindow()
+    return false
+  end
+  NebbieDash._identUiContainer = containerOrErr
   local pad = 4
   local titleH = 22
-  NebbieDash._identUiGeyser = Geyser.MiniConsole:new({
-    name = "NebbieDashIdentUi",
-    x = pad,
-    y = titleH,
-    width = "100%-" .. tostring(pad * 2),
-    height = "100%-" .. tostring(titleH + pad),
-  }, NebbieDash._identUiContainer)
-  NebbieDash._identUiGeyser:setColor(14, 14, 18, 255)
+  local okMc, mcOrErr = pcall(function()
+    return Geyser.MiniConsole:new({
+      name = "NebbieDashIdentUi",
+      x = pad,
+      y = titleH,
+      width = "100%-" .. tostring(pad * 2),
+      height = "100%-" .. tostring(titleH + pad),
+    }, NebbieDash._identUiContainer)
+  end)
+  if not okMc or not mcOrErr then
+    cecho("<red>[NebbieDash] MiniConsole Ident UI fallita: " .. tostring(mcOrErr) .. "\n")
+    NebbieDash.destroyIdentUiWindow()
+    return false
+  end
+  NebbieDash._identUiGeyser = mcOrErr
+  pcall(function() NebbieDash._identUiGeyser:setColor(14, 14, 18, 255) end)
   if type(setMiniConsoleFontSize) == "function" then
-    setMiniConsoleFontSize("NebbieDashIdentUi", NebbieDash.fontSize or 10)
+    pcall(setMiniConsoleFontSize, "NebbieDashIdentUi", NebbieDash.fontSize or 10)
   end
   if type(enableScrollBar) == "function" then
-    enableScrollBar("NebbieDashIdentUi", true)
+    pcall(enableScrollBar, "NebbieDashIdentUi", true)
   end
   if type(setMaxLines) == "function" then
-    setMaxLines("NebbieDashIdentUi", 4000)
+    pcall(setMaxLines, "NebbieDashIdentUi", 4000)
   end
+  -- load() ripristina pos/size ma puo' lasciarla nascosta (bug "serve 2x nidentui").
   if type(NebbieDash._identUiContainer.load) == "function" then
     pcall(function() NebbieDash._identUiContainer:load() end)
   end
   NebbieDash._identUiCreated = true
-  NebbieDash._identUiHidden = false
+  NebbieDash.showIdentUiWindow()
   NebbieDash.updateIdentUiWrap()
   NebbieDash.refreshIdentUi()
   NebbieDash.armIdentUiResizeWatch()
@@ -4407,8 +4446,15 @@ function NebbieDash.cmdIdentUi(argStr)
   mode = (mode or ""):lower()
 
   if mode == "off" or mode == "hide" or mode == "close" then
-    NebbieDash.hideIdentUiWindow()
+    if NebbieDash._identUiCreated then NebbieDash.hideIdentUiWindow() end
     cecho("<grey>[NebbieDash] Finestra Ident nascosta (<yellow>nidentui<grey> per riaprire).\n")
+    return
+  end
+
+  if mode == "rebuild" or mode == "force" or mode == "new" then
+    NebbieDash.destroyIdentUiWindow()
+    if not NebbieDash.initIdentUiWindow() then return end
+    cecho("<green>[NebbieDash] Finestra Ident ricostruita.\n")
     return
   end
 
@@ -4417,7 +4463,6 @@ function NebbieDash.cmdIdentUi(argStr)
     NebbieDash._identUiState.page = 1
     NebbieDash._identUiState.view = "list"
     if not NebbieDash.initIdentUiWindow() then return end
-    NebbieDash.refreshIdentUi()
     return
   end
 
@@ -4426,7 +4471,6 @@ function NebbieDash.cmdIdentUi(argStr)
     NebbieDash._identUiState.page = 1
     NebbieDash._identUiState.view = "list"
     if not NebbieDash.initIdentUiWindow() then return end
-    NebbieDash.refreshIdentUi()
     return
   end
 
@@ -4440,7 +4484,6 @@ function NebbieDash.cmdIdentUi(argStr)
     NebbieDash._identUiState.page = 1
     NebbieDash._identUiState.view = "list"
     if not NebbieDash.initIdentUiWindow() then return end
-    NebbieDash.refreshIdentUi()
     return
   end
 
@@ -4469,7 +4512,9 @@ function NebbieDash.cmdIdentUi(argStr)
     local ok = NebbieDash.deleteIdentEntry(entry.key)
     if ok then
       cecho("<green>[NebbieDash] Ident eliminato: <white>" .. tostring(entry.objectName) .. "\n")
-      NebbieDash.refreshIdentUi()
+      if NebbieDash.identUiWindowAlive() and not NebbieDash._identUiHidden then
+        NebbieDash.refreshIdentUi()
+      end
     end
     return
   end
@@ -4482,18 +4527,27 @@ function NebbieDash.cmdIdentUi(argStr)
     cecho("<grey>  <yellow>nidentui char [Pg]<grey>     filtra per personaggio\n")
     cecho("<grey>  <yellow>nidentui del [oggetto]<grey>  elimina (se univoco)\n")
     cecho("<grey>  <yellow>nidentui reset<grey>         azzera filtri\n")
+    cecho("<grey>  <yellow>nidentui rebuild<grey>       ricrea la finestra (se non si apre)\n")
     cecho("<grey>  <yellow>nidentui off<grey>            nascondi finestra\n")
     cecho("<grey>In finestra: nome=dettaglio, [slot]=tag manuale, sort slot, wrap al resize.\n")
     cecho("<grey>Slot automatici: dopo <yellow>neq/nresync<grey> se l'oggetto e' in equip.\n")
     return
   end
 
+  if mode == "toggle" then
+    if NebbieDash.identUiWindowAlive() and not NebbieDash._identUiHidden then
+      NebbieDash.hideIdentUiWindow()
+      cecho("<grey>[NebbieDash] Finestra Ident nascosta (<yellow>nidentui<grey> per riaprire).\n")
+      return
+    end
+  end
+
   if not NebbieDash.initIdentUiWindow() then return end
   if mode == "" or mode == "on" or mode == "show" or mode == "open" or mode == "toggle" then
-    if NebbieDash._identUiHidden then
-      NebbieDash.showIdentUiWindow()
-      NebbieDash.refreshIdentUi()
-    end
+    -- Sempre show+refresh (come nswui): load() o stato stale non devono
+    -- lasciare la UI "aperta" solo a parole.
+    NebbieDash.showIdentUiWindow()
+    NebbieDash.refreshIdentUi()
     cecho("<green>[NebbieDash] Finestra Ident aperta (<yellow>nidentui help<green> per comandi).\n")
     return
   end
@@ -4501,6 +4555,7 @@ function NebbieDash.cmdIdentUi(argStr)
   NebbieDash._identUiState.filter = argStr
   NebbieDash._identUiState.page = 1
   NebbieDash._identUiState.view = "list"
+  NebbieDash.showIdentUiWindow()
   NebbieDash.refreshIdentUi()
 end
 
@@ -4627,7 +4682,8 @@ function NebbieDash.initSwUiWindow()
     pcall(function() NebbieDash._swUiContainer:load() end)
   end
   NebbieDash._swUiCreated = true
-  NebbieDash._swUiHidden = false
+  -- load() puo' nascondere: forza show come per nidentui.
+  NebbieDash.showSwUiWindow()
   NebbieDash.refreshSwUi()
   return true
 end

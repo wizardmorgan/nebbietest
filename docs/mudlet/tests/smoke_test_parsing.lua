@@ -1707,6 +1707,24 @@ check("identdb: updateIdentUiWrap senza crash",
     local cols = NebbieDash.updateIdentUiWrap()
     return type(cols) == "number" and cols >= 40
   end)())
+-- nidentui alive/recreate: riferimenti stale non devono passare per "vivi"
+do
+  local realAdj = _G.Adjustable
+  local realGeyser = _G.Geyser
+  NebbieDash._identUiCreated = true
+  NebbieDash._identUiContainer = { show = function() end, hide = function() end }
+  NebbieDash._identUiGeyser = { get_width = function() error("dead") end }
+  _G.Geyser = { windowList = {}, MiniConsole = { new = function() end } }
+  check("identui: stale refs not alive", NebbieDash.identUiWindowAlive() == false)
+  _G.Geyser.windowList["NebbieDashIdentUiContainer"] = {}
+  NebbieDash._identUiGeyser = { get_width = function() return 560 end }
+  check("identui: listed window is alive", NebbieDash.identUiWindowAlive() == true)
+  NebbieDash._identUiCreated = false
+  NebbieDash._identUiContainer = nil
+  NebbieDash._identUiGeyser = nil
+  _G.Adjustable = realAdj
+  _G.Geyser = realGeyser
+end
 NebbieDash._identUiState.slotFilter = ""
 NebbieDash._identUiState.sort = "name"
 

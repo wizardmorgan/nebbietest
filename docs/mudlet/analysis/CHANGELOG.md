@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.2 — 2026-11-18
+
+- **nidentui**: fix apertura inaffidabile — dopo `:load()` la finestra poteva
+  restare nascosta (serviva un secondo `nidentui`); dopo update/package
+  reload i riferimenti Geyser stale facevano “aprire” senza UI. Ora: check
+  alive + ricrea se morta; sempre `show` dopo create/load; `nidentui rebuild`
+  per forzare. Stesso show-dopo-load su `nswui`.
+
 ## 1.16.1 — 2026-11-17
 
 - **nautosplit / loot**: riconosce il riepilogo multi-mucchio del server
