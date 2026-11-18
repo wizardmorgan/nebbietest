@@ -198,15 +198,15 @@ check("eq anomalo: slot 8 usa la location dalla riga (non la tabella statica 'ai
 
 -- Test 3c: buildEquipRows segna correttamente gli slot vuoti (richiesta:
 -- "adesso si leggono tutti gli slot ma non mi segna cosa è vuoto"). Su
--- TestAnomalo sono occupati solo 2 dei 23 slot canonici (luce+incoccata).
+-- TestAnomalo: 22 slot canonici (con luce, senza clan/incoccata); 2 occupati.
 local rowsAnomalo = NebbieDash.buildEquipRows(dataAnomalo)
-check("equip rows: 23 righe (luce+incoccata, senza clan)", #rowsAnomalo == 23)
+check("equip rows: 22 righe (con luce, senza clan/incoccata)", #rowsAnomalo == 22)
 local occupied, empty = 0, 0
 for _, row in ipairs(rowsAnomalo) do
   if row.empty then empty = empty + 1 else occupied = occupied + 1 end
 end
 check("equip rows: 2 occupati", occupied == 2)
-check("equip rows: 21 vuoti", empty == 21)
+check("equip rows: 20 vuoti", empty == 20)
 for _, row in ipairs(rowsAnomalo) do
   if row.location == "ai piedi" then
     check("equip rows: 'ai piedi' occupato con l'oggetto giusto",
@@ -217,8 +217,8 @@ for _, row in ipairs(rowsAnomalo) do
   end
 end
 
--- Test 3d: eq NomiyaMaki (21 posizioni tipiche) — vuoti solo luce/incoccata
--- se non presenti nel dump.
+-- Test 3d: eq NomiyaMaki (21 posizioni tipiche) — vuoto solo "come luce"
+-- se non presente nel dump.
 local rowsFull = NebbieDash.buildEquipRows(data)
 local emptyFull, emptyNames = 0, {}
 for _, row in ipairs(rowsFull) do
@@ -227,14 +227,21 @@ for _, row in ipairs(rowsFull) do
     emptyNames[row.location] = true
   end
 end
-check("equip rows: eq completo -> solo luce/incoccata vuoti",
-  emptyFull == 2 and emptyNames["come luce"] and emptyNames["incoccata"])
+check("equip rows: eq completo -> solo come luce vuoto",
+  emptyFull == 1 and emptyNames["come luce"] and not emptyNames["incoccata"])
 check("identdb: choices includono come luce",
   (function()
     for _, c in ipairs(NebbieDash.identWearSlotChoices()) do
       if c == "come luce" then return true end
     end
     return false
+  end)())
+check("identdb: choices senza incoccata",
+  (function()
+    for _, c in ipairs(NebbieDash.identWearSlotChoices()) do
+      if c == "incoccata" then return false end
+    end
+    return true
   end)())
 
 NebbieDash.setCurrentCharacter("NomiyaMaki", true)
@@ -1744,7 +1751,7 @@ do
   check("identui: get_width ok even if not in windowList",
     NebbieDash.identUiWindowAlive() == true)
   NebbieDash._identUiGeyser = { } -- no get_width
-  _G.Geyser.windowList["NebbieDashIdentUiContaineruserWindow"] = {}
+  _G.Geyser.windowList[NebbieDash.IDENT_UI_USERWINDOW] = {}
   check("identui: CTUW userWindow in list counts alive",
     NebbieDash.identUiWindowAlive() == true)
   NebbieDash._identUiCreated = false
@@ -2629,14 +2636,14 @@ do
       and NebbieDash._identUiBackend == nil)
 end
 
--- nidentui rebuild: deferred via tempTimer (0.2s → eseguito subito nel mock).
+-- nidentui rebuild: sincrono (niente tempTimer — evita hang + doppia finestra).
 do
   local initCalls = 0
   local origInit = NebbieDash.initIdentUiWindow
   NebbieDash.initIdentUiWindow = function()
     initCalls = initCalls + 1
     NebbieDash._identUiCreated = true
-    NebbieDash._identUiBackend = "userwindow"
+    NebbieDash._identUiBackend = "adjustable"
     NebbieDash._identUiContainer = { show = function() end, resize = function() end, move = function() end }
     NebbieDash._identUiGeyser = {}
     return true
@@ -2647,7 +2654,7 @@ do
     showReset = opts and opts.resetGeom == true
   end
   NebbieDash.cmdIdentUi("rebuild")
-  check("identui rebuild: init dopo defer", initCalls == 1)
+  check("identui rebuild: init sincrono", initCalls == 1)
   check("identui rebuild: resetGeom su show", showReset == true)
   NebbieDash.initIdentUiWindow = origInit
   NebbieDash.showIdentUiWindow = origShow
@@ -2657,9 +2664,11 @@ check("identui: default size 560x480",
   NebbieDash.IDENT_UI_W == 560 and NebbieDash.IDENT_UI_H == 480)
 check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
-check("package version 1.16.8+",
+check("identui: container Panel (no collisioni legacy)",
+  NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
+check("package version 1.16.9+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.8"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.9"))
 
 -- Adjustable show non deve aprire UserWindow OS (shell vuote).
 do

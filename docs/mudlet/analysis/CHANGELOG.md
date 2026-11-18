@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.9 — 2026-11-18
+
+- **nidentui rebuild**: sincrono (niente `tempTimer` — non resta più appeso
+  e non apre una seconda finestra se rilanci `nidentui`); non chiama più
+  `closeUserWindow` sul nome Adjustable (poteva freezare); nuovo nome
+  container `NebbieDashIdentUiPanel` per evitare collisioni con shell OS
+  legacy; chiude solo orfani CTUW/legacy.
+- **Slot**: rimosso **`incoccata`** da equip/picker (resta `come luce`).
+
 ## 1.16.8 — 2026-11-18
 
 - **nidentui**: fix finestre OS **vuote/duplicate** — su Adjustable `show()`

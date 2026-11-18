@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.8"
+local PKG_VER = "1.16.9"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -575,7 +575,6 @@ NebbieDash.EQ_SLOT_ORDER = {
   "all'orecchio destro",
   "all'orecchio sinistro",
   "davanti agli occhi",
-  "incoccata",
 }
 NebbieDash.EQ_SLOTS = NebbieDash.EQ_SLOT_ORDER
 -- Slot aggiuntivo indicato dall'utente ma non ancora osservato/confermato in
@@ -3473,10 +3472,17 @@ function NebbieDash.canUseIdentUiWindow()
   return type(Geyser.UserWindow) == "table"
 end
 
-NebbieDash.IDENT_UI_CONTAINER = "NebbieDashIdentUiContainer"
+-- Nome NUOVO (1.16.9): evita collisioni con UserWindow OS vuote create da
+-- openUserWindow("NebbieDashIdentUiContainer") in 1.16.4–1.16.8.
+NebbieDash.IDENT_UI_CONTAINER = "NebbieDashIdentUiPanel"
 NebbieDash.IDENT_UI_CONSOLE = "NebbieDashIdentUi"
 -- convertToUserWindow crea "<name>userWindow" al doppio-click.
-NebbieDash.IDENT_UI_USERWINDOW = "NebbieDashIdentUiContaineruserWindow"
+NebbieDash.IDENT_UI_USERWINDOW = "NebbieDashIdentUiPaneluserWindow"
+NebbieDash.IDENT_UI_LEGACY_WINDOWS = {
+  "NebbieDashIdentUiContainer",
+  "NebbieDashIdentUiContaineruserWindow",
+  "NebbieDashIdentUiPaneluserWindow",
+}
 -- Size/pos di default. Preferiamo Adjustable.Container (dentro Mudlet);
 -- UserWindow (finestra OS "fuori") solo come fallback.
 NebbieDash.IDENT_UI_W = 560
@@ -3531,19 +3537,27 @@ function NebbieDash.detachIdentUiFromUserWindow()
   end)
 end
 
--- Chiude UserWindow orfane lasciate da show/openUserWindow o da CTUW.
--- Mai abbinare a :delete sullo stesso nome nello stesso tick se backend nativo.
+-- Chiude SOLO UserWindow orfane legacy/CTUW. Mai closeUserWindow sul nome
+-- dell'Adjustable vivo: su diversi Mudlet appende o freeza il client.
 function NebbieDash.closeIdentUiOrphanUserWindows()
   if type(closeUserWindow) ~= "function" then return end
-  pcall(closeUserWindow, NebbieDash.IDENT_UI_USERWINDOW)
-  -- Bug 1.16.7: show() su Adjustable chiamava openUserWindow(container)
-  -- creando una shell OS VUOTA con lo stesso nome del container.
-  pcall(closeUserWindow, NebbieDash.IDENT_UI_CONTAINER)
+  for _, name in ipairs(NebbieDash.IDENT_UI_LEGACY_WINDOWS or {}) do
+    pcall(closeUserWindow, name)
+  end
+end
+
+function NebbieDash.cancelIdentUiRebuildTimer()
+  if NebbieDash._identUiRebuildTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._identUiRebuildTimer)
+  end
+  NebbieDash._identUiRebuildTimer = nil
+  NebbieDash._identUiRebuildPending = false
 end
 
 -- Teardown sicuro: su UserWindow nativo NON combinare :delete + deleteWindow +
 -- closeUserWindow sullo stesso nome (double-free Qt → crash Mudlet).
 function NebbieDash.destroyIdentUiWindow()
+  NebbieDash.cancelIdentUiRebuildTimer()
   if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
     pcall(killTimer, NebbieDash._identUiResizeTimer)
   end
@@ -3553,7 +3567,6 @@ function NebbieDash.destroyIdentUiWindow()
   local container = NebbieDash._identUiContainer
   local name = NebbieDash.IDENT_UI_CONTAINER
   local console = NebbieDash.IDENT_UI_CONSOLE
-  local ctuwName = NebbieDash.IDENT_UI_USERWINDOW
 
   -- Scollega i ref Lua subito: timer/refresh non devono toccare widget in delete.
   NebbieDash._identUiContainer = nil
@@ -3568,7 +3581,7 @@ function NebbieDash.destroyIdentUiWindow()
     if container and type(container.hide) == "function" then
       pcall(function() container:hide() end)
     end
-    -- Una sola API di chiusura per la UserWindow nativa.
+    -- Una sola API di chiusura per la UserWindow nativa (solo quel nome).
     if type(closeUserWindow) == "function" then
       pcall(closeUserWindow, name)
     elseif container and type(container.delete) == "function" then
@@ -3579,10 +3592,7 @@ function NebbieDash.destroyIdentUiWindow()
     if type(deleteWindow) == "function" then
       pcall(deleteWindow, console)
     end
-    -- Eventuale wrapper CTUW residuo da sessioni miste.
-    if type(closeUserWindow) == "function" then
-      pcall(closeUserWindow, ctuwName)
-    end
+    NebbieDash.closeIdentUiOrphanUserWindows()
     return
   end
 
@@ -3601,10 +3611,10 @@ function NebbieDash.destroyIdentUiWindow()
       pcall(function() container:delete() end)
     end
   end
-  for _, winName in ipairs({ name, console, ctuwName }) do
+  for _, winName in ipairs({ name, console }) do
     if type(deleteWindow) == "function" then pcall(deleteWindow, winName) end
   end
-  -- Chiudi wrapper CTUW + eventuali shell OS vuote create per sbaglio.
+  -- Solo legacy/CTUW orfane — mai closeUserWindow(name) sull'Adjustable.
   NebbieDash.closeIdentUiOrphanUserWindows()
 end
 
@@ -3917,8 +3927,9 @@ function NebbieDash.initIdentUiWindow()
     cecho("<orange>[NebbieDash] Finestra ident non disponibile (serve Geyser MiniConsole).\n")
     return false
   end
+  NebbieDash.cancelIdentUiRebuildTimer()
   -- Riusa solo Adjustable dentro Mudlet. Se e' ancora UserWindow nativo
-  -- (sessioni 1.16.4–1.16.7) o Adjustable staccato da CTUW, ricrea Adjustable.
+  -- (sessioni 1.16.4–1.16.8) o Adjustable staccato da CTUW, ricrea Adjustable.
   if NebbieDash.identUiWindowAlive() and NebbieDash._identUiBackend == "adjustable" then
     local c = NebbieDash._identUiContainer
     if not (c and c.isUserWindow) then
@@ -3928,8 +3939,6 @@ function NebbieDash.initIdentUiWindow()
     end
   end
   NebbieDash.destroyIdentUiWindow()
-  -- Chiudi subito eventuali shell OS vuote residue prima di ricreare.
-  NebbieDash.closeIdentUiOrphanUserWindows()
   NebbieDash.wipeIdentUiSavedState()
   local container, mc, backendOrErr = NebbieDash.createIdentUiShell(
     NebbieDash.IDENT_UI_W, NebbieDash.IDENT_UI_H)
@@ -4726,27 +4735,20 @@ function NebbieDash.cmdIdentUi(argStr)
   end
 
   if mode == "rebuild" or mode == "force" or mode == "new" then
-    -- Distruggi subito, ricrea al tick successivo: ricreare una UserWindow
-    -- con lo stesso nome nello stesso evento Lua puo' far crashare Mudlet.
+    -- Sincrono: il defer 0.2s lasciava rebuild "appeso" e un secondo
+    -- `nidentui` creava un'altra finestra mentre il timer era ancora in coda.
+    NebbieDash.cancelIdentUiRebuildTimer()
     NebbieDash.destroyIdentUiWindow()
-    local function finishRebuild()
-      if not NebbieDash.initIdentUiWindow() then
-        cecho("<red>[NebbieDash] nidentui rebuild fallito (vedi messaggio sopra).\n")
-        return
-      end
-      NebbieDash.showIdentUiWindow({ resetGeom = true })
-      cecho("<green>[NebbieDash] Finestra Ident ricostruita"
-        .. (NebbieDash._identUiBackend and (" (" .. NebbieDash._identUiBackend .. ")") or "")
-        .. " "
-        .. tostring(NebbieDash.IDENT_UI_W) .. "x" .. tostring(NebbieDash.IDENT_UI_H)
-        .. ".\n")
+    if not NebbieDash.initIdentUiWindow() then
+      cecho("<red>[NebbieDash] nidentui rebuild fallito (vedi messaggio sopra).\n")
+      return
     end
-    if type(tempTimer) == "function" then
-      cecho("<grey>[NebbieDash] nidentui rebuild: ricreo tra un attimo...\n")
-      tempTimer(0.2, finishRebuild)
-    else
-      finishRebuild()
-    end
+    NebbieDash.showIdentUiWindow({ resetGeom = true })
+    cecho("<green>[NebbieDash] Finestra Ident ricostruita"
+      .. (NebbieDash._identUiBackend and (" (" .. NebbieDash._identUiBackend .. ")") or "")
+      .. " "
+      .. tostring(NebbieDash.IDENT_UI_W) .. "x" .. tostring(NebbieDash.IDENT_UI_H)
+      .. ".\n")
     return
   end
 
