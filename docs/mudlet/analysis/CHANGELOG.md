@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.4 — 2026-11-18
+
+- **nidentui**: con Adjustable+CTUW la UI poteva risultare `alive=true` ma
+  **invisibile** (stato da `:load()`). Ora usa **UserWindow nativo** (niente
+  Adjustable/load), migra automaticamente le sessioni Adjustable, cancella
+  i save AdjustableContainer, forza geometria/show/`openUserWindow`.
+
 ## 1.16.3 — 2026-11-18
 
 - **nidentui + convertToUserWindow**: il check `Geyser.windowList` poteva
