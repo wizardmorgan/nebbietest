@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.14 — 2026-11-18
+
+- **ngoldalert**: non segnala più come furto `account buy …` (cassetta
+  account / Platino) né l’echo `Hai pagato N monete.` (importo in coda).
+
 ## 1.16.13 — 2026-11-18
 
 - **nidentui archivio**: dopo conferma resta su **stesso tab e stessa pagina**

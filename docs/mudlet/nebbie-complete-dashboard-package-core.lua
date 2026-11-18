@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.13"
+local PKG_VER = "1.16.14"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -5907,6 +5907,8 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   if cmd:match("^drop%s+all%.?coin") or cmd:match("^drop%s+all%.?monet") then return true end
   if cmd:match("^drop%s+coin") or cmd:match("^drop%s+monet") then return true end
   if cmd:match("^buy%s+") or cmd:match("^purchase%s+") then return true end
+  -- Cassetta account (es. "account buy platino unico") — non inizia con buy.
+  if cmd:match("^account%s+buy") or cmd:match("^account%s+purchase") then return true end
   if cmd:match("^offer%s+") or cmd:match("^bid%s+") then return true end
   if cmd:match("^asta%s+") or cmd:match("^auction%s+") then return true end
   -- rent: l'addebito reale arriva dopo il menu; vedi noteExpectedGoldCharge sulla riga pensione
@@ -5923,6 +5925,15 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   -- Resurrect (magic2.cpp) costa oro al cast
   if cmd:match("resurrect") then return true end
   return false
+end
+
+-- Importo da conferma pagamento (es. cassetta account):
+-- "Hai pagato 6.000.000 monete."
+function NebbieDash.parseHaiPagatoAmount(text)
+  text = NebbieDash.stripColors(text or ""):match("^%s*(.-)%s*$") or ""
+  if text == "" then return nil end
+  local raw = text:match("^Hai pagato ([%d%.,]+) monete")
+  return NebbieDash.parseGroupedInt(raw)
 end
 
 -- Importo offerta asta (auction.cpp + talk_auction Banditore).
@@ -5967,6 +5978,15 @@ function NebbieDash.isVoluntaryGoldSpendLine(text)
   if text:match("^Posi una moneta%.%s*$") then return true end
   if text:match("^Posi alcune monete%.%s*$") then return true end
   if text:match("^Paghi [%d%.,]+ monete") then return true end
+  -- Cassetta account / pagamenti: "Hai pagato 6.000.000 monete."
+  if NebbieDash.parseHaiPagatoAmount(text) then return true end
+  if text:match("^Hai pagato ") then return true end
+  -- Conferma cassetta di sicurezza account (anche senza importo sulla stessa riga)
+  if text:match("cassetta di sicurezza di account") then return true end
+  if text:match("forziere di platino") or text:match("forziere di oro")
+      or text:match("forziere di argento") or text:match("forziere di ferro") then
+    return true
+  end
   -- Asta: tell Banditore — vedi parseAuctionBidAmount
   if NebbieDash.parseAuctionBidAmount(text) then return true end
   -- Shop buy (EN/IT): tell del mercante — vedi parseShopBuyGoldAmount
@@ -6020,6 +6040,13 @@ function NebbieDash.onGoldSpendConfirmLine()
     NebbieDash.armGoldSpendExpected("shop", 30)
     return
   end
+  local paidAmt = NebbieDash.parseHaiPagatoAmount(text)
+  if paidAmt then
+    -- Cassetta account / pagamenti con importo esplicito.
+    NebbieDash.enqueueExpectedGoldCharge(paidAmt, "hai-pagato", 120)
+    NebbieDash.armGoldSpendExpected("hai-pagato", 30)
+    return
+  end
   if NebbieDash.isVoluntaryGoldSpendLine(text) then
     NebbieDash.armGoldSpendExpected("echo", 8)
   end
@@ -6054,8 +6081,9 @@ function NebbieDash.onDataSendRequest(_, cmd)
     -- rent: grace lunga di cortesia; l'importo preciso arriva dalla riga pensione
     if low:match("^%s*rent") then
       NebbieDash.armGoldSpendExpected("rent", 120)
-    elseif low:match("^%s*buy%s+") or low:match("^%s*purchase%s+") then
-      -- Shop: spesso G: scende solo al prompt successivo (dopo tell EN/IT).
+    elseif low:match("^%s*buy%s+") or low:match("^%s*purchase%s+")
+        or low:match("^%s*account%s+buy") or low:match("^%s*account%s+purchase") then
+      -- Shop / cassetta account: G: spesso al prompt successivo.
       NebbieDash.armGoldSpendExpected("buy", 30)
     elseif low:match("^%s*bid%s+") or low:match("^%s*offer%s+")
         or low:match("^%s*asta%s+") or low:match("^%s*auction%s+") then
@@ -11891,6 +11919,10 @@ function NebbieDash.installTriggers()
   NebbieDash._goldPosiMonetaTrig = tempTrigger("Posi una moneta.", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldPosiMoneteTrig = tempTrigger("Posi alcune monete.", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldPaghiTrig = tempTrigger("Paghi ", [[NebbieDash.onGoldSpendConfirmLine()]])
+  -- Cassetta account / pagamenti: "Hai pagato 6.000.000 monete."
+  NebbieDash._goldHaiPagatoTrig = tempTrigger("Hai pagato ", [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldAccountSafeTrig = tempTrigger("cassetta di sicurezza di account",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
   -- Asta: substring "offerta di " copre "Un offerta" (server) e "Un'offerta".
   NebbieDash._goldAstaTrig = tempTrigger("offerta di ", [[NebbieDash.onGoldSpendConfirmLine()]])
   -- Sage practice a pagamento (prac learning → COSTO_PRAC)

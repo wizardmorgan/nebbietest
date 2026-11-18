@@ -2358,6 +2358,34 @@ do
   check("goldalert: cmd give monete", NebbieDash.isVoluntaryGoldCommand("give 50 monete mirari") == true)
   check("goldalert: cmd drop coins", NebbieDash.isVoluntaryGoldCommand("drop 10 coins") == true)
   check("goldalert: cmd buy", NebbieDash.isVoluntaryGoldCommand("buy potion") == true)
+  check("goldalert: cmd account buy platino",
+    NebbieDash.isVoluntaryGoldCommand("account buy platino unico") == true)
+  check("goldalert: parse Hai pagato milioni",
+    NebbieDash.parseHaiPagatoAmount("Hai pagato 6.000.000 monete.") == 6000000)
+  check("goldalert: Hai pagato is voluntary",
+    NebbieDash.isVoluntaryGoldSpendLine("Hai pagato 6.000.000 monete.") == true)
+  check("goldalert: cassetta account echo voluntary",
+    NebbieDash.isVoluntaryGoldSpendLine(
+      "Ora hai una cassetta di sicurezza di account, piano Platino (acquisto unico).") == true)
+  alertLog = {}
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash._expectedGoldCharges = {}
+  NebbieDash._expectedGoldCharge = nil
+  NebbieDash._lastPromptGold = 24362603
+  NebbieDash._goldAlertReady = true
+  NebbieDash.onDataSendRequest(nil, "account buy platino unico")
+  check("goldalert: account buy arms", NebbieDash.goldSpendExpectedNow() == true)
+  -- Simula grace scaduta ma importo esatto da "Hai pagato"
+  NebbieDash._goldSpendExpectedUntil = 0
+  _G.line = "Hai pagato 6.000.000 monete."
+  NebbieDash.onGoldSpendConfirmLine()
+  NebbieDash._goldSpendExpectedUntil = 0
+  NebbieDash.checkGoldAlertFromPrompt(18362603) -- -6000000
+  check("goldalert: account platino -6M suppresses", #alertLog == 0)
+  check("goldalert: account platino charge consumed",
+    NebbieDash._expectedGoldCharge == nil
+      and #(NebbieDash._expectedGoldCharges or {}) == 0)
+  _G.line = nil
   check("goldalert: cmd prac learning", NebbieDash.isVoluntaryGoldCommand("prac learning") == true)
   check("goldalert: cmd practice learning", NebbieDash.isVoluntaryGoldCommand("practice learning") == true)
   check("goldalert: echo prac learning",
@@ -2671,9 +2699,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.13+",
+check("package version 1.16.14+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.13"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.14"))
 
 -- Archivio: resta su tab/pagina; goto first/last.
 do
