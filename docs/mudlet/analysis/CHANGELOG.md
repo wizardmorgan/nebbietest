@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.11 — 2026-11-18
+
+- **nidentui lista**: numerazione **progressiva** tra le pagine (pag.2 continua
+  da 13…, non riparte da 1).
+
 ## 1.16.10 — 2026-11-18
 
 - **nidentui**: riattivato doppio-clic **convertToUserWindow** (stacca fuori /

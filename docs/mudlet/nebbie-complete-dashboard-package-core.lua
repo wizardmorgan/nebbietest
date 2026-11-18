@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.10"
+local PKG_VER = "1.16.11"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -4285,6 +4285,10 @@ function NebbieDash.renderIdentUiList()
 
   NebbieDash._identUiRows = {}
   local rowIdx = 0
+  -- Numero visualizzato = indice assoluto nella lista filtrata (continua
+  -- tra le pagine: pag.2 parte da pageSize+1, non da 1).
+  local numWidth = math.max(2, #tostring(#all))
+  local numFmt = "<grey>%" .. tostring(numWidth) .. "d. "
   for i = from, to do
     local entry = all[i]
     rowIdx = rowIdx + 1
@@ -4303,7 +4307,7 @@ function NebbieDash.renderIdentUiList()
     if #slots > 0 then
       slotTxt = " <cyan>[" .. table.concat(slots, "/") .. "]"
     end
-    NebbieDash.identUiCecho(string.format("<grey>%2d. ", rowIdx))
+    NebbieDash.identUiCecho(string.format(numFmt, i))
     NebbieDash.identUiCechoLink(
       "<yellow>" .. (entry.objectName or "?"),
       string.format("NebbieDash.identUiOpenRow(%d)", rowIdx),

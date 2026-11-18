@@ -2666,9 +2666,45 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.10+",
+check("package version 1.16.11+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.10"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.11"))
+
+-- Numerazione lista progressiva tra pagine (display = indice assoluto).
+do
+  local echoLog = {}
+  local origCecho = NebbieDash.identUiCecho
+  local origLink = NebbieDash.identUiCechoLink
+  local origCollect = NebbieDash.collectIdentUiEntries
+  local origClear = NebbieDash.clearIdentUiWindow
+  local origToolbar = NebbieDash.identUiToolbar
+  NebbieDash.identUiCecho = function(t) table.insert(echoLog, tostring(t or "")) end
+  NebbieDash.identUiCechoLink = function(t) table.insert(echoLog, tostring(t or "")) end
+  NebbieDash.clearIdentUiWindow = function() end
+  NebbieDash.identUiToolbar = function() end
+  local fake = {}
+  for n = 1, 15 do
+    fake[n] = { key = "k" .. n, objectName = "obj" .. n, objectType = "OTHER", affects = {} }
+  end
+  NebbieDash.collectIdentUiEntries = function() return fake end
+  NebbieDash._identUiState.page = 2
+  NebbieDash._identUiState.pageSize = 12
+  NebbieDash._identUiState.view = "list"
+  NebbieDash.renderIdentUiList()
+  local joined = table.concat(echoLog, "")
+  check("identui list page2: inizia da 13", joined:find("13%.", 1, false) ~= nil)
+  check("identui list page2: non riparte da  1.", joined:find("%s1%. ") == nil and joined:find("^1%. ") == nil)
+  check("identui list page2: ha 14 e 15",
+    joined:find("14%.", 1, false) ~= nil and joined:find("15%.", 1, false) ~= nil)
+  check("identui list page2: rows locali = 3",
+    NebbieDash._identUiRows and #NebbieDash._identUiRows == 3)
+  NebbieDash.identUiCecho = origCecho
+  NebbieDash.identUiCechoLink = origLink
+  NebbieDash.collectIdentUiEntries = origCollect
+  NebbieDash.clearIdentUiWindow = origClear
+  NebbieDash.identUiToolbar = origToolbar
+  NebbieDash._identUiState.page = 1
+end
 
 -- Adjustable show non deve aprire UserWindow OS (shell vuote).
 do
