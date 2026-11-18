@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.6"
+local PKG_VER = "1.16.7"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3477,12 +3477,15 @@ NebbieDash.IDENT_UI_CONTAINER = "NebbieDashIdentUiContainer"
 NebbieDash.IDENT_UI_CONSOLE = "NebbieDashIdentUi"
 -- convertToUserWindow crea "<name>userWindow" al doppio-click.
 NebbieDash.IDENT_UI_USERWINDOW = "NebbieDashIdentUiContaineruserWindow"
--- Size/pos di default (UserWindow = finestra OS; senza default resta lo stato
--- sballato dell'ultima chiusura Mudlet).
+-- Size/pos di default. Preferiamo Adjustable.Container (dentro Mudlet);
+-- UserWindow (finestra OS "fuori") solo come fallback.
 NebbieDash.IDENT_UI_W = 560
 NebbieDash.IDENT_UI_H = 480
 NebbieDash.IDENT_UI_X = 80
 NebbieDash.IDENT_UI_Y = 80
+-- Ancoraggio destro tipico Adjustable (come nswui), resta nel main frame.
+NebbieDash.IDENT_UI_ADJ_X = "-580px"
+NebbieDash.IDENT_UI_ADJ_Y = "80px"
 
 -- true se i riferimenti Lua puntano ancora a window Geyser vive.
 -- Probe get_width prima di Geyser.windowList: con CTUW il container puo'
@@ -3696,13 +3699,19 @@ end
 function NebbieDash.forceIdentUiGeometry(w, h, x, y)
   w = tonumber(w) or NebbieDash.IDENT_UI_W or 560
   h = tonumber(h) or NebbieDash.IDENT_UI_H or 480
-  x = tonumber(x) or NebbieDash.IDENT_UI_X or 80
-  y = tonumber(y) or NebbieDash.IDENT_UI_Y or 80
   local c = NebbieDash._identUiContainer
   if not c then return end
-  -- Geyser preferisce stringhe con unita' ("560px"); i numeri nudi possono
-  -- far fallire resize/move su UserWindow.
-  local ws, hs, xs, ys = w .. "px", h .. "px", x .. "px", y .. "px"
+  local ws, hs = w .. "px", h .. "px"
+  local xs, ys
+  if NebbieDash._identUiBackend == "adjustable" then
+    xs = (type(x) == "string" and x) or NebbieDash.IDENT_UI_ADJ_X or "-580px"
+    ys = (type(y) == "string" and y) or NebbieDash.IDENT_UI_ADJ_Y or "80px"
+  else
+    x = tonumber(x) or NebbieDash.IDENT_UI_X or 80
+    y = tonumber(y) or NebbieDash.IDENT_UI_Y or 80
+    xs, ys = x .. "px", y .. "px"
+  end
+  -- Geyser preferisce stringhe con unita' ("560px").
   pcall(function()
     if type(c.resize) == "function" then c:resize(ws, hs) end
     if type(c.move) == "function" then c:move(xs, ys) end
@@ -3710,8 +3719,10 @@ function NebbieDash.forceIdentUiGeometry(w, h, x, y)
   if type(resizeWindow) == "function" then
     pcall(resizeWindow, NebbieDash.IDENT_UI_CONTAINER, w, h)
   end
-  if type(moveWindow) == "function" then
-    pcall(moveWindow, NebbieDash.IDENT_UI_CONTAINER, x, y)
+  if NebbieDash._identUiBackend ~= "adjustable" and type(moveWindow) == "function" then
+    pcall(moveWindow, NebbieDash.IDENT_UI_CONTAINER,
+      tonumber(x) or NebbieDash.IDENT_UI_X or 80,
+      tonumber(y) or NebbieDash.IDENT_UI_Y or 80)
   end
 end
 
@@ -3794,16 +3805,43 @@ function NebbieDash.createIdentUiShell(w, h)
   h = tonumber(h) or NebbieDash.IDENT_UI_H or 480
   local x = tonumber(NebbieDash.IDENT_UI_X) or 80
   local y = tonumber(NebbieDash.IDENT_UI_Y) or 80
-  -- Sempre "Npx": Geyser.UserWindow e' piu' stabile con unita' esplicite.
+  local adjX = NebbieDash.IDENT_UI_ADJ_X or "-580px"
+  local adjY = NebbieDash.IDENT_UI_ADJ_Y or "80px"
+  -- "Npx" per UserWindow; Adjustable usa ancoraggio relativo (dentro Mudlet).
   local xs, ys, ws, hs = x .. "px", y .. "px", w .. "px", h .. "px"
   local backend = nil
   local container = nil
   local errUw, errAdj = nil, nil
 
-  -- Preferisci UserWindow nativo: immune a convertToUserWindow e allo
-  -- Adjustable:load() che lascia la finestra "alive" ma invisibile.
-  -- Posizione assoluta (px): evita geometria "fuori schermo" ereditata.
-  if type(Geyser) == "table" and type(Geyser.UserWindow) == "table" then
+  -- Preferisci Adjustable: resta DENTRO Mudlet (nswui-like). Mai :load() —
+  -- era la causa della UI "alive ma invisibile" con CTUW.
+  -- UserWindow (finestra OS) solo se Adjustable non e' disponibile/rotto.
+  if type(Adjustable) == "table" and type(Adjustable.Container) == "table" then
+    local ok, res = pcall(function()
+      return Adjustable.Container:new({
+        name = NebbieDash.IDENT_UI_CONTAINER,
+        x = adjX,
+        y = adjY,
+        width = w,
+        height = h,
+        titleText = "Nebbie — Ident DB",
+        titleTxtColor = "white",
+        adjLabelstyle = [[
+          background-color: rgb(14, 14, 20);
+          border: 2px solid rgb(120, 90, 50);
+          border-radius: 6px;
+        ]],
+      })
+    end)
+    if ok and res then
+      container = res
+      backend = "adjustable"
+    else
+      errAdj = tostring(res)
+    end
+  end
+
+  if not container and type(Geyser) == "table" and type(Geyser.UserWindow) == "table" then
     local ok, res = pcall(function()
       return Geyser.UserWindow:new({
         name = NebbieDash.IDENT_UI_CONTAINER,
@@ -3826,33 +3864,8 @@ function NebbieDash.createIdentUiShell(w, h)
     end
   end
 
-  if not container and type(Adjustable) == "table" and type(Adjustable.Container) == "table" then
-    local ok, res = pcall(function()
-      return Adjustable.Container:new({
-        name = NebbieDash.IDENT_UI_CONTAINER,
-        x = xs,
-        y = ys,
-        width = w,
-        height = h,
-        titleText = "Nebbie — Ident DB",
-        titleTxtColor = "white",
-        adjLabelstyle = [[
-          background-color: rgb(14, 14, 20);
-          border: 2px solid rgb(120, 90, 50);
-          border-radius: 6px;
-        ]],
-      })
-    end)
-    if ok and res then
-      container = res
-      backend = "adjustable"
-    else
-      errAdj = tostring(res)
-    end
-  end
-
   if not container then
-    return nil, nil, "UserWindow=" .. tostring(errUw) .. " Adjustable=" .. tostring(errAdj)
+    return nil, nil, "Adjustable=" .. tostring(errAdj) .. " UserWindow=" .. tostring(errUw)
   end
 
   local pad = 4
@@ -3880,9 +3893,11 @@ function NebbieDash.initIdentUiWindow()
     cecho("<orange>[NebbieDash] Finestra ident non disponibile (serve Geyser MiniConsole).\n")
     return false
   end
-  -- Se e' ancora Adjustable (sessioni 1.16.2/3), migra a UserWindow:
-  -- Adjustable+CTUW+:load() lascia alive=true ma finestra invisibile.
-  if NebbieDash.identUiWindowAlive() and NebbieDash._identUiBackend == "userwindow" then
+  -- Se gia' viva (Adjustable dentro Mudlet o UserWindow fallback), riusa.
+  -- Non chiamare mai Adjustable:load() (stato invisibile + CTUW).
+  if NebbieDash.identUiWindowAlive()
+      and (NebbieDash._identUiBackend == "adjustable"
+        or NebbieDash._identUiBackend == "userwindow") then
     NebbieDash.showIdentUiWindow()
     NebbieDash.refreshIdentUi()
     return true
@@ -4611,9 +4626,9 @@ function NebbieDash.renderIdentUiSlotPicker(key)
     "Rimuovi tutti gli slot")
   NebbieDash.identUiCecho("  ")
   NebbieDash.identUiCechoLink(
-    "<yellow>[« dettaglio]",
-    "NebbieDash.identUiOpenRow(1)",
-    "Torna al dettaglio")
+    "<yellow>[« lista]",
+    "NebbieDash.identUiShowList()",
+    "Torna alla lista")
   NebbieDash.identUiCecho("\n")
 end
 
@@ -4625,7 +4640,12 @@ function NebbieDash.identUiApplyWearSlot(loc)
   cecho(string.format(
     "<green>[NebbieDash] Slot <white>%s<green> → <cyan>%s\n",
     entry.objectName or "?", loc))
-  NebbieDash._identUiState.view = "detail"
+  -- Dopo il tag manuale torna alla lista (non al dettaglio): flusso tipico
+  -- e' [slot] dalla lista → scegli → vedi subito lo slot in riga.
+  local st = NebbieDash._identUiState
+  st.view = "list"
+  st.selectedKey = nil
+  st.pendingDeleteKey = nil
   NebbieDash.refreshIdentUi()
 end
 
@@ -4637,6 +4657,12 @@ function NebbieDash.identUiClearWearSlots()
   entry.wearSlotsManual = true
   NebbieDash.scheduleIdentDbSave()
   cecho("<green>[NebbieDash] Slot azzerati per <white>" .. (entry.objectName or "?") .. "\n")
+  local st = NebbieDash._identUiState
+  if st.view == "slots" then
+    st.view = "list"
+    st.selectedKey = nil
+    st.pendingDeleteKey = nil
+  end
   NebbieDash.refreshIdentUi()
 end
 

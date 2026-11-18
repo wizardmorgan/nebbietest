@@ -2648,9 +2648,45 @@ end
 
 check("identui: default size 560x480",
   NebbieDash.IDENT_UI_W == 560 and NebbieDash.IDENT_UI_H == 480)
-check("package version 1.16.6+",
+check("identui: prefer Adjustable (ancoraggio destro)",
+  NebbieDash.IDENT_UI_ADJ_X == "-580px")
+check("package version 1.16.7+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.6"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.7"))
+
+-- Dopo slot manuale: torna alla lista (non dettaglio).
+do
+  local entry = {
+    key = "k-slot-ui",
+    objectName = "anello test",
+    wearSlots = {},
+  }
+  local origGet = NebbieDash.getIdentEntryByKey
+  local origSet = NebbieDash.setIdentWearSlotsManual
+  local origRefresh = NebbieDash.refreshIdentUi
+  local setArgs = nil
+  NebbieDash.getIdentEntryByKey = function(k)
+    if k == entry.key then return entry end
+    return origGet and origGet(k) or nil
+  end
+  NebbieDash.setIdentWearSlotsManual = function(e, locs)
+    setArgs = { e, locs }
+    e.wearSlots = locs
+    e.wearSlotsManual = true
+  end
+  NebbieDash.refreshIdentUi = function() end
+  NebbieDash._identUiState.view = "slots"
+  NebbieDash._identUiState.selectedKey = entry.key
+  NebbieDash.identUiApplyWearSlot("come luce")
+  check("identui apply slot: set manuale chiamato",
+    setArgs and setArgs[1] == entry and setArgs[2][1] == "come luce")
+  check("identui apply slot: torna a lista",
+    NebbieDash._identUiState.view == "list"
+      and NebbieDash._identUiState.selectedKey == nil)
+  NebbieDash.getIdentEntryByKey = origGet
+  NebbieDash.setIdentWearSlotsManual = origSet
+  NebbieDash.refreshIdentUi = origRefresh
+end
 
 print("")
 if failures == 0 then

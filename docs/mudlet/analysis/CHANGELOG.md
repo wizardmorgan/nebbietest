@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.7 — 2026-11-18
+
+- **nidentui**: dopo impostazione manuale dello slot torna alla **lista**
+  (non al dettaglio). Picker: link `[« lista]`.
+- **nidentui create/rebuild**: preferisce **Adjustable.Container** (dentro
+  Mudlet, ancorato a destra come `nswui`); UserWindow OS solo come fallback.
+  Continua a **non** chiamare `:load()` (evita UI invisibile con CTUW).
+
 ## 1.16.6 — 2026-11-18
 
 - **nidentui rebuild**: fix crash Mudlet — teardown UserWindow nativo senza
