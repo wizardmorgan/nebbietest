@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.10 — 2026-11-18
+
+- **nidentui**: riattivato doppio-clic **convertToUserWindow** (stacca fuori /
+  rientra in Mudlet). Era disabilitato in 1.16.8 per le shell vuote; con il
+  fix di `openUserWindow` non serve più bloccarlo.
+
 ## 1.16.9 — 2026-11-18
 
 - **nidentui rebuild**: sincrono (niente `tempTimer` — non resta più appeso

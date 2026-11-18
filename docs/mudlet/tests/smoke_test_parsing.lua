@@ -2666,9 +2666,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.9+",
+check("package version 1.16.10+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.9"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.10"))
 
 -- Adjustable show non deve aprire UserWindow OS (shell vuote).
 do

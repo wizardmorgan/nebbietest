@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.9"
+local PKG_VER = "1.16.10"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3892,15 +3892,10 @@ function NebbieDash.createIdentUiShell(w, h)
     return nil, nil, "Adjustable=" .. tostring(errAdj) .. " UserWindow=" .. tostring(errUw)
   end
 
-  -- Disabilita doppio-clic CTUW su nidentui: convertToUserWindow stacca in
-  -- UserWindow OS e lascia duplicati/vuoti. nswui resta convertibile.
-  if backend == "adjustable" then
-    pcall(function()
-      if container.adjLabel and type(container.adjLabel.setDoubleClickCallback) == "function" then
-        container.adjLabel:setDoubleClickCallback(function() end)
-      end
-    end)
-  end
+  -- Doppio-clic: convertToUserWindow (se installato) stacca in UserWindow OS
+  -- e un secondo doppio-clic la riporta dentro. Non sovrascrivere il callback
+  -- CTUW (in 1.16.8 era azzerato per le shell vuote; ora openUserWindow non
+  -- gira più su Adjustable, quindi il dblclick è di nuovo sicuro).
 
   local pad = 4
   local titleH = (backend == "adjustable") and 22 or 4
