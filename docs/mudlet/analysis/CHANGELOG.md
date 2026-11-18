@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.8 — 2026-11-18
+
+- **nidentui**: fix finestre OS **vuote/duplicate** — su Adjustable `show()`
+  non chiama più `openUserWindow` (creava shell vuote omonime); su rebuild
+  chiude gli orfani; disabilita doppio-clic CTUW su nidentui; migra via da
+  UserWindow nativo / CTUW staccato verso Adjustable dentro Mudlet.
+
 ## 1.16.7 — 2026-11-18
 
 - **nidentui**: dopo impostazione manuale dello slot torna alla **lista**

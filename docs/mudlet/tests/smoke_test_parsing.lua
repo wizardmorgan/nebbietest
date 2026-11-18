@@ -52,13 +52,16 @@ function hideWindow() end
 function showWindow() end
 _G.__closeUserWindowLog = {}
 _G.__deleteWindowLog = {}
+_G.__openUserWindowLog = {}
 function closeUserWindow(name)
   table.insert(_G.__closeUserWindowLog, tostring(name or ""))
 end
 function deleteWindow(name)
   table.insert(_G.__deleteWindowLog, tostring(name or ""))
 end
-function openUserWindow() end
+function openUserWindow(name)
+  table.insert(_G.__openUserWindowLog, tostring(name or ""))
+end
 function setLabelClickCallback() end
 function setLabelToolTip() end
 function moveLabel() end
@@ -2599,16 +2602,20 @@ do
   }
   NebbieDash._identUiGeyser = { get_width = function() return 560 end }
   NebbieDash.destroyIdentUiWindow()
-  check("identui destroy UW: closeUserWindow chiamato",
-    #_G.__closeUserWindowLog == 1
-      and _G.__closeUserWindowLog[1] == NebbieDash.IDENT_UI_CONTAINER)
-  check("identui destroy UW: non chiama container:delete", deletedSelf == false)
-  check("identui destroy UW: non close sul wrapper CTUW",
+  check("identui destroy UW: closeUserWindow sul container",
     (function()
       for _, n in ipairs(_G.__closeUserWindowLog) do
-        if n == NebbieDash.IDENT_UI_USERWINDOW then return false end
+        if n == NebbieDash.IDENT_UI_CONTAINER then return true end
       end
-      return true
+      return false
+    end)())
+  check("identui destroy UW: non chiama container:delete", deletedSelf == false)
+  check("identui destroy UW: chiude anche wrapper CTUW orfano",
+    (function()
+      for _, n in ipairs(_G.__closeUserWindowLog) do
+        if n == NebbieDash.IDENT_UI_USERWINDOW then return true end
+      end
+      return false
     end)())
   check("identui destroy UW: console deleteWindow ok",
     (function()
@@ -2650,9 +2657,34 @@ check("identui: default size 560x480",
   NebbieDash.IDENT_UI_W == 560 and NebbieDash.IDENT_UI_H == 480)
 check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
-check("package version 1.16.7+",
+check("package version 1.16.8+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.7"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.8"))
+
+-- Adjustable show non deve aprire UserWindow OS (shell vuote).
+do
+  _G.__openUserWindowLog = {}
+  local origArm = NebbieDash.armIdentUiResizeWatch
+  NebbieDash.armIdentUiResizeWatch = function() end
+  NebbieDash._identUiBackend = "adjustable"
+  NebbieDash._identUiHidden = true
+  NebbieDash._identUiCreated = true
+  NebbieDash._identUiContainer = {
+    show = function() end,
+    raise = function() end,
+    resize = function() end,
+    move = function() end,
+    get_width = function() return 560 end,
+    get_height = function() return 480 end,
+  }
+  NebbieDash.showIdentUiWindow({ resetGeom = true })
+  check("identui show adjustable: nessun openUserWindow",
+    #_G.__openUserWindowLog == 0)
+  NebbieDash.armIdentUiResizeWatch = origArm
+  NebbieDash._identUiCreated = false
+  NebbieDash._identUiContainer = nil
+  NebbieDash._identUiBackend = nil
+end
 
 -- Dopo slot manuale: torna alla lista (non dettaglio).
 do

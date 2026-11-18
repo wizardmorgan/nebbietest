@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.7"
+local PKG_VER = "1.16.8"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3531,6 +3531,16 @@ function NebbieDash.detachIdentUiFromUserWindow()
   end)
 end
 
+-- Chiude UserWindow orfane lasciate da show/openUserWindow o da CTUW.
+-- Mai abbinare a :delete sullo stesso nome nello stesso tick se backend nativo.
+function NebbieDash.closeIdentUiOrphanUserWindows()
+  if type(closeUserWindow) ~= "function" then return end
+  pcall(closeUserWindow, NebbieDash.IDENT_UI_USERWINDOW)
+  -- Bug 1.16.7: show() su Adjustable chiamava openUserWindow(container)
+  -- creando una shell OS VUOTA con lo stesso nome del container.
+  pcall(closeUserWindow, NebbieDash.IDENT_UI_CONTAINER)
+end
+
 -- Teardown sicuro: su UserWindow nativo NON combinare :delete + deleteWindow +
 -- closeUserWindow sullo stesso nome (double-free Qt → crash Mudlet).
 function NebbieDash.destroyIdentUiWindow()
@@ -3569,6 +3579,10 @@ function NebbieDash.destroyIdentUiWindow()
     if type(deleteWindow) == "function" then
       pcall(deleteWindow, console)
     end
+    -- Eventuale wrapper CTUW residuo da sessioni miste.
+    if type(closeUserWindow) == "function" then
+      pcall(closeUserWindow, ctuwName)
+    end
     return
   end
 
@@ -3590,10 +3604,8 @@ function NebbieDash.destroyIdentUiWindow()
   for _, winName in ipairs({ name, console, ctuwName }) do
     if type(deleteWindow) == "function" then pcall(deleteWindow, winName) end
   end
-  -- Solo il wrapper CTUW, non di nuovo il container già delete-ato.
-  if type(closeUserWindow) == "function" then
-    pcall(closeUserWindow, ctuwName)
-  end
+  -- Chiudi wrapper CTUW + eventuali shell OS vuote create per sbaglio.
+  NebbieDash.closeIdentUiOrphanUserWindows()
 end
 
 -- Wrap colonne della mini-console Ident in base alla larghezza pixel corrente.
@@ -3745,9 +3757,11 @@ function NebbieDash.showIdentUiWindow(opts)
   if opts.resetGeom or NebbieDash.identUiGeometryLooksBroken() then
     NebbieDash.forceIdentUiGeometry()
   end
-  -- Se convertToUserWindow l'ha staccata, mostra anche il parent UserWindow.
-  if c and c.isUserWindow and c.userwindow and type(c.userwindow.show) == "function" then
-    pcall(function() c.userwindow:show() end)
+  -- Se CTUW ha staccato l'Adjustable, mostra il parent UserWindow reale
+  -- (oggetto Geyser), NON openUserWindow(nome) — crea shell OS VUOTE.
+  local ctuwParent = c and c.isUserWindow and c.userwindow
+  if ctuwParent and type(ctuwParent.show) == "function" then
+    pcall(function() ctuwParent:show() end)
   end
   if c and type(c.show) == "function" then
     pcall(function() c:show() end)
@@ -3755,7 +3769,9 @@ function NebbieDash.showIdentUiWindow(opts)
   if type(showWindow) == "function" then
     pcall(showWindow, NebbieDash.IDENT_UI_CONTAINER)
     pcall(showWindow, NebbieDash.IDENT_UI_CONSOLE)
-    pcall(showWindow, NebbieDash.IDENT_UI_USERWINDOW)
+    if ctuwParent then
+      pcall(showWindow, NebbieDash.IDENT_UI_USERWINDOW)
+    end
   end
   if c and type(c.raise) == "function" then
     pcall(function() c:raise() end)
@@ -3763,19 +3779,17 @@ function NebbieDash.showIdentUiWindow(opts)
   if type(raiseWindow) == "function" then
     pcall(raiseWindow, NebbieDash.IDENT_UI_CONTAINER)
     pcall(raiseWindow, NebbieDash.IDENT_UI_CONSOLE)
-    pcall(raiseWindow, NebbieDash.IDENT_UI_USERWINDOW)
-  end
-  -- UserWindow nativo: openUserWindow se nascosta/chiusa, non a ogni show
-  -- ridondante sullo stesso tick di :new (open doppio → crash Qt).
-  if type(openUserWindow) == "function" then
-    if NebbieDash._identUiBackend == "userwindow" then
-      if opts.forceOpen or NebbieDash._identUiHidden then
-        pcall(openUserWindow, NebbieDash.IDENT_UI_CONTAINER)
-      end
-    else
-      pcall(openUserWindow, NebbieDash.IDENT_UI_CONTAINER)
-      pcall(openUserWindow, NebbieDash.IDENT_UI_USERWINDOW)
+    if ctuwParent then
+      pcall(raiseWindow, NebbieDash.IDENT_UI_USERWINDOW)
     end
+  end
+  -- openUserWindow SOLO per backend UserWindow nativo (Geyser.UserWindow:new).
+  -- Su Adjustable NON chiamarlo mai: apre finestre OS vuote omonime e, con
+  -- doppio-clic CTUW, ne restano due.
+  if NebbieDash._identUiBackend == "userwindow"
+      and type(openUserWindow) == "function"
+      and (opts.forceOpen or NebbieDash._identUiHidden) then
+    pcall(openUserWindow, NebbieDash.IDENT_UI_CONTAINER)
   end
   NebbieDash._identUiHidden = false
   NebbieDash.armIdentUiResizeWatch()
@@ -3868,6 +3882,16 @@ function NebbieDash.createIdentUiShell(w, h)
     return nil, nil, "Adjustable=" .. tostring(errAdj) .. " UserWindow=" .. tostring(errUw)
   end
 
+  -- Disabilita doppio-clic CTUW su nidentui: convertToUserWindow stacca in
+  -- UserWindow OS e lascia duplicati/vuoti. nswui resta convertibile.
+  if backend == "adjustable" then
+    pcall(function()
+      if container.adjLabel and type(container.adjLabel.setDoubleClickCallback) == "function" then
+        container.adjLabel:setDoubleClickCallback(function() end)
+      end
+    end)
+  end
+
   local pad = 4
   local titleH = (backend == "adjustable") and 22 or 4
   local okMc, mcOrErr = pcall(function()
@@ -3893,16 +3917,19 @@ function NebbieDash.initIdentUiWindow()
     cecho("<orange>[NebbieDash] Finestra ident non disponibile (serve Geyser MiniConsole).\n")
     return false
   end
-  -- Se gia' viva (Adjustable dentro Mudlet o UserWindow fallback), riusa.
-  -- Non chiamare mai Adjustable:load() (stato invisibile + CTUW).
-  if NebbieDash.identUiWindowAlive()
-      and (NebbieDash._identUiBackend == "adjustable"
-        or NebbieDash._identUiBackend == "userwindow") then
-    NebbieDash.showIdentUiWindow()
-    NebbieDash.refreshIdentUi()
-    return true
+  -- Riusa solo Adjustable dentro Mudlet. Se e' ancora UserWindow nativo
+  -- (sessioni 1.16.4–1.16.7) o Adjustable staccato da CTUW, ricrea Adjustable.
+  if NebbieDash.identUiWindowAlive() and NebbieDash._identUiBackend == "adjustable" then
+    local c = NebbieDash._identUiContainer
+    if not (c and c.isUserWindow) then
+      NebbieDash.showIdentUiWindow()
+      NebbieDash.refreshIdentUi()
+      return true
+    end
   end
   NebbieDash.destroyIdentUiWindow()
+  -- Chiudi subito eventuali shell OS vuote residue prima di ricreare.
+  NebbieDash.closeIdentUiOrphanUserWindows()
   NebbieDash.wipeIdentUiSavedState()
   local container, mc, backendOrErr = NebbieDash.createIdentUiShell(
     NebbieDash.IDENT_UI_W, NebbieDash.IDENT_UI_H)
