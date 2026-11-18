@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.11"
+local PKG_VER = "1.16.12"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3456,10 +3456,45 @@ NebbieDash._identUiState = NebbieDash._identUiState or {
   page = 1,
   pageSize = 12,
   view = "list", -- list | detail | slots
-  tab = "active", -- active | deleted | all
+  tab = "active", -- active | deleted (Archiviati)
   selectedKey = nil,
   pendingDeleteKey = nil,
 }
+
+-- Completa i default se lo stato proviene da una versione senza `tab`
+-- (altrimenti tab=nil e comportamenti ambigui).
+function NebbieDash.ensureIdentUiState()
+  local st = NebbieDash._identUiState
+  if type(st) ~= "table" then
+    NebbieDash._identUiState = {
+      filter = "",
+      charFilter = "",
+      slotFilter = "",
+      onlyCedibile = false,
+      sort = "name",
+      page = 1,
+      pageSize = 12,
+      view = "list",
+      tab = "active",
+      selectedKey = nil,
+      pendingDeleteKey = nil,
+    }
+    return NebbieDash._identUiState
+  end
+  if st.filter == nil then st.filter = "" end
+  if st.charFilter == nil then st.charFilter = "" end
+  if st.slotFilter == nil then st.slotFilter = "" end
+  if st.onlyCedibile == nil then st.onlyCedibile = false end
+  if st.sort == nil then st.sort = "name" end
+  if st.page == nil then st.page = 1 end
+  if st.pageSize == nil then st.pageSize = 12 end
+  if st.view == nil then st.view = "list" end
+  -- "all" non e' piu' supportato: gli archiviati stanno SOLO in Archiviati.
+  if st.tab == nil or st.tab == "" or st.tab == "all" then
+    st.tab = "active"
+  end
+  return st
+end
 
 function NebbieDash.canUseIdentUiWindow()
   if type(Geyser) ~= "table" or type(Geyser.MiniConsole) ~= "table" then
@@ -3967,7 +4002,17 @@ function NebbieDash.initIdentUiWindow()
 end
 
 function NebbieDash.isIdentArchived(entry)
-  return type(entry) == "table" and entry.archived == true
+  if type(entry) ~= "table" then return false end
+  -- Qualsiasi truthy (true/1/"true") da sync/JSON; non solo == true.
+  local a = entry.archived
+  if a == true or a == 1 or a == "1" or a == "true" or a == "yes" then
+    return true
+  end
+  local st = entry.possession and entry.possession.status
+  if st == "archived" or st == "destroyed" then
+    return true
+  end
+  return false
 end
 
 function NebbieDash.identLifecycleStatus(entry)
@@ -4110,28 +4155,32 @@ function NebbieDash.getIdentEntryByKey(key)
 end
 
 function NebbieDash.collectIdentUiEntries()
-  local st = NebbieDash._identUiState or {}
-  local results
-  local includeArch = (st.tab == "deleted" or st.tab == "all")
+  local st = NebbieDash.ensureIdentUiState()
+  local tab = st.tab or "active"
+  if tab ~= "deleted" then tab = "active" end
+  st.tab = tab
+  -- Archiviati SOLO nel tab deleted/Archiviati; Attivi non li include mai.
+  local includeArch = (tab == "deleted")
   local listOpts = { includeArchived = includeArch }
+  local results
   if st.charFilter and st.charFilter ~= "" then
     results = NebbieDash.listIdentDbByCharacter(st.charFilter, listOpts)
   else
     results = NebbieDash.searchIdentDb(st.filter or "", listOpts)
   end
-  local tab = st.tab or "active"
-  if tab ~= "all" then
-    local filtered = {}
-    for _, e in ipairs(results) do
-      local arch = NebbieDash.isIdentArchived(e)
-      if tab == "deleted" and arch then table.insert(filtered, e)
-      elseif tab == "active" and not arch then table.insert(filtered, e) end
+  local filtered = {}
+  for _, e in ipairs(results) do
+    local arch = NebbieDash.isIdentArchived(e)
+    if tab == "deleted" then
+      if arch then table.insert(filtered, e) end
+    else
+      if not arch then table.insert(filtered, e) end
     end
-    results = filtered
   end
+  results = filtered
   if st.charFilter and st.charFilter ~= "" and st.filter and st.filter ~= "" then
     local q = st.filter:lower()
-    local filtered = {}
+    filtered = {}
     for _, e in ipairs(results) do
       local hay = table.concat({
         e.objectName or "", e.objectType or "", e.flags or "",
@@ -4143,7 +4192,7 @@ function NebbieDash.collectIdentUiEntries()
     results = filtered
   end
   if st.onlyCedibile then
-    local filtered = {}
+    filtered = {}
     for _, e in ipairs(results) do
       if e.cedibile then table.insert(filtered, e) end
     end
@@ -4151,7 +4200,7 @@ function NebbieDash.collectIdentUiEntries()
   end
   if st.slotFilter and st.slotFilter ~= "" then
     local needle = st.slotFilter:lower()
-    local filtered = {}
+    filtered = {}
     for _, e in ipairs(results) do
       if NebbieDash.identEntryMatchesWearSlotFilter(e, needle) then
         table.insert(filtered, e)
@@ -4179,7 +4228,7 @@ function NebbieDash.collectIdentUiEntries()
 end
 
 function NebbieDash.identUiToolbar()
-  local st = NebbieDash._identUiState
+  local st = NebbieDash.ensureIdentUiState()
   local tab = st.tab or "active"
   NebbieDash.identUiCecho("<grey>Totale DB: <white>" .. tostring(NebbieDash.identDbEntryCount())
     .. "  <grey>| filtro: <yellow>" .. ((st.filter ~= "" and st.filter) or "(nessuno)")
@@ -4189,15 +4238,11 @@ function NebbieDash.identUiToolbar()
     .. "\n")
   NebbieDash.identUiCechoLink(
     tab == "active" and "<green>[Attivi]" or "<grey>[Attivi]",
-    "NebbieDash.identUiSetTab(\"active\")", "Schede non archiviate")
+    "NebbieDash.identUiSetTab(\"active\")", "Solo schede non archiviate")
   NebbieDash.identUiCecho(" ")
   NebbieDash.identUiCechoLink(
-    tab == "deleted" and "<orange>[Deleted]" or "<grey>[Deleted]",
-    "NebbieDash.identUiSetTab(\"deleted\")", "Archiviati / distrutti (ripristinabili)")
-  NebbieDash.identUiCecho(" ")
-  NebbieDash.identUiCechoLink(
-    tab == "all" and "<cyan>[Tutti]" or "<grey>[Tutti]",
-    "NebbieDash.identUiSetTab(\"all\")", "Tutte le schede")
+    tab == "deleted" and "<orange>[Archiviati]" or "<grey>[Archiviati]",
+    "NebbieDash.identUiSetTab(\"deleted\")", "Solo archiviati / distrutti (ripristinabili)")
   NebbieDash.identUiCecho("\n")
   NebbieDash.identUiCechoLink("<cyan>[lista]", "NebbieDash.identUiShowList()", "Torna alla lista")
   NebbieDash.identUiCecho(" ")
@@ -4243,6 +4288,7 @@ end
 
 function NebbieDash.refreshIdentUi()
   if not NebbieDash._identUiCreated or NebbieDash._identUiHidden then return end
+  NebbieDash.ensureIdentUiState()
   NebbieDash.updateIdentUiWrap()
   NebbieDash.clearIdentUiWindow()
   NebbieDash.identUiToolbar()
@@ -4469,10 +4515,14 @@ function NebbieDash.identUiCancelDelete()
 end
 
 function NebbieDash.identUiSetTab(tab)
-  NebbieDash._identUiState = NebbieDash._identUiState or {}
-  NebbieDash._identUiState.tab = tab or "active"
-  NebbieDash._identUiState.page = 1
-  NebbieDash._identUiState.view = "list"
+  local st = NebbieDash.ensureIdentUiState()
+  tab = tab or "active"
+  if tab == "all" or (tab ~= "active" and tab ~= "deleted") then
+    tab = "active"
+  end
+  st.tab = tab
+  st.page = 1
+  st.view = "list"
   NebbieDash.refreshIdentUi()
 end
 
@@ -4702,7 +4752,7 @@ function NebbieDash.identUiClearWearSlots()
 end
 
 function NebbieDash.identUiResetFilters()
-  local st = NebbieDash._identUiState
+  local st = NebbieDash.ensureIdentUiState()
   st.filter = ""
   st.charFilter = ""
   st.slotFilter = ""
@@ -4710,6 +4760,7 @@ function NebbieDash.identUiResetFilters()
   st.sort = "name"
   st.page = 1
   st.view = "list"
+  st.tab = "active"
   st.pendingDeleteKey = nil
   NebbieDash.refreshIdentUi()
 end

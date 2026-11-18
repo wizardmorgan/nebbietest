@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.12 — 2026-11-18
+
+- **nidentui**: gli **archiviati** restano **solo** in `[Archiviati]` (niente
+  più tab Tutti; Attivi non li mostra). `isIdentArchived` più robusto;
+  reset filtri torna ad Attivi.
+
 ## 1.16.11 — 2026-11-18
 
 - **nidentui lista**: numerazione **progressiva** tra le pagine (pag.2 continua

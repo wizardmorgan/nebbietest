@@ -2666,9 +2666,75 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.11+",
+check("package version 1.16.12+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.11"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.12"))
+
+-- Archiviati solo nel tab Archiviati, mai in Attivi.
+do
+  NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
+  NebbieDash.identDb.entries = NebbieDash.identDb.entries or {}
+  NebbieDash.identDb.entries["archivio-ui-attivo"] = {
+    key = "archivio-ui-attivo",
+    objectName = "spada attiva test",
+    objectType = "WEAPON",
+    archived = false,
+    affects = {},
+  }
+  NebbieDash.identDb.entries["archivio-ui-arch"] = {
+    key = "archivio-ui-arch",
+    objectName = "spada archiviata test",
+    objectType = "WEAPON",
+    archived = true,
+    possession = { status = "archived" },
+    affects = {},
+  }
+  NebbieDash.identDb.entries["archivio-ui-truthy"] = {
+    key = "archivio-ui-truthy",
+    objectName = "spada truthy archive",
+    objectType = "WEAPON",
+    archived = "true",
+    affects = {},
+  }
+  NebbieDash.ensureIdentUiState()
+  NebbieDash._identUiState.filter = ""
+  NebbieDash._identUiState.charFilter = ""
+  NebbieDash._identUiState.slotFilter = ""
+  NebbieDash._identUiState.onlyCedibile = false
+  NebbieDash._identUiState.tab = "active"
+  local activeRows = NebbieDash.collectIdentUiEntries()
+  local activeHasArch = false
+  local activeHasLive = false
+  for _, e in ipairs(activeRows) do
+    if e.key == "archivio-ui-arch" or e.key == "archivio-ui-truthy" then
+      activeHasArch = true
+    end
+    if e.key == "archivio-ui-attivo" then activeHasLive = true end
+  end
+  check("identui: Attivi senza archiviati", activeHasArch == false)
+  check("identui: Attivi include non archiviati", activeHasLive == true)
+  NebbieDash._identUiState.tab = "deleted"
+  local delRows = NebbieDash.collectIdentUiEntries()
+  local delHasArch, delHasLive = false, false
+  for _, e in ipairs(delRows) do
+    if e.key == "archivio-ui-arch" or e.key == "archivio-ui-truthy" then
+      delHasArch = true
+    end
+    if e.key == "archivio-ui-attivo" then delHasLive = true end
+  end
+  check("identui: Archiviati solo archiviati", delHasArch == true and delHasLive == false)
+  check("identui: isIdentArchived truthy string",
+    NebbieDash.isIdentArchived(NebbieDash.identDb.entries["archivio-ui-truthy"]) == true)
+  NebbieDash._identUiState.tab = "all"
+  local coerced = NebbieDash.collectIdentUiEntries()
+  local allLeak = false
+  for _, e in ipairs(coerced) do
+    if e.key == "archivio-ui-arch" then allLeak = true end
+  end
+  check("identui: tab all coercito ad Attivi (no leak)", allLeak == false
+    and NebbieDash._identUiState.tab == "active")
+  NebbieDash._identUiState.tab = "active"
+end
 
 -- Numerazione lista progressiva tra pagine (display = indice assoluto).
 do
