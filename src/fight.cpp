@@ -16,12 +16,15 @@
 #include <array>
 #include <cstddef>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <algorithm>
 #include <unordered_map>
 #include <map>
 #include <utility>
 #include <cstdint>
+#include <limits>
+#include <optional>
 /***************************  General include ************************************/
 #include "config.hpp"
 #include "typedefs.hpp"
@@ -350,6 +353,104 @@ bool area_target_untouchable(char_data* ch, char_data* v) {
 		   (mob_untouchable(v) || victim_is_immortal_pc(v));
 }
 
+/* Nome italiano degli incantesimi di danno, con genere e numero per
+ * accordare articoli e verbi nei messaggi. Se manca, si usa
+ * "incantesimo <nome inglese>". */
+struct SpellNameIt {
+	const char* nome;
+	bool femminile;
+	bool plurale;
+};
+
+static SpellNameIt spell_name_it(int type) {
+	switch(type) {
+	case SPELL_ACID_BLAST:       return {"scarica acida", true, false};
+	case SPELL_ACID_BREATH:      return {"soffio acido", false, false};
+	case SPELL_BURNING_HANDS:    return {"mani di fuoco", true, true};
+	case SPELL_CALL_LIGHTNING:   return {"richiamo del fulmine", false, false};
+	case SPELL_CAUSE_CRITICAL:   return {"ferita critica", true, false};
+	case SPELL_CAUSE_LIGHT:      return {"ferita leggera", true, false};
+	case SPELL_CAUSE_SERIOUS:    return {"ferita grave", true, false};
+	case SPELL_CHAIN_LIGHTNING:  return {"fulmini a catena", false, true};
+	case SPELL_CHILL_TOUCH:      return {"tocco gelido", false, false};
+	case SPELL_COLOUR_SPRAY:     return {"raggio multicolore", false, false};
+	case SPELL_CONE_OF_COLD:     return {"cono di freddo", false, false};
+	case SPELL_DISINTEGRATE:     return {"raggio disintegrante", false, false};
+	case SPELL_EARTHQUAKE:       return {"terremoto", false, false};
+	case SPELL_ENERGY_DRAIN:     return {"prosciugamento vitale", false, false};
+	case SPELL_FIREBALL:         return {"palla di fuoco", true, false};
+	case SPELL_FIRESTORM:        return {"tempesta di fuoco", true, false};
+	case SPELL_FIRE_BREATH:      return {"soffio di fiamma", false, false};
+	case SPELL_FLAMESTRIKE:      return {"colonna di fiamme", true, false};
+	case SPELL_FROST_BREATH:     return {"soffio di gelo", false, false};
+	case SPELL_GAS_BREATH:       return {"soffio velenoso", false, false};
+	case SPELL_GEYSER:           return {"getto bollente", false, false};
+	case SPELL_GREEN_SLIME:      return {"melma verde", true, false};
+	case SPELL_HARM:             return {"ferita devastante", true, false};
+	case SPELL_HOLY_WORD:        return {"parola sacra", true, false};
+	case SPELL_ICE_STORM:        return {"tempesta di ghiaccio", true, false};
+	case SPELL_INCENDIARY_CLOUD: return {"nube di fuoco", true, false};
+	case SPELL_LIGHTNING_BOLT:   return {"fulmine", false, false};
+	case SPELL_LIGHTNING_BREATH: return {"soffio elettrico", false, false};
+	case SPELL_MAGIC_MISSILE:    return {"dardo magico", false, false};
+	case SPELL_METEOR_SWARM:     return {"sciame di meteore", false, false};
+	case SPELL_MINOR_HARM:       return {"ferita lacerante", true, false};
+	case SPELL_POISON:           return {"veleno", false, false};
+	case SPELL_PRISMATIC_SPRAY:  return {"getto prismatico", false, false};
+	case SPELL_PWORD_KILL:       return {"parola della morte", true, false};
+	case SPELL_SHOCKING_GRASP:   return {"stretta folgorante", true, false};
+	case SPELL_SUNRAY:           return {"raggio solare", false, false};
+	case SPELL_UNHOLY_WORD:      return {"parola empia", true, false};
+	default:                     return {nullptr, false, false};
+	}
+}
+
+/* Articolo davanti al nome: "lo" per s impura, z, x, y, gn, ps, pn. */
+static bool vuole_lo(const char* n) {
+	const auto c0 = static_cast<unsigned char>(n[0]);
+	const auto c1 = static_cast<unsigned char>(n[0] != '\0' ? n[1] : '\0');
+	if(c0 == 'z' || c0 == 'x' || c0 == 'y') {
+		return true;
+	}
+	if(c0 == 's' && c1 != '\0' && std::strchr("aeiou", c1) == nullptr) {
+		return true;
+	}
+	return (c0 == 'g' && c1 == 'n') || (c0 == 'p' && (c1 == 's' || c1 == 'n'));
+}
+
+static bool inizia_vocale(const char* n) {
+	return n[0] != '\0' && std::strchr("aeiou", n[0]) != nullptr;
+}
+
+/* "la palla di fuoco", "l'arroventamento", "lo sciame di meteore", "i fulmini a catena" */
+static std::string con_articolo(const SpellNameIt& sn) {
+	const char* art;
+	if(sn.plurale) {
+		art = sn.femminile ? "le " : ((inizia_vocale(sn.nome) || vuole_lo(sn.nome)) ? "gli " : "i ");
+	}
+	else if(inizia_vocale(sn.nome)) {
+		art = "l'";
+	}
+	else {
+		art = sn.femminile ? "la " : (vuole_lo(sn.nome) ? "lo " : "il ");
+	}
+	return std::string(art) + sn.nome;
+}
+
+/* "la tua palla di fuoco", "i tuoi fulmini a catena" */
+static std::string con_tuo(const SpellNameIt& sn) {
+	const char* tuo = sn.plurale ? (sn.femminile ? "le tue " : "i tuoi ")
+								 : (sn.femminile ? "la tua " : "il tuo ");
+	return std::string(tuo) + sn.nome;
+}
+
+static std::string maiuscola(std::string s) {
+	if(!s.empty()) {
+		s[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(s[0])));
+	}
+	return s;
+}
+
 /* Globo anti-magia: lo attraversa solo un personaggio (non mob) di livello
  * MAESTRO_DEGLI_DEI o piu', come in spell_dispel_magic. Se polimorfato conta
  * il personaggio originale. */
@@ -369,23 +470,42 @@ bool anti_magic_shields(char_data* caster, char_data* target) {
 		   !anti_magic_bypass(caster);
 }
 
-bool blocked_by_anti_magic(char_data* ch, char_data* victim) {
+bool npc_ai_caster(char_data* ch) {
+	return ch != nullptr && IS_NPC(ch) && ch->desc == nullptr;
+}
+
+/* Solo il globo del mob stesso: quello del bersaglio il mob non lo conosce. */
+bool npc_own_anti_magic(char_data* ch) {
+	return npc_ai_caster(ch) && anti_magic_shields(ch, ch);
+}
+
+bool blocked_by_anti_magic(char_data* ch, char_data* victim, int spl) {
 	if(ch == nullptr) {
 		return false;
 	}
+	/* mob IA col suo globo: bloccato in silenzio, altrimenti il messaggio si ripete a ogni round */
+	if(npc_own_anti_magic(ch)) {
+		return true;
+	}
+	/* con il nome italiano (incantesimi di danno) "La palla di fuoco di $n svanisce...",
+	 * altrimenti il generico "L'incantesimo di $n svanisce..." */
+	const SpellNameIt sn = spell_name_it(spl);
+	const std::string tuo = (sn.nome != nullptr) ? maiuscola(con_tuo(sn)) : "Il tuo incantesimo";
+	const std::string art = (sn.nome != nullptr) ? maiuscola(con_articolo(sn)) : "L'incantesimo";
+	const std::string svanisce = sn.plurale ? " svaniscono" : " svanisce";
 	if(anti_magic_shields(ch, ch)) {
-		act("Il tuo incantesimo svanisce contro il tuo stesso globo $c0012anti-magia$c0007!",
+		act((tuo + svanisce + " contro il tuo stesso globo $c0012anti-magia$c0007!").c_str(),
 			FALSE, ch, nullptr, nullptr, TO_CHAR);
-		act("L'incantesimo di $n svanisce contro il suo stesso globo $c0012anti-magia$c0007.",
+		act((art + " di $n" + svanisce + " contro il suo stesso globo $c0012anti-magia$c0007.").c_str(),
 			FALSE, ch, nullptr, nullptr, TO_ROOM);
 		return true;
 	}
 	if(victim != nullptr && victim != ch && anti_magic_shields(ch, victim)) {
-		act("Il tuo incantesimo svanisce contro il globo $c0012anti-magia$c0007 di $N!",
+		act((tuo + svanisce + " contro il globo $c0012anti-magia$c0007 di $N!").c_str(),
 			FALSE, ch, nullptr, victim, TO_CHAR);
-		act("L'incantesimo di $n svanisce contro il tuo globo $c0012anti-magia$c0007!",
+		act((art + " di $n" + svanisce + " contro il tuo globo $c0012anti-magia$c0007!").c_str(),
 			FALSE, ch, nullptr, victim, TO_VICT);
-		act("L'incantesimo di $n svanisce contro il globo $c0012anti-magia$c0007 di $N.",
+		act((art + " di $n" + svanisce + " contro il globo $c0012anti-magia$c0007 di $N.").c_str(),
 			FALSE, ch, nullptr, victim, TO_NOTVICT);
 		return true;
 	}
@@ -432,6 +552,78 @@ void staff_skip_notice(char_data* ch, bool skip_group) {
 		}
 	}
 	area_skip_notice(ch, skipped);
+}
+
+/* true se p e' ancora nella lista della stanza: confronta solo i puntatori,
+ * quindi non legge memoria gia' liberata da extract_char. */
+bool char_in_room_people(const char_data* p, int room) {
+	const auto* rp = real_roomp(room);
+	if(p == nullptr || rp == nullptr) {
+		return false;
+	}
+	for(const char_data* u = rp->people; u != nullptr; u = u->next_in_room) {
+		if(u == p) {
+			return u->nMagicNumber == CHAR_VALID_MAGIC;
+		}
+	}
+	return false;
+}
+
+std::vector<char_data*> room_people_snapshot(int room) {
+	std::vector<char_data*> people;
+	if(const auto* rp = real_roomp(room)) {
+		for(auto* u = rp->people; u != nullptr; u = u->next_in_room) {
+			people.push_back(u);
+		}
+	}
+	return people;
+}
+
+namespace {
+
+[[nodiscard]] bool staff_target_ok(char_data* ch, char_data* v, StaffTargets who, const StaffOptions& opt) {
+	if(v != ch && anti_magic_shields(ch, v)) {
+		return false;
+	}
+	if(opt.untouchable && area_spell_untouchable(ch, v)) {
+		return false;
+	}
+	switch(who) {
+	case StaffTargets::Hostile:
+		return opt.victim_first ? !in_group(v, ch) : !in_group(ch, v);
+	case StaffTargets::Group:
+		return in_group(ch, v);
+	case StaffTargets::Others:
+		return v != ch;
+	case StaffTargets::All:
+		return true;
+	}
+	return false;
+}
+
+} // namespace
+
+void staff_for_each(char_data* ch, StaffTargets who, const StaffOptions& opt,
+					const std::function<void(char_data*)>& fn) {
+	if(ch == nullptr || real_roomp(ch->in_room) == nullptr) {
+		return;
+	}
+	if(opt.untouchable) {
+		staff_skip_notice(ch, who == StaffTargets::Hostile); /* Blocco minimo: intoccabili saltati dal bastone */
+	}
+	const int room = ch->in_room;
+	/* Prima la lista: la spell puo' uccidere o spostare il bersaglio. */
+	for(auto* v : room_people_snapshot(room)) {
+		if(!char_in_room_people(ch, room)) {
+			break; /* chi usa il bastone e' morto o non e' piu' qui */
+		}
+		if(!char_in_room_people(v, room)) {
+			continue; /* estratto o portato via (teleport, recall) */
+		}
+		if(staff_target_ok(ch, v, who, opt)) {
+			fn(v);
+		}
+	}
 }
 
 bool combat_denied_notify(char_data* ch, char_data* victim, int type) {
@@ -693,11 +885,11 @@ static const char* LocationHitText(struct char_data* victim, int location) {
 		return location_hit_text[5].singular;
 	}
 	/* Senza una luce equipaggiata lo slot 0 non ha senso: colpo sul corpo */
-	if(location == WEAR_LIGHT && (victim == NULL || victim->equipment[WEAR_LIGHT] == NULL)) {
+	if(location == WEAR_LIGHT && (victim == nullptr || victim->equipment[WEAR_LIGHT] == nullptr)) {
 		return location_hit_text[WEAR_BODY].singular;
 	}
 	/* Senza scudo il colpo arriva sul braccio sinistro */
-	if(location == WEAR_SHIELD && (victim == NULL || victim->equipment[WEAR_SHIELD] == NULL)) {
+	if(location == WEAR_SHIELD && (victim == nullptr || victim->equipment[WEAR_SHIELD] == nullptr)) {
 		return "sul braccio sinistro";
 	}
 	if(location >= 7 && location <= 10) {
@@ -2072,6 +2264,50 @@ namespace {
 [[nodiscard]] int raw_share(float share, char_data* member) {
 	return static_cast<int>(static_cast<long>(share * GroupXPRatio[GetMaxLevel(member)]));
 }
+
+/**
+ * Bonus gruppo in long long: total *= (100+bonus) / 100 in int a 32 bit
+ * overflowava con share ~21M (boss dimensione) e toglieva XP al party.
+ */
+[[nodiscard]] int apply_group_pc_bonus(int raw, int percent_bonus) {
+	if(percent_bonus <= 0) {
+		return raw;
+	}
+	const long long scaled =
+		static_cast<long long>(raw) * (100LL + static_cast<long long>(percent_bonus)) / 100LL;
+	if(scaled > static_cast<long long>(std::numeric_limits<int>::max())) {
+		return std::numeric_limits<int>::max();
+	}
+	if(scaled < static_cast<long long>(std::numeric_limits<int>::min())) {
+		return std::numeric_limits<int>::min();
+	}
+	return static_cast<int>(scaled);
+}
+
+/**
+ * Cintura: total < 0 su kill NPC non deve entrare in gain_exp (perdita assorda).
+ * Log + skip; se total > 0 il payout normale (cap incluso) resta invariato.
+ */
+void grant_group_kill_exp(char_data* beneficiary, int total, const char_data* victim) {
+	if(beneficiary == nullptr) {
+		return;
+	}
+	if(total < 0) {
+		mudlog(LOG_SYSERR,
+			"group_gain: total=%d negativo per %s (victim=%s exp=%d) — skip",
+			total,
+			GET_NAME(beneficiary),
+			victim != nullptr ? GET_NAME_DESC(victim) : "?",
+			victim != nullptr ? GET_EXP(victim) : 0);
+		return;
+	}
+	if(total == 0) {
+		return;
+	}
+	if(gain_exp_delta(beneficiary, total) > 0) {
+		add_group_share_summary(beneficiary, total);
+	}
+}
 } // namespace
 
 /*
@@ -2129,16 +2365,13 @@ void group_gain(struct char_data* ch, struct char_data* victim) {
 	if(leader_here) {
 		int total = raw_share(share, leader);
 		if(pc) {
-			total *= 100 + (3 * pc);
-			total /= 100;
+			total = apply_group_pc_bonus(total, 3 * pc);
 		}
 		total = RatioExp(leader, victim, total);
 		total = GroupLevelRatioExp(leader, group_max_level, total);
 		total = ExpCaps(leader, group_count, total, victim); /* figure EXP MAXES */
 		total = clan_gain(leader, total);
-		if(gain_exp_delta(leader, total) > 0) {
-			add_group_share_summary(leader, total);
-		}
+		grant_group_kill_exp(leader, total, victim);
 		change_alignment(leader, victim);
 	}
 
@@ -2150,15 +2383,12 @@ void group_gain(struct char_data* ch, struct char_data* victim) {
 		int total = raw_share(share, member);
 
 		if(IS_PC(member)) {
-			total *= 100 + pc;
-			total /= 100;
+			total = apply_group_pc_bonus(total, pc);
 			total = RatioExp(member, victim, total);
 			total = GroupLevelRatioExp(member, group_max_level, total);
 			total = ExpCaps(member, group_count, total, victim); /* figure EXP MAXES */
 			total = clan_gain(member, total);
-			if(gain_exp_delta(member, total) > 0) {
-				add_group_share_summary(member, total);
-			}
+			grant_group_kill_exp(member, total, victim);
 			change_alignment(member, victim);
 			continue;
 		}
@@ -2170,10 +2400,18 @@ void group_gain(struct char_data* ch, struct char_data* victim) {
 			total = GroupLevelRatioExp(member, group_max_level, total);
 			total = ExpCaps(member, group_count, total, victim); /* figure EXP MAXES */
 			if(member->master->in_room == member->in_room) {
-				act(("Ricevi " + format_thousands(total) +
-					 " punti della parte di esperienza di $N.").c_str(),
-					false, member->master, nullptr, member, TO_CHAR);
-				gain_exp(member->master, total);
+				if(total < 0) {
+					mudlog(LOG_SYSERR,
+						"group_gain: total=%d negativo charm->%s (victim=%s) — skip",
+						total, GET_NAME(member->master),
+						GET_NAME_DESC(victim));
+				}
+				else if(total > 0) {
+					act(("Ricevi " + format_thousands(total) +
+						 " punti della parte di esperienza di $N.").c_str(),
+						false, member->master, nullptr, member, TO_CHAR);
+					gain_exp(member->master, total);
+				}
 				change_alignment(member, victim);
 			}
 		}
@@ -2181,9 +2419,7 @@ void group_gain(struct char_data* ch, struct char_data* victim) {
 			total = RatioExp(member, victim, total);
 			total = GroupLevelRatioExp(member, group_max_level, total);
 			total = ExpCaps(member, group_count, total, victim); /* figure EXP MAXES */
-			if(gain_exp_delta(member, total) > 0) {
-				add_group_share_summary(member, total);
-			}
+			grant_group_kill_exp(member, total, victim);
 			change_alignment(member, victim);
 		}
 	}
@@ -2263,229 +2499,783 @@ int group_loss(struct char_data* ch,int loss) {
 	return(loss*MAX(70,multi));
 }
 
-char* replace_string(const char* str, const char* weapon, const char* weapon_s,
-					 const char* location_hit, const char* location_hit_s) {
-	static char buf[256];
-	char* cp;
+namespace {
+/* Testi di dam_message per fascia di danno. Nei modelli:
+   #W = verbo alla terza persona (attack_hit_text.plural),
+   #w = verbo alla seconda persona (attack_hit_text.singular),
+   #L e #l = parte del corpo colpita (stesso testo per tutti e due). */
+struct DamMessageTier {
+	int max_dam;                /* danno massimo della fascia, compreso */
+	std::string_view to_room;
+	std::string_view to_char;
+	std::string_view to_victim;
+};
 
-	cp = buf;
+constexpr std::array<DamMessageTier, 14> dam_message_tiers{{
+	{0,                               /*     0    */
+	 "$n manca $N.",
+	 "manchi $N.",
+	 "$n ti manca."},
+	{2,                               /*  1..  2  */
+	 "$n #W $N #l graffiandol$B.",
+	 "#w $N #l graffiandol$B.",
+	 "$n ti #W #L graffiandoti."},
+	{4,                               /*  3..  4  */
+	 "$n #W appena $N #l.",
+	 "#w appena $N #l.",
+	 "$n ti #W appena #L."},
+	{10,                              /*  5.. 10  */
+	 "$n #W $N #l.",
+	 "#w $N #l.",
+	 "$n ti #W #L."},
+	{15,                              /* 11.. 15  */
+	 "$n #W $N duramente #l.",
+	 "#w $N duramente #l.",
+	 "$n ti #W duramente #L."},
+	{25,                              /* 16.. 25  */
+	 "$n #W $N molto duramente #l.",
+	 "#w $N molto duramente #l.",
+	 "$n ti #W molto duramente #L."},
+	{35,                              /* 26.. 35  */
+	 "$n #W $N con estrema forza #l.",
+	 "#w $N con estrema forza #l.",
+	 "$n ti #W con estrema forza #L."},
+	{45,                              /* 36.. 45  */
+	 "$n #W $N #l $c0011massacrandol$B$c0007!",
+	 "#w $N #l $c0010massacrandol$B$c0007!",
+	 "$n ti #W #L $c0009massacrandoti$c0007!"},
+	{55,                              /* 46.. 55  */
+	 "$n #W $N #l $c0011devastandol$B$c0007!",
+	 "#w $N #l $c0010devastandol$B$c0007!",
+	 "$n ti #W #L $c0009devastandoti$c0007!"},
+	{65,                              /* 56.. 65  */
+	 "$n #W $N #l $c0011sbaragliandol$B$c0007!",
+	 "#w $N #l $c0010sbaragliandol$B$c0007!",
+	 "$n ti #W #L $c0009sbaragliandoti$c0007!"},
+	{75,                              /* 66.. 75  */
+	 "$n #W $N #l $c0011polverizzandol$B$c0007!",
+	 "#w $N #l $c0010polverizzandol$B$c0007!",
+	 "$n ti #W #L $c0009polverizzandoti$c0007!"},
+	{85,                              /* 76.. 85  */
+	 "$n #W $N #l $c0011sbriciolandol$B$c0007!",
+	 "#w $N #l $c0010sbriciolandol$B$c0007!",
+	 "$n ti #W #L $c0009sbriciolandoti$c0007!"},
+	{95,                              /* 86.. 95  */
+	 "$n #W $N #l $c0011annientandol$B$c0007!",
+	 "#w $N #l $c0010annientandol$B$c0007!",
+	 "$n ti #W #L $c0009annientandoti$c0007!"},
+	{std::numeric_limits<int>::max(), /* > 95     */
+	 "$n #W $N #l $c0011sterminandol$B$c0007!",
+	 "#w $N #l $c0010sterminandol$B$c0007!",
+	 "$n ti #W #L $c0009sterminandoti$c0007!"}
+}};
 
-	for(; *str; str++) {
-		if(*str == '#') {
-			switch(*(++str)) {
-			case 'W' :
-				for(; *weapon; *(cp++) = *(weapon++));
-				break;
-			case 'w' :
-				for(; *weapon_s; *(cp++) = *(weapon_s++));
-				break;
+/* Fascia del danno: la prima con dam <= max_dam (dam <= 0 = mancato).
+   L'ultima ha max_dam = INT_MAX, quindi una fascia si trova sempre. */
+[[nodiscard]] const DamMessageTier& dam_message_tier(int dam) {
+	for(const auto& tier : dam_message_tiers) {
+		if(dam <= tier.max_dam) {
+			return tier;
+		}
+	}
+	return dam_message_tiers.back();
+}
 
-			/* added this to show where the person was hit */
-			case 'L' :
-				for(; *location_hit; *(cp++) = *(location_hit++));
-				break;
-			case 'l' :
-				for(; *location_hit_s; *(cp++) = *(location_hit_s++));
-				break;
+/* Verbi dell'arma e parte colpita da mettere nei modelli. */
+struct DamMessageWords {
+	std::string_view verb_3rd;  /* #W */
+	std::string_view verb_2nd;  /* #w */
+	std::string_view location;  /* #L e #l */
+};
 
-			default :
-				*(cp++) = '#';
+/* Sostituisce tutti i #W, #w, #L, #l del modello; il resto (anche i codici
+   $c e $n/$N per act) resta com'e'. */
+[[nodiscard]] std::string expand_dam_template(std::string_view tpl, const DamMessageWords& words) {
+	std::string out;
+	out.reserve(tpl.size() + words.verb_3rd.size() + words.location.size());
+	for(std::size_t i = 0; i < tpl.size(); ++i) {
+		if(tpl[i] != '#' || i + 1 >= tpl.size()) {
+			out += tpl[i];
+			continue;
+		}
+		switch(tpl[i + 1]) {
+		case 'W':
+			out += words.verb_3rd;
+			++i;
+			break;
+		case 'w':
+			out += words.verb_2nd;
+			++i;
+			break;
+		case 'L':
+		case 'l':
+			out += words.location;
+			++i;
+			break;
+		default:
+			out += '#';
+			break;
+		}
+	}
+	return out;
+}
+
+/* Danno tra parentesi quadre per chi ha PWP_MODE, es. " $c0003[12]$c0007". */
+void append_pwp_damage(std::string& msg, std::string_view color, bool minus_sign, int shown_dam) {
+	msg += ' ';
+	msg += color;
+	msg += '[';
+	if(minus_sign) {
+		msg += '-';
+	}
+	msg += std::to_string(shown_dam);
+	msg += "]$c0007";
+}
+} // namespace
+
+/* ===== Visualizzazione compatta del combattimento (comando COMBAT) =====
+ * Opzioni del giocatore in player.user_flags (chi guarda decide per se'):
+ *   COMBAT_COMPACT          una riga per attaccante, vittima e tipo di colpo
+ *                           a fine turno, invece di una riga per colpo;
+ *   COMBAT_NO_WEAPON_SPELL  nasconde le righe degli incantesimi delle armi;
+ *   COMBAT_NO_MISS          nasconde i colpi mancati.
+ * Danno, locazione ed effetti si calcolano come sempre: cambia solo il testo.
+ * I colpi si raccolgono in g_compact_entries mentre c'e' un CompactCombatScope
+ * aperto (tutto il round in perform_violence, oppure hit()): quando si chiude
+ * il piu' esterno escono le righe compatte. Senza scope la riga esce subito.
+ * Mob uguali (NPC senza giocatore, stesso nome e short_descr) che colpiscono
+ * la stessa vittima con lo stesso tipo di colpo escono in una riga sola con
+ * "(Nx) " davanti; i pg mai. Le voci di un char escono prima della sua morte e quando
+ * lascia la stanza o viene estratto (compact_combat_forget), cosi' non
+ * restano puntatori pendenti. */
+namespace {
+
+struct CompactCombatEntry {
+	char_data* ch;
+	char_data* victim;
+	int type;                  /* TYPE_HIT.. per la mischia, SPELL_* per l'arma */
+	bool weapon_spell;
+	int hits;
+	int misses;
+	int dam;                   /* danno finale sommato dei colpi a segno */
+	const char* immunity_msg;  /* riga d'immunita' alle armi per l'attaccante */
+	int regen;                 /* rigenerazione del troll sommata (DamageEpilog) */
+};
+
+std::vector<CompactCombatEntry> g_compact_entries;
+int g_compact_scope_depth = 0;
+
+/* Chi sta lanciando l'incantesimo della propria arma (WeaponSpell), o
+ * nullptr. Solo confronto di puntatori, mai dereferenziato. */
+const char_data* g_weapon_spell_caster = nullptr;
+
+struct WeaponSpellCasterGuard {
+	explicit WeaponSpellCasterGuard(const char_data* caster)
+		: prev(g_weapon_spell_caster) {
+		g_weapon_spell_caster = caster;
+	}
+	~WeaponSpellCasterGuard() {
+		g_weapon_spell_caster = prev;
+	}
+	WeaponSpellCasterGuard(const WeaponSpellCasterGuard&) = delete;
+	WeaponSpellCasterGuard& operator=(const WeaponSpellCasterGuard&) = delete;
+	const char_data* prev;
+};
+
+/* Opzioni di chi riceve la riga: se e' in switch/poly contano quelle del pg. */
+[[nodiscard]] unsigned long combat_view_flags(const char_data* to) {
+	const char_data* who = (to->desc && to->desc->original) ? to->desc->original : to;
+	return static_cast<unsigned long>(who->player.user_flags);
+}
+
+enum class CombatViewRole { Attacker, Victim, Room };
+
+/* Chiama f(destinatario, ruolo) per attaccante, vittima e chi sta nella
+ * stanza dell'attaccante (come TO_CHAR, TO_VICT e TO_NOTVICT di act). */
+template <typename F>
+void for_each_combat_viewer(char_data* ch, char_data* victim, F&& f) {
+	f(ch, CombatViewRole::Attacker);
+	if(victim != ch) {
+		f(victim, CombatViewRole::Victim);
+	}
+	room_data* rp = real_roomp(ch->in_room);
+	if(rp == nullptr) {
+		return;
+	}
+	for(char_data* to = rp->people; to; to = to->next_in_room) {
+		if(to != ch && to != victim) {
+			f(to, CombatViewRole::Room);
+		}
+	}
+}
+
+[[nodiscard]] std::string compact_times(int n) {
+	return n == 1 ? std::string("1 volta") : std::to_string(n) + " volte";
+}
+
+/* Intensita' della riga compatta in base al danno MEDIO per colpo andato a
+ * segno nel turno (totale / colpi riusciti, arrotondato), stesse fasce di
+ * dam_message_tiers (senza il mancato); il [danno] PWP resta il totale. before va prima della
+ * vittima ("tagli appena l'orco"), after dopo il conteggio ("2 volte con
+ * estrema forza"), gerund in fondo ("massacrandolo"); strong = colorato e
+ * con il punto esclamativo. */
+struct CompactTier {
+	int max_dam;
+	std::string_view before;
+	std::string_view after;
+	std::string_view gerund;
+	bool strong;
+};
+
+constexpr std::array<CompactTier, 13> compact_tiers{{
+	{2,                               "",                "",                  "graffiando",    false},
+	{4,                               "appena",          "",                  "",              false},
+	{10,                              "",                "",                  "",              false},
+	{15,                              "duramente",       "",                  "",              false},
+	{25,                              "molto duramente", "",                  "",              false},
+	{35,                              "",                "con estrema forza", "",              false},
+	{45,                              "",                "",                  "massacrando",   true},
+	{55,                              "",                "",                  "devastando",    true},
+	{65,                              "",                "",                  "sbaragliando",  true},
+	{75,                              "",                "",                  "polverizzando", true},
+	{85,                              "",                "",                  "sbriciolando",  true},
+	{95,                              "",                "",                  "annientando",   true},
+	{std::numeric_limits<int>::max(), "",                "",                  "sterminando",   true}
+}};
+
+[[nodiscard]] const CompactTier& compact_tier(int dam) {
+	for(const auto& tier : compact_tiers) {
+		if(dam <= tier.max_dam) {
+			return tier;
+		}
+	}
+	return compact_tiers.back();
+}
+
+/* Riga compatta di mischia per un ruolo (modello per act: $n, $N, $B). */
+[[nodiscard]] std::string compact_melee_line(const CompactCombatEntry& e,
+											 CombatViewRole role, bool no_miss) {
+	std::size_t weapon_index = 0;
+	if(e.type >= TYPE_HIT && static_cast<std::size_t>(e.type - TYPE_HIT) < std::size(attack_hit_text)) {
+		weapon_index = static_cast<std::size_t>(e.type - TYPE_HIT);
+	}
+	const attack_hit_type& wt = attack_hit_text[weapon_index];
+
+	std::string out;
+	if(e.hits == 0) {
+		/* tutto a vuoto: con i mancanti nascosti niente conteggio */
+		const std::string times = (!no_miss && e.misses > 1) ? " " + compact_times(e.misses) : "";
+		switch(role) {
+		case CombatViewRole::Attacker:
+			out = "manchi $N" + times + ".";
+			break;
+		case CombatViewRole::Victim:
+			out = "$n ti manca" + times + ".";
+			break;
+		case CombatViewRole::Room:
+			out = "$n manca $N" + times + ".";
+			break;
+		}
+		return out;
+	}
+
+	/* media per colpo a segno, arrotondata; assorbiti a 0: graffio, come
+	 * dam_message */
+	const int avg_dam = (e.dam + e.hits / 2) / e.hits;
+	const CompactTier& tier = compact_tier(std::max(1, avg_dam));
+	switch(role) {
+	case CombatViewRole::Attacker:
+		out = wt.singular;
+		out += ' ';
+		if(!tier.before.empty()) {
+			out += tier.before;
+			out += ' ';
+		}
+		out += "$N";
+		break;
+	case CombatViewRole::Victim:
+		out = "$n ti ";
+		out += wt.plural;
+		if(!tier.before.empty()) {
+			out += ' ';
+			out += tier.before;
+		}
+		break;
+	case CombatViewRole::Room:
+		out = "$n ";
+		out += wt.plural;
+		out += ' ';
+		if(!tier.before.empty()) {
+			out += tier.before;
+			out += ' ';
+		}
+		out += "$N";
+		break;
+	}
+	if(e.hits > 1) {
+		out += ' ';
+		out += compact_times(e.hits);
+	}
+	if(!tier.after.empty()) {
+		out += ' ';
+		out += tier.after;
+	}
+	if(!tier.gerund.empty()) {
+		out += ' ';
+		if(tier.strong) {
+			out += role == CombatViewRole::Attacker ? "$c0010" :
+				   role == CombatViewRole::Victim ? "$c0009" : "$c0011";
+		}
+		out += tier.gerund;
+		out += role == CombatViewRole::Victim ? "ti" : "l$B";
+		if(tier.strong) {
+			out += "$c0007";
+		}
+	}
+	if(!no_miss && e.misses > 0) {
+		out += role == CombatViewRole::Victim ? ", mancandoti " : ", mancandol$B ";
+		out += compact_times(e.misses);
+	}
+	out += tier.strong ? "!" : ".";
+	return out;
+}
+
+/* Riga compatta dell'incantesimo d'arma: le stesse frasi di myst.dam che
+ * escono colpo per colpo (hit_msg, oppure miss_msg se li ha mancati tutti),
+ * prese dalla prima voce caricata per quell'incantesimo, con il conteggio
+ * fra parentesi prima della punteggiatura finale:
+ *   "Il tocco della tua mano genera atroci dolori nel corpo di $N (3 volte)!"
+ * Senza voce in myst.dam: frase generica ("lanci il tuo incantesimo..."). */
+[[nodiscard]] const message_type* weapon_spell_messages(int spell) {
+	for(int i = 0; i < MAX_MESSAGES; ++i) {
+		if(fight_messages[i].a_type == spell && fight_messages[i].msg != nullptr) {
+			return fight_messages[i].msg;
+		}
+	}
+	return nullptr;
+}
+
+/* Inserisce suffix prima della punteggiatura finale (. ! ? anche ripetuti),
+ * lasciando dopo di essa gli eventuali codici colore $cNNNN di chiusura.
+ * Senza punteggiatura il suffisso va in fondo al testo. */
+[[nodiscard]] std::string insert_before_final_punct(std::string_view line, const std::string& suffix) {
+	std::string body(line);
+	while(!body.empty() && (body.back() == ' ' || body.back() == '\n' || body.back() == '\r')) {
+		body.pop_back();
+	}
+	std::string tail;
+	auto ends_with_color = [](const std::string& s) {
+		const std::size_t n = s.size();
+		return n >= 6 && s[n - 6] == '$' && (s[n - 5] == 'c' || s[n - 5] == 'C') &&
+			   std::isdigit(static_cast<unsigned char>(s[n - 4])) &&
+			   std::isdigit(static_cast<unsigned char>(s[n - 3])) &&
+			   std::isdigit(static_cast<unsigned char>(s[n - 2])) &&
+			   std::isdigit(static_cast<unsigned char>(s[n - 1]));
+	};
+	while(ends_with_color(body)) {
+		tail.insert(0, body, body.size() - 6, 6);
+		body.resize(body.size() - 6);
+	}
+	std::string punct;
+	while(!body.empty() && (body.back() == '.' || body.back() == '!' || body.back() == '?')) {
+		punct.insert(punct.begin(), body.back());
+		body.pop_back();
+	}
+	return body + suffix + punct + tail;
+}
+
+/* Frase generica per gli incantesimi d'arma senza voce in myst.dam. */
+[[nodiscard]] std::string weapon_spell_generic_line(CombatViewRole role, bool all_missed) {
+	switch(role) {
+	case CombatViewRole::Attacker:
+		return all_missed ? "manchi $N con il tuo incantesimo." : "lanci il tuo incantesimo contro $N!";
+	case CombatViewRole::Victim:
+		return all_missed ? "$n ti manca con il suo incantesimo." : "$n lancia il suo incantesimo contro di te!";
+	case CombatViewRole::Room:
+		break;
+	}
+	return all_missed ? "$n manca $N con il suo incantesimo." : "$n lancia il suo incantesimo contro $N!";
+}
+
+/* Riga compatta dell'incantesimo d'arma per un ruolo. */
+[[nodiscard]] std::string compact_weapon_spell_line(const CompactCombatEntry& e,
+													CombatViewRole role, bool no_miss) {
+	const bool all_missed = e.hits == 0;
+
+	/* conteggio: "(3 volte)", "(3 volte, 1 a vuoto)", "(1 a vuoto)";
+	 * tutti mancati: "(3 volte)"; con i mancanti nascosti niente a vuoto */
+	std::string counts;
+	if(all_missed) {
+		if(!no_miss && e.misses > 1) {
+			counts = compact_times(e.misses);
+		}
+	}
+	else {
+		if(e.hits > 1) {
+			counts = compact_times(e.hits);
+		}
+		if(!no_miss && e.misses > 0) {
+			if(!counts.empty()) {
+				counts += ", ";
+			}
+			counts += std::to_string(e.misses) + " a vuoto";
+		}
+	}
+	const std::string suffix = counts.empty() ? std::string() : " (" + counts + ")";
+
+	std::string text;
+	if(const message_type* messages = weapon_spell_messages(e.type)) {
+		const msg_type& m = all_missed ? messages->miss_msg : messages->hit_msg;
+		const char* src = role == CombatViewRole::Attacker ? m.attacker_msg :
+						  role == CombatViewRole::Victim ? m.victim_msg : m.room_msg;
+		text = src ? src : "";
+	}
+	if(text.empty()) {
+		text = weapon_spell_generic_line(role, all_missed);
+	}
+	return insert_before_final_punct(text, suffix);
+}
+
+/* Stampa una voce a chi ha la modalita' compatta (gli altri hanno gia'
+ * visto i colpi uno per uno). count > 1: voce di un gruppo di mob uguali,
+ * vittima e stanza leggono "(Nx) " a inizio riga. */
+void compact_print_entry(const CompactCombatEntry& e, int count) {
+	if(!char_is_valid(e.ch) || !char_is_valid(e.victim)) {
+		return;
+	}
+	if(real_roomp(e.ch->in_room) == nullptr) {
+		return;
+	}
+	const std::string prefix = count > 1 ? "(" + std::to_string(count) + "x) " : std::string();
+	for_each_combat_viewer(e.ch, e.victim, [&e, &prefix](char_data* to, CombatViewRole role) {
+		const unsigned long flags = combat_view_flags(to);
+		if(!IS_SET(flags, COMBAT_COMPACT)) {
+			return;
+		}
+		if(e.weapon_spell && IS_SET(flags, COMBAT_NO_WEAPON_SPELL)) {
+			return;
+		}
+		const bool no_miss = IS_SET(flags, COMBAT_NO_MISS) != 0;
+		std::string line;
+		if(!e.weapon_spell && e.hits == 0 && e.immunity_msg != nullptr &&
+				role == CombatViewRole::Attacker) {
+			/* immunita' alle armi: all'attaccante la sua riga, come oggi */
+			line = e.immunity_msg;
+		}
+		else if(e.weapon_spell) {
+			line = compact_weapon_spell_line(e, role, no_miss);
+		}
+		else {
+			line = compact_melee_line(e, role, no_miss);
+		}
+		if(role == CombatViewRole::Attacker && IS_SET(to->player.user_flags, PWP_MODE)) {
+			append_pwp_damage(line, "$c0003", false, std::max(0, e.dam));
+		}
+		else if(role == CombatViewRole::Victim && IS_SET(to->player.user_flags, PWP_MODE)) {
+			append_pwp_damage(line, "$c0001", e.dam > 0, std::max(0, e.dam));
+		}
+		act_to_one(line.c_str(), FALSE, e.ch, nullptr, e.victim, to,
+				   role == CombatViewRole::Attacker ? nullptr : prefix.c_str());
+	});
+}
+
+/* Righe "rigenera!" del troll, con la stessa visibilita' di DamageEpilog
+ * (act con hide_invisible TRUE: vittima, attaccante, stanza dell'attaccante).
+ * compact_viewers = true: solo a chi ha COMBAT_COMPACT (riga sommata del
+ * turno, dopo la riga compatta); false: solo a chi non ce l'ha (riga del
+ * singolo colpo, subito, come sempre). NPC e chi non ha il bit = compatta
+ * spenta. */
+void send_regen_lines(char_data* ch, char_data* victim, int regen, bool compact_viewers) {
+	if(!char_is_valid(ch) || !char_is_valid(victim) || real_roomp(ch->in_room) == nullptr) {
+		return;
+	}
+	auto wanted = [compact_viewers](const char_data* to) {
+		return (IS_SET(combat_view_flags(to), COMBAT_COMPACT) != 0) == compact_viewers;
+	};
+	if(wanted(victim)) {
+		std::string to_victim = "Rigeneri!";
+		if(IS_SET(victim->player.user_flags, PWP_MODE)) {
+			to_victim += " $c0006[+" + std::to_string(regen) + "]$c0007";
+		}
+		act_to_one(to_victim.c_str(), TRUE, victim, nullptr, ch, victim);
+	}
+	if(wanted(ch)) {
+		std::string to_char = "$N rigenera!";
+		if(IS_SET(ch->player.user_flags, PWP_MODE)) {
+			to_char += " $c0006[+" + std::to_string(regen) + "]$c0007";
+		}
+		act_to_one(to_char.c_str(), TRUE, ch, nullptr, victim, ch);
+	}
+	for(char_data* to = real_roomp(ch->in_room)->people; to; to = to->next_in_room) {
+		if(to != ch && to != victim && wanted(to)) {
+			act_to_one("$N rigenera!", TRUE, ch, nullptr, victim, to);
+		}
+	}
+}
+
+/* Rigenerazione sommata del turno per una vittima (tutti gli attaccanti):
+ * una riga sola, solo a chi ha la modalita' compatta. Il [+N] PWP lo leggono
+ * la vittima e chi l'ha colpita (attackers). */
+void compact_print_regen(char_data* victim, int regen,
+						 const std::vector<const char_data*>& attackers) {
+	if(!char_is_valid(victim)) {
+		return;
+	}
+	room_data* rp = real_roomp(victim->in_room);
+	if(rp == nullptr) {
+		return;
+	}
+	const std::string pwp = " $c0006[+" + std::to_string(regen) + "]$c0007";
+	for(char_data* to = rp->people; to; to = to->next_in_room) {
+		if(!IS_SET(combat_view_flags(to), COMBAT_COMPACT)) {
+			continue;
+		}
+		std::string line = to == victim ? "Rigeneri!" : "$n rigenera!";
+		const bool attacker = std::find(attackers.begin(), attackers.end(), to) != attackers.end();
+		if((to == victim || attacker) && IS_SET(to->player.user_flags, PWP_MODE)) {
+			line += pwp;
+		}
+		act_to_one(line.c_str(), TRUE, victim, nullptr, nullptr, to);
+	}
+}
+
+/* Voci raggruppabili: stessa vittima, tipo e incantesimo d'arma, attaccanti
+ * mob uguali (NPC senza giocatore, stesso nome e short_descr, stessa stanza).
+ * I pg non si raggruppano mai. */
+[[nodiscard]] bool compact_same_group(const CompactCombatEntry& a, const CompactCombatEntry& b) {
+	if(a.ch == b.ch || a.victim != b.victim || a.type != b.type ||
+			a.weapon_spell != b.weapon_spell) {
+		return false;
+	}
+	if(!char_is_valid(a.ch) || !char_is_valid(b.ch)) {
+		return false;
+	}
+	if(!IS_NPC(a.ch) || !IS_NPC(b.ch) || a.ch->desc != nullptr || b.ch->desc != nullptr ||
+			a.ch->in_room != b.ch->in_room) {
+		return false;
+	}
+	auto same = [](const char* x, const char* y) {
+		return (x == nullptr || y == nullptr) ? x == y : std::strcmp(x, y) == 0;
+	};
+	return same(a.ch->player.short_descr, b.ch->player.short_descr) &&
+		   same(a.ch->player.name, b.ch->player.name);
+}
+
+/* Toglie dalla lista le voci per cui pred e' vero e le stampa. Prima le
+ * tolgo e poi stampo: la stampa non deve vedere la lista a meta'. */
+template <typename Pred>
+void compact_flush_if(Pred&& pred) {
+	if(g_compact_entries.empty()) {
+		return;
+	}
+	std::vector<CompactCombatEntry> out;
+	auto it = g_compact_entries.begin();
+	while(it != g_compact_entries.end()) {
+		if(pred(*it)) {
+			out.push_back(*it);
+			it = g_compact_entries.erase(it);
+		}
+		else {
+			++it;
+		}
+	}
+	/* Mob uguali: le voci si sommano in quella del primo colpo (l'ordine
+	 * resta quello dei primi colpi); counts = quanti mob nel gruppo, anche
+	 * quelli che hanno mancato tutto. */
+	std::vector<CompactCombatEntry> groups;
+	std::vector<int> counts;
+	for(const auto& e : out) {
+		bool merged = false;
+		for(std::size_t g = 0; g < groups.size(); ++g) {
+			if(compact_same_group(groups[g], e)) {
+				groups[g].hits += e.hits;
+				groups[g].misses += e.misses;
+				groups[g].dam += e.dam;
+				groups[g].regen += e.regen;
+				if(groups[g].immunity_msg == nullptr) {
+					groups[g].immunity_msg = e.immunity_msg;
+				}
+				++counts[g];
+				merged = true;
 				break;
 			}
 		}
-		else {
-			*(cp++) = *str;
+		if(!merged) {
+			groups.push_back(e);
+			counts.push_back(1);
 		}
-
-		*cp = 0;
-	} /* For */
-
-	return(buf);
+	}
+	for(std::size_t i = 0; i < groups.size(); ++i) {
+		compact_print_entry(groups[i], counts[i]);
+		/* Dopo l'ultima voce della vittima: una sola riga di rigenerazione
+		 * con il totale (tutti gli attaccanti, mischia + incantesimi d'arma). */
+		bool last_of_victim = true;
+		int regen = 0;
+		std::vector<const char_data*> attackers;
+		for(std::size_t j = 0; j < groups.size(); ++j) {
+			if(groups[j].victim == groups[i].victim) {
+				regen += groups[j].regen;
+				attackers.push_back(groups[j].ch);
+				if(j > i) {
+					last_of_victim = false;
+				}
+			}
+		}
+		if(last_of_victim && regen > 0) {
+			compact_print_regen(groups[i].victim, regen, attackers);
+		}
+	}
 }
 
+void compact_flush_all() {
+	compact_flush_if([](const CompactCombatEntry&) {
+		return true;
+	});
+}
 
+/* Voci in cui ch attacca o viene colpito. */
+void compact_flush_char(const char_data* ch) {
+	compact_flush_if([ch](const CompactCombatEntry& e) {
+		return e.ch == ch || e.victim == ch;
+	});
+}
 
-
-void dam_message(int dam, struct char_data* ch, struct char_data* victim,
-				 int w_type, int location, int display_dam) {
-	struct obj_data* wield;
-	char* buf;
-	int snum;
-	if(display_dam < 0) {
-		display_dam = dam;
+/* Fuori da un turno (nessuno scope aperto) la riga esce subito. */
+void compact_flush_if_idle() {
+	if(g_compact_scope_depth == 0) {
+		compact_flush_all();
 	}
+}
 
-	static struct dam_weapon_type {
-		const char* to_room;
-		const char* to_char;
-		const char* to_victim;
-	} dam_weapons[] = {
+/* Il colpo si puo' raccogliere: attaccante e vittima diversi e nella stessa
+ * stanza. Le armi a distanza restano colpo per colpo. */
+[[nodiscard]] bool compact_recordable(const char_data* ch, const char_data* victim) {
+	return ch != victim && ch->in_room != NOWHERE && ch->in_room == victim->in_room;
+}
 
-		{
-			"$n manca $N.",                                 /*     0    */
-			"manchi $N.",
-			"$n ti manca."
-		},
-
-		{
-			"$n #W $N #l graffiandol$B.",                   /*  1..  2  */
-			"#w $N #l graffiandol$B.",
-			"$n ti #W #L graffiandoti."
-		},
-
-		{
-			"$n #W appena $N #l.",                          /*  3..  4  */
-			"#w appena $N #l.",
-			"$n ti #W appena #L."
-		},
-
-		{
-			"$n #W $N #l.",                                 /*  5.. 10  */
-			"#w $N #l.",
-			"$n ti #W #L."
-		},
-
-		{
-			"$n #W $N duramente #l.",                       /* 11.. 15  */
-			"#w $N duramente #l.",
-			"$n ti #W duramente #L."
-		},
-
-		{
-			"$n #W $N molto duramente #l.",                 /* 16.. 25  */
-			"#w $N molto duramente #l.",
-			"$n ti #W molto duramente #L."
-		},
-
-		{
-			"$n #W $N con estrema forza #l.",               /* 26.. 35  */
-			"#w $N con estrema forza #l.",
-			"$n ti #W con estrema forza #L."
-		},
-
-		{
-			"$n #W $N #l $c0011massacrandol$B$c0007!",      /* 36.. 45  */
-			"#w $N #l $c0010massacrandol$B$c0007!",
-			"$n ti #W #L $c0009massacrandoti$c0007!"
-		},
-
-		{
-			"$n #W $N #l $c0011devastandol$B$c0007!",       /* 46.. 55  */
-			"#w $N #l $c0010devastandol$B$c0007!",
-			"$n ti #W #L $c0009devastandoti$c0007!"
-		},
-
-		{
-			"$n #W $N #l $c0011sbaragliandol$B$c0007!",     /* 56.. 65  */
-			"#w $N #l $c0010sbaragliandol$B$c0007!",
-			"$n ti #W #L $c0009sbaragliandoti$c0007!"
-		},
-
-		{
-			"$n #W $N #l $c0011polverizzandol$B$c0007!",    /* 66.. 75  */
-			"#w $N #l $c0010polverizzandol$B$c0007!",
-			"$n ti #W #L $c0009polverizzandoti$c0007!"
-		},
-
-		{
-			"$n #W $N #l $c0011sbriciolandol$B$c0007!",     /* 76.. 85  */
-			"#w $N #l $c0010sbriciolandol$B$c0007!",
-			"$n ti #W #L $c0009sbriciolandoti$c0007!"
-		},
-
-		{
-			"$n #W $N #l $c0011annientandol$B$c0007!",      /* 86.. 95  */
-			"#w $N #l $c0010annientandol$B$c0007!",
-			"$n ti #W #L $c0009annientandoti$c0007!"
-		},
-
-		{
-			"$n #W $N #l $c0011sterminandol$B$c0007!",      /* > 95     */
-			"#w $N #l $c0010sterminandol$B$c0007!",
-			"$n ti #W #L $c0009sterminandoti$c0007!"
+void compact_record(char_data* ch, char_data* victim, int type, bool weapon_spell,
+					bool hit_ok, int dam, const char* immunity_msg) {
+	for(auto& e : g_compact_entries) {
+		if(e.ch == ch && e.victim == victim && e.type == type && e.weapon_spell == weapon_spell) {
+			if(hit_ok) {
+				++e.hits;
+				e.dam += std::max(0, dam);
+			}
+			else {
+				++e.misses;
+			}
+			if(immunity_msg != nullptr) {
+				e.immunity_msg = immunity_msg;
+			}
+			return;
 		}
+	}
+	g_compact_entries.push_back(CompactCombatEntry{
+		ch, victim, type, weapon_spell, hit_ok ? 1 : 0, hit_ok ? 0 : 1,
+		hit_ok ? std::max(0, dam) : 0, immunity_msg, 0});
+}
 
-	};
+/* Rigenerazione del troll dopo un colpo gia' contato in una voce compatta
+ * (mischia, o incantesimo dell'arma di ch): si somma alla voce e la riga
+ * esce con lei. false = nessuna voce (fuori turno, colpo non raccolto):
+ * il chiamante stampa subito come sempre. */
+[[nodiscard]] bool compact_add_regen(const char_data* ch, const char_data* victim,
+									 int attacktype, int regen) {
+	if(g_compact_scope_depth <= 0 || g_compact_entries.empty()) {
+		return false;
+	}
+	const bool melee = attacktype >= TYPE_HIT && attacktype < TYPE_RANGE_WEAPON;
+	const bool weapon_spell = !melee && g_weapon_spell_caster != nullptr &&
+							  g_weapon_spell_caster == ch;
+	if(!melee && !weapon_spell) {
+		return false;
+	}
+	for(auto& e : g_compact_entries) {
+		if(e.ch == ch && e.victim == victim && e.type == attacktype &&
+				e.weapon_spell == weapon_spell) {
+			e.regen += regen;
+			return true;
+		}
+	}
+	return false;
+}
+} // namespace
 
+CompactCombatScope::CompactCombatScope() {
+	++g_compact_scope_depth;
+}
 
-	w_type -= TYPE_HIT;   /* Change to base of table with text */
+CompactCombatScope::~CompactCombatScope() {
+	if(g_compact_scope_depth > 1) {
+		--g_compact_scope_depth;
+		return;
+	}
+	/* scope piu' esterno: escono le righe del turno */
+	g_compact_scope_depth = 0;
+	compact_flush_all();
+}
 
+void compact_combat_forget(struct char_data* ch) {
+	if(ch == nullptr || g_compact_entries.empty()) {
+		return;
+	}
+	compact_flush_char(ch);
+}
 
-	wield = ch->equipment[WIELD];
+void dam_message(int dam, char_data* ch, char_data* victim,
+				 int w_type, int location, int display_dam, const char* to_char_override,
+				 bool compact_recorded) {
+	/* display_dam negativo = mostra dam; in PWP mai sotto 0 */
+	const int shown_dam = std::max(0, display_dam < 0 ? dam : display_dam);
 
-	if(dam <= 0) {
-		snum = 0;
+	/* w_type parte da TYPE_HIT; fuori tabella (non succede: DamageMessages
+	   chiama solo con TYPE_HIT..TYPE_RANGE_WEAPON) si usa TYPE_HIT. */
+	std::size_t weapon_index = 0;
+	if(w_type >= TYPE_HIT && static_cast<std::size_t>(w_type - TYPE_HIT) < std::size(attack_hit_text)) {
+		weapon_index = static_cast<std::size_t>(w_type - TYPE_HIT);
 	}
-	else if(dam <= 2) {
-		snum = 1;
-	}
-	else if(dam <= 4) {
-		snum = 2;
-	}
-	else if(dam <= 10) {
-		snum = 3;
-	}
-	else if(dam <= 15) {
-		snum = 4;
-	}
-	else if(dam <= 25) {
-		snum = 5;
-	}
-	else if(dam <= 35) {
-		snum = 6;
-	}
-	else if(dam <= 45) {
-		snum = 7;
-	}
-	else if(dam <= 55) {
-		snum = 8;
-	}
-	else if(dam <= 65) {
-		snum = 9;
-	}
-	else if(dam <= 75) {
-		snum = 10;
-	}
-	else if(dam <= 85) {
-		snum = 11;
-	}
-	else if(dam <= 95) {
-		snum = 12;
-	}
-	else {
-		snum = 13;
+	const attack_hit_type& weapon_text = attack_hit_text[weapon_index];
+
+	obj_data* const wield = ch->equipment[WIELD];
+	const DamMessageTier& tier = dam_message_tier(dam);
+
+	/* Una sola chiamata: il lato a caso (number(0, 1)) e' lo stesso per
+	   stanza, attaccante e vittima. */
+	const DamMessageWords words{weapon_text.plural, weapon_text.singular,
+								LocationHitText(victim, location)};
+
+	const std::string to_room = expand_dam_template(tier.to_room, words);
+
+	std::string to_char = (to_char_override != nullptr)
+						  ? std::string(to_char_override)
+						  : expand_dam_template(tier.to_char, words);
+	if(IS_SET(ch->player.user_flags, PWP_MODE)) {
+		append_pwp_damage(to_char, "$c0003", false, shown_dam);
 	}
 
-	const char* loc_text = LocationHitText(victim, location);
-	buf = replace_string(dam_weapons[snum].to_room, attack_hit_text[w_type].plural, attack_hit_text[w_type].singular,
-						 loc_text, loc_text);
-	act(buf, FALSE, ch, wield, victim, TO_NOTVICT);
+	std::string to_victim = expand_dam_template(tier.to_victim, words);
+	if(IS_SET(victim->player.user_flags, PWP_MODE)) {
+		append_pwp_damage(to_victim, "$c0001", shown_dam > 0, shown_dam);
+	}
 
-	buf = replace_string(dam_weapons[snum].to_char, attack_hit_text[w_type].plural, attack_hit_text[w_type].singular,
-						 loc_text, loc_text);
-    if(IS_SET(ch->player.user_flags,PWP_MODE)) {
-        std::string msg = buf;
-        msg += " $c0003[";
-        msg += std::to_string((display_dam < 0 ? 0 : display_dam));
-        msg += "]$c0007";
-        std::snprintf(buf, MAX_STRING_LENGTH, "%s", msg.c_str());
-    }
-	act(buf, FALSE, ch, wield, victim, TO_CHAR);
-
-	buf = replace_string(dam_weapons[snum].to_victim, attack_hit_text[w_type].plural, attack_hit_text[w_type].singular,
-						 loc_text, loc_text);
-    if(IS_SET(victim->player.user_flags,PWP_MODE)) {
-        std::string msg = buf;
-        msg += " $c0001[";
-        if(display_dam > 0) {
-            msg += "-";
-        }
-        msg += std::to_string((display_dam < 0 ? 0 : display_dam));
-        msg += "]$c0007";
-        std::snprintf(buf, MAX_STRING_LENGTH, "%s", msg.c_str());
-    }
-	act(buf, FALSE, ch, wield, victim, TO_VICT);
-
+	/* Riga per riga secondo le opzioni di chi la riceve (COMBAT):
+	 * chi ha la modalita' compatta vedra' il riassunto del turno, chi
+	 * nasconde i mancanti salta il "manca". La riga d'immunita'
+	 * dell'attaccante non e' un semplice mancato: resta. */
+	const bool is_miss = dam <= 0;
+	for_each_combat_viewer(ch, victim, [&](char_data* to, CombatViewRole role) {
+		const unsigned long flags = combat_view_flags(to);
+		if(compact_recorded && IS_SET(flags, COMBAT_COMPACT)) {
+			return;
+		}
+		const bool override_line = role == CombatViewRole::Attacker && to_char_override != nullptr;
+		if(is_miss && !override_line && IS_SET(flags, COMBAT_NO_MISS)) {
+			return;
+		}
+		const std::string& line = role == CombatViewRole::Attacker ? to_char :
+								  role == CombatViewRole::Victim ? to_victim : to_room;
+		act_to_one(line.c_str(), false, ch, wield, victim, to);
+	});
 }
 
 int DamCheckDeny(struct char_data* ch, struct char_data* victim, int type) {
@@ -2553,9 +3343,11 @@ int SetVictFighting(struct char_data* ch, struct char_data* v) {
 	return(FALSE);
 }
 
-/* Ultimo colpo fermato da WeaponCheck (immunita' alle armi): impostato da
- * DamageTrivia, letto e azzerato da DamageMessages. */
-static bool g_weapon_immunity_block = false;
+/* Ultimo colpo fermato da WeaponCheck (immunita' alle armi): la riga per
+ * l'attaccante ("ignora il tuo stupido attacco", "colpo inefficace"), oppure
+ * nullptr. Impostato da DamageTrivia, letto e azzerato da DamageMessages,
+ * che la da' al posto del "manchi" cosi' l'attaccante legge una riga sola. */
+static const char* g_weapon_immunity_msg = nullptr;
 
 /* Poteri psionici: non sono magia, l'anti magic shell non li ferma.
  * Non stanno in IsMagicSpell perche' li' decidono anche l'assorbimento. */
@@ -2571,66 +3363,13 @@ static bool is_psionic_attack(int type) {
 	}
 }
 
-/* Nome italiano degli incantesimi di danno, con genere e numero per
- * accordare articoli e verbi nei messaggi. Se manca, si usa
- * "incantesimo <nome inglese>". */
-struct SpellNameIt {
-	const char* nome;
-	bool femminile;
-	bool plurale;
-};
-
-static SpellNameIt spell_name_it(int type) {
-	switch(type) {
-	case SPELL_ACID_BLAST:       return {"scarica acida", true, false};
-	case SPELL_ACID_BREATH:      return {"soffio acido", false, false};
-	case SPELL_BURNING_HANDS:    return {"mani di fuoco", true, true};
-	case SPELL_CALL_LIGHTNING:   return {"richiamo del fulmine", false, false};
-	case SPELL_CAUSE_CRITICAL:   return {"ferita critica", true, false};
-	case SPELL_CAUSE_LIGHT:      return {"ferita leggera", true, false};
-	case SPELL_CAUSE_SERIOUS:    return {"ferita grave", true, false};
-	case SPELL_CHAIN_LIGHTNING:  return {"fulmini a catena", false, true};
-	case SPELL_CHILL_TOUCH:      return {"tocco gelido", false, false};
-	case SPELL_COLOUR_SPRAY:     return {"raggio multicolore", false, false};
-	case SPELL_CONE_OF_COLD:     return {"cono di freddo", false, false};
-	case SPELL_DISINTEGRATE:     return {"raggio disintegrante", false, false};
-	case SPELL_EARTHQUAKE:       return {"terremoto", false, false};
-	case SPELL_ENERGY_DRAIN:     return {"prosciugamento vitale", false, false};
-	case SPELL_FIREBALL:         return {"palla di fuoco", true, false};
-	case SPELL_FIRESTORM:        return {"tempesta di fuoco", true, false};
-	case SPELL_FIRE_BREATH:      return {"soffio di fiamma", false, false};
-	case SPELL_FLAMESTRIKE:      return {"colonna di fiamme", true, false};
-	case SPELL_FROST_BREATH:     return {"soffio di gelo", false, false};
-	case SPELL_GAS_BREATH:       return {"soffio velenoso", false, false};
-	case SPELL_GEYSER:           return {"getto bollente", false, false};
-	case SPELL_GREEN_SLIME:      return {"melma verde", true, false};
-	case SPELL_HARM:             return {"ferita devastante", true, false};
-	case SPELL_HEAT_STUFF:       return {"incandescenza", true, false};
-	case SPELL_HOLY_WORD:        return {"parola sacra", true, false};
-	case SPELL_ICE_STORM:        return {"tempesta di ghiaccio", true, false};
-	case SPELL_INCENDIARY_CLOUD: return {"nube di fuoco", true, false};
-	case SPELL_LIGHTNING_BOLT:   return {"fulmine", false, false};
-	case SPELL_LIGHTNING_BREATH: return {"soffio elettrico", false, false};
-	case SPELL_MAGIC_MISSILE:    return {"dardo magico", false, false};
-	case SPELL_METEOR_SWARM:     return {"sciame di meteore", false, false};
-	case SPELL_MINOR_HARM:       return {"ferita lacerante", true, false};
-	case SPELL_POISON:           return {"veleno", false, false};
-	case SPELL_PRISMATIC_SPRAY:  return {"getto prismatico", false, false};
-	case SPELL_PWORD_KILL:       return {"parola della morte", true, false};
-	case SPELL_SHOCKING_GRASP:   return {"stretta folgorante", true, false};
-	case SPELL_SUNRAY:           return {"raggio solare", false, false};
-	case SPELL_UNHOLY_WORD:      return {"parola empia", true, false};
-	default:                     return {nullptr, false, false};
-	}
-}
-
 int DamageTrivia(struct char_data* ch, struct char_data* v,
 				 int dam, int type, int location, int* stuff_dam) {
 
 	char buf[255];
 	int classe=-1;
 	int dummy,result;
-	g_weapon_immunity_block = false;
+	g_weapon_immunity_msg = nullptr;
 	if(stuff_dam != nullptr) {
 		*stuff_dam = -1; /* -1 = niente danni all'eq */
 	}
@@ -2769,21 +3508,17 @@ int DamageTrivia(struct char_data* ch, struct char_data* v,
 				snprintf(nome, sizeof(nome), "incantesimo %s", spells[ type - 1 ]);
 				sn = {nome, false, false};
 			}
-			const char* art = sn.plurale ? (sn.femminile ? "le" : "i")
-										 : (sn.femminile ? "la" : "il");
-			const char* tuo = sn.plurale ? (sn.femminile ? "le tue" : "i tuoi")
-										 : (sn.femminile ? "la tua" : "il tuo");
+			const std::string art = con_articolo(sn);
+			const std::string tuo = maiuscola(con_tuo(sn));
 			const char* spegne = sn.plurale ? "si spengono" : "si spegne";
-			sprintf(buf, "$N ridacchia mentre %s %s di $n %s sul suo globo "
-					"anti-magia!", art, sn.nome, spegne);
+			sprintf(buf, "$N ridacchia mentre %s di $n %s sul suo globo "
+					"anti-magia!", art.c_str(), spegne);
 			act(buf, FALSE, ch, 0, v, TO_NOTVICT);
-			sprintf(buf, "%s %s %s contro il globo anti-magia di $N!",
-					tuo, sn.nome, spegne);
-			buf[0] = toupper(buf[0]);
+			sprintf(buf, "%s %s contro il globo anti-magia di $N!",
+					tuo.c_str(), spegne);
 			act(buf, FALSE, ch, 0, v, TO_CHAR);
-			sprintf(buf, "%s %s di $n %s contro il tuo globo anti-magia!",
-					art, sn.nome, spegne);
-			buf[0] = toupper(buf[0]);
+			sprintf(buf, "%s di $n %s contro il tuo globo anti-magia!",
+					maiuscola(art).c_str(), spegne);
 			act(buf, FALSE, ch, 0, v, TO_VICT);
 			dam = -1;
 		}
@@ -2819,10 +3554,13 @@ int DamageTrivia(struct char_data* ch, struct char_data* v,
 
 	if(dam > -1) {
 		const int dam_before_immunity = dam;
-		dam = WeaponCheck(ch, v, type, dam);
+		const char* immunity_msg = nullptr;
+		dam = WeaponCheck(ch, v, type, dam, &immunity_msg);
 		/* immunita' alle armi (+1..+4, non magiche): il colpo non passa,
 		 * DamageMessages deve dare il mancato e non il colpo assorbito */
-		g_weapon_immunity_block = (dam == 0 && dam_before_immunity > 0);
+		if(dam == 0 && dam_before_immunity > 0) {
+			g_weapon_immunity_msg = immunity_msg;
+		}
 
 		/* danni all'eq col danno di adesso (dopo WeaponCheck, prima di
 		 * life-saver, cavalcatura e mana shield), come prima. Con stuff_dam
@@ -2991,12 +3729,23 @@ void DamageMessages(struct char_data* ch, struct char_data* v, int dam,
 	struct message_type* messages;
 	char buf[MAX_STRING_LENGTH];
 
-	/* Skill/spell/colpo RIUSCITO (dam_req > 0) ma danno finale ridotto a 0
+	/* Skill/spell RIUSCITO (dam_req > 0) ma danno finale ridotto a 0
 	 * (sanctuary, scudo, immunita'...): testo di colpo, non di fallimento.
-	 * Il fallimento chiama damage() con 0 (dam_req == 0) -> miss. */
-	const bool immunity_block = g_weapon_immunity_block;
-	g_weapon_immunity_block = false;
-	const bool hit_ok_zero = (dam == 0 && dam_req > 0 && !immunity_block);
+	 * Il fallimento chiama damage() con 0 (dam_req == 0) -> miss.
+	 * Non vale per i colpi d'arma (TYPE_HIT..TYPE_RANGE_WEAPON): un colpo di
+	 * mischia o a distanza ridotto a 0 si legge e si conta come mancato. */
+	const char* const immunity_msg = g_weapon_immunity_msg;
+	g_weapon_immunity_msg = nullptr;
+	const bool immunity_block = immunity_msg != nullptr;
+	const bool melee_type = attacktype >= TYPE_HIT && attacktype <= TYPE_RANGE_WEAPON;
+	const bool hit_ok_zero = (dam == 0 && dam_req > 0 && !immunity_block && !melee_type);
+
+	/* Vittima morta da un colpo che non e' di mischia: le righe compatte
+	 * ancora in sospeso su di lei escono prima del messaggio di morte. */
+	if(!melee_type && !g_compact_entries.empty() && char_is_valid(v) &&
+			GET_POS(v) == POSITION_DEAD) {
+		compact_flush_char(v);
+	}
 
 	/* kick/springleap: testo col danno FINALE da qui. Con dam_req == 0 non stampa
 	 * (miss esplicito: kick_messages(..., -1) in act.off). Assorbito a 0: lo
@@ -3019,8 +3768,26 @@ void DamageMessages(struct char_data* ch, struct char_data* v, int dam,
 		if(!char_is_valid(ch) || !char_is_valid(v)) {
 			return;
 		}
-		/* Colpo andato a segno ma assorbito: severita' minima (graffio), PWP resta [0]. */
-		dam_message(hit_ok_zero ? 1 : dam, ch, v, attacktype, location, dam);
+		/* Colpo d'arma ridotto a 0 (sanctuary, armatura...): mancato. */
+		/* immunita': vittima e stanza leggono il mancato, l'attaccante la
+		 * riga dell'immunita' al posto del suo "manchi". */
+		/* Visualizzazione compatta: il colpo si conta per la riga di fine
+		 * turno (le armi a distanza restano colpo per colpo). */
+		const bool compact = attacktype != TYPE_RANGE_WEAPON && compact_recordable(ch, v);
+		if(compact) {
+			compact_record(ch, v, attacktype, false, dam > 0 || hit_ok_zero, dam, immunity_msg);
+		}
+		dam_message(hit_ok_zero ? 1 : dam, ch, v, attacktype, location, dam, immunity_msg,
+					compact);
+		if(compact) {
+			if(GET_POS(v) == POSITION_DEAD) {
+				/* colpo mortale: la riga compatta esce prima della morte */
+				compact_flush_char(v);
+			}
+			else {
+				compact_flush_if_idle();
+			}
+		}
 		/* do not wanna frag the bow, frag the arrow instead! */
 		if(ch->equipment[ WIELD ] && attacktype != TYPE_RANGE_WEAPON) {
 			BrittleCheck(ch,v, dam);
@@ -3063,92 +3830,63 @@ void DamageMessages(struct char_data* ch, struct char_data* v, int dam,
 					act(messages->god_msg.room_msg,
 						FALSE, ch, ch->equipment[WIELD], v, TO_NOTVICT);
 				}
-				else if(dam > 0 || hit_ok_zero) {
-					if(GET_POS(v) == POSITION_DEAD) {
-                        sprintf(buf, "%s", messages->die_msg.attacker_msg);
-                        if(IS_SET(ch->player.user_flags,PWP_MODE))
-                        {
-                            std::string msg = buf;
-                            msg += " $c0003[";
-                            msg += std::to_string((dam < 0 ? 0 : dam));
-                            msg += "]$c0007";
-                            std::snprintf(buf, MAX_STRING_LENGTH, "%s", msg.c_str());
-                        }
-                        if(ch != v)
-                            act(buf, FALSE, ch, ch->equipment[WIELD], v, TO_CHAR);
-                        sprintf(buf, "%s", messages->die_msg.victim_msg);
-                        if(IS_SET(v->player.user_flags,PWP_MODE))
-                        {
-                            std::string msg = buf;
-                            msg += " $c0001[";
-                            if(dam > 0) {
-                                msg += "-";
-                            }
-                            msg += std::to_string((dam < 0 ? 0 : dam));
-                            msg += "]$c0007";
-                            std::snprintf(buf, MAX_STRING_LENGTH, "%s", msg.c_str());
-                        }
-						act(buf, FALSE, ch, ch->equipment[WIELD], v, TO_VICT);
-						act(messages->die_msg.room_msg,
-							FALSE, ch, ch->equipment[WIELD], v, TO_NOTVICT);
+				else {
+					/* die/hit con colpo riuscito, miss con dam == 0 (dam < 0 niente) */
+					const msg_type* text = nullptr;
+					bool is_miss = false;
+					bool is_death = false;
+					if(dam > 0 || hit_ok_zero) {
+						is_death = GET_POS(v) == POSITION_DEAD;
+						text = is_death ? &messages->die_msg : &messages->hit_msg;
 					}
-					else {
-                        sprintf(buf, "%s", messages->hit_msg.attacker_msg);
-                        if(IS_SET(ch->player.user_flags,PWP_MODE))
-                        {
-                            std::string msg = buf;
-                            msg += " $c0003[";
-                            msg += std::to_string((dam < 0 ? 0 : dam));
-                            msg += "]$c0007";
-                            std::snprintf(buf, MAX_STRING_LENGTH, "%s", msg.c_str());
-                        }
-                        if(ch != v)
-                            act(buf, FALSE, ch, ch->equipment[WIELD], v, TO_CHAR);
-                        sprintf(buf, "%s", messages->hit_msg.victim_msg);
-                        if(IS_SET(v->player.user_flags,PWP_MODE))
-                        {
-                            std::string msg = buf;
-                            msg += " $c0001[";
-                            if(dam > 0) {
-                                msg += "-";
-                            }
-                            msg += std::to_string((dam < 0 ? 0 : dam));
-                            msg += "]$c0007";
-                            std::snprintf(buf, MAX_STRING_LENGTH, "%s", msg.c_str());
-                        }
-						act(buf, FALSE, ch, ch->equipment[WIELD], v, TO_VICT);
-						act(messages->hit_msg.room_msg,
-							FALSE, ch, ch->equipment[WIELD], v, TO_NOTVICT);
+					else if(dam == 0) {
+						text = &messages->miss_msg;
+						is_miss = true;
 					}
-				} /* dam >0 */
-				else if(dam == 0) {
-                    sprintf(buf, "%s", messages->miss_msg.attacker_msg);
-                    if(IS_SET(ch->player.user_flags,PWP_MODE))
-                    {
-                        std::string msg = buf;
-                        msg += " $c0003[";
-                        msg += std::to_string((dam < 0 ? 0 : dam));
-                        msg += "]$c0007";
-                        std::snprintf(buf, MAX_STRING_LENGTH, "%s", msg.c_str());
-                    }
-                    if(ch != v)
-                        act(buf, FALSE, ch, ch->equipment[WIELD], v, TO_CHAR);
-                    sprintf(buf, "%s", messages->miss_msg.victim_msg);
-                    if(IS_SET(v->player.user_flags,PWP_MODE))
-                    {
-                        std::string msg = buf;
-                        msg += " $c0001[";
-                        if(dam > 0) {
-                            msg += "-";
-                        }
-                        msg += std::to_string((dam < 0 ? 0 : dam));
-                        msg += "]$c0007";
-                        std::snprintf(buf, MAX_STRING_LENGTH, "%s", msg.c_str());
-                    }
-					act(buf, FALSE, ch, ch->equipment[WIELD], v, TO_VICT);
-					act(messages->miss_msg.room_msg,
-						FALSE, ch, ch->equipment[WIELD], v, TO_NOTVICT);
-				} /* dam == 0 */
+					if(text != nullptr) {
+						std::string to_char = text->attacker_msg ? text->attacker_msg : "";
+						if(IS_SET(ch->player.user_flags, PWP_MODE)) {
+							append_pwp_damage(to_char, "$c0003", false, std::max(0, dam));
+						}
+						std::string to_victim = text->victim_msg ? text->victim_msg : "";
+						if(IS_SET(v->player.user_flags, PWP_MODE)) {
+							append_pwp_damage(to_victim, "$c0001", dam > 0, std::max(0, dam));
+						}
+						/* Incantesimo dell'arma (WeaponSpell) che non uccide: riga
+						 * per riga secondo le opzioni di chi guarda. La morte si
+						 * vede sempre per intero. */
+						const bool from_weapon = !is_death && g_weapon_spell_caster != nullptr &&
+												 g_weapon_spell_caster == ch && ch != v;
+						if(from_weapon) {
+							const bool compact = compact_recordable(ch, v);
+							if(compact) {
+								compact_record(ch, v, attacktype, true, !is_miss, dam, nullptr);
+							}
+							const char* room_line = text->room_msg;
+							for_each_combat_viewer(ch, v, [&](char_data* to, CombatViewRole role) {
+								const unsigned long flags = combat_view_flags(to);
+								if((compact && IS_SET(flags, COMBAT_COMPACT)) ||
+										IS_SET(flags, COMBAT_NO_WEAPON_SPELL) ||
+										(is_miss && IS_SET(flags, COMBAT_NO_MISS))) {
+									return;
+								}
+								const char* line = role == CombatViewRole::Attacker ? to_char.c_str() :
+												   role == CombatViewRole::Victim ? to_victim.c_str() : room_line;
+								act_to_one(line, FALSE, ch, ch->equipment[WIELD], v, to);
+							});
+							if(compact) {
+								compact_flush_if_idle();
+							}
+						}
+						else {
+							if(ch != v) {
+								act(to_char.c_str(), FALSE, ch, ch->equipment[WIELD], v, TO_CHAR);
+							}
+							act(to_victim.c_str(), FALSE, ch, ch->equipment[WIELD], v, TO_VICT);
+							act(text->room_msg, FALSE, ch, ch->equipment[WIELD], v, TO_NOTVICT);
+						}
+					}
+				}
 			} /* fight messages == atk type */
 		}
 	}
@@ -3832,7 +4570,15 @@ int DamageEpilog(struct char_data* ch, struct char_data* victim,
 								  number(0, GetMaxLevel(ch))), dam / 2);
 				GET_HIT(victim) += regenerate;
 				alter_hit(victim, 0);
-				if(dam > 0 && regenerate > 0) {
+				/* visualizzazione compatta: a chi ha la compatta la riga esce
+				 * sommata dopo quella del turno (compact_print_regen) */
+				if(dam > 0 && regenerate > 0 && ch != victim &&
+						compact_add_regen(ch, victim, killedbytype, regenerate)) {
+					/* contata nella voce compatta: chi non ha la compatta la
+					 * vede subito, colpo per colpo, come sempre */
+					send_regen_lines(ch, victim, regenerate, false);
+				}
+				else if(dam > 0 && regenerate > 0) {
 					sprintf(buf, "Rigeneri!");
 					if(IS_SET(victim->player.user_flags, PWP_MODE)) {
 						std::string msg = buf;
@@ -4785,6 +5531,9 @@ DamageResult hit(struct char_data* ch, struct char_data* victim,
 		drop_stale_opponent(ch, victim);
 		return AllLiving;
 	}
+	/* fuori da perform_violence (primo colpo, charge...): le righe compatte
+	 * escono alla fine di questo hit */
+	const CompactCombatScope compact_scope;
 	return root_hit(ch, victim, type, damage, FALSE, Hit_Location(victim));
 }
 
@@ -5082,6 +5831,11 @@ void perform_violence(unsigned long currentPulse) {
 	struct char_data* ch;
 	int tdir, cmv, max_cmv, caught, rng, tdr;
 
+	/* Visualizzazione compatta: i colpi di tutto il round escono alla fine,
+	 * una riga per attaccante (o gruppo di mob uguali), vittima e tipo. */
+	std::optional<CompactCombatScope> compact_round;
+	compact_round.emplace();
+
 	for(ch = combat_list; ch; ch = combat_next_dude) {
 		struct room_data* rp;
 		struct char_data* vict;
@@ -5149,6 +5903,9 @@ void perform_violence(unsigned long currentPulse) {
 			}
 		}
 	}
+
+	/* fine del round: escono le righe compatte */
+	compact_round.reset();
 
 	char_data* pNext;
 	/* charging loop */
@@ -5946,7 +6703,7 @@ int DamagedByAttack(struct obj_data* i, int dam_type) {
 	}
 }
 
-int WeaponCheck(struct char_data* ch, struct char_data* v, int type, int dam) {
+int WeaponCheck(struct char_data* ch, struct char_data* v, int type, int dam, const char** block_msg) {
 	int Immunity, total, j;
 
 	Immunity = -1;
@@ -5983,8 +6740,9 @@ int WeaponCheck(struct char_data* ch, struct char_data* v, int type, int dam) {
 				return(dam);
 			}
 			else {
-				act("Il tuo colpo e' inefficace contro $N.", FALSE, ch, 0, v,
-					TO_CHAR);
+				if(block_msg != nullptr) {
+					*block_msg = "Il tuo colpo e' inefficace contro $N.";
+				}
 				return(0);
 			} /* was not TYPE_HIT or NPC */
 
@@ -5992,7 +6750,9 @@ int WeaponCheck(struct char_data* ch, struct char_data* v, int type, int dam) {
 		else {
 			total = 0;
 			if(!ch->equipment[ WIELD ]) {
-				act("$N ignora il tuo stupido attacco.", FALSE, ch, 0, v, TO_CHAR);
+				if(block_msg != nullptr) {
+					*block_msg = "$N ignora il tuo stupido attacco.";
+				}
 				return(0);
 			}
 
@@ -6013,7 +6773,9 @@ int WeaponCheck(struct char_data* ch, struct char_data* v, int type, int dam) {
 				return(dam);
 			}
 			else {
-				act("$N ignora il tuo stupido attacco.", FALSE, ch, 0, v, TO_CHAR);
+				if(block_msg != nullptr) {
+					*block_msg = "$N ignora il tuo stupido attacco.";
+				}
 				return(0);
 			}
 		}
@@ -6152,6 +6914,9 @@ void WeaponSpell(struct char_data* c, struct char_data* v,
 						iLevel = MIN(4, GET_LEVEL(c, BestMagicClass(c)) / 6);
 						/* Weapon procs cast as weak wands: no spellpower bonus. */
 						SpellpowerSuppressGuard no_weapon_spell_sp;
+						/* DamageMessages riconosce l'incantesimo dell'arma
+						 * (visualizzazione compatta, opzione incantesimo arma) */
+						WeaponSpellCasterGuard weapon_spell_caster(c);
 						(*spell_info[num].spell_pointer)(iLevel, c, "", SPELL_TYPE_WAND,
 														 v, 0);
 					} /* was weapon spell */

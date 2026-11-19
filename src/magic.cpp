@@ -154,9 +154,6 @@ void spell_burning_hands(byte level, struct char_data* ch,
 			continue;
 		}
 		if((ch->in_room == tmp_victim->in_room) && (ch != tmp_victim)) {
-			if((GetMaxLevel(tmp_victim)>=LOW_IMMORTAL) && (!IS_NPC(tmp_victim))) { // SALVO non deve agire su un immortale
-				return;
-			}
 			if(!in_group(ch, tmp_victim)) {
 				act("$c0001Vieni raggiunt$b dalle fiamme!\n\r",
 					FALSE, ch, 0, tmp_victim, TO_VICT);
@@ -1714,7 +1711,8 @@ void spell_locate_object(byte level, struct char_data* ch,
 			strncat(buf, buf2, sizeof(buf) - strlen(buf) - 1);
 		}
 	}/* fine for */
-	page_string(ch->desc, buf, 0);
+	/* buf e' sullo stack: il paginatore deve averne una copia */
+	page_string(ch->desc, buf, true);
 
 	if(j==0) {
 		send_to_char("Hai molta confusione in testa.\n\r",ch);
@@ -1782,7 +1780,8 @@ void spell_locate_object(byte level, struct char_data* ch,
 			}
 		}
 
-	page_string(ch->desc,buf,0);
+	/* buf e' sullo stack: il paginatore deve averne una copia */
+	page_string(ch->desc, buf, true);
 
 	if(j==0) {
 		send_to_char("Hai molta confusione in testa.\n\r",ch);
@@ -2941,13 +2940,13 @@ void spell_anti_magic_shell(byte level, struct char_data* ch,
 		affect_to_char(victim, &af);
 	}
 	else {
-        if(ch != victim) {
-            act("Hai gia' addosso uno $c0012scudo anti-magia$c0007.", FALSE, ch, 0, victim, TO_CHAR);
-        }
-        else {
-            act("Ha gia' addosso uno $c0012scudo anti-magia$c0007.", FALSE, ch, 0, victim, TO_CHAR);
-        }
-    }
+		if(ch != victim) {
+			act("$N ha gia' addosso uno $c0012scudo anti-magia$c0007.", FALSE, ch, 0, victim, TO_CHAR);
+		}
+		else {
+			act("Hai gia' addosso uno $c0012scudo anti-magia$c0007.", FALSE, ch, 0, victim, TO_CHAR);
+		}
+	}
 
 }
 
@@ -2955,7 +2954,6 @@ void spell_anti_magic_shell(byte level, struct char_data* ch,
 void spell_prismatic_spray(byte level, struct char_data* ch,
 						   struct char_data* victim, struct obj_data* obj) {
 	int dam;
-	struct char_data* tmp_victim;
 
 	assert(ch);
 	if(level <0 || level >ABS_MAX_LVL) {
@@ -2983,12 +2981,20 @@ void spell_prismatic_spray(byte level, struct char_data* ch,
 		}
 	}
 	area_skip_notice(ch, area_skipped);
-	for(tmp_victim=real_roomp(ch->in_room)->people;
-			tmp_victim ; tmp_victim=tmp_victim->next_in_room) {
+	/* Prima la lista: il raggio violetto teletrasporta (anche in una
+	 * deathtrap), quindi next_in_room dopo l'effetto non e' affidabile. */
+	const int room = ch->in_room;
+	for(auto* const tmp_victim : room_people_snapshot(room)) {
+		if(!char_in_room_people(ch, room)) {
+			break;
+		}
+		if(!char_in_room_people(tmp_victim, room)) {
+			continue; /* gia' portato via o estratto */
+		}
 		if(area_spell_untouchable(ch, tmp_victim)) {
 			continue;
 		}
-		if(ch->in_room == tmp_victim->in_room && ch != tmp_victim) {
+		if(ch != tmp_victim) {
 			if(!in_group(ch,tmp_victim) && !IS_IMMORTAL(tmp_victim)) {
 				switch(number(1, 7)) {
 				case 1:
@@ -3053,6 +3059,9 @@ void spell_prismatic_spray(byte level, struct char_data* ch,
 					}
 					break;
 				} /* end switch */
+				if(!char_in_room_people(tmp_victim, room)) {
+					continue; /* teletrasportato: niente combattimento a distanza */
+				}
 				if(!tmp_victim->specials.fighting &&      /* make them hate the caster */
 						ch->specials.fighting != tmp_victim) {
 					set_fighting(ch,tmp_victim);

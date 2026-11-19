@@ -60,6 +60,7 @@
 #include "procarea.hpp"
 #include "procarea_balance.hpp"
 #include "create.obj.hpp"
+#include "editor_term.hpp"
 #include "object_instance.hpp"
 #include "clan_symbol.hpp"
 #include "mob.editor.hpp"
@@ -3872,6 +3873,8 @@ void cleanout_room(struct room_data* rp) {
 	int i;
 	struct extra_descr_data* exptr, *nptr;
 
+	/* string/edit/redit sui testi della stanza: staccati prima del free. */
+	EditorReleaseRoom(rp);
 	free(rp->name);
 	rp->name = NULL;
 	free(rp->description);
@@ -5801,6 +5804,9 @@ void reset_zone(int zone) {
 							   obj_index[ ZCMD.arg1 ].iVNum,
 							   mob_index[ pLastMob->nr ].iVNum,
 							   ZCMD.arg3, s);
+						/* Slot gia' occupato: pObj non e' da nessuna parte, ma e'
+						 * in object_list e conta nei limiti del vnum. */
+						extract_obj(pObj);
 					}
 				}
 				break;

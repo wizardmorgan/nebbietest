@@ -2123,6 +2123,73 @@ char* act_next_visible(char* p) {
   return (*p != '\0') ? p : nullptr;
 }
 
+/**
+ * Se subito prima di name_start c'e' " di " e il nome inizia con articolo
+ * determinativo, fonde: di la -> della, di lo -> dello, di il -> del,
+ * di l' -> dell', di i -> dei, di gli -> degli, di le -> delle.
+ * un/una/uno restano invariati. Ritorna il nuovo fine del nome in buf.
+ */
+char* fuse_di_leading_article(char* buf, char* name_start, char* name_end) {
+  if(buf == nullptr || name_start == nullptr || name_end == nullptr ||
+	 name_start < buf + 4 || name_end < name_start) {
+	return name_end;
+  }
+  if(name_start[-1] != ' ' ||
+	 std::tolower(static_cast<unsigned char>(name_start[-2])) != 'i' ||
+	 std::tolower(static_cast<unsigned char>(name_start[-3])) != 'd' ||
+	 name_start[-4] != ' ') {
+	return name_end;
+  }
+
+  struct ArtMap {
+	std::string_view art;
+	std::string_view fused; /* sostituisce "di " + art (senza lo spazio prima di di) */
+  };
+  static constexpr ArtMap kMap[] = {
+	  {"gli ", "degli "},
+	  {"la ", "della "},
+	  {"lo ", "dello "},
+	  {"le ", "delle "},
+	  {"il ", "del "},
+	  {"i ", "dei "},
+	  {"l'", "dell'"},
+  };
+
+  for(const ArtMap& m : kMap) {
+	char* p = name_start;
+	bool match = true;
+	for(const char want : m.art) {
+	  p = act_next_visible(p);
+	  if(p == nullptr || p >= name_end ||
+		 std::tolower(static_cast<unsigned char>(*p)) !=
+			 static_cast<unsigned char>(want)) {
+		match = false;
+		break;
+	  }
+	  ++p;
+	}
+	if(!match) {
+	  continue;
+	}
+
+	/* Riscrivi da 'd' di "di ": fused + resto del nome dopo l'articolo. */
+	char* write = name_start - 3;
+	const std::size_t rest_len = static_cast<std::size_t>(name_end - p);
+	static char rest_buf[MAX_STRING_LENGTH];
+	if(rest_len >= sizeof(rest_buf)) {
+	  return name_end;
+	}
+	std::memcpy(rest_buf, p, rest_len);
+	std::memcpy(write, m.fused.data(), m.fused.size());
+	write += m.fused.size();
+	std::memcpy(write, rest_buf, rest_len);
+	write += rest_len;
+	*write = '\0';
+	return write;
+  }
+  return name_end;
+}
+
 } // namespace
 
 /*
@@ -2354,8 +2421,13 @@ void ParseAct(const char *str, struct char_data *ch, struct char_data *to,
       }
 
       if (point && i) {
+        char* name_start = point;
         while ((*point = *(i++)) != 0) {
           ++point;
+        }
+        /* "di la signora" -> "della signora" (solo $n/$N/$p/$P). */
+        if(*strp == 'n' || *strp == 'N' || *strp == 'p' || *strp == 'P') {
+          point = fuse_di_leading_article(buf, name_start, point);
         }
 
         ++strp;
@@ -2368,6 +2440,45 @@ void ParseAct(const char *str, struct char_data *ch, struct char_data *to,
   *(++point) = '\r';
   *(++point) = '\0';
 }
+/* Come act(), ma la riga va a un solo destinatario 'to', con gli stessi
+ * controlli che act() fa per TO_CHAR/TO_VICT/TO_NOTVICT (descrittore, editor,
+ * visibilita', sonno). Serve a chi sceglie persona per persona chi riceve la
+ * riga (visualizzazione compatta del combattimento). */
+void act_to_one(const char *str, int hide_invisible, struct char_data *ch,
+                struct obj_data *obj, void *vict_obj, struct char_data *to,
+                const char *prefix) {
+  char buf[MAX_STRING_LENGTH];
+
+  if (ch == NULL || to == NULL || !str || !*str) {
+    return;
+  }
+  if (ch->in_room <= -1 || ch->in_room > 99999) {
+    return;
+  }
+  if (!to->desc || (to != ch && !room_msg_to(to->desc))) {
+    return;
+  }
+  if ((hide_invisible && !CAN_SEE(to, ch)) || GET_POS(to) <= POSITION_SLEEPING) {
+    return;
+  }
+  ParseAct(str, ch, to, vict_obj, obj, buf);
+  if (buf[1] == '$')
+    buf[7] = UPPER(buf[7]);
+  else if (buf[0] == '$')
+    buf[6] = UPPER(buf[6]);
+  else
+    CAP(buf);
+  if (prefix != nullptr && *prefix) {
+    /* prefisso dopo CAP(): la riga resta con la maiuscola dopo "(6x) " */
+    std::string line(prefix);
+    line += buf;
+    send_to_char(line.c_str(), to);
+  } else {
+    send_to_char(buf, to);
+  }
+  send_to_char("$c0007", to);
+}
+
 void act(const char *str, int hide_invisible, struct char_data *ch,
          struct obj_data *obj, void *vict_obj, int type) {
   struct char_data *to, *z;

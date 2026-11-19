@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include <string>
 /***************************  General include ************************************/
 #include "config.hpp"
@@ -15,6 +16,7 @@
 /***************************  Local    include ************************************/
 #include "editor_term.hpp"
 #include "comm.hpp"
+#include "create.obj.hpp"   /* oedit_snapshot_clear */
 #include "vt100c.hpp"
 #include "vt_screen.hpp"     /* vt_csi_pos */
 
@@ -149,6 +151,150 @@ bool IsEditorState(int connected) {
 	return connected == CON_OBJ_EDITING ||
 	       connected == CON_MOB_EDITING ||
 	       connected == CON_EDITING;
+}
+
+namespace {
+
+/* true se d->str punta a uno dei campi testo di victim. */
+[[nodiscard]] bool editor_str_in_char(const descriptor_data* d, char_data* victim) {
+	char_player_data& p = victim->player;
+	for(char** const field : {&p.name, &p.short_descr, &p.long_descr, &p.description,
+							   &p.title, &p.sounds, &p.distant_snds}) {
+		if(d->str == field) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/* true se d->str punta a un campo testo di obj o a una sua extra description. */
+[[nodiscard]] bool editor_str_in_obj(const descriptor_data* d, obj_data* obj) {
+	for(char** const field : {&obj->name, &obj->description, &obj->short_description,
+							   &obj->action_description}) {
+		if(d->str == field) {
+			return true;
+		}
+	}
+	for(extra_descr_data* ed = obj->ex_description;
+			ed != nullptr && ed->nMagicNumber == EXDESC_VALID_MAGIC; ed = ed->next) {
+		if(d->str == &ed->description) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/* true se d->str punta a un campo testo di rp: nome, descrizione, uscite
+ * (descrizione e keyword) o extra description. */
+[[nodiscard]] bool editor_str_in_room(const descriptor_data* d, room_data* rp) {
+	if(d->str == &rp->name || d->str == &rp->description) {
+		return true;
+	}
+	for(room_direction_data* const door : rp->dir_option) {
+		if(door != nullptr && (d->str == &door->general_description || d->str == &door->keyword)) {
+			return true;
+		}
+	}
+	for(extra_descr_data* ed = rp->ex_description; ed != nullptr; ed = ed->next) {
+		if(d->str == &ed->description || d->str == &ed->keyword) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/* Stacca d->str dal bersaglio che sta per essere liberato. Con il testo
+ * originale da parte (oedit/medit/redit) lo rimette nel campo, che poi
+ * libera free_char/free_obj; senza, il testo scritto resta nel campo e
+ * viene liberato con lui. In entrambi i casi d->str non punta piu' li'. */
+void editor_drop_text(descriptor_data* d) {
+	if(d->str_backup != nullptr) {
+		EditorAbortText(d);
+	}
+	d->str = nullptr;
+}
+
+/* Riporta in gioco chi era in medit/oedit/forgia su un bersaglio sparito. */
+void editor_leave_state(descriptor_data* d, const char* msg) {
+	char_data* const editor = d->character;
+	send_to_char(msg, editor);
+	if(d->connected == CON_OBJ_FORGING) {
+		descriptor_set_connected(d, CON_PLYNG);
+		return;
+	}
+	oedit_snapshot_clear(editor);
+	act("$n smette di $c0009p$c0010l$c0011a$c0012$c0013s$c0014m$c0009a$c0010r$c0011e$c0007 la materia.",
+		false, editor, nullptr, nullptr, TO_ROOM);
+	descriptor_set_connected(d, CON_PLYNG);
+	editor->specials.position = POSITION_STANDING;
+}
+
+} // namespace
+
+void EditorReleaseChar(struct char_data* victim) {
+	if(victim == nullptr) {
+		return;
+	}
+	for(descriptor_data* d = descriptor_list; d != nullptr; d = d->next) {
+		char_data* const editor = d->character;
+		if(d->str != nullptr && editor_str_in_char(d, victim)) {
+			editor_drop_text(d);
+			if(editor != nullptr && editor != victim && editor->specials.mobedit != victim) {
+				send_to_char("\n\rCio' su cui stavi scrivendo non esiste piu'.\n\r", editor);
+			}
+		}
+		if(editor == nullptr || editor == victim || editor->specials.mobedit != victim) {
+			continue;
+		}
+		editor->specials.mobedit = nullptr;
+		if(d->connected == CON_MOB_EDITING) {
+			editor_leave_state(d, "\n\rIl mob che stavi modificando non esiste piu'.\n\r");
+		}
+	}
+}
+
+void EditorReleaseObj(struct obj_data* obj) {
+	if(obj == nullptr) {
+		return;
+	}
+	for(descriptor_data* d = descriptor_list; d != nullptr; d = d->next) {
+		char_data* const editor = d->character;
+		if(d->str != nullptr && editor_str_in_obj(d, obj)) {
+			editor_drop_text(d);
+			if(editor != nullptr && editor->specials.objedit != obj) {
+				send_to_char("\n\rCio' su cui stavi scrivendo non esiste piu'.\n\r", editor);
+			}
+		}
+		if(editor == nullptr || editor->specials.objedit != obj) {
+			continue;
+		}
+		editor->specials.objedit = nullptr;
+		if(d->connected == CON_OBJ_EDITING || d->connected == CON_OBJ_FORGING) {
+			editor_leave_state(d, "\n\rL'oggetto che stavi modificando non esiste piu'.\n\r");
+		}
+	}
+}
+
+void EditorReleaseRoom(struct room_data* rp) {
+	if(rp == nullptr) {
+		return;
+	}
+	for(descriptor_data* d = descriptor_list; d != nullptr; d = d->next) {
+		char_data* const editor = d->character;
+		/* redit lavora sempre su real_roomp(editor->in_room): va chiuso finche'
+		 * il builder e' ancora nella stanza, prima che venga spostato altrove. */
+		const bool in_redit = editor != nullptr && d->connected == CON_EDITING &&
+							  editor->in_room == rp->number;
+		if(d->str != nullptr && editor_str_in_room(d, rp)) {
+			editor_drop_text(d);
+			if(editor != nullptr && !in_redit) {
+				send_to_char("\n\rCio' su cui stavi scrivendo non esiste piu'.\n\r", editor);
+			}
+		}
+		if(in_redit) {
+			editor_leave_state(d, "\n\rLa stanza che stavi modificando e' stata ricaricata o distrutta.\n\r");
+		}
+	}
 }
 
 } // namespace Alarmud

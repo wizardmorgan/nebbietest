@@ -159,7 +159,7 @@ struct PolyType DruidList[MAX_DRUID_POLY] = {
 
 void cast_resurrection(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_RESURRECTION)) {
 		return;
 	}
 
@@ -186,7 +186,7 @@ void cast_resurrection(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_major_track(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_MAJOR_TRACK)) {
 		return;
 	}
 
@@ -213,12 +213,9 @@ void cast_major_track(byte level, struct char_data* ch, const char* arg, int typ
 		spell_track(level, ch, tar_ch, NULL);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room)) {
-			if(tar_ch != ch) {
-				spell_track(level, ch, tar_ch, NULL);
-			}
-		}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_track(level, ch, v, nullptr);
+		});
 		break;
 	default:
 		mudlog(LOG_SYSERR, "Serious problem in 'track'");
@@ -228,7 +225,7 @@ void cast_major_track(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_minor_track(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_MINOR_TRACK)) {
 		return;
 	}
 
@@ -255,12 +252,9 @@ void cast_minor_track(byte level, struct char_data* ch, const char* arg, int typ
 		spell_track(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room)) {
-			if(tar_ch != ch) {
-				spell_track(level, ch, tar_ch, 0);
-			}
-		}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_track(level, ch, v, nullptr);
+		});
 		break;
 	default:
 		mudlog(LOG_SYSERR, "Serious problem in 'track'");
@@ -271,7 +265,7 @@ void cast_minor_track(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_mana(byte level, struct char_data* ch, const char* arg, int type,
 			   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_MANA)) {
 		return;
 	}
 
@@ -286,11 +280,9 @@ void cast_mana(byte level, struct char_data* ch, const char* arg, int type,
 		spell_mana(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_mana(level, ch, tar_ch, 0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_mana(level, ch, v, nullptr);
+		});
 		break;
 	case SPELL_TYPE_SPELL:
 		/* Castable shield moved to SPELL_MANASHIELD / cast_manashield. */
@@ -305,7 +297,7 @@ void cast_mana(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_manashield(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_MANASHIELD)) {
 		return;
 	}
 	(void)arg;
@@ -414,7 +406,7 @@ void cast_destino_hp(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_armor(byte level, struct char_data* ch, const char* arg, int type,
 				struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_ARMOR)) {
 		return;
 	}
 	switch(type) {
@@ -464,7 +456,7 @@ void cast_armor(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_mirror_images(byte level, struct char_data* ch, const char* arg, int type,
 						struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MIRROR_IMAGES)) {
 		return;
 	}
 	switch(type) {
@@ -506,7 +498,7 @@ void cast_mirror_images(byte level, struct char_data* ch, const char* arg, int t
 }
 void cast_stone_skin(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_STONE_SKIN)) {
 		return;
 	}
 	switch(type) {
@@ -549,7 +541,7 @@ void cast_stone_skin(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_astral_walk(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_ASTRAL_WALK)) {
 		return;
 	}
 	switch(type) {
@@ -570,7 +562,7 @@ void cast_astral_walk(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_teleport(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_TELEPORT)) {
 		return;
 	}
 	switch(type) {
@@ -591,12 +583,9 @@ void cast_teleport(byte level, struct char_data* ch, const char* arg, int type,
 		break;
 
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, false); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(tar_ch != ch && !area_spell_untouchable(ch, tar_ch)) {
-				spell_teleport(level, ch, tar_ch, 0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}.skip_untouchable(), [&](char_data* v) {
+			spell_teleport(level, ch, v, nullptr);
+		});
 		break;
 
 	default :
@@ -608,7 +597,7 @@ void cast_teleport(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_bless(byte level, struct char_data* ch, const char* arg, int type,
 				struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_BLESS)) {
 		return;
 	}
 
@@ -691,7 +680,7 @@ void cast_bless(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_infravision(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_INFRAVISION)) {
 		return;
 	}
 	switch(type) {
@@ -730,11 +719,11 @@ void cast_infravision(byte level, struct char_data* ch, const char* arg, int typ
 		spell_infravision(level,ch,tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch && !HasActiveInfravision(tar_ch)) {
-				spell_infravision(level,ch,tar_ch,0);
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			if(!HasActiveInfravision(v)) {
+				spell_infravision(level, ch, v, nullptr);
 			}
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in infravision!");
@@ -744,7 +733,7 @@ void cast_infravision(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_true_seeing(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_TRUE_SIGHT)) {
 		return;
 	}
 
@@ -784,12 +773,11 @@ void cast_true_seeing(byte level, struct char_data* ch, const char* arg, int typ
 		spell_true_seeing(level,ch,tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch)
-				if(!(IS_AFFECTED(tar_ch, AFF_TRUE_SIGHT))) {
-					spell_true_seeing(level,ch,tar_ch,0);
-				}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			if(!IS_AFFECTED(v, AFF_TRUE_SIGHT)) {
+				spell_true_seeing(level, ch, v, nullptr);
+			}
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in true_seeing!");
@@ -799,7 +787,7 @@ void cast_true_seeing(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_blindness(byte level, struct char_data* ch, const char* arg, int type,
 					struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_BLINDNESS)) {
 		return;
 	}
 	switch(type) {
@@ -841,13 +829,11 @@ void cast_blindness(byte level, struct char_data* ch, const char* arg, int type,
 		spell_blindness(level,ch,tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(ch, tar_ch) && !area_spell_untouchable(ch, tar_ch))
-				if(!(IS_AFFECTED(tar_ch, AFF_BLIND))) {
-					spell_blindness(level,ch,tar_ch,0);
-				}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable(), [&](char_data* v) {
+			if(!IS_AFFECTED(v, AFF_BLIND)) {
+				spell_blindness(level, ch, v, nullptr);
+			}
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in blindness!");
@@ -857,7 +843,7 @@ void cast_blindness(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_light(byte level, struct char_data* ch, const char* arg, int type,
 				struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_LIGHT)) {
 		return;
 	}
 	switch(type) {
@@ -884,7 +870,7 @@ void cast_light(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_cont_light(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_CONT_LIGHT)) {
 		return;
 	}
 	switch(type) {
@@ -911,7 +897,7 @@ void cast_cont_light(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_calm(byte level, struct char_data* ch, const char* arg, int type,
 			   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CALM)) {
 		return;
 	}
 	switch(type) {
@@ -937,10 +923,9 @@ void cast_calm(byte level, struct char_data* ch, const char* arg, int type,
 		spell_calm(level,ch,ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people);
-				tar_ch; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room)) {
-			spell_calm(level,ch,tar_ch,0);
-		}
+		staff_for_each(ch, StaffTargets::All, StaffOptions{}, [&](char_data* v) {
+			spell_calm(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in continual light!");
@@ -950,7 +935,7 @@ void cast_calm(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_web(byte level, struct char_data* ch, const char* arg, int type,
 			  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_WEB)) {
 		return;
 	}
 	switch(type) {
@@ -976,11 +961,9 @@ void cast_web(byte level, struct char_data* ch, const char* arg, int type,
 		spell_web(level,ch,ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people);
-				tar_ch; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(!in_group(ch, tar_ch)) {
-				spell_web(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}, [&](char_data* v) {
+			spell_web(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in web!");
@@ -990,7 +973,7 @@ void cast_web(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_clone(byte level, struct char_data* ch, const char* arg, int type,
 				struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_CLONE)) {
 		return;
 	}
 	send_to_char("Not *YET* implemented.", ch);
@@ -1000,7 +983,7 @@ void cast_clone(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_control_weather(byte level,struct char_data* ch, const char* arg, int type,
 						  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_CONTROL_WEATHER)) {
 		return;
 	}
 	char buffer[MAX_STRING_LENGTH];
@@ -1088,7 +1071,7 @@ void cast_control_weather(byte level,struct char_data* ch, const char* arg, int 
 
 void cast_create_food(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CREATE_FOOD)) {
 		return;
 	}
 
@@ -1114,7 +1097,7 @@ void cast_create_food(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_create_water(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_CREATE_WATER)) {
 		return;
 	}
 	switch(type) {
@@ -1136,7 +1119,7 @@ void cast_create_water(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_water_breath(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_WATER_BREATH)) {
 		return;
 	}
 
@@ -1171,7 +1154,7 @@ void cast_water_breath(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_flying(byte level, struct char_data* ch, const char* arg, int type,
 				 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_FLY)) {
 		return;
 	}
 
@@ -1207,7 +1190,7 @@ void cast_flying(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_fly_group(byte level, struct char_data* ch, const char* arg, int type,
 					struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_FLY_GROUP)) {
 		return;
 	}
 
@@ -1228,7 +1211,7 @@ void cast_fly_group(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_heroes_feast(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_H_FEAST)) {
 		return;
 	}
 
@@ -1248,7 +1231,7 @@ void cast_heroes_feast(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_cure_blind(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CURE_BLIND)) {
 		return;
 	}
 	switch(type) {
@@ -1259,11 +1242,9 @@ void cast_cure_blind(byte level, struct char_data* ch, const char* arg, int type
 		spell_cure_blind(level,ch,ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_cure_blind(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_cure_blind(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in cure blind!");
@@ -1275,7 +1256,7 @@ void cast_cure_blind(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_cure_critic(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CURE_CRITIC)) {
 		return;
 	}
 	switch(type) {
@@ -1295,11 +1276,9 @@ void cast_cure_critic(byte level, struct char_data* ch, const char* arg, int typ
 		spell_cure_critic(level,ch,tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_cure_critic(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_cure_critic(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in cure critic!");
@@ -1312,7 +1291,7 @@ void cast_cure_critic(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_cure_light(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CURE_LIGHT)) {
 		return;
 	}
 	switch(type) {
@@ -1329,11 +1308,9 @@ void cast_cure_light(byte level, struct char_data* ch, const char* arg, int type
 		spell_cure_light(level,ch,tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_cure_light(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_cure_light(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in cure light!");
@@ -1343,7 +1320,7 @@ void cast_cure_light(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_cure_serious(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CURE_SERIOUS)) {
 		return;
 	}
 	switch(type) {
@@ -1360,11 +1337,9 @@ void cast_cure_serious(byte level, struct char_data* ch, const char* arg, int ty
 		spell_cure_serious(level,ch,tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_cure_serious(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_cure_serious(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in cure serious!");
@@ -1374,7 +1349,7 @@ void cast_cure_serious(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_refresh(byte level, struct char_data* ch, const char* arg, int type,
 				  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_REFRESH)) {
 		return;
 	}
 	switch(type) {
@@ -1391,11 +1366,9 @@ void cast_refresh(byte level, struct char_data* ch, const char* arg, int type,
 		spell_refresh(level,ch,tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_refresh(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_refresh(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in refresh!");
@@ -1405,7 +1378,7 @@ void cast_refresh(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_second_wind(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SECOND_WIND)) {
 		return;
 	}
 	switch(type) {
@@ -1418,11 +1391,9 @@ void cast_second_wind(byte level, struct char_data* ch, const char* arg, int typ
 	case SPELL_TYPE_WAND:
 
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_second_wind(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_second_wind(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in second_wind!");
@@ -1432,7 +1403,7 @@ void cast_second_wind(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_shield(byte level, struct char_data* ch, const char* arg, int type,
 				 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SHIELD)) {
 		return;
 	}
 	switch(type) {
@@ -1449,11 +1420,9 @@ void cast_shield(byte level, struct char_data* ch, const char* arg, int type,
 		spell_shield(level,ch,tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_shield(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_shield(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in shield!");
@@ -1465,7 +1434,7 @@ void cast_shield(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_curse(byte level, struct char_data* ch, const char* arg, int type,
 				struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CURSE)) {
 		return;
 	}
 	switch(type) {
@@ -1503,12 +1472,9 @@ void cast_curse(byte level, struct char_data* ch, const char* arg, int type,
 		}
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, false); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(tar_ch != ch && !area_spell_untouchable(ch, tar_ch)) {
-				spell_curse(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}.skip_untouchable(), [&](char_data* v) {
+			spell_curse(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR,"Serious screw up in curse! Char = %s.",
@@ -1520,7 +1486,7 @@ void cast_curse(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_detect_evil(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_DETECT_EVIL)) {
 		return;
 	}
 	switch(type) {
@@ -1538,11 +1504,11 @@ void cast_detect_evil(byte level, struct char_data* ch, const char* arg, int typ
 		spell_detect_evil(level,ch,ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch && !HasActiveDetectEvil(tar_ch)) {
-				spell_detect_evil(level,ch,tar_ch,0);
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			if(!HasActiveDetectEvil(v)) {
+				spell_detect_evil(level, ch, v, nullptr);
 			}
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in detect evil!");
@@ -1553,7 +1519,7 @@ void cast_detect_evil(byte level, struct char_data* ch, const char* arg, int typ
 
 
 void cast_detect_invisibility(byte level, struct char_data* ch, const char* arg, int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_DETECT_INVISIBLE)) {
 		return;
 	}
 	switch(type) {
@@ -1571,12 +1537,12 @@ void cast_detect_invisibility(byte level, struct char_data* ch, const char* arg,
 		spell_detect_invisibility(level,ch,ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(in_group(ch,tar_ch))
-				if(!(IS_AFFECTED(tar_ch, AFF_DETECT_INVISIBLE))) {
-					spell_detect_invisibility(level,ch,tar_ch,0);
-				}
+		/* Bastone benefico: chi lo usa e il suo gruppo. */
+		staff_for_each(ch, StaffTargets::Group, StaffOptions{}, [&](char_data* v) {
+			if(!IS_AFFECTED(v, AFF_DETECT_INVISIBLE)) {
+				spell_detect_invisibility(level, ch, v, nullptr);
+			}
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in detect invisibility!");
@@ -1588,7 +1554,7 @@ void cast_detect_invisibility(byte level, struct char_data* ch, const char* arg,
 
 void cast_detect_magic(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_DETECT_MAGIC)) {
 		return;
 	}
 	switch(type) {
@@ -1606,12 +1572,11 @@ void cast_detect_magic(byte level, struct char_data* ch, const char* arg, int ty
 		spell_detect_magic(level,ch,ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch)
-				if(!(IS_AFFECTED(tar_ch, SPELL_DETECT_MAGIC))) {
-					spell_detect_magic(level,ch,tar_ch,0);
-				}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			if(!IS_AFFECTED(v, SPELL_DETECT_MAGIC)) {
+				spell_detect_magic(level, ch, v, nullptr);
+			}
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in detect magic!");
@@ -1623,7 +1588,7 @@ void cast_detect_magic(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_detect_poison(byte level, struct char_data* ch, const char* arg, int type,
 						struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_DETECT_POISON)) {
 		return;
 	}
 	switch(type) {
@@ -1653,7 +1618,7 @@ void cast_detect_poison(byte level, struct char_data* ch, const char* arg, int t
 
 void cast_dispel_evil(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_DISPEL_EVIL)) {
 		return;
 	}
 	switch(type) {
@@ -1679,11 +1644,9 @@ void cast_dispel_evil(byte level, struct char_data* ch, const char* arg, int typ
 		spell_dispel_evil(level, ch, tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(!in_group(tar_ch,ch)) {
-				spell_dispel_evil(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.group_victim_first(), [&](char_data* v) {
+			spell_dispel_evil(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in dispel evil!");
@@ -1693,7 +1656,7 @@ void cast_dispel_evil(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_dispel_good(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_DISPEL_GOOD)) {
 		return;
 	}
 	switch(type) {
@@ -1719,11 +1682,9 @@ void cast_dispel_good(byte level, struct char_data* ch, const char* arg, int typ
 		spell_dispel_good(level, ch, tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(!in_group(tar_ch,ch)) {
-				spell_dispel_good(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.group_victim_first(), [&](char_data* v) {
+			spell_dispel_good(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in dispel good!");
@@ -1733,7 +1694,7 @@ void cast_dispel_good(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_faerie_fire(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_FAERIE_FIRE)) {
 		return;
 	}
 	switch(type) {
@@ -1759,12 +1720,9 @@ void cast_faerie_fire(byte level, struct char_data* ch, const char* arg, int typ
 		spell_faerie_fire(level, ch, tar_ch,0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_faerie_fire(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			spell_faerie_fire(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in dispel good!");
@@ -1776,7 +1734,7 @@ void cast_faerie_fire(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_enchant_weapon(byte level, struct char_data* ch, const char* arg, int type,
 						 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_ENCHANT_WEAPON)) {
 		return;
 	}
 	switch(type) {
@@ -1800,7 +1758,7 @@ void cast_enchant_weapon(byte level, struct char_data* ch, const char* arg, int 
 
 void cast_heal(byte level, struct char_data* ch, const char* arg, int type,
 			   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_HEAL)) {
 		return;
 	}
 	switch(type) {
@@ -1811,11 +1769,9 @@ void cast_heal(byte level, struct char_data* ch, const char* arg, int type,
 		spell_heal(level, ch, ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_heal(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_heal(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in heal!");
@@ -1825,7 +1781,7 @@ void cast_heal(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_minor_heal(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_MINOR_HEAL)) {
 		return;
 	}
 	if(type == SPELL_TYPE_SPELL && !can_use_minor_heal(ch)) {
@@ -1847,11 +1803,9 @@ void cast_minor_heal(byte level, struct char_data* ch, const char* arg, int type
 		spell_minor_heal(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_minor_heal(level, ch, tar_ch, 0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_minor_heal(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in minor heal!");
@@ -1862,7 +1816,7 @@ void cast_minor_heal(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_minor_harm(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_MINOR_HARM)) {
 		return;
 	}
 	if(type == SPELL_TYPE_SPELL && !can_use_minor_harm(ch)) {
@@ -1884,12 +1838,9 @@ void cast_minor_harm(byte level, struct char_data* ch, const char* arg, int type
 		spell_minor_harm(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(ch, tar_ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_minor_harm(level, ch, tar_ch, 0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable(), [&](char_data* v) {
+			spell_minor_harm(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in minor harm!");
@@ -1900,7 +1851,7 @@ void cast_minor_harm(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_invisibility(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_INVISIBLE)) {
 		return;
 	}
 	switch(type) {
@@ -1956,12 +1907,11 @@ void cast_invisibility(byte level, struct char_data* ch, const char* arg, int ty
 		}
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch)
-				if(!(IS_AFFECTED(tar_ch, AFF_INVISIBLE))) {
-					spell_invisibility(level,ch,tar_ch,0);
-				}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			if(!IS_AFFECTED(v, AFF_INVISIBLE)) {
+				spell_invisibility(level, ch, v, nullptr);
+			}
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in invisibility!");
@@ -1974,7 +1924,7 @@ void cast_invisibility(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_locate_object(byte level, struct char_data* ch, const char* arg, int type,
 						struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_LOCATE_OBJECT)) {
 		return;
 	}
 	switch(type) {
@@ -1989,7 +1939,7 @@ void cast_locate_object(byte level, struct char_data* ch, const char* arg, int t
 
 
 void cast_poison(byte level, struct char_data* ch, const char* arg, int type,struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_POISON)) {
 		return;
 	}
 	switch(type) {
@@ -2001,13 +1951,9 @@ void cast_poison(byte level, struct char_data* ch, const char* arg, int type,str
 		spell_poison(level, ch, ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, false); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room) {
-			if(tar_ch != ch && !area_spell_untouchable(ch, tar_ch)) {
-				spell_poison(level,ch,tar_ch,0);
-			}
-		}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}.skip_untouchable(), [&](char_data* v) {
+			spell_poison(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in poison!");
@@ -2018,7 +1964,7 @@ void cast_poison(byte level, struct char_data* ch, const char* arg, int type,str
 
 void cast_protection_from_evil(byte level, struct char_data* ch, const char* arg, int type,
 							   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROTECT_FROM_EVIL)) {
 		return;
 	}
 	switch(type) {
@@ -2045,11 +1991,9 @@ void cast_protection_from_evil(byte level, struct char_data* ch, const char* arg
 		spell_protection_from_evil(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_protection_from_evil(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_protection_from_evil(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in protection from evil!");
@@ -2059,7 +2003,7 @@ void cast_protection_from_evil(byte level, struct char_data* ch, const char* arg
 
 void cast_protection_from_evil_group(byte level, struct char_data* ch, const char* arg, int type,
 									 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_FROM_EVIL_GROUP)) {
 		return;
 	}
 	switch(type) {
@@ -2079,11 +2023,9 @@ void cast_protection_from_evil_group(byte level, struct char_data* ch, const cha
 		spell_protection_from_evil_group(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_protection_from_evil_group(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_protection_from_evil_group(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in protection from evil!");
@@ -2094,7 +2036,7 @@ void cast_protection_from_evil_group(byte level, struct char_data* ch, const cha
 
 void cast_remove_curse(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_REMOVE_CURSE)) {
 		return;
 	}
 	switch(type) {
@@ -2115,11 +2057,9 @@ void cast_remove_curse(byte level, struct char_data* ch, const char* arg, int ty
 		spell_remove_curse(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_remove_curse(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_remove_curse(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in remove curse!");
@@ -2131,7 +2071,7 @@ void cast_remove_curse(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_remove_poison(byte level, struct char_data* ch, const char* arg, int type,
 						struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_REMOVE_POISON)) {
 		return;
 	}
 	switch(type) {
@@ -2142,11 +2082,9 @@ void cast_remove_poison(byte level, struct char_data* ch, const char* arg, int t
 		spell_remove_poison(level, ch, ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_remove_poison(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_remove_poison(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in remove poison!");
@@ -2156,7 +2094,7 @@ void cast_remove_poison(byte level, struct char_data* ch, const char* arg, int t
 
 
 void cast_remove_paralysis(byte level, struct char_data* ch, const char* arg, int type,  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_REMOVE_PARALYSIS)) {
 		return;
 	}
 	switch(type) {
@@ -2173,11 +2111,9 @@ void cast_remove_paralysis(byte level, struct char_data* ch, const char* arg, in
 		spell_remove_paralysis(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_remove_paralysis(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_remove_paralysis(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in remove paralysis!");
@@ -2190,7 +2126,7 @@ void cast_remove_paralysis(byte level, struct char_data* ch, const char* arg, in
 
 void cast_sanctuary(byte level, struct char_data* ch, const char* arg, int type,
 					struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SANCTUARY)) {
 		return;
 	}
 	switch(type) {
@@ -2212,11 +2148,9 @@ void cast_sanctuary(byte level, struct char_data* ch, const char* arg, int type,
 		spell_sanctuary(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_sanctuary(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_sanctuary(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in sanctuary!");
@@ -2226,7 +2160,7 @@ void cast_sanctuary(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_fireshield(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_FIRESHIELD)) {
 		return;
 	}
 	switch(type) {
@@ -2248,11 +2182,9 @@ void cast_fireshield(byte level, struct char_data* ch, const char* arg, int type
 		spell_fireshield(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_fireshield(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_fireshield(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in fireshield!");
@@ -2263,7 +2195,7 @@ void cast_fireshield(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_sleep(byte level, struct char_data* ch, const char* arg, int type,
 				struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SLEEP)) {
 		return;
 	}
 	switch(type) {
@@ -2289,14 +2221,9 @@ void cast_sleep(byte level, struct char_data* ch, const char* arg, int type,
 		spell_sleep(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, false); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people;
-				tar_ch; tar_ch = tar_ch->next_in_room) {
-			if(tar_ch != ch && !area_spell_untouchable(ch, tar_ch)) {
-				spell_sleep(level, ch, tar_ch, 0);
-			}
-		}
-
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}.skip_untouchable(), [&](char_data* v) {
+			spell_sleep(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in sleep!");
@@ -2307,7 +2234,7 @@ void cast_sleep(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_strength(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_STRENGTH)) {
 		return;
 	}
 	switch(type) {
@@ -2328,11 +2255,9 @@ void cast_strength(byte level, struct char_data* ch, const char* arg, int type,
 		spell_strength(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(tar_ch != ch) {
-				spell_strength(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_strength(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in strength!");
@@ -2344,7 +2269,7 @@ void cast_strength(byte level, struct char_data* ch, const char* arg, int type,
 void cast_ventriloquate(byte level, struct char_data* ch, const char* arg,
 						int type, struct char_data* tar_ch,
 						struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_VENTRILOQUATE)) {
 		return;
 	}
 	struct char_data* tmp_ch;
@@ -2399,10 +2324,9 @@ void cast_ventriloquate(byte level, struct char_data* ch, const char* arg,
 
 void cast_word_of_recall(byte level, struct char_data* ch, const char* arg,int type,
 						 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_WORD_OF_RECALL)) {
 		return;
 	}
-	struct char_data* tmp_ch;
 	switch(type) {
 	case SPELL_TYPE_SPELL:
 		spell_word_of_recall(level, ch, ch, 0);
@@ -2424,12 +2348,9 @@ void cast_word_of_recall(byte level, struct char_data* ch, const char* arg,int t
 		spell_word_of_recall(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = real_roomp(ch->in_room)->people ; tar_ch ; tar_ch = tmp_ch) {
-			tmp_ch = tar_ch->next_in_room;
-			if(tar_ch != ch && !anti_magic_shields(ch, tar_ch)) {
-				spell_word_of_recall(level,ch,tar_ch,0);
-			}
-		}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}, [&](char_data* v) {
+			spell_word_of_recall(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in word of recall!");
@@ -2441,7 +2362,7 @@ void cast_word_of_recall(byte level, struct char_data* ch, const char* arg,int t
 
 void cast_summon(byte level, struct char_data* ch, const char* arg, int type,
 				 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SUMMON)) {
 		return;
 	}
 	switch(type) {
@@ -2459,7 +2380,7 @@ void cast_summon(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_charm_person(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CHARM_PERSON)) {
 		return;
 	}
 	switch(type) {
@@ -2473,12 +2394,9 @@ void cast_charm_person(byte level, struct char_data* ch, const char* arg, int ty
 		spell_charm_person(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_charm_person(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			spell_charm_person(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in charm person!");
@@ -2488,7 +2406,7 @@ void cast_charm_person(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_charm_monster(byte level, struct char_data* ch, const char* arg, int type,
 						struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CHARM_MONSTER)) {
 		return;
 	}
 	switch(type) {
@@ -2502,12 +2420,9 @@ void cast_charm_monster(byte level, struct char_data* ch, const char* arg, int t
 		spell_charm_monster(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_charm_monster(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			spell_charm_monster(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in charm monster!");
@@ -2519,7 +2434,7 @@ void cast_charm_monster(byte level, struct char_data* ch, const char* arg, int t
 
 void cast_sense_life(byte level, struct char_data* ch, const char* /*arg*/, int type,
 					 struct char_data* /*tar_ch*/, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_SENSE_LIFE)) {
 		return;
 	}
 	if(ch == nullptr) {
@@ -2550,7 +2465,7 @@ void cast_sense_life(byte level, struct char_data* ch, const char* /*arg*/, int 
 
 void cast_identify(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_IDENTIFY)) {
 		return;
 	}
 	switch(type) {
@@ -2587,7 +2502,7 @@ struct pbreath breath_potions[] = {
 
 void cast_dragon_breath(byte level, struct char_data* ch, const char* arg, int type,
 						struct char_data* tar_ch, struct obj_data* potion) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_DRAGON_BREATH)) {
 		return;
 	}
 	struct pbreath*        scan;
@@ -2700,7 +2615,7 @@ void cast_lightning_breath(byte level, struct char_data* ch, const char* arg, in
 
 void cast_knock(byte level, struct char_data* ch, const char* arg, int type,
 				struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_KNOCK)) {
 		return;
 	}
 	int door;
@@ -2765,7 +2680,7 @@ void cast_knock(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_know_alignment(byte level, struct char_data* ch, const char* arg,
 						 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_KNOW_ALIGNMENT)) {
 		return;
 	}
 	switch(type) {
@@ -2789,7 +2704,7 @@ void cast_know_alignment(byte level, struct char_data* ch, const char* arg,
 
 void cast_weakness(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_WEAKNESS)) {
 		return;
 	}
 	switch(type) {
@@ -2810,12 +2725,9 @@ void cast_weakness(byte level, struct char_data* ch, const char* arg, int type,
 		spell_weakness(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch, ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_weakness(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			spell_weakness(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in weakness!");
@@ -2825,7 +2737,7 @@ void cast_weakness(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_dispel_magic(byte level, struct char_data* ch, const char* arg,
 					   int type,struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_DISPEL_MAGIC)) {
 		return;
 	}
 	switch(type) {
@@ -2848,12 +2760,9 @@ void cast_dispel_magic(byte level, struct char_data* ch, const char* arg,
 		break;
 
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, false); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(tar_ch != ch && !area_spell_untouchable(ch, tar_ch)) {
-				spell_dispel_magic(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}.skip_untouchable(), [&](char_data* v) {
+			spell_dispel_magic(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in dispel magic");
@@ -2864,7 +2773,7 @@ void cast_dispel_magic(byte level, struct char_data* ch, const char* arg,
 
 void cast_animate_dead(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_ANIMATE_DEAD)) {
 		return;
 	}
 
@@ -2914,7 +2823,7 @@ void cast_animate_dead(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_succor(byte level, struct char_data* ch, const char* arg, int type,
 				 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_SUCCOR)) {
 		return;
 	}
 
@@ -2928,7 +2837,7 @@ void cast_succor(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_paralyze(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PARALYSIS)) {
 		return;
 	}
 
@@ -2955,12 +2864,9 @@ void cast_paralyze(byte level, struct char_data* ch, const char* arg, int type,
 		spell_paralyze(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, false); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(tar_ch != ch && !area_spell_untouchable(ch, tar_ch)) {
-				spell_paralyze(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Others, StaffOptions{}.skip_untouchable(), [&](char_data* v) {
+			spell_paralyze(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in paralyze");
@@ -2970,7 +2876,7 @@ void cast_paralyze(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_fear(byte level, struct char_data* ch, const char* arg, int type,
 			   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_FEAR)) {
 		return;
 	}
 
@@ -3000,12 +2906,9 @@ void cast_fear(byte level, struct char_data* ch, const char* arg, int type,
 		spell_fear(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_fear(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			spell_fear(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in fear");
@@ -3015,7 +2918,7 @@ void cast_fear(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_turn(byte level, struct char_data* ch, const char* arg, int type,
 			   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_TURN)) {
 		return;
 	}
 
@@ -3042,11 +2945,9 @@ void cast_turn(byte level, struct char_data* ch, const char* arg, int type,
 		spell_turn(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(!in_group(tar_ch,ch)) {
-				spell_turn(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.group_victim_first(), [&](char_data* v) {
+			spell_turn(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in turn");
@@ -3056,7 +2957,7 @@ void cast_turn(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_faerie_fog(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* victim, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_FAERIE_FOG)) {
 		return;
 	}
 	switch(type) {
@@ -3074,7 +2975,7 @@ void cast_faerie_fog(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_poly_self(byte level, struct char_data* ch, const char* arg, int type,
 					struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_POLY_SELF)) {
 		return;
 	}
 	char buffer[40];
@@ -3154,7 +3055,7 @@ void cast_poly_self(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_minor_creation(byte level, struct char_data* ch, const char* arg, int type,
 						 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MINOR_CREATE)) {
 		return;
 	}
 	char buffer[40];
@@ -3216,7 +3117,7 @@ void cast_minor_creation(byte level, struct char_data* ch, const char* arg, int 
 
 void cast_conjure_elemental(byte level, struct char_data* ch, const char* arg, int type,
 							struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_CONJURE_ELEMENTAL)) {
 		return;
 	}
 	char buffer[40];
@@ -3302,7 +3203,7 @@ void cast_conjure_elemental(byte level, struct char_data* ch, const char* arg, i
 
 void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type,
 					 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_CACAODEMON)) {
 		return;
 	}
 	char buffer[40];
@@ -3416,7 +3317,7 @@ void cast_cacaodemon(byte level, struct char_data* ch, const char* arg, int type
 
 void cast_mon_sum1(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MON_SUM_1)) {
 		return;
 	}
 	if(NoSummon(ch)) {
@@ -3438,7 +3339,7 @@ void cast_mon_sum1(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_mon_sum2(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MON_SUM_2)) {
 		return;
 	}
 	if(NoSummon(ch)) {
@@ -3460,7 +3361,7 @@ void cast_mon_sum2(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_mon_sum3(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MON_SUM_3)) {
 		return;
 	}
 	if(NoSummon(ch)) {
@@ -3482,7 +3383,7 @@ void cast_mon_sum3(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_mon_sum4(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MON_SUM_4)) {
 		return;
 	}
 	if(NoSummon(ch)) {
@@ -3504,7 +3405,7 @@ void cast_mon_sum4(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_mon_sum5(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MON_SUM_5)) {
 		return;
 	}
 	if(NoSummon(ch)) {
@@ -3526,7 +3427,7 @@ void cast_mon_sum5(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_mon_sum6(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MON_SUM_6)) {
 		return;
 	}
 	if(NoSummon(ch)) {
@@ -3548,7 +3449,7 @@ void cast_mon_sum6(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_mon_sum7(byte level, struct char_data* ch, const char* arg, int type,
 				   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MON_SUM_7)) {
 		return;
 	}
 
@@ -3572,7 +3473,7 @@ void cast_mon_sum7(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_tree_travel(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_TREE_TRAVEL)) {
 		return;
 	}
 
@@ -3591,7 +3492,7 @@ void cast_tree_travel(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_speak_with_plants(byte level, struct char_data* ch, const char* arg,
 							int type,  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_SPEAK_WITH_PLANT)) {
 		return;
 	}
 
@@ -3613,7 +3514,7 @@ void cast_speak_with_plants(byte level, struct char_data* ch, const char* arg,
 
 void cast_transport_via_plant(byte level, struct char_data* ch, const char* arg,
 							  int type,  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_TRANSPORT_VIA_PLANT)) {
 		return;
 	}
 	if(!tar_obj) {
@@ -3633,7 +3534,7 @@ void cast_transport_via_plant(byte level, struct char_data* ch, const char* arg,
 
 void cast_haste(byte level, struct char_data* ch, const char* arg,
 				int type,  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_HASTE)) {
 		return;
 	}
 
@@ -3660,12 +3561,10 @@ void cast_haste(byte level, struct char_data* ch, const char* arg,
 		spell_haste(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_haste(level,ch,tar_ch,0);
-			}
+		/* Bastone benefico: chi lo usa e il suo gruppo. */
+		staff_for_each(ch, StaffTargets::Group, StaffOptions{}, [&](char_data* v) {
+			spell_haste(level, ch, v, nullptr);
+		});
 		break;
 	case SPELL_TYPE_POTION:
 		spell_haste(level, ch, tar_ch, 0);
@@ -3679,7 +3578,7 @@ void cast_haste(byte level, struct char_data* ch, const char* arg,
 
 void cast_slow(byte level, struct char_data* ch, const char* arg,
 			   int type,  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SLOW)) {
 		return;
 	}
 	switch(type) {
@@ -3705,12 +3604,9 @@ void cast_slow(byte level, struct char_data* ch, const char* arg,
 		spell_slow(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_slow(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			spell_slow(level, ch, v, nullptr);
+		});
 		break;
 	case SPELL_TYPE_POTION:
 		spell_slow(level, ch, tar_ch, 0);
@@ -3723,7 +3619,7 @@ void cast_slow(byte level, struct char_data* ch, const char* arg,
 
 void cast_reincarnate(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_REINCARNATE)) {
 		return;
 	}
 
@@ -3750,7 +3646,7 @@ void cast_reincarnate(byte level, struct char_data* ch, const char* arg, int typ
 
 void cast_changestaff(byte level, struct char_data* ch, const char* arg,
 					  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_CHANGESTAFF)) {
 		return;
 	}
 	char buffer[40];
@@ -3783,7 +3679,7 @@ void cast_changestaff(byte level, struct char_data* ch, const char* arg,
 
 void cast_pword_kill(byte level, struct char_data* ch, const char* arg,
 					 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PWORD_KILL)) {
 		return;
 	}
 
@@ -3804,7 +3700,7 @@ void cast_pword_kill(byte level, struct char_data* ch, const char* arg,
 
 void cast_pword_blind(byte level, struct char_data* ch, const char* arg,
 					  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PWORD_BLIND)) {
 		return;
 	}
 
@@ -3826,7 +3722,7 @@ void cast_pword_blind(byte level, struct char_data* ch, const char* arg,
 
 void cast_chain_lightn(byte level, struct char_data* ch, const char* arg,
 					   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CHAIN_LIGHTNING)) {
 		return;
 	}
 
@@ -3849,7 +3745,7 @@ void cast_chain_lightn(byte level, struct char_data* ch, const char* arg,
 
 void cast_scare(byte level, struct char_data* ch, const char* arg,
 				int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SCARE)) {
 		return;
 	}
 
@@ -3872,7 +3768,7 @@ void cast_scare(byte level, struct char_data* ch, const char* arg,
 
 void cast_familiar(byte level, struct char_data* ch, const char* arg,
 				   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_FAMILIAR)) {
 		return;
 	}
 	char buf[128];
@@ -3900,7 +3796,7 @@ void cast_familiar(byte level, struct char_data* ch, const char* arg,
 
 void cast_aid(byte level, struct char_data* ch, const char* arg,
 			  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_AID)) {
 		return;
 	}
 	if(!tar_ch) {
@@ -3923,7 +3819,7 @@ void cast_aid(byte level, struct char_data* ch, const char* arg,
 
 void cast_holyword(byte level, struct char_data* ch, const char* arg,
 				   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_HOLY_WORD)) {
 		return;
 	}
 
@@ -3939,7 +3835,7 @@ void cast_holyword(byte level, struct char_data* ch, const char* arg,
 }
 void cast_unholyword(byte level, struct char_data* ch, const char* arg,
 					 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_UNHOLY_WORD)) {
 		return;
 	}
 
@@ -3957,7 +3853,7 @@ void cast_unholyword(byte level, struct char_data* ch, const char* arg,
 
 void cast_golem(byte level, struct char_data* ch, const char* arg,
 				int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_GOLEM)) {
 		return;
 	}
 
@@ -3979,7 +3875,7 @@ void cast_golem(byte level, struct char_data* ch, const char* arg,
 
 void cast_command(byte level, struct char_data* ch, const char* arg,
 				  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_COMMAND)) {
 		return;
 	}
 	const char* p;
@@ -4033,7 +3929,7 @@ void cast_command(byte level, struct char_data* ch, const char* arg,
 void cast_change_form(byte level, struct char_data* ch, const char* arg,
 					  int type, struct char_data* tar_ch,
 					  struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_CHANGE_FORM)) {
 		return;
 	}
 	char buffer[40];
@@ -4156,7 +4052,7 @@ void cast_change_form(byte level, struct char_data* ch, const char* arg,
 
 void cast_shillelagh(byte level, struct char_data* ch, const char* arg,
 					 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_SHILLELAGH)) {
 		return;
 	}
 
@@ -4174,7 +4070,7 @@ void cast_shillelagh(byte level, struct char_data* ch, const char* arg,
 void cast_goodberry(byte level, struct char_data* ch, const char* arg,
 					int type, struct char_data* tar_ch,
 					struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_GOODBERRY)) {
 		return;
 	}
 
@@ -4193,7 +4089,7 @@ void cast_goodberry(byte level, struct char_data* ch, const char* arg,
 void cast_elemental_blade(byte level, struct char_data* ch, const char* arg,
 						  int type, struct char_data* tar_ch,
 						  struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_ELEMENTAL_BLADE)) {
 		return;
 	}
 	(void)tar_ch;
@@ -4325,7 +4221,7 @@ void cast_elemental_blade(byte level, struct char_data* ch, const char* arg,
 
 void cast_animal_growth(byte level, struct char_data* ch, const char* arg,
 						int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_ANIMAL_GROWTH)) {
 		return;
 	}
 
@@ -4343,7 +4239,7 @@ void cast_animal_growth(byte level, struct char_data* ch, const char* arg,
 
 void cast_insect_growth(byte level, struct char_data* ch, const char* arg,
 						int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_INSECT_GROWTH)) {
 		return;
 	}
 
@@ -4364,7 +4260,7 @@ void cast_insect_growth(byte level, struct char_data* ch, const char* arg,
 
 void cast_creeping_death(byte level, struct char_data* ch, const char* arg,
 						 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_CREEPING_DEATH)) {
 		return;
 	}
 	const char* p;
@@ -4403,7 +4299,7 @@ void cast_creeping_death(byte level, struct char_data* ch, const char* arg,
 
 void cast_commune(byte level, struct char_data* ch, const char* arg,
 				  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_COMMUNE)) {
 		return;
 	}
 	switch(type) {
@@ -4420,7 +4316,7 @@ void cast_commune(byte level, struct char_data* ch, const char* arg,
 
 void cast_feeblemind(byte level, struct char_data* ch, const char* arg,
 					 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_FEEBLEMIND)) {
 		return;
 	}
 	switch(type) {
@@ -4444,7 +4340,7 @@ void cast_feeblemind(byte level, struct char_data* ch, const char* arg,
 
 void cast_animal_summon_1(byte level, struct char_data* ch, const char* arg,
 						  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_ANIMAL_SUM_1)) {
 		return;
 	}
 	switch(type) {
@@ -4463,7 +4359,7 @@ void cast_animal_summon_1(byte level, struct char_data* ch, const char* arg,
 
 void cast_animal_summon_2(byte level, struct char_data* ch, const char* arg,
 						  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_ANIMAL_SUM_2)) {
 		return;
 	}
 	switch(type) {
@@ -4482,7 +4378,7 @@ void cast_animal_summon_2(byte level, struct char_data* ch, const char* arg,
 
 void cast_animal_summon_3(byte level, struct char_data* ch, const char* arg,
 						  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_ANIMAL_SUM_3)) {
 		return;
 	}
 	switch(type) {
@@ -4501,7 +4397,7 @@ void cast_animal_summon_3(byte level, struct char_data* ch, const char* arg,
 
 void cast_fire_servant(byte level, struct char_data* ch, const char* arg,
 					   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_FIRE_SERVANT)) {
 		return;
 	}
 	switch(type) {
@@ -4519,7 +4415,7 @@ void cast_fire_servant(byte level, struct char_data* ch, const char* arg,
 
 void cast_earth_servant(byte level, struct char_data* ch, const char* arg,
 						int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_EARTH_SERVANT)) {
 		return;
 	}
 	switch(type) {
@@ -4537,7 +4433,7 @@ void cast_earth_servant(byte level, struct char_data* ch, const char* arg,
 
 void cast_water_servant(byte level, struct char_data* ch, const char* arg,
 						int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_WATER_SERVANT)) {
 		return;
 	}
 	switch(type) {
@@ -4555,7 +4451,7 @@ void cast_water_servant(byte level, struct char_data* ch, const char* arg,
 
 void cast_wind_servant(byte level, struct char_data* ch, const char* arg,
 					   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_WIND_SERVANT)) {
 		return;
 	}
 	switch(type) {
@@ -4574,7 +4470,7 @@ void cast_wind_servant(byte level, struct char_data* ch, const char* arg,
 
 void cast_veggie_growth(byte level, struct char_data* ch, const char* arg,
 						int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_VEGGIE_GROWTH)) {
 		return;
 	}
 
@@ -4593,7 +4489,7 @@ void cast_veggie_growth(byte level, struct char_data* ch, const char* arg,
 
 void cast_charm_veggie(byte level, struct char_data* ch, const char* arg, int type,
 					   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_CHARM_VEGGIE)) {
 		return;
 	}
 	switch(type) {
@@ -4607,12 +4503,9 @@ void cast_charm_veggie(byte level, struct char_data* ch, const char* arg, int ty
 		spell_charm_veggie(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_charm_veggie(level,ch,tar_ch,0);
-			}
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			spell_charm_veggie(level, ch, v, nullptr);
+		});
 		break;
 	default :
 		mudlog(LOG_SYSERR, "Serious screw-up in charm veggie!");
@@ -4622,7 +4515,7 @@ void cast_charm_veggie(byte level, struct char_data* ch, const char* arg, int ty
 
 void cast_tree(byte level, struct char_data* ch, const char* arg, int type,
 			   struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_TREE)) {
 		return;
 	}
 
@@ -4651,7 +4544,7 @@ void cast_tree(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_animate_rock(byte level, struct char_data* ch, const char* arg,
 					   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_ANIMATE_ROCK)) {
 		return;
 	}
 
@@ -4673,7 +4566,7 @@ void cast_animate_rock(byte level, struct char_data* ch, const char* arg,
 
 void cast_travelling(byte level, struct char_data* ch, const char* arg,
 					 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_TRAVELLING)) {
 		return;
 	}
 
@@ -4693,7 +4586,7 @@ void cast_travelling(byte level, struct char_data* ch, const char* arg,
 
 void cast_animal_friendship(byte level, struct char_data* ch, const char* arg,
 							int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_ANIMAL_FRIENDSHIP)) {
 		return;
 	}
 
@@ -4711,7 +4604,7 @@ void cast_animal_friendship(byte level, struct char_data* ch, const char* arg,
 
 void cast_invis_to_animals(byte level, struct char_data* ch, const char* arg,
 						   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_INVIS_TO_ANIMALS)) {
 		return;
 	}
 
@@ -4729,7 +4622,7 @@ void cast_invis_to_animals(byte level, struct char_data* ch, const char* arg,
 
 void cast_slow_poison(byte level, struct char_data* ch, const char* arg,
 					  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SLOW_POISON)) {
 		return;
 	}
 
@@ -4751,7 +4644,7 @@ void cast_slow_poison(byte level, struct char_data* ch, const char* arg,
 
 void cast_entangle(byte level, struct char_data* ch, const char* arg,
 				   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_ENTANGLE)) {
 		return;
 	}
 
@@ -4765,12 +4658,11 @@ void cast_entangle(byte level, struct char_data* ch, const char* arg,
 		spell_entangle(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !IS_IMMORTAL(tar_ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_entangle(level,ch,tar_ch,0);
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			if(!IS_IMMORTAL(v)) {
+				spell_entangle(level, ch, v, nullptr);
 			}
+		});
 		break;
 	default:
 		mudlog(LOG_SYSERR, "serious screw-up in entangle.");
@@ -4780,7 +4672,7 @@ void cast_entangle(byte level, struct char_data* ch, const char* arg,
 
 void cast_snare(byte level, struct char_data* ch, const char* arg,
 				int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SNARE)) {
 		return;
 	}
 
@@ -4794,12 +4686,11 @@ void cast_snare(byte level, struct char_data* ch, const char* arg,
 		spell_snare(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !IS_IMMORTAL(tar_ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_snare(level,ch,tar_ch,0);
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			if(!IS_IMMORTAL(v)) {
+				spell_snare(level, ch, v, nullptr);
 			}
+		});
 		break;
 	default:
 		mudlog(LOG_SYSERR, "serious screw-up in snare.");
@@ -4809,7 +4700,7 @@ void cast_snare(byte level, struct char_data* ch, const char* arg,
 
 void cast_gust_of_wind(byte level, struct char_data* ch, const char* arg,
 					   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_GUST_OF_WIND)) {
 		return;
 	}
 
@@ -4830,7 +4721,7 @@ void cast_gust_of_wind(byte level, struct char_data* ch, const char* arg,
 
 void cast_barkskin(byte level, struct char_data* ch, const char* arg,
 				   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_BARKSKIN)) {
 		return;
 	}
 
@@ -4844,11 +4735,10 @@ void cast_barkskin(byte level, struct char_data* ch, const char* arg,
 		spell_barkskin(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		for(tar_ch = skip_anti_magic(ch, real_roomp(ch->in_room)->people) ;
-				tar_ch ; tar_ch = skip_anti_magic(ch, tar_ch->next_in_room))
-			if(!in_group(tar_ch,ch)) {
-				spell_barkskin(level,ch,tar_ch,0);
-			}
+		/* Bastone benefico: chi lo usa e il suo gruppo. */
+		staff_for_each(ch, StaffTargets::Group, StaffOptions{}, [&](char_data* v) {
+			spell_barkskin(level, ch, v, nullptr);
+		});
 		break;
 	default:
 		mudlog(LOG_SYSERR, "serious screw-up in barkskin.");
@@ -4859,7 +4749,7 @@ void cast_barkskin(byte level, struct char_data* ch, const char* arg,
 
 void cast_warp_weapon(byte level, struct char_data* ch, const char* arg,
 					  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_WARP_WEAPON)) {
 		return;
 	}
 
@@ -4882,7 +4772,7 @@ void cast_warp_weapon(byte level, struct char_data* ch, const char* arg,
 
 void cast_heat_stuff(byte level, struct char_data* ch, const char* arg,
 					 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_HEAT_STUFF)) {
 		return;
 	}
 
@@ -4903,7 +4793,7 @@ void cast_heat_stuff(byte level, struct char_data* ch, const char* arg,
 
 void cast_sunray(byte level, struct char_data* ch, const char* arg,
 				 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SUNRAY)) {
 		return;
 	}
 
@@ -4924,7 +4814,7 @@ void cast_sunray(byte level, struct char_data* ch, const char* arg,
 
 void cast_find_traps(byte level, struct char_data* ch, const char* arg,
 					 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_FIND_TRAPS)) {
 		return;
 	}
 
@@ -4946,7 +4836,7 @@ void cast_find_traps(byte level, struct char_data* ch, const char* arg,
 
 void cast_firestorm(byte level, struct char_data* ch, const char* arg,
 					int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_FIRESTORM)) {
 		return;
 	}
 
@@ -4965,7 +4855,7 @@ void cast_firestorm(byte level, struct char_data* ch, const char* arg,
 
 void cast_dust_devil(byte level, struct char_data* ch, const char* arg,
 					 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_DUST_DEVIL)) {
 		return;
 	}
 
@@ -4983,7 +4873,7 @@ void cast_dust_devil(byte level, struct char_data* ch, const char* arg,
 
 void cast_know_monster(byte level, struct char_data* ch, const char* arg,
 					   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_KNOW_MONSTER)) {
 		return;
 	}
 
@@ -5005,7 +4895,7 @@ void cast_know_monster(byte level, struct char_data* ch, const char* arg,
 
 void cast_silence(byte level, struct char_data* ch, const char* arg,
 				  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_SILENCE)) {
 		return;
 	}
 
@@ -5022,12 +4912,11 @@ void cast_silence(byte level, struct char_data* ch, const char* arg,
 		spell_silence(level, ch, tar_ch, 0);
 		break;
 	case SPELL_TYPE_STAFF:
-		staff_skip_notice(ch, true); /* Blocco minimo: intoccabili saltati dal bastone */
-		for(tar_ch = real_roomp(ch->in_room)->people ;
-				tar_ch ; tar_ch = tar_ch->next_in_room)
-			if(!in_group(tar_ch,ch) && !IS_IMMORTAL(tar_ch) && !area_spell_untouchable(ch, tar_ch)) {
-				spell_silence(level,ch,tar_ch,0);
+		staff_for_each(ch, StaffTargets::Hostile, StaffOptions{}.skip_untouchable().group_victim_first(), [&](char_data* v) {
+			if(!IS_IMMORTAL(v)) {
+				spell_silence(level, ch, v, nullptr);
 			}
+		});
 		break;
 	default:
 		mudlog(LOG_SYSERR, "serious screw-up in silence.");
@@ -5037,7 +4926,7 @@ void cast_silence(byte level, struct char_data* ch, const char* arg,
 
 void cast_dragon_ride(byte level, struct char_data* ch, const char* arg,
 					  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_DRAGON_RIDE)) {
 		return;
 	}
 
@@ -5058,7 +4947,7 @@ void cast_dragon_ride(byte level, struct char_data* ch, const char* arg,
 
 void cast_mount(byte level, struct char_data* ch, const char* arg,
 				int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_MOUNT)) {
 		return;
 	}
 
@@ -5097,7 +4986,7 @@ void cast_sending(byte level, struct char_data* ch, const char* arg,
 
 void cast_portal(byte level, struct char_data* ch, const char* arg,
 				 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PORTAL)) {
 		return;
 	}
 	switch(type) {
@@ -5118,7 +5007,7 @@ void cast_portal(byte level, struct char_data* ch, const char* arg,
 
 void cast_teleport_wo_error(byte level, struct char_data* ch, const char* arg,
 							int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_TELEPORT_WO_ERROR)) {
 		return;
 	}
 	switch(type) {
@@ -5140,7 +5029,7 @@ void cast_teleport_wo_error(byte level, struct char_data* ch, const char* arg,
 
 void cast_globe_darkness(byte level, struct char_data* ch, const char* arg,
 						 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_GLOBE_DARKNESS)) {
 		return;
 	}
 	switch(type) {
@@ -5157,7 +5046,7 @@ void cast_globe_darkness(byte level, struct char_data* ch, const char* arg,
 }
 void cast_globe_minor_inv(byte level, struct char_data* ch, const char* arg,
 						  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_GLOBE_MINOR_INV)) {
 		return;
 	}
 	switch(type) {
@@ -5175,7 +5064,7 @@ void cast_globe_minor_inv(byte level, struct char_data* ch, const char* arg,
 }
 void cast_globe_major_inv(byte level, struct char_data* ch, const char* arg,
 						  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_GLOBE_MAJOR_INV)) {
 		return;
 	}
 	switch(type) {
@@ -5193,7 +5082,7 @@ void cast_globe_major_inv(byte level, struct char_data* ch, const char* arg,
 }
 void cast_prot_energy_drain(byte level, struct char_data* ch, const char* arg,
 							int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_ENERGY_DRAIN)) {
 		return;
 	}
 	switch(type) {
@@ -5211,7 +5100,7 @@ void cast_prot_energy_drain(byte level, struct char_data* ch, const char* arg,
 }
 void cast_prot_dragon_breath(byte level, struct char_data* ch, const char* arg,
 							 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_DRAGON_BREATH)) {
 		return;
 	}
 	switch(type) {
@@ -5231,7 +5120,7 @@ void cast_prot_dragon_breath(byte level, struct char_data* ch, const char* arg,
 
 void cast_anti_magic_shell(byte level, struct char_data* ch, const char* arg,
 						   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_ANTI_MAGIC_SHELL)) {
 		return;
 	}
 	switch(type) {
@@ -5259,7 +5148,7 @@ void cast_anti_magic_shell(byte level, struct char_data* ch, const char* arg,
 
 void cast_comp_languages(byte level, struct char_data* ch, const char* arg, int type,
 						 struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_COMP_LANGUAGES)) {
 		return;
 	}
 	switch(type) {
@@ -5291,7 +5180,7 @@ void cast_comp_languages(byte level, struct char_data* ch, const char* arg, int 
 
 void cast_prot_fire(byte level, struct char_data* ch, const char* arg, int type,
 					struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_FIRE)) {
 		return;
 	}
 	switch(type) {
@@ -5318,7 +5207,7 @@ void cast_prot_fire(byte level, struct char_data* ch, const char* arg, int type,
 }
 void cast_prot_cold(byte level, struct char_data* ch, const char* arg, int type,
 					struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_COLD)) {
 		return;
 	}
 	switch(type) {
@@ -5345,7 +5234,7 @@ void cast_prot_cold(byte level, struct char_data* ch, const char* arg, int type,
 }
 void cast_prot_energy(byte level, struct char_data* ch, const char* arg, int type,
 					  struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_ENERGY)) {
 		return;
 	}
 	switch(type) {
@@ -5372,7 +5261,7 @@ void cast_prot_energy(byte level, struct char_data* ch, const char* arg, int typ
 }
 void cast_prot_elec(byte level, struct char_data* ch, const char* arg, int type,
 					struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_ELEC)) {
 		return;
 	}
 	switch(type) {
@@ -5401,7 +5290,7 @@ void cast_prot_elec(byte level, struct char_data* ch, const char* arg, int type,
 
 void cast_enchant_armor(byte level, struct char_data* ch, const char* arg, int type,
 						struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, nullptr)) {
+	if(blocked_by_anti_magic(ch, nullptr, SPELL_ENCHANT_ARMOR)) {
 		return;
 	}
 	switch(type) {
@@ -5430,7 +5319,7 @@ void cast_messenger(byte level, struct char_data* ch, const char* arg,
 
 void cast_prot_dragon_breath_fire(byte level, struct char_data* ch, const char* arg,
 								  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_BREATH_FIRE)) {
 		return;
 	}
 	switch(type) {
@@ -5449,7 +5338,7 @@ void cast_prot_dragon_breath_fire(byte level, struct char_data* ch, const char* 
 
 void cast_prot_dragon_breath_frost(byte level, struct char_data* ch, const char* arg,
 								   int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_BREATH_FROST)) {
 		return;
 	}
 	switch(type) {
@@ -5469,7 +5358,7 @@ void cast_prot_dragon_breath_frost(byte level, struct char_data* ch, const char*
 
 void cast_prot_dragon_breath_elec(byte level, struct char_data* ch, const char* arg,
 								  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_BREATH_ELEC)) {
 		return;
 	}
 	switch(type) {
@@ -5489,7 +5378,7 @@ void cast_prot_dragon_breath_elec(byte level, struct char_data* ch, const char* 
 
 void cast_prot_dragon_breath_acid(byte level, struct char_data* ch, const char* arg,
 								  int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_BREATH_ACID)) {
 		return;
 	}
 	switch(type) {
@@ -5509,7 +5398,7 @@ void cast_prot_dragon_breath_acid(byte level, struct char_data* ch, const char* 
 
 void cast_prot_dragon_breath_gas(byte level, struct char_data* ch, const char* arg,
 								 int type, struct char_data* tar_ch, struct obj_data* tar_obj) {
-	if(blocked_by_anti_magic(ch, tar_ch)) {
+	if(blocked_by_anti_magic(ch, tar_ch, SPELL_PROT_BREATH_GAS)) {
 		return;
 	}
 	switch(type) {
