@@ -310,7 +310,9 @@ ndig status
 Automazioni (solo con automine attivo): retry dig ~24s su fallimento/trovato;
 umber → swap combat → alla morte heal + dig tool + check sanctuary; aura
 svanita → `att` + sanctuary se manca + dig; refresh / true sight; piccone
-rotto → nuovo tool; filone esaurito → `inv` + `drop 1 coin` (+ suono).
+rotto → solo `get`+`wield` di un nuovo `dig_tool` dallo zaino (mani gia'
+vuote, niente rem/put dell'arma rotta); filone esaurito → `inv` + loot
+keep/exclude/drop (+ suono).
 Fame/sete: resta **`nautofeed`**. Preferenze: `dig_tool` (default `pic`), `dig_combat`,
 `dig_retry_sec`. Suoni: `nebbie-dash-sounds.txt` oppure fallback sistema
 (Linux freedesktop / Windows Media / macOS Sounds).

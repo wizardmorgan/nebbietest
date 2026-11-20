@@ -2731,9 +2731,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.21+",
+check("package version 1.16.22+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.21"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.22"))
 
 -- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).
 do
@@ -2782,6 +2782,7 @@ do
   data.eqUpdated = true
   data.eq = {
     { location = "sulla schiena", item = "Borsa Inesauribile dei Korred", empty = false },
+    { location = "impugnato", item = "a mining pick", empty = false },
   }
   -- buildEquipRows may need different shape — if steps fail, still parse OK
   local steps, err = NebbieDash.digAutoBuildVeinLootSteps()
@@ -2796,6 +2797,31 @@ do
     check("dig loot: no drop 1 coin", joined:find("drop 1 coin", 1, true) == nil)
   else
     check("dig loot: steps build (skip shape=" .. tostring(err) .. ")", true)
+  end
+  -- Piccone in frantumi: mani vuote → niente rem/put dell'arma stale in eq.
+  NebbieDash.loadItemKeywords = function() end
+  local swapBroken, errBroken = NebbieDash.digAutoBuildSwapSteps("pic", { handsEmpty = true })
+  if swapBroken then
+    local j = table.concat(swapBroken, " | ")
+    check("dig break: rem zaino", j:find("rem ", 1, true) ~= nil)
+    check("dig break: get pic", j:find("get pic ", 1, true) ~= nil)
+    check("dig break: wield pic", j:find("wield pic", 1, true) ~= nil)
+    check("dig break: wear zaino", j:find("wear ", 1, true) ~= nil)
+    check("dig break: no rem arma stale", j:find("rem piccone", 1, true) == nil
+      and j:find("rem pick", 1, true) == nil
+      and j:find("rem mining", 1, true) == nil)
+    check("dig break: no put arma stale", j:find("put ", 1, true) == nil)
+  else
+    check("dig break: steps build (skip shape=" .. tostring(errBroken) .. ")", true)
+  end
+  local swapNormal, errNormal = NebbieDash.digAutoBuildSwapSteps("pic")
+  if swapNormal then
+    local jn = table.concat(swapNormal, " | ")
+    -- Con piccone ancora in mano (eq stale) il path normale puo' fare rem/put.
+    check("dig swap normale: get pic", jn:find("get pic ", 1, true) ~= nil)
+    check("dig swap normale: wield pic", jn:find("wield pic", 1, true) ~= nil)
+  else
+    check("dig swap normale: steps build (skip shape=" .. tostring(errNormal) .. ")", true)
   end
 end
 

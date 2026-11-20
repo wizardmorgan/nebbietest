@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.22 — 2026-11-20
+
+- **ndig**: se il piccone cade in frantumi, lo script prende un nuovo `dig_tool`
+  dallo zaino **senza** `rem`/`put` dell'arma cache (mani gia' vuote). Evita
+  `Non lo stai usando` / `Non hai nessun piccone` dopo la rottura.
+
 ## 1.16.21 — 2026-11-20
 
 - **ndig loot**: a filone esaurito, dopo `inv` mette in zaino i keep e droppa

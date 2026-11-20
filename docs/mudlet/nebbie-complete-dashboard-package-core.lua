@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.21"
+local PKG_VER = "1.16.22"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -10350,7 +10350,10 @@ function NebbieDash.digAutoActivateFromDigCommand()
   end
 end
 
-function NebbieDash.digAutoBuildSwapSteps(weaponKw)
+-- opts.handsEmpty: mani vuote (es. piccone in frantumi) → solo get+wield dal
+-- zaino, senza rem/put dell'arma "impugnata" in cache (stale dopo la rottura).
+function NebbieDash.digAutoBuildSwapSteps(weaponKw, opts)
+  opts = opts or {}
   local name = NebbieDash.currentChar
   if not name then return nil, "no_char" end
   local data = NebbieDash.getCharData(name)
@@ -10360,22 +10363,25 @@ function NebbieDash.digAutoBuildSwapSteps(weaponKw)
   weaponKw = (weaponKw or ""):match("^%s*(.-)%s*$") or ""
   if weaponKw == "" then return nil, "no_weapon" end
   local backKw = NebbieDash.macroBackpackKeywordFromPhrase(backPhrase, backOverride)
-  local wieldPhrase = NebbieDash.currentWieldedKeyword(data)
-  local wieldConfirmed = wieldPhrase ~= "" and data.eqUpdated
   local wieldKw = ""
-  if wieldConfirmed then
-    local wieldItem = nil
-    for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
-      if not row.empty and row.location == "impugnato" then
-        wieldItem = row.item
-        break
+  local wieldConfirmed = false
+  if not opts.handsEmpty then
+    local wieldPhrase = NebbieDash.currentWieldedKeyword(data)
+    wieldConfirmed = wieldPhrase ~= "" and data.eqUpdated
+    if wieldConfirmed then
+      local wieldItem = nil
+      for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+        if not row.empty and row.location == "impugnato" then
+          wieldItem = row.item
+          break
+        end
       end
-    end
-    if wieldItem then
-      local resolved, isOv = NebbieDash.resolveItemKeywords(wieldItem)
-      wieldKw = NebbieDash.macroBackpackKeywordFromPhrase(resolved, isOv)
-    else
-      wieldKw = NebbieDash.macroBackpackKeywordFromPhrase(wieldPhrase, false)
+      if wieldItem then
+        local resolved, isOv = NebbieDash.resolveItemKeywords(wieldItem)
+        wieldKw = NebbieDash.macroBackpackKeywordFromPhrase(resolved, isOv)
+      else
+        wieldKw = NebbieDash.macroBackpackKeywordFromPhrase(wieldPhrase, false)
+      end
     end
   end
   local steps = {}
@@ -10392,12 +10398,12 @@ function NebbieDash.digAutoBuildSwapSteps(weaponKw)
   return steps, nil, wieldKw
 end
 
-function NebbieDash.digAutoRunSwap(weaponKw, label)
+function NebbieDash.digAutoRunSwap(weaponKw, label, opts)
   if NebbieDash._weaponSwapBusy then
     cecho("<orange>[NebbieDash] Dig: cambio arma gia' in corso.\n")
     return false
   end
-  local steps, err = NebbieDash.digAutoBuildSwapSteps(weaponKw)
+  local steps, err = NebbieDash.digAutoBuildSwapSteps(weaponKw, opts)
   if not steps then
     if err == "no_backpack" then
       cecho("<orange>[NebbieDash] Dig: nessuno zaino (schiena) — fai <yellow>neq<orange> prima.\n")
@@ -10577,9 +10583,13 @@ function NebbieDash.onDigPickBrokenLine()
   if not st.active then return end
   NebbieDash.digAutoCancelRetry()
   NebbieDash.playSystemOrConfiguredSound("dig_warn", "dig_warn")
+  -- Il piccone e' gia' distrutto: mani vuote. Solo get+wield di un nuovo tool
+  -- dallo zaino (niente rem/put dell'arma cache che non c'e' piu').
   local tool = NebbieDash.digToolKeyword()
-  NebbieDash.digAutoRunSwap(tool, "dig_tool")
-  tempTimer((NebbieDash.weaponSwapDelay or 0.5) * 6 + 0.5, function()
+  cecho("<orange>[NebbieDash] Dig: piccone in frantumi — prendo <yellow>" ..
+    tool .. "<orange> dallo zaino.\n")
+  NebbieDash.digAutoRunSwap(tool, "dig_tool", { handsEmpty = true })
+  tempTimer((NebbieDash.weaponSwapDelay or 0.5) * 4 + 0.5, function()
     local s = NebbieDash.digAutoState()
     if not s.active then return end
     NebbieDash.digAutoRequestSanctuaryCheck()
