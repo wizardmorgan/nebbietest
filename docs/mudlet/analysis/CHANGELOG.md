@@ -1,5 +1,9 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.20 — 2026-11-20
+
+- **ndig**: default `dig_tool = pic` (matcha piccone e pick).
+
 ## 1.16.19 — 2026-11-20
 
 - **ndig / automine** (da dadomud): `ndig` impugna piccone dallo zaino;

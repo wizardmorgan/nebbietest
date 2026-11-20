@@ -302,7 +302,7 @@ Stile dadomud (senza finestra Mine):
 ndig                 # togli arma, prendi dig_tool dallo zaino, impugnato
 dig                  # la PRIMA volta attiva le automazioni
 ndig off             # ferma retry / automine
-ndig tool piccone    # keyword pala/piccone (default: piccone)
+ndig tool pic        # keyword corta (default: pic → piccone/pick)
 ndig combat slash    # arma da usare sull'umber (default: arma tolta da ndig)
 ndig status
 ```
@@ -311,7 +311,7 @@ Automazioni (solo con automine attivo): retry dig ~24s su fallimento/trovato;
 umber → swap combat → alla morte heal + dig tool + check sanctuary; aura
 svanita → `att` + sanctuary se manca + dig; refresh / true sight; piccone
 rotto → nuovo tool; filone esaurito → `inv` + `drop 1 coin` (+ suono).
-Fame/sete: resta **`nautofeed`**. Preferenze: `dig_tool`, `dig_combat`,
+Fame/sete: resta **`nautofeed`**. Preferenze: `dig_tool` (default `pic`), `dig_combat`,
 `dig_retry_sec`. Suoni: `nebbie-dash-sounds.txt` oppure fallback sistema
 (Linux freedesktop / Windows Media / macOS Sounds).
 

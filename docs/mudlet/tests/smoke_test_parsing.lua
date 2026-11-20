@@ -2731,13 +2731,15 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.19+",
+check("package version 1.16.20+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.19"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.20"))
 
 -- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).
 do
   NebbieDash.prefs = NebbieDash.prefs or {}
+  NebbieDash.prefs.dig_tool = nil
+  check("dig: default dig_tool pic", NebbieDash.digToolKeyword() == "pic")
   NebbieDash.prefs.dig_tool = "pala"
   NebbieDash.prefs.dig_combat = "slash"
   NebbieDash.prefs.dig_retry_sec = 24

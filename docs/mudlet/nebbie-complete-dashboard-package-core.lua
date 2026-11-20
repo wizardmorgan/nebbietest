@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.19"
+local PKG_VER = "1.16.20"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -686,7 +686,7 @@ function NebbieDash.ensurePreferencesFile()
     "# sanity_neq_on_login = on  # se l'equip in cache è vuoto ma marcato sincronizzato, invia eq\n" ..
     "# text_highlights = on      # gemme/metalli + evidenziazioni aura/disarm/dig/sanc\n" ..
     "# chat_window = on          # finestra floating per say/gt/tell/whisper/ask/gossip/shout\n" ..
-    "# dig_tool = piccone         # keyword pala/piccone per ndig (in zaino)\n" ..
+    "# dig_tool = pic              # keyword corta: matcha piccone e pick\n" ..
     "# dig_combat =              # keyword arma combat per umber (vuoto = arma tolta da ndig)\n" ..
     "# dig_retry_sec = 24        # secondi tra un dig fallito e il ripristino\n" ..
     "sidebar_mode = dock\n" ..
@@ -694,7 +694,7 @@ function NebbieDash.ensurePreferencesFile()
     "sanity_neq_on_login = on\n" ..
     "text_highlights = on\n" ..
     "chat_window = on\n" ..
-    "dig_tool = piccone\n" ..
+    "dig_tool = pic\n" ..
     "dig_combat =\n" ..
     "dig_retry_sec = 24\n" ..
     "# gold_alert = on           # avvisa se G: scende senza split/give/drop/pagamenti\n" ..
@@ -729,7 +729,7 @@ function NebbieDash.loadPreferences()
     text_highlights = true,
     chat_window = true,
     gold_alert = true,
-    dig_tool = "piccone",
+    dig_tool = "pic",
     dig_combat = "",
     dig_retry_sec = 24,
     ident_sync_url = "https://nebbie.wizmorgan.it/nebbie-ident",
@@ -814,7 +814,7 @@ function NebbieDash.savePreferencesFile()
     "text_highlights = " .. ((NebbieDash.prefs and NebbieDash.prefs.text_highlights ~= false) and "on" or "off") .. "\n" ..
     "chat_window = " .. ((NebbieDash.chatEnabled ~= false) and "on" or "off") .. "\n" ..
     "gold_alert = " .. ((NebbieDash.goldAlert ~= false) and "on" or "off") .. "\n" ..
-    "dig_tool = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.dig_tool) or "piccone") .. "\n" ..
+    "dig_tool = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.dig_tool) or "pic") .. "\n" ..
     "dig_combat = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.dig_combat) or "") .. "\n" ..
     "dig_retry_sec = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.dig_retry_sec) or 24) .. "\n" ..
     "ident_sync_url = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_sync_url) or "https://nebbie.wizmorgan.it/nebbie-ident") .. "\n" ..
@@ -5534,7 +5534,7 @@ NebbieDash.HELP_TEXT = {
   { "nitemlen <n>", "Lunghezza max descrizioni oggetti in equip." },
   { "nclanslot <on|off>", "Mostra/nascondi lo slot simbolo del clan." },
   { "usa <keyword>", "Cambio arma da zaino (rem/get/wield)." },
-  { "ndig [on|off|tool|combat|status]", "Automine dig (equip piccone + loop dadomud)." },
+  { "ndig [on|off|tool|combat|status]", "Automine dig (equip pic + loop dadomud)." },
   { "nswui [off]", "Finestra floating speedwalk (lista path + pausa/riprendi)." },
   { "nsw pause|resume|skip|stop|status", "Controlla la corsa speedwalk." },
   { "nspeedwalks", "Ricarica nebbie-speedwalks.txt (ndashboard)." },
@@ -10017,7 +10017,7 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Automine dig (port da dadomud): ndig + trigger gated.
--- ndig = rem zaino, get piccone, rem arma, wield piccone, put arma, wear zaino.
+-- ndig = rem zaino, get pic (piccone/pick), rem arma, wield, put arma, wear zaino.
 -- Al primo `dig` inviato al MUD partono retry / umber swap / sanc / vein done.
 -- Fame/sete: resta nautofeed (niente doppio mangia dadomud).
 -- ---------------------------------------------------------------------------
@@ -10043,8 +10043,8 @@ end
 
 function NebbieDash.digToolKeyword()
   local t = NebbieDash.prefs and NebbieDash.prefs.dig_tool
-  t = (t or "piccone"):match("^%s*(.-)%s*$") or "piccone"
-  if t == "" then t = "piccone" end
+  t = (t or "pic"):match("^%s*(.-)%s*$") or "pic"
+  if t == "" then t = "pic" end
   return t
 end
 
