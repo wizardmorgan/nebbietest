@@ -184,6 +184,8 @@ ALIASES = [
     ("nebbie-dash-leftheights", "^nleftheights (.+)$", "NebbieDash.cmdSetLeftHeights(matches[2])"),
     ("nebbie-dash-clanslot", "^nclanslot (.+)$", "NebbieDash.cmdSetClanSlot(matches[2])"),
     ("nebbie-dash-usa", "^usa (.+)$", "NebbieDash.cmdUsa(matches[2])"),
+    ("nebbie-dash-dig", "^ndig$", "NebbieDash.cmdDig(\"\")"),
+    ("nebbie-dash-dig-args", "^ndig (.+)$", "NebbieDash.cmdDig(matches[2])"),
     ("nebbie-dash-configdir", "^nconfigdir$", "NebbieDash.cmdConfigDir(\"\")"),
     ("nebbie-dash-sidebar", "^nsidebar (.+)$", "NebbieDash.cmdSetSidebar(matches[2])"),
     ("nebbie-dash-preferences-reload", "^npreferencesreload$", "NebbieDash.cmdReloadPreferences()"),

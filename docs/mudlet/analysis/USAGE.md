@@ -294,6 +294,27 @@ Preferenza `chat_window = on|off` in `nebbie-dash-preferences.txt`. Trascinabile
 (Mudlet Adjustable.Container). Nota: l’echo parlante di `gossip` è uguale a `say` (`Tu dici '…'`),
 quindi in uscita compare come `[say]`; i gossip altrui (`vi dice`) sono etichettati correttamente.
 
+## Automine dig (`ndig`) — da 1.16.19
+
+Stile dadomud (senza finestra Mine):
+
+```
+ndig                 # togli arma, prendi dig_tool dallo zaino, impugnato
+dig                  # la PRIMA volta attiva le automazioni
+ndig off             # ferma retry / automine
+ndig tool piccone    # keyword pala/piccone (default: piccone)
+ndig combat slash    # arma da usare sull'umber (default: arma tolta da ndig)
+ndig status
+```
+
+Automazioni (solo con automine attivo): retry dig ~24s su fallimento/trovato;
+umber → swap combat → alla morte heal + dig tool + check sanctuary; aura
+svanita → `att` + sanctuary se manca + dig; refresh / true sight; piccone
+rotto → nuovo tool; filone esaurito → `inv` + `drop 1 coin` (+ suono).
+Fame/sete: resta **`nautofeed`**. Preferenze: `dig_tool`, `dig_combat`,
+`dig_retry_sec`. Suoni: `nebbie-dash-sounds.txt` oppure fallback sistema
+(Linux freedesktop / Windows Media / macOS Sounds).
+
 ## Cambio arma (`usa`)
 
 Dalla **1.15.31** non c'è più il pannello "Armi"; dalla **1.15.96** nemmeno lo speedwalk sotto

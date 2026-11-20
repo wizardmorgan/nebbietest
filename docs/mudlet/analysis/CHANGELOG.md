@@ -1,5 +1,13 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.19 — 2026-11-20
+
+- **ndig / automine** (da dadomud): `ndig` impugna piccone dallo zaino;
+  al primo `dig` partono retry 24s, swap umber, ripresa dopo sanc/piccone
+  rotto, filone esaurito (`inv`+`drop 1 coin`), refresh/true sight.
+  `ndig off|tool|combat|status`. Suoni: file in `nebbie-dash-sounds.txt`
+  oppure fallback suoni di sistema (Linux/Windows/macOS).
+
 ## 1.16.18 — 2026-11-18
 
 - **nchat**: cattura anche **sign** (`Tu hai detto '…'`,

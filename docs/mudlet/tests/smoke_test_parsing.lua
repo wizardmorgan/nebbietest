@@ -2731,9 +2731,36 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.18+",
+check("package version 1.16.19+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.18"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.19"))
+
+-- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).
+do
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  NebbieDash.prefs.dig_tool = "pala"
+  NebbieDash.prefs.dig_combat = "slash"
+  NebbieDash.prefs.dig_retry_sec = 24
+  check("dig: digToolKeyword pala", NebbieDash.digToolKeyword() == "pala")
+  check("dig: digCombatKeyword slash", NebbieDash.digCombatKeyword() == "slash")
+  check("dig: digRetrySec 24", NebbieDash.digRetrySec() == 24)
+  local st = NebbieDash.digAutoState()
+  st.armed = true
+  st.active = false
+  NebbieDash.digAutoActivateFromDigCommand()
+  check("dig: primo dig attiva active", st.active == true)
+  NebbieDash.digAutoStop(nil)
+  check("dig: stop spegne armed/active", st.armed == false and st.active == false)
+  local osname = NebbieDash.detectHostOs()
+  check("dig: detectHostOs noto",
+    osname == "linux" or osname == "windows" or osname == "macos")
+  -- resolveSystemSound puo' essere nil se il VM non ha freedesktop sounds
+  check("dig: SYSTEM_SOUND_CANDIDATES presenti",
+    type(NebbieDash.SYSTEM_SOUND_CANDIDATES) == "table"
+      and NebbieDash.SYSTEM_SOUND_CANDIDATES.linux
+      and NebbieDash.SYSTEM_SOUND_CANDIDATES.windows
+      and NebbieDash.SYSTEM_SOUND_CANDIDATES.macos)
+end
 
 -- Re-identify sposta possesso da un toon all'altro.
 do
