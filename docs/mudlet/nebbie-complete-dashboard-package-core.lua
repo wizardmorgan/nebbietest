@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.25"
+local PKG_VER = "1.16.26"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -5554,7 +5554,7 @@ NebbieDash.HELP_TEXT = {
 
   { section = "Dig / miniera" },
   { "ndig", "Impugna dig_tool dallo zaino; al primo dig avvia automine." },
-  { "ndig combat <kw>", "Arma da usare sull'umber (default: arma tolta da ndig)." },
+  { "ndig combat <kw>", "Arma umber: get+wield e put dig_tool in zaino." },
   { "ndig help", "Riassunto opzioni dig." },
   { "ndig loot", "Come ndigloot: ricarica nebbie-dig-loot.txt." },
   { "ndig off", "Ferma retry / automine." },
@@ -10097,14 +10097,18 @@ NebbieDash._digAuto = NebbieDash._digAuto or {
   verifyingSanctuary = false,
   quietAttrib = false,
   stashedCombat = "",
+  currentWield = "",
 }
 
 function NebbieDash.digAutoState()
   NebbieDash._digAuto = NebbieDash._digAuto or {
     armed = false, active = false, digPending = false,
     digPendingTimer = nil, verifyingSanctuary = false,
-    quietAttrib = false, stashedCombat = "",
+    quietAttrib = false, stashedCombat = "", currentWield = "",
   }
+  if NebbieDash._digAuto.currentWield == nil then
+    NebbieDash._digAuto.currentWield = ""
+  end
   return NebbieDash._digAuto
 end
 
@@ -10420,8 +10424,10 @@ function NebbieDash.digAutoActivateFromDigCommand()
   end
 end
 
--- opts.handsEmpty: mani vuote (es. piccone in frantumi) → solo get+wield dal
--- zaino, senza rem/put dell'arma "impugnata" in cache (stale dopo la rottura).
+-- opts.handsEmpty: mani vuote (frantumi) → solo get+wield, niente rem/put.
+-- opts.putAwayKw: keyword da rimuovere e rimettere in zaino (stile dadomud
+-- config.armaattuale). Se assente, ricava dall'eq cache (puo' fallire se
+-- eq non sincronizzato → manca il put: per umber usare sempre putAwayKw).
 function NebbieDash.digAutoBuildSwapSteps(weaponKw, opts)
   opts = opts or {}
   local name = NebbieDash.currentChar
@@ -10433,39 +10439,41 @@ function NebbieDash.digAutoBuildSwapSteps(weaponKw, opts)
   weaponKw = (weaponKw or ""):match("^%s*(.-)%s*$") or ""
   if weaponKw == "" then return nil, "no_weapon" end
   local backKw = NebbieDash.macroBackpackKeywordFromPhrase(backPhrase, backOverride)
-  local wieldKw = ""
-  local wieldConfirmed = false
+  local putAwayKw = ""
   if not opts.handsEmpty then
-    local wieldPhrase = NebbieDash.currentWieldedKeyword(data)
-    wieldConfirmed = wieldPhrase ~= "" and data.eqUpdated
-    if wieldConfirmed then
-      local wieldItem = nil
-      for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
-        if not row.empty and row.location == "impugnato" then
-          wieldItem = row.item
-          break
+    putAwayKw = ((opts.putAwayKw or ""):match("^%s*(.-)%s*$")) or ""
+    if putAwayKw == "" then
+      local wieldPhrase = NebbieDash.currentWieldedKeyword(data)
+      if wieldPhrase ~= "" and data.eqUpdated then
+        local wieldItem = nil
+        for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+          if not row.empty and row.location == "impugnato" then
+            wieldItem = row.item
+            break
+          end
         end
-      end
-      if wieldItem then
-        local resolved, isOv = NebbieDash.resolveItemKeywords(wieldItem)
-        wieldKw = NebbieDash.macroBackpackKeywordFromPhrase(resolved, isOv)
-      else
-        wieldKw = NebbieDash.macroBackpackKeywordFromPhrase(wieldPhrase, false)
+        if wieldItem then
+          local resolved, isOv = NebbieDash.resolveItemKeywords(wieldItem)
+          putAwayKw = NebbieDash.macroBackpackKeywordFromPhrase(resolved, isOv)
+        else
+          putAwayKw = NebbieDash.macroBackpackKeywordFromPhrase(wieldPhrase, false)
+        end
       end
     end
   end
+  local doPutAway = putAwayKw ~= "" and not NebbieDash.keywordsOverlap(putAwayKw, weaponKw)
   local steps = {}
   table.insert(steps, "rem " .. backKw)
   table.insert(steps, "get " .. weaponKw .. " " .. backKw)
-  if wieldConfirmed and wieldKw ~= "" and not NebbieDash.keywordsOverlap(wieldKw, weaponKw) then
-    table.insert(steps, "rem " .. wieldKw)
+  if doPutAway then
+    table.insert(steps, "rem " .. putAwayKw)
   end
   table.insert(steps, "wield " .. weaponKw)
-  if wieldConfirmed and wieldKw ~= "" and not NebbieDash.keywordsOverlap(wieldKw, weaponKw) then
-    table.insert(steps, "put " .. wieldKw .. " " .. backKw)
+  if doPutAway then
+    table.insert(steps, "put " .. putAwayKw .. " " .. backKw)
   end
   table.insert(steps, "wear " .. backKw)
-  return steps, nil, wieldKw
+  return steps, nil, putAwayKw
 end
 
 function NebbieDash.digAutoFlushPendingSwap()
@@ -10507,6 +10515,8 @@ function NebbieDash.digAutoRunSwap(weaponKw, label, opts)
   tempTimer(timeout, function()
     NebbieDash.endWeaponSwapGuard(gen, true)
   end)
+  -- Traccia cosa abbiamo in mano (come dadomud config.armaattuale).
+  NebbieDash.digAutoState().currentWield = weaponKw
   return true
 end
 
@@ -10529,10 +10539,15 @@ function NebbieDash.digAutoEquipTool()
     end
   end
   local tool = NebbieDash.digToolKeyword()
-  local ok = NebbieDash.digAutoRunSwap(tool, "dig_tool")
+  local putAway = current
+  if putAway == "" then putAway = st.currentWield end
+  local ok = NebbieDash.digAutoRunSwap(tool, "dig_tool", {
+    putAwayKw = (putAway ~= "" and not NebbieDash.keywordsOverlap(putAway, tool)) and putAway or nil,
+  })
   if ok then
     st.armed = true
     st.active = false
+    st.currentWield = tool
     NebbieDash.digAutoCancelRetry()
     cecho(string.format(
       "<green>[NebbieDash] Dig pronto: impugnato <yellow>%s<green>. Digita <yellow>dig<green> per avviare le automazioni.\n",
@@ -10613,7 +10628,14 @@ function NebbieDash.onDigHumberInLine()
     cecho("<orange>[NebbieDash] Dig umber: manca arma combat (ndig combat <kw>).\n")
     return
   end
-  NebbieDash.digAutoRunSwap(combat, "dig_combat")
+  -- Sempre rem+put del dig_tool (non solo se eq cache ha impugnato).
+  local putAway = NebbieDash.digToolKeyword()
+  if st.currentWield and st.currentWield ~= "" then
+    putAway = st.currentWield
+  end
+  cecho("<orange>[NebbieDash] Dig umber: impugnato <yellow>" .. combat ..
+    "<orange>, ripongo <yellow>" .. putAway .. "<orange>.\n")
+  NebbieDash.digAutoRunSwap(combat, "dig_combat", { putAwayKw = putAway })
 end
 
 function NebbieDash.onDigHumberOutLine()
@@ -10624,7 +10646,16 @@ function NebbieDash.onDigHumberOutLine()
     send("cast 'heal' " .. who, false)
   end
   local tool = NebbieDash.digToolKeyword()
-  NebbieDash.digAutoRunSwap(tool, "dig_tool")
+  -- Riponi arma combat, riprendi dig_tool (come dadomud armaattuale → dig).
+  local putAway = NebbieDash.digCombatKeyword()
+  if putAway == "" and st.currentWield and st.currentWield ~= "" then
+    putAway = st.currentWield
+  end
+  cecho("<orange>[NebbieDash] Dig: umber morto — riprendo <yellow>" .. tool ..
+    "<orange>, ripongo <yellow>" .. (putAway ~= "" and putAway or "?") .. "<orange>.\n")
+  NebbieDash.digAutoRunSwap(tool, "dig_tool", {
+    putAwayKw = (putAway ~= "" and putAway) or nil,
+  })
   tempTimer((NebbieDash.weaponSwapDelay or 0.5) * 6 + 0.5, function()
     local s = NebbieDash.digAutoState()
     if not s.active then return end
@@ -10767,7 +10798,7 @@ function NebbieDash.printDigHelp()
   cecho("<yellow>  ndig off<white>             Ferma automine / retry.\n")
   cecho("<yellow>  ndig status<white>          Stato, tool, combat, suoni.\n")
   cecho("<yellow>  ndig tool <kw><white>       Keyword attrezzo (default: pic).\n")
-  cecho("<yellow>  ndig combat <kw><white>     Arma per umber.\n")
+  cecho("<yellow>  ndig combat <kw><white>     Arma umber (get+wield, put dig_tool in zaino).\n")
   cecho("<yellow>  ndig loot / ndigloot<white> Ricarica nebbie-dig-loot.txt.\n")
   cecho("<grey>  Piccone rotto ($p in frantumi) → nuovo tool. Fame/sete non si pesta sullo zaino.\n")
   cecho("<grey>  Filone esaurito → inv + loot zaino + drop 1 coin.\n")

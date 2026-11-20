@@ -377,13 +377,15 @@ ndigloot / ndig loot # ricarica nebbie-dig-loot.txt
 ```
 
 Automazioni (solo con automine attivo): retry dig ~24s su fallimento/trovato;
-umber → swap combat → alla morte heal + dig tool + check sanctuary; aura
-svanita → `att` + sanctuary se manca + dig; refresh / true sight; piccone
-rotto (`$p cade a terra in frantumi`, es. Piccone / A mining pick) → solo
-`get`+`wield` di un nuovo `dig_tool` dallo zaino; se dig senza attrezzo
-(`Forse usando l'attrezzo adatto`) riprova lo stesso; filone esaurito →
-`inv` + loot keep/exclude/drop + `drop 1 coin` (+ suono). Fame/sete
-(`nautofeed`) aspetta se lo zaino e' occupato dal cambio dig (e viceversa).
+umber → `rem` zaino, `get` combat, `rem` dig_tool, `wield` combat, `put`
+dig_tool nello zaino, `wear` zaino; alla morte heal + swap inverso (combat
+→ dig_tool con `put` combat) + check sanctuary; aura svanita → `att` +
+sanctuary se manca + dig; refresh / true sight; piccone rotto (`$p cade a
+terra in frantumi`, es. Piccone / A mining pick) → solo `get`+`wield` di un
+nuovo `dig_tool` dallo zaino; se dig senza attrezzo (`Forse usando
+l'attrezzo adatto`) riprova lo stesso; filone esaurito → `inv` + loot
+keep/exclude/drop + `drop 1 coin` (+ suono). Fame/sete (`nautofeed`) aspetta
+se lo zaino e' occupato dal cambio dig (e viceversa).
 Fame/sete: resta **`nautofeed`**. Preferenze: `dig_tool` (default `pic`), `dig_combat`,
 `dig_retry_sec`. Suoni: `nebbie-dash-sounds.txt` oppure fallback sistema
 (Linux freedesktop / Windows Media / macOS Sounds).

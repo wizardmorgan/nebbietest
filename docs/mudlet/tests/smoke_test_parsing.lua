@@ -2731,9 +2731,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.25+",
+check("package version 1.16.26+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.25"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.26"))
 
 -- nhelp: sezioni + comandi chiave presenti; ordine alfabetico in sezione.
 do
@@ -2864,6 +2864,29 @@ do
     NebbieDash.digLineLooksLikeBrokenTool("A mining pick cade a terra in frantumi.", "pic") == true)
   check("dig break: ignore scudo",
     NebbieDash.digLineLooksLikeBrokenTool("Uno scudo di ferro cade a terra in frantumi.", "pic") == false)
+  -- Umber: putAwayKw esplicito anche senza eq impugnato (bug: mancava put).
+  data.eq = {
+    { location = "sulla schiena", item = "It's a Beautiful Day", empty = false },
+  }
+  data.eqUpdated = true
+  local umberSteps, umberErr = NebbieDash.digAutoBuildSwapSteps("slash", { putAwayKw = "pic" })
+  if umberSteps then
+    local ju = table.concat(umberSteps, " | ")
+    check("dig umber: rem zaino", ju:find("rem ", 1, true) ~= nil)
+    check("dig umber: get slash", ju:find("get slash ", 1, true) ~= nil)
+    check("dig umber: rem pic", ju:find("rem pic", 1, true) ~= nil)
+    check("dig umber: wield slash", ju:find("wield slash", 1, true) ~= nil)
+    check("dig umber: put pic zaino", ju:find("put pic ", 1, true) ~= nil)
+    check("dig umber: wear zaino", ju:find("wear ", 1, true) ~= nil)
+  else
+    check("dig umber: steps (skip=" .. tostring(umberErr) .. ")", true)
+  end
+  -- Senza putAwayKw e senza impugnato in eq: niente put (vecchio bug path).
+  local bareSteps = NebbieDash.digAutoBuildSwapSteps("slash")
+  if bareSteps then
+    local jb = table.concat(bareSteps, " | ")
+    check("dig umber bare: no put senza putAway/eq", jb:find("put ", 1, true) == nil)
+  end
 end
 
 -- Re-identify sposta possesso da un toon all'altro.

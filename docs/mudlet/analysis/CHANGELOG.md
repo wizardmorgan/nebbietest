@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.26 — 2026-11-20
+
+- **ndig umber**: allo swap combat/dig_tool fa sempre `rem`+`put` dell'arma
+  da riporre (`dig_tool` / `dig_combat`), anche se l'eq cache non ha
+  «impugnato» aggiornato — prima poteva mancare il put nello zaino.
+
 ## 1.16.25 — 2026-11-20
 
 - **ndig**: a filone esaurito, dopo loot zaino torna anche `drop 1 coin`
