@@ -3527,6 +3527,18 @@
 			"WARNINGS_MODE_OFF": {
 				"value": 65536,
 				"comment": "show the amount of each increased achievement"
+			},
+			"COMBAT_COMPACT": {
+				"value": 131072,
+				"comment": "LEGACY combattimento compatto: convertito in combat_view al caricamento"
+			},
+			"COMBAT_NO_WEAPON_SPELL": {
+				"value": 262144,
+				"comment": "LEGACY nasconde inc. arma: convertito in combat_view al caricamento"
+			},
+			"COMBAT_NO_MISS": {
+				"value": 524288,
+				"comment": "LEGACY nasconde mancati: convertito in combat_view al caricamento"
 			}
 		},
 		"e_sys_flags": {

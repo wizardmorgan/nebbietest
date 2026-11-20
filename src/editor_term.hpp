@@ -11,6 +11,8 @@ namespace Alarmud {
 
 struct char_data;
 struct descriptor_data;
+struct obj_data;
+struct room_data;
 
 /** Clear screen only in VT100 mode; otherwise emit a newline separator. */
 void EditorClear(struct char_data* ch);
@@ -37,6 +39,15 @@ bool EditorFinishText(struct descriptor_data* d);
 void EditorAbortText(struct descriptor_data* d);
 /** True when the descriptor is inside oedit, medit or redit. */
 bool IsEditorState(int connected);
+/** Il mob/PG victim sta per essere liberato: ogni editor di testo (d->str)
+ *  che punta nei suoi campi viene chiuso, e chi lo ha in medit torna in gioco. */
+void EditorReleaseChar(struct char_data* victim);
+/** Come EditorReleaseChar, per un oggetto (oedit, forgia, string obj, write). */
+void EditorReleaseObj(struct obj_data* obj);
+/** Come EditorReleaseChar, per una stanza che sta per perdere i suoi testi
+ *  (rload, purge di stanze, procarea): chiude string/edit sui suoi campi e
+ *  riporta in gioco chi e' in redit li'. */
+void EditorReleaseRoom(struct room_data* rp);
 
 } // namespace Alarmud
 #endif // __EDITOR_TERM_HPP

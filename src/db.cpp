@@ -59,11 +59,15 @@
 #include "toon_migration.hpp"
 #include "procarea.hpp"
 #include "procarea_balance.hpp"
+#include "create.obj.hpp"
+#include "editor_term.hpp"
 #include "object_instance.hpp"
 #include "clan_symbol.hpp"
 #include "mob.editor.hpp"
 #include "edit_pool.hpp"
+#include "combat_view.hpp"
 #include <array>
+#include <cstddef>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -274,7 +278,7 @@ struct BodyDeltaCount {
 struct CoreSnap {
 	std::string description; /* vuoto <=> NULL in DB */
 	std::string authcode;
-	std::array<long long, 27 + MAX_SAVES> nums{}; /* 27 campi + MAX_SAVES */
+	std::array<long long, 28 + MAX_SAVES> nums{}; /* 27 campi + MAX_SAVES + combat_view */
 
 	[[nodiscard]] bool operator==(const CoreSnap& o) const {
 		return description == o.description && authcode == o.authcode && nums == o.nums;
@@ -316,6 +320,7 @@ struct CoreSnap {
 	for(int j = 0; j < MAX_SAVES; ++j) {
 		s.nums[i++] = st.apply_saving_throw[j];
 	}
+	s.nums[i++] = st.combat_view;
 	return s;
 }
 
@@ -357,6 +362,7 @@ struct CoreSnap {
 	for(int j = 0; j < MAX_SAVES; ++j) {
 		out.nums[i++] = sql_to_ll(row[29 + j]);
 	}
+	out.nums[i++] = sql_to_ll(row[29 + MAX_SAVES]); /* combat_view */
 	return true;
 }
 
@@ -473,7 +479,7 @@ void body_exec_value_batches(DB* db, const std::string& prefix, const std::strin
 			"authcode, wimpy_level, load_room, start_room, spells_to_learn, alignment, act, "
 			"affected_by, affected_by2, condition_drunk, condition_full, condition_thirst, "
 			"save_throw_0, save_throw_1, save_throw_2, save_throw_3, save_throw_4, "
-			"save_throw_5, save_throw_6, save_throw_7) VALUES ("
+			"save_throw_5, save_throw_6, save_throw_7, combat_view) VALUES ("
 		 << toon_id << ','
 		 << db_sql_literal(st.description, true) << ','
 		 << st.iClass << ',' << static_cast<int>(st.sex) << ',' << st.race << ','
@@ -490,6 +496,7 @@ void body_exec_value_batches(DB* db, const std::string& prefix, const std::strin
 	for(int i = 0; i < MAX_SAVES; ++i) {
 		core << ',' << st.apply_saving_throw[i];
 	}
+	core << ',' << st.combat_view;
 	core << ") ON DUPLICATE KEY UPDATE "
 			"description=VALUES(description), class_primary=VALUES(class_primary), "
 			"sex=VALUES(sex), race=VALUES(race), birth=VALUES(birth), played=VALUES(played), "
@@ -506,7 +513,8 @@ void body_exec_value_batches(DB* db, const std::string& prefix, const std::strin
 			"save_throw_0=VALUES(save_throw_0), save_throw_1=VALUES(save_throw_1), "
 			"save_throw_2=VALUES(save_throw_2), save_throw_3=VALUES(save_throw_3), "
 			"save_throw_4=VALUES(save_throw_4), save_throw_5=VALUES(save_throw_5), "
-			"save_throw_6=VALUES(save_throw_6), save_throw_7=VALUES(save_throw_7)";
+			"save_throw_6=VALUES(save_throw_6), save_throw_7=VALUES(save_throw_7), "
+			"combat_view=VALUES(combat_view)";
 	return core.str();
 }
 
@@ -637,7 +645,7 @@ void db_write_character_snapshot_full_tx(DB* db, const std::string& toon_id,
 		"age_modifier, authcode, wimpy_level, load_room, start_room, spells_to_learn, "
 		"alignment, act, affected_by, affected_by2, condition_drunk, condition_full, "
 		"condition_thirst, save_throw_0, save_throw_1, save_throw_2, save_throw_3, "
-		"save_throw_4, save_throw_5, save_throw_6, save_throw_7 FROM character_core "
+		"save_throw_4, save_throw_5, save_throw_6, save_throw_7, combat_view FROM character_core "
 		"WHERE toon_id = " +
 		toon_id + " LIMIT 1";
 	if(!mysql_query_select_tx(db, sql, res) || !res) {
@@ -3620,7 +3628,7 @@ void build_player_index() {
 
 	mudlog(LOG_CHECK, "Began Wizlist Generation.");
 
-	std::snprintf(wizlist, sizeof(wizlist), "\033[2J\033[0;0H\n\r\n\r");
+	std::snprintf(wizlist, sizeof(wizlist), "\n\r\n\r");
 	for(i = IMMENSO; i > IMMORTALE; i--) {
 		append_into_cbuf(wizlist, sizeof(wizlist), GeneraSezione(i, &list_wiz));
 	}
@@ -3635,10 +3643,10 @@ void build_player_index() {
 	}
 
 	/* Immortali */
-	std::snprintf(immlist, sizeof(immlist), "\033[2J\033[0;0H\n\r\n\r");
+	std::snprintf(immlist, sizeof(immlist), "\n\r\n\r");
 	append_into_cbuf(immlist, sizeof(immlist), GeneraSezione(IMMORTALE, &list_wiz));
 	/* Principi */
-	std::snprintf(princelist, sizeof(princelist), "\033[2J\033[0;0H\n\r\n\r");
+	std::snprintf(princelist, sizeof(princelist), "\n\r\n\r");
 	append_into_cbuf(princelist, sizeof(princelist), GeneraSezione(PRINCIPE, &list_wiz));
 
 	mudlog(LOG_CHECK, "Wizlist counts: principi=%d immortali=%d dei=%d",
@@ -3871,6 +3879,8 @@ void cleanout_room(struct room_data* rp) {
 	int i;
 	struct extra_descr_data* exptr, *nptr;
 
+	/* string/edit/redit sui testi della stanza: staccati prima del free. */
+	EditorReleaseRoom(rp);
 	free(rp->name);
 	rp->name = NULL;
 	free(rp->description);
@@ -5472,6 +5482,36 @@ void ExecuteZoneCommand(ZoneCommand* pZC, NumberType NT) {
 }
 #endif
 
+/**
+ * Resolve container for zone-reset P without scanning global object_list.
+ * Prefers the last O/G/E/P context (pLastCont), then children / ancestors so
+ * nested and sibling P chains work, without filling PG-held same-vnum bags.
+ */
+static struct obj_data* resolve_reset_container(struct obj_data* last, int rnum) {
+	if(!last) {
+		return nullptr;
+	}
+	if(last->item_number == rnum) {
+		return last;
+	}
+	for(struct obj_data* t = last->contains; t; t = t->next_content) {
+		if(t->item_number == rnum) {
+			return t;
+		}
+	}
+	for(struct obj_data* outer = last->in_obj; outer; outer = outer->in_obj) {
+		if(outer->item_number == rnum) {
+			return outer;
+		}
+		for(struct obj_data* t = outer->contains; t; t = t->next_content) {
+			if(t->item_number == rnum) {
+				return t;
+			}
+		}
+	}
+	return nullptr;
+}
+
 #define ZCMD zone_table[zone].cmd[cmd_no]
 
 /* execute the reset command table of a given zone */
@@ -5491,9 +5531,10 @@ void reset_zone(int zone) {
 	struct room_data* rp;
 	//static int done = FALSE;
 	struct char_data* pLastMob = 0;
-	// Qui veniva messo il puntatore all'ultimo container utilizzato, dato che poi non veniva mai utilizzato
-	// Lascio commentato nel caso scopra invece che mi era sfuggito l'utilizzo
-	//struct obj_data* pLastCont = 0;
+	/* Ultimo oggetto caricato da O/G/E (contenitore atteso dai P successivi).
+	 * Non usare get_obj_num: prende il primo vnum in object_list e puo' riempire
+	 * forziere/borse gia' in mano ai PG al reset zona (es. Mordor 37129). */
+	struct obj_data* pLastCont = nullptr;
 	char* s;
 	int d, e, valore_max = 0;
 
@@ -5606,6 +5647,7 @@ void reset_zone(int zone) {
                 }
 #endif
 				pObj = NULL;
+				pLastCont = nullptr;
 				nLastCmd = FALSE;
 				if(ZCMD.arg1 >= 0 && (ZCMD.arg2 == 0 || obj_index[ ZCMD.arg1 ].number < valore_max)
 				  ) {
@@ -5619,10 +5661,9 @@ void reset_zone(int zone) {
                                 else
                                 {
                                     obj_to_room(pObj, ZCMD.arg3);
+									pLastCont = pObj;
+									nLastCmd = TRUE;
                                 }
-								nLastCmd = TRUE;
-								//if (ITEM_TYPE(pObj) == ITEM_CONTAINER)
-								//{ pLastCont = pObj; }
 							}
 						}
 					}
@@ -5642,24 +5683,57 @@ void reset_zone(int zone) {
                     valore_max *= 2;
                 }
 #endif
+				/* Contesto locale (ultimo O/G/E/P), non get_obj_num globale. */
+				pCont = resolve_reset_container(pLastCont, ZCMD.arg3);
 				if(ZCMD.arg1 >= 0 &&
 						(ZCMD.arg2 == 0 ||
 						 obj_index[ ZCMD.arg1 ].number < valore_max) &&
-						(pCont = get_obj_num(ZCMD.arg3)) != NULL &&
+						pCont != nullptr &&
 						(pObj = read_object(ZCMD.arg1, REAL)) != NULL) {
                     if(IS_SET(pObj->obj_flags.type_flag, ITEM_KEY) && ZCMD.arg2 == 1 && obj_index[ ZCMD.arg1 ].number > 1)
                     {
                         extract_obj(pObj);
+						/* Come su HEAD: restiamo nel ramo "letto" senza spezzare la catena. */
+						nLastCmd = TRUE;
                     }
+					else if(ITEM_TYPE(pCont) != ITEM_CONTAINER) {
+						const int cont_vnum =
+							pCont->item_number >= 0
+								? obj_index[pCont->item_number].iVNum
+								: -1;
+						const int put_vnum =
+							pObj->item_number >= 0
+								? obj_index[pObj->item_number].iVNum
+								: -1;
+						mudlog(LOG_ERROR,
+							   "zone %s cmd P: refuse put obj #%d into non-container '%s' (vnum %d)",
+							   zone_table[zone].name, put_vnum,
+							   (pCont->short_description
+									? pCont->short_description
+									: "?"),
+							   cont_vnum);
+						extract_obj(pObj);
+						pObj = nullptr;
+						/* Contesto P rotto: non riempire altri non-container. */
+						pLastCont = nullptr;
+						nLastCmd = FALSE;
+					}
                     else
                     {
                         obj_to_obj(pObj, pCont);
+						if(ITEM_TYPE(pObj) == ITEM_CONTAINER) {
+							pLastCont = pObj; /* nesting: P successivi nel bag appena messo */
+						}
+						else {
+							pLastCont = pCont; /* sibling: restiamo sul contenitore esterno */
+						}
+						nLastCmd = TRUE;
                     }
-					nLastCmd = TRUE;
 				}
 				else {
 					pObj = pCont = NULL;
-					// nLastCmd = FALSE;    commentando questo viene caricato tutto nel contenitore, escluso gli oggetti maxxati
+					/* Non azzerare nLastCmd: i P successivi con if_flag devono continuare
+					 * (fallimento tipico = cap mondo o container non nel contesto reset). */
 				}
 				break;
 
@@ -5683,9 +5757,10 @@ void reset_zone(int zone) {
                     else
                     {
                         obj_to_char(pObj, pLastMob);
+						if(ITEM_TYPE(pObj) == ITEM_CONTAINER) {
+							pLastCont = pObj;
+						}
                     }
-					//if (ITEM_TYPE(pObj) == ITEM_CONTAINER)
-					//{ pLastCont = pObj; }
 				}
 				break;
 
@@ -5723,9 +5798,10 @@ void reset_zone(int zone) {
                         else
                         {
                             equip_char(pLastMob, pObj, ZCMD.arg3);
+							if(ITEM_TYPE(pObj) == ITEM_CONTAINER) {
+								pLastCont = pObj;
+							}
                         }
-						//if (ITEM_TYPE(pObj) == ITEM_CONTAINER)
-						//{ pLastCont = pObj; }
 					}
 					else {
 						mudlog(LOG_ERROR, "eq error - zone %d, cmd %d, "
@@ -5734,6 +5810,9 @@ void reset_zone(int zone) {
 							   obj_index[ ZCMD.arg1 ].iVNum,
 							   mob_index[ pLastMob->nr ].iVNum,
 							   ZCMD.arg3, s);
+						/* Slot gia' occupato: pObj non e' da nessuna parte, ma e'
+						 * in object_list e conta nei limiti del vnum. */
+						extract_obj(pObj);
 					}
 				}
 				break;
@@ -5824,8 +5903,13 @@ int load_char(const char* name, struct char_file_u* char_element) {
 		fread(char_element, MIN(filesize, sizeof(struct char_file_u)), 1, fl);
 		fclose(fl);
 		/* Campi append-only assenti nei .dat vecchi. */
-		if(filesize < static_cast<long>(sizeof(struct char_file_u))) {
+		if(filesize < static_cast<long>(offsetof(struct char_file_u, edit_pool) +
+										sizeof(char_element->edit_pool))) {
 			std::memset(&char_element->edit_pool, 0, sizeof(char_element->edit_pool));
+		}
+		if(filesize < static_cast<long>(offsetof(struct char_file_u, combat_view) +
+										sizeof(char_element->combat_view))) {
+			char_element->combat_view = 0;
 		}
 		/*
 		 **  Kludge for ressurection
@@ -5872,7 +5956,7 @@ int load_char_mysql(const char* name, struct char_file_u* char_element) {
 		"cc.act, cc.affected_by, cc.affected_by2, cc.last_logon, "
 		"cc.condition_drunk, cc.condition_full, cc.condition_thirst, "
 		"cc.save_throw_0, cc.save_throw_1, cc.save_throw_2, cc.save_throw_3, "
-		"cc.save_throw_4, cc.save_throw_5, cc.save_throw_6, cc.save_throw_7, "
+		"cc.save_throw_4, cc.save_throw_5, cc.save_throw_6, cc.save_throw_7, cc.combat_view, "
 		"cs.str, cs.str_add, cs.intel, cs.wis, cs.dex, cs.con, cs.chr, cs.extra, cs.extra2, "
 		"cs.mana, cs.max_mana, cs.mana_gain, cs.hit, cs.max_hit, cs.hit_gain, "
 		"cs.move, cs.max_move, cs.move_gain, cs.p_rune_dei, cs.points_extra1, cs.points_extra2, "
@@ -5933,6 +6017,7 @@ int load_char_mysql(const char* name, struct char_file_u* char_element) {
 	for(int i = 0; i < MAX_SAVES; ++i) {
 		st.apply_saving_throw[i] = static_cast<sh_int>(sql_to_ll(row[c++]));
 	}
+	st.combat_view = static_cast<int>(sql_to_ll(row[c++]));
 	st.abilities.str = static_cast<sbyte>(sql_to_ll(row[c++]));
 	st.abilities.str_add = static_cast<sbyte>(sql_to_ll(row[c++]));
 	st.abilities.intel = static_cast<sbyte>(sql_to_ll(row[c++]));
@@ -7385,6 +7470,9 @@ void store_to_char(struct char_file_u* st, struct char_data* ch) {
 
 	ch->player.speaks = st->speaks;
 	ch->player.user_flags = st->user_flags;
+	ch->player.combat_view = st->combat_view;
+	/* vecchi bit COMBAT_* di user_flags -> combat_view (tutte le categorie) */
+	combat_view::migrate_legacy(ch->player.user_flags, ch->player.combat_view);
 	ch->player.extra_flags = st->extra_flags;
 	ch->AgeModifier = st->agemod;
 	CREATE(GET_NAME(ch), char, strlen(st->name) + 1);
@@ -7450,6 +7538,7 @@ void store_to_char(struct char_file_u* st, struct char_data* ch) {
 
 	/* set default screen size */
 	ch->size = 25;
+	ch->width = 80;
 
 	/* affect_total (e gli affect_* sopra) clampano al max nudo senza eq.
 	 * Ripristina i valori del file: restano validi fino a dopo load_char_objs. */
@@ -7583,6 +7672,7 @@ void char_to_store(struct char_data* ch, struct char_file_u* st) {
 
 	st->speaks = ch->player.speaks;
 	st->user_flags = ch->player.user_flags;
+	st->combat_view = ch->player.combat_view;
 
 	st->points.armor = 100;
 	st->points.hitroll = 0;
@@ -8182,6 +8272,8 @@ void free_char(struct char_data* ch) {
 	mudlog(LOG_CHECK, "Freeing char %s (ADDR: %p, magic %d)", GET_NAME_DESC(ch),
 		   ch, ch->nMagicNumber);
 
+	oedit_snapshot_clear(ch); /* snapshot oedit indicizzato per puntatore */
+
 	if(GET_NAME(ch)) {
 		free(GET_NAME(ch));
 		GET_NAME(ch) = NULL;
@@ -8202,6 +8294,12 @@ void free_char(struct char_data* ch) {
 	if(ch->specials.prompt) {
 		free(ch->specials.prompt);
 		ch->specials.prompt = NULL;
+	}
+	for(int sb = 0; sb < VT_STATUSBAR_LINES; ++sb) {
+		if(ch->specials.statusbar[sb]) {
+			free(ch->specials.statusbar[sb]);
+			ch->specials.statusbar[sb] = nullptr;
+		}
 	}
 	if(ch->specials.lastversion) {
 		free(ch->specials.lastversion);
@@ -8892,6 +8990,7 @@ void clear_char(struct char_data* ch) {
 	ch->specials.default_pos = POSITION_STANDING;
 	GET_AC(ch) = 100; /* Basic Armor */
 	ch->size = 25;
+	ch->width = 80;
 	ch->nMagicNumber = CHAR_VALID_MAGIC;
 }
 
