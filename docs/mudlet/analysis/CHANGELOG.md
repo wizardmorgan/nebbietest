@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.23 — 2026-11-20
+
+- **ndig**: trigger frantumi generico (`cade a terra in frantumi`) — cattura
+  anche `A mining pick …`, non solo `Piccone …`. Su `Forse usando l'attrezzo
+  adatto` riprende `dig_tool` invece di spegnere. Fame/sete e cambio dig non
+  si pestano sullo zaino (coda reciproca).
+
 ## 1.16.22 — 2026-11-20
 
 - **ndig**: se il piccone cade in frantumi, lo script prende un nuovo `dig_tool`

@@ -2731,9 +2731,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.22+",
+check("package version 1.16.23+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.22"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.23"))
 
 -- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).
 do
@@ -2823,6 +2823,12 @@ do
   else
     check("dig swap normale: steps build (skip shape=" .. tostring(errNormal) .. ")", true)
   end
+  check("dig break: match Piccone",
+    NebbieDash.digLineLooksLikeBrokenTool("Piccone cade a terra in frantumi.", "pic") == true)
+  check("dig break: match A mining pick",
+    NebbieDash.digLineLooksLikeBrokenTool("A mining pick cade a terra in frantumi.", "pic") == true)
+  check("dig break: ignore scudo",
+    NebbieDash.digLineLooksLikeBrokenTool("Uno scudo di ferro cade a terra in frantumi.", "pic") == false)
 end
 
 -- Re-identify sposta possesso da un toon all'altro.

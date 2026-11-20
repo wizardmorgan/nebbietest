@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.22"
+local PKG_VER = "1.16.23"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -6787,6 +6787,10 @@ function NebbieDash.endWeaponSwapGuard(gen, restoreIfEmpty)
   -- restoreIfEmpty=true: altrimenti onWearBackLine → end(..., false) azzera lo
   -- stash e un "Smetti di usare" in ritardo svuota «sulla schiena».
   NebbieDash._weaponSwapBusy = false
+  if NebbieDash._hungerMacroPending and type(NebbieDash.runHungerMacro) == "function" then
+    NebbieDash._hungerMacroPending = false
+    tempTimer(0.35, function() NebbieDash.runHungerMacro() end)
+  end
   if not restoreIfEmpty then return end
   local stash = NebbieDash._weaponSwapBackItem
   NebbieDash._weaponSwapBackItem = nil
@@ -10398,7 +10402,22 @@ function NebbieDash.digAutoBuildSwapSteps(weaponKw, opts)
   return steps, nil, wieldKw
 end
 
+function NebbieDash.digAutoFlushPendingSwap()
+  local pend = NebbieDash._digSwapPending
+  if not pend then return end
+  NebbieDash._digSwapPending = nil
+  NebbieDash.digAutoRunSwap(pend.weaponKw, pend.label, pend.opts)
+end
+
 function NebbieDash.digAutoRunSwap(weaponKw, label, opts)
+  if NebbieDash._hungerMacroBusy then
+    -- Fame/sete sta usando lo zaino: coda il cambio dig e riparti dopo.
+    NebbieDash._digSwapPending = {
+      weaponKw = weaponKw, label = label, opts = opts,
+    }
+    cecho("<orange>[NebbieDash] Dig: attendo fine macro fame/sete prima del cambio arma.\n")
+    return true
+  end
   if NebbieDash._weaponSwapBusy then
     cecho("<orange>[NebbieDash] Dig: cambio arma gia' in corso.\n")
     return false
@@ -10571,21 +10590,61 @@ function NebbieDash.onDigTrueSightGoneLine()
   end
 end
 
+-- True se la riga frantumi riguarda un attrezzo da scavo (non uno scudo/arma
+-- generica). Il MUD stampa "$p cade a terra in frantumi." con short desc
+-- (es. "Piccone …" oppure "A mining pick …").
+function NebbieDash.digLineLooksLikeBrokenTool(text, toolKw)
+  local lower = NebbieDash.stripColors(tostring(text or "")):lower()
+  if lower:find("piccone", 1, true) then return true end
+  if lower:find("mining pick", 1, true) then return true end
+  if lower:find("%f[%w]pick%f[%W]") then return true end
+  if lower:find("%f[%w]pala%f[%W]") then return true end
+  toolKw = ((toolKw or ""):match("^%s*(.-)%s*$") or ""):lower()
+  if toolKw ~= "" and lower:find(toolKw, 1, true) then return true end
+  return false
+end
+
+-- Dig senza tool in mano (skills.cpp): riprova get+wield dig_tool.
 function NebbieDash.onDigNoToolLine()
   local st = NebbieDash.digAutoState()
   if not st.active and not st.armed then return end
+  NebbieDash.digAutoCancelRetry()
   NebbieDash.playSystemOrConfiguredSound("dig_warn", "dig_warn")
-  NebbieDash.digAutoStop("nessun attrezzo disponibile — automine fermato.")
+  local tool = NebbieDash.digToolKeyword()
+  cecho("<orange>[NebbieDash] Dig: manca attrezzo — prendo <yellow>" ..
+    tool .. "<orange> dallo zaino.\n")
+  local ok = NebbieDash.digAutoRunSwap(tool, "dig_tool", { handsEmpty = true })
+  if not ok then
+    NebbieDash.digAutoStop("nessun attrezzo disponibile — automine fermato.")
+    return
+  end
+  if st.active then
+    tempTimer((NebbieDash.weaponSwapDelay or 0.5) * 4 + 0.5, function()
+      local s = NebbieDash.digAutoState()
+      if not s.active then return end
+      NebbieDash.digAutoRequestSanctuaryCheck()
+    end)
+  end
 end
 
 function NebbieDash.onDigPickBrokenLine()
   local st = NebbieDash.digAutoState()
   if not st.active then return end
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local tool = NebbieDash.digToolKeyword()
+  if not NebbieDash.digLineLooksLikeBrokenTool(text, tool) then
+    return
+  end
   NebbieDash.digAutoCancelRetry()
   NebbieDash.playSystemOrConfiguredSound("dig_warn", "dig_warn")
-  -- Il piccone e' gia' distrutto: mani vuote. Solo get+wield di un nuovo tool
-  -- dallo zaino (niente rem/put dell'arma cache che non c'e' piu').
-  local tool = NebbieDash.digToolKeyword()
+  -- Mani gia' vuote: solo get+wield (niente rem/put stale). Pulisci cache impugnato.
+  local name = NebbieDash.currentChar
+  if name and type(NebbieDash.patchCachedEqLocation) == "function" then
+    local data = NebbieDash.getCharData(name)
+    if data and data.eqUpdated then
+      NebbieDash.patchCachedEqLocation(data, "impugnato", nil)
+    end
+  end
   cecho("<orange>[NebbieDash] Dig: piccone in frantumi — prendo <yellow>" ..
     tool .. "<orange> dallo zaino.\n")
   NebbieDash.digAutoRunSwap(tool, "dig_tool", { handsEmpty = true })
@@ -10627,9 +10686,11 @@ function NebbieDash.installDigAutomineTriggers()
     [[NebbieDash.onDigRefreshWarnLine()]])
   add("La tua visione torna normale.",
     [[NebbieDash.onDigTrueSightGoneLine()]])
-  add("Non sembra che ti abbia",
+  -- skills.cpp do_miner senza tool in mano
+  add("Forse usando l'attrezzo adatto",
     [[NebbieDash.onDigNoToolLine()]])
-  add("Piccone cade a terra in frantumi",
+  -- fight.cpp MakeScrap: "$p cade a terra in frantumi." (Piccone / A mining pick / …)
+  add("cade a terra in frantumi",
     [[NebbieDash.onDigPickBrokenLine()]])
 end
 
@@ -11104,6 +11165,11 @@ function NebbieDash.runHungerMacro()
     NebbieDash._hungerMacroPending = true
     return
   end
+  -- Non togliere lo zaino mentre dig/cambio arma lo sta usando.
+  if NebbieDash._weaponSwapBusy then
+    NebbieDash._hungerMacroPending = true
+    return
+  end
   local macro = NebbieDash.hungerMacros[name]
   if not macro then
     cecho("<orange>[NebbieDash] Nessuna macro fame/sete configurata per " .. name ..
@@ -11128,6 +11194,9 @@ function NebbieDash.runHungerMacro()
   tempTimer(delay * (#steps - 1) + 1.0, function()
     NebbieDash._hungerMacroBusy = false
     NebbieDash._hungerMacroBusySince = nil
+    if type(NebbieDash.digAutoFlushPendingSwap) == "function" then
+      NebbieDash.digAutoFlushPendingSwap()
+    end
     if NebbieDash._hungerMacroPending then
       NebbieDash._hungerMacroPending = false
       tempTimer(0.35, function() NebbieDash.runHungerMacro() end)
