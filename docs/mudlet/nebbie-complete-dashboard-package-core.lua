@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.23"
+local PKG_VER = "1.16.24"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -5512,63 +5512,127 @@ function NebbieDash.positionHelpWindow()
   resizeWindow("NebbieDashHelpWin", winW, winH)
 end
 
--- Testo statico dei comandi disponibili. Va aggiornato ogni volta che si
--- aggiunge/rinomina un alias in build-nebbie-complete-dashboard-package.py
--- (stessa regola gia' seguita per USAGE.md/CHANGELOG.md).
+-- Elenco comandi per nhelp / "? Comandi".
+-- Formato: { section = "Titolo" } oppure { "comando", "descrizione" }.
+-- Dentro ogni sezione i comandi sono in ordine alfabetico (per nome).
+-- Aggiornare SEMPRE qui + USAGE.md quando si aggiunge/rinomina un alias
+-- in build-nebbie-complete-dashboard-package.py.
 NebbieDash.HELP_TEXT = {
-  { "c / r / m <spell> [bersaglio]", "Lancia spell (nclass PG); senza bersaglio = PG attivo." },
-  { "<shortcut> [bersaglio]", "Alias globali da nebbie-spell-shortcuts.txt (stile zMUD)." },
-  { "nspellaliases / nspellaliasesreload", "Elenco shortcut; ricarica file shortcut/cast." },
-  { "neq / nattrib / nresync", "Mostra equip/spell salvati; nresync invia eq+attrib al MUD." },
-  { "nfix", "Riavvia il package (pulisce pannelli legacy)." },
-  { "npackageupdate [force]", "Aggiorna il .mpackage da GitHub (main)." },
-  { "npackagecheck", "Controlla se su GitHub c'e' una versione piu' nuova." },
-  { "ntriggers", "Reinstalla i trigger senza riavviare Mudlet." },
-  { "nkeys", "Info tastierino numerico / shortcut da command line." },
-  { "ngui", "Mostra/nascondi il pannello Equip." },
-  { "nlayout", "Ripristina larghezza/font di default." },
-  { "nchar <nome>", "Forza il personaggio attivo (es. nchar Sirio)." },
-  { "nclass <c|r|m>", "Prefisso lancio spell per il PG attivo (cast/recall/mind)." },
-  { "nfont <6-24>", "Font del pannello Equip." },
-  { "nwidth [auto|<px>]", "Larghezza colonna Equip (bordo sinistro)." },
-  { "npreferencesreload", "Ricarica preferenze e highlight da ndashboard." },
-  { "nconfigdir", "Mostra cartella profiles/ndashboard." },
-  { "nitemlen <n>", "Lunghezza max descrizioni oggetti in equip." },
-  { "nclanslot <on|off>", "Mostra/nascondi lo slot simbolo del clan." },
-  { "usa <keyword>", "Cambio arma da zaino (rem/get/wield)." },
-  { "ndig [on|off|tool|combat|status|loot]", "Automine dig (equip pic + loop dadomud)." },
-  { "ndigloot", "Ricarica nebbie-dig-loot.txt (keep/exclude/drop)." },
-  { "nswui [off]", "Finestra floating speedwalk (lista path + pausa/riprendi)." },
-  { "nsw pause|resume|skip|stop|status", "Controlla la corsa speedwalk." },
-  { "nspeedwalks", "Ricarica nebbie-speedwalks.txt (ndashboard)." },
-  { "nspeeddelay <sec>", "Ritardo tra passi speedwalk / ripetizioni .Ncmd." },
-  { "nloot / nautoloot / nautosplit", "Loot monete; auto a fine fight; split gruppo." },
-  { "nsplit <n>", "Split manuale col gruppo." },
-  { "nautostand / nautodisarm", "Stand dopo caduta; recupero arma dopo disarmo." },
-  { ".<n><comando>", "Ripete il comando N volte (es. .4s)." },
-  { "nautofeed / nhungermacros", "Macro fame/sete; ricarica file macro." },
-  { "nitemkeywords", "Ricarica parole chiave oggetti (ndashboard)." },
-  { "nforgetspell <nome>", "Toglie una spell dall'elenco del PG attivo." },
-  { "nchat [on|off|clear]", "Finestra floating chat (say/gt/clan/tell/send/telep/sign/…)." },
-  { "ngoldalert [on|off|status]", "Allarme se G: scende senza spesa volontaria." },
-  { "nidentui [filter|slot|char|del|reset]", "Finestra floating archivio identify." },
-  { "nidentdb …", "Cerca/hold/cedibile/export identify (vedi USAGE)." },
-  { "nidentsync [token|skip|setup|status|…]", "Sync identify con hub VPS (token)." },
-  { "nidentpull / nidentpush", "Solo pull o solo push verso l'hub." },
-  { "nknowdb [query|race …]", "Archivio know monster (ndashboard)." },
-  { "nbatch / nidentbatch …", "Batch admin/identify (profilo Sirio)." },
-  { "identify <arma>", "(gioco) Tipo danno per usa/disarmo." },
+  { section = "Aiuto e package" },
+  { "nfix", "Reinstalla trigger/GUI senza disinstallare il package." },
   { "nhelp", "Mostra/nascondi questa finestra." },
+  { "nkeys", "Info tastierino numerico / shortcut da command line." },
+  { "npackagecheck", "Controlla se su GitHub c'e' una versione piu' nuova." },
+  { "npackageupdate [force]", "Aggiorna il .mpackage da GitHub (main)." },
+  { "ntriggers", "Reinstalla i trigger senza riavviare Mudlet." },
+
+  { section = "Personaggio e pannelli" },
+  { "nattrib", "Invia attrib e aggiorna spell in cache." },
+  { "nchar <nome>", "Forza il personaggio attivo (es. nchar Sirio)." },
+  { "nclanslot <on|off>", "Mostra/nascondi lo slot simbolo del clan." },
+  { "neq", "Invia eq e aggiorna il pannello equip." },
+  { "nfont <6-24>", "Font del pannello Equip." },
+  { "ngui", "Mostra/nascondi il pannello Equip." },
+  { "nitemlen <n>", "Lunghezza max descrizioni oggetti in equip." },
+  { "nlayout", "Ripristina larghezza/font di default." },
+  { "nresync", "Invia eq + attrib al MUD e aggiorna cache." },
+  { "nwidth [auto|<px>]", "Larghezza colonna Equip (bordo sinistro)." },
+
+  { section = "Spell e cast" },
+  { "<shortcut> [bersaglio]", "Alias globali da nebbie-spell-shortcuts.txt." },
+  { "c / r / m <spell> [bersaglio]", "Lancia spell (cast/recall/mind); default bersaglio = PG." },
+  { "nclass <c|r|m>", "Prefisso lancio spell per il PG attivo." },
+  { "nforgetspell <nome>", "Toglie una spell dall'elenco del PG attivo." },
+  { "nspellaliases", "Elenco shortcut + spell pannello + nclass." },
+  { "nspellaliasesreload", "Ricarica file shortcut/cast da ndashboard." },
+  { "nspellwarn <n>", "Sotto quanti tick una spell attiva diventa rossa." },
+
+  { section = "Equip e armi" },
+  { "identify <arma>", "(comando gioco) tipo danno per usa/disarmo." },
+  { "nitemkeywords", "Ricarica parole chiave oggetti (ndashboard)." },
+  { "usa <keyword>", "Cambio arma da zaino (rem/get/wield/put/wear)." },
+
+  { section = "Dig / miniera" },
+  { "ndig", "Impugna dig_tool dallo zaino; al primo dig avvia automine." },
+  { "ndig combat <kw>", "Arma da usare sull'umber (default: arma tolta da ndig)." },
+  { "ndig help", "Riassunto opzioni dig." },
+  { "ndig loot", "Come ndigloot: ricarica nebbie-dig-loot.txt." },
+  { "ndig off", "Ferma retry / automine." },
+  { "ndig status", "Stato armed/active, tool, combat, retry, suoni." },
+  { "ndig tool <kw>", "Keyword attrezzo (default: pic → piccone/pick)." },
+  { "ndigloot", "Ricarica keep/exclude/drop per loot a filone esaurito." },
+
+  { section = "Loot, oro e gruppo" },
+  { "nautoloot <on|off>", "Loot monete automatico a fine fight (default on)." },
+  { "nautosplit <on|off>", "Split automatico col gruppo dopo loot (default on)." },
+  { "ngoldalert [on|off|status]", "Allarme se G: scende senza spesa volontaria." },
+  { "ngroupcmd …", "Comando di gruppo (vedi USAGE)." },
+  { "nloot", "Prende monete dal cadavere (corp / pile of bones)." },
+  { "nsplit <n>", "Split manuale col gruppo." },
+
+  { section = "Fame, sete e automatici" },
+  { ".<n><comando>", "Ripete il comando N volte (es. .4s)." },
+  { "nautodisarm <on|off>", "Recupero arma dopo disarmo (default on)." },
+  { "nautofeed <on|off>", "Macro fame/sete automatica (default on)." },
+  { "nautostand <on|off>", "Stand automatico dopo caduta (default on)." },
+  { "nhungermacros", "Ricarica nebbie-hunger-macros.txt." },
+
+  { section = "Speedwalk" },
+  { "nspeeddelay <sec>", "Ritardo tra passi speedwalk / ripetizioni .Ncmd." },
+  { "nspeedwalks", "Ricarica nebbie-speedwalks.txt (ndashboard)." },
+  { "nsw pause|resume|skip|stop|status", "Controlla la corsa speedwalk." },
+  { "nswui [off]", "Finestra floating speedwalk (lista + pausa/riprendi)." },
+
+  { section = "Chat" },
+  { "nchat [on|off|clear]", "Finestra chat (say/gt/clan/tell/send/telep/sign/…)." },
+
+  { section = "Identify e know" },
+  { "nidentbatch …", "Batch identify admin (oload + identify; profilo Sirio)." },
+  { "nidentbatchreload", "Ricarica config batch identify." },
+  { "nidentdb …", "Cerca/hold/cedibile/export identify (vedi USAGE)." },
+  { "nidentdbreload", "Ricarica nebbie-ident-db.lua dal disco." },
+  { "nidentpull / nidentpush", "Solo pull o solo push verso l'hub sync." },
+  { "nidentsync [token|skip|setup|status|…]", "Sync identify con hub VPS." },
+  { "nidentui [filter|slot|char|del|reset|rebuild]", "Finestra floating archivio identify." },
+  { "nknowdb [query|race …]", "Archivio know monster (ndashboard)." },
+  { "nknowdbreload", "Ricarica nebbie-know-db.lua dal disco." },
+
+  { section = "Batch admin" },
+  { "nbatch …", "Batch comandi su CSV (profilo Sirio)." },
+  { "nbatchreload", "Ricarica file batch." },
+  { "nbatchverify …", "Verifica log batch vs CSV atteso." },
+
+  { section = "Preferenze e file" },
+  { "nconfigdir", "Mostra cartella profiles/ndashboard." },
+  { "npreferencesreload", "Ricarica preferenze e highlight da ndashboard." },
 }
 
 function NebbieDash.buildHelpText()
-  local lines = { "<cyan><b>NebbieDash — comandi disponibili</b>", "" }
+  local lines = {
+    "<cyan><b>NebbieDash — comandi</b>  <grey>v" .. tostring(NebbieDash.version or "?"),
+    "",
+  }
   for _, entry in ipairs(NebbieDash.HELP_TEXT) do
-    table.insert(lines, string.format("<yellow>%-32s<white> %s", entry[1], entry[2]))
+    if entry.section then
+      table.insert(lines, "")
+      table.insert(lines, "<cyan><b>— " .. entry.section .. " —</b>")
+    elseif entry[1] and entry[2] then
+      table.insert(lines, string.format("<yellow>%-36s<white> %s", entry[1], entry[2]))
+    end
   end
   table.insert(lines, "")
-  table.insert(lines, "<grey>Documentazione completa: docs/mudlet/analysis/USAGE.md")
+  table.insert(lines, "<grey>Dettagli: analysis/USAGE.md  ·  ndig help  ·  nidentui help")
   return lines
+end
+
+function NebbieDash.refreshHelpWindowContent()
+  if not NebbieDash._helpWinCreated then return end
+  clearWindow("NebbieDashHelpWin")
+  for _, l in ipairs(NebbieDash.buildHelpText()) do
+    cecho("NebbieDashHelpWin", l .. "\n")
+  end
+  cechoLink("NebbieDashHelpWin", "<orange>[chiudi]", "NebbieDash.toggleHelp()", "Chiudi questa finestra", true)
+  cecho("NebbieDashHelpWin", "\n")
 end
 
 function NebbieDash.toggleHelp()
@@ -5578,12 +5642,7 @@ function NebbieDash.toggleHelp()
     setMiniConsoleFontSize("NebbieDashHelpWin", NebbieDash.fontSize)
     NebbieDash._helpWinCreated = true
     NebbieDash.positionHelpWindow()
-    clearWindow("NebbieDashHelpWin")
-    for _, l in ipairs(NebbieDash.buildHelpText()) do
-      cecho("NebbieDashHelpWin", l .. "\n")
-    end
-    cechoLink("NebbieDashHelpWin", "<orange>[chiudi]", "NebbieDash.toggleHelp()", "Chiudi questa finestra", true)
-    cecho("NebbieDashHelpWin", "\n")
+    NebbieDash.refreshHelpWindowContent()
     showWindow("NebbieDashHelpWin")
     NebbieDash._helpWinVisible = true
     return
@@ -5593,6 +5652,7 @@ function NebbieDash.toggleHelp()
     NebbieDash._helpWinVisible = false
   else
     NebbieDash.positionHelpWindow()
+    NebbieDash.refreshHelpWindowContent()
     showWindow("NebbieDashHelpWin")
     NebbieDash._helpWinVisible = true
   end
@@ -10694,12 +10754,29 @@ function NebbieDash.installDigAutomineTriggers()
     [[NebbieDash.onDigPickBrokenLine()]])
 end
 
+function NebbieDash.printDigHelp()
+  cecho("<cyan>[NebbieDash] ndig — automine (dig / miniera)\n")
+  cecho("<yellow>  ndig<white>                 Impugna dig_tool dallo zaino (armed).\n")
+  cecho("<yellow>  dig<white>                  Prima volta: attiva automine (retry, umber, sanc…).\n")
+  cecho("<yellow>  ndig off<white>             Ferma automine / retry.\n")
+  cecho("<yellow>  ndig status<white>          Stato, tool, combat, suoni.\n")
+  cecho("<yellow>  ndig tool <kw><white>       Keyword attrezzo (default: pic).\n")
+  cecho("<yellow>  ndig combat <kw><white>     Arma per umber.\n")
+  cecho("<yellow>  ndig loot / ndigloot<white> Ricarica nebbie-dig-loot.txt.\n")
+  cecho("<grey>  Piccone rotto ($p in frantumi) → nuovo tool. Fame/sete non si pesta sullo zaino.\n")
+  cecho("<grey>  Elenco completo: <yellow>nhelp<grey> (sezione Dig / miniera).\n")
+end
+
 function NebbieDash.cmdDig(argStr)
   argStr = (argStr or ""):match("^%s*(.-)%s*$") or ""
   local mode, rest = argStr:match("^(%S+)%s*(.-)%s*$")
   mode = (mode or ""):lower()
   rest = rest or ""
 
+  if mode == "help" or mode == "?" then
+    NebbieDash.printDigHelp()
+    return
+  end
   if mode == "" or mode == "on" or mode == "start" or mode == "equip" then
     NebbieDash.digAutoEquipTool()
     return
@@ -10757,7 +10834,7 @@ function NebbieDash.cmdDig(argStr)
     cecho("<green>[NebbieDash] dig_combat = <white>" .. rest .. "\n")
     return
   end
-  cecho("<orange>[NebbieDash] Uso: ndig | ndig on|off|status|loot|tool <kw>|combat <kw>\n")
+  NebbieDash.printDigHelp()
 end
 
 

@@ -2731,9 +2731,44 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.23+",
+check("package version 1.16.24+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.23"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.24"))
+
+-- nhelp: sezioni + comandi chiave presenti; ordine alfabetico in sezione.
+do
+  local help = NebbieDash.HELP_TEXT
+  check("help: HELP_TEXT tabella", type(help) == "table" and #help > 10)
+  local sections, cmds = 0, 0
+  local seen = {}
+  local lastSectionCmds = nil
+  local alphaOk = true
+  for _, e in ipairs(help) do
+    if e.section then
+      sections = sections + 1
+      lastSectionCmds = {}
+    elseif e[1] then
+      cmds = cmds + 1
+      seen[e[1]:match("^(%S+)") or e[1]] = true
+      if lastSectionCmds then
+        local key = (e[1] or ""):lower()
+        if #lastSectionCmds > 0 and key < lastSectionCmds[#lastSectionCmds] then
+          alphaOk = false
+        end
+        table.insert(lastSectionCmds, key)
+      end
+    end
+  end
+  check("help: almeno 8 sezioni", sections >= 8)
+  check("help: comandi alfabetici in sezione", alphaOk)
+  local lines = NebbieDash.buildHelpText()
+  local joined = table.concat(lines, "\n")
+  check("help: buildHelpText ha Dig", joined:find("Dig / miniera", 1, true) ~= nil)
+  check("help: elenca ndig", joined:find("ndig", 1, true) ~= nil)
+  check("help: elenca ndigloot", joined:find("ndigloot", 1, true) ~= nil)
+  check("help: elenca nchat", joined:find("nchat", 1, true) ~= nil)
+  check("help: elenca nidentsync", joined:find("nidentsync", 1, true) ~= nil)
+end
 
 -- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).
 do

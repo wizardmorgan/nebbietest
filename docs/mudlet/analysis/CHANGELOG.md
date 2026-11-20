@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.24 — 2026-11-20
+
+- **nhelp**: comandi divisi per sezione (ordine alfabetico in ciascuna);
+  include ndig/ndigloot e alias mancanti. `ndig help` con riassunto.
+  La finestra help si aggiorna a ogni riapertura.
+
 ## 1.16.23 — 2026-11-20
 
 - **ndig**: trigger frantumi generico (`cade a terra in frantumi`) — cattura
