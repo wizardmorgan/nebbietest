@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.27 — 2026-11-20
+
+- **ndig off**: ripristina l'arma `dig_combat` (umber) e ripone `dig_tool`
+  nello zaino. Se combat e' gia' in mano, non rifa lo swap.
+
 ## 1.16.26 — 2026-11-20
 
 - **ndig umber**: allo swap combat/dig_tool fa sempre `rem`+`put` dell'arma

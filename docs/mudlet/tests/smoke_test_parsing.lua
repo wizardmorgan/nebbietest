@@ -2731,9 +2731,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.26+",
+check("package version 1.16.27+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.26"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.27"))
 
 -- nhelp: sezioni + comandi chiave presenti; ordine alfabetico in sezione.
 do
@@ -2887,6 +2887,35 @@ do
     local jb = table.concat(bareSteps, " | ")
     check("dig umber bare: no put senza putAway/eq", jb:find("put ", 1, true) == nil)
   end
+  -- ndig off ripristina combat e ripone dig_tool.
+  NebbieDash.prefs.dig_combat = "slash"
+  NebbieDash.prefs.dig_tool = "pic"
+  local stOff = NebbieDash.digAutoState()
+  stOff.armed = true
+  stOff.active = true
+  stOff.currentWield = "pic"
+  local offSwap = nil
+  local origRun = NebbieDash.digAutoRunSwap
+  NebbieDash.digAutoRunSwap = function(kw, label, opts)
+    offSwap = { kw = kw, label = label, opts = opts }
+    return true
+  end
+  NebbieDash.digAutoStop("disattivato.")
+  NebbieDash.digAutoRunSwap = origRun
+  check("dig off: spegne armed/active", stOff.armed == false and stOff.active == false)
+  check("dig off: swap a combat", offSwap and offSwap.kw == "slash")
+  check("dig off: putAway dig_tool",
+    offSwap and offSwap.opts and offSwap.opts.putAwayKw == "pic")
+  -- Gia' combat in mano: niente swap.
+  stOff.currentWield = "slash"
+  stOff.armed = true
+  offSwap = nil
+  NebbieDash.digAutoRunSwap = function(kw, label, opts)
+    offSwap = { kw = kw }; return true
+  end
+  NebbieDash.digAutoStop("disattivato.")
+  NebbieDash.digAutoRunSwap = origRun
+  check("dig off: gia' combat → no swap", offSwap == nil)
 end
 
 -- Re-identify sposta possesso da un toon all'altro.

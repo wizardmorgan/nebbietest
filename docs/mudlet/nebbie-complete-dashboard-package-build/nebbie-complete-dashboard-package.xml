@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.26"
+local PKG_VER = "1.16.27"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -5563,7 +5563,7 @@ NebbieDash.HELP_TEXT = {
   { "ndig combat <kw>", "Arma umber: get+wield e put dig_tool in zaino." },
   { "ndig help", "Riassunto opzioni dig." },
   { "ndig loot", "Come ndigloot: ricarica nebbie-dig-loot.txt." },
-  { "ndig off", "Ferma retry / automine." },
+  { "ndig off", "Ferma automine e ripristina arma dig_combat." },
   { "ndig status", "Stato armed/active, tool, combat, retry, suoni." },
   { "ndig tool <kw>", "Keyword attrezzo (default: pic → piccone/pick)." },
   { "ndigloot", "Ricarica keep/exclude/drop per loot a filone esaurito." },
@@ -10385,7 +10385,12 @@ function NebbieDash.digAutoCancelRetry()
   st.digPending = false
 end
 
-function NebbieDash.digAutoStop(msg)
+-- opts.restoreCombat (default true): dopo lo stop, ripristina dig_combat
+-- (arma umber) e ripone dig_tool nello zaino — come uscire da ndig.
+function NebbieDash.digAutoStop(msg, opts)
+  opts = opts or {}
+  local restoreCombat = opts.restoreCombat
+  if restoreCombat == nil then restoreCombat = true end
   local st = NebbieDash.digAutoState()
   NebbieDash.digAutoCancelRetry()
   st.armed = false
@@ -10395,6 +10400,26 @@ function NebbieDash.digAutoStop(msg)
   if msg then
     cecho("<orange>[NebbieDash] Dig automine: " .. msg .. "\n")
   end
+  if not restoreCombat then return end
+  local combat = NebbieDash.digCombatKeyword()
+  if combat == "" then
+    cecho("<orange>[NebbieDash] Dig off: nessuna arma combat (ndig combat <kw>) da ripristinare.\n")
+    return
+  end
+  -- Gia' in mano l'arma combat (es. umber in corso): non rifare lo swap.
+  if st.currentWield and st.currentWield ~= ""
+      and NebbieDash.keywordsOverlap(st.currentWield, combat) then
+    cecho("<green>[NebbieDash] Dig off: gia' impugnato <yellow>" .. combat .. "<green>.\n")
+    return
+  end
+  local putAway = NebbieDash.digToolKeyword()
+  if st.currentWield and st.currentWield ~= ""
+      and not NebbieDash.keywordsOverlap(st.currentWield, combat) then
+    putAway = st.currentWield
+  end
+  cecho("<green>[NebbieDash] Dig off: ripristino <yellow>" .. combat ..
+    "<green>, ripongo <yellow>" .. putAway .. "<green>.\n")
+  NebbieDash.digAutoRunSwap(combat, "dig_combat", { putAwayKw = putAway })
 end
 
 function NebbieDash.digAutoScheduleRetry()
@@ -10801,7 +10826,7 @@ function NebbieDash.printDigHelp()
   cecho("<cyan>[NebbieDash] ndig — automine (dig / miniera)\n")
   cecho("<yellow>  ndig<white>                 Impugna dig_tool dallo zaino (armed).\n")
   cecho("<yellow>  dig<white>                  Prima volta: attiva automine (retry, umber, sanc…).\n")
-  cecho("<yellow>  ndig off<white>             Ferma automine / retry.\n")
+  cecho("<yellow>  ndig off<white>             Ferma automine e ripristina dig_combat.\n")
   cecho("<yellow>  ndig status<white>          Stato, tool, combat, suoni.\n")
   cecho("<yellow>  ndig tool <kw><white>       Keyword attrezzo (default: pic).\n")
   cecho("<yellow>  ndig combat <kw><white>     Arma umber (get+wield, put dig_tool in zaino).\n")

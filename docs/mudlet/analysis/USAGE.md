@@ -142,7 +142,7 @@ quando si aggiunge un alias.
 | `ndig combat <kw>` | Arma per umber (default: arma tolta da `ndig`). |
 | `ndig help` | Riassunto opzioni dig. |
 | `ndig loot` / `ndigloot` | Ricarica `nebbie-dig-loot.txt` (keep/exclude/drop). |
-| `ndig off` | Ferma automine / retry. |
+| `ndig off` | Ferma automine e ripristina `dig_combat` (ripone dig_tool). |
 | `ndig status` | Stato armed/active, tool, combat, suoni. |
 | `ndig tool <kw>` | Keyword attrezzo (default: `pic`). |
 
@@ -368,7 +368,7 @@ Stile dadomud (senza finestra Mine):
 ```
 ndig                 # togli arma, prendi dig_tool dallo zaino, impugnato
 dig                  # la PRIMA volta attiva le automazioni
-ndig off             # ferma retry / automine
+ndig off             # ferma automine e ripristina dig_combat (put dig_tool)
 ndig tool pic        # keyword corta (default: pic → piccone/pick)
 ndig combat slash    # arma da usare sull'umber (default: arma tolta da ndig)
 ndig status
