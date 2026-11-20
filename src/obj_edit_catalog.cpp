@@ -735,6 +735,19 @@ bool object_edit_recovers_listino_malus(const struct obj_data* obj, int location
 	return target_modifier > cur;
 }
 
+bool object_edit_malus_crosses_to_bonus(int location, int current,
+									   int target) noexcept {
+	if(!listino_current_is_malus(location, current)) {
+		return false;
+	}
+	if(location == APPLY_AC || location == APPLY_SPELLFAIL) {
+		/* Malus >0, bonus <0: attraversa lo zero. */
+		return target < 0;
+	}
+	/* Stats: malus <0, bonus >0. */
+	return target > 0;
+}
+
 static void portal_force_paid_malus(struct obj_data* obj) noexcept {
 	if(obj) {
 		SET_BIT(obj->obj_flags.extra_flags2, ITEM2_PAID_MALUS);
@@ -1830,7 +1843,10 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 								long& xp_raw, int& pq, std::string& err,
 								int other_worn_edited_dam, int other_worn_edited_sp,
 								bool clear_slot, int other_owned_edited_spellfail,
-								bool allow_combat_merge) {
+								bool allow_combat_merge, ObjEditMalusSplit* split_out) {
+	if(split_out) {
+		*split_out = {};
+	}
 	if(!obj) {
 		err = "oggetto null";
 		return false;
@@ -1841,9 +1857,10 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 	 * flag), forziamo PAID_MALUS sui clone di analisi cosi' diff.valore include
 	 * la tariffa 2× e, in un solo posto, class_mult + Artifact +50%.
 	 */
+	const bool recovers_malus =
+		object_edit_recovers_listino_malus(obj, location, target_modifier, clear_slot);
 	const bool use_paid_malus =
-		IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS)
-		|| object_edit_recovers_listino_malus(obj, location, target_modifier, clear_slot);
+		IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS) || recovers_malus;
 
 	/*
 	 * Baseline congelata prima dell'edit: per premi senza instance gli affect
@@ -1855,19 +1872,6 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		err = "baseline pezzo non disponibile";
 		return false;
 	}
-
-	struct obj_data* before_obj = portal_clone_obj_state(obj);
-	if(!before_obj) {
-		extract_obj(frozen_baseline);
-		err = "impossibile clonare oggetto";
-		return false;
-	}
-	if(use_paid_malus) {
-		portal_force_paid_malus(before_obj);
-	}
-	const ObjEditAnalysis before =
-		AnalyzeObjEditAgainst(before_obj, frozen_baseline, true);
-	extract_obj(before_obj);
 
 	struct obj_data* clone = portal_clone_obj_state(obj);
 	if(!clone) {
@@ -1904,6 +1908,75 @@ bool object_quote_affect_target(struct obj_data* obj, int location, int target_m
 		extract_obj(frozen_baseline);
 		return false;
 	}
+
+	/*
+	 * Recupero malus: 2× sul tratto fino a 0. Se il target e' un bonus oltre
+	 * lo zero (AC +10→−10), spezza: 2×(cur→0) + 1×(0→target).
+	 */
+	if(recovers_malus) {
+		const int cur = object_edit_display_current(obj, location);
+		pq = 0;
+		if(!clear_slot &&
+		   object_edit_malus_crosses_to_bonus(location, cur, target_modifier)) {
+			const long malus_unit =
+				EditAffectDeltaListinoCost(obj, location, 0 - cur);
+			const long malus_xp = (malus_unit > 0) ? (malus_unit * 2) : 0L;
+
+			struct obj_data* mid = portal_clone_obj_state(obj);
+			if(!mid) {
+				extract_obj(clone);
+				extract_obj(frozen_baseline);
+				err = "impossibile clonare oggetto";
+				return false;
+			}
+			std::string mid_err;
+			if(!apply_target_modifier(mid, location, 0, mid_err, false, false)) {
+				extract_obj(mid);
+				extract_obj(clone);
+				extract_obj(frozen_baseline);
+				err = mid_err.empty() ? "impossibile azzerare malus in quote" : mid_err;
+				return false;
+			}
+			portal_force_paid_malus(mid);
+			const long bonus_xp =
+				EditAffectDeltaListinoCost(mid, location, target_modifier);
+			extract_obj(mid);
+
+			xp_raw = malus_xp + std::max(0L, bonus_xp);
+			if(split_out) {
+				split_out->active = true;
+				split_out->malus_xp_raw = malus_xp;
+				split_out->bonus_xp_raw = std::max(0L, bonus_xp);
+				split_out->from = cur;
+				split_out->to = target_modifier;
+			}
+			extract_obj(clone);
+			extract_obj(frozen_baseline);
+			return true;
+		}
+
+		const int delta_mod = target_modifier - cur;
+		const long unit = EditAffectDeltaListinoCost(obj, location, delta_mod);
+		xp_raw = (unit > 0) ? (unit * 2) : 0L;
+		extract_obj(clone);
+		extract_obj(frozen_baseline);
+		return true;
+	}
+
+	struct obj_data* before_obj = portal_clone_obj_state(obj);
+	if(!before_obj) {
+		extract_obj(clone);
+		extract_obj(frozen_baseline);
+		err = "impossibile clonare oggetto";
+		return false;
+	}
+	if(use_paid_malus) {
+		portal_force_paid_malus(before_obj);
+	}
+	const ObjEditAnalysis before =
+		AnalyzeObjEditAgainst(before_obj, frozen_baseline, true);
+	extract_obj(before_obj);
+
 	const ObjEditAnalysis after =
 		AnalyzeObjEditAgainst(clone, frozen_baseline, true);
 	extract_obj(clone);

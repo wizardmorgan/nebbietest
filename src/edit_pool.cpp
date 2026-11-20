@@ -1202,6 +1202,12 @@ edit_pool_quote edit_pool_quote_paid(EditPoolField field, int units,
 	return q;
 }
 
+std::pair<long, int> editpool_cost_for_units_n(EditPoolField field, int units,
+											   int n_classes) {
+	const edit_pool_quote q = edit_pool_quote_paid(field, units, n_classes);
+	return {q.xp_raw, q.pq};
+}
+
 bool edit_pool_set_absolute(struct char_edit_pool_data* pool, EditPoolField field,
 							int value) {
 	const auto refs = pool_field_refs(pool, field);

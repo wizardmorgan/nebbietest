@@ -8211,8 +8211,8 @@ std::unordered_map<struct char_data*, EditPoolPending> g_editpool_pending;
 }
 
 /**
- * Costo sulle unita' applicate — delega a edit_pool_quote_paid (stesso listino
- * del portale: artifact x1.5, xp/n_classi, rune=ceil).
+ * Costo sulle unita' applicate — stesso listino del portale via
+ * editpool_cost_for_units_n / edit_pool_quote_paid.
  */
 [[nodiscard]] std::pair<long, int>
 editpool_cost_for_units(EditPoolField field, int units, struct char_data* vict) {
@@ -8223,8 +8223,7 @@ editpool_cost_for_units(EditPoolField field, int units, struct char_data* vict) 
 			n_classes = 1;
 		}
 	}
-	const edit_pool_quote q = edit_pool_quote_paid(field, units, n_classes);
-	return {q.xp_raw, q.pq};
+	return editpool_cost_for_units_n(field, units, n_classes);
 }
 
 void send_editpool_usage(struct char_data* ch) {

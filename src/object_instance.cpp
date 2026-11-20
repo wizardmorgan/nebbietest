@@ -1773,6 +1773,75 @@ obj_data* object_instance_materialize_create_baseline(unsigned long long instanc
 	return obj;
 }
 
+bool object_instance_rebase_create_baseline(struct obj_data* obj,
+											const char* system_actor) {
+	if(!obj || obj->db_instance_id == 0) {
+		return false;
+	}
+	DB* db = Sql::getMysql();
+	if(!db) {
+		return false;
+	}
+	int base = object_instance_resolve_base_vnum(obj);
+	if(base <= 0) {
+		base = (obj->item_number >= 0) ? obj_index[obj->item_number].iVNum : 0;
+	}
+	if(base <= 0) {
+		return false;
+	}
+
+	object_instance row {};
+	fill_instance_from_obj(row, obj, base, nullptr, true, system_actor);
+	const std::string detail =
+		build_instance_diff(nullptr, row, nullptr, nullptr, obj);
+	if(detail.empty()) {
+		return false;
+	}
+
+	constexpr const char* kPaidMalusTag = "paid_malus_baseline";
+	const unsigned long long instance_id = obj->db_instance_id;
+	try {
+		const bool ok = with_odb_tx(db, [&]() {
+			using EvQ = odb::query<object_instance_event>;
+			object_instance_event create_ev {};
+			bool found = false;
+			for(const auto& ev :
+				db->query<object_instance_event>(EvQ::instance_id == instance_id)) {
+				if(ev.kind != "create") {
+					continue;
+				}
+				if(!found || ev.at < create_ev.at) {
+					create_ev = ev;
+					found = true;
+				}
+			}
+			char note_buf[128];
+			snprintf(note_buf, sizeof(note_buf), "base=%d %s", base, kPaidMalusTag);
+			if(found) {
+				create_ev.detail = detail;
+				create_ev.note = note_buf;
+				db->update(create_ev);
+			}
+			else {
+				append_instance_event_tx(db, instance_id, nullptr, "create", note_buf,
+										 detail.c_str(), system_actor);
+			}
+			return true;
+		});
+		if(ok) {
+			mudlog(LOG_CHECK,
+				   "paid_malus_baseline: rebased create of instance %llu base %d",
+				   static_cast<unsigned long long>(instance_id), base);
+		}
+		return ok;
+	}
+	catch(const odb::exception& e) {
+		mudlog(LOG_SYSERR, "object_instance_rebase_create_baseline(%llu): %s",
+			   static_cast<unsigned long long>(instance_id), e.what());
+		return false;
+	}
+}
+
 obj_data* object_edit_load_baseline(const struct obj_data* obj) {
 	if(!obj) {
 		return nullptr;
@@ -1789,6 +1858,14 @@ obj_data* object_edit_load_baseline(const struct obj_data* obj) {
 		}
 		return read_object(rNum, REAL);
 	};
+
+	/* Dopo recupero malus: create-baseline = stato post-wipe (niente ripagamento). */
+	if(IS_OBJ_STAT2(obj, ITEM2_PAID_MALUS) && obj->db_instance_id != 0) {
+		if(struct obj_data* baseline =
+			   object_instance_materialize_create_baseline(obj->db_instance_id)) {
+			return baseline;
+		}
+	}
 
 	if(procarea_obj_is_reward(obj)) {
 		if(obj->db_instance_id != 0) {
@@ -2758,16 +2835,20 @@ void accumulate_obj_affects(const struct obj_data* obj, AffectTotals& tot) {
 }
 
 /**
- * Create-baseline solo per premi Dimensione (rolled nello snapshot).
- * Gli edit god/portale tengono il create gia' "pieno" di edit: vs create
- * i delta sarebbero tutti 0 — per quelli si usa il proto mondo.
+ * Create-baseline: premi Dimensione (rolled) oppure pezzi con PAID_MALUS
+ * (snapshot post-recupero malus dal portale). Altri edit god/portale restano
+ * vs proto mondo (il create sarebbe gia' pieno di edit → delta 0).
  */
 [[nodiscard]] bool instance_uses_create_baseline(const std::string& source,
 												 int extra_flags2) noexcept {
 	if(source == kObjInstSourceProcareaLoot) {
 		return true;
 	}
-	return IS_SET(static_cast<unsigned long>(extra_flags2), ITEM2_PROCAREA_REWARD) != 0;
+	const auto flags = static_cast<unsigned long>(extra_flags2);
+	if(IS_SET(flags, ITEM2_PROCAREA_REWARD)) {
+		return true;
+	}
+	return IS_SET(flags, ITEM2_PAID_MALUS) != 0;
 }
 
 [[nodiscard]] const AffectTotals& baseline_affects_for_instance(

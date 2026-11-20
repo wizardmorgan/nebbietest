@@ -60,8 +60,28 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 													 bool clear_slot) noexcept;
 
 /**
+ * true se da malus si passa oltre lo zero fino a un bonus
+ * (es. AC +10→−10, INT −3→+2): quote/apply vanno spezzati in
+ * malus→0 (2×) + 0→bonus (1×).
+ */
+[[nodiscard]] bool object_edit_malus_crosses_to_bonus(int location, int current,
+													 int target) noexcept;
+
+/** Dettaglio quote spezzata malus→0 + 0→bonus (xp_raw gia' con class/artifact). */
+struct ObjEditMalusSplit {
+	bool active = false;
+	long malus_xp_raw = 0;
+	long bonus_xp_raw = 0;
+	int from = 0;
+	int to = 0;
+};
+
+/**
  * Simula affect target → delta costo listino (AnalyzeObjEdit.diff prima/dopo).
  * class_mult e Artifact +50% sono applicati dentro AnalyzeObjEdit (una sola volta).
+ * Recupero malus a 0: 2× EditAffectDeltaListinoCost.
+ * Malus che attraversa lo zero fino a bonus: malus→0 (2×) + 0→target (1×);
+ * se split_out != nullptr viene riempito.
  * Se other_worn_edited_dam >= 0 e l'edit tocca il dam → tetto 30
  * (somma delta vs proto su pezzi ITEM2_EDIT *indossati*, escluso questo).
  * allow_combat_merge: se true e hr==dr (o hr==sp), accorpa in HITNDAM/HITNSP;
@@ -74,7 +94,8 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 											  int other_worn_edited_sp = -1,
 											  bool clear_slot = false,
 											  int other_owned_edited_spellfail = -1,
-											  bool allow_combat_merge = false);
+											  bool allow_combat_merge = false,
+											  ObjEditMalusSplit* split_out = nullptr);
 
 /** Imposta affect target (stessa logica di quote). Restituisce false se invalido.
  *  clear_slot: libera lo slot (bonus positivo gratis).
@@ -103,7 +124,7 @@ bool inventory_row_is_worn(int wearpos) noexcept;
 
 /**
  * Dam/SP *editato* = max(0, totale_pezzo − baseline).
- * Baseline = create-baseline per premi procarea, proto mondo altrimenti.
+ * Baseline = create-baseline (procarea / PAID_MALUS), altrimenti proto mondo.
  */
 [[nodiscard]] int object_edit_damroll_edited_delta(const struct obj_data* obj) noexcept;
 [[nodiscard]] int object_edit_spellpower_edited_delta(const struct obj_data* obj) noexcept;

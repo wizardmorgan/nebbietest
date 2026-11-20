@@ -68,6 +68,7 @@ Schema (heal v15 idempotente + ensureTables Node):
 ========================================================================
 FASE 5 — LOAD TEST
 ========================================================================
+  A) Sessioni + semaforo + job TX (path portale/MySQL, senza myst pesante)
   edit-portal/scripts/load-test-async-edit.js
 
   MYSQL_HOST=... MYSQL_USER=... MYSQL_PASSWORD=... MYSQL_DATABASE=nebbie \
@@ -82,6 +83,23 @@ FASE 5 — LOAD TEST
     jobAvgRunMs ~11.4
   Conclusione: a 10 account il semaforo e' irrilevante sul path login;
   i job restano fuori dal pulse di myst.
+
+  B) N editor umani su myst (browse + quote, nessuna apply)
+  edit-portal/scripts/load-test-myst-editors.js
+
+  MYSQL_HOST=... MYSQL_PORT=33306 MYSQL_USER=... MYSQL_PASSWORD=... \
+  MYSQL_DATABASE=nebbie MYST_EDIT_API_URL=http://127.0.0.1:8090 \
+  EDIT_API_SECRET=nebbie-edit-dev-secret LOAD_TOON_IDS=1,2,3,... \
+  LOAD_N=10 LOAD_DURATION_SEC=120 \
+    node scripts/load-test-myst-editors.js
+
+  Mix per worker: list-inventory, get-object-edit-options, quote-object-edit
+  (+ a volte ping / get-character-state), pause random 0.5-3s.
+  Apre sessioni edit sui toon stressati (semaforo login); chiude a fine run.
+  Entra nel mud con un PG FUORI da LOAD_TOON_IDS e valuta lag movimento/combat.
+  Output: p50/p95/max e errori per endpoint (latenze alte = coda worker seriale).
+  Fuori Docker lo script scrive audit in ./edit-portal-audit.loadtest.log
+  (non usa /app/...); override con EDIT_PORTAL_AUDIT_LOG se serve.
 
 ========================================================================
 LISTINO: seed .inc → MySQL verita' → cache RAM myst

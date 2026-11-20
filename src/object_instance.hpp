@@ -113,14 +113,24 @@ obj_data* object_instance_materialize(unsigned long long instance_id);
 /**
  * Ricostruisce lo stato al primo evento create (osave db procarea iniziale).
  * Per stat procarea: baseline modifiche staff. Caller deve extract_obj().
+ * Anche pezzi con ITEM2_PAID_MALUS dopo rebase portale.
  */
 obj_data* object_instance_materialize_create_baseline(unsigned long long instance_id);
 
 /**
+ * Riscrive (o crea) l'evento create dell'istanza con lo snapshot attuale di obj
+ * (affect/flags/cost). Usato dopo recupero malus listino a 2x + PAID_MALUS,
+ * cosi' i delta futuri non ripagano il malus tolto. false se MySQL/id assenti.
+ */
+[[nodiscard]] bool object_instance_rebase_create_baseline(
+	struct obj_data* obj, const char* system_actor = "edit_portal_paid_malus");
+
+/**
  * Baseline per delta edit / listino / tetti (stesso contratto di EditAffectBroker):
- * - non-premio: prototipo mondo
+ * - PAID_MALUS + instance: create-baseline (post-recupero malus)
  * - premio + instance: create-baseline (rolled al primo persist)
  * - premio senza instance: affect vivi come baseline sospesa (niente DB)
+ * - altrimenti: prototipo mondo
  * Caller: extract_obj().
  */
 [[nodiscard]] obj_data* object_edit_load_baseline(const obj_data* obj);
@@ -297,6 +307,10 @@ inline obj_data* object_instance_materialize(unsigned long long) {
 }
 inline obj_data* object_instance_materialize_create_baseline(unsigned long long) {
 	return nullptr;
+}
+inline bool object_instance_rebase_create_baseline(struct obj_data*,
+												   const char* = nullptr) {
+	return false;
 }
 inline obj_data* object_edit_load_baseline(const obj_data*) {
 	return nullptr;

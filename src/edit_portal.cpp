@@ -872,10 +872,12 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 }
 
 /**
- * Pagamento pool PG come editpool: XP e rune sono alternative (pq = costo
- * rune completo), non rune additive sul listino oggetti.
- * - solo rune: pay_xp==0 e pay_rune >= quote_pq → addebita quote_pq
- * - XP / misto: pay_xp + pay_rune*1MXP >= quote_xp (senza obbligo pq)
+ * Pagamento pool PG come editpool_charge_or_refund: XP e rune sono listini
+ * paralleli (pq = alternativa completa), non rune additive / conversione 1 MXP.
+ * - 100% XP: pay_rune==0, pay_xp >= quote_xp → addebita (quote_xp*100)/100
+ * - 100% rune: pay_xp==0, pay_rune >= quote_pq → addebita quote_pq
+ * - misto: percentuali che sommano 100; addebita
+ *   (quote_xp*pct_xp)/100 e (quote_pq*pct_rune)/100 (divisione intera).
  */
 [[nodiscard]] bool resolve_editpool_payment(int pay_xp, int pay_rune, long quote_xp,
 											int quote_pq, int& xp_cost, int& rune_cost,
@@ -891,6 +893,34 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 		rune_cost = 0;
 		return true;
 	}
+
+	auto parts_for = [quote_xp_i, pq](int pct_xp, int pct_rune) {
+		struct {
+			int xp;
+			int rune;
+		} out {};
+		out.xp = static_cast<int>(
+			(static_cast<long long>(quote_xp_i) * static_cast<long long>(pct_xp)) /
+			100LL);
+		out.rune = (pq * pct_rune) / 100;
+		return out;
+	};
+
+	/* Match esatto alle parti editpool (UI slider / ok xp|rune|misto). */
+	for(int pct_rune = 0; pct_rune <= 100; ++pct_rune) {
+		const int pct_xp = 100 - pct_rune;
+		const auto parts = parts_for(pct_xp, pct_rune);
+		if(pay_xp == parts.xp && pay_rune == parts.rune) {
+			xp_cost = parts.xp;
+			rune_cost = parts.rune;
+			return true;
+		}
+	}
+
+	/*
+	 * Solo-rune / solo-XP con eventuale overpay rispetto al listino intero
+	 * (come editpool ok rune / ok xp).
+	 */
 	if(pay_xp == 0 && pay_rune > 0) {
 		if(pay_rune < pq) {
 			err = "[portal:pay] rune insufficienti per il listino pool (editpool)";
@@ -900,15 +930,14 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 		rune_cost = pq;
 		return true;
 	}
-	const long long covered = static_cast<long long>(pay_xp) +
-							  static_cast<long long>(pay_rune) * kObjEditRunePerMegaXp;
-	if(covered < static_cast<long long>(quote_xp_i)) {
-		err = "[portal:pay] copertura XP/Rune insufficiente rispetto al listino pool";
-		return false;
+	if(pay_rune == 0 && pay_xp >= quote_xp_i) {
+		xp_cost = quote_xp_i;
+		rune_cost = 0;
+		return true;
 	}
-	xp_cost = pay_xp;
-	rune_cost = pay_rune;
-	return true;
+
+	err = "[portal:pay] copertura XP/Rune non allineata al listino pool (editpool)";
+	return false;
 }
 
 [[nodiscard]] struct obj_data* materialize_inventory_row(
@@ -2374,6 +2403,11 @@ struct ToonInventoryEditScan {
 			d["pool"] = pool_to_json(pool);
 			d["resistances"] = resistances;
 			d["stats_missing"] = !has_stats;
+			{
+				const int n_classes = class_count_for_toon(toon_id);
+				d["n_classes"] = n_classes;
+				d["class_mult"] = edit_pool_class_mult(n_classes);
+			}
 			if(!has_stats) {
 				d["warning"] =
 					"Nessuna riga in character_stats per questo toon (PG non migrato "
@@ -2654,6 +2688,9 @@ struct ToonInventoryEditScan {
 				extract_obj(obj);
 				return json_error("oggetto non editabile (RARO, tan, tipo o owner)", 400);
 			}
+			/* class_mult listino (Artifact / affect) sul PG target, anche se
+			 * il pezzo non ha ancora personal_owner / ED. */
+			ensure_portal_listino_owner(obj, toon_name);
 
 			const int item_type = ITEM_TYPE(obj);
 			const bool is_armor =
@@ -2910,6 +2947,7 @@ struct ToonInventoryEditScan {
 			long xp_raw = 0;
 			int pq = 0;
 			std::string quote_err;
+			ObjEditMalusSplit malus_split {};
 			const bool touches_dam_sp =
 				object_edit_location_affects_dam(location)
 				|| object_edit_location_affects_spellpower(location);
@@ -2930,7 +2968,7 @@ struct ToonInventoryEditScan {
 				parse_json_int(req, "allow_combat_merge", 0) != 0;
 			if(!object_quote_affect_target(obj, location, target_modifier, xp_raw, pq,
 										   quote_err, other_dam, other_sp, clear_slot,
-										   other_sf, allow_combat_merge)) {
+										   other_sf, allow_combat_merge, &malus_split)) {
 				extract_obj(obj);
 				return json_error(quote_err.c_str(), 400);
 			}
@@ -2975,8 +3013,24 @@ struct ToonInventoryEditScan {
 												   clear_slot)
 					? 1
 					: 0;
+			if(malus_split.active) {
+				d["malus_split"] = 1;
+				d["malus_part"] = quote_xp_json(malus_split.malus_xp_raw, 0);
+				d["malus_part"]["from"] = malus_split.from;
+				d["malus_part"]["to"] = 0;
+				d["malus_part"]["note"] = "Recupero malus a 0 (tariffa 2x)";
+				d["bonus_part"] = quote_xp_json(malus_split.bonus_xp_raw, 0);
+				d["bonus_part"]["from"] = 0;
+				d["bonus_part"]["to"] = malus_split.to;
+				d["bonus_part"]["note"] = "Bonus oltre lo zero (listino 1x)";
+			}
 			if(clear_slot) {
 				d["note"] = "Rimuovi slot: libera lo slot (gratis, listino)";
+			}
+			else if(malus_split.active) {
+				d["note"] =
+					"Spezzato: malus→0 a tariffa 2×, poi 0→bonus a listino 1× "
+					"(due apply in sequenza; baseline dopo il recupero)";
 			}
 			else if(d["will_set_paid_malus"] == 1 && xp_raw > 0) {
 				d["note"] =
@@ -3114,7 +3168,15 @@ struct ToonInventoryEditScan {
 					return fail_affect("Artifact: specificare target_modifier=1 per attivare",
 									  400);
 				}
-				const long quote_xp = EditArtifactFlagListinoCost(obj);
+				/*
+				 * Portale: Artifact da solo = listino flag; in pacchetto con
+				 * affect pagati la UI manda waive_artifact_fee (costo 0: il
+				 * +50% e' gia' nel listino affect). Broker non vende Artifact.
+				 */
+				const bool waive_artifact_fee =
+					parse_json_int(req, "waive_artifact_fee", 0) != 0;
+				const long quote_xp =
+					waive_artifact_fee ? 0L : EditArtifactFlagListinoCost(obj);
 				int xp_cost = 0;
 				int rune_cost = 0;
 				std::string pay_resolve_err;
@@ -3199,9 +3261,11 @@ struct ToonInventoryEditScan {
 					: -1;
 			const bool allow_combat_merge =
 				parse_json_int(req, "allow_combat_merge", 0) != 0;
+			ObjEditMalusSplit malus_split {};
 			if(!object_quote_affect_target(obj, location, target_modifier, quote_xp,
 										   quote_pq, quote_err, other_dam, other_sp,
-										   clear_slot, other_sf, allow_combat_merge)) {
+										   clear_slot, other_sf, allow_combat_merge,
+										   &malus_split)) {
 				extract_obj(obj);
 				return fail_affect(quote_err.c_str(), 400);
 			}
@@ -3218,20 +3282,17 @@ struct ToonInventoryEditScan {
 				std::memcpy(reward_baseline_affs, after->affected,
 							sizeof(reward_baseline_affs));
 			}
+			const int cur_before = object_edit_display_current(after, location);
+			const bool recovers_malus = object_edit_recovers_listino_malus(
+				after, location, target_modifier, clear_slot);
+			const bool malus_then_bonus =
+				malus_split.active ||
+				(recovers_malus && !clear_slot &&
+				 object_edit_malus_crosses_to_bonus(location, cur_before,
+													 target_modifier));
 			extract_obj(obj);
 
-			std::string apply_err;
-			if(!object_apply_affect_target(after, location, target_modifier, apply_err,
-										   other_dam, other_sp, clear_slot, other_sf,
-										   allow_combat_merge)) {
-				extract_obj(after);
-				return fail_affect(apply_err.c_str(), 400);
-			}
-			if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
-				SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
-			}
-
-			/* Pagamento: XP e/o Rune coprono il listino (1 MXP = 1 Rune). */
+			/* Pagamento sul totale quote (anche se spezzato in due apply). */
 			int xp_cost = 0;
 			int rune_cost = 0;
 			std::string pay_resolve_err;
@@ -3259,10 +3320,76 @@ struct ToonInventoryEditScan {
 				return fail_affect(pay_err.c_str(), 402);
 			}
 
+			std::string apply_err;
+			bool paid_malus_baseline = false;
+			bool saved = false;
 			std::string save_err;
-			const bool saved = portal_save_edited_inventory_item(
-				inventory_id, after, save_err, target_name.c_str(),
-				need_reward_baseline ? reward_baseline_affs : nullptr);
+
+			if(malus_then_bonus) {
+				/*
+				 * Fase 1: malus→0 (2× gia' nel quote totale), PAID_MALUS +
+				 * baseline. Fase 2: 0→bonus (1×) senza riscrivere la baseline
+				 * sul bonus (resta edit vs post-malus).
+				 */
+				if(!object_apply_affect_target(after, location, 0, apply_err, other_dam,
+											   other_sp, false, other_sf,
+											   allow_combat_merge)) {
+					extract_obj(after);
+					return fail_affect(apply_err.c_str(), 400);
+				}
+				if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
+					SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
+				}
+				saved = portal_save_edited_inventory_item(
+					inventory_id, after, save_err, target_name.c_str(),
+					need_reward_baseline ? reward_baseline_affs : nullptr);
+				if(saved && after->db_instance_id != 0) {
+					paid_malus_baseline = object_instance_rebase_create_baseline(
+						after, "edit_portal_paid_malus");
+				}
+				if(!saved) {
+					extract_obj(after);
+					return fail_affect(save_err.empty()
+										   ? "[portal:save] malus→0 fallito dopo pagamento"
+										   : save_err.c_str(),
+									   500);
+				}
+				apply_err.clear();
+				if(!object_apply_affect_target(after, location, target_modifier, apply_err,
+											   other_dam, other_sp, false, other_sf,
+											   allow_combat_merge)) {
+					extract_obj(after);
+					return fail_affect(apply_err.c_str(), 400);
+				}
+				save_err.clear();
+				saved = portal_save_edited_inventory_item(
+					inventory_id, after, save_err, target_name.c_str(), nullptr);
+			}
+			else {
+				if(!object_apply_affect_target(after, location, target_modifier, apply_err,
+											   other_dam, other_sp, clear_slot, other_sf,
+											   allow_combat_merge)) {
+					extract_obj(after);
+					return fail_affect(apply_err.c_str(), 400);
+				}
+				if(!IS_OBJ_STAT2(after, ITEM2_EDIT)) {
+					SET_BIT(after->obj_flags.extra_flags2, ITEM2_EDIT);
+				}
+				saved = portal_save_edited_inventory_item(
+					inventory_id, after, save_err, target_name.c_str(),
+					need_reward_baseline ? reward_baseline_affs : nullptr);
+				if(saved && recovers_malus && after->db_instance_id != 0) {
+					paid_malus_baseline = object_instance_rebase_create_baseline(
+						after, "edit_portal_paid_malus");
+					if(!paid_malus_baseline) {
+						mudlog(LOG_SYSERR,
+							   "edit_portal: paid_malus save ok ma rebase baseline fallito "
+							   "inv=%llu inst=%llu",
+							   static_cast<unsigned long long>(inventory_id),
+							   static_cast<unsigned long long>(after->db_instance_id));
+					}
+				}
+			}
 
 			Json d = analyze_to_json(after);
 			d["paid_xp"] = xp_cost;
@@ -3271,6 +3398,10 @@ struct ToonInventoryEditScan {
 			d["text_changed"] = text_changed;
 			d["instance_id"] = after->db_instance_id;
 			d["base_vnum"] = object_instance_resolve_base_vnum(after);
+			d["paid_malus"] = IS_OBJ_STAT2(after, ITEM2_PAID_MALUS) ? 1 : 0;
+			d["paid_malus_baseline"] = paid_malus_baseline ? 1 : 0;
+			d["recovered_malus"] = recovers_malus ? 1 : 0;
+			d["malus_split_applied"] = malus_then_bonus ? 1 : 0;
 			if(!save_err.empty()) {
 				d["save_err"] = save_err;
 			}
@@ -3652,11 +3783,21 @@ struct ToonInventoryEditScan {
 						   parse_json_int(req, "rune_delta", 0);
 			}
 			if(new_exp < 0 || new_exp > kLabExpCap) {
-				return portal_audit_fail(req, "exp fuori range (0..2e9)", 400,
+				std::ostringstream er;
+				er << "exp fuori range: richiesto " << new_exp
+				   << ", ammesso 0.." << kLabExpCap
+				   << " (massimo " << kLabExpCap << ")";
+				const std::string er_msg = er.str();
+				return portal_audit_fail(req, er_msg.c_str(), 400,
 										 target_toon_id, target_name.c_str());
 			}
 			if(new_rune < 0 || new_rune > kLabExpCap) {
-				return portal_audit_fail(req, "rune fuori range (0..2e9)", 400,
+				std::ostringstream er;
+				er << "rune fuori range: richiesto " << new_rune
+				   << ", ammesso 0.." << kLabExpCap
+				   << " (massimo " << kLabExpCap << ")";
+				const std::string er_msg = er.str();
+				return portal_audit_fail(req, er_msg.c_str(), 400,
 										 target_toon_id, target_name.c_str());
 			}
 			DB* db = Sql::getMysql();
@@ -3769,6 +3910,27 @@ struct ToonInventoryEditScan {
 					return portal_audit_fail(req, "read_object fallito", 500,
 											 target_toon_id, target_name.c_str());
 				}
+				/*
+				 * Prototipo grezzo (es. trash/other o RARO) resterebbe nascosto
+				 * dalla lista inventario del portale. Come lab-clone: personalizza
+				 * sul target, crea object_instance e poi inserisce in inventario.
+				 */
+				obj->db_instance_id = 0;
+				if(obj->char_vnum <= 0) {
+					obj->char_vnum = vnum;
+				}
+				portal_apply_personalize(obj, target_name.c_str());
+				if(!IS_OBJ_STAT2(obj, ITEM2_EDIT)) {
+					SET_BIT(obj->obj_flags.extra_flags2, ITEM2_EDIT);
+				}
+				std::string persist_err;
+				if(!portal_persist_object_instance_mysql(obj, vnum,
+														 target_name.c_str(),
+														 persist_err)) {
+					extract_obj(obj);
+					return portal_audit_fail(req, persist_err.c_str(), 500,
+											 target_toon_id, target_name.c_str());
+				}
 				unsigned long long inv_id = 0;
 				std::string ins_err;
 				if(!lab_insert_inventory_obj(target_toon_id, obj, inv_id, ins_err)) {
@@ -3779,6 +3941,7 @@ struct ToonInventoryEditScan {
 				Json row;
 				row["inventory_id"] = inv_id;
 				row["vnum"] = vnum;
+				row["instance_id"] = obj->db_instance_id;
 				row["short_desc"] =
 					obj->short_description ? obj->short_description : "";
 				created.push_back(row);

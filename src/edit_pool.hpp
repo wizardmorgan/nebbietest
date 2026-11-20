@@ -143,10 +143,9 @@ inline constexpr long kEditPoolPqPerMegaXp = 1000000L;
 inline constexpr int kEditPoolSessionPqFee = 1;
 
 /**
- * Costo listino edit pool (xp, rune) per units unita' di field, come
- * l'anteprima di editpool: listino x1.5 artifact x mult classi;
- * xp diviso per n_classes, rune per eccesso. n_classes < 1 -> 1.
- * Definita in act.wizard.cpp.
+ * Costo listino edit pool (xp, rune) per units unita' di field: stesso
+ * listino di edit_pool_quote_paid (artifact, class_mult, xp/n_classes,
+ * rune ceil). n_classes < 1 -> 1.
  */
 [[nodiscard]] std::pair<long, int> editpool_cost_for_units_n(EditPoolField field,
 															 int units,
