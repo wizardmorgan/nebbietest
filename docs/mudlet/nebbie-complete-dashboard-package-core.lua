@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.27"
+local PKG_VER = "1.16.28"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -1526,6 +1526,7 @@ NebbieDash.SHORTCUT_RESERVED = {
   ngoldalert = true,
   nidentui = true,
   nidentsync = true, nidentpull = true, nidentpush = true,
+  ncfgsync = true, ncfgpull = true, ncfgpush = true,
   nswui = true,
   nsw = true,
   usa = true,
@@ -5603,6 +5604,8 @@ NebbieDash.HELP_TEXT = {
   { "nbatchverify …", "Verifica log batch vs CSV atteso." },
 
   { section = "Preferenze e file" },
+  { "ncfgpull / ncfgpush", "Solo pull o solo push config ndashboard." },
+  { "ncfgsync [sync|pull|push|list|status]", "Sync file config (merge additivo, hub ident)." },
   { "nconfigdir", "Mostra cartella profiles/ndashboard." },
   { "npreferencesreload", "Ricarica preferenze e highlight da ndashboard." },
 }
@@ -8948,6 +8951,527 @@ end
 
 function NebbieDash.cmdIdentPush()
   NebbieDash.cmdIdentSync("push")
+end
+
+-- ---------------------------------------------------------------------------
+-- Sync file di configurazione ndashboard (stesso hub/token degli ident).
+-- Merge **additivo**: aggiunge chiavi/righe mancanti, non sovrascrive valori
+-- gia' presenti (ne' in locale ne' sull'hub).
+-- Comandi: ncfgsync | ncfgpull | ncfgpush | ncfgsync status|list
+-- ---------------------------------------------------------------------------
+NebbieDash.CFG_SYNC_PAGE_SIZE = 40
+
+-- Catalogo file syncabili. kind:
+--   kv_eq     → "key = value" (shortcuts, sounds-like)
+--   kv_colon  → "Name: rest" (hunger, item-keywords)
+--   lines     → una riga = un entry (speedwalks, cast-spells)
+--   dig_loot  → "keep|exclude|drop keyword"
+--   prefs     → preferenze whitelist (mai token)
+NebbieDash.CFG_SYNC_FILES = {
+  {
+    name = "nebbie-spell-shortcuts.txt",
+    kind = "kv_eq",
+    reload = function()
+      if type(NebbieDash.loadSpellCastConfig) == "function" then
+        NebbieDash.loadSpellCastConfig()
+      end
+    end,
+  },
+  {
+    name = "nebbie-cast-spells.txt",
+    kind = "lines",
+    reload = function()
+      if type(NebbieDash.loadSpellCastConfig) == "function" then
+        NebbieDash.loadSpellCastConfig()
+      end
+    end,
+  },
+  {
+    name = "nebbie-speedwalks.txt",
+    kind = "lines",
+    reload = function()
+      if type(NebbieDash.loadSpeedwalks) == "function" then
+        NebbieDash.loadSpeedwalks()
+      end
+      if NebbieDash._swUiVisible and type(NebbieDash.showSwUiWindow) == "function" then
+        pcall(NebbieDash.showSwUiWindow)
+      end
+    end,
+  },
+  {
+    name = "nebbie-hunger-macros.txt",
+    kind = "kv_colon",
+    reload = function()
+      if type(NebbieDash.loadHungerMacros) == "function" then
+        NebbieDash.loadHungerMacros()
+      end
+    end,
+  },
+  {
+    name = "nebbie-item-keywords.txt",
+    kind = "kv_colon",
+    reload = function()
+      if type(NebbieDash.loadItemKeywords) == "function" then
+        NebbieDash.loadItemKeywords()
+      end
+    end,
+  },
+  {
+    name = "nebbie-dig-loot.txt",
+    kind = "dig_loot",
+    reload = function()
+      if type(NebbieDash.loadDigLootRules) == "function" then
+        NebbieDash.loadDigLootRules()
+      end
+    end,
+  },
+  {
+    name = "nebbie-dash-preferences.txt",
+    kind = "prefs",
+    reload = function()
+      if type(NebbieDash.loadPreferences) == "function" then
+        NebbieDash.loadPreferences()
+      end
+    end,
+  },
+  {
+    name = "nebbie-batch-commands.txt",
+    kind = "lines",
+  },
+  {
+    name = "nebbie-ident-batch-commands.txt",
+    kind = "lines",
+  },
+  {
+    name = "nebbie-batch-items.csv",
+    kind = "lines",
+  },
+}
+
+NebbieDash.CFG_SYNC_PREFS_KEYS = {
+  dig_tool = true,
+  dig_combat = true,
+  dig_retry_sec = true,
+  text_highlights = true,
+  chat_window = true,
+  gold_alert = true,
+  weapon_swap_delay = true,
+  sanity_neq_on_login = true,
+  sidebar_mode = true,
+  ident_exclude_chars = true,
+  ident_sync_on_boot = true,
+  auto_install_convert_to_userwindow = true,
+}
+
+function NebbieDash.cfgSyncSpecByName(name)
+  for _, spec in ipairs(NebbieDash.CFG_SYNC_FILES or {}) do
+    if spec.name == name then return spec end
+  end
+  return nil
+end
+
+function NebbieDash.cfgSyncReadDataLines(path)
+  local lines = {}
+  local f = io.open(path, "r")
+  if not f then return lines end
+  for raw in f:lines() do
+    table.insert(lines, raw)
+  end
+  f:close()
+  return lines
+end
+
+function NebbieDash.cfgSyncExportEntries(spec)
+  local path = NebbieDash.configPath(spec.name)
+  local entries = {}
+  local lines = NebbieDash.cfgSyncReadDataLines(path)
+  if spec.kind == "kv_eq" then
+    for _, raw in ipairs(lines) do
+      local line2 = raw:match("^%s*(.-)%s*$") or ""
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+        local key, val = NebbieDash.parseSpellShortcutLine(line2)
+        if key and val and key ~= "" then
+          local lk = key:lower()
+          if not entries[lk] then
+            entries[lk] = key .. " = " .. val
+          end
+        end
+      end
+    end
+  elseif spec.kind == "kv_colon" then
+    for _, raw in ipairs(lines) do
+      local line2 = raw:match("^%s*(.-)%s*$") or ""
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+        local name, rest = line2:match("^([^:]+):%s*(.+)$")
+        if name and rest then
+          name = name:match("^%s*(.-)%s*$")
+          rest = rest:match("^%s*(.-)%s*$")
+          local lk = name:lower()
+          if lk ~= "" and not entries[lk] then
+            entries[lk] = name .. ": " .. rest
+          end
+        end
+      end
+    end
+  elseif spec.kind == "dig_loot" then
+    for _, raw in ipairs(lines) do
+      local kind, kw = NebbieDash.parseDigLootLine(raw)
+      if kind and kw then
+        local key = kind .. "|" .. kw:lower()
+        if not entries[key] then
+          entries[key] = kind .. " " .. kw
+        end
+      end
+    end
+  elseif spec.kind == "prefs" then
+    for _, raw in ipairs(lines) do
+      local line2 = raw:match("^%s*(.-)%s*$") or ""
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+        local k, v = line2:match("^([%w_]+)%s*=%s*(.-)%s*$")
+        if k and NebbieDash.CFG_SYNC_PREFS_KEYS[k] then
+          entries[k] = k .. " = " .. tostring(v)
+        end
+      end
+    end
+  else -- lines
+    for _, raw in ipairs(lines) do
+      local line2 = raw:match("^%s*(.-)%s*$") or ""
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+        local key = line2:lower()
+        if not entries[key] then
+          entries[key] = line2
+        end
+      end
+    end
+  end
+  return entries
+end
+
+function NebbieDash.cfgSyncLocalKeys(spec)
+  local keys = {}
+  for k, _ in pairs(NebbieDash.cfgSyncExportEntries(spec)) do
+    keys[k] = true
+  end
+  return keys
+end
+
+-- Aggiunge in coda al file solo le righe le cui chiavi non esistono gia'.
+function NebbieDash.cfgSyncAppendMissing(spec, remoteEntries)
+  if type(remoteEntries) ~= "table" then return 0 end
+  local path = NebbieDash.configPath(spec.name)
+  NebbieDash.ensureConfigDir()
+  local existing = NebbieDash.cfgSyncLocalKeys(spec)
+  local toAdd = {}
+  for key, line in pairs(remoteEntries) do
+    if type(key) == "string" and key ~= "" and type(line) == "string" and line ~= "" then
+      if not existing[key] then
+        table.insert(toAdd, { key = key, line = line })
+      end
+    end
+  end
+  table.sort(toAdd, function(a, b) return a.key < b.key end)
+  if #toAdd == 0 then return 0 end
+  -- Assicura file esistente (scheletro default se manca).
+  if spec.name == "nebbie-dig-loot.txt" and type(NebbieDash.ensureDigLootFile) == "function" then
+    NebbieDash.ensureDigLootFile()
+  elseif spec.name == "nebbie-spell-shortcuts.txt" then
+    NebbieDash.ensureSpellShortcutsFile()
+  elseif spec.name == "nebbie-cast-spells.txt" then
+    NebbieDash.ensureCastSpellsFile()
+  elseif spec.name == "nebbie-speedwalks.txt" and type(NebbieDash.ensureSpeedwalkFile) == "function" then
+    NebbieDash.ensureSpeedwalkFile()
+  elseif spec.name == "nebbie-hunger-macros.txt" then
+    NebbieDash.ensureHungerMacrosFile()
+  elseif spec.name == "nebbie-item-keywords.txt" then
+    NebbieDash.ensureItemKeywordsFile()
+  elseif spec.name == "nebbie-dash-preferences.txt" then
+    NebbieDash.ensurePreferencesFile()
+  end
+  local f = io.open(path, "a")
+  if not f then return 0 end
+  f:write("\n# --- sync hub " .. os.date("%Y-%m-%d %H:%M") .. " ---\n")
+  for _, row in ipairs(toAdd) do
+    f:write(row.line .. "\n")
+    existing[row.key] = true
+  end
+  f:close()
+  return #toAdd
+end
+
+function NebbieDash.cfgSyncBusy()
+  return NebbieDash._cfgSync and NebbieDash._cfgSync.active and true or false
+end
+
+function NebbieDash.cfgSyncAbort(msg)
+  if NebbieDash._cfgSync then NebbieDash._cfgSync.active = false end
+  if msg and msg ~= "" then
+    cecho("<orange>[NebbieDash] Config sync: " .. msg .. "\n")
+  end
+end
+
+function NebbieDash.ensureCfgSyncHttpHandlers()
+  if NebbieDash._cfgSyncHttpHandlers then return end
+  if type(registerAnonymousEventHandler) ~= "function" then return end
+  registerAnonymousEventHandler("sysGetHttpDone", "NebbieDash.onCfgSyncGetDone")
+  registerAnonymousEventHandler("sysGetHttpError", "NebbieDash.onCfgSyncGetError")
+  registerAnonymousEventHandler("sysPostHttpDone", "NebbieDash.onCfgSyncPostDone")
+  registerAnonymousEventHandler("sysPostHttpError", "NebbieDash.onCfgSyncPostError")
+  NebbieDash._cfgSyncHttpHandlers = true
+end
+
+function NebbieDash.cfgSyncIsOurUrl(url)
+  local st = NebbieDash._cfgSync
+  if not st or not st.base then return false end
+  url = tostring(url or "")
+  return url:find(st.base, 1, true) ~= nil and url:find("/v1/config", 1, true) ~= nil
+end
+
+function NebbieDash.startCfgSyncPull(mode)
+  local okCfg, base = NebbieDash.identSyncConfigured()
+  if not okCfg then
+    cecho("<orange>[NebbieDash] Config sync: serve lo stesso token di nidentsync "
+      .. "(nidentsync token <segreto>).\n")
+    return
+  end
+  if type(getHTTP) ~= "function" then
+    cecho("<orange>[NebbieDash] getHTTP non disponibile — aggiorna Mudlet.\n")
+    return
+  end
+  if NebbieDash.cfgSyncBusy() then
+    cecho("<orange>[NebbieDash] Config sync gia' in corso.\n")
+    return
+  end
+  if NebbieDash.identSyncBusy() then
+    cecho("<orange>[NebbieDash] Ident sync in corso — riprova dopo.\n")
+    return
+  end
+  NebbieDash.ensureCfgSyncHttpHandlers()
+  local queue = {}
+  for _, spec in ipairs(NebbieDash.CFG_SYNC_FILES or {}) do
+    table.insert(queue, spec.name)
+  end
+  NebbieDash._cfgSync = {
+    active = true,
+    mode = mode or "sync",
+    base = base,
+    fileQueue = queue,
+    fileIndex = 0,
+    page = 1,
+    pullInserted = 0,
+    filesTouched = 0,
+  }
+  cecho("<grey>[NebbieDash] Config sync: pull da <white>" ..
+    NebbieDash.identSyncMaskUrl(base) .. "<grey> ...\n")
+  NebbieDash.cfgSyncPullNextFile()
+end
+
+function NebbieDash.cfgSyncPullNextFile()
+  local st = NebbieDash._cfgSync
+  if not st or not st.active then return end
+  st.fileIndex = (st.fileIndex or 0) + 1
+  local name = st.fileQueue and st.fileQueue[st.fileIndex]
+  if not name then
+    cecho(string.format(
+      "<green>[NebbieDash] Config pull ok: +%d righe/chiavi nuove (%d file toccati).\n",
+      st.pullInserted or 0, st.filesTouched or 0))
+    if st.mode == "pull" then
+      st.active = false
+      return
+    end
+    NebbieDash.cfgSyncStartPush()
+    return
+  end
+  st.currentFile = name
+  st.page = 1
+  st.fileInserted = 0
+  NebbieDash.cfgSyncRequestPage(name, 1)
+end
+
+function NebbieDash.cfgSyncRequestPage(fileName, page)
+  local st = NebbieDash._cfgSync
+  if not st or not st.active then return end
+  local url = string.format(
+    "%s/v1/config?file=%s&page=%d&page_size=%d",
+    st.base,
+    tostring(fileName):gsub("([^%w%-_%.~])", function(c)
+      return string.format("%%%02X", string.byte(c))
+    end),
+    page,
+    NebbieDash.CFG_SYNC_PAGE_SIZE or 40)
+  st.expectGetUrl = url
+  st.page = page
+  local headers = NebbieDash.identSyncHeaders()
+  local ok, err = pcall(getHTTP, url, headers)
+  if not ok then
+    NebbieDash.cfgSyncAbort("getHTTP fallita: " .. tostring(err))
+  end
+end
+
+function NebbieDash.onCfgSyncGetDone(_, url, body)
+  if not NebbieDash.cfgSyncIsOurUrl(url) then return end
+  local st = NebbieDash._cfgSync
+  if not st or not st.active then return end
+  if st.expectGetUrl and tostring(url) ~= tostring(st.expectGetUrl) then return end
+  local data = NebbieDash.jsonDecode(body or "")
+  if type(data) ~= "table" or data.ok ~= true then
+    NebbieDash.cfgSyncAbort("risposta pull non valida (" .. tostring(st.currentFile) .. ")")
+    return
+  end
+  local spec = NebbieDash.cfgSyncSpecByName(st.currentFile)
+  local n = 0
+  if spec then
+    n = NebbieDash.cfgSyncAppendMissing(spec, data.entries or {})
+    if n > 0 then
+      st.pullInserted = (st.pullInserted or 0) + n
+      st.fileInserted = (st.fileInserted or 0) + n
+      if type(spec.reload) == "function" then
+        pcall(spec.reload)
+      end
+    end
+  end
+  local page = tonumber(data.page) or st.page or 1
+  local pages = tonumber(data.pages) or page
+  if page < pages then
+    NebbieDash.cfgSyncRequestPage(st.currentFile, page + 1)
+    return
+  end
+  if (st.fileInserted or 0) > 0 then
+    st.filesTouched = (st.filesTouched or 0) + 1
+    cecho("<grey>[NebbieDash] Config: <white>" .. tostring(st.currentFile) ..
+      "<grey> +" .. tostring(st.fileInserted) .. "\n")
+  end
+  NebbieDash.cfgSyncPullNextFile()
+end
+
+function NebbieDash.onCfgSyncGetError(_, err, url)
+  if url and not NebbieDash.cfgSyncIsOurUrl(url) then return end
+  if not (NebbieDash._cfgSync and NebbieDash._cfgSync.active) then return end
+  NebbieDash.cfgSyncAbort("errore GET: " .. tostring(err))
+end
+
+function NebbieDash.cfgSyncStartPush()
+  local st = NebbieDash._cfgSync
+  if not st then return end
+  if type(postHTTP) ~= "function" then
+    NebbieDash.cfgSyncAbort("postHTTP non disponibile — pull fatto, push saltato")
+    return
+  end
+  local okCfg, base = NebbieDash.identSyncConfigured()
+  if not okCfg then
+    NebbieDash.cfgSyncAbort("config sync assente")
+    return
+  end
+  st.base = base
+  st.active = true
+  local files = {}
+  local total = 0
+  for _, spec in ipairs(NebbieDash.CFG_SYNC_FILES or {}) do
+    local entries = NebbieDash.cfgSyncExportEntries(spec)
+    local count = 0
+    for _ in pairs(entries) do count = count + 1 end
+    if count > 0 then
+      files[spec.name] = { entries = entries }
+      total = total + count
+    end
+  end
+  local url = base .. "/v1/config/merge"
+  st.expectPostUrl = url
+  local body = NebbieDash.jsonEncode({ files = files })
+  if type(body) ~= "string" or body == "" then
+    NebbieDash.cfgSyncAbort("serializzazione JSON fallita")
+    return
+  end
+  cecho("<grey>[NebbieDash] Config sync: push (" .. tostring(total) .. " chiavi)...\n")
+  local headers = NebbieDash.identSyncHeaders()
+  local ok, err = pcall(postHTTP, body, url, headers)
+  if not ok then
+    NebbieDash.cfgSyncAbort("postHTTP fallita: " .. tostring(err))
+  end
+end
+
+function NebbieDash.onCfgSyncPostDone(_, url, body)
+  if not NebbieDash.cfgSyncIsOurUrl(url) then return end
+  local st = NebbieDash._cfgSync
+  if not st or not st.active then return end
+  if st.expectPostUrl and tostring(url) ~= tostring(st.expectPostUrl) then return end
+  local data = NebbieDash.jsonDecode(body or "")
+  st.active = false
+  if type(data) ~= "table" or data.ok ~= true then
+    cecho("<orange>[NebbieDash] Config push: risposta non valida.\n")
+    return
+  end
+  cecho(string.format(
+    "<green>[NebbieDash] Config push ok: +%d nuove / =%d gia' presenti (hub file=%d).\n",
+    tonumber(data.inserted) or 0,
+    tonumber(data.unchanged) or 0,
+    tonumber(data.files) or 0))
+end
+
+function NebbieDash.onCfgSyncPostError(_, err, url)
+  if url and not NebbieDash.cfgSyncIsOurUrl(url) then return end
+  if not (NebbieDash._cfgSync and NebbieDash._cfgSync.active) then return end
+  NebbieDash.cfgSyncAbort("errore POST: " .. tostring(err))
+end
+
+function NebbieDash.cmdCfgSync(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$") or ""
+  local mode, rest = argStr:match("^(%S+)%s*(.-)%s*$")
+  mode = (mode or ""):lower()
+  rest = rest or ""
+  if mode == "" or mode == "sync" or mode == "full" then
+    NebbieDash.startCfgSyncPull("sync")
+    return
+  end
+  if mode == "pull" then
+    NebbieDash.startCfgSyncPull("pull")
+    return
+  end
+  if mode == "push" then
+    if NebbieDash.cfgSyncBusy() or NebbieDash.identSyncBusy() then
+      cecho("<orange>[NebbieDash] Sync gia' in corso.\n")
+      return
+    end
+    if not NebbieDash.identSyncConfigured() then
+      cecho("<orange>[NebbieDash] Configura nidentsync token prima.\n")
+      return
+    end
+    NebbieDash.ensureCfgSyncHttpHandlers()
+    local ok, base = NebbieDash.identSyncConfigured()
+    NebbieDash._cfgSync = { active = true, mode = "push", base = base }
+    NebbieDash.cfgSyncStartPush()
+    return
+  end
+  if mode == "list" or mode == "files" then
+    cecho("<cyan>[NebbieDash] File config syncabili (merge additivo):\n")
+    for _, spec in ipairs(NebbieDash.CFG_SYNC_FILES or {}) do
+      local n = 0
+      for _ in pairs(NebbieDash.cfgSyncExportEntries(spec)) do n = n + 1 end
+      cecho("<yellow>  " .. spec.name .. "<grey>  kind=" .. tostring(spec.kind) ..
+        "  locali=" .. tostring(n) .. "\n")
+    end
+    cecho("<grey>Esclusi: sounds (path macchina), chars/ui cache, ident/know DB "
+      .. "(hanno sync dedicati).\n")
+    return
+  end
+  if mode == "status" or mode == "info" or mode == "help" or mode == "?" then
+    local ok, url = NebbieDash.identSyncConfigured()
+    cecho("<green>[NebbieDash] Config sync usa lo stesso hub/token di nidentsync.\n")
+    cecho("<grey>URL: <white>" .. NebbieDash.identSyncMaskUrl(
+      url ~= "" and url or (NebbieDash.IDENT_SYNC_DEFAULT_URL or "")) ..
+      (ok and "" or " <orange>(token mancante)") .. "\n")
+    cecho("<grey>Comandi: <yellow>ncfgsync<grey> | <yellow>ncfgpull<grey> | <yellow>ncfgpush<grey> | <yellow>ncfgsync list\n")
+    cecho("<grey>Merge: aggiunge solo righe/chiavi mancanti, non sovrascrive.\n")
+    return
+  end
+  cecho("<orange>[NebbieDash] Uso: ncfgsync [sync|pull|push|list|status]\n")
+end
+
+function NebbieDash.cmdCfgPull()
+  NebbieDash.cmdCfgSync("pull")
+end
+
+function NebbieDash.cmdCfgPush()
+  NebbieDash.cmdCfgSync("push")
 end
 
 function NebbieDash.applyIdentSyncToken(token)

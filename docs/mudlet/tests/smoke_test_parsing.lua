@@ -2731,9 +2731,48 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.27+",
+check("package version 1.16.28+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.27"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.28"))
+
+-- Config sync: export/merge additivo locale (senza HTTP).
+do
+  check("cfgsync: catalogo presente",
+    type(NebbieDash.CFG_SYNC_FILES) == "table" and #NebbieDash.CFG_SYNC_FILES >= 5)
+  local tmpDir = "/tmp/nebbie-cfgsync-test"
+  os.execute("mkdir -p " .. tmpDir)
+  local oldConfigPath = NebbieDash.configPath
+  NebbieDash.configPath = function(name) return tmpDir .. "/" .. name end
+  -- shortcuts file
+  local f = io.open(tmpDir .. "/nebbie-spell-shortcuts.txt", "w")
+  f:write("# test\nhe = heal\nts = true sight\n")
+  f:close()
+  local spec = NebbieDash.cfgSyncSpecByName("nebbie-spell-shortcuts.txt")
+  local exported = NebbieDash.cfgSyncExportEntries(spec)
+  check("cfgsync: export he", exported["he"] == "he = heal")
+  check("cfgsync: export ts", exported["ts"] == "ts = true sight")
+  local added = NebbieDash.cfgSyncAppendMissing(spec, {
+    he = "he = OVERWRITE",
+    wo = "wo = word of recall",
+  })
+  check("cfgsync: append solo mancanti", added == 1)
+  local again = NebbieDash.cfgSyncExportEntries(spec)
+  check("cfgsync: he non sovrascritto", again["he"] == "he = heal")
+  check("cfgsync: wo aggiunto", again["wo"] == "wo = word of recall")
+  -- dig loot keys
+  local fl = io.open(tmpDir .. "/nebbie-dig-loot.txt", "w")
+  fl:write("keep oro\nkeep pietra\n")
+  fl:close()
+  local lootSpec = NebbieDash.cfgSyncSpecByName("nebbie-dig-loot.txt")
+  local lootEx = NebbieDash.cfgSyncExportEntries(lootSpec)
+  check("cfgsync: dig loot key", lootEx["keep|oro"] == "keep oro")
+  local lootAdd = NebbieDash.cfgSyncAppendMissing(lootSpec, {
+    ["keep|oro"] = "keep oro",
+    ["keep|mithril"] = "keep mithril",
+  })
+  check("cfgsync: dig loot +1", lootAdd == 1)
+  NebbieDash.configPath = oldConfigPath
+end
 
 -- nhelp: sezioni + comandi chiave presenti; ordine alfabetico in sezione.
 do

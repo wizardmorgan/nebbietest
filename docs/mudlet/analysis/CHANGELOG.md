@@ -1,5 +1,14 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.28 — 2026-11-20
+
+- **ncfgsync**: sync dei file di config `ndashboard` sullo stesso hub/token
+  di `nidentsync`. Merge **additivo** (aggiunge chiavi/righe mancanti, non
+  sovrascrive). Include shortcut, cast-spells, speedwalks, hunger macros,
+  item-keywords, dig-loot, preferenze whitelist, batch. Esclusi sounds e
+  cache PG/UI. Server: `GET/POST /v1/config*` in `tools/ident-sync-server`.
+  Comandi: `ncfgsync` / `ncfgpull` / `ncfgpush` / `ncfgsync list`.
+
 ## 1.16.27 — 2026-11-20
 
 - **ndig off**: ripristina l'arma `dig_combat` (umber) e ripone `dig_tool`

@@ -208,6 +208,8 @@ quando si aggiunge un alias.
 
 | Alias | Cosa fa |
 |---|---|
+| `ncfgpull` / `ncfgpush` | Solo pull o solo push dei file config verso l’hub. |
+| `ncfgsync [sync\|list\|status]` | Sync config `ndashboard` (stesso token di `nidentsync`; merge additivo). |
 | `nconfigdir` | Mostra `profiles/ndashboard` e il file root config. |
 | `npreferencesreload` | Ricarica preferenze e highlight da ndashboard. |
 
@@ -285,7 +287,7 @@ toggle cedibile, sort/pagine, filtri, possesso, export CSV. Il comando di gioco
 `Distruggi …` sposta l’entry in Archiviati come `destroyed`. Rename da oedit con
 stesso vnum+stats aggiorna il nome e tiene i nomi precedenti.
 
-### Sync VPS (`nidentsync`)
+### Sync VPS (`nidentsync` / `ncfgsync`)
 
 Hub HTTPS tra PC. URL di default fissa:
 `https://nebbie.wizmorgan.it/nebbie-ident`. All’avvio del profilo, se manca il
@@ -301,9 +303,16 @@ ident_sync_skip_prompt = off
 ident_exclude_chars = Sirio
 ```
 
-Comandi: `nidentsync` (pull+merge+push), `nidentpull`, `nidentpush`,
-`nidentsync status|token …|skip|setup|onboot on|off` (anche `url …` se serve
-override). Server: `tools/ident-sync-server/README.md`.
+**Identify**: `nidentsync` (pull+merge+push), `nidentpull`, `nidentpush`,
+`nidentsync status|token …|skip|setup|onboot on|off`.
+
+**File config ndashboard** (1.16.28+): `ncfgsync` / `ncfgpull` / `ncfgpush` /
+`ncfgsync list` — stesso token. Merge **solo additivo** (aggiunge
+shortcut/path/macro/loot/… mancanti; non cambia valori già presenti). Non
+sincronizza path suoni né cache PG/UI. Sul VPS serve il server aggiornato
+(`tools/ident-sync-server`, endpoint `/v1/config*`).
+
+Server: `tools/ident-sync-server/README.md`.
 
 **Allineamento remoto**: di default **non** è automatico a ogni identify —
 salva solo in locale. Per aggiornare il VPS lancia `nidentsync` (o
@@ -984,10 +993,11 @@ il file viene creato con istruzioni ed un esempio commentato).
 se l’uscita è bloccata / cadi / timeout → pausa; poi `nsw resume` (riprova) o `nsw skip`.
 Il pannello laterale resta disponibile.
 
-**Sync tra PC**: i path stanno già in `ndashboard` come gli ident. La sync VPS HTTPS
-(`nidentsync`) **non è attiva** sul package in produzione (ramo laterale non mergiato);
-tra macchine oggi serve sincronizzare la cartella `ndashboard` a livello disco
-(Syncthing/share) oppure attivare più avanti l’hub VPS.
+**Sync tra PC**: con **1.16.28+** usa `ncfgsync` (stesso hub/token di
+`nidentsync`): merge **additivo** di speedwalks e altri file config (aggiunge
+righe/chiavi mancanti, non sovrascrive). Richiede il server aggiornato con
+endpoint `/v1/config*`. In alternativa resta Syncthing sulla cartella
+`ndashboard`.
 
 **Formato di ogni riga** (deciso insieme, vedi `Q&A.md` Round 5):
 
