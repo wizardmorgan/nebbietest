@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.25 — 2026-11-20
+
+- **ndig**: a filone esaurito, dopo loot zaino torna anche `drop 1 coin`
+  (marca stanza, come dadomud). Se lo zaino manca, droppa comunque la moneta.
+
 ## 1.16.24 — 2026-11-20
 
 - **nhelp**: comandi divisi per sezione (ordine alfabetico in ciascuna);

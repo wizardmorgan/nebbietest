@@ -2731,9 +2731,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.24+",
+check("package version 1.16.25+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.24"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.25"))
 
 -- nhelp: sezioni + comandi chiave presenti; ordine alfabetico in sezione.
 do
@@ -2829,7 +2829,7 @@ do
     check("dig loot: get carbone", joined:find("get all.carbone ", 1, true) ~= nil)
     check("dig loot: drop pepita", joined:find("drop all.pepita", 1, true) ~= nil)
     check("dig loot: wear zaino", joined:find("wear ", 1, true) ~= nil)
-    check("dig loot: no drop 1 coin", joined:find("drop 1 coin", 1, true) == nil)
+    check("dig loot: drop 1 coin", joined:find("drop 1 coin", 1, true) ~= nil)
   else
     check("dig loot: steps build (skip shape=" .. tostring(err) .. ")", true)
   end

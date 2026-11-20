@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.24"
+local PKG_VER = "1.16.25"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -10237,6 +10237,8 @@ function NebbieDash.digAutoBuildVeinLootSteps()
     table.insert(steps, "drop all." .. kw)
   end
   table.insert(steps, "wear " .. backKw)
+  -- Come dadomud: lascia 1 moneta a terra per marcare la stanza scavata.
+  table.insert(steps, "drop 1 coin")
   return steps, nil
 end
 
@@ -10244,10 +10246,14 @@ function NebbieDash.digAutoRunVeinLoot()
   local steps, err = NebbieDash.digAutoBuildVeinLootSteps()
   if not steps then
     if err == "no_backpack" then
-      cecho("<orange>[NebbieDash] Dig loot: nessuno zaino (schiena) — fai <yellow>neq<orange>. Loot saltato.\n")
+      cecho("<orange>[NebbieDash] Dig loot: nessuno zaino (schiena) — fai <yellow>neq<orange>. Loot saltato; droppo comunque 1 coin.\n")
     else
-      cecho("<orange>[NebbieDash] Dig loot: personaggio non rilevato — loot saltato.\n")
+      cecho("<orange>[NebbieDash] Dig loot: personaggio non rilevato — loot saltato; droppo comunque 1 coin.\n")
     end
+    -- Anche senza loot: marca stanza come dadomud.
+    tempTimer(0.4, function()
+      send("drop 1 coin", false)
+    end)
     return false
   end
   local delay = NebbieDash.weaponSwapDelay or 0.5
@@ -10256,7 +10262,7 @@ function NebbieDash.digAutoRunVeinLoot()
     NebbieDash.runCommandSequence(steps, delay)
   end)
   cecho(string.format(
-    "<green>[NebbieDash] Dig: filone esaurito — inv + loot zaino (%d comandi, file dig-loot).\n",
+    "<green>[NebbieDash] Dig: filone esaurito — inv + loot zaino + drop 1 coin (%d comandi).\n",
     #steps))
   return true
 end
@@ -10764,6 +10770,7 @@ function NebbieDash.printDigHelp()
   cecho("<yellow>  ndig combat <kw><white>     Arma per umber.\n")
   cecho("<yellow>  ndig loot / ndigloot<white> Ricarica nebbie-dig-loot.txt.\n")
   cecho("<grey>  Piccone rotto ($p in frantumi) → nuovo tool. Fame/sete non si pesta sullo zaino.\n")
+  cecho("<grey>  Filone esaurito → inv + loot zaino + drop 1 coin.\n")
   cecho("<grey>  Elenco completo: <yellow>nhelp<grey> (sezione Dig / miniera).\n")
 end
 
