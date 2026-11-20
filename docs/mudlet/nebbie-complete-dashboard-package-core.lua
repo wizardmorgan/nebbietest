@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.20"
+local PKG_VER = "1.16.21"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -665,6 +665,7 @@ function NebbieDash.ensureDefaultConfigFiles()
   NebbieDash.ensureBatchItemsFile()
   NebbieDash.ensurePreferencesFile()
   NebbieDash.ensureSoundsFile()
+  NebbieDash.ensureDigLootFile()
 end
 
 function NebbieDash.preferencesPath()
@@ -1529,6 +1530,7 @@ NebbieDash.SHORTCUT_RESERVED = {
   nsw = true,
   usa = true,
   ndig = true,
+  ndigloot = true,
   nconfigdir = true,
   nsidebar = true,
   npreferencesreload = true,
@@ -5534,7 +5536,8 @@ NebbieDash.HELP_TEXT = {
   { "nitemlen <n>", "Lunghezza max descrizioni oggetti in equip." },
   { "nclanslot <on|off>", "Mostra/nascondi lo slot simbolo del clan." },
   { "usa <keyword>", "Cambio arma da zaino (rem/get/wield)." },
-  { "ndig [on|off|tool|combat|status]", "Automine dig (equip pic + loop dadomud)." },
+  { "ndig [on|off|tool|combat|status|loot]", "Automine dig (equip pic + loop dadomud)." },
+  { "ndigloot", "Ricarica nebbie-dig-loot.txt (keep/exclude/drop)." },
   { "nswui [off]", "Finestra floating speedwalk (lista path + pausa/riprendi)." },
   { "nsw pause|resume|skip|stop|status", "Controlla la corsa speedwalk." },
   { "nspeedwalks", "Ricarica nebbie-speedwalks.txt (ndashboard)." },
@@ -10063,6 +10066,138 @@ function NebbieDash.digRetrySec()
   return 24
 end
 
+function NebbieDash.digLootPath()
+  return NebbieDash.configPath("nebbie-dig-loot.txt")
+end
+
+function NebbieDash.ensureDigLootFile()
+  local path = NebbieDash.digLootPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  NebbieDash.ensureConfigDir()
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# File loot dig — nebbie-complete-dashboard-package\n" ..
+    "# Usato quando il filone e' esaurito (dopo inv): mette in zaino i keep,\n" ..
+    "# toglie gli exclude dallo zaino, droppa il resto elencato in drop.\n" ..
+    "#\n" ..
+    "# Sintassi (una regola per riga):\n" ..
+    "#   keep <keyword>      put all.<keyword> <zaino>\n" ..
+    "#   exclude <keyword>   get all.<keyword> <zaino>  (dopo i keep)\n" ..
+    "#   drop <keyword>      drop all.<keyword>         (lascia a terra)\n" ..
+    "#\n" ..
+    "# Keyword = come le vuole il MUD (es. oro, mithril, pietra, carbone).\n" ..
+    "# Ordine consigliato: keep specifici, poi keep pietra, exclude carbone,\n" ..
+    "# poi drop dei rifiuti (pepita residua, minerale, carbone, …).\n" ..
+    "#\n" ..
+    "# Dopo modifiche: ndigloot  oppure  ndig loot\n" ..
+    "#\n" ..
+    "keep oro\n" ..
+    "keep mithril\n" ..
+    "keep acciaio\n" ..
+    "keep pietra\n" ..
+    "exclude carbone\n" ..
+    "drop pepita\n" ..
+    "drop minerale\n" ..
+    "drop carbone\n" ..
+    "drop resina\n"
+  )
+  f:close()
+end
+
+function NebbieDash.parseDigLootLine(rawLine)
+  local line2 = (rawLine or ""):match("^%s*(.-)%s*$") or ""
+  if line2 == "" or line2:sub(1, 1) == "#" then return nil end
+  local kind, kw = line2:match("^(%S+)%s+(.+)$")
+  if not kind or not kw then return nil end
+  kind = kind:lower()
+  kw = kw:match("^%s*(.-)%s*$") or ""
+  kw = kw:gsub("%s*#.*$", ""):match("^%s*(.-)%s*$") or ""
+  if kw == "" then return nil end
+  if kind ~= "keep" and kind ~= "exclude" and kind ~= "drop" then return nil end
+  return kind, kw
+end
+
+function NebbieDash.loadDigLootRules()
+  NebbieDash.ensureDigLootFile()
+  NebbieDash.digLoot = { keep = {}, exclude = {}, drop = {} }
+  local path = NebbieDash.digLootPath()
+  local f = io.open(path, "r")
+  if not f then return end
+  for raw in f:lines() do
+    local kind, kw = NebbieDash.parseDigLootLine(raw)
+    if kind then
+      table.insert(NebbieDash.digLoot[kind], kw)
+    end
+  end
+  f:close()
+end
+
+function NebbieDash.cmdReloadDigLoot()
+  NebbieDash.loadDigLootRules()
+  local d = NebbieDash.digLoot or { keep = {}, exclude = {}, drop = {} }
+  cecho(string.format(
+    "<green>[NebbieDash] Dig loot: keep=%d exclude=%d drop=%d da <white>%s\n",
+    #(d.keep or {}), #(d.exclude or {}), #(d.drop or {}), NebbieDash.digLootPath()))
+  for _, kw in ipairs(d.keep or {}) do
+    cecho("<grey>  keep <white>" .. kw .. "\n")
+  end
+  for _, kw in ipairs(d.exclude or {}) do
+    cecho("<grey>  exclude <white>" .. kw .. "\n")
+  end
+  for _, kw in ipairs(d.drop or {}) do
+    cecho("<grey>  drop <white>" .. kw .. "\n")
+  end
+end
+
+function NebbieDash.digAutoBuildVeinLootSteps()
+  local name = NebbieDash.currentChar
+  if not name then return nil, "no_char" end
+  local data = NebbieDash.getCharData(name)
+  NebbieDash.loadItemKeywords()
+  if not NebbieDash.digLoot then NebbieDash.loadDigLootRules() end
+  local rules = NebbieDash.digLoot or { keep = {}, exclude = {}, drop = {} }
+  local backPhrase, backOverride = NebbieDash.findBackpackKeywords(data)
+  if backPhrase == "" then return nil, "no_backpack" end
+  local backKw = NebbieDash.macroBackpackKeywordFromPhrase(backPhrase, backOverride)
+  if backKw == "" then return nil, "no_backpack" end
+  local steps = {}
+  table.insert(steps, "rem " .. backKw)
+  for _, kw in ipairs(rules.keep or {}) do
+    table.insert(steps, "put all." .. kw .. " " .. backKw)
+  end
+  for _, kw in ipairs(rules.exclude or {}) do
+    table.insert(steps, "get all." .. kw .. " " .. backKw)
+  end
+  for _, kw in ipairs(rules.drop or {}) do
+    table.insert(steps, "drop all." .. kw)
+  end
+  table.insert(steps, "wear " .. backKw)
+  return steps, nil
+end
+
+function NebbieDash.digAutoRunVeinLoot()
+  local steps, err = NebbieDash.digAutoBuildVeinLootSteps()
+  if not steps then
+    if err == "no_backpack" then
+      cecho("<orange>[NebbieDash] Dig loot: nessuno zaino (schiena) — fai <yellow>neq<orange>. Loot saltato.\n")
+    else
+      cecho("<orange>[NebbieDash] Dig loot: personaggio non rilevato — loot saltato.\n")
+    end
+    return false
+  end
+  local delay = NebbieDash.weaponSwapDelay or 0.5
+  -- Piccolo ritardo dopo inv cosi' l'output inventario arriva prima dei put.
+  tempTimer(0.4, function()
+    NebbieDash.runCommandSequence(steps, delay)
+  end)
+  cecho(string.format(
+    "<green>[NebbieDash] Dig: filone esaurito — inv + loot zaino (%d comandi, file dig-loot).\n",
+    #steps))
+  return true
+end
+
+
 function NebbieDash.detectHostOs()
   if type(getOS) == "function" then
     local ok, osname = pcall(getOS)
@@ -10374,8 +10509,7 @@ function NebbieDash.onDigVeinDoneLine()
     NebbieDash.armGoldSpendExpected("dig_vein", 8)
   end
   send("inv", false)
-  send("drop 1 coin", false)
-  cecho("<green>[NebbieDash] Dig: filone esaurito — inv + drop 1 coin.\n")
+  NebbieDash.digAutoRunVeinLoot()
 end
 
 function NebbieDash.onDigHumberInLine()
@@ -10503,6 +10637,10 @@ function NebbieDash.cmdDig(argStr)
     NebbieDash.digAutoStop("disattivato.")
     return
   end
+  if mode == "loot" or mode == "lootreload" then
+    NebbieDash.cmdReloadDigLoot()
+    return
+  end
   if mode == "status" or mode == "info" then
     local st = NebbieDash.digAutoState()
     cecho(string.format(
@@ -10548,7 +10686,7 @@ function NebbieDash.cmdDig(argStr)
     cecho("<green>[NebbieDash] dig_combat = <white>" .. rest .. "\n")
     return
   end
-  cecho("<orange>[NebbieDash] Uso: ndig | ndig on|off|status|tool <kw>|combat <kw>\n")
+  cecho("<orange>[NebbieDash] Uso: ndig | ndig on|off|status|loot|tool <kw>|combat <kw>\n")
 end
 
 
@@ -12720,6 +12858,7 @@ function NebbieDash.migrateSharedConfigFiles()
     "nebbie-ident-batch-commands.txt",
     "nebbie-dash-preferences.txt",
     "nebbie-dash-sounds.txt",
+    "nebbie-dig-loot.txt",
     "nebbie-ident-db.lua",
     "nebbie-know-db.lua",
   }
@@ -12749,6 +12888,7 @@ function NebbieDash.boot(forceAnnounce)
   NebbieDash.loadSpellCastConfig()
   NebbieDash.loadHungerMacros()
   NebbieDash.loadItemKeywords()
+  NebbieDash.loadDigLootRules()
   NebbieDash.loadBatchCommands()
   NebbieDash.loadBatchItems()
   NebbieDash.installTriggers()

@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.21 — 2026-11-20
+
+- **ndig loot**: a filone esaurito, dopo `inv` mette in zaino i keep e droppa
+  il resto (file `nebbie-dig-loot.txt`: `keep`/`exclude`/`drop`). Default:
+  oro/mithril/acciaio + pietre (no carbone). `ndigloot` / `ndig loot`.
+
 ## 1.16.20 — 2026-11-20
 
 - **ndig**: default `dig_tool = pic` (matcha piccone e pick).

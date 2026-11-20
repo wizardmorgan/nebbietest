@@ -315,6 +315,31 @@ Fame/sete: resta **`nautofeed`**. Preferenze: `dig_tool` (default `pic`), `dig_c
 `dig_retry_sec`. Suoni: `nebbie-dash-sounds.txt` oppure fallback sistema
 (Linux freedesktop / Windows Media / macOS Sounds).
 
+### Loot a filone esaurito (`nebbie-dig-loot.txt`)
+
+Dopo `inv` lo script:
+1. `rem` zaino
+2. `put all.<keep> zaino` per ogni riga `keep`
+3. `get all.<exclude> zaino` (es. carbone)
+4. `drop all.<drop>` per lasciare a terra il resto
+5. `wear` zaino
+
+Default creato al primo avvio:
+
+```
+keep oro
+keep mithril
+keep acciaio
+keep pietra
+exclude carbone
+drop pepita
+drop minerale
+drop carbone
+drop resina
+```
+
+Modifica il file in `profiles/ndashboard/nebbie-dig-loot.txt` poi `ndigloot`.
+
 ## Cambio arma (`usa`)
 
 Dalla **1.15.31** non c'è più il pannello "Armi"; dalla **1.15.96** nemmeno lo speedwalk sotto

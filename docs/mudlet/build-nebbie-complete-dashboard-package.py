@@ -186,6 +186,7 @@ ALIASES = [
     ("nebbie-dash-usa", "^usa (.+)$", "NebbieDash.cmdUsa(matches[2])"),
     ("nebbie-dash-dig", "^ndig$", "NebbieDash.cmdDig(\"\")"),
     ("nebbie-dash-dig-args", "^ndig (.+)$", "NebbieDash.cmdDig(matches[2])"),
+    ("nebbie-dash-dig-loot", "^ndigloot$", "NebbieDash.cmdReloadDigLoot()"),
     ("nebbie-dash-configdir", "^nconfigdir$", "NebbieDash.cmdConfigDir(\"\")"),
     ("nebbie-dash-sidebar", "^nsidebar (.+)$", "NebbieDash.cmdSetSidebar(matches[2])"),
     ("nebbie-dash-preferences-reload", "^npreferencesreload$", "NebbieDash.cmdReloadPreferences()"),

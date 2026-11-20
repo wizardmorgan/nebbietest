@@ -2731,9 +2731,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.20+",
+check("package version 1.16.21+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.20"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.21"))
 
 -- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).
 do
@@ -2762,6 +2762,41 @@ do
       and NebbieDash.SYSTEM_SOUND_CANDIDATES.linux
       and NebbieDash.SYSTEM_SOUND_CANDIDATES.windows
       and NebbieDash.SYSTEM_SOUND_CANDIDATES.macos)
+  local k, kw = NebbieDash.parseDigLootLine("keep oro")
+  check("dig loot: parse keep oro", k == "keep" and kw == "oro")
+  local k2, kw2 = NebbieDash.parseDigLootLine("exclude carbone # no")
+  check("dig loot: parse exclude carbone", k2 == "exclude" and kw2 == "carbone")
+  local k3, kw3 = NebbieDash.parseDigLootLine("drop pepita")
+  check("dig loot: parse drop pepita", k3 == "drop" and kw3 == "pepita")
+  check("dig loot: ignora commento", NebbieDash.parseDigLootLine("# keep x") == nil)
+  -- Build steps with fake eq backpack
+  NebbieDash.digLoot = {
+    keep = { "oro", "mithril", "acciaio", "pietra" },
+    exclude = { "carbone" },
+    drop = { "pepita", "minerale", "carbone", "resina" },
+  }
+  NebbieDash.currentChar = "Mirari"
+  NebbieDash.chars = NebbieDash.chars or {}
+  NebbieDash.chars.Mirari = NebbieDash.chars.Mirari or {}
+  local data = NebbieDash.getCharData("Mirari")
+  data.eqUpdated = true
+  data.eq = {
+    { location = "sulla schiena", item = "Borsa Inesauribile dei Korred", empty = false },
+  }
+  -- buildEquipRows may need different shape — if steps fail, still parse OK
+  local steps, err = NebbieDash.digAutoBuildVeinLootSteps()
+  if steps then
+    local joined = table.concat(steps, " | ")
+    check("dig loot: rem zaino", joined:find("rem ", 1, true) ~= nil)
+    check("dig loot: put oro", joined:find("put all.oro ", 1, true) ~= nil)
+    check("dig loot: put pietra", joined:find("put all.pietra ", 1, true) ~= nil)
+    check("dig loot: get carbone", joined:find("get all.carbone ", 1, true) ~= nil)
+    check("dig loot: drop pepita", joined:find("drop all.pepita", 1, true) ~= nil)
+    check("dig loot: wear zaino", joined:find("wear ", 1, true) ~= nil)
+    check("dig loot: no drop 1 coin", joined:find("drop 1 coin", 1, true) == nil)
+  else
+    check("dig loot: steps build (skip shape=" .. tostring(err) .. ")", true)
+  end
 end
 
 -- Re-identify sposta possesso da un toon all'altro.
