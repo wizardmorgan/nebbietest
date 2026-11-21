@@ -2162,6 +2162,29 @@ chatOk("chat: telep self", "Tu mandi a Mirari il pensiero 'psst'", "telep", "Tu"
   check("chat: think non confuso con telep",
     NebbieDash.parseChatLine("Tu pensi :: 'x'").channel == "think"
       and NebbieDash.parseChatLine("Tu mandi a Bob il pensiero 'x'").channel == "telep")
+  -- Conta quante volte la stessa riga self matcherebbe i pattern trigger
+  -- (regressione doppio echo: prima c'erano sia "Tu pensi ::" sia ":: '").
+  do
+    local pats = {
+      "Tu pensi ::", "Tu pensi ||", ":: '", "|| '",
+    }
+    -- Solo gli ultimi due devono restare in installChatTriggers; simula
+    -- string.find come Mudlet tempTrigger (substring).
+    local live = { ":: '", "|| '" }
+    local function hits(text, list)
+      local n = 0
+      for _, p in ipairs(list) do
+        if text:find(p, 1, true) then n = n + 1 end
+      end
+      return n
+    end
+    check("chat: think self un solo trigger vivo",
+      hits("Tu pensi :: 'ciao'", live) == 1)
+    check("chat: think other un solo trigger vivo",
+      hits("::Sirio:: 'ciao'", live) == 1)
+    check("chat: think self non doppio se solo vivi",
+      hits("Tu pensi :: 'ciao'", pats) == 2) -- documenta il bug storico
+  end
 local echoTelep = NebbieDash.formatChatEcho(
   NebbieDash.parseChatLine("Tu mandi a Mirari il pensiero 'psst'"))
 check("chat: format echo telep ha freccia",
@@ -2739,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.29+",
+check("package version 1.16.30+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.29"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.30"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do

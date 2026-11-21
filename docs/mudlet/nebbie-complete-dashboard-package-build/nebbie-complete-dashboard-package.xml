@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.29"
+local PKG_VER = "1.16.30"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3461,8 +3461,6 @@ function NebbieDash.installChatTriggers()
     "Tu dici a ",
     "Mandi a ",
     "Tu mandi a ",
-    "Tu pensi ::",
-    "Tu pensi ||",
     "Tu sussurri a ",
     "Tu chiedi a ",
     "Tu gridi '",
@@ -3480,7 +3478,7 @@ function NebbieDash.installChatTriggers()
     "] grida '",
     "], con i segni, dice '",
     "] dice '",
-    -- think immortali/superni: self "Tu pensi :: '" e ricevuto "::Nome:: '"
+    -- think immortali/superni (un solo trigger a canale: copre self e ricevuto)
     ":: '",
     "|| '",
   }

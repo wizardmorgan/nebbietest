@@ -1,5 +1,9 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.30 — 2026-11-21
+
+- **nchat**: think non piu' duplicato (un solo trigger `:: '` / `|| '`).
+
 ## 1.16.29 — 2026-11-21
 
 - **nchat**: cattura anche **think** immortali (`Tu pensi :: '…'`,
