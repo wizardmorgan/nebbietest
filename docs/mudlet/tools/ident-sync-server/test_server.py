@@ -35,6 +35,14 @@ def test_merge_logic() -> None:
     check("older incoming unchanged body", status2 == "unchanged" and merged2["lastAt"] == 20)
     check("older still unions byCharacter", "C" in merged2["byCharacter"])
 
+    # Config: additive only
+    base = {"he": "he = heal"}
+    merged_cfg, st_cfg = server.merge_config_entries(
+        base, {"he": "he = OTHER", "ts": "ts = true sight"}
+    )
+    check("config insert new key", st_cfg["inserted"] == 1 and "ts" in merged_cfg)
+    check("config never overwrite", merged_cfg["he"] == "he = heal" and st_cfg["unchanged"] == 1)
+
 
 def http_json(url: str, method: str = "GET", body: dict | None = None, token: str | None = None):
     data = None
@@ -124,6 +132,50 @@ def test_http() -> None:
             ent = page["entries"]["anello prova"]
             check("name kept newer", ent["objectName"] == "Anello Prova")
             check("byCharacter union Sirio", "Sirio" in ent["byCharacter"] and "Mirari" in ent["byCharacter"])
+
+            # --- config sync additive ---
+            cfg_payload = {
+                "files": {
+                    "nebbie-spell-shortcuts.txt": {
+                        "entries": {"he": "he = heal", "ts": "ts = true sight"}
+                    }
+                }
+            }
+            st, cfg_merge = http_json(
+                base + "/v1/config/merge", method="POST", body=cfg_payload, token=token
+            )
+            check(
+                "config merge insert",
+                st == 200 and cfg_merge["inserted"] == 2 and cfg_merge["ok"] is True,
+            )
+            st, files = http_json(base + "/v1/config/files", token=token)
+            check(
+                "config files list",
+                st == 200
+                and len(files["files"]) == 1
+                and files["files"][0]["file"] == "nebbie-spell-shortcuts.txt",
+            )
+            st, cfg_page = http_json(
+                base + "/v1/config?file=nebbie-spell-shortcuts.txt&page=1", token=token
+            )
+            check("config page has he", st == 200 and "he" in cfg_page["entries"])
+            # overwrite attempt must leave original
+            overwrite = {
+                "files": {
+                    "nebbie-spell-shortcuts.txt": {
+                        "entries": {"he": "he = OVERWRITE", "wo": "wo = word of recall"}
+                    }
+                }
+            }
+            st, cfg_merge2 = http_json(
+                base + "/v1/config/merge", method="POST", body=overwrite, token=token
+            )
+            check("config additive insert wo", cfg_merge2["inserted"] == 1)
+            st, cfg_page = http_json(
+                base + "/v1/config?file=nebbie-spell-shortcuts.txt&page=1", token=token
+            )
+            check("config he not overwritten", cfg_page["entries"]["he"] == "he = heal")
+            check("config wo present", cfg_page["entries"].get("wo") == "wo = word of recall")
         finally:
             proc.terminate()
             try:

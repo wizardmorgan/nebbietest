@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NebbieDash identify-DB sync hub (VPS).
+"""NebbieDash identify-DB + config-file sync hub (VPS).
 
 Minimal HTTPS-ready HTTP service (put nginx/caddy/stunnel in front).
 Stdlib only. Auth: Authorization: Bearer <token>
@@ -8,9 +8,12 @@ Endpoints:
   GET  /health
   GET  /v1/ident?page=1&page_size=5
   POST /v1/ident/merge   body: {"entries": {key: entry, ...}}
+  GET  /v1/config/files
+  GET  /v1/config?file=NAME&page=1&page_size=40
+  POST /v1/config/merge  body: {"files": {name: {"entries": {key: value}}}}
 
-Merge rule: keep entry with higher lastAt (int unix); on tie keep existing
-server copy. byCharacter maps are unioned (per-char higher at wins).
+Ident merge: higher lastAt wins; byCharacter unioned.
+Config merge: **additive only** — insert missing keys, never overwrite values.
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ import json
 import os
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -25,18 +29,31 @@ from urllib.parse import parse_qs, urlparse
 
 TOKEN = os.environ.get("NEBBIE_IDENT_TOKEN", "").strip()
 DATA_PATH = Path(os.environ.get("NEBBIE_IDENT_DATA", "./data/ident-db.json")).resolve()
+CONFIG_DATA_PATH = Path(
+    os.environ.get(
+        "NEBBIE_CONFIG_DATA",
+        str(DATA_PATH.parent / "config-db.json"),
+    )
+).resolve()
 HOST = os.environ.get("NEBBIE_IDENT_HOST", "127.0.0.1")
 PORT = int(os.environ.get("NEBBIE_IDENT_PORT", "8787"))
 PAGE_SIZE_DEFAULT = int(os.environ.get("NEBBIE_IDENT_PAGE_SIZE", "5"))
 PAGE_SIZE_MAX = int(os.environ.get("NEBBIE_IDENT_PAGE_SIZE_MAX", "15"))
+CONFIG_PAGE_SIZE_DEFAULT = int(os.environ.get("NEBBIE_CONFIG_PAGE_SIZE", "40"))
+CONFIG_PAGE_SIZE_MAX = int(os.environ.get("NEBBIE_CONFIG_PAGE_SIZE_MAX", "80"))
 # Keep Mudlet getHTTP response under ~10k chars.
 MAX_RESPONSE_CHARS = int(os.environ.get("NEBBIE_IDENT_MAX_RESPONSE_CHARS", "9000"))
 
 _lock = threading.RLock()
+_config_lock = threading.RLock()
 
 
 def _empty_db() -> dict[str, Any]:
     return {"entries": {}, "updated_at": 0}
+
+
+def _empty_config_db() -> dict[str, Any]:
+    return {"files": {}, "updated_at": 0}
 
 
 def load_db() -> dict[str, Any]:
@@ -61,6 +78,121 @@ def save_db(db: dict[str, Any]) -> None:
         tmp = DATA_PATH.with_suffix(".tmp")
         tmp.write_text(json.dumps(db, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         tmp.replace(DATA_PATH)
+
+
+def load_config_db() -> dict[str, Any]:
+    with _config_lock:
+        if not CONFIG_DATA_PATH.exists():
+            return _empty_config_db()
+        try:
+            raw = json.loads(CONFIG_DATA_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return _empty_config_db()
+        if not isinstance(raw, dict):
+            return _empty_config_db()
+        files = raw.get("files")
+        if not isinstance(files, dict):
+            files = {}
+        clean: dict[str, Any] = {}
+        for name, blob in files.items():
+            if not isinstance(name, str) or name == "":
+                continue
+            if not isinstance(blob, dict):
+                continue
+            entries = blob.get("entries")
+            if not isinstance(entries, dict):
+                entries = {}
+            clean[name] = {
+                "entries": {str(k): str(v) for k, v in entries.items() if k is not None},
+                "updated_at": int(blob.get("updated_at") or 0),
+            }
+        return {"files": clean, "updated_at": int(raw.get("updated_at") or 0)}
+
+
+def save_config_db(db: dict[str, Any]) -> None:
+    with _config_lock:
+        CONFIG_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CONFIG_DATA_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(db, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        tmp.replace(CONFIG_DATA_PATH)
+
+
+def merge_config_entries(
+    existing: dict[str, Any], incoming: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """Additive only: insert missing keys, never overwrite."""
+    out = dict(existing)
+    stats = {"inserted": 0, "unchanged": 0}
+    for key, value in incoming.items():
+        if not isinstance(key, str) or key == "":
+            continue
+        if key not in out:
+            out[key] = value if isinstance(value, str) else str(value)
+            stats["inserted"] += 1
+        else:
+            stats["unchanged"] += 1
+    return out, stats
+
+
+def merge_config_files(
+    server_files: dict[str, Any], incoming_files: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, int]]:
+    out = dict(server_files)
+    totals = {"inserted": 0, "unchanged": 0, "files_touched": 0}
+    now = int(time.time())
+    for name, blob in incoming_files.items():
+        if not isinstance(name, str) or name == "":
+            continue
+        if not isinstance(blob, dict):
+            continue
+        entries = blob.get("entries")
+        if not isinstance(entries, dict):
+            continue
+        cur = out.get(name)
+        if not isinstance(cur, dict):
+            cur = {"entries": {}, "updated_at": 0}
+        merged, stats = merge_config_entries(cur.get("entries") or {}, entries)
+        if stats["inserted"] > 0:
+            totals["files_touched"] += 1
+        totals["inserted"] += stats["inserted"]
+        totals["unchanged"] += stats["unchanged"]
+        out[name] = {"entries": merged, "updated_at": now if stats["inserted"] else int(cur.get("updated_at") or 0)}
+    return out, totals
+
+
+def config_page_payload(
+    file_blob: dict[str, Any], file_name: str, page: int, page_size: int
+) -> dict[str, Any]:
+    entries = file_blob.get("entries") if isinstance(file_blob, dict) else {}
+    if not isinstance(entries, dict):
+        entries = {}
+    keys = sorted(entries.keys())
+    total = len(keys)
+    pages = max(1, (total + page_size - 1) // page_size) if total else 1
+    page = max(1, page)
+    if page > pages:
+        page = pages
+    start = (page - 1) * page_size
+    end = start + page_size
+    slice_keys = keys[start:end]
+    slice_entries = {k: entries[k] for k in slice_keys}
+    while True:
+        payload = {
+            "ok": True,
+            "file": file_name,
+            "page": page,
+            "page_size": page_size,
+            "pages": pages,
+            "total": total,
+            "updated_at": int(file_blob.get("updated_at") or 0) if isinstance(file_blob, dict) else 0,
+            "entries": slice_entries,
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        if len(encoded) <= MAX_RESPONSE_CHARS or len(slice_entries) <= 1:
+            return payload
+        last = next(reversed(slice_entries))
+        del slice_entries[last]
+        page_size = max(1, len(slice_entries))
 
 
 def entry_last_at(entry: Any) -> int:
@@ -230,6 +362,12 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/") or "/"
         if path == "/health":
             db = load_db()
+            cfg = load_config_db()
+            cfg_entries = sum(
+                len((blob.get("entries") or {}))
+                for blob in (cfg.get("files") or {}).values()
+                if isinstance(blob, dict)
+            )
             self._send(
                 200,
                 {
@@ -237,6 +375,9 @@ class Handler(BaseHTTPRequestHandler):
                     "service": "nebbie-ident-sync",
                     "entries": len(db["entries"]),
                     "updated_at": db.get("updated_at") or 0,
+                    "config_files": len(cfg.get("files") or {}),
+                    "config_entries": cfg_entries,
+                    "config_updated_at": cfg.get("updated_at") or 0,
                 },
             )
             return
@@ -259,41 +400,118 @@ class Handler(BaseHTTPRequestHandler):
             payload.pop("_chars", None)
             self._send(200, payload)
             return
+        if path == "/v1/config/files":
+            if not self._check_auth():
+                return
+            cfg = load_config_db()
+            listing = []
+            for name in sorted((cfg.get("files") or {}).keys()):
+                blob = cfg["files"][name]
+                entries = blob.get("entries") if isinstance(blob, dict) else {}
+                listing.append(
+                    {
+                        "file": name,
+                        "entries": len(entries) if isinstance(entries, dict) else 0,
+                        "updated_at": int(blob.get("updated_at") or 0)
+                        if isinstance(blob, dict)
+                        else 0,
+                    }
+                )
+            self._send(
+                200,
+                {
+                    "ok": True,
+                    "files": listing,
+                    "updated_at": cfg.get("updated_at") or 0,
+                },
+            )
+            return
+        if path == "/v1/config":
+            if not self._check_auth():
+                return
+            qs = parse_qs(parsed.query)
+            file_name = ((qs.get("file") or [""])[0] or "").strip()
+            if file_name == "":
+                self._send(400, {"ok": False, "error": "missing_file"})
+                return
+            try:
+                page = int((qs.get("page") or ["1"])[0])
+            except ValueError:
+                page = 1
+            try:
+                page_size = int(
+                    (qs.get("page_size") or [str(CONFIG_PAGE_SIZE_DEFAULT)])[0]
+                )
+            except ValueError:
+                page_size = CONFIG_PAGE_SIZE_DEFAULT
+            page_size = max(1, min(page_size, CONFIG_PAGE_SIZE_MAX))
+            cfg = load_config_db()
+            blob = (cfg.get("files") or {}).get(file_name) or {
+                "entries": {},
+                "updated_at": 0,
+            }
+            self._send(200, config_page_payload(blob, file_name, page, page_size))
+            return
         self._send(404, {"ok": False, "error": "not_found"})
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
-        if path != "/v1/ident/merge":
-            self._send(404, {"ok": False, "error": "not_found"})
+        if path == "/v1/ident/merge":
+            if not self._check_auth():
+                return
+            body = self._read_json()
+            if not isinstance(body, dict) or not isinstance(body.get("entries"), dict):
+                self._send(400, {"ok": False, "error": "invalid_body"})
+                return
+            with _lock:
+                db = load_db()
+                merged, stats = merge_entries(db["entries"], body["entries"])
+                db = {
+                    "entries": merged,
+                    "updated_at": int(time.time()),
+                }
+                save_db(db)
+            self._send(
+                200,
+                {
+                    "ok": True,
+                    "inserted": stats["inserted"],
+                    "updated": stats["updated"],
+                    "unchanged": stats["unchanged"],
+                    "total": len(merged),
+                    "updated_at": db["updated_at"],
+                },
+            )
             return
-        if not self._check_auth():
+        if path == "/v1/config/merge":
+            if not self._check_auth():
+                return
+            body = self._read_json()
+            if not isinstance(body, dict) or not isinstance(body.get("files"), dict):
+                self._send(400, {"ok": False, "error": "invalid_body"})
+                return
+            with _config_lock:
+                cfg = load_config_db()
+                merged_files, stats = merge_config_files(cfg.get("files") or {}, body["files"])
+                cfg = {
+                    "files": merged_files,
+                    "updated_at": int(time.time()),
+                }
+                save_config_db(cfg)
+            self._send(
+                200,
+                {
+                    "ok": True,
+                    "inserted": stats["inserted"],
+                    "unchanged": stats["unchanged"],
+                    "files_touched": stats["files_touched"],
+                    "files": len(merged_files),
+                    "updated_at": cfg["updated_at"],
+                },
+            )
             return
-        body = self._read_json()
-        if not isinstance(body, dict) or not isinstance(body.get("entries"), dict):
-            self._send(400, {"ok": False, "error": "invalid_body"})
-            return
-        with _lock:
-            db = load_db()
-            merged, stats = merge_entries(db["entries"], body["entries"])
-            import time
-
-            db = {
-                "entries": merged,
-                "updated_at": int(time.time()),
-            }
-            save_db(db)
-        self._send(
-            200,
-            {
-                "ok": True,
-                "inserted": stats["inserted"],
-                "updated": stats["updated"],
-                "unchanged": stats["unchanged"],
-                "total": len(merged),
-                "updated_at": db["updated_at"],
-            },
-        )
+        self._send(404, {"ok": False, "error": "not_found"})
 
 
 def main() -> int:
@@ -305,9 +523,13 @@ def main() -> int:
     DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not DATA_PATH.exists():
         save_db(_empty_db())
+    CONFIG_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not CONFIG_DATA_PATH.exists():
+        save_config_db(_empty_config_db())
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     sys.stderr.write(
-        "nebbie-ident-sync listening on http://%s:%s  data=%s\n" % (HOST, PORT, DATA_PATH)
+        "nebbie-ident-sync listening on http://%s:%s  ident=%s  config=%s\n"
+        % (HOST, PORT, DATA_PATH, CONFIG_DATA_PATH)
     )
     try:
         httpd.serve_forever()

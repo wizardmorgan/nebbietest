@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.5"
+local PKG_VER = "1.16.32"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -575,7 +575,6 @@ NebbieDash.EQ_SLOT_ORDER = {
   "all'orecchio destro",
   "all'orecchio sinistro",
   "davanti agli occhi",
-  "incoccata",
 }
 NebbieDash.EQ_SLOTS = NebbieDash.EQ_SLOT_ORDER
 -- Slot aggiuntivo indicato dall'utente ma non ancora osservato/confermato in
@@ -666,6 +665,7 @@ function NebbieDash.ensureDefaultConfigFiles()
   NebbieDash.ensureBatchItemsFile()
   NebbieDash.ensurePreferencesFile()
   NebbieDash.ensureSoundsFile()
+  NebbieDash.ensureDigLootFile()
 end
 
 function NebbieDash.preferencesPath()
@@ -687,11 +687,17 @@ function NebbieDash.ensurePreferencesFile()
     "# sanity_neq_on_login = on  # se l'equip in cache è vuoto ma marcato sincronizzato, invia eq\n" ..
     "# text_highlights = on      # gemme/metalli + evidenziazioni aura/disarm/dig/sanc\n" ..
     "# chat_window = on          # finestra floating per say/gt/tell/whisper/ask/gossip/shout\n" ..
+    "# dig_tool = pic              # keyword corta: matcha piccone e pick\n" ..
+    "# dig_combat =              # keyword arma combat per umber (vuoto = arma tolta da ndig)\n" ..
+    "# dig_retry_sec = 24        # secondi tra un dig fallito e il ripristino\n" ..
     "sidebar_mode = dock\n" ..
     "weapon_swap_delay = 0.5\n" ..
     "sanity_neq_on_login = on\n" ..
     "text_highlights = on\n" ..
     "chat_window = on\n" ..
+    "dig_tool = pic\n" ..
+    "dig_combat =\n" ..
+    "dig_retry_sec = 24\n" ..
     "# gold_alert = on           # avvisa se G: scende senza split/give/drop/pagamenti\n" ..
     "gold_alert = on\n" ..
     "# ident_sync_url = https://nebbie.wizmorgan.it/nebbie-ident\n" ..
@@ -724,6 +730,9 @@ function NebbieDash.loadPreferences()
     text_highlights = true,
     chat_window = true,
     gold_alert = true,
+    dig_tool = "pic",
+    dig_combat = "",
+    dig_retry_sec = 24,
     ident_sync_url = "https://nebbie.wizmorgan.it/nebbie-ident",
     ident_sync_token = "",
     ident_sync_on_boot = false,
@@ -752,6 +761,13 @@ function NebbieDash.loadPreferences()
             NebbieDash.prefs.chat_window = NebbieDash.parsePreferencesBool(val)
           elseif key == "gold_alert" then
             NebbieDash.prefs.gold_alert = NebbieDash.parsePreferencesBool(val)
+          elseif key == "dig_tool" then
+            NebbieDash.prefs.dig_tool = val
+          elseif key == "dig_combat" then
+            NebbieDash.prefs.dig_combat = val
+          elseif key == "dig_retry_sec" then
+            local n = tonumber(val)
+            if n and n >= 5 and n <= 120 then NebbieDash.prefs.dig_retry_sec = n end
           elseif key == "ident_sync_url" then
             NebbieDash.prefs.ident_sync_url = val:gsub("/+$", "")
           elseif key == "ident_sync_token" then
@@ -799,6 +815,9 @@ function NebbieDash.savePreferencesFile()
     "text_highlights = " .. ((NebbieDash.prefs and NebbieDash.prefs.text_highlights ~= false) and "on" or "off") .. "\n" ..
     "chat_window = " .. ((NebbieDash.chatEnabled ~= false) and "on" or "off") .. "\n" ..
     "gold_alert = " .. ((NebbieDash.goldAlert ~= false) and "on" or "off") .. "\n" ..
+    "dig_tool = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.dig_tool) or "pic") .. "\n" ..
+    "dig_combat = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.dig_combat) or "") .. "\n" ..
+    "dig_retry_sec = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.dig_retry_sec) or 24) .. "\n" ..
     "ident_sync_url = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_sync_url) or "https://nebbie.wizmorgan.it/nebbie-ident") .. "\n" ..
     "ident_sync_token = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_sync_token) or "") .. "\n" ..
     "ident_sync_on_boot = " .. ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_on_boot) and "on" or "off") .. "\n" ..
@@ -1416,8 +1435,14 @@ function NebbieDash.finishAttribCapture()
   data.spellsUpdated = os.time()
   NebbieDash.saveStore()
   NebbieDash.refreshDashboard()
-  cecho("<green>[NebbieDash] Spell attivi aggiornati (" .. tostring(#cap.spells) .. " attive, " ..
-    tostring(#data.knownSpellOrder) .. " conosciute in totale).\n")
+  local digQuiet = NebbieDash._digAuto and NebbieDash._digAuto.quietAttrib
+  if not digQuiet then
+    cecho("<green>[NebbieDash] Spell attivi aggiornati (" .. tostring(#cap.spells) .. " attive, " ..
+      tostring(#data.knownSpellOrder) .. " conosciute in totale).\n")
+  end
+  if type(NebbieDash.digAutoOnAttribFinished) == "function" then
+    NebbieDash.digAutoOnAttribFinished()
+  end
 end
 
 function NebbieDash.onAttribCaptureLine()
@@ -1501,9 +1526,12 @@ NebbieDash.SHORTCUT_RESERVED = {
   ngoldalert = true,
   nidentui = true,
   nidentsync = true, nidentpull = true, nidentpush = true,
+  ncfgsync = true, ncfgpull = true, ncfgpush = true,
   nswui = true,
   nsw = true,
   usa = true,
+  ndig = true,
+  ndigloot = true,
   nconfigdir = true,
   nsidebar = true,
   npreferencesreload = true,
@@ -3110,6 +3138,10 @@ NebbieDash.CHAT_CHANNEL_COLORS = {
   gtell = "cyan",
   clantell = "orange",
   tell = "magenta",
+  send = "violet",
+  telep = "LightSkyBlue",
+  think = "LightSteelBlue",
+  sign = "LightCyan",
   whisper = "green",
   ask = "blue",
   shout = "red",
@@ -3259,6 +3291,32 @@ function NebbieDash.parseChatLine(text)
     return { channel = "tell", speaker = "Tu", target = target, message = msg, self = true }
   end
 
+  -- Skill sending / messenger (skills.cpp do_sending): echo senza "Tu ".
+  target, msg = text:match("^Mandi a (.+) %(che e' AFK%) il messaggio '(.+)'%s*$")
+  if target and msg then
+    return { channel = "send", speaker = "Tu", target = target, message = msg, self = true, afk = true }
+  end
+  target, msg = text:match("^Mandi a (.+) il messaggio '(.+)'%s*$")
+  if target and msg then
+    return { channel = "send", speaker = "Tu", target = target, message = msg, self = true }
+  end
+
+  -- telepathy (act.comm.cpp telepathy_deliver): "Tu mandi a … il pensiero".
+  target, msg = text:match("^Tu mandi a (.+) il pensiero '(.+)'%s*$")
+  if target and msg then
+    return { channel = "telep", speaker = "Tu", target = target, message = msg, self = true }
+  end
+
+  -- Immortal think / " (do_commune): "Tu pensi :: '…'" oppure "Tu pensi || '…'".
+  msg = text:match("^Tu pensi :: '(.+)'%s*$")
+  if msg then
+    return { channel = "think", speaker = "Tu", message = msg, self = true }
+  end
+  msg = text:match("^Tu pensi || '(.+)'%s*$")
+  if msg then
+    return { channel = "think", speaker = "Tu", message = msg, self = true, superni = true }
+  end
+
   target, msg = text:match("^Tu sussurri a (.+), '(.+)'%s*$")
   if target and msg then
     return { channel = "whisper", speaker = "Tu", target = target, message = msg, self = true }
@@ -3272,6 +3330,12 @@ function NebbieDash.parseChatLine(text)
   msg = text:match("^Tu gridi '(.+)'%s*$")
   if msg then
     return { channel = "shout", speaker = "Tu", message = msg, self = true }
+  end
+
+  -- Skill sign (act.comm.cpp do_sign): echo parlante distinto da say.
+  msg = text:match("^Tu hai detto '(.+)'%s*$")
+  if msg then
+    return { channel = "sign", speaker = "Tu", message = msg, self = true }
   end
 
   -- Gossip e say: stesso echo parlante "Tu dici '…'" (gossip giallo in gioco).
@@ -3301,6 +3365,23 @@ function NebbieDash.parseChatLine(text)
   if who and msg then
     return { channel = "tell", speaker = who, message = msg }
   end
+  who, msg = text:match("^%[(.-)%] ti manda il messaggio '(.+)'%s*$")
+  if who and msg then
+    return { channel = "send", speaker = who, message = msg }
+  end
+  who, msg = text:match("^%[(.-)%] ti manda il pensiero '(.+)'%s*$")
+  if who and msg then
+    return { channel = "telep", speaker = who, message = msg }
+  end
+  -- Immortal think ricevuto: "::Nome:: '…'" / "||Nome|| '…'" (do_commune).
+  who, msg = text:match("^::(.+):: '(.+)'%s*$")
+  if who and msg then
+    return { channel = "think", speaker = who, message = msg }
+  end
+  who, msg = text:match("^||(.+)|| '(.+)'%s*$")
+  if who and msg then
+    return { channel = "think", speaker = who, message = msg, superni = true }
+  end
   who, msg = text:match("^%[(.-)%] ti sussurra '(.+)'%s*$")
   if who and msg then
     return { channel = "whisper", speaker = who, message = msg }
@@ -3312,6 +3393,11 @@ function NebbieDash.parseChatLine(text)
   who, msg = text:match("^%[(.-)%] grida '(.+)'%s*$")
   if who and msg then
     return { channel = "shout", speaker = who, message = msg }
+  end
+  -- Sign language room broadcast (solo se il ricevente capisce i segni).
+  who, msg = text:match("^%[(.-)%], con i segni, dice '(.+)'%s*$")
+  if who and msg then
+    return { channel = "sign", speaker = who, message = msg }
   end
   who, msg = text:match("^%[(.-)%] dice '(.+)'%s*$")
   if who and msg then
@@ -3367,19 +3453,28 @@ function NebbieDash.installChatTriggers()
     "Tu dici al clan '",
     "Tu dici alla casata '",
     "Tu dici a ",
+    "Mandi a ",
+    "Tu mandi a ",
     "Tu sussurri a ",
     "Tu chiedi a ",
     "Tu gridi '",
+    "Tu hai detto '",
     "Tu dici '",
     "] dice al gruppo '",
     "] dice al clan '",
     "] dice alla casata '",
     "] vi dice '",
     "] ti dice '",
+    "] ti manda il messaggio '",
+    "] ti manda il pensiero '",
     "] ti sussurra '",
     "] ti chiede '",
     "] grida '",
+    "], con i segni, dice '",
     "] dice '",
+    -- think immortali/superni (un solo trigger a canale: copre self e ricevuto)
+    ":: '",
+    "|| '",
   }
   for _, pat in ipairs(patterns) do
     local id = tempTrigger(pat, [[NebbieDash.onChatCaptureLine()]])
@@ -3457,10 +3552,45 @@ NebbieDash._identUiState = NebbieDash._identUiState or {
   page = 1,
   pageSize = 12,
   view = "list", -- list | detail | slots
-  tab = "active", -- active | deleted | all
+  tab = "active", -- active | deleted (Archiviati)
   selectedKey = nil,
   pendingDeleteKey = nil,
 }
+
+-- Completa i default se lo stato proviene da una versione senza `tab`
+-- (altrimenti tab=nil e comportamenti ambigui).
+function NebbieDash.ensureIdentUiState()
+  local st = NebbieDash._identUiState
+  if type(st) ~= "table" then
+    NebbieDash._identUiState = {
+      filter = "",
+      charFilter = "",
+      slotFilter = "",
+      onlyCedibile = false,
+      sort = "name",
+      page = 1,
+      pageSize = 12,
+      view = "list",
+      tab = "active",
+      selectedKey = nil,
+      pendingDeleteKey = nil,
+    }
+    return NebbieDash._identUiState
+  end
+  if st.filter == nil then st.filter = "" end
+  if st.charFilter == nil then st.charFilter = "" end
+  if st.slotFilter == nil then st.slotFilter = "" end
+  if st.onlyCedibile == nil then st.onlyCedibile = false end
+  if st.sort == nil then st.sort = "name" end
+  if st.page == nil then st.page = 1 end
+  if st.pageSize == nil then st.pageSize = 12 end
+  if st.view == nil then st.view = "list" end
+  -- "all" non e' piu' supportato: gli archiviati stanno SOLO in Archiviati.
+  if st.tab == nil or st.tab == "" or st.tab == "all" then
+    st.tab = "active"
+  end
+  return st
+end
 
 function NebbieDash.canUseIdentUiWindow()
   if type(Geyser) ~= "table" or type(Geyser.MiniConsole) ~= "table" then
@@ -3473,16 +3603,26 @@ function NebbieDash.canUseIdentUiWindow()
   return type(Geyser.UserWindow) == "table"
 end
 
-NebbieDash.IDENT_UI_CONTAINER = "NebbieDashIdentUiContainer"
+-- Nome NUOVO (1.16.9): evita collisioni con UserWindow OS vuote create da
+-- openUserWindow("NebbieDashIdentUiContainer") in 1.16.4–1.16.8.
+NebbieDash.IDENT_UI_CONTAINER = "NebbieDashIdentUiPanel"
 NebbieDash.IDENT_UI_CONSOLE = "NebbieDashIdentUi"
 -- convertToUserWindow crea "<name>userWindow" al doppio-click.
-NebbieDash.IDENT_UI_USERWINDOW = "NebbieDashIdentUiContaineruserWindow"
--- Size/pos di default (UserWindow = finestra OS; senza default resta lo stato
--- sballato dell'ultima chiusura Mudlet).
+NebbieDash.IDENT_UI_USERWINDOW = "NebbieDashIdentUiPaneluserWindow"
+NebbieDash.IDENT_UI_LEGACY_WINDOWS = {
+  "NebbieDashIdentUiContainer",
+  "NebbieDashIdentUiContaineruserWindow",
+  "NebbieDashIdentUiPaneluserWindow",
+}
+-- Size/pos di default. Preferiamo Adjustable.Container (dentro Mudlet);
+-- UserWindow (finestra OS "fuori") solo come fallback.
 NebbieDash.IDENT_UI_W = 560
 NebbieDash.IDENT_UI_H = 480
 NebbieDash.IDENT_UI_X = 80
 NebbieDash.IDENT_UI_Y = 80
+-- Ancoraggio destro tipico Adjustable (come nswui), resta nel main frame.
+NebbieDash.IDENT_UI_ADJ_X = "-580px"
+NebbieDash.IDENT_UI_ADJ_Y = "80px"
 
 -- true se i riferimenti Lua puntano ancora a window Geyser vive.
 -- Probe get_width prima di Geyser.windowList: con CTUW il container puo'
@@ -3504,7 +3644,10 @@ function NebbieDash.identUiWindowAlive()
   return true
 end
 
+-- Solo per Adjustable convertito da CTUW (non per Geyser.UserWindow nativo:
+-- lì isUserWindow=true e unlock/changeContainer/delete del parent crashano Mudlet).
 function NebbieDash.detachIdentUiFromUserWindow()
+  if NebbieDash._identUiBackend == "userwindow" then return end
   local c = NebbieDash._identUiContainer
   if not c then return end
   pcall(function()
@@ -3517,30 +3660,46 @@ function NebbieDash.detachIdentUiFromUserWindow()
       c.isUserWindow = false
     end
     local uw = c.userwindow
-    if uw and type(uw.hide) == "function" then pcall(function() uw:hide() end) end
-    if uw and type(uw.delete) == "function" then pcall(function() uw:delete() end) end
+    if uw and uw ~= c then
+      if type(uw.hide) == "function" then pcall(function() uw:hide() end) end
+      if type(uw.delete) == "function" then pcall(function() uw:delete() end) end
+    end
     c.userwindow = nil
   end)
 end
 
+-- Chiude SOLO UserWindow orfane legacy/CTUW. Mai closeUserWindow sul nome
+-- dell'Adjustable vivo: su diversi Mudlet appende o freeza il client.
+function NebbieDash.closeIdentUiOrphanUserWindows()
+  if type(closeUserWindow) ~= "function" then return end
+  for _, name in ipairs(NebbieDash.IDENT_UI_LEGACY_WINDOWS or {}) do
+    pcall(closeUserWindow, name)
+  end
+end
+
+function NebbieDash.cancelIdentUiRebuildTimer()
+  if NebbieDash._identUiRebuildTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._identUiRebuildTimer)
+  end
+  NebbieDash._identUiRebuildTimer = nil
+  NebbieDash._identUiRebuildPending = false
+end
+
+-- Teardown sicuro: su UserWindow nativo NON combinare :delete + deleteWindow +
+-- closeUserWindow sullo stesso nome (double-free Qt → crash Mudlet).
 function NebbieDash.destroyIdentUiWindow()
-  NebbieDash.detachIdentUiFromUserWindow()
-  if NebbieDash._identUiContainer then
-    if type(NebbieDash._identUiContainer.hide) == "function" then
-      pcall(function() NebbieDash._identUiContainer:hide() end)
-    end
-    if type(NebbieDash._identUiContainer.delete) == "function" then
-      pcall(function() NebbieDash._identUiContainer:delete() end)
-    end
+  NebbieDash.cancelIdentUiRebuildTimer()
+  if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
+    pcall(killTimer, NebbieDash._identUiResizeTimer)
   end
-  for _, name in ipairs({
-    NebbieDash.IDENT_UI_CONTAINER,
-    NebbieDash.IDENT_UI_CONSOLE,
-    NebbieDash.IDENT_UI_USERWINDOW,
-  }) do
-    if type(deleteWindow) == "function" then pcall(deleteWindow, name) end
-    if type(closeUserWindow) == "function" then pcall(closeUserWindow, name) end
-  end
+  NebbieDash._identUiResizeTimer = nil
+
+  local backend = NebbieDash._identUiBackend
+  local container = NebbieDash._identUiContainer
+  local name = NebbieDash.IDENT_UI_CONTAINER
+  local console = NebbieDash.IDENT_UI_CONSOLE
+
+  -- Scollega i ref Lua subito: timer/refresh non devono toccare widget in delete.
   NebbieDash._identUiContainer = nil
   NebbieDash._identUiGeyser = nil
   NebbieDash._identUiCreated = false
@@ -3548,10 +3707,46 @@ function NebbieDash.destroyIdentUiWindow()
   NebbieDash._identUiBackend = nil
   NebbieDash._identUiRows = nil
   NebbieDash._identUiLastW = nil
-  if NebbieDash._identUiResizeTimer and type(killTimer) == "function" then
-    pcall(killTimer, NebbieDash._identUiResizeTimer)
+
+  if backend == "userwindow" then
+    if container and type(container.hide) == "function" then
+      pcall(function() container:hide() end)
+    end
+    -- Una sola API di chiusura per la UserWindow nativa (solo quel nome).
+    if type(closeUserWindow) == "function" then
+      pcall(closeUserWindow, name)
+    elseif container and type(container.delete) == "function" then
+      pcall(function() container:delete() end)
+    elseif type(deleteWindow) == "function" then
+      pcall(deleteWindow, name)
+    end
+    if type(deleteWindow) == "function" then
+      pcall(deleteWindow, console)
+    end
+    NebbieDash.closeIdentUiOrphanUserWindows()
+    return
   end
-  NebbieDash._identUiResizeTimer = nil
+
+  -- Adjustable / CTUW / sconosciuto: detach CTUW poi hide+delete (come nswui).
+  NebbieDash._identUiBackend = backend
+  NebbieDash._identUiContainer = container
+  NebbieDash.detachIdentUiFromUserWindow()
+  NebbieDash._identUiContainer = nil
+  NebbieDash._identUiBackend = nil
+
+  if container then
+    if type(container.hide) == "function" then
+      pcall(function() container:hide() end)
+    end
+    if type(container.delete) == "function" then
+      pcall(function() container:delete() end)
+    end
+  end
+  for _, winName in ipairs({ name, console }) do
+    if type(deleteWindow) == "function" then pcall(deleteWindow, winName) end
+  end
+  -- Solo legacy/CTUW orfane — mai closeUserWindow(name) sull'Adjustable.
+  NebbieDash.closeIdentUiOrphanUserWindows()
 end
 
 -- Wrap colonne della mini-console Ident in base alla larghezza pixel corrente.
@@ -3655,21 +3850,32 @@ function NebbieDash.wipeIdentUiSavedState()
 end
 
 function NebbieDash.forceIdentUiGeometry(w, h, x, y)
-  w = w or NebbieDash.IDENT_UI_W or 560
-  h = h or NebbieDash.IDENT_UI_H or 480
-  x = x or NebbieDash.IDENT_UI_X or 80
-  y = y or NebbieDash.IDENT_UI_Y or 80
+  w = tonumber(w) or NebbieDash.IDENT_UI_W or 560
+  h = tonumber(h) or NebbieDash.IDENT_UI_H or 480
   local c = NebbieDash._identUiContainer
   if not c then return end
+  local ws, hs = w .. "px", h .. "px"
+  local xs, ys
+  if NebbieDash._identUiBackend == "adjustable" then
+    xs = (type(x) == "string" and x) or NebbieDash.IDENT_UI_ADJ_X or "-580px"
+    ys = (type(y) == "string" and y) or NebbieDash.IDENT_UI_ADJ_Y or "80px"
+  else
+    x = tonumber(x) or NebbieDash.IDENT_UI_X or 80
+    y = tonumber(y) or NebbieDash.IDENT_UI_Y or 80
+    xs, ys = x .. "px", y .. "px"
+  end
+  -- Geyser preferisce stringhe con unita' ("560px").
   pcall(function()
-    if type(c.resize) == "function" then c:resize(w, h) end
-    if type(c.move) == "function" then c:move(x, y) end
+    if type(c.resize) == "function" then c:resize(ws, hs) end
+    if type(c.move) == "function" then c:move(xs, ys) end
   end)
   if type(resizeWindow) == "function" then
     pcall(resizeWindow, NebbieDash.IDENT_UI_CONTAINER, w, h)
   end
-  if type(moveWindow) == "function" then
-    pcall(moveWindow, NebbieDash.IDENT_UI_CONTAINER, x, y)
+  if NebbieDash._identUiBackend ~= "adjustable" and type(moveWindow) == "function" then
+    pcall(moveWindow, NebbieDash.IDENT_UI_CONTAINER,
+      tonumber(x) or NebbieDash.IDENT_UI_X or 80,
+      tonumber(y) or NebbieDash.IDENT_UI_Y or 80)
   end
 end
 
@@ -3692,9 +3898,11 @@ function NebbieDash.showIdentUiWindow(opts)
   if opts.resetGeom or NebbieDash.identUiGeometryLooksBroken() then
     NebbieDash.forceIdentUiGeometry()
   end
-  -- Se convertToUserWindow l'ha staccata, mostra anche il parent UserWindow.
-  if c and c.isUserWindow and c.userwindow and type(c.userwindow.show) == "function" then
-    pcall(function() c.userwindow:show() end)
+  -- Se CTUW ha staccato l'Adjustable, mostra il parent UserWindow reale
+  -- (oggetto Geyser), NON openUserWindow(nome) — crea shell OS VUOTE.
+  local ctuwParent = c and c.isUserWindow and c.userwindow
+  if ctuwParent and type(ctuwParent.show) == "function" then
+    pcall(function() ctuwParent:show() end)
   end
   if c and type(c.show) == "function" then
     pcall(function() c:show() end)
@@ -3702,7 +3910,9 @@ function NebbieDash.showIdentUiWindow(opts)
   if type(showWindow) == "function" then
     pcall(showWindow, NebbieDash.IDENT_UI_CONTAINER)
     pcall(showWindow, NebbieDash.IDENT_UI_CONSOLE)
-    pcall(showWindow, NebbieDash.IDENT_UI_USERWINDOW)
+    if ctuwParent then
+      pcall(showWindow, NebbieDash.IDENT_UI_USERWINDOW)
+    end
   end
   if c and type(c.raise) == "function" then
     pcall(function() c:raise() end)
@@ -3710,12 +3920,17 @@ function NebbieDash.showIdentUiWindow(opts)
   if type(raiseWindow) == "function" then
     pcall(raiseWindow, NebbieDash.IDENT_UI_CONTAINER)
     pcall(raiseWindow, NebbieDash.IDENT_UI_CONSOLE)
-    pcall(raiseWindow, NebbieDash.IDENT_UI_USERWINDOW)
+    if ctuwParent then
+      pcall(raiseWindow, NebbieDash.IDENT_UI_USERWINDOW)
+    end
   end
-  -- UserWindow nativo: openUserWindow sul nome del container.
-  if type(openUserWindow) == "function" then
+  -- openUserWindow SOLO per backend UserWindow nativo (Geyser.UserWindow:new).
+  -- Su Adjustable NON chiamarlo mai: apre finestre OS vuote omonime e, con
+  -- doppio-clic CTUW, ne restano due.
+  if NebbieDash._identUiBackend == "userwindow"
+      and type(openUserWindow) == "function"
+      and (opts.forceOpen or NebbieDash._identUiHidden) then
     pcall(openUserWindow, NebbieDash.IDENT_UI_CONTAINER)
-    pcall(openUserWindow, NebbieDash.IDENT_UI_USERWINDOW)
   end
   NebbieDash._identUiHidden = false
   NebbieDash.armIdentUiResizeWatch()
@@ -3741,46 +3956,27 @@ function NebbieDash.hideIdentUiWindow()
 end
 
 function NebbieDash.createIdentUiShell(w, h)
-  w = w or NebbieDash.IDENT_UI_W or 560
-  h = h or NebbieDash.IDENT_UI_H or 480
-  local x = NebbieDash.IDENT_UI_X or 80
-  local y = NebbieDash.IDENT_UI_Y or 80
+  w = tonumber(w) or NebbieDash.IDENT_UI_W or 560
+  h = tonumber(h) or NebbieDash.IDENT_UI_H or 480
+  local x = tonumber(NebbieDash.IDENT_UI_X) or 80
+  local y = tonumber(NebbieDash.IDENT_UI_Y) or 80
+  local adjX = NebbieDash.IDENT_UI_ADJ_X or "-580px"
+  local adjY = NebbieDash.IDENT_UI_ADJ_Y or "80px"
+  -- "Npx" per UserWindow; Adjustable usa ancoraggio relativo (dentro Mudlet).
+  local xs, ys, ws, hs = x .. "px", y .. "px", w .. "px", h .. "px"
   local backend = nil
   local container = nil
   local errUw, errAdj = nil, nil
 
-  -- Preferisci UserWindow nativo: immune a convertToUserWindow e allo
-  -- Adjustable:load() che lascia la finestra "alive" ma invisibile.
-  -- Posizione assoluta (px): evita geometria "fuori schermo" ereditata.
-  if type(Geyser) == "table" and type(Geyser.UserWindow) == "table" then
-    local ok, res = pcall(function()
-      return Geyser.UserWindow:new({
-        name = NebbieDash.IDENT_UI_CONTAINER,
-        x = x,
-        y = y,
-        width = w,
-        height = h,
-      })
-    end)
-    if ok and res then
-      container = res
-      backend = "userwindow"
-      pcall(function()
-        if type(res.setTitle) == "function" then
-          res:setTitle("Nebbie — Ident DB")
-        end
-      end)
-    else
-      errUw = tostring(res)
-    end
-  end
-
-  if not container and type(Adjustable) == "table" and type(Adjustable.Container) == "table" then
+  -- Preferisci Adjustable: resta DENTRO Mudlet (nswui-like). Mai :load() —
+  -- era la causa della UI "alive ma invisibile" con CTUW.
+  -- UserWindow (finestra OS) solo se Adjustable non e' disponibile/rotto.
+  if type(Adjustable) == "table" and type(Adjustable.Container) == "table" then
     local ok, res = pcall(function()
       return Adjustable.Container:new({
         name = NebbieDash.IDENT_UI_CONTAINER,
-        x = x,
-        y = y,
+        x = adjX,
+        y = adjY,
         width = w,
         height = h,
         titleText = "Nebbie — Ident DB",
@@ -3800,9 +3996,37 @@ function NebbieDash.createIdentUiShell(w, h)
     end
   end
 
-  if not container then
-    return nil, nil, "UserWindow=" .. tostring(errUw) .. " Adjustable=" .. tostring(errAdj)
+  if not container and type(Geyser) == "table" and type(Geyser.UserWindow) == "table" then
+    local ok, res = pcall(function()
+      return Geyser.UserWindow:new({
+        name = NebbieDash.IDENT_UI_CONTAINER,
+        x = xs,
+        y = ys,
+        width = ws,
+        height = hs,
+      })
+    end)
+    if ok and res then
+      container = res
+      backend = "userwindow"
+      pcall(function()
+        if type(res.setTitle) == "function" then
+          res:setTitle("Nebbie — Ident DB")
+        end
+      end)
+    else
+      errUw = tostring(res)
+    end
   end
+
+  if not container then
+    return nil, nil, "Adjustable=" .. tostring(errAdj) .. " UserWindow=" .. tostring(errUw)
+  end
+
+  -- Doppio-clic: convertToUserWindow (se installato) stacca in UserWindow OS
+  -- e un secondo doppio-clic la riporta dentro. Non sovrascrivere il callback
+  -- CTUW (in 1.16.8 era azzerato per le shell vuote; ora openUserWindow non
+  -- gira più su Adjustable, quindi il dblclick è di nuovo sicuro).
 
   local pad = 4
   local titleH = (backend == "adjustable") and 22 or 4
@@ -3829,12 +4053,16 @@ function NebbieDash.initIdentUiWindow()
     cecho("<orange>[NebbieDash] Finestra ident non disponibile (serve Geyser MiniConsole).\n")
     return false
   end
-  -- Se e' ancora Adjustable (sessioni 1.16.2/3), migra a UserWindow:
-  -- Adjustable+CTUW+:load() lascia alive=true ma finestra invisibile.
-  if NebbieDash.identUiWindowAlive() and NebbieDash._identUiBackend == "userwindow" then
-    NebbieDash.showIdentUiWindow()
-    NebbieDash.refreshIdentUi()
-    return true
+  NebbieDash.cancelIdentUiRebuildTimer()
+  -- Riusa solo Adjustable dentro Mudlet. Se e' ancora UserWindow nativo
+  -- (sessioni 1.16.4–1.16.8) o Adjustable staccato da CTUW, ricrea Adjustable.
+  if NebbieDash.identUiWindowAlive() and NebbieDash._identUiBackend == "adjustable" then
+    local c = NebbieDash._identUiContainer
+    if not (c and c.isUserWindow) then
+      NebbieDash.showIdentUiWindow()
+      NebbieDash.refreshIdentUi()
+      return true
+    end
   end
   NebbieDash.destroyIdentUiWindow()
   NebbieDash.wipeIdentUiSavedState()
@@ -3870,7 +4098,17 @@ function NebbieDash.initIdentUiWindow()
 end
 
 function NebbieDash.isIdentArchived(entry)
-  return type(entry) == "table" and entry.archived == true
+  if type(entry) ~= "table" then return false end
+  -- Qualsiasi truthy (true/1/"true") da sync/JSON; non solo == true.
+  local a = entry.archived
+  if a == true or a == 1 or a == "1" or a == "true" or a == "yes" then
+    return true
+  end
+  local st = entry.possession and entry.possession.status
+  if st == "archived" or st == "destroyed" then
+    return true
+  end
+  return false
 end
 
 function NebbieDash.identLifecycleStatus(entry)
@@ -4013,28 +4251,32 @@ function NebbieDash.getIdentEntryByKey(key)
 end
 
 function NebbieDash.collectIdentUiEntries()
-  local st = NebbieDash._identUiState or {}
-  local results
-  local includeArch = (st.tab == "deleted" or st.tab == "all")
+  local st = NebbieDash.ensureIdentUiState()
+  local tab = st.tab or "active"
+  if tab ~= "deleted" then tab = "active" end
+  st.tab = tab
+  -- Archiviati SOLO nel tab deleted/Archiviati; Attivi non li include mai.
+  local includeArch = (tab == "deleted")
   local listOpts = { includeArchived = includeArch }
+  local results
   if st.charFilter and st.charFilter ~= "" then
     results = NebbieDash.listIdentDbByCharacter(st.charFilter, listOpts)
   else
     results = NebbieDash.searchIdentDb(st.filter or "", listOpts)
   end
-  local tab = st.tab or "active"
-  if tab ~= "all" then
-    local filtered = {}
-    for _, e in ipairs(results) do
-      local arch = NebbieDash.isIdentArchived(e)
-      if tab == "deleted" and arch then table.insert(filtered, e)
-      elseif tab == "active" and not arch then table.insert(filtered, e) end
+  local filtered = {}
+  for _, e in ipairs(results) do
+    local arch = NebbieDash.isIdentArchived(e)
+    if tab == "deleted" then
+      if arch then table.insert(filtered, e) end
+    else
+      if not arch then table.insert(filtered, e) end
     end
-    results = filtered
   end
+  results = filtered
   if st.charFilter and st.charFilter ~= "" and st.filter and st.filter ~= "" then
     local q = st.filter:lower()
-    local filtered = {}
+    filtered = {}
     for _, e in ipairs(results) do
       local hay = table.concat({
         e.objectName or "", e.objectType or "", e.flags or "",
@@ -4046,7 +4288,7 @@ function NebbieDash.collectIdentUiEntries()
     results = filtered
   end
   if st.onlyCedibile then
-    local filtered = {}
+    filtered = {}
     for _, e in ipairs(results) do
       if e.cedibile then table.insert(filtered, e) end
     end
@@ -4054,7 +4296,7 @@ function NebbieDash.collectIdentUiEntries()
   end
   if st.slotFilter and st.slotFilter ~= "" then
     local needle = st.slotFilter:lower()
-    local filtered = {}
+    filtered = {}
     for _, e in ipairs(results) do
       if NebbieDash.identEntryMatchesWearSlotFilter(e, needle) then
         table.insert(filtered, e)
@@ -4082,7 +4324,7 @@ function NebbieDash.collectIdentUiEntries()
 end
 
 function NebbieDash.identUiToolbar()
-  local st = NebbieDash._identUiState
+  local st = NebbieDash.ensureIdentUiState()
   local tab = st.tab or "active"
   NebbieDash.identUiCecho("<grey>Totale DB: <white>" .. tostring(NebbieDash.identDbEntryCount())
     .. "  <grey>| filtro: <yellow>" .. ((st.filter ~= "" and st.filter) or "(nessuno)")
@@ -4092,15 +4334,11 @@ function NebbieDash.identUiToolbar()
     .. "\n")
   NebbieDash.identUiCechoLink(
     tab == "active" and "<green>[Attivi]" or "<grey>[Attivi]",
-    "NebbieDash.identUiSetTab(\"active\")", "Schede non archiviate")
+    "NebbieDash.identUiSetTab(\"active\")", "Solo schede non archiviate")
   NebbieDash.identUiCecho(" ")
   NebbieDash.identUiCechoLink(
-    tab == "deleted" and "<orange>[Deleted]" or "<grey>[Deleted]",
-    "NebbieDash.identUiSetTab(\"deleted\")", "Archiviati / distrutti (ripristinabili)")
-  NebbieDash.identUiCecho(" ")
-  NebbieDash.identUiCechoLink(
-    tab == "all" and "<cyan>[Tutti]" or "<grey>[Tutti]",
-    "NebbieDash.identUiSetTab(\"all\")", "Tutte le schede")
+    tab == "deleted" and "<orange>[Archiviati]" or "<grey>[Archiviati]",
+    "NebbieDash.identUiSetTab(\"deleted\")", "Solo archiviati / distrutti (ripristinabili)")
   NebbieDash.identUiCecho("\n")
   NebbieDash.identUiCechoLink("<cyan>[lista]", "NebbieDash.identUiShowList()", "Torna alla lista")
   NebbieDash.identUiCecho(" ")
@@ -4146,6 +4384,7 @@ end
 
 function NebbieDash.refreshIdentUi()
   if not NebbieDash._identUiCreated or NebbieDash._identUiHidden then return end
+  NebbieDash.ensureIdentUiState()
   NebbieDash.updateIdentUiWrap()
   NebbieDash.clearIdentUiWindow()
   NebbieDash.identUiToolbar()
@@ -4175,19 +4414,33 @@ function NebbieDash.renderIdentUiList()
     NebbieDash.identUiCecho("<orange>(nessuna entry — prova nidentui reset oppure identify in gioco)\n")
     return
   end
-  if st.page > 1 then
-    NebbieDash.identUiCechoLink("<cyan>[« prec]", "NebbieDash.identUiPage(-1)", "Pagina precedente")
-    NebbieDash.identUiCecho("  ")
-  end
-  if st.page < pages then
-    NebbieDash.identUiCechoLink("<cyan>[succ »]", "NebbieDash.identUiPage(1)", "Pagina successiva")
-  end
-  if st.page > 1 or st.page < pages then
+  if pages > 1 then
+    if st.page > 1 then
+      NebbieDash.identUiCechoLink(
+        "<cyan>[«« inizio]", "NebbieDash.identUiGotoPage(1)", "Prima pagina")
+      NebbieDash.identUiCecho("  ")
+      NebbieDash.identUiCechoLink(
+        "<cyan>[« prec]", "NebbieDash.identUiPage(-1)", "Pagina precedente")
+      NebbieDash.identUiCecho("  ")
+    end
+    if st.page < pages then
+      NebbieDash.identUiCechoLink(
+        "<cyan>[succ »]", "NebbieDash.identUiPage(1)", "Pagina successiva")
+      NebbieDash.identUiCecho("  ")
+      NebbieDash.identUiCechoLink(
+        "<cyan>[fine »»]",
+        string.format("NebbieDash.identUiGotoPage(%d)", pages),
+        "Ultima pagina")
+    end
     NebbieDash.identUiCecho("\n")
   end
 
   NebbieDash._identUiRows = {}
   local rowIdx = 0
+  -- Numero visualizzato = indice assoluto nella lista filtrata (continua
+  -- tra le pagine: pag.2 parte da pageSize+1, non da 1).
+  local numWidth = math.max(2, #tostring(#all))
+  local numFmt = "<grey>%" .. tostring(numWidth) .. "d. "
   for i = from, to do
     local entry = all[i]
     rowIdx = rowIdx + 1
@@ -4206,7 +4459,7 @@ function NebbieDash.renderIdentUiList()
     if #slots > 0 then
       slotTxt = " <cyan>[" .. table.concat(slots, "/") .. "]"
     end
-    NebbieDash.identUiCecho(string.format("<grey>%2d. ", rowIdx))
+    NebbieDash.identUiCecho(string.format(numFmt, i))
     NebbieDash.identUiCechoLink(
       "<yellow>" .. (entry.objectName or "?"),
       string.format("NebbieDash.identUiOpenRow(%d)", rowIdx),
@@ -4368,29 +4621,38 @@ function NebbieDash.identUiCancelDelete()
 end
 
 function NebbieDash.identUiSetTab(tab)
-  NebbieDash._identUiState = NebbieDash._identUiState or {}
-  NebbieDash._identUiState.tab = tab or "active"
-  NebbieDash._identUiState.page = 1
-  NebbieDash._identUiState.view = "list"
+  local st = NebbieDash.ensureIdentUiState()
+  tab = tab or "active"
+  if tab == "all" or (tab ~= "active" and tab ~= "deleted") then
+    tab = "active"
+  end
+  st.tab = tab
+  st.page = 1
+  st.view = "list"
   NebbieDash.refreshIdentUi()
 end
 
 function NebbieDash.identUiConfirmDelete()
-  local key = NebbieDash._identUiState.pendingDeleteKey
+  local st = NebbieDash.ensureIdentUiState()
+  local key = st.pendingDeleteKey
   if not key then return end
   local entry = NebbieDash.getIdentEntryByKey(key)
   local name = entry and entry.objectName or key
+  -- Conserva tab + pagina correnti (non saltare ad Archiviati / pagina 1).
+  local keepTab = st.tab or "active"
+  local keepPage = tonumber(st.page) or 1
   local ok = NebbieDash.archiveIdentEntry(key, "manual", "manual")
   if ok then
-    cecho("<green>[NebbieDash] Ident archiviato in Deleted: <white>" .. tostring(name)
-      .. "<green> (ripristinabile).\n")
+    cecho("<green>[NebbieDash] Ident archiviato (vedi <yellow>[Archiviati]<green>): <white>"
+      .. tostring(name) .. "<green> (ripristinabile).\n")
   else
     cecho("<orange>[NebbieDash] Archivio fallito per <white>" .. tostring(key) .. "\n")
   end
-  NebbieDash._identUiState.pendingDeleteKey = nil
-  NebbieDash._identUiState.view = "list"
-  NebbieDash._identUiState.selectedKey = nil
-  NebbieDash._identUiState.tab = "deleted"
+  st.pendingDeleteKey = nil
+  st.view = "list"
+  st.selectedKey = nil
+  st.tab = keepTab
+  st.page = keepPage
   NebbieDash.refreshIdentUi()
 end
 
@@ -4560,9 +4822,9 @@ function NebbieDash.renderIdentUiSlotPicker(key)
     "Rimuovi tutti gli slot")
   NebbieDash.identUiCecho("  ")
   NebbieDash.identUiCechoLink(
-    "<yellow>[« dettaglio]",
-    "NebbieDash.identUiOpenRow(1)",
-    "Torna al dettaglio")
+    "<yellow>[« lista]",
+    "NebbieDash.identUiShowList()",
+    "Torna alla lista")
   NebbieDash.identUiCecho("\n")
 end
 
@@ -4574,7 +4836,12 @@ function NebbieDash.identUiApplyWearSlot(loc)
   cecho(string.format(
     "<green>[NebbieDash] Slot <white>%s<green> → <cyan>%s\n",
     entry.objectName or "?", loc))
-  NebbieDash._identUiState.view = "detail"
+  -- Dopo il tag manuale torna alla lista (non al dettaglio): flusso tipico
+  -- e' [slot] dalla lista → scegli → vedi subito lo slot in riga.
+  local st = NebbieDash._identUiState
+  st.view = "list"
+  st.selectedKey = nil
+  st.pendingDeleteKey = nil
   NebbieDash.refreshIdentUi()
 end
 
@@ -4586,11 +4853,17 @@ function NebbieDash.identUiClearWearSlots()
   entry.wearSlotsManual = true
   NebbieDash.scheduleIdentDbSave()
   cecho("<green>[NebbieDash] Slot azzerati per <white>" .. (entry.objectName or "?") .. "\n")
+  local st = NebbieDash._identUiState
+  if st.view == "slots" then
+    st.view = "list"
+    st.selectedKey = nil
+    st.pendingDeleteKey = nil
+  end
   NebbieDash.refreshIdentUi()
 end
 
 function NebbieDash.identUiResetFilters()
-  local st = NebbieDash._identUiState
+  local st = NebbieDash.ensureIdentUiState()
   st.filter = ""
   st.charFilter = ""
   st.slotFilter = ""
@@ -4598,13 +4871,21 @@ function NebbieDash.identUiResetFilters()
   st.sort = "name"
   st.page = 1
   st.view = "list"
+  st.tab = "active"
   st.pendingDeleteKey = nil
   NebbieDash.refreshIdentUi()
 end
 
 function NebbieDash.identUiPage(delta)
-  local st = NebbieDash._identUiState
+  local st = NebbieDash.ensureIdentUiState()
   st.page = (st.page or 1) + (delta or 0)
+  st.view = "list"
+  NebbieDash.refreshIdentUi()
+end
+
+function NebbieDash.identUiGotoPage(page)
+  local st = NebbieDash.ensureIdentUiState()
+  st.page = math.max(1, tonumber(page) or 1)
   st.view = "list"
   NebbieDash.refreshIdentUi()
 end
@@ -4622,8 +4903,14 @@ function NebbieDash.cmdIdentUi(argStr)
   end
 
   if mode == "rebuild" or mode == "force" or mode == "new" then
+    -- Sincrono: il defer 0.2s lasciava rebuild "appeso" e un secondo
+    -- `nidentui` creava un'altra finestra mentre il timer era ancora in coda.
+    NebbieDash.cancelIdentUiRebuildTimer()
     NebbieDash.destroyIdentUiWindow()
-    if not NebbieDash.initIdentUiWindow() then return end
+    if not NebbieDash.initIdentUiWindow() then
+      cecho("<red>[NebbieDash] nidentui rebuild fallito (vedi messaggio sopra).\n")
+      return
+    end
     NebbieDash.showIdentUiWindow({ resetGeom = true })
     cecho("<green>[NebbieDash] Finestra Ident ricostruita"
       .. (NebbieDash._identUiBackend and (" (" .. NebbieDash._identUiBackend .. ")") or "")
@@ -5249,61 +5536,130 @@ function NebbieDash.positionHelpWindow()
   resizeWindow("NebbieDashHelpWin", winW, winH)
 end
 
--- Testo statico dei comandi disponibili. Va aggiornato ogni volta che si
--- aggiunge/rinomina un alias in build-nebbie-complete-dashboard-package.py
--- (stessa regola gia' seguita per USAGE.md/CHANGELOG.md).
+-- Elenco comandi per nhelp / "? Comandi".
+-- Formato: { section = "Titolo" } oppure { "comando", "descrizione" }.
+-- Dentro ogni sezione i comandi sono in ordine alfabetico (per nome).
+-- Aggiornare SEMPRE qui + USAGE.md quando si aggiunge/rinomina un alias
+-- in build-nebbie-complete-dashboard-package.py.
 NebbieDash.HELP_TEXT = {
-  { "c / r / m <spell> [bersaglio]", "Lancia spell (nclass PG); senza bersaglio = PG attivo." },
-  { "<shortcut> [bersaglio]", "Alias globali da nebbie-spell-shortcuts.txt (stile zMUD)." },
-  { "nspellaliases / nspellaliasesreload", "Elenco shortcut; ricarica file shortcut/cast." },
-  { "neq / nattrib / nresync", "Mostra equip/spell salvati; nresync invia eq+attrib al MUD." },
-  { "nfix", "Riavvia il package (pulisce pannelli legacy)." },
-  { "npackageupdate [force]", "Aggiorna il .mpackage da GitHub (main)." },
-  { "npackagecheck", "Controlla se su GitHub c'e' una versione piu' nuova." },
-  { "ntriggers", "Reinstalla i trigger senza riavviare Mudlet." },
-  { "nkeys", "Info tastierino numerico / shortcut da command line." },
-  { "ngui", "Mostra/nascondi il pannello Equip." },
-  { "nlayout", "Ripristina larghezza/font di default." },
-  { "nchar <nome>", "Forza il personaggio attivo (es. nchar Sirio)." },
-  { "nclass <c|r|m>", "Prefisso lancio spell per il PG attivo (cast/recall/mind)." },
-  { "nfont <6-24>", "Font del pannello Equip." },
-  { "nwidth [auto|<px>]", "Larghezza colonna Equip (bordo sinistro)." },
-  { "npreferencesreload", "Ricarica preferenze e highlight da ndashboard." },
-  { "nconfigdir", "Mostra cartella profiles/ndashboard." },
-  { "nitemlen <n>", "Lunghezza max descrizioni oggetti in equip." },
-  { "nclanslot <on|off>", "Mostra/nascondi lo slot simbolo del clan." },
-  { "usa <keyword>", "Cambio arma da zaino (rem/get/wield)." },
-  { "nswui [off]", "Finestra floating speedwalk (lista path + pausa/riprendi)." },
-  { "nsw pause|resume|skip|stop|status", "Controlla la corsa speedwalk." },
-  { "nspeedwalks", "Ricarica nebbie-speedwalks.txt (ndashboard)." },
-  { "nspeeddelay <sec>", "Ritardo tra passi speedwalk / ripetizioni .Ncmd." },
-  { "nloot / nautoloot / nautosplit", "Loot monete; auto a fine fight; split gruppo." },
-  { "nsplit <n>", "Split manuale col gruppo." },
-  { "nautostand / nautodisarm", "Stand dopo caduta; recupero arma dopo disarmo." },
-  { ".<n><comando>", "Ripete il comando N volte (es. .4s)." },
-  { "nautofeed / nhungermacros", "Macro fame/sete; ricarica file macro." },
-  { "nitemkeywords", "Ricarica parole chiave oggetti (ndashboard)." },
-  { "nforgetspell <nome>", "Toglie una spell dall'elenco del PG attivo." },
-  { "nchat [on|off|clear]", "Finestra floating chat (say/gt/clan/tell/…)." },
-  { "ngoldalert [on|off|status]", "Allarme se G: scende senza spesa volontaria." },
-  { "nidentui [filter|slot|char|del|reset]", "Finestra floating archivio identify." },
-  { "nidentdb …", "Cerca/hold/cedibile/export identify (vedi USAGE)." },
-  { "nidentsync [token|skip|setup|status|…]", "Sync identify con hub VPS (token)." },
-  { "nidentpull / nidentpush", "Solo pull o solo push verso l'hub." },
-  { "nknowdb [query|race …]", "Archivio know monster (ndashboard)." },
-  { "nbatch / nidentbatch …", "Batch admin/identify (profilo Sirio)." },
-  { "identify <arma>", "(gioco) Tipo danno per usa/disarmo." },
+  { section = "Aiuto e package" },
+  { "nfix", "Reinstalla trigger/GUI senza disinstallare il package." },
   { "nhelp", "Mostra/nascondi questa finestra." },
+  { "nkeys", "Info tastierino numerico / shortcut da command line." },
+  { "npackagecheck", "Controlla se su GitHub c'e' una versione piu' nuova." },
+  { "npackageupdate [force]", "Aggiorna il .mpackage da GitHub (main)." },
+  { "ntriggers", "Reinstalla i trigger senza riavviare Mudlet." },
+
+  { section = "Personaggio e pannelli" },
+  { "nattrib", "Invia attrib e aggiorna spell in cache." },
+  { "nchar <nome>", "Forza il personaggio attivo (es. nchar Sirio)." },
+  { "nclanslot <on|off>", "Mostra/nascondi lo slot simbolo del clan." },
+  { "neq", "Invia eq e aggiorna il pannello equip." },
+  { "nfont <6-24>", "Font del pannello Equip." },
+  { "ngui", "Mostra/nascondi il pannello Equip." },
+  { "nitemlen <n>", "Lunghezza max descrizioni oggetti in equip." },
+  { "nlayout", "Ripristina larghezza/font di default." },
+  { "nresync", "Invia eq + attrib al MUD e aggiorna cache." },
+  { "nwidth [auto|<px>]", "Larghezza colonna Equip (bordo sinistro)." },
+
+  { section = "Spell e cast" },
+  { "<shortcut> [bersaglio]", "Alias globali da nebbie-spell-shortcuts.txt." },
+  { "c / r / m <spell> [bersaglio]", "Lancia spell (cast/recall/mind); default bersaglio = PG." },
+  { "nclass <c|r|m>", "Prefisso lancio spell per il PG attivo." },
+  { "nforgetspell <nome>", "Toglie una spell dall'elenco del PG attivo." },
+  { "nspellaliases", "Elenco shortcut + spell pannello + nclass." },
+  { "nspellaliasesreload", "Ricarica file shortcut/cast da ndashboard." },
+  { "nspellwarn <n>", "Sotto quanti tick una spell attiva diventa rossa." },
+
+  { section = "Equip e armi" },
+  { "identify <arma>", "(comando gioco) tipo danno per usa/disarmo." },
+  { "nitemkeywords", "Ricarica parole chiave oggetti (ndashboard)." },
+  { "usa <keyword>", "Cambio arma da zaino (rem/get/wield/put/wear)." },
+
+  { section = "Dig / miniera" },
+  { "ndig", "Impugna dig_tool dallo zaino; al primo dig avvia automine." },
+  { "ndig combat <kw>", "Arma umber: get+wield e put dig_tool in zaino." },
+  { "ndig help", "Riassunto opzioni dig." },
+  { "ndig loot", "Come ndigloot: ricarica nebbie-dig-loot.txt." },
+  { "ndig off", "Ferma automine e ripristina arma dig_combat." },
+  { "ndig status", "Stato armed/active, tool, combat, retry, suoni." },
+  { "ndig testsound [kind]", "Prova suono dig (humber/dig_done/dig_warn; mac afplay)." },
+  { "ndig tool <kw>", "Keyword attrezzo (default: pic → piccone/pick)." },
+  { "ndigloot", "Ricarica keep/exclude/drop per loot a filone esaurito." },
+
+  { section = "Loot, oro e gruppo" },
+  { "nautoloot <on|off>", "Loot monete automatico a fine fight (default on)." },
+  { "nautosplit <on|off>", "Split automatico col gruppo dopo loot (default on)." },
+  { "ngoldalert [on|off|status]", "Allarme se G: scende senza spesa volontaria." },
+  { "ngroupcmd …", "Comando di gruppo (vedi USAGE)." },
+  { "nloot", "Prende monete dal cadavere (corp / pile of bones)." },
+  { "nsplit <n>", "Split manuale col gruppo." },
+
+  { section = "Fame, sete e automatici" },
+  { ".<n><comando>", "Ripete il comando N volte (es. .4s)." },
+  { "nautodisarm <on|off>", "Recupero arma dopo disarmo (default on)." },
+  { "nautofeed <on|off>", "Macro fame/sete automatica (default on)." },
+  { "nautostand <on|off>", "Stand automatico dopo caduta (default on)." },
+  { "nhungermacros", "Ricarica nebbie-hunger-macros.txt." },
+
+  { section = "Speedwalk" },
+  { "nspeeddelay <sec>", "Ritardo tra passi speedwalk / ripetizioni .Ncmd." },
+  { "nspeedwalks", "Ricarica nebbie-speedwalks.txt (ndashboard)." },
+  { "nsw pause|resume|skip|stop|status", "Controlla la corsa speedwalk." },
+  { "nswui [off]", "Finestra floating speedwalk (lista + pausa/riprendi)." },
+
+  { section = "Chat" },
+  { "nchat [on|off|clear]", "Finestra chat (say/gt/tell/send/telep/think/sign/…)." },
+
+  { section = "Identify e know" },
+  { "nidentbatch …", "Batch identify admin (oload + identify; profilo Sirio)." },
+  { "nidentbatchreload", "Ricarica config batch identify." },
+  { "nidentdb …", "Cerca/hold/cedibile/export identify (vedi USAGE)." },
+  { "nidentdbreload", "Ricarica nebbie-ident-db.lua dal disco." },
+  { "nidentpull / nidentpush", "Solo pull o solo push verso l'hub sync." },
+  { "nidentsync [token|skip|setup|status|…]", "Sync identify con hub VPS." },
+  { "nidentui [filter|slot|char|del|reset|rebuild]", "Finestra floating archivio identify." },
+  { "nknowdb [query|race …]", "Archivio know monster (ndashboard)." },
+  { "nknowdbreload", "Ricarica nebbie-know-db.lua dal disco." },
+
+  { section = "Batch admin" },
+  { "nbatch …", "Batch comandi su CSV (profilo Sirio)." },
+  { "nbatchreload", "Ricarica file batch." },
+  { "nbatchverify …", "Verifica log batch vs CSV atteso." },
+
+  { section = "Preferenze e file" },
+  { "ncfgpull / ncfgpush", "Solo pull o solo push config ndashboard." },
+  { "ncfgsync [sync|pull|push|list|status]", "Sync file config (merge additivo, hub ident)." },
+  { "nconfigdir", "Mostra cartella profiles/ndashboard." },
+  { "npreferencesreload", "Ricarica preferenze e highlight da ndashboard." },
 }
 
 function NebbieDash.buildHelpText()
-  local lines = { "<cyan><b>NebbieDash — comandi disponibili</b>", "" }
+  local lines = {
+    "<cyan><b>NebbieDash — comandi</b>  <grey>v" .. tostring(NebbieDash.version or "?"),
+    "",
+  }
   for _, entry in ipairs(NebbieDash.HELP_TEXT) do
-    table.insert(lines, string.format("<yellow>%-32s<white> %s", entry[1], entry[2]))
+    if entry.section then
+      table.insert(lines, "")
+      table.insert(lines, "<cyan><b>— " .. entry.section .. " —</b>")
+    elseif entry[1] and entry[2] then
+      table.insert(lines, string.format("<yellow>%-36s<white> %s", entry[1], entry[2]))
+    end
   end
   table.insert(lines, "")
-  table.insert(lines, "<grey>Documentazione completa: docs/mudlet/analysis/USAGE.md")
+  table.insert(lines, "<grey>Dettagli: analysis/USAGE.md  ·  ndig help  ·  nidentui help")
   return lines
+end
+
+function NebbieDash.refreshHelpWindowContent()
+  if not NebbieDash._helpWinCreated then return end
+  clearWindow("NebbieDashHelpWin")
+  for _, l in ipairs(NebbieDash.buildHelpText()) do
+    cecho("NebbieDashHelpWin", l .. "\n")
+  end
+  cechoLink("NebbieDashHelpWin", "<orange>[chiudi]", "NebbieDash.toggleHelp()", "Chiudi questa finestra", true)
+  cecho("NebbieDashHelpWin", "\n")
 end
 
 function NebbieDash.toggleHelp()
@@ -5313,12 +5669,7 @@ function NebbieDash.toggleHelp()
     setMiniConsoleFontSize("NebbieDashHelpWin", NebbieDash.fontSize)
     NebbieDash._helpWinCreated = true
     NebbieDash.positionHelpWindow()
-    clearWindow("NebbieDashHelpWin")
-    for _, l in ipairs(NebbieDash.buildHelpText()) do
-      cecho("NebbieDashHelpWin", l .. "\n")
-    end
-    cechoLink("NebbieDashHelpWin", "<orange>[chiudi]", "NebbieDash.toggleHelp()", "Chiudi questa finestra", true)
-    cecho("NebbieDashHelpWin", "\n")
+    NebbieDash.refreshHelpWindowContent()
     showWindow("NebbieDashHelpWin")
     NebbieDash._helpWinVisible = true
     return
@@ -5328,6 +5679,7 @@ function NebbieDash.toggleHelp()
     NebbieDash._helpWinVisible = false
   else
     NebbieDash.positionHelpWindow()
+    NebbieDash.refreshHelpWindowContent()
     showWindow("NebbieDashHelpWin")
     NebbieDash._helpWinVisible = true
   end
@@ -5441,6 +5793,7 @@ function NebbieDash.cmdReloadPreferences()
   NebbieDash.weaponSwapDelay = NebbieDash.prefs.weapon_swap_delay or NebbieDash.weaponSwapDelay
   NebbieDash.chatEnabled = NebbieDash.prefs.chat_window ~= false
   NebbieDash.installTextHighlightTriggers()
+  NebbieDash.installDigAutomineTriggers()
   if NebbieDash.chatEnabled then
     NebbieDash.initChatWindow()
     NebbieDash.installChatTriggers()
@@ -5716,6 +6069,8 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   if cmd:match("^drop%s+all%.?coin") or cmd:match("^drop%s+all%.?monet") then return true end
   if cmd:match("^drop%s+coin") or cmd:match("^drop%s+monet") then return true end
   if cmd:match("^buy%s+") or cmd:match("^purchase%s+") then return true end
+  -- Cassetta account (es. "account buy platino unico") — non inizia con buy.
+  if cmd:match("^account%s+buy") or cmd:match("^account%s+purchase") then return true end
   if cmd:match("^offer%s+") or cmd:match("^bid%s+") then return true end
   if cmd:match("^asta%s+") or cmd:match("^auction%s+") then return true end
   -- rent: l'addebito reale arriva dopo il menu; vedi noteExpectedGoldCharge sulla riga pensione
@@ -5732,6 +6087,15 @@ function NebbieDash.isVoluntaryGoldCommand(cmd)
   -- Resurrect (magic2.cpp) costa oro al cast
   if cmd:match("resurrect") then return true end
   return false
+end
+
+-- Importo da conferma pagamento (es. cassetta account):
+-- "Hai pagato 6.000.000 monete."
+function NebbieDash.parseHaiPagatoAmount(text)
+  text = NebbieDash.stripColors(text or ""):match("^%s*(.-)%s*$") or ""
+  if text == "" then return nil end
+  local raw = text:match("^Hai pagato ([%d%.,]+) monete")
+  return NebbieDash.parseGroupedInt(raw)
 end
 
 -- Importo offerta asta (auction.cpp + talk_auction Banditore).
@@ -5776,6 +6140,15 @@ function NebbieDash.isVoluntaryGoldSpendLine(text)
   if text:match("^Posi una moneta%.%s*$") then return true end
   if text:match("^Posi alcune monete%.%s*$") then return true end
   if text:match("^Paghi [%d%.,]+ monete") then return true end
+  -- Cassetta account / pagamenti: "Hai pagato 6.000.000 monete."
+  if NebbieDash.parseHaiPagatoAmount(text) then return true end
+  if text:match("^Hai pagato ") then return true end
+  -- Conferma cassetta di sicurezza account (anche senza importo sulla stessa riga)
+  if text:match("cassetta di sicurezza di account") then return true end
+  if text:match("forziere di platino") or text:match("forziere di oro")
+      or text:match("forziere di argento") or text:match("forziere di ferro") then
+    return true
+  end
   -- Asta: tell Banditore — vedi parseAuctionBidAmount
   if NebbieDash.parseAuctionBidAmount(text) then return true end
   -- Shop buy (EN/IT): tell del mercante — vedi parseShopBuyGoldAmount
@@ -5829,6 +6202,13 @@ function NebbieDash.onGoldSpendConfirmLine()
     NebbieDash.armGoldSpendExpected("shop", 30)
     return
   end
+  local paidAmt = NebbieDash.parseHaiPagatoAmount(text)
+  if paidAmt then
+    -- Cassetta account / pagamenti con importo esplicito.
+    NebbieDash.enqueueExpectedGoldCharge(paidAmt, "hai-pagato", 120)
+    NebbieDash.armGoldSpendExpected("hai-pagato", 30)
+    return
+  end
   if NebbieDash.isVoluntaryGoldSpendLine(text) then
     NebbieDash.armGoldSpendExpected("echo", 8)
   end
@@ -5843,7 +6223,19 @@ function NebbieDash.onRentPensionLine()
   end
 end
 
+function NebbieDash.isDigCommand(cmd)
+  local c = tostring(cmd or ""):gsub("[\r\n]+$", "")
+  c = c:match("^%s*(.-)%s*$") or ""
+  return c:lower() == "dig"
+end
+
 function NebbieDash.onDataSendRequest(_, cmd)
+  do
+    if NebbieDash.isDigCommand(cmd)
+        and type(NebbieDash.digAutoActivateFromDigCommand) == "function" then
+      NebbieDash.digAutoActivateFromDigCommand()
+    end
+  end
   local run = NebbieDash._swRun
   if run and run.status == "running" then
     local c = (cmd or ""):match("^%s*(.-)%s*$") or ""
@@ -5863,8 +6255,9 @@ function NebbieDash.onDataSendRequest(_, cmd)
     -- rent: grace lunga di cortesia; l'importo preciso arriva dalla riga pensione
     if low:match("^%s*rent") then
       NebbieDash.armGoldSpendExpected("rent", 120)
-    elseif low:match("^%s*buy%s+") or low:match("^%s*purchase%s+") then
-      -- Shop: spesso G: scende solo al prompt successivo (dopo tell EN/IT).
+    elseif low:match("^%s*buy%s+") or low:match("^%s*purchase%s+")
+        or low:match("^%s*account%s+buy") or low:match("^%s*account%s+purchase") then
+      -- Shop / cassetta account: G: spesso al prompt successivo.
       NebbieDash.armGoldSpendExpected("buy", 30)
     elseif low:match("^%s*bid%s+") or low:match("^%s*offer%s+")
         or low:match("^%s*asta%s+") or low:match("^%s*auction%s+") then
@@ -6487,6 +6880,10 @@ function NebbieDash.endWeaponSwapGuard(gen, restoreIfEmpty)
   -- restoreIfEmpty=true: altrimenti onWearBackLine → end(..., false) azzera lo
   -- stash e un "Smetti di usare" in ritardo svuota «sulla schiena».
   NebbieDash._weaponSwapBusy = false
+  if NebbieDash._hungerMacroPending and type(NebbieDash.runHungerMacro) == "function" then
+    NebbieDash._hungerMacroPending = false
+    tempTimer(0.35, function() NebbieDash.runHungerMacro() end)
+  end
   if not restoreIfEmpty then return end
   local stash = NebbieDash._weaponSwapBackItem
   NebbieDash._weaponSwapBackItem = nil
@@ -6783,16 +7180,40 @@ function NebbieDash.loadIdentDb()
       NebbieDash.identDb.entries = NebbieDash.identDb.entries or {}
       NebbieDash.migrateIdentCedibileFlags()
       NebbieDash.purgeIdentEntriesFromExcludedChars()
+      NebbieDash.repairManualWearSlotsOverflow()
     elseif ok and type(loaded) == "table" and loaded.objectName then
       -- file corrotto/parziale: ignora
     end
   end
   -- Riprendi slot da cache eq gia' nota (A), senza attendere un nuovo neq.
+  -- (salta entry con wearSlotsManual — vedi syncIdentWearSlotsFromEqSlots).
   for _, data in pairs(NebbieDash.chars or {}) do
     if data and data.eq then
       NebbieDash.syncIdentWearSlotsFromEqSlots(data.eq)
     end
   end
+end
+
+-- Il sync eq pre-1.16.13 poteva aggiungere slot a entry gia' taggate a mano.
+-- Il picker manuale imposta un solo slot: se manuale e N>1, tieni il primo.
+function NebbieDash.repairManualWearSlotsOverflow()
+  local entries = NebbieDash.identDb and NebbieDash.identDb.entries
+  if type(entries) ~= "table" then return 0 end
+  local fixed = 0
+  for _, entry in pairs(entries) do
+    if entry and entry.wearSlotsManual then
+      local list = NebbieDash.identWearSlotsList(entry)
+      if #list > 1 then
+        entry.wearSlots = { list[1] }
+        entry.wearSlotsSource = "manual"
+        fixed = fixed + 1
+      end
+    end
+  end
+  if fixed > 0 then
+    NebbieDash.scheduleIdentDbSave()
+  end
+  return fixed
 end
 
 function NebbieDash.saveIdentDb()
@@ -7019,26 +7440,26 @@ function NebbieDash.upsertIdentRecord(parsed, character, source)
   existing.affects = parsed.affects or {}
   existing.statsSig = NebbieDash.identStatsSignature(parsed)
   existing.lastAt = now
-  existing.lastCharacter = character or existing.lastCharacter or "unknown"
   existing.lastSource = source or existing.lastSource
   existing.byCharacter = existing.byCharacter or {}
-  local who = character or "unknown"
+  local who = character or NebbieDash.currentChar or "unknown"
+  if who == "" then who = "unknown" end
+  existing.lastCharacter = who
   existing.byCharacter[who] = {
     at = now,
-    source = source or existing.byCharacter[who] and existing.byCharacter[who].source,
+    source = source or (existing.byCharacter[who] and existing.byCharacter[who].source),
   }
-  -- Identify implica che il PG ha l'oggetto a portata: aggiorna possesso.
-  existing.possession = {
-    status = "held",
-    character = who,
-    at = now,
-    via = "identify",
-    from = existing.possession and existing.possession.character,
-    displaySeen = existing.possession and existing.possession.displaySeen,
-  }
+  -- Identify = pezzo di chi lo identa: sposta possesso anche se era di un altro toon.
+  local prevHolder = existing.possession and existing.possession.character
+  NebbieDash.setIdentPossession(existing, "held", who, "identify", nil, prevHolder)
+  if prevHolder and prevHolder ~= "" and prevHolder:lower() ~= tostring(who):lower()
+      and not NebbieDash.isIdentExcludedChar(prevHolder) then
+    cecho(string.format(
+      "<grey>[NebbieDash] Ident: <white>%s<grey> possesso <yellow>%s<grey> → <green>%s\n",
+      existing.objectName or key, prevHolder, who))
+  end
   NebbieDash.applyCedibileFromFlags(existing, existing.flags)
   NebbieDash.identDb.entries[key] = existing
-  NebbieDash.scheduleIdentDbSave()
   if NebbieDash._identUiCreated and not NebbieDash._identUiHidden then
     NebbieDash.refreshIdentUi()
   end
@@ -7423,10 +7844,12 @@ function NebbieDash.finishIdentArchiveCapture()
   if not cap then return end
   local parsed = NebbieDash.parseIdentifyFull(cap.lines)
   if not parsed then return end
-  if NebbieDash.isIdentExcludedChar(cap.character) then
+  -- Preferisci currentChar al momento della chiusura (switch PG mid-capture).
+  local who = NebbieDash.currentChar or cap.character or "unknown"
+  if NebbieDash.isIdentExcludedChar(who) then
     return -- Sirio/esclusi: non archiviamo identify
   end
-  NebbieDash.upsertIdentRecord(parsed, cap.character, cap.source)
+  NebbieDash.upsertIdentRecord(parsed, who, cap.source)
 end
 
 function NebbieDash.identDbEntryCount()
@@ -7474,39 +7897,44 @@ function NebbieDash.searchIdentDb(query, opts)
   return results
 end
 
+-- true se l'entry "appartiene" a charName per filtri UI/export.
+-- Con possesso held: conta SOLO il detentore attuale (re-identify sposta il pezzo).
+-- Senza possesso held: lastCharacter, poi (se includeHistory) byCharacter.
+function NebbieDash.identEntryMatchesCharacter(entry, charName, opts)
+  opts = opts or {}
+  if type(entry) ~= "table" then return false end
+  charName = (charName or ""):match("^%s*(.-)%s*$") or ""
+  if charName == "" then return true end
+  local needle = charName:lower()
+  local function nameHit(who)
+    if not who or who == "" then return false end
+    local w = tostring(who):lower()
+    return w == needle or w:find(needle, 1, true) ~= nil
+  end
+  local poss = entry.possession
+  if poss and poss.status == "held" and poss.character and poss.character ~= "" then
+    return nameHit(poss.character)
+  end
+  if nameHit(entry.lastCharacter) then return true end
+  if opts.includeHistory == false then return false end
+  for who, _ in pairs(entry.byCharacter or {}) do
+    if nameHit(who) then return true end
+  end
+  return false
+end
+
 function NebbieDash.listIdentDbByCharacter(charName, opts)
   opts = opts or {}
   charName = (charName or ""):match("^%s*(.-)%s*$") or ""
   if NebbieDash.isIdentExcludedChar(charName) then return {} end
-  local needle = charName:lower()
   local results = {}
   for _, entry in pairs((NebbieDash.identDb and NebbieDash.identDb.entries) or {}) do
     if NebbieDash.isIdentEntryFromExcludedChar(entry) and opts.includeExcluded ~= true then
       -- skip Sirio
     elseif NebbieDash.isIdentArchived(entry) and opts.includeArchived ~= true then
       -- skip
-    else
-    local by = entry.byCharacter or {}
-    local hit = false
-    if needle == "" then
-      hit = true
-    else
-      for who, _ in pairs(by) do
-        if who:lower() == needle or who:lower():find(needle, 1, true) then
-          hit = true
-          break
-        end
-      end
-      if not hit and entry.lastCharacter
-          and entry.lastCharacter:lower():find(needle, 1, true) then
-        hit = true
-      end
-      local pc = entry.possession and entry.possession.character
-      if not hit and pc and pc:lower():find(needle, 1, true) then
-        hit = true
-      end
-    end
-    if hit then table.insert(results, entry) end
+    elseif NebbieDash.identEntryMatchesCharacter(entry, charName, opts) then
+      table.insert(results, entry)
     end
   end
   table.sort(results, function(a, b)
@@ -7586,6 +8014,11 @@ end
 
 function NebbieDash.addIdentWearSlot(entry, location, source)
   if not entry then return false end
+  -- Tag manuale: eq/resync non devono riaggiungere altri slot (dopo rebuild
+  -- loadIdentDb richiamava sync eq e ripristinava i multi-slot).
+  if entry.wearSlotsManual and source ~= "manual" then
+    return false
+  end
   local loc = NebbieDash.normalizeWearSlotLabel(location)
   if loc == "" or loc == "?" then return false end
   entry.wearSlots = entry.wearSlots or {}
@@ -7629,6 +8062,7 @@ function NebbieDash.identItemMatchesEqText(ident, eqItemText)
 end
 
 -- Dopo un eq riuscito: aggiunge agli identify matchati lo slot visto in equip.
+-- Salta entry con wearSlotsManual (il tag utente ha priorita').
 function NebbieDash.syncIdentWearSlotsFromEqSlots(slots)
   if not slots then return 0 end
   NebbieDash.identDb = NebbieDash.identDb or { entries = {} }
@@ -7639,7 +8073,8 @@ function NebbieDash.syncIdentWearSlotsFromEqSlots(slots)
     local loc = type(eqEntry) == "table" and (eqEntry.location or "") or ""
     if item ~= "" and loc ~= "" then
       for _, ident in pairs(NebbieDash.identDb.entries) do
-        if NebbieDash.identItemMatchesEqText(ident, item) then
+        if not ident.wearSlotsManual
+            and NebbieDash.identItemMatchesEqText(ident, item) then
           if NebbieDash.addIdentWearSlot(ident, loc, "eq") then
             added = added + 1
           end
@@ -8548,6 +8983,527 @@ function NebbieDash.cmdIdentPush()
   NebbieDash.cmdIdentSync("push")
 end
 
+-- ---------------------------------------------------------------------------
+-- Sync file di configurazione ndashboard (stesso hub/token degli ident).
+-- Merge **additivo**: aggiunge chiavi/righe mancanti, non sovrascrive valori
+-- gia' presenti (ne' in locale ne' sull'hub).
+-- Comandi: ncfgsync | ncfgpull | ncfgpush | ncfgsync status|list
+-- ---------------------------------------------------------------------------
+NebbieDash.CFG_SYNC_PAGE_SIZE = 40
+
+-- Catalogo file syncabili. kind:
+--   kv_eq     → "key = value" (shortcuts, sounds-like)
+--   kv_colon  → "Name: rest" (hunger, item-keywords)
+--   lines     → una riga = un entry (speedwalks, cast-spells)
+--   dig_loot  → "keep|exclude|drop keyword"
+--   prefs     → preferenze whitelist (mai token)
+NebbieDash.CFG_SYNC_FILES = {
+  {
+    name = "nebbie-spell-shortcuts.txt",
+    kind = "kv_eq",
+    reload = function()
+      if type(NebbieDash.loadSpellCastConfig) == "function" then
+        NebbieDash.loadSpellCastConfig()
+      end
+    end,
+  },
+  {
+    name = "nebbie-cast-spells.txt",
+    kind = "lines",
+    reload = function()
+      if type(NebbieDash.loadSpellCastConfig) == "function" then
+        NebbieDash.loadSpellCastConfig()
+      end
+    end,
+  },
+  {
+    name = "nebbie-speedwalks.txt",
+    kind = "lines",
+    reload = function()
+      if type(NebbieDash.loadSpeedwalks) == "function" then
+        NebbieDash.loadSpeedwalks()
+      end
+      if NebbieDash._swUiVisible and type(NebbieDash.showSwUiWindow) == "function" then
+        pcall(NebbieDash.showSwUiWindow)
+      end
+    end,
+  },
+  {
+    name = "nebbie-hunger-macros.txt",
+    kind = "kv_colon",
+    reload = function()
+      if type(NebbieDash.loadHungerMacros) == "function" then
+        NebbieDash.loadHungerMacros()
+      end
+    end,
+  },
+  {
+    name = "nebbie-item-keywords.txt",
+    kind = "kv_colon",
+    reload = function()
+      if type(NebbieDash.loadItemKeywords) == "function" then
+        NebbieDash.loadItemKeywords()
+      end
+    end,
+  },
+  {
+    name = "nebbie-dig-loot.txt",
+    kind = "dig_loot",
+    reload = function()
+      if type(NebbieDash.loadDigLootRules) == "function" then
+        NebbieDash.loadDigLootRules()
+      end
+    end,
+  },
+  {
+    name = "nebbie-dash-preferences.txt",
+    kind = "prefs",
+    reload = function()
+      if type(NebbieDash.loadPreferences) == "function" then
+        NebbieDash.loadPreferences()
+      end
+    end,
+  },
+  {
+    name = "nebbie-batch-commands.txt",
+    kind = "lines",
+  },
+  {
+    name = "nebbie-ident-batch-commands.txt",
+    kind = "lines",
+  },
+  {
+    name = "nebbie-batch-items.csv",
+    kind = "lines",
+  },
+}
+
+NebbieDash.CFG_SYNC_PREFS_KEYS = {
+  dig_tool = true,
+  dig_combat = true,
+  dig_retry_sec = true,
+  text_highlights = true,
+  chat_window = true,
+  gold_alert = true,
+  weapon_swap_delay = true,
+  sanity_neq_on_login = true,
+  sidebar_mode = true,
+  ident_exclude_chars = true,
+  ident_sync_on_boot = true,
+  auto_install_convert_to_userwindow = true,
+}
+
+function NebbieDash.cfgSyncSpecByName(name)
+  for _, spec in ipairs(NebbieDash.CFG_SYNC_FILES or {}) do
+    if spec.name == name then return spec end
+  end
+  return nil
+end
+
+function NebbieDash.cfgSyncReadDataLines(path)
+  local lines = {}
+  local f = io.open(path, "r")
+  if not f then return lines end
+  for raw in f:lines() do
+    table.insert(lines, raw)
+  end
+  f:close()
+  return lines
+end
+
+function NebbieDash.cfgSyncExportEntries(spec)
+  local path = NebbieDash.configPath(spec.name)
+  local entries = {}
+  local lines = NebbieDash.cfgSyncReadDataLines(path)
+  if spec.kind == "kv_eq" then
+    for _, raw in ipairs(lines) do
+      local line2 = raw:match("^%s*(.-)%s*$") or ""
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+        local key, val = NebbieDash.parseSpellShortcutLine(line2)
+        if key and val and key ~= "" then
+          local lk = key:lower()
+          if not entries[lk] then
+            entries[lk] = key .. " = " .. val
+          end
+        end
+      end
+    end
+  elseif spec.kind == "kv_colon" then
+    for _, raw in ipairs(lines) do
+      local line2 = raw:match("^%s*(.-)%s*$") or ""
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+        local name, rest = line2:match("^([^:]+):%s*(.+)$")
+        if name and rest then
+          name = name:match("^%s*(.-)%s*$")
+          rest = rest:match("^%s*(.-)%s*$")
+          local lk = name:lower()
+          if lk ~= "" and not entries[lk] then
+            entries[lk] = name .. ": " .. rest
+          end
+        end
+      end
+    end
+  elseif spec.kind == "dig_loot" then
+    for _, raw in ipairs(lines) do
+      local kind, kw = NebbieDash.parseDigLootLine(raw)
+      if kind and kw then
+        local key = kind .. "|" .. kw:lower()
+        if not entries[key] then
+          entries[key] = kind .. " " .. kw
+        end
+      end
+    end
+  elseif spec.kind == "prefs" then
+    for _, raw in ipairs(lines) do
+      local line2 = raw:match("^%s*(.-)%s*$") or ""
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+        local k, v = line2:match("^([%w_]+)%s*=%s*(.-)%s*$")
+        if k and NebbieDash.CFG_SYNC_PREFS_KEYS[k] then
+          entries[k] = k .. " = " .. tostring(v)
+        end
+      end
+    end
+  else -- lines
+    for _, raw in ipairs(lines) do
+      local line2 = raw:match("^%s*(.-)%s*$") or ""
+      if line2 ~= "" and line2:sub(1, 1) ~= "#" then
+        local key = line2:lower()
+        if not entries[key] then
+          entries[key] = line2
+        end
+      end
+    end
+  end
+  return entries
+end
+
+function NebbieDash.cfgSyncLocalKeys(spec)
+  local keys = {}
+  for k, _ in pairs(NebbieDash.cfgSyncExportEntries(spec)) do
+    keys[k] = true
+  end
+  return keys
+end
+
+-- Aggiunge in coda al file solo le righe le cui chiavi non esistono gia'.
+function NebbieDash.cfgSyncAppendMissing(spec, remoteEntries)
+  if type(remoteEntries) ~= "table" then return 0 end
+  local path = NebbieDash.configPath(spec.name)
+  NebbieDash.ensureConfigDir()
+  local existing = NebbieDash.cfgSyncLocalKeys(spec)
+  local toAdd = {}
+  for key, line in pairs(remoteEntries) do
+    if type(key) == "string" and key ~= "" and type(line) == "string" and line ~= "" then
+      if not existing[key] then
+        table.insert(toAdd, { key = key, line = line })
+      end
+    end
+  end
+  table.sort(toAdd, function(a, b) return a.key < b.key end)
+  if #toAdd == 0 then return 0 end
+  -- Assicura file esistente (scheletro default se manca).
+  if spec.name == "nebbie-dig-loot.txt" and type(NebbieDash.ensureDigLootFile) == "function" then
+    NebbieDash.ensureDigLootFile()
+  elseif spec.name == "nebbie-spell-shortcuts.txt" then
+    NebbieDash.ensureSpellShortcutsFile()
+  elseif spec.name == "nebbie-cast-spells.txt" then
+    NebbieDash.ensureCastSpellsFile()
+  elseif spec.name == "nebbie-speedwalks.txt" and type(NebbieDash.ensureSpeedwalkFile) == "function" then
+    NebbieDash.ensureSpeedwalkFile()
+  elseif spec.name == "nebbie-hunger-macros.txt" then
+    NebbieDash.ensureHungerMacrosFile()
+  elseif spec.name == "nebbie-item-keywords.txt" then
+    NebbieDash.ensureItemKeywordsFile()
+  elseif spec.name == "nebbie-dash-preferences.txt" then
+    NebbieDash.ensurePreferencesFile()
+  end
+  local f = io.open(path, "a")
+  if not f then return 0 end
+  f:write("\n# --- sync hub " .. os.date("%Y-%m-%d %H:%M") .. " ---\n")
+  for _, row in ipairs(toAdd) do
+    f:write(row.line .. "\n")
+    existing[row.key] = true
+  end
+  f:close()
+  return #toAdd
+end
+
+function NebbieDash.cfgSyncBusy()
+  return NebbieDash._cfgSync and NebbieDash._cfgSync.active and true or false
+end
+
+function NebbieDash.cfgSyncAbort(msg)
+  if NebbieDash._cfgSync then NebbieDash._cfgSync.active = false end
+  if msg and msg ~= "" then
+    cecho("<orange>[NebbieDash] Config sync: " .. msg .. "\n")
+  end
+end
+
+function NebbieDash.ensureCfgSyncHttpHandlers()
+  if NebbieDash._cfgSyncHttpHandlers then return end
+  if type(registerAnonymousEventHandler) ~= "function" then return end
+  registerAnonymousEventHandler("sysGetHttpDone", "NebbieDash.onCfgSyncGetDone")
+  registerAnonymousEventHandler("sysGetHttpError", "NebbieDash.onCfgSyncGetError")
+  registerAnonymousEventHandler("sysPostHttpDone", "NebbieDash.onCfgSyncPostDone")
+  registerAnonymousEventHandler("sysPostHttpError", "NebbieDash.onCfgSyncPostError")
+  NebbieDash._cfgSyncHttpHandlers = true
+end
+
+function NebbieDash.cfgSyncIsOurUrl(url)
+  local st = NebbieDash._cfgSync
+  if not st or not st.base then return false end
+  url = tostring(url or "")
+  return url:find(st.base, 1, true) ~= nil and url:find("/v1/config", 1, true) ~= nil
+end
+
+function NebbieDash.startCfgSyncPull(mode)
+  local okCfg, base = NebbieDash.identSyncConfigured()
+  if not okCfg then
+    cecho("<orange>[NebbieDash] Config sync: serve lo stesso token di nidentsync "
+      .. "(nidentsync token <segreto>).\n")
+    return
+  end
+  if type(getHTTP) ~= "function" then
+    cecho("<orange>[NebbieDash] getHTTP non disponibile — aggiorna Mudlet.\n")
+    return
+  end
+  if NebbieDash.cfgSyncBusy() then
+    cecho("<orange>[NebbieDash] Config sync gia' in corso.\n")
+    return
+  end
+  if NebbieDash.identSyncBusy() then
+    cecho("<orange>[NebbieDash] Ident sync in corso — riprova dopo.\n")
+    return
+  end
+  NebbieDash.ensureCfgSyncHttpHandlers()
+  local queue = {}
+  for _, spec in ipairs(NebbieDash.CFG_SYNC_FILES or {}) do
+    table.insert(queue, spec.name)
+  end
+  NebbieDash._cfgSync = {
+    active = true,
+    mode = mode or "sync",
+    base = base,
+    fileQueue = queue,
+    fileIndex = 0,
+    page = 1,
+    pullInserted = 0,
+    filesTouched = 0,
+  }
+  cecho("<grey>[NebbieDash] Config sync: pull da <white>" ..
+    NebbieDash.identSyncMaskUrl(base) .. "<grey> ...\n")
+  NebbieDash.cfgSyncPullNextFile()
+end
+
+function NebbieDash.cfgSyncPullNextFile()
+  local st = NebbieDash._cfgSync
+  if not st or not st.active then return end
+  st.fileIndex = (st.fileIndex or 0) + 1
+  local name = st.fileQueue and st.fileQueue[st.fileIndex]
+  if not name then
+    cecho(string.format(
+      "<green>[NebbieDash] Config pull ok: +%d righe/chiavi nuove (%d file toccati).\n",
+      st.pullInserted or 0, st.filesTouched or 0))
+    if st.mode == "pull" then
+      st.active = false
+      return
+    end
+    NebbieDash.cfgSyncStartPush()
+    return
+  end
+  st.currentFile = name
+  st.page = 1
+  st.fileInserted = 0
+  NebbieDash.cfgSyncRequestPage(name, 1)
+end
+
+function NebbieDash.cfgSyncRequestPage(fileName, page)
+  local st = NebbieDash._cfgSync
+  if not st or not st.active then return end
+  local url = string.format(
+    "%s/v1/config?file=%s&page=%d&page_size=%d",
+    st.base,
+    tostring(fileName):gsub("([^%w%-_%.~])", function(c)
+      return string.format("%%%02X", string.byte(c))
+    end),
+    page,
+    NebbieDash.CFG_SYNC_PAGE_SIZE or 40)
+  st.expectGetUrl = url
+  st.page = page
+  local headers = NebbieDash.identSyncHeaders()
+  local ok, err = pcall(getHTTP, url, headers)
+  if not ok then
+    NebbieDash.cfgSyncAbort("getHTTP fallita: " .. tostring(err))
+  end
+end
+
+function NebbieDash.onCfgSyncGetDone(_, url, body)
+  if not NebbieDash.cfgSyncIsOurUrl(url) then return end
+  local st = NebbieDash._cfgSync
+  if not st or not st.active then return end
+  if st.expectGetUrl and tostring(url) ~= tostring(st.expectGetUrl) then return end
+  local data = NebbieDash.jsonDecode(body or "")
+  if type(data) ~= "table" or data.ok ~= true then
+    NebbieDash.cfgSyncAbort("risposta pull non valida (" .. tostring(st.currentFile) .. ")")
+    return
+  end
+  local spec = NebbieDash.cfgSyncSpecByName(st.currentFile)
+  local n = 0
+  if spec then
+    n = NebbieDash.cfgSyncAppendMissing(spec, data.entries or {})
+    if n > 0 then
+      st.pullInserted = (st.pullInserted or 0) + n
+      st.fileInserted = (st.fileInserted or 0) + n
+      if type(spec.reload) == "function" then
+        pcall(spec.reload)
+      end
+    end
+  end
+  local page = tonumber(data.page) or st.page or 1
+  local pages = tonumber(data.pages) or page
+  if page < pages then
+    NebbieDash.cfgSyncRequestPage(st.currentFile, page + 1)
+    return
+  end
+  if (st.fileInserted or 0) > 0 then
+    st.filesTouched = (st.filesTouched or 0) + 1
+    cecho("<grey>[NebbieDash] Config: <white>" .. tostring(st.currentFile) ..
+      "<grey> +" .. tostring(st.fileInserted) .. "\n")
+  end
+  NebbieDash.cfgSyncPullNextFile()
+end
+
+function NebbieDash.onCfgSyncGetError(_, err, url)
+  if url and not NebbieDash.cfgSyncIsOurUrl(url) then return end
+  if not (NebbieDash._cfgSync and NebbieDash._cfgSync.active) then return end
+  NebbieDash.cfgSyncAbort("errore GET: " .. tostring(err))
+end
+
+function NebbieDash.cfgSyncStartPush()
+  local st = NebbieDash._cfgSync
+  if not st then return end
+  if type(postHTTP) ~= "function" then
+    NebbieDash.cfgSyncAbort("postHTTP non disponibile — pull fatto, push saltato")
+    return
+  end
+  local okCfg, base = NebbieDash.identSyncConfigured()
+  if not okCfg then
+    NebbieDash.cfgSyncAbort("config sync assente")
+    return
+  end
+  st.base = base
+  st.active = true
+  local files = {}
+  local total = 0
+  for _, spec in ipairs(NebbieDash.CFG_SYNC_FILES or {}) do
+    local entries = NebbieDash.cfgSyncExportEntries(spec)
+    local count = 0
+    for _ in pairs(entries) do count = count + 1 end
+    if count > 0 then
+      files[spec.name] = { entries = entries }
+      total = total + count
+    end
+  end
+  local url = base .. "/v1/config/merge"
+  st.expectPostUrl = url
+  local body = NebbieDash.jsonEncode({ files = files })
+  if type(body) ~= "string" or body == "" then
+    NebbieDash.cfgSyncAbort("serializzazione JSON fallita")
+    return
+  end
+  cecho("<grey>[NebbieDash] Config sync: push (" .. tostring(total) .. " chiavi)...\n")
+  local headers = NebbieDash.identSyncHeaders()
+  local ok, err = pcall(postHTTP, body, url, headers)
+  if not ok then
+    NebbieDash.cfgSyncAbort("postHTTP fallita: " .. tostring(err))
+  end
+end
+
+function NebbieDash.onCfgSyncPostDone(_, url, body)
+  if not NebbieDash.cfgSyncIsOurUrl(url) then return end
+  local st = NebbieDash._cfgSync
+  if not st or not st.active then return end
+  if st.expectPostUrl and tostring(url) ~= tostring(st.expectPostUrl) then return end
+  local data = NebbieDash.jsonDecode(body or "")
+  st.active = false
+  if type(data) ~= "table" or data.ok ~= true then
+    cecho("<orange>[NebbieDash] Config push: risposta non valida.\n")
+    return
+  end
+  cecho(string.format(
+    "<green>[NebbieDash] Config push ok: +%d nuove / =%d gia' presenti (hub file=%d).\n",
+    tonumber(data.inserted) or 0,
+    tonumber(data.unchanged) or 0,
+    tonumber(data.files) or 0))
+end
+
+function NebbieDash.onCfgSyncPostError(_, err, url)
+  if url and not NebbieDash.cfgSyncIsOurUrl(url) then return end
+  if not (NebbieDash._cfgSync and NebbieDash._cfgSync.active) then return end
+  NebbieDash.cfgSyncAbort("errore POST: " .. tostring(err))
+end
+
+function NebbieDash.cmdCfgSync(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$") or ""
+  local mode, rest = argStr:match("^(%S+)%s*(.-)%s*$")
+  mode = (mode or ""):lower()
+  rest = rest or ""
+  if mode == "" or mode == "sync" or mode == "full" then
+    NebbieDash.startCfgSyncPull("sync")
+    return
+  end
+  if mode == "pull" then
+    NebbieDash.startCfgSyncPull("pull")
+    return
+  end
+  if mode == "push" then
+    if NebbieDash.cfgSyncBusy() or NebbieDash.identSyncBusy() then
+      cecho("<orange>[NebbieDash] Sync gia' in corso.\n")
+      return
+    end
+    if not NebbieDash.identSyncConfigured() then
+      cecho("<orange>[NebbieDash] Configura nidentsync token prima.\n")
+      return
+    end
+    NebbieDash.ensureCfgSyncHttpHandlers()
+    local ok, base = NebbieDash.identSyncConfigured()
+    NebbieDash._cfgSync = { active = true, mode = "push", base = base }
+    NebbieDash.cfgSyncStartPush()
+    return
+  end
+  if mode == "list" or mode == "files" then
+    cecho("<cyan>[NebbieDash] File config syncabili (merge additivo):\n")
+    for _, spec in ipairs(NebbieDash.CFG_SYNC_FILES or {}) do
+      local n = 0
+      for _ in pairs(NebbieDash.cfgSyncExportEntries(spec)) do n = n + 1 end
+      cecho("<yellow>  " .. spec.name .. "<grey>  kind=" .. tostring(spec.kind) ..
+        "  locali=" .. tostring(n) .. "\n")
+    end
+    cecho("<grey>Esclusi: sounds (path macchina), chars/ui cache, ident/know DB "
+      .. "(hanno sync dedicati).\n")
+    return
+  end
+  if mode == "status" or mode == "info" or mode == "help" or mode == "?" then
+    local ok, url = NebbieDash.identSyncConfigured()
+    cecho("<green>[NebbieDash] Config sync usa lo stesso hub/token di nidentsync.\n")
+    cecho("<grey>URL: <white>" .. NebbieDash.identSyncMaskUrl(
+      url ~= "" and url or (NebbieDash.IDENT_SYNC_DEFAULT_URL or "")) ..
+      (ok and "" or " <orange>(token mancante)") .. "\n")
+    cecho("<grey>Comandi: <yellow>ncfgsync<grey> | <yellow>ncfgpull<grey> | <yellow>ncfgpush<grey> | <yellow>ncfgsync list\n")
+    cecho("<grey>Merge: aggiunge solo righe/chiavi mancanti, non sovrascrive.\n")
+    return
+  end
+  cecho("<orange>[NebbieDash] Uso: ncfgsync [sync|pull|push|list|status]\n")
+end
+
+function NebbieDash.cmdCfgPull()
+  NebbieDash.cmdCfgSync("pull")
+end
+
+function NebbieDash.cmdCfgPush()
+  NebbieDash.cmdCfgSync("push")
+end
+
 function NebbieDash.applyIdentSyncToken(token)
   token = (token or ""):match("^%s*(.-)%s*$") or ""
   if token == "" then
@@ -9359,6 +10315,7 @@ function NebbieDash.ensureSoundsFile()
   f:write(
     "# NebbieDash — percorsi suono opzionali (vuoto = silenzioso)\n" ..
     "# Dopo modifiche: npreferencesreload oppure ntriggers\n" ..
+    "# Vuoto = prova suoni di sistema (Linux freedesktop / Windows Media / macOS Sounds).\n" ..
     "# Esempio Windows: C:/Users/tu/.config/mudlet/profiles/ndashboard/sounds/humber.mp3\n" ..
     "humber =\n" ..
     "dig_done =\n" ..
@@ -9396,13 +10353,59 @@ function NebbieDash.loadSoundsConfig()
   f:close()
 end
 
+-- Riproduce un file audio. Su macOS Mudlet playSoundFile spesso non gestisce
+-- gli .aiff di sistema → fallback afplay. Su Linux prova playSoundFile poi
+-- paplay/ffplay se disponibili.
+function NebbieDash.shellQuote(s)
+  return "'" .. tostring(s or ""):gsub("'", "'\\''") .. "'"
+end
+
+function NebbieDash.playSoundPath(path, opts)
+  opts = opts or {}
+  path = (path or ""):match("^%s*(.-)%s*$") or ""
+  if path == "" then return false, "empty" end
+  if type(io.exists) == "function" and not io.exists(path) then
+    local f = io.open(path, "rb")
+    if f then f:close() else return false, "missing" end
+  end
+  local osname = NebbieDash.detectHostOs()
+  local ext = (path:match("%.([%w]+)$") or ""):lower()
+  local preferAfplay = (osname == "macos")
+    or ext == "aiff" or ext == "aif" or ext == "caf"
+  local function tryAfplay()
+    -- Background: non bloccare Mudlet sul suono.
+    local cmd = "afplay " .. NebbieDash.shellQuote(path) .. " >/dev/null 2>&1 &"
+    local ok = pcall(os.execute, cmd)
+    return ok
+  end
+  local function tryPlaySoundFile()
+    if type(playSoundFile) ~= "function" then return false end
+    local ok = pcall(playSoundFile, path)
+    return ok == true
+  end
+  local function tryLinuxCli()
+    local q = NebbieDash.shellQuote(path)
+    for _, bin in ipairs({ "paplay", "pw-play", "ffplay -nodisp -autoexit -loglevel quiet" }) do
+      local cmd = bin .. " " .. q .. " >/dev/null 2>&1 &"
+      if pcall(os.execute, cmd) then return true end
+    end
+    return false
+  end
+  if preferAfplay then
+    if tryAfplay() then return true, "afplay" end
+    if tryPlaySoundFile() then return true, "playSoundFile" end
+    return false, "afplay_failed"
+  end
+  if tryPlaySoundFile() then return true, "playSoundFile" end
+  if osname == "linux" and tryLinuxCli() then return true, "cli" end
+  if osname == "macos" and tryAfplay() then return true, "afplay" end
+  return false, "no_player"
+end
+
 function NebbieDash.playHighlightSound(key)
   local path = NebbieDash.sounds and NebbieDash.sounds[key]
   if not path or path == "" then return end
-  if type(io.exists) == "function" and not io.exists(path) then return end
-  if type(playSoundFile) == "function" then
-    pcall(playSoundFile, path)
-  end
+  NebbieDash.playSoundPath(path)
 end
 
 function NebbieDash.hlColorSpan(text, r, g, b, br, bg, bb)
@@ -9534,16 +10537,24 @@ end
 
 function NebbieDash.onHighlightHumber()
   if NebbieDash.textHighlights == false then return end
-  -- Stile "humber" (rosso su giallo). Stesso testo di humberin in dadomud;
-  -- qui solo evidenziazione + suono, niente swap armi automatico.
+  -- Stile "humber" (rosso su giallo). Con dig automine attivo lo swap e' altrove;
+  -- qui solo evidenziazione (+ suono configurato o di sistema).
   NebbieDash.hlColorWholeLine(255, 0, 0, 255, 255, 0)
-  NebbieDash.playHighlightSound("humber")
+  if type(NebbieDash.playSystemOrConfiguredSound) == "function" then
+    NebbieDash.playSystemOrConfiguredSound("humber", "humber")
+  else
+    NebbieDash.playHighlightSound("humber")
+  end
 end
 
 function NebbieDash.onHighlightDigDone()
   if NebbieDash.textHighlights == false then return end
   NebbieDash.hlColorWholeLine(24, 202, 53, 255, 255, 255)
-  NebbieDash.playHighlightSound("dig_done")
+  if type(NebbieDash.playSystemOrConfiguredSound) == "function" then
+    NebbieDash.playSystemOrConfiguredSound("dig_done", "dig_done")
+  else
+    NebbieDash.playHighlightSound("dig_done")
+  end
 end
 
 function NebbieDash.teardownTextHighlightTriggers()
@@ -9670,6 +10681,889 @@ function NebbieDash.runWeaponSwap(target)
   end)
   return true
 end
+
+-- ---------------------------------------------------------------------------
+-- Automine dig (port da dadomud): ndig + trigger gated.
+-- ndig = rem zaino, get pic (piccone/pick), rem arma, wield, put arma, wear zaino.
+-- Al primo `dig` inviato al MUD partono retry / umber swap / sanc / vein done.
+-- Fame/sete: resta nautofeed (niente doppio mangia dadomud).
+-- ---------------------------------------------------------------------------
+
+NebbieDash._digAuto = NebbieDash._digAuto or {
+  armed = false,
+  active = false,
+  digPending = false,
+  digPendingTimer = nil,
+  verifyingSanctuary = false,
+  quietAttrib = false,
+  stashedCombat = "",
+  currentWield = "",
+}
+
+function NebbieDash.digAutoState()
+  NebbieDash._digAuto = NebbieDash._digAuto or {
+    armed = false, active = false, digPending = false,
+    digPendingTimer = nil, verifyingSanctuary = false,
+    quietAttrib = false, stashedCombat = "", currentWield = "",
+  }
+  if NebbieDash._digAuto.currentWield == nil then
+    NebbieDash._digAuto.currentWield = ""
+  end
+  return NebbieDash._digAuto
+end
+
+function NebbieDash.digToolKeyword()
+  local t = NebbieDash.prefs and NebbieDash.prefs.dig_tool
+  t = (t or "pic"):match("^%s*(.-)%s*$") or "pic"
+  if t == "" then t = "pic" end
+  return t
+end
+
+function NebbieDash.digCombatKeyword()
+  local st = NebbieDash.digAutoState()
+  local pref = NebbieDash.prefs and NebbieDash.prefs.dig_combat
+  pref = (pref or ""):match("^%s*(.-)%s*$") or ""
+  if pref ~= "" then return pref end
+  if st.stashedCombat and st.stashedCombat ~= "" then return st.stashedCombat end
+  return ""
+end
+
+function NebbieDash.digRetrySec()
+  local n = NebbieDash.prefs and tonumber(NebbieDash.prefs.dig_retry_sec)
+  if n and n >= 5 and n <= 120 then return n end
+  return 24
+end
+
+function NebbieDash.digLootPath()
+  return NebbieDash.configPath("nebbie-dig-loot.txt")
+end
+
+function NebbieDash.ensureDigLootFile()
+  local path = NebbieDash.digLootPath()
+  if type(io.exists) == "function" and io.exists(path) then return end
+  NebbieDash.ensureConfigDir()
+  local f = io.open(path, "w")
+  if not f then return end
+  f:write(
+    "# File loot dig — nebbie-complete-dashboard-package\n" ..
+    "# Usato quando il filone e' esaurito (dopo inv): mette in zaino i keep,\n" ..
+    "# toglie gli exclude dallo zaino, droppa il resto elencato in drop.\n" ..
+    "#\n" ..
+    "# Sintassi (una regola per riga):\n" ..
+    "#   keep <keyword>      put all.<keyword> <zaino>\n" ..
+    "#   exclude <keyword>   get all.<keyword> <zaino>  (dopo i keep)\n" ..
+    "#   drop <keyword>      drop all.<keyword>         (lascia a terra)\n" ..
+    "#\n" ..
+    "# Keyword = come le vuole il MUD (es. oro, mithril, pietra, carbone).\n" ..
+    "# Ordine consigliato: keep specifici, poi keep pietra, exclude carbone,\n" ..
+    "# poi drop dei rifiuti (pepita residua, minerale, carbone, …).\n" ..
+    "#\n" ..
+    "# Dopo modifiche: ndigloot  oppure  ndig loot\n" ..
+    "#\n" ..
+    "keep oro\n" ..
+    "keep mithril\n" ..
+    "keep acciaio\n" ..
+    "keep pietra\n" ..
+    "exclude carbone\n" ..
+    "drop pepita\n" ..
+    "drop minerale\n" ..
+    "drop carbone\n" ..
+    "drop resina\n"
+  )
+  f:close()
+end
+
+function NebbieDash.parseDigLootLine(rawLine)
+  local line2 = (rawLine or ""):match("^%s*(.-)%s*$") or ""
+  if line2 == "" or line2:sub(1, 1) == "#" then return nil end
+  local kind, kw = line2:match("^(%S+)%s+(.+)$")
+  if not kind or not kw then return nil end
+  kind = kind:lower()
+  kw = kw:match("^%s*(.-)%s*$") or ""
+  kw = kw:gsub("%s*#.*$", ""):match("^%s*(.-)%s*$") or ""
+  if kw == "" then return nil end
+  if kind ~= "keep" and kind ~= "exclude" and kind ~= "drop" then return nil end
+  return kind, kw
+end
+
+function NebbieDash.loadDigLootRules()
+  NebbieDash.ensureDigLootFile()
+  NebbieDash.digLoot = { keep = {}, exclude = {}, drop = {} }
+  local path = NebbieDash.digLootPath()
+  local f = io.open(path, "r")
+  if not f then return end
+  for raw in f:lines() do
+    local kind, kw = NebbieDash.parseDigLootLine(raw)
+    if kind then
+      table.insert(NebbieDash.digLoot[kind], kw)
+    end
+  end
+  f:close()
+end
+
+function NebbieDash.cmdReloadDigLoot()
+  NebbieDash.loadDigLootRules()
+  local d = NebbieDash.digLoot or { keep = {}, exclude = {}, drop = {} }
+  cecho(string.format(
+    "<green>[NebbieDash] Dig loot: keep=%d exclude=%d drop=%d da <white>%s\n",
+    #(d.keep or {}), #(d.exclude or {}), #(d.drop or {}), NebbieDash.digLootPath()))
+  for _, kw in ipairs(d.keep or {}) do
+    cecho("<grey>  keep <white>" .. kw .. "\n")
+  end
+  for _, kw in ipairs(d.exclude or {}) do
+    cecho("<grey>  exclude <white>" .. kw .. "\n")
+  end
+  for _, kw in ipairs(d.drop or {}) do
+    cecho("<grey>  drop <white>" .. kw .. "\n")
+  end
+end
+
+function NebbieDash.digAutoBuildVeinLootSteps()
+  local name = NebbieDash.currentChar
+  if not name then return nil, "no_char" end
+  local data = NebbieDash.getCharData(name)
+  NebbieDash.loadItemKeywords()
+  if not NebbieDash.digLoot then NebbieDash.loadDigLootRules() end
+  local rules = NebbieDash.digLoot or { keep = {}, exclude = {}, drop = {} }
+  local backPhrase, backOverride = NebbieDash.findBackpackKeywords(data)
+  if backPhrase == "" then return nil, "no_backpack" end
+  local backKw = NebbieDash.macroBackpackKeywordFromPhrase(backPhrase, backOverride)
+  if backKw == "" then return nil, "no_backpack" end
+  local steps = {}
+  table.insert(steps, "rem " .. backKw)
+  for _, kw in ipairs(rules.keep or {}) do
+    table.insert(steps, "put all." .. kw .. " " .. backKw)
+  end
+  for _, kw in ipairs(rules.exclude or {}) do
+    table.insert(steps, "get all." .. kw .. " " .. backKw)
+  end
+  for _, kw in ipairs(rules.drop or {}) do
+    table.insert(steps, "drop all." .. kw)
+  end
+  table.insert(steps, "wear " .. backKw)
+  -- Come dadomud: lascia 1 moneta a terra per marcare la stanza scavata.
+  table.insert(steps, "drop 1 coin")
+  return steps, nil
+end
+
+function NebbieDash.digAutoRunVeinLoot()
+  local steps, err = NebbieDash.digAutoBuildVeinLootSteps()
+  if not steps then
+    if err == "no_backpack" then
+      cecho("<orange>[NebbieDash] Dig loot: nessuno zaino (schiena) — fai <yellow>neq<orange>. Loot saltato; droppo comunque 1 coin.\n")
+    else
+      cecho("<orange>[NebbieDash] Dig loot: personaggio non rilevato — loot saltato; droppo comunque 1 coin.\n")
+    end
+    -- Anche senza loot: marca stanza come dadomud.
+    tempTimer(0.4, function()
+      send("drop 1 coin", false)
+    end)
+    return false
+  end
+  local delay = NebbieDash.weaponSwapDelay or 0.5
+  -- Piccolo ritardo dopo inv cosi' l'output inventario arriva prima dei put.
+  tempTimer(0.4, function()
+    NebbieDash.runCommandSequence(steps, delay)
+  end)
+  cecho(string.format(
+    "<green>[NebbieDash] Dig: filone esaurito — inv + loot zaino + drop 1 coin (%d comandi).\n",
+    #steps))
+  return true
+end
+
+
+function NebbieDash.detectHostOs()
+  if type(getOS) == "function" then
+    local ok, osname = pcall(getOS)
+    if ok and type(osname) == "string" and osname ~= "" then
+      local low = osname:lower()
+      if low:find("win", 1, true) then return "windows" end
+      if low:find("mac", 1, true) or low:find("darwin", 1, true) then return "macos" end
+      return "linux"
+    end
+  end
+  if package.config:sub(1, 1) == "\\" then return "windows" end
+  return "linux"
+end
+
+NebbieDash.SYSTEM_SOUND_CANDIDATES = {
+  linux = {
+    humber = {
+      "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga",
+      "/usr/share/sounds/freedesktop/stereo/bell.oga",
+      "/usr/share/sounds/alsa/Noise.wav",
+    },
+    dig_done = {
+      "/usr/share/sounds/freedesktop/stereo/complete.oga",
+      "/usr/share/sounds/freedesktop/stereo/message.oga",
+      "/usr/share/sounds/freedesktop/stereo/bell.oga",
+    },
+    dig_warn = {
+      "/usr/share/sounds/freedesktop/stereo/dialog-error.oga",
+      "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga",
+      "/usr/share/sounds/freedesktop/stereo/bell.oga",
+    },
+  },
+  windows = {
+    humber = {
+      "C:/Windows/Media/Windows Exclamation.wav",
+      "C:/Windows/Media/Windows Ding.wav",
+      "C:/Windows/Media/chord.wav",
+    },
+    dig_done = {
+      "C:/Windows/Media/Windows Notify.wav",
+      "C:/Windows/Media/tada.wav",
+      "C:/Windows/Media/chimes.wav",
+    },
+    dig_warn = {
+      "C:/Windows/Media/Windows Critical Stop.wav",
+      "C:/Windows/Media/Windows Ding.wav",
+      "C:/Windows/Media/chord.wav",
+    },
+  },
+  macos = {
+    humber = {
+      "/System/Library/Sounds/Sosumi.aiff",
+      "/System/Library/Sounds/Basso.aiff",
+      "/System/Library/Sounds/Funk.aiff",
+    },
+    dig_done = {
+      "/System/Library/Sounds/Glass.aiff",
+      "/System/Library/Sounds/Ping.aiff",
+      "/System/Library/Sounds/Hero.aiff",
+    },
+    dig_warn = {
+      "/System/Library/Sounds/Basso.aiff",
+      "/System/Library/Sounds/Sosumi.aiff",
+      "/System/Library/Sounds/Funk.aiff",
+    },
+  },
+}
+
+function NebbieDash.resolveSystemSound(kind)
+  local osname = NebbieDash.detectHostOs()
+  local tableByOs = NebbieDash.SYSTEM_SOUND_CANDIDATES[osname]
+    or NebbieDash.SYSTEM_SOUND_CANDIDATES.linux
+  local list = tableByOs and tableByOs[kind]
+  if type(list) ~= "table" then return nil end
+  for _, p in ipairs(list) do
+    if type(io.exists) == "function" and io.exists(p) then
+      return p
+    end
+    -- Fallback senza io.exists: prova open
+    local f = io.open(p, "rb")
+    if f then f:close(); return p end
+  end
+  return nil
+end
+
+function NebbieDash.playSystemOrConfiguredSound(key, systemKind)
+  local path = NebbieDash.sounds and NebbieDash.sounds[key]
+  if path and path ~= "" then
+    NebbieDash.playHighlightSound(key)
+    return true
+  end
+  local sys = NebbieDash.resolveSystemSound(systemKind or key)
+  if not sys then return false end
+  local ok = NebbieDash.playSoundPath(sys)
+  return ok == true
+end
+
+function NebbieDash.cmdDigTestSound(which)
+  which = ((which or ""):match("^%s*(.-)%s*$") or ""):lower()
+  if which == "" then which = "humber" end
+  local map = {
+    humber = "humber",
+    dig_done = "dig_done",
+    done = "dig_done",
+    dig_warn = "dig_warn",
+    warn = "dig_warn",
+    sanc = "dig_warn",
+    sanc_gone = "dig_warn",
+  }
+  local kind = map[which]
+  if not kind then
+    cecho("<orange>[NebbieDash] Uso: ndig testsound [humber|dig_done|dig_warn]\n")
+    return
+  end
+  local cfg = NebbieDash.sounds and NebbieDash.sounds[kind]
+  local path = (cfg and cfg ~= "" and cfg) or NebbieDash.resolveSystemSound(kind)
+  if not path then
+    cecho("<orange>[NebbieDash] Nessun file suono per <yellow>" .. kind ..
+      "<orange> (OS=" .. tostring(NebbieDash.detectHostOs()) .. ").\n")
+    return
+  end
+  local ok, how = NebbieDash.playSoundPath(path)
+  if ok then
+    cecho(string.format(
+      "<green>[NebbieDash] Test suono <yellow>%s<green> via <white>%s<green>: %s\n",
+      kind, tostring(how), path))
+  else
+    cecho(string.format(
+      "<orange>[NebbieDash] Test suono FALLITO (%s) per <yellow>%s<orange>: %s\n",
+      tostring(how), kind, path))
+  end
+end
+
+function NebbieDash.digAutoCancelRetry()
+  local st = NebbieDash.digAutoState()
+  if st.digPendingTimer and type(killTimer) == "function" then
+    pcall(killTimer, st.digPendingTimer)
+  end
+  st.digPendingTimer = nil
+  st.digPending = false
+end
+
+-- opts.restoreCombat (default true): dopo lo stop, ripristina dig_combat
+-- (arma umber) e ripone dig_tool nello zaino — come uscire da ndig.
+function NebbieDash.digAutoStop(msg, opts)
+  opts = opts or {}
+  local restoreCombat = opts.restoreCombat
+  if restoreCombat == nil then restoreCombat = true end
+  local st = NebbieDash.digAutoState()
+  NebbieDash.digAutoCancelRetry()
+  st.armed = false
+  st.active = false
+  st.verifyingSanctuary = false
+  st.quietAttrib = false
+  if msg then
+    cecho("<orange>[NebbieDash] Dig automine: " .. msg .. "\n")
+  end
+  if not restoreCombat then return end
+  local combat = NebbieDash.digCombatKeyword()
+  if combat == "" then
+    cecho("<orange>[NebbieDash] Dig off: nessuna arma combat (ndig combat <kw>) da ripristinare.\n")
+    return
+  end
+  -- Gia' in mano l'arma combat (es. umber in corso): non rifare lo swap.
+  if st.currentWield and st.currentWield ~= ""
+      and NebbieDash.keywordsOverlap(st.currentWield, combat) then
+    cecho("<green>[NebbieDash] Dig off: gia' impugnato <yellow>" .. combat .. "<green>.\n")
+    return
+  end
+  local putAway = NebbieDash.digToolKeyword()
+  if st.currentWield and st.currentWield ~= ""
+      and not NebbieDash.keywordsOverlap(st.currentWield, combat) then
+    putAway = st.currentWield
+  end
+  cecho("<green>[NebbieDash] Dig off: ripristino <yellow>" .. combat ..
+    "<green>, ripongo <yellow>" .. putAway .. "<green>.\n")
+  NebbieDash.digAutoRunSwap(combat, "dig_combat", { putAwayKw = putAway })
+end
+
+function NebbieDash.digAutoScheduleRetry()
+  local st = NebbieDash.digAutoState()
+  if not st.active then return end
+  NebbieDash.digAutoCancelRetry()
+  st.digPending = true
+  local sec = NebbieDash.digRetrySec()
+  st.digPendingTimer = tempTimer(sec, function()
+    local s = NebbieDash.digAutoState()
+    s.digPendingTimer = nil
+    if s.digPending and s.active then
+      s.digPending = false
+      send("dig", false)
+    else
+      s.digPending = false
+    end
+  end)
+end
+
+function NebbieDash.digAutoIsEngaged()
+  local st = NebbieDash.digAutoState()
+  return st.armed or st.active
+end
+
+function NebbieDash.digAutoActivateFromDigCommand()
+  local st = NebbieDash.digAutoState()
+  if not st.armed and not st.active then return end
+  if not st.active then
+    st.active = true
+    st.armed = true
+    cecho("<green>[NebbieDash] Dig automine attivo (retry/umber/sanc/vein).\n")
+  end
+end
+
+-- Se armed ma active non e' partito (sysDataSendRequest assente / dig via
+-- send() script), attiva al primo feedback dig dal MUD.
+function NebbieDash.digAutoEnsureActiveFromWorld()
+  local st = NebbieDash.digAutoState()
+  if st.active then return true end
+  if not st.armed then return false end
+  NebbieDash.digAutoActivateFromDigCommand()
+  return st.active == true
+end
+
+-- opts.handsEmpty: mani vuote (frantumi) → solo get+wield, niente rem/put.
+-- opts.putAwayKw: keyword da rimuovere e rimettere in zaino (stile dadomud
+-- config.armaattuale). Se assente, ricava dall'eq cache (puo' fallire se
+-- eq non sincronizzato → manca il put: per umber usare sempre putAwayKw).
+function NebbieDash.digAutoBuildSwapSteps(weaponKw, opts)
+  opts = opts or {}
+  local name = NebbieDash.currentChar
+  if not name then return nil, "no_char" end
+  local data = NebbieDash.getCharData(name)
+  NebbieDash.loadItemKeywords()
+  local backPhrase, backOverride = NebbieDash.findBackpackKeywords(data)
+  if backPhrase == "" then return nil, "no_backpack" end
+  weaponKw = (weaponKw or ""):match("^%s*(.-)%s*$") or ""
+  if weaponKw == "" then return nil, "no_weapon" end
+  local backKw = NebbieDash.macroBackpackKeywordFromPhrase(backPhrase, backOverride)
+  local putAwayKw = ""
+  if not opts.handsEmpty then
+    putAwayKw = ((opts.putAwayKw or ""):match("^%s*(.-)%s*$")) or ""
+    if putAwayKw == "" then
+      local wieldPhrase = NebbieDash.currentWieldedKeyword(data)
+      if wieldPhrase ~= "" and data.eqUpdated then
+        local wieldItem = nil
+        for _, row in ipairs(NebbieDash.buildEquipRows(data)) do
+          if not row.empty and row.location == "impugnato" then
+            wieldItem = row.item
+            break
+          end
+        end
+        if wieldItem then
+          local resolved, isOv = NebbieDash.resolveItemKeywords(wieldItem)
+          putAwayKw = NebbieDash.macroBackpackKeywordFromPhrase(resolved, isOv)
+        else
+          putAwayKw = NebbieDash.macroBackpackKeywordFromPhrase(wieldPhrase, false)
+        end
+      end
+    end
+  end
+  local doPutAway = putAwayKw ~= "" and not NebbieDash.keywordsOverlap(putAwayKw, weaponKw)
+  local steps = {}
+  table.insert(steps, "rem " .. backKw)
+  table.insert(steps, "get " .. weaponKw .. " " .. backKw)
+  if doPutAway then
+    table.insert(steps, "rem " .. putAwayKw)
+  end
+  table.insert(steps, "wield " .. weaponKw)
+  if doPutAway then
+    table.insert(steps, "put " .. putAwayKw .. " " .. backKw)
+  end
+  table.insert(steps, "wear " .. backKw)
+  return steps, nil, putAwayKw
+end
+
+function NebbieDash.digAutoFlushPendingSwap()
+  local pend = NebbieDash._digSwapPending
+  if not pend then return end
+  NebbieDash._digSwapPending = nil
+  NebbieDash.digAutoRunSwap(pend.weaponKw, pend.label, pend.opts)
+end
+
+function NebbieDash.digAutoRunSwap(weaponKw, label, opts)
+  if NebbieDash._hungerMacroBusy then
+    -- Fame/sete sta usando lo zaino: coda il cambio dig e riparti dopo.
+    NebbieDash._digSwapPending = {
+      weaponKw = weaponKw, label = label, opts = opts,
+    }
+    cecho("<orange>[NebbieDash] Dig: attendo fine macro fame/sete prima del cambio arma.\n")
+    return true
+  end
+  if NebbieDash._weaponSwapBusy then
+    cecho("<orange>[NebbieDash] Dig: cambio arma gia' in corso.\n")
+    return false
+  end
+  local steps, err = NebbieDash.digAutoBuildSwapSteps(weaponKw, opts)
+  if not steps then
+    if err == "no_backpack" then
+      cecho("<orange>[NebbieDash] Dig: nessuno zaino (schiena) — fai <yellow>neq<orange> prima.\n")
+    elseif err == "no_weapon" then
+      cecho("<orange>[NebbieDash] Dig: keyword arma mancante (" .. (label or "?") .. ").\n")
+    else
+      cecho("<orange>[NebbieDash] Dig: personaggio non rilevato.\n")
+    end
+    return false
+  end
+  local name = NebbieDash.currentChar
+  local data = NebbieDash.getCharData(name)
+  local gen = NebbieDash.beginWeaponSwapGuard(data)
+  NebbieDash.runCommandSequence(steps, NebbieDash.weaponSwapDelay)
+  local timeout = (NebbieDash.weaponSwapDelay or 0.5) * #steps + 4.0
+  tempTimer(timeout, function()
+    NebbieDash.endWeaponSwapGuard(gen, true)
+  end)
+  -- Traccia cosa abbiamo in mano (come dadomud config.armaattuale).
+  NebbieDash.digAutoState().currentWield = weaponKw
+  return true
+end
+
+function NebbieDash.digAutoEquipTool()
+  local st = NebbieDash.digAutoState()
+  local name = NebbieDash.currentChar
+  if not name then
+    cecho("<orange>[NebbieDash] Nessun personaggio — attendi prompt o nchar.\n")
+    return false
+  end
+  local data = NebbieDash.getCharData(name)
+  NebbieDash.loadItemKeywords()
+  local current = NebbieDash.currentWieldedKeyword(data)
+  if current ~= "" then
+    -- Stasha l'arma combat se non configurata esplicitamente.
+    local pref = NebbieDash.prefs and NebbieDash.prefs.dig_combat
+    pref = (pref or ""):match("^%s*(.-)%s*$") or ""
+    if pref == "" then
+      st.stashedCombat = current
+    end
+  end
+  local tool = NebbieDash.digToolKeyword()
+  local putAway = current
+  if putAway == "" then putAway = st.currentWield end
+  local ok = NebbieDash.digAutoRunSwap(tool, "dig_tool", {
+    putAwayKw = (putAway ~= "" and not NebbieDash.keywordsOverlap(putAway, tool)) and putAway or nil,
+  })
+  if ok then
+    st.armed = true
+    st.active = false
+    st.currentWield = tool
+    NebbieDash.digAutoCancelRetry()
+    cecho(string.format(
+      "<green>[NebbieDash] Dig pronto: impugnato <yellow>%s<green>. Digita <yellow>dig<green> per avviare le automazioni.\n",
+      tool))
+    local combat = NebbieDash.digCombatKeyword()
+    if combat ~= "" then
+      cecho("<grey>[NebbieDash] Dig combat (umber): <white>" .. combat .. "\n")
+    else
+      cecho("<orange>[NebbieDash] Nessuna arma combat nota — imposta <yellow>ndig combat <kw><orange>.\n")
+    end
+  end
+  return ok
+end
+
+function NebbieDash.digAutoRequestSanctuaryCheck()
+  local st = NebbieDash.digAutoState()
+  if not st.active then return end
+  st.verifyingSanctuary = true
+  st.quietAttrib = true
+  send("att", false)
+end
+
+function NebbieDash.digAutoOnAttribFinished()
+  local st = NebbieDash.digAutoState()
+  if not st.verifyingSanctuary then return end
+  st.verifyingSanctuary = false
+  st.quietAttrib = false
+  if not st.active then return end
+  local name = NebbieDash.currentChar
+  local data = name and NebbieDash.getCharData(name)
+  local hasSanc = false
+  if data and type(data.activeSpells) == "table" then
+    for k, _ in pairs(data.activeSpells) do
+      if tostring(k):lower() == "sanctuary" then
+        hasSanc = true
+        break
+      end
+    end
+  end
+  if hasSanc then
+    send("dig", false)
+  else
+    local who = name or ""
+    if who == "" then who = "me" end
+    send("cast 'sanctuary' " .. who, false)
+    tempTimer(2.0, function()
+      local s = NebbieDash.digAutoState()
+      if s.active then send("dig", false) end
+    end)
+  end
+end
+
+-- --- Trigger handlers (active, oppure armed→active al primo feedback MUD) ---
+
+function NebbieDash.onDigGataLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
+  NebbieDash.digAutoScheduleRetry()
+end
+
+function NebbieDash.onDigVeinDoneLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
+  NebbieDash.digAutoCancelRetry()
+  NebbieDash.playSystemOrConfiguredSound("dig_done", "dig_done")
+  if type(NebbieDash.armGoldSpendExpected) == "function" then
+    NebbieDash.armGoldSpendExpected("dig_vein", 8)
+  end
+  send("inv", false)
+  NebbieDash.digAutoRunVeinLoot()
+end
+
+function NebbieDash.onDigHumberInLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
+  local st = NebbieDash.digAutoState()
+  NebbieDash.digAutoCancelRetry()
+  NebbieDash.playSystemOrConfiguredSound("humber", "humber")
+  local combat = NebbieDash.digCombatKeyword()
+  if combat == "" then
+    cecho("<orange>[NebbieDash] Dig umber: manca arma combat (ndig combat <kw>).\n")
+    return
+  end
+  -- Sempre rem+put del dig_tool (non solo se eq cache ha impugnato).
+  local putAway = NebbieDash.digToolKeyword()
+  if st.currentWield and st.currentWield ~= "" then
+    putAway = st.currentWield
+  end
+  cecho("<orange>[NebbieDash] Dig umber: impugnato <yellow>" .. combat ..
+    "<orange>, ripongo <yellow>" .. putAway .. "<orange>.\n")
+  NebbieDash.digAutoRunSwap(combat, "dig_combat", { putAwayKw = putAway })
+end
+
+function NebbieDash.onDigHumberOutLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
+  local st = NebbieDash.digAutoState()
+  local who = NebbieDash.currentChar or ""
+  if who ~= "" then
+    send("cast 'heal' " .. who, false)
+  end
+  local tool = NebbieDash.digToolKeyword()
+  -- Riponi arma combat, riprendi dig_tool (come dadomud armaattuale → dig).
+  local putAway = NebbieDash.digCombatKeyword()
+  if putAway == "" and st.currentWield and st.currentWield ~= "" then
+    putAway = st.currentWield
+  end
+  cecho("<orange>[NebbieDash] Dig: umber morto — riprendo <yellow>" .. tool ..
+    "<orange>, ripongo <yellow>" .. (putAway ~= "" and putAway or "?") .. "<orange>.\n")
+  NebbieDash.digAutoRunSwap(tool, "dig_tool", {
+    putAwayKw = (putAway ~= "" and putAway) or nil,
+  })
+  tempTimer((NebbieDash.weaponSwapDelay or 0.5) * 6 + 0.5, function()
+    local s = NebbieDash.digAutoState()
+    if not s.active then return end
+    NebbieDash.digAutoRequestSanctuaryCheck()
+  end)
+end
+
+function NebbieDash.onDigSancGoneLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
+  NebbieDash.digAutoCancelRetry()
+  NebbieDash.playSystemOrConfiguredSound("sanc_gone", "dig_warn")
+  NebbieDash.digAutoRequestSanctuaryCheck()
+end
+
+function NebbieDash.onDigRefreshWarnLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
+  local who = NebbieDash.currentChar or ""
+  if who ~= "" then
+    send("cast 'refresh' " .. who, false)
+  end
+end
+
+function NebbieDash.onDigTrueSightGoneLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
+  local who = NebbieDash.currentChar or ""
+  if who ~= "" then
+    send("cast 'true sight' " .. who, false)
+  end
+end
+
+-- True se la riga frantumi riguarda un attrezzo da scavo (non uno scudo/arma
+-- generica). Il MUD stampa "$p cade a terra in frantumi." con short desc
+-- (es. "Piccone …" oppure "A mining pick …").
+function NebbieDash.digLineLooksLikeBrokenTool(text, toolKw)
+  local lower = NebbieDash.stripColors(tostring(text or "")):lower()
+  if lower:find("piccone", 1, true) then return true end
+  if lower:find("mining pick", 1, true) then return true end
+  if lower:find("%f[%w]pick%f[%W]") then return true end
+  if lower:find("%f[%w]pala%f[%W]") then return true end
+  toolKw = ((toolKw or ""):match("^%s*(.-)%s*$") or ""):lower()
+  if toolKw ~= "" and lower:find(toolKw, 1, true) then return true end
+  return false
+end
+
+-- Dig senza tool in mano (skills.cpp): riprova get+wield dig_tool.
+function NebbieDash.onDigNoToolLine()
+  local st = NebbieDash.digAutoState()
+  if not st.active and not st.armed then return end
+  NebbieDash.digAutoCancelRetry()
+  NebbieDash.playSystemOrConfiguredSound("dig_warn", "dig_warn")
+  local tool = NebbieDash.digToolKeyword()
+  cecho("<orange>[NebbieDash] Dig: manca attrezzo — prendo <yellow>" ..
+    tool .. "<orange> dallo zaino.\n")
+  local ok = NebbieDash.digAutoRunSwap(tool, "dig_tool", { handsEmpty = true })
+  if not ok then
+    NebbieDash.digAutoStop("nessun attrezzo disponibile — automine fermato.")
+    return
+  end
+  if st.active then
+    tempTimer((NebbieDash.weaponSwapDelay or 0.5) * 4 + 0.5, function()
+      local s = NebbieDash.digAutoState()
+      if not s.active then return end
+      NebbieDash.digAutoRequestSanctuaryCheck()
+    end)
+  end
+end
+
+function NebbieDash.onDigPickBrokenLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
+  local st = NebbieDash.digAutoState()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local tool = NebbieDash.digToolKeyword()
+  if not NebbieDash.digLineLooksLikeBrokenTool(text, tool) then
+    return
+  end
+  NebbieDash.digAutoCancelRetry()
+  NebbieDash.playSystemOrConfiguredSound("dig_warn", "dig_warn")
+  -- Mani gia' vuote: solo get+wield (niente rem/put stale). Pulisci cache impugnato.
+  local name = NebbieDash.currentChar
+  if name and type(NebbieDash.patchCachedEqLocation) == "function" then
+    local data = NebbieDash.getCharData(name)
+    if data and data.eqUpdated then
+      NebbieDash.patchCachedEqLocation(data, "impugnato", nil)
+    end
+  end
+  cecho("<orange>[NebbieDash] Dig: piccone in frantumi — prendo <yellow>" ..
+    tool .. "<orange> dallo zaino.\n")
+  NebbieDash.digAutoRunSwap(tool, "dig_tool", { handsEmpty = true })
+  tempTimer((NebbieDash.weaponSwapDelay or 0.5) * 4 + 0.5, function()
+    local s = NebbieDash.digAutoState()
+    if not s.active then return end
+    NebbieDash.digAutoRequestSanctuaryCheck()
+  end)
+end
+
+function NebbieDash.teardownDigAutomineTriggers()
+  for _, id in ipairs(NebbieDash._digTrigIds or {}) do
+    if id then pcall(function() killTrigger(id) end) end
+  end
+  NebbieDash._digTrigIds = {}
+  if NebbieDash._digAliasId then
+    pcall(function() killAlias(NebbieDash._digAliasId) end)
+    NebbieDash._digAliasId = nil
+  end
+end
+
+function NebbieDash.installDigAutomineTriggers()
+  NebbieDash.teardownDigAutomineTriggers()
+  NebbieDash._digTrigIds = {}
+  if type(tempTrigger) == "function" then
+    local function add(pat, code)
+      local id = tempTrigger(pat, code)
+      if id then table.insert(NebbieDash._digTrigIds, id) end
+    end
+    add("Fai una mossa maldestra e non riesci a scavare.",
+      [[NebbieDash.onDigGataLine()]])
+    add("fondo trovi qualcosa.",
+      [[NebbieDash.onDigGataLine()]])
+    add("Qui non si riesce piu' a scavare, il filone sembra esaurito!",
+      [[NebbieDash.onDigVeinDoneLine()]])
+    add("ACCIDENTI!!! Qualcosa si muove nel punto in cui hai scavato!",
+      [[NebbieDash.onDigHumberInLine()]])
+    add("Il tuo sangue si gela al grido di morte di Un umber hulk.",
+      [[NebbieDash.onDigHumberOutLine()]])
+    add("L'aura bianca che ti circondava svanisce.",
+      [[NebbieDash.onDigSancGoneLine()]])
+    add("L'aura bianca che ti circonda inizia a diventare meno intensa.",
+      [[NebbieDash.onDigRefreshWarnLine()]])
+    add("La tua visione torna normale.",
+      [[NebbieDash.onDigTrueSightGoneLine()]])
+    -- skills.cpp do_miner senza tool in mano
+    add("Forse usando l'attrezzo adatto",
+      [[NebbieDash.onDigNoToolLine()]])
+    -- fight.cpp MakeScrap: "$p cade a terra in frantumi." (Piccone / A mining pick / …)
+    add("cade a terra in frantumi",
+      [[NebbieDash.onDigPickBrokenLine()]])
+  end
+  -- Alias dedicato: send() da script/altri alias spesso NON alza
+  -- sysDataSendRequest, quindi active restava false dopo un dig "riuscito".
+  if type(tempAlias) == "function" then
+    NebbieDash._digAliasId = tempAlias([[^dig$]], [[
+      NebbieDash.digAutoActivateFromDigCommand()
+      send("dig", false)
+    ]])
+  end
+end
+
+function NebbieDash.printDigHelp()
+  cecho("<cyan>[NebbieDash] ndig — automine (dig / miniera)\n")
+  cecho("<yellow>  ndig<white>                 Impugna dig_tool dallo zaino (armed).\n")
+  cecho("<yellow>  dig<white>                  Attiva automine (alias/send/feedback MUD).\n")
+  cecho("<yellow>  ndig off<white>             Ferma automine e ripristina dig_combat.\n")
+  cecho("<yellow>  ndig status<white>          Stato, tool, combat, suoni.\n")
+  cecho("<yellow>  ndig testsound [kind]<white> Prova humber/dig_done/dig_warn (mac: afplay).\n")
+  cecho("<yellow>  ndig tool <kw><white>       Keyword attrezzo (default: pic).\n")
+  cecho("<yellow>  ndig combat <kw><white>     Arma umber (get+wield, put dig_tool in zaino).\n")
+  cecho("<yellow>  ndig loot / ndigloot<white> Ricarica nebbie-dig-loot.txt.\n")
+  cecho("<grey>  Piccone rotto ($p in frantumi) → nuovo tool. Fame/sete non si pesta sullo zaino.\n")
+  cecho("<grey>  Filone esaurito → inv + loot zaino + drop 1 coin.\n")
+  cecho("<grey>  Elenco completo: <yellow>nhelp<grey> (sezione Dig / miniera).\n")
+end
+
+function NebbieDash.cmdDig(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$") or ""
+  local mode, rest = argStr:match("^(%S+)%s*(.-)%s*$")
+  mode = (mode or ""):lower()
+  rest = rest or ""
+
+  if mode == "help" or mode == "?" then
+    NebbieDash.printDigHelp()
+    return
+  end
+  if mode == "" or mode == "on" or mode == "start" or mode == "equip" then
+    NebbieDash.digAutoEquipTool()
+    return
+  end
+  if mode == "off" or mode == "stop" then
+    NebbieDash.digAutoStop("disattivato.")
+    return
+  end
+  if mode == "loot" or mode == "lootreload" then
+    NebbieDash.cmdReloadDigLoot()
+    return
+  end
+  if mode == "status" or mode == "info" then
+    local st = NebbieDash.digAutoState()
+    cecho(string.format(
+      "<green>[NebbieDash] Dig: armed=%s active=%s tool=<white>%s<green> combat=<white>%s<green> retry=%ds\n",
+      tostring(st.armed), tostring(st.active),
+      NebbieDash.digToolKeyword(),
+      NebbieDash.digCombatKeyword() ~= "" and NebbieDash.digCombatKeyword() or "(none)",
+      NebbieDash.digRetrySec()))
+    local hum = NebbieDash.resolveSystemSound("humber")
+    local done = NebbieDash.resolveSystemSound("dig_done")
+    cecho("<grey>[NebbieDash] Suono sistema humber: " ..
+      (hum or "(non trovato)") .. "\n")
+    cecho("<grey>[NebbieDash] Suono sistema dig_done: " ..
+      (done or "(non trovato)") .. "\n")
+    cecho("<grey>[NebbieDash] OS=" .. tostring(NebbieDash.detectHostOs()) ..
+      " — prova: <yellow>ndig testsound humber\n")
+    return
+  end
+  if mode == "testsound" or mode == "testsounds" or mode == "sound" then
+    NebbieDash.cmdDigTestSound(rest)
+    return
+  end
+  if mode == "tool" then
+    if rest == "" then
+      cecho("<orange>[NebbieDash] Uso: ndig tool <keyword>  (attuale: " ..
+        NebbieDash.digToolKeyword() .. ")\n")
+      return
+    end
+    NebbieDash.prefs = NebbieDash.prefs or {}
+    NebbieDash.prefs.dig_tool = rest
+    if type(NebbieDash.savePreferencesFile) == "function" then
+      pcall(NebbieDash.savePreferencesFile)
+    end
+    cecho("<green>[NebbieDash] dig_tool = <white>" .. rest .. "\n")
+    return
+  end
+  if mode == "combat" then
+    if rest == "" then
+      cecho("<orange>[NebbieDash] Uso: ndig combat <keyword>  (attuale: " ..
+        (NebbieDash.digCombatKeyword() ~= "" and NebbieDash.digCombatKeyword() or "(none)") .. ")\n")
+      return
+    end
+    NebbieDash.prefs = NebbieDash.prefs or {}
+    NebbieDash.prefs.dig_combat = rest
+    NebbieDash.digAutoState().stashedCombat = rest
+    if type(NebbieDash.savePreferencesFile) == "function" then
+      pcall(NebbieDash.savePreferencesFile)
+    end
+    cecho("<green>[NebbieDash] dig_combat = <white>" .. rest .. "\n")
+    return
+  end
+  NebbieDash.printDigHelp()
+end
+
 
 function NebbieDash.cmdUsa(argStr)
   local name = NebbieDash.currentChar
@@ -10075,6 +11969,11 @@ function NebbieDash.runHungerMacro()
     NebbieDash._hungerMacroPending = true
     return
   end
+  -- Non togliere lo zaino mentre dig/cambio arma lo sta usando.
+  if NebbieDash._weaponSwapBusy then
+    NebbieDash._hungerMacroPending = true
+    return
+  end
   local macro = NebbieDash.hungerMacros[name]
   if not macro then
     cecho("<orange>[NebbieDash] Nessuna macro fame/sete configurata per " .. name ..
@@ -10099,6 +11998,9 @@ function NebbieDash.runHungerMacro()
   tempTimer(delay * (#steps - 1) + 1.0, function()
     NebbieDash._hungerMacroBusy = false
     NebbieDash._hungerMacroBusySince = nil
+    if type(NebbieDash.digAutoFlushPendingSwap) == "function" then
+      NebbieDash.digAutoFlushPendingSwap()
+    end
     if NebbieDash._hungerMacroPending then
       NebbieDash._hungerMacroPending = false
       tempTimer(0.35, function() NebbieDash.runHungerMacro() end)
@@ -11622,6 +13524,9 @@ function NebbieDash.teardownTriggers()
   NebbieDash.teardownChatTriggers()
   NebbieDash.teardownTextHighlightTriggers()
   NebbieDash.teardownSpellShortcutTriggers()
+  if type(NebbieDash.teardownDigAutomineTriggers) == "function" then
+    NebbieDash.teardownDigAutomineTriggers()
+  end
 end
 
 function NebbieDash.installTriggers()
@@ -11669,6 +13574,10 @@ function NebbieDash.installTriggers()
   NebbieDash._goldPosiMonetaTrig = tempTrigger("Posi una moneta.", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldPosiMoneteTrig = tempTrigger("Posi alcune monete.", [[NebbieDash.onGoldSpendConfirmLine()]])
   NebbieDash._goldPaghiTrig = tempTrigger("Paghi ", [[NebbieDash.onGoldSpendConfirmLine()]])
+  -- Cassetta account / pagamenti: "Hai pagato 6.000.000 monete."
+  NebbieDash._goldHaiPagatoTrig = tempTrigger("Hai pagato ", [[NebbieDash.onGoldSpendConfirmLine()]])
+  NebbieDash._goldAccountSafeTrig = tempTrigger("cassetta di sicurezza di account",
+    [[NebbieDash.onGoldSpendConfirmLine()]])
   -- Asta: substring "offerta di " copre "Un offerta" (server) e "Un'offerta".
   NebbieDash._goldAstaTrig = tempTrigger("offerta di ", [[NebbieDash.onGoldSpendConfirmLine()]])
   -- Sage practice a pagamento (prac learning → COSTO_PRAC)
@@ -11758,6 +13667,7 @@ function NebbieDash.installTriggers()
     table.insert(NebbieDash._spellExpiryTrigs, id)
   end
   NebbieDash.installTextHighlightTriggers()
+  NebbieDash.installDigAutomineTriggers()
   NebbieDash.installChatTriggers()
   -- Speedwalk: conferma stanza (Uscite:/buio) e fail espliciti.
   NebbieDash._swRunTrigs = {}
@@ -11773,23 +13683,43 @@ function NebbieDash.installTriggers()
   swTrig(tempTrigger("Non vedi nient'altro che stelle", [[NebbieDash.onSpeedwalkGameLine()]]))
   if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
   if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
-  -- Gli anonymous event handler restano registrati una volta sola (a
-  -- differenza dei trigger sopra, qui non c'e' un modo affidabile per
-  -- "smontarli" per nome/funzione): non serve comunque rifarli ad ogni
-  -- reinstall perche' le funzioni target (onConnectionEvent/onWindowResize)
-  -- sono idempotenti — vengono chiamate per nome ad ogni evento, quindi
-  -- eseguono sempre la versione PIU' RECENTE del codice anche senza essere
-  -- re-registrate.
-  if type(registerAnonymousEventHandler) == "function" and not NebbieDash._eventHandlersRegistered then
-    registerAnonymousEventHandler("sysConnectionEvent", "NebbieDash.onConnectionEvent")
-    registerAnonymousEventHandler("sysWindowResizeEvent", "NebbieDash.onWindowResize")
-    registerAnonymousEventHandler("sysInstallPackage", "NebbieDash.onInstallPackageEvent")
-    registerAnonymousEventHandler("sysUninstallPackage", "NebbieDash.onUninstallPackageEvent")
-    registerAnonymousEventHandler("sysDataSendRequest", "NebbieDash.onDataSendRequest")
+  -- Anonymous event handler: registrazione additiva per (evento, handler).
+  -- Chiamati per nome → sempre la versione piu' recente del codice. Evita il
+  -- buco in cui `_eventHandlersRegistered=true` da un package vecchio saltava
+  -- handler aggiunti dopo (es. sysDataSendRequest per dig/gold).
+  if type(registerAnonymousEventHandler) == "function" then
+    NebbieDash._anonHandlerKeys = NebbieDash._anonHandlerKeys or {}
+    if NebbieDash._eventHandlersRegistered and not NebbieDash._anonHandlersSeeded then
+      -- Migrazione: marchia solo i handler "vecchi" per evitare doppioni.
+      -- NON marchiare sysDataSendRequest/gmcp: potevano mancare se il flag
+      -- era true da un package precedente all'aggiunta dig/gold.
+      local legacy = {
+        "sysConnectionEvent::NebbieDash.onConnectionEvent",
+        "sysWindowResizeEvent::NebbieDash.onWindowResize",
+        "sysInstallPackage::NebbieDash.onInstallPackageEvent",
+        "sysUninstallPackage::NebbieDash.onUninstallPackageEvent",
+      }
+      for _, k in ipairs(legacy) do
+        NebbieDash._anonHandlerKeys[k] = true
+      end
+      NebbieDash._anonHandlersSeeded = true
+    end
+    local function ensureAnon(event, handlerName)
+      local key = event .. "::" .. handlerName
+      if NebbieDash._anonHandlerKeys[key] then return end
+      registerAnonymousEventHandler(event, handlerName)
+      NebbieDash._anonHandlerKeys[key] = true
+    end
+    ensureAnon("sysConnectionEvent", "NebbieDash.onConnectionEvent")
+    ensureAnon("sysWindowResizeEvent", "NebbieDash.onWindowResize")
+    ensureAnon("sysInstallPackage", "NebbieDash.onInstallPackageEvent")
+    ensureAnon("sysUninstallPackage", "NebbieDash.onUninstallPackageEvent")
+    ensureAnon("sysDataSendRequest", "NebbieDash.onDataSendRequest")
     -- GMCP char.base.gold (server lowercase; Mudlet puo' capitalizzare)
-    registerAnonymousEventHandler("gmcp.char.base", "NebbieDash.onGmcpCharBase")
-    registerAnonymousEventHandler("gmcp.Char.Base", "NebbieDash.onGmcpCharBase")
+    ensureAnon("gmcp.char.base", "NebbieDash.onGmcpCharBase")
+    ensureAnon("gmcp.Char.Base", "NebbieDash.onGmcpCharBase")
     NebbieDash._eventHandlersRegistered = true
+    NebbieDash._anonHandlersSeeded = true
   end
   NebbieDash.installSpellShortcutTriggers()
 end
@@ -11831,6 +13761,7 @@ function NebbieDash.migrateSharedConfigFiles()
     "nebbie-ident-batch-commands.txt",
     "nebbie-dash-preferences.txt",
     "nebbie-dash-sounds.txt",
+    "nebbie-dig-loot.txt",
     "nebbie-ident-db.lua",
     "nebbie-know-db.lua",
   }
@@ -11860,6 +13791,7 @@ function NebbieDash.boot(forceAnnounce)
   NebbieDash.loadSpellCastConfig()
   NebbieDash.loadHungerMacros()
   NebbieDash.loadItemKeywords()
+  NebbieDash.loadDigLootRules()
   NebbieDash.loadBatchCommands()
   NebbieDash.loadBatchItems()
   NebbieDash.installTriggers()

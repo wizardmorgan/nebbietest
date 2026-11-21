@@ -86,63 +86,132 @@ corrente e va aggiornata ad ogni release (promemoria lasciato direttamente nel c
 Nessun alias invia comandi al MUD in automatico all'avvio (scelta deliberata, vedi
 `RECOMMENDATION.md` §3): tutti vanno digitati a mano quando servono.
 
+In gioco: **`nhelp`** (o tasto "? Comandi") mostra lo stesso elenco diviso per
+sezione, in ordine alfabetico. Aggiornare sempre `HELP_TEXT` + questa tabella
+quando si aggiunge un alias.
+
+### Aiuto e package
+
 | Alias | Cosa fa |
 |---|---|
-| `nresync` | Invia `eq` al MUD, aspetta 1.5s, poi invia `attrib`. Aggiorna la cache equip+spell del personaggio corrente e ridisegna il pannello. **Usalo dopo ogni login/riconnessione.** |
-| `neq` | Invia solo `eq` e aggiorna il pannello equip. |
+| `nfix` | Reinstalla trigger e GUI senza disinstallare il package. |
+| `nhelp` | Mostra/nasconde la finestra comandi (sezioni + ordine alfabetico). |
+| `nkeys` | Info tastierino / shortcut da command line. |
+| `npackagecheck` | Controlla se su GitHub c’è una versione più nuova. |
+| `npackageupdate [force]` | Scarica e reinstalla il `.mpackage` da GitHub (`main`). |
+| `ntriggers` | Reinstalla i trigger senza riavviare Mudlet. |
+
+### Personaggio e pannelli
+
+| Alias | Cosa fa |
+|---|---|
 | `nattrib` | Invia solo `attrib` e aggiorna il pannello spell. |
-| `nchar <nome>` | Forza manualmente il personaggio attivo (es. `nchar NomiyaMaki`), utile se il rilevamento automatico dal prompt non è ancora scattato (nessun comando ancora digitato in gioco). |
-| `ngui` | Mostra/nasconde il pannello Equip (bordo sinistro). |
-| `nlayout` | Ripristina larghezza/font di default del pannello Equip. |
-| `nfont <numero>` | Cambia la dimensione del testo nel pannello (6–24, default 11). |
-| `nwidth <numero\|auto>` | Larghezza colonna Equip (150–900px) oppure `auto`. |
-| `nswui` | Finestra floating speedwalk (lista path + pausa/riprendi). |
+| `nchar <nome>` | Forza il personaggio attivo (es. `nchar NomiyaMaki`). |
+| `nclanslot <on\|off>` | Mostra/nasconde lo slot simbolo del clan. |
+| `neq` | Invia solo `eq` e aggiorna il pannello equip. |
+| `nfont <6-24>` | Font del pannello Equip (default 11). |
+| `ngui` | Mostra/nasconde il pannello Equip. |
+| `nitemlen <n>` | Caratteri max descrizione oggetto prima di "…" (10–300). |
+| `nlayout` | Ripristina larghezza/font di default. |
+| `nresync` | Invia `eq` + `attrib`; **usalo dopo ogni login**. |
+| `nwidth <px\|auto>` | Larghezza colonna Equip (150–900) oppure `auto`. |
+
+### Spell e cast
+
+| Alias | Cosa fa |
+|---|---|
+| `c` / `r` / `m <spell> [bersaglio]` | `cast` / `recall` / `mind` — bersaglio sempre esplicito (default: PG). |
+| `nclass <c\|r\|m>` | Prefisso spell permanente per il PG attivo. |
+| `nforgetspell <nome>` | Toglie una spell dall’elenco del PG. |
+| `nspellaliases` | Elenco shortcut + spell pannello + `nclass`. |
+| `nspellaliasesreload` | Ricarica shortcut/cast da ndashboard. |
+| `nspellwarn <n>` | Sotto quanti tick una spell attiva diventa rossa. |
+
+### Equip e armi
+
+| Alias | Cosa fa |
+|---|---|
+| `nitemkeywords` | Ricarica parole chiave oggetti (ndashboard). |
+| `usa <keyword>` | Cambio arma da zaino (`rem`/`get`/`wield`/`put`/`wear`). |
+
+### Dig / miniera
+
+| Alias | Cosa fa |
+|---|---|
+| `ndig` | Impugna `dig_tool` dallo zaino; al primo `dig` avvia automine. |
+| `ndig combat <kw>` | Arma per umber (default: arma tolta da `ndig`). |
+| `ndig help` | Riassunto opzioni dig. |
+| `ndig loot` / `ndigloot` | Ricarica `nebbie-dig-loot.txt` (keep/exclude/drop). |
+| `ndig off` | Ferma automine e ripristina `dig_combat` (ripone dig_tool). |
+| `ndig status` | Stato armed/active, tool, combat, suoni. |
+| `ndig tool <kw>` | Keyword attrezzo (default: `pic`). |
+
+### Loot, oro e gruppo
+
+| Alias | Cosa fa |
+|---|---|
+| `nautoloot <on\|off>` | Loot monete automatico a fine fight (default on). |
+| `nautosplit <on\|off>` | Split automatico col gruppo dopo loot (default on). |
+| `ngoldalert [on\|off\|status]` | Allarme se `G:` scende senza spesa volontaria. |
+| `nloot` | Prende monete dal cadavere (`corp` / `pile`). |
+| `nsplit <n>` | Split manuale col gruppo. |
+
+### Fame, sete e automatici
+
+| Alias | Cosa fa |
+|---|---|
+| `.<n><comando>` | Ripete il comando N volte (es. `.4s`). |
+| `nautodisarm <on\|off>` | Recupero arma dopo disarmo (default on). |
+| `nautofeed <on\|off>` | Macro fame/sete automatica (default on). |
+| `nautostand <on\|off>` | Stand automatico dopo caduta (default on). |
+| `nhungermacros` | Ricarica `nebbie-hunger-macros.txt`. |
+
+### Speedwalk
+
+| Alias | Cosa fa |
+|---|---|
+| `nspeeddelay <sec>` | Ritardo tra passi speedwalk. |
+| `nspeedwalks` | Ricarica `nebbie-speedwalks.txt`. |
 | `nsw pause\|resume\|skip\|stop\|status` | Controlla la corsa speedwalk. |
-| `nidentsync …` | Sync identify VPS (`token` / `skip` / `setup` / `status`). |
-| `nchat` / `ngoldalert` | Finestra chat floating; allarme monete. |
-| `usa <parola-chiave>` | Cambio arma da zaino (`rem`/`put`/`get`/`wield` come nebbie-play-all). Es. `usa redentore`. |
-| `nconfigdir` | Mostra **`profiles/ndashboard`** e il file **`profiles/nebbie-dash-config-root.txt`** (percorso da aprire in Explorer). |
-| `nclanslot <on\|off>` | Mostra/nasconde il 22° slot equip placeholder "simbolo del clan" (nascosto di default, non ancora confermato in un `eq` reale). |
-| `nitemlen <numero>` | Cambia quanti caratteri della descrizione oggetto mostrare prima di troncare con "…" (10–300, default 42). Alzalo se preferisci vedere più testo (andrà più facilmente a capo), abbassalo per evitare il più possibile il word-wrap. |
-| `nfix` | Reinstalla trigger e GUI senza disinstallare il package (utile se qualcosa sembra "bloccato"). |
-| `npackageupdate` | Scarica e reinstalla il `.mpackage` da GitHub (`main`). Opzionale: `npackageupdate force`. |
-| `npackagecheck` | Controlla se su GitHub c’è una versione più nuova (stesso check automatico di boot/connect). |
-| `c <spell> [bersaglio]` | Invia `cast '<spell>' <bersaglio>` — **sempre con bersaglio** (default: PG attivo). Es. `c heal` → `cast 'heal' NomiyaMaki`; `c heal bob` → `cast 'heal' bob`. |
-| `r <spell> [bersaglio]` | Come sopra con `recall` (sorcerer). |
-| `m <spell> [bersaglio]` | Come sopra con `mind` (psionico). |
-| `nclass <c\|r\|m>` | Imposta **per sempre** per il personaggio attivo quale comando usano pannello e shortcut (`cast`/`recall`/`mind`). Una volta per PG (es. mago → `nclass c`). |
-| `nspellaliases` | Elenco shortcut globali + spell nel pannello + `nclass` del PG attivo. |
-| `nspellaliasesreload` | Ricarica `nebbie-spell-shortcuts.txt` e `nebbie-cast-spells.txt` dopo modifiche manuali. |
-| `nspellwarn <n>` | Sotto quanti tick residui una spell attiva nel pannello viene mostrata in rosso invece che verde (default 5). |
-| `nforgetspell <nome>` | Toglie una riga dall'elenco pannello in memoria (e da vecchi dati `knownSpellOrder` se presente); aggiorna anche `nebbie-cast-spells.txt` a mano per renderlo permanente. |
-| `nspeedwalks` | Ricarica gli speedwalk dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
-| `nswui` | Finestra floating speedwalk (lista path, pausa/riprendi). |
-| `nsw pause\|resume\|skip\|stop\|status` | Controlla la corsa speedwalk (pausa automatica su blocco/caduta/timeout). |
-| `nspeeddelay <secondi>` | Pausa tra un movimento e il successivo quando esegui uno speedwalk (default 0.35s). |
-| `nhelp` | Mostra/nasconde la finestra con l'elenco di tutti questi comandi (stessa finestra del tasto "? Comandi", vedi sotto). |
-| `nloot` | Prende le monete dal cadavere presente (prova sia `get all.coin corp` che `get all.coin pile`, per cadaveri normali e "pile of bones"). Normalmente non serve digitarlo: scatta da solo, vedi sotto. |
-| `nautoloot <on\|off>` | Attiva/disattiva il loot automatico alla fine di ogni combattimento a cui partecipi (default **on**). |
-| `nautosplit <on\|off>` | Attiva/disattiva lo split automatico col gruppo dopo ogni loot riuscito (default **on**). |
-| `nsplit <numero>` | Divide manualmente un importo col gruppo (equivalente a digitare `split <numero>`), utile per casi non coperti da `nloot`. |
-| `ngoldalert [on\|off\|status]` | Avvisa se l’oro scende senza split/give/drop/pagamenti volontari (default **on**). Serve `G:%g` nel prompt e/o GMCP. |
-| `nautostand <on\|off>` | Attiva/disattiva il rialzarsi automatico (`stand`) dopo una caduta (default **on**). |
-| `nautodisarm <on\|off>` | Attiva/disattiva il recupero automatico dell'arma dopo un disarmo (default **on**). |
-| `.<numero><comando>` | Ripete il comando N volte, es. `.4s` invia `s` quattro volte (funziona con qualsiasi comando: `.3 kill goblin` invia `kill goblin` tre volte). |
-| `nautofeed <on\|off>` | Attiva/disattiva la macro automatica fame/sete (default **on**), vedi sotto. |
-| `nhungermacros` | Ricarica le macro fame/sete dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
-| `nitemkeywords` | Ricarica le parole chiave per oggetto (condivise tra tutti i personaggi) dal file di configurazione dopo averlo modificato (vedi sotto), senza riavviare Mudlet. |
-| `nidentdb [query]` | Cerca nell’archivio **identify** condiviso (`profiles/ndashboard/nebbie-ident-db.lua`). Si aggiorna da solo a ogni identify (spell o pergamena) di qualsiasi PG. |
-| `nidentui` | Finestra Ident DB (UserWindow OS, può stare fuori da Mudlet). Default `560×480`. Se non si apre / size sballato: `nidentui rebuild`. |
-| `nidentui slot [pos]` | Filtra per slot indossabile (es. `dito`/`alle dita`, `polsi`, `orecchie`, `impugnato`). Dito/polso/orecchio L+R sono un solo nome. Slot da `eq` e/o tag `[imposta slot]`. |
-| `nidentdb where <query>` | Come sopra + possesso + chi ha l’oggetto in equip (cache `eq` / `nresync`). |
-| `nidentdb char <nome>` | Identify / possesso di quel personaggio. |
-| `nidentdb hold <NomePg>` | Dopo un `drop`: assegna l’oggetto lasciato in terra a un PG. |
-| `nidentdb hold <oggetto> <NomePg>` | Assegna possesso senza drop pendente. |
+| `nswui [off]` | Finestra floating speedwalk. |
+
+### Chat
+
+| Alias | Cosa fa |
+|---|---|
+| `nchat [on\|off\|clear]` | Finestra chat (say/gt/clan/tell/send/telep/think/sign/…). |
+
+### Identify e know
+
+| Alias | Cosa fa |
+|---|---|
+| `nidentdb [query]` | Cerca nell’archivio identify (`nebbie-ident-db.lua`). |
+| `nidentdb char\|where\|hold\|export …` | Filtro PG, possesso, export CSV (vedi sotto). |
 | `nidentdbreload` | Ricarica l’archivio identify dal disco. |
-| `nidentdb export <NomePg>` | Esporta in CSV tutti gli identify di quel PG (`NomePg-gg-mm-aaaa-hh-mm-ss.csv`). |
-| `nknowdb [query]` | Cerca nell’archivio **know monster** condiviso (`nebbie-know-db.lua`). |
-| `nknowdb race <razza>` | Filtra per razza. |
-| `nknowdbreload` | Ricarica l’archivio know monster dal disco. |
+| `nidentpull` / `nidentpush` | Solo pull o solo push verso l’hub. |
+| `nidentsync …` | Sync identify VPS (`token` / `skip` / `setup` / `status`). |
+| `nidentui …` | Finestra Ident DB (`filter` / `slot` / `char` / `rebuild`…). |
+| `nknowdb [query\|race …]` | Archivio know monster. |
+| `nknowdbreload` | Ricarica know monster dal disco. |
+
+### Batch admin
+
+| Alias | Cosa fa |
+|---|---|
+| `nbatch …` | Batch comandi su CSV (profilo Sirio). |
+| `nbatchreload` | Ricarica file batch. |
+| `nbatchverify …` | Verifica log batch vs CSV. |
+| `nidentbatch …` | Batch identify (`oload` + identify). |
+| `nidentbatchreload` | Ricarica config batch identify. |
+
+### Preferenze e file
+
+| Alias | Cosa fa |
+|---|---|
+| `ncfgpull` / `ncfgpush` | Solo pull o solo push dei file config verso l’hub. |
+| `ncfgsync [sync\|list\|status]` | Sync config `ndashboard` (stesso token di `nidentsync`; merge additivo). |
+| `nconfigdir` | Mostra `profiles/ndashboard` e il file root config. |
+| `npreferencesreload` | Ricarica preferenze e highlight da ndashboard. |
 
 ## Evidenziazioni testo (gemme / combat / dig)
 
@@ -212,12 +281,13 @@ nidentui debug
 nidentui off
 ```
 
-In finestra (click): tab **Attivi / Deleted / Tutti**, dettaglio, **archivia** (soft-delete
-ripristinabile) o purge definitivo da Deleted, toggle cedibile, sort/pagine, filtri,
-possesso, export CSV. Il comando di gioco `Distruggi …` sposta l’entry in Deleted come
-`destroyed`. Rename da oedit con stesso vnum+stats aggiorna il nome e tiene i nomi precedenti.
+In finestra (click): tab **Attivi / Archiviati** (gli archiviati solo in Archiviati),
+dettaglio, **archivia** (soft-delete ripristinabile) o purge definitivo da Archiviati,
+toggle cedibile, sort/pagine, filtri, possesso, export CSV. Il comando di gioco
+`Distruggi …` sposta l’entry in Archiviati come `destroyed`. Rename da oedit con
+stesso vnum+stats aggiorna il nome e tiene i nomi precedenti.
 
-### Sync VPS (`nidentsync`)
+### Sync VPS (`nidentsync` / `ncfgsync`)
 
 Hub HTTPS tra PC. URL di default fissa:
 `https://nebbie.wizmorgan.it/nebbie-ident`. All’avvio del profilo, se manca il
@@ -233,9 +303,25 @@ ident_sync_skip_prompt = off
 ident_exclude_chars = Sirio
 ```
 
-Comandi: `nidentsync` (pull+merge+push), `nidentpull`, `nidentpush`,
-`nidentsync status|token …|skip|setup|onboot on|off` (anche `url …` se serve
-override). Server: `tools/ident-sync-server/README.md`.
+**Identify**: `nidentsync` (pull+merge+push), `nidentpull`, `nidentpush`,
+`nidentsync status|token …|skip|setup|onboot on|off`.
+
+**File config ndashboard** (1.16.28+): `ncfgsync` / `ncfgpull` / `ncfgpush` /
+`ncfgsync list` — stesso token. Merge **solo additivo** (aggiunge
+shortcut/path/macro/loot/… mancanti; non cambia valori già presenti). Non
+sincronizza path suoni né cache PG/UI. Sul VPS serve il server aggiornato
+(`tools/ident-sync-server`, endpoint `/v1/config*`).
+
+Server: `tools/ident-sync-server/README.md`.
+
+**Allineamento remoto**: di default **non** è automatico a ogni identify —
+salva solo in locale. Per aggiornare il VPS lancia `nidentsync` (o
+`nidentpush`). Opzionale: `nidentsync onboot on` / `ident_sync_on_boot = on`
+sincronizza all’apertura del profilo Mudlet.
+
+**Possesso tra toon**: se re-identi un pezzo già in DB tenuto da un altro tuo
+PG, il possesso passa a chi sta identando (filtro `char` / UI seguono il
+detentore attuale).
 
 **Sirio / esclusi**: `ident_exclude_chars` (default `Sirio`) non salva identify,
 non li mostra in GUI e non li sincronizza.
@@ -266,6 +352,10 @@ Dalla **1.15.63** una finestra floating raccoglie i canali di comunicazione:
 | gtell | `gt` / `gtell` |
 | clantell | clan / casata (`Tu dici al clan/casata '…'`, `[Nome] dice al clan/casata '…'`) |
 | tell | `tell` |
+| send | `sending` / `messenger` (`Mandi a … il messaggio '…'`, `[Nome] ti manda il messaggio '…'`) |
+| telep | `telepathy` (`Tu mandi a … il pensiero '…'`, `[Nome] ti manda il pensiero '…'`) |
+| think | `think` / `"` immortali (`Tu pensi :: '…'`, `::Nome:: '…'`; superni `||`) |
+| sign | `sign` (`Tu hai detto '…'`, `[Nome], con i segni, dice '…'`) |
 | whisper | `whisper` |
 | ask | `ask` |
 | gossip | `gossip` |
@@ -280,6 +370,61 @@ nchat clear    # svuota il log
 Preferenza `chat_window = on|off` in `nebbie-dash-preferences.txt`. Trascinabile/ridimensionabile
 (Mudlet Adjustable.Container). Nota: l’echo parlante di `gossip` è uguale a `say` (`Tu dici '…'`),
 quindi in uscita compare come `[say]`; i gossip altrui (`vi dice`) sono etichettati correttamente.
+
+## Automine dig (`ndig`) — da 1.16.19
+
+Stile dadomud (senza finestra Mine):
+
+```
+ndig                 # togli arma, prendi dig_tool dallo zaino, impugnato
+dig                  # la PRIMA volta attiva le automazioni
+ndig off             # ferma automine e ripristina dig_combat (put dig_tool)
+ndig tool pic        # keyword corta (default: pic → piccone/pick)
+ndig combat slash    # arma da usare sull'umber (default: arma tolta da ndig)
+ndig status
+ndig help            # riassunto opzioni
+ndigloot / ndig loot # ricarica nebbie-dig-loot.txt
+```
+
+Automazioni (solo con automine attivo): retry dig ~24s su fallimento/trovato;
+umber → `rem` zaino, `get` combat, `rem` dig_tool, `wield` combat, `put`
+dig_tool nello zaino, `wear` zaino; alla morte heal + swap inverso (combat
+→ dig_tool con `put` combat) + check sanctuary; aura svanita → `att` +
+sanctuary se manca + dig; refresh / true sight; piccone rotto (`$p cade a
+terra in frantumi`, es. Piccone / A mining pick) → solo `get`+`wield` di un
+nuovo `dig_tool` dallo zaino; se dig senza attrezzo (`Forse usando
+l'attrezzo adatto`) riprova lo stesso; filone esaurito → `inv` + loot
+keep/exclude/drop + `drop 1 coin` (+ suono). Fame/sete (`nautofeed`) aspetta
+se lo zaino e' occupato dal cambio dig (e viceversa).
+Fame/sete: resta **`nautofeed`**. Preferenze: `dig_tool` (default `pic`), `dig_combat`,
+`dig_retry_sec`. Suoni: `nebbie-dash-sounds.txt` oppure fallback sistema
+(Linux freedesktop / Windows Media / macOS Sounds).
+
+### Loot a filone esaurito (`nebbie-dig-loot.txt`)
+
+Dopo `inv` lo script:
+1. `rem` zaino
+2. `put all.<keep> zaino` per ogni riga `keep`
+3. `get all.<exclude> zaino` (es. carbone)
+4. `drop all.<drop>` per lasciare a terra il resto
+5. `wear` zaino
+6. `drop 1 coin` (marca stanza, come dadomud)
+
+Default creato al primo avvio:
+
+```
+keep oro
+keep mithril
+keep acciaio
+keep pietra
+exclude carbone
+drop pepita
+drop minerale
+drop carbone
+drop resina
+```
+
+Modifica il file in `profiles/ndashboard/nebbie-dig-loot.txt` poi `ndigloot`.
 
 ## Cambio arma (`usa`)
 
@@ -849,10 +994,11 @@ il file viene creato con istruzioni ed un esempio commentato).
 se l’uscita è bloccata / cadi / timeout → pausa; poi `nsw resume` (riprova) o `nsw skip`.
 Il pannello laterale resta disponibile.
 
-**Sync tra PC**: i path stanno già in `ndashboard` come gli ident. La sync VPS HTTPS
-(`nidentsync`) **non è attiva** sul package in produzione (ramo laterale non mergiato);
-tra macchine oggi serve sincronizzare la cartella `ndashboard` a livello disco
-(Syncthing/share) oppure attivare più avanti l’hub VPS.
+**Sync tra PC**: con **1.16.28+** usa `ncfgsync` (stesso hub/token di
+`nidentsync`): merge **additivo** di speedwalks e altri file config (aggiunge
+righe/chiavi mancanti, non sovrascrive). Richiede il server aggiornato con
+endpoint `/v1/config*`. In alternativa resta Syncthing sulla cartella
+`ndashboard`.
 
 **Formato di ogni riga** (deciso insieme, vedi `Q&A.md` Round 5):
 
