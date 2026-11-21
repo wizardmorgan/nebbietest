@@ -179,7 +179,7 @@ quando si aggiunge un alias.
 
 | Alias | Cosa fa |
 |---|---|
-| `nchat [on\|off\|clear]` | Finestra chat (say/gt/clan/tell/send/telep/sign/…). |
+| `nchat [on\|off\|clear]` | Finestra chat (say/gt/clan/tell/send/telep/think/sign/…). |
 
 ### Identify e know
 
@@ -354,6 +354,7 @@ Dalla **1.15.63** una finestra floating raccoglie i canali di comunicazione:
 | tell | `tell` |
 | send | `sending` / `messenger` (`Mandi a … il messaggio '…'`, `[Nome] ti manda il messaggio '…'`) |
 | telep | `telepathy` (`Tu mandi a … il pensiero '…'`, `[Nome] ti manda il pensiero '…'`) |
+| think | `think` / `"` immortali (`Tu pensi :: '…'`, `::Nome:: '…'`; superni `||`) |
 | sign | `sign` (`Tu hai detto '…'`, `[Nome], con i segni, dice '…'`) |
 | whisper | `whisper` |
 | ask | `ask` |

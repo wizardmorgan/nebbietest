@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.28"
+local PKG_VER = "1.16.29"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3146,6 +3146,7 @@ NebbieDash.CHAT_CHANNEL_COLORS = {
   tell = "magenta",
   send = "violet",
   telep = "LightSkyBlue",
+  think = "LightSteelBlue",
   sign = "LightCyan",
   whisper = "green",
   ask = "blue",
@@ -3312,6 +3313,16 @@ function NebbieDash.parseChatLine(text)
     return { channel = "telep", speaker = "Tu", target = target, message = msg, self = true }
   end
 
+  -- Immortal think / " (do_commune): "Tu pensi :: '…'" oppure "Tu pensi || '…'".
+  msg = text:match("^Tu pensi :: '(.+)'%s*$")
+  if msg then
+    return { channel = "think", speaker = "Tu", message = msg, self = true }
+  end
+  msg = text:match("^Tu pensi || '(.+)'%s*$")
+  if msg then
+    return { channel = "think", speaker = "Tu", message = msg, self = true, superni = true }
+  end
+
   target, msg = text:match("^Tu sussurri a (.+), '(.+)'%s*$")
   if target and msg then
     return { channel = "whisper", speaker = "Tu", target = target, message = msg, self = true }
@@ -3367,6 +3378,15 @@ function NebbieDash.parseChatLine(text)
   who, msg = text:match("^%[(.-)%] ti manda il pensiero '(.+)'%s*$")
   if who and msg then
     return { channel = "telep", speaker = who, message = msg }
+  end
+  -- Immortal think ricevuto: "::Nome:: '…'" / "||Nome|| '…'" (do_commune).
+  who, msg = text:match("^::(.+):: '(.+)'%s*$")
+  if who and msg then
+    return { channel = "think", speaker = who, message = msg }
+  end
+  who, msg = text:match("^||(.+)|| '(.+)'%s*$")
+  if who and msg then
+    return { channel = "think", speaker = who, message = msg, superni = true }
   end
   who, msg = text:match("^%[(.-)%] ti sussurra '(.+)'%s*$")
   if who and msg then
@@ -3441,6 +3461,8 @@ function NebbieDash.installChatTriggers()
     "Tu dici a ",
     "Mandi a ",
     "Tu mandi a ",
+    "Tu pensi ::",
+    "Tu pensi ||",
     "Tu sussurri a ",
     "Tu chiedi a ",
     "Tu gridi '",
@@ -3458,6 +3480,9 @@ function NebbieDash.installChatTriggers()
     "] grida '",
     "], con i segni, dice '",
     "] dice '",
+    -- think immortali/superni: self "Tu pensi :: '" e ricevuto "::Nome:: '"
+    ":: '",
+    "|| '",
   }
   for _, pat in ipairs(patterns) do
     local id = tempTrigger(pat, [[NebbieDash.onChatCaptureLine()]])
@@ -5591,7 +5616,7 @@ NebbieDash.HELP_TEXT = {
   { "nswui [off]", "Finestra floating speedwalk (lista + pausa/riprendi)." },
 
   { section = "Chat" },
-  { "nchat [on|off|clear]", "Finestra chat (say/gt/clan/tell/send/telep/sign/…)." },
+  { "nchat [on|off|clear]", "Finestra chat (say/gt/tell/send/telep/think/sign/…)." },
 
   { section = "Identify e know" },
   { "nidentbatch …", "Batch identify admin (oload + identify; profilo Sirio)." },

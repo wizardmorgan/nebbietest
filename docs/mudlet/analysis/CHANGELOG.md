@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.29 — 2026-11-21
+
+- **nchat**: cattura anche **think** immortali (`Tu pensi :: '…'`,
+  `::Nome:: '…'`) e think superni (`||`).
+
 ## 1.16.28 — 2026-11-20
 
 - **ncfgsync**: sync dei file di config `ndashboard` sullo stesso hub/token

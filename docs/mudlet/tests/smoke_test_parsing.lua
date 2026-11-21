@@ -2148,12 +2148,20 @@ check("chat: format echo send ha freccia",
   echoSend and echoSend:find("Tu → Mirari", 1, true) ~= nil
     and echoSend:find("[send]", 1, true) ~= nil)
 chatOk("chat: telep self", "Tu mandi a Mirari il pensiero 'psst'", "telep", "Tu", "psst", "Mirari")
-chatOk("chat: telep other", "[Hayato] ti manda il pensiero 'qui'", "telep", "Hayato", "qui")
-check("chat: telep non confuso con send",
-  NebbieDash.parseChatLine("[X] ti manda il pensiero 'y'").channel == "telep"
-    and NebbieDash.parseChatLine("[X] ti manda il messaggio 'y'").channel == "send"
-    and NebbieDash.parseChatLine("Tu mandi a Bob il pensiero 'z'").channel == "telep"
-    and NebbieDash.parseChatLine("Mandi a Bob il messaggio 'z'").channel == "send")
+  chatOk("chat: telep other", "[Hayato] ti manda il pensiero 'qui'", "telep", "Hayato", "qui")
+  check("chat: telep non confuso con send",
+    NebbieDash.parseChatLine("[X] ti manda il pensiero 'y'").channel == "telep"
+      and NebbieDash.parseChatLine("[X] ti manda il messaggio 'y'").channel == "send"
+      and NebbieDash.parseChatLine("Tu mandi a Bob il pensiero 'z'").channel == "telep"
+      and NebbieDash.parseChatLine("Mandi a Bob il messaggio 'z'").channel == "send")
+  -- Immortal think (do_commune): :: / ||
+  chatOk("chat: think self", "Tu pensi :: 'ciao dei'", "think", "Tu", "ciao dei")
+  chatOk("chat: think other", "::Sirio:: 'attenzione'", "think", "Sirio", "attenzione")
+  chatOk("chat: think superni self", "Tu pensi || 'solo superni'", "think", "Tu", "solo superni")
+  chatOk("chat: think superni other", "||Morgan|| 'ping'", "think", "Morgan", "ping")
+  check("chat: think non confuso con telep",
+    NebbieDash.parseChatLine("Tu pensi :: 'x'").channel == "think"
+      and NebbieDash.parseChatLine("Tu mandi a Bob il pensiero 'x'").channel == "telep")
 local echoTelep = NebbieDash.formatChatEcho(
   NebbieDash.parseChatLine("Tu mandi a Mirari il pensiero 'psst'"))
 check("chat: format echo telep ha freccia",
@@ -2731,9 +2739,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.28+",
+check("package version 1.16.29+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.28"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.29"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
