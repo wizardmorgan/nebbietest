@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.32 — 2026-11-21
+
+- **suoni macOS**: gli `.aiff` di sistema non partivano con `playSoundFile`
+  (SDL) → fallback `afplay`; `ndig testsound [humber|dig_done|dig_warn]`.
+
 ## 1.16.31 — 2026-11-21
 
 - **ndig**: se `dig` non attivava `active` (sysDataSendRequest assente / dig

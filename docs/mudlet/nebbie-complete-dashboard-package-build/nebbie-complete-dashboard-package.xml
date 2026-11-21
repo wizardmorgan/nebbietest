@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.31"
+local PKG_VER = "1.16.32"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -5589,6 +5589,7 @@ NebbieDash.HELP_TEXT = {
   { "ndig loot", "Come ndigloot: ricarica nebbie-dig-loot.txt." },
   { "ndig off", "Ferma automine e ripristina arma dig_combat." },
   { "ndig status", "Stato armed/active, tool, combat, retry, suoni." },
+  { "ndig testsound [kind]", "Prova suono dig (humber/dig_done/dig_warn; mac afplay)." },
   { "ndig tool <kw>", "Keyword attrezzo (default: pic → piccone/pick)." },
   { "ndigloot", "Ricarica keep/exclude/drop per loot a filone esaurito." },
 
@@ -10358,13 +10359,59 @@ function NebbieDash.loadSoundsConfig()
   f:close()
 end
 
+-- Riproduce un file audio. Su macOS Mudlet playSoundFile spesso non gestisce
+-- gli .aiff di sistema → fallback afplay. Su Linux prova playSoundFile poi
+-- paplay/ffplay se disponibili.
+function NebbieDash.shellQuote(s)
+  return "'" .. tostring(s or ""):gsub("'", "'\\''") .. "'"
+end
+
+function NebbieDash.playSoundPath(path, opts)
+  opts = opts or {}
+  path = (path or ""):match("^%s*(.-)%s*$") or ""
+  if path == "" then return false, "empty" end
+  if type(io.exists) == "function" and not io.exists(path) then
+    local f = io.open(path, "rb")
+    if f then f:close() else return false, "missing" end
+  end
+  local osname = NebbieDash.detectHostOs()
+  local ext = (path:match("%.([%w]+)$") or ""):lower()
+  local preferAfplay = (osname == "macos")
+    or ext == "aiff" or ext == "aif" or ext == "caf"
+  local function tryAfplay()
+    -- Background: non bloccare Mudlet sul suono.
+    local cmd = "afplay " .. NebbieDash.shellQuote(path) .. " >/dev/null 2>&1 &"
+    local ok = pcall(os.execute, cmd)
+    return ok
+  end
+  local function tryPlaySoundFile()
+    if type(playSoundFile) ~= "function" then return false end
+    local ok = pcall(playSoundFile, path)
+    return ok == true
+  end
+  local function tryLinuxCli()
+    local q = NebbieDash.shellQuote(path)
+    for _, bin in ipairs({ "paplay", "pw-play", "ffplay -nodisp -autoexit -loglevel quiet" }) do
+      local cmd = bin .. " " .. q .. " >/dev/null 2>&1 &"
+      if pcall(os.execute, cmd) then return true end
+    end
+    return false
+  end
+  if preferAfplay then
+    if tryAfplay() then return true, "afplay" end
+    if tryPlaySoundFile() then return true, "playSoundFile" end
+    return false, "afplay_failed"
+  end
+  if tryPlaySoundFile() then return true, "playSoundFile" end
+  if osname == "linux" and tryLinuxCli() then return true, "cli" end
+  if osname == "macos" and tryAfplay() then return true, "afplay" end
+  return false, "no_player"
+end
+
 function NebbieDash.playHighlightSound(key)
   local path = NebbieDash.sounds and NebbieDash.sounds[key]
   if not path or path == "" then return end
-  if type(io.exists) == "function" and not io.exists(path) then return end
-  if type(playSoundFile) == "function" then
-    pcall(playSoundFile, path)
-  end
+  NebbieDash.playSoundPath(path)
 end
 
 function NebbieDash.hlColorSpan(text, r, g, b, br, bg, bb)
@@ -10920,12 +10967,47 @@ function NebbieDash.playSystemOrConfiguredSound(key, systemKind)
   local path = NebbieDash.sounds and NebbieDash.sounds[key]
   if path and path ~= "" then
     NebbieDash.playHighlightSound(key)
-    return
+    return true
   end
   local sys = NebbieDash.resolveSystemSound(systemKind or key)
-  if not sys then return end
-  if type(playSoundFile) == "function" then
-    pcall(playSoundFile, sys)
+  if not sys then return false end
+  local ok = NebbieDash.playSoundPath(sys)
+  return ok == true
+end
+
+function NebbieDash.cmdDigTestSound(which)
+  which = ((which or ""):match("^%s*(.-)%s*$") or ""):lower()
+  if which == "" then which = "humber" end
+  local map = {
+    humber = "humber",
+    dig_done = "dig_done",
+    done = "dig_done",
+    dig_warn = "dig_warn",
+    warn = "dig_warn",
+    sanc = "dig_warn",
+    sanc_gone = "dig_warn",
+  }
+  local kind = map[which]
+  if not kind then
+    cecho("<orange>[NebbieDash] Uso: ndig testsound [humber|dig_done|dig_warn]\n")
+    return
+  end
+  local cfg = NebbieDash.sounds and NebbieDash.sounds[kind]
+  local path = (cfg and cfg ~= "" and cfg) or NebbieDash.resolveSystemSound(kind)
+  if not path then
+    cecho("<orange>[NebbieDash] Nessun file suono per <yellow>" .. kind ..
+      "<orange> (OS=" .. tostring(NebbieDash.detectHostOs()) .. ").\n")
+    return
+  end
+  local ok, how = NebbieDash.playSoundPath(path)
+  if ok then
+    cecho(string.format(
+      "<green>[NebbieDash] Test suono <yellow>%s<green> via <white>%s<green>: %s\n",
+      kind, tostring(how), path))
+  else
+    cecho(string.format(
+      "<orange>[NebbieDash] Test suono FALLITO (%s) per <yellow>%s<orange>: %s\n",
+      tostring(how), kind, path))
   end
 end
 
@@ -11403,6 +11485,7 @@ function NebbieDash.printDigHelp()
   cecho("<yellow>  dig<white>                  Attiva automine (alias/send/feedback MUD).\n")
   cecho("<yellow>  ndig off<white>             Ferma automine e ripristina dig_combat.\n")
   cecho("<yellow>  ndig status<white>          Stato, tool, combat, suoni.\n")
+  cecho("<yellow>  ndig testsound [kind]<white> Prova humber/dig_done/dig_warn (mac: afplay).\n")
   cecho("<yellow>  ndig tool <kw><white>       Keyword attrezzo (default: pic).\n")
   cecho("<yellow>  ndig combat <kw><white>     Arma umber (get+wield, put dig_tool in zaino).\n")
   cecho("<yellow>  ndig loot / ndigloot<white> Ricarica nebbie-dig-loot.txt.\n")
@@ -11447,6 +11530,12 @@ function NebbieDash.cmdDig(argStr)
       (hum or "(non trovato)") .. "\n")
     cecho("<grey>[NebbieDash] Suono sistema dig_done: " ..
       (done or "(non trovato)") .. "\n")
+    cecho("<grey>[NebbieDash] OS=" .. tostring(NebbieDash.detectHostOs()) ..
+      " — prova: <yellow>ndig testsound humber\n")
+    return
+  end
+  if mode == "testsound" or mode == "testsounds" or mode == "sound" then
+    NebbieDash.cmdDigTestSound(rest)
     return
   end
   if mode == "tool" then

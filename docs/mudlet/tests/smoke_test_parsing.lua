@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.31+",
+check("package version 1.16.32+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.31"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.32"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2884,6 +2884,12 @@ do
       and NebbieDash.SYSTEM_SOUND_CANDIDATES.linux
       and NebbieDash.SYSTEM_SOUND_CANDIDATES.windows
       and NebbieDash.SYSTEM_SOUND_CANDIDATES.macos)
+  check("sound: shellQuote escape",
+    NebbieDash.shellQuote("a'b") == "'a'\\''b'")
+  local missOk, missWhy = NebbieDash.playSoundPath("/no/such/sound.aiff")
+  check("sound: playSoundPath missing", missOk == false and missWhy == "missing")
+  check("sound: macos candidates aiff",
+    tostring(NebbieDash.SYSTEM_SOUND_CANDIDATES.macos.humber[1]):find("%.aiff") ~= nil)
   local k, kw = NebbieDash.parseDigLootLine("keep oro")
   check("dig loot: parse keep oro", k == "keep" and kw == "oro")
   local k2, kw2 = NebbieDash.parseDigLootLine("exclude carbone # no")
