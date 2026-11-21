@@ -371,6 +371,27 @@ Preferenza `chat_window = on|off` in `nebbie-dash-preferences.txt`. Trascinabile
 (Mudlet Adjustable.Container). Nota: l’echo parlante di `gossip` è uguale a `say` (`Tu dici '…'`),
 quindi in uscita compare come `[say]`; i gossip altrui (`vi dice`) sono etichettati correttamente.
 
+## Achievement (`nach`) — da 1.16.33
+
+Finestra floating con gli achievement **separati per toon** (file
+`profiles/ndashboard/achievement/<PG>.lua`). Usa il PG attivo dal prompt
+(`NebbieDash.currentChar`). Se esistono file legacy in
+`getMudletHomeDir()/achievement/`, vengono migrati alla prima lettura.
+
+```
+nach                 # mostra / nasconde (anche Ctrl+Shift+A)
+nach refresh         # achievements all + paginazione automatica
+nach pg Nome         # guarda un altro toon gia' salvato
+nach status
+```
+
+In finestra: filtro Race/Boss/Skill/Quest/Other, ordine % o "mancano",
+scalini sullo stesso contatore (solo il prossimo), aggiornamento live dalle
+righe `Race Achievement #N '…' p/m`.
+
+Disattiva lo script standalone "Nebbie Achievement" se lo avevi: altrimenti
+doppi trigger / doppia finestra.
+
 ## Automine dig (`ndig`) — da 1.16.19
 
 Stile dadomud (senza finestra Mine):

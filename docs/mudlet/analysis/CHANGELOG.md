@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.33 — 2026-11-21
+
+- **nach / nachievements**: finestra achievement per toon (port Nebbie
+  Achievement). File `ndashboard/achievement/<PG>.lua`, migrazione da
+  `~/…/achievement/`, update live, scalini, Ctrl+Shift+A, `nach refresh`.
+
 ## 1.16.32 — 2026-11-21
 
 - **suoni macOS**: gli `.aiff` di sistema non partivano con `playSoundFile`

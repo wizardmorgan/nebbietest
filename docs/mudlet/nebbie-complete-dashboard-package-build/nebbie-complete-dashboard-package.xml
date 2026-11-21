@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.32"
+local PKG_VER = "1.16.33"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -1017,6 +1017,9 @@ function NebbieDash.setCurrentCharacter(name, manual)
   if type(raiseEvent) == "function" then
     pcall(raiseEvent, "nebbieDashCharacterChanged", name, manual and true or false)
   end
+  if type(NebbieDash.achOnCharacterChanged) == "function" then
+    NebbieDash.achOnCharacterChanged(name)
+  end
   if not manual then
     tempTimer(1.2, function()
       NebbieDash.maybeSanityResyncEq(name)
@@ -1184,6 +1187,9 @@ function NebbieDash.onPromptLine()
   NebbieDash.enforceTriggerHygiene()
   if NebbieDash._batch and NebbieDash._batch.active and NebbieDash._batch.awaitingOutput then
     NebbieDash.onBatchPrompt(text)
+  end
+  if type(NebbieDash.achOnPrompt) == "function" then
+    NebbieDash.achOnPrompt()
   end
 end
 
@@ -1529,6 +1535,8 @@ NebbieDash.SHORTCUT_RESERVED = {
   nknowdb = true, nknowdbreload = true,
   npackageupdate = true, npackagecheck = true,
   nchat = true,
+  nach = true,
+  nachievements = true,
   ngoldalert = true,
   nidentui = true,
   nidentsync = true, nidentpull = true, nidentpush = true,
@@ -3544,6 +3552,711 @@ function NebbieDash.cmdChat(argStr)
   cecho("<orange>[NebbieDash] Uso: <yellow>nchat<orange> | <yellow>nchat on|off|clear\n")
   cecho("<grey>Raccoglie: say, gt/gtell, clantell/casata, tell, whisper, ask, gossip, shout.\n")
 end
+
+-- ---------------------------------------------------------------------------
+-- Achievement per toon (port da Nebbie Achievement): nach / nachievements.
+-- File: ndashboard/achievement/<PG>.lua (migra da getMudletHomeDir()/achievement).
+-- ---------------------------------------------------------------------------
+NebbieDash._ach = NebbieDash._ach or {
+  dati = {},
+  vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false },
+  lettura = nil,
+  visible = false,
+  created = false,
+  trigIds = {},
+  keyId = nil,
+  endTimer = nil,
+}
+
+NebbieDash.ACH_CATEGORIES = { "Tutte", "Race", "Boss", "Skill", "Quest", "Other" }
+
+function NebbieDash.achState()
+  NebbieDash._ach = NebbieDash._ach or {
+    dati = {},
+    vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false },
+    lettura = nil, visible = false, created = false, trigIds = {},
+  }
+  local st = NebbieDash._ach
+  st.dati = st.dati or {}
+  st.vista = st.vista or { pg = nil, cat = "Tutte", ordine = "perc", completi = false }
+  st.trigIds = st.trigIds or {}
+  return st
+end
+
+function NebbieDash.achActivePg()
+  local name = NebbieDash.currentChar
+  if name and name ~= "" then return name end
+  return nil
+end
+
+function NebbieDash.achTrim(s)
+  return (tostring(s or ""):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+function NebbieDash.achParseNum(s)
+  return tonumber((tostring(s or ""):gsub("%.", ""))) or 0
+end
+
+function NebbieDash.achFmtNum(n)
+  local s = tostring(math.floor(n or 0))
+  local r = s:reverse():gsub("(%d%d%d)", "%1."):reverse()
+  return (r:gsub("^%.", ""))
+end
+
+-- Contatore senza singolare/plurale: "Re Salomone ucciso" ~ "Re Salomone uccisi"
+function NebbieDash.achCounterKey(cat, cont)
+  local w = {}
+  for p in tostring(cont or ""):lower():gmatch("%S+") do
+    w[#w + 1] = (#p > 3) and p:gsub("[aeio]$", "") or p
+  end
+  return tostring(cat or "") .. "|" .. table.concat(w, " ")
+end
+
+function NebbieDash.achDir()
+  return NebbieDash.configPath("achievement")
+end
+
+function NebbieDash.achFile(pg)
+  return NebbieDash.achDir() .. "/" .. tostring(pg) .. ".lua"
+end
+
+function NebbieDash.ensureAchDir()
+  if type(NebbieDash.ensureConfigDir) == "function" then
+    NebbieDash.ensureConfigDir()
+  end
+  local d = NebbieDash.achDir()
+  if type(lfs) == "table" and type(lfs.mkdir) == "function" then
+    pcall(lfs.mkdir, d)
+  end
+  return d
+end
+
+function NebbieDash.achLegacyPaths(pg)
+  local out = {}
+  if type(getMudletHomeDir) == "function" then
+    local home = getMudletHomeDir()
+    if home and home ~= "" then
+      out[#out + 1] = home .. "/achievement/" .. pg .. ".lua"
+    end
+  end
+  if type(NebbieDash.mudletProfileHome) == "function" then
+    local ph = NebbieDash.mudletProfileHome()
+    if ph and ph ~= "" then
+      out[#out + 1] = ph .. "/achievement/" .. pg .. ".lua"
+    end
+  end
+  return out
+end
+
+function NebbieDash.achMigrateLegacyIfNeeded(pg)
+  if not pg or pg == "" then return end
+  NebbieDash.ensureAchDir()
+  local newPath = NebbieDash.achFile(pg)
+  if type(io.exists) == "function" and io.exists(newPath) then return end
+  local fcheck = io.open(newPath, "rb")
+  if fcheck then fcheck:close(); return end
+  for _, oldPath in ipairs(NebbieDash.achLegacyPaths(pg)) do
+    local rf = io.open(oldPath, "rb")
+    if rf then
+      local content = rf:read("*a")
+      rf:close()
+      local wf = io.open(newPath, "wb")
+      if wf then
+        wf:write(content or "")
+        wf:close()
+        cecho("<yellow>[NebbieDash] Ach: migrato <white>" .. oldPath ..
+          "<yellow> -> ndashboard/achievement/\n")
+      end
+      return
+    end
+  end
+end
+
+function NebbieDash.achLoad(pg)
+  if not pg or pg == "" then return nil end
+  local st = NebbieDash.achState()
+  NebbieDash.achMigrateLegacyIfNeeded(pg)
+  local t = {}
+  if type(table.load) == "function" then
+    local ok = pcall(table.load, NebbieDash.achFile(pg), t)
+    if ok and type(t.lista) == "table" then
+      st.dati[pg] = t
+    end
+  end
+  st.dati[pg] = st.dati[pg] or { lista = {} }
+  st.dati[pg].lista = st.dati[pg].lista or {}
+  return st.dati[pg]
+end
+
+function NebbieDash.achSave(pg)
+  local st = NebbieDash.achState()
+  local d = pg and st.dati[pg]
+  if not d then return end
+  NebbieDash.ensureAchDir()
+  d.aggiornato = os.date("%Y-%m-%d %H:%M")
+  if type(table.save) == "function" then
+    pcall(table.save, NebbieDash.achFile(pg), d)
+  end
+end
+
+function NebbieDash.achKnownPgs()
+  local out, seen = {}, {}
+  local dir = NebbieDash.achDir()
+  if type(lfs) == "table" and type(lfs.dir) == "function" then
+    pcall(function()
+      for f in lfs.dir(dir) do
+        local n = tostring(f):match("^(.+)%.lua$")
+        if n and not seen[n] then
+          seen[n] = true
+          out[#out + 1] = n
+        end
+      end
+    end)
+  end
+  local active = NebbieDash.achActivePg()
+  if active and not seen[active] then
+    out[#out + 1] = active
+  end
+  table.sort(out)
+  return out
+end
+
+function NebbieDash.achParseListLine(rawLine, state)
+  state = state or {}
+  local l = NebbieDash.achTrim(NebbieDash.stripColors(rawLine or ""))
+  local cat = l:match("^%-%-%-+%s+(%a+)%s+Achievements%s+%-%-%-+%s*$")
+  if cat then
+    state.cat = cat
+    state.nuove = (state.nuove or 0) + 1
+    return true, "cat"
+  end
+  local n, nome, p, m, cont = l:match("^%[%s*(%d+)%]%s+(.-)%s+([%d%.]+)/([%d%.]+)%s+(.-)%s*$")
+  if n then
+    state.nuove = (state.nuove or 0) + 1
+    state.lista = state.lista or {}
+    local nomeT = NebbieDash.achTrim(nome)
+    state.lista[nomeT] = {
+      num = tonumber(n),
+      nome = nomeT,
+      cat = state.cat or "",
+      prog = NebbieDash.achParseNum(p),
+      max = NebbieDash.achParseNum(m),
+      cont = NebbieDash.achTrim(cont),
+      t = os.time(),
+    }
+    return true, "row"
+  end
+  return false
+end
+
+function NebbieDash.achBeginRead()
+  local st = NebbieDash.achState()
+  local pg = NebbieDash.achActivePg()
+  if not pg then
+    cecho("<orange>[NebbieDash] Ach: nessun PG attivo — attendi il prompt o nchar.\n")
+    st.lettura = nil
+    return
+  end
+  st.lettura = { pg = pg, cat = "", lista = {}, nuove = 0 }
+end
+
+function NebbieDash.achFinishRead()
+  local st = NebbieDash.achState()
+  local r = st.lettura
+  st.lettura = nil
+  if st.endTimer and type(killTimer) == "function" then
+    pcall(killTimer, st.endTimer)
+  end
+  st.endTimer = nil
+  if not (r and r.pg and type(r.lista) == "table" and next(r.lista)) then return end
+  local d = NebbieDash.achLoad(r.pg)
+  d.lista = r.lista
+  NebbieDash.achSave(r.pg)
+  local n = 0
+  for _ in pairs(r.lista) do n = n + 1 end
+  cecho(string.format(
+    "\n<cyan>[NebbieDash] Ach: <yellow>%s<cyan>: %d achievement memorizzati.\n",
+    r.pg, n))
+  if st.visible then NebbieDash.achDraw() end
+end
+
+function NebbieDash.achUpdateLive(cat, nome, prog, maxv)
+  local pg = NebbieDash.achActivePg()
+  if not pg then return end
+  nome = NebbieDash.achTrim(nome)
+  if nome == "" then return end
+  local st = NebbieDash.achState()
+  local d = st.dati[pg] or NebbieDash.achLoad(pg)
+  local v = d.lista[nome]
+  if not v then
+    v = { nome = nome, cat = cat, cont = "", max = maxv }
+    d.lista[nome] = v
+  end
+  v.prog, v.max, v.t = prog, maxv, os.time()
+  if v.cat == nil or v.cat == "" then v.cat = cat end
+  if v.cont ~= "" then
+    local k = NebbieDash.achCounterKey(v.cat, v.cont)
+    for _, x in pairs(d.lista) do
+      if x ~= v and x.cont ~= "" and NebbieDash.achCounterKey(x.cat, x.cont) == k
+          and x.prog < x.max then
+        x.prog = math.min(prog, x.max)
+      end
+    end
+  end
+  NebbieDash.achSave(pg)
+  if st.visible then NebbieDash.achDraw() end
+end
+
+function NebbieDash.achOnPrompt()
+  local st = NebbieDash.achState()
+  if st.lettura then
+    tempTimer(0.2, function()
+      if NebbieDash.achState().lettura then
+        NebbieDash.achFinishRead()
+      end
+    end)
+  end
+end
+
+function NebbieDash.achOnCharacterChanged(name)
+  local st = NebbieDash.achState()
+  if not st.visible then return end
+  if name and name ~= "" then
+    st.vista.pg = name
+    NebbieDash.achLoad(name)
+    NebbieDash.achDraw()
+  end
+end
+
+-- Un elemento per contatore: prossimo scalino.
+function NebbieDash.achBuildRows(pg)
+  local st = NebbieDash.achState()
+  local d = st.dati[pg] or NebbieDash.achLoad(pg)
+  local gruppi = {}
+  for _, v in pairs(d.lista or {}) do
+    local k = (v.cont and v.cont ~= "") and NebbieDash.achCounterKey(v.cat, v.cont)
+      or ("nome|" .. tostring(v.nome))
+    local g = gruppi[k] or { voci = {} }
+    gruppi[k] = g
+    g.voci[#g.voci + 1] = v
+  end
+  local out = {}
+  for _, g in pairs(gruppi) do
+    table.sort(g.voci, function(a, b) return (a.max or 0) < (b.max or 0) end)
+    local prossimo, fatti = nil, 0
+    for _, v in ipairs(g.voci) do
+      if (v.prog or 0) >= (v.max or 0) then
+        fatti = fatti + 1
+      elseif not prossimo then
+        prossimo = v
+      end
+    end
+    local v = prossimo or g.voci[#g.voci]
+    if v and (st.vista.cat == "Tutte" or v.cat == st.vista.cat)
+        and (prossimo or st.vista.completi) then
+      out[#out + 1] = {
+        v = v,
+        scalino = fatti + (prossimo and 1 or 0),
+        tot = #g.voci,
+        completo = not prossimo,
+        perc = (v.max or 0) > 0 and math.min((v.prog or 0) / v.max, 1) or 0,
+        mancano = math.max((v.max or 0) - (v.prog or 0), 0),
+      }
+    end
+  end
+  table.sort(out, function(a, b)
+    if a.completo ~= b.completo then return not a.completo end
+    if st.vista.ordine == "mancano" then
+      if a.mancano ~= b.mancano then return a.mancano < b.mancano end
+    elseif a.perc ~= b.perc then
+      return a.perc > b.perc
+    end
+    return tostring(a.v.nome) < tostring(b.v.nome)
+  end)
+  return out, d
+end
+
+function NebbieDash.achBar(perc, larg)
+  larg = larg or 20
+  local pieni = math.floor(perc * larg + 0.5)
+  local col = perc >= 0.75 and "<green>" or (perc >= 0.4 and "<gold>" or "<grey>")
+  return col .. string.rep("#", pieni) .. "<dim_grey>" .. string.rep("-", larg - pieni) .. "<reset>"
+end
+
+function NebbieDash.canUseAchWindow()
+  return type(Adjustable) == "table" and type(Adjustable.Container) == "table"
+    and type(Geyser) == "table" and type(Geyser.MiniConsole) == "table"
+end
+
+function NebbieDash.destroyAchWindow()
+  local st = NebbieDash.achState()
+  if st.container then
+    if type(st.container.hide) == "function" then
+      pcall(function() st.container:hide() end)
+    end
+    if type(st.container.delete) == "function" then
+      pcall(function() st.container:delete() end)
+    end
+  end
+  for _, name in ipairs({ "NebbieDashAchContainer", "NebbieDashAch" }) do
+    if type(deleteWindow) == "function" then pcall(deleteWindow, name) end
+  end
+  st.container = nil
+  st.console = nil
+  st.created = false
+  st.visible = false
+end
+
+function NebbieDash.achCecho(text)
+  local g = NebbieDash.achState().console
+  if g and type(g.cecho) == "function" then
+    pcall(function() g:cecho(text) end)
+  end
+end
+
+function NebbieDash.achCechoLink(text, command, hint)
+  local g = NebbieDash.achState().console
+  if g and type(g.cechoLink) == "function" then
+    pcall(function() g:cechoLink(text, command, hint or "", true) end)
+  elseif type(cechoLink) == "function" then
+    pcall(cechoLink, "NebbieDashAch", text, command, hint or "", true)
+  end
+end
+
+function NebbieDash.achButton(label, active, command, hint)
+  if active then
+    NebbieDash.achCechoLink("<black:yellow> " .. label .. " <reset>", command, hint)
+  else
+    NebbieDash.achCechoLink("<cyan>" .. label .. "<reset>", command, hint)
+  end
+  NebbieDash.achCecho(" ")
+end
+
+function NebbieDash.initAchWindow()
+  local st = NebbieDash.achState()
+  if not NebbieDash.canUseAchWindow() then
+    cecho("<orange>[NebbieDash] Ach: finestra non disponibile (Adjustable/Geyser).\n")
+    return false
+  end
+  if st.created and st.container then
+    if type(st.container.show) == "function" then
+      pcall(function() st.container:show() end)
+    end
+    st.visible = true
+    return true
+  end
+  NebbieDash.destroyAchWindow()
+  st.container = Adjustable.Container:new({
+    name = "NebbieDashAchContainer",
+    x = "20%",
+    y = "8%",
+    width = 640,
+    height = 560,
+    titleText = "Nebbie — Achievement",
+    titleTxtColor = "white",
+    adjLabelstyle = [[
+      background-color: rgb(12, 12, 18);
+      border: 2px solid rgb(90, 90, 40);
+      border-radius: 6px;
+    ]],
+  })
+  local pad, titleH = 4, 22
+  st.console = Geyser.MiniConsole:new({
+    name = "NebbieDashAch",
+    x = pad,
+    y = titleH,
+    width = "100%-" .. tostring(pad * 2),
+    height = "100%-" .. tostring(titleH + pad),
+  }, st.container)
+  st.console:setColor(12, 12, 16, 255)
+  if type(setMiniConsoleFontSize) == "function" then
+    setMiniConsoleFontSize("NebbieDashAch", NebbieDash.fontSize or 10)
+  end
+  if type(enableScrollBar) == "function" then
+    enableScrollBar("NebbieDashAch", true)
+  end
+  if type(setMaxLines) == "function" then
+    setMaxLines("NebbieDashAch", 5000)
+  end
+  if type(st.container.load) == "function" then
+    pcall(function() st.container:load() end)
+  end
+  st.created = true
+  st.visible = true
+  return true
+end
+
+function NebbieDash.achSetVistaPg(pg)
+  local st = NebbieDash.achState()
+  st.vista.pg = pg
+  NebbieDash.achLoad(pg)
+  NebbieDash.achDraw()
+end
+
+function NebbieDash.achSetVistaCat(cat)
+  NebbieDash.achState().vista.cat = cat
+  NebbieDash.achDraw()
+end
+
+function NebbieDash.achSetVistaOrdine(ord)
+  NebbieDash.achState().vista.ordine = ord
+  NebbieDash.achDraw()
+end
+
+function NebbieDash.achToggleCompleti()
+  local st = NebbieDash.achState()
+  st.vista.completi = not st.vista.completi
+  NebbieDash.achDraw()
+end
+
+function NebbieDash.achRequestRefresh()
+  send("achievements all", false)
+end
+
+function NebbieDash.achDraw()
+  local st = NebbieDash.achState()
+  if not st.console then return end
+  if type(st.console.clear) == "function" then
+    pcall(function() st.console:clear() end)
+  elseif type(clearWindow) == "function" then
+    pcall(clearWindow, "NebbieDashAch")
+  end
+  local pgs = NebbieDash.achKnownPgs()
+  st.vista.pg = st.vista.pg or NebbieDash.achActivePg() or pgs[1]
+  local pg = st.vista.pg
+  local active = NebbieDash.achActivePg()
+  NebbieDash.achCecho("<grey>PG: ")
+  for _, p in ipairs(pgs) do
+    NebbieDash.achButton(p, p == pg,
+      string.format("NebbieDash.achSetVistaPg(%q)", p),
+      "achievement di " .. p)
+  end
+  NebbieDash.achCecho("\n<grey>tipo: ")
+  for _, c in ipairs(NebbieDash.ACH_CATEGORIES) do
+    NebbieDash.achButton(c, st.vista.cat == c,
+      string.format("NebbieDash.achSetVistaCat(%q)", c))
+  end
+  NebbieDash.achCecho("\n<grey>ordine: ")
+  NebbieDash.achButton("% completamento", st.vista.ordine == "perc",
+    [[NebbieDash.achSetVistaOrdine("perc")]], "prima i piu' avanti in percentuale")
+  NebbieDash.achButton("quanti mancano", st.vista.ordine == "mancano",
+    [[NebbieDash.achSetVistaOrdine("mancano")]], "prima quelli a cui manca meno")
+  NebbieDash.achCecho("  ")
+  NebbieDash.achCechoLink(
+    st.vista.completi and "<dim_grey>[nascondi completati]" or "<dim_grey>[mostra completati]",
+    [[NebbieDash.achToggleCompleti()]], "")
+  if pg and active and pg == active then
+    NebbieDash.achCecho("  ")
+    NebbieDash.achCechoLink("<green>[aggiorna]",
+      [[NebbieDash.achRequestRefresh()]],
+      "manda achievements all e legge tutte le pagine")
+  end
+  NebbieDash.achCecho("\n")
+  if not pg then
+    NebbieDash.achCecho("\n<grey>Nessun PG. Connettiti e premi [aggiorna].\n")
+    return
+  end
+  local lista, d = NebbieDash.achBuildRows(pg)
+  NebbieDash.achCecho(string.format(
+    "<dim_grey>%s, aggiornato: %s<reset>\n\n", pg, d.aggiornato or "mai"))
+  if #lista == 0 then
+    local tip = (pg == active)
+      and " Premi [aggiorna] o scrivi achievements all.\n" or "\n"
+    NebbieDash.achCecho("<grey>Niente da mostrare." .. tip)
+    return
+  end
+  for _, r in ipairs(lista) do
+    local v = r.v
+    NebbieDash.achCecho(string.format(
+      "<white>%s <dim_grey>[%s]%s%s<reset>\n",
+      v.nome, v.cat or "?",
+      (v.cont and v.cont ~= "") and (" " .. v.cont) or "",
+      r.tot > 1 and string.format(" · scalino %d/%d", r.scalino, r.tot) or ""))
+    NebbieDash.achCecho(string.format(
+      "  %s <white>%3d%%  <grey>%s/%s",
+      NebbieDash.achBar(r.perc, 20), math.floor(r.perc * 100),
+      NebbieDash.achFmtNum(v.prog), NebbieDash.achFmtNum(v.max)))
+    if r.completo then
+      NebbieDash.achCecho("  <green>completato")
+    else
+      NebbieDash.achCecho("  <yellow>mancano " .. NebbieDash.achFmtNum(r.mancano))
+    end
+    NebbieDash.achCecho("<reset>\n")
+  end
+end
+
+function NebbieDash.achToggle()
+  local st = NebbieDash.achState()
+  if st.visible and st.created then
+    if st.container and type(st.container.hide) == "function" then
+      pcall(function() st.container:hide() end)
+    end
+    st.visible = false
+    cecho("<grey>[NebbieDash] Ach: finestra nascosta (<yellow>nach<grey> per riaprire).\n")
+    return
+  end
+  if not NebbieDash.initAchWindow() then return end
+  st.vista.pg = st.vista.pg or NebbieDash.achActivePg()
+  if st.vista.pg then NebbieDash.achLoad(st.vista.pg) end
+  NebbieDash.achDraw()
+  cecho("<green>[NebbieDash] Ach: finestra aperta (<yellow>nach refresh<green> / Ctrl+Shift+A).\n")
+end
+
+function NebbieDash.onAchListHeaderLine()
+  NebbieDash.achBeginRead()
+end
+
+function NebbieDash.onAchPagerLine()
+  local st = NebbieDash.achState()
+  local r = st.lettura
+  if r and (r.nuove or 0) > 0 then
+    r.nuove = 0
+    send("", false)
+  end
+end
+
+function NebbieDash.onAchListBodyLine()
+  local st = NebbieDash.achState()
+  if not st.lettura then return end
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  NebbieDash.achParseListLine(text, st.lettura)
+  if st.endTimer and type(killTimer) == "function" then
+    pcall(killTimer, st.endTimer)
+  end
+  st.endTimer = tempTimer(4, function()
+    local s = NebbieDash.achState()
+    s.endTimer = nil
+    if s.lettura then NebbieDash.achFinishRead() end
+  end)
+end
+
+function NebbieDash.onAchLiveUpdateLine()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  text = NebbieDash.stripColors(text or "")
+  local cat, nome, p, m = text:match(
+    "^(Race|Boss|Skill|Quest|Other) Achievement #%d+ '(.+)' ([%d%.]+)/([%d%.]+)")
+  if not cat then return end
+  NebbieDash.achUpdateLive(cat, nome, NebbieDash.achParseNum(p), NebbieDash.achParseNum(m))
+end
+
+function NebbieDash.teardownAchTriggers()
+  local st = NebbieDash.achState()
+  for _, id in ipairs(st.trigIds or {}) do
+    if id then pcall(function() killTrigger(id) end) end
+  end
+  st.trigIds = {}
+  if st.keyId then
+    pcall(function() killKey(st.keyId) end)
+    st.keyId = nil
+  end
+  if st.endTimer and type(killTimer) == "function" then
+    pcall(killTimer, st.endTimer)
+    st.endTimer = nil
+  end
+end
+
+function NebbieDash.installAchTriggers()
+  NebbieDash.teardownAchTriggers()
+  local st = NebbieDash.achState()
+  st.trigIds = {}
+  local function addTrig(id)
+    if id then table.insert(st.trigIds, id) end
+  end
+  if type(tempRegexTrigger) == "function" then
+    addTrig(tempRegexTrigger([[^Ecco tutti i tuoi achievements:]],
+      [[NebbieDash.onAchListHeaderLine()]]))
+    addTrig(tempRegexTrigger([=[^\[Batti INVIO per continuare/Q per uscire\]]=],
+      [[NebbieDash.onAchPagerLine()]]))
+    addTrig(tempRegexTrigger([=[^(?:\[\s*\d+\]|-{3,}\s+\w+\s+Achievements)]=],
+      [[NebbieDash.onAchListBodyLine()]]))
+    addTrig(tempRegexTrigger(
+      [[^(Race|Boss|Skill|Quest|Other) Achievement #\d+ '(.+)' ([\d.]+)/([\d.]+)]],
+      [[NebbieDash.onAchLiveUpdateLine()]]))
+  elseif type(tempTrigger) == "function" then
+    addTrig(tempTrigger("Ecco tutti i tuoi achievements:",
+      [[NebbieDash.onAchListHeaderLine()]]))
+    addTrig(tempTrigger("Achievement #",
+      [[NebbieDash.onAchLiveUpdateLine()]]))
+  end
+  if type(tempKey) == "function" and mudlet and mudlet.keymodifier and mudlet.key then
+    st.keyId = tempKey(
+      mudlet.keymodifier.Control + mudlet.keymodifier.Shift,
+      mudlet.key.A,
+      [[NebbieDash.cmdAch("")]])
+  end
+end
+
+function NebbieDash.printAchHelp()
+  cecho("<cyan>[NebbieDash] nach — achievement per toon\n")
+  cecho("<yellow>  nach<white>                 Mostra/nasconde la finestra.\n")
+  cecho("<yellow>  nach refresh<white>         Manda achievements all (PG attivo).\n")
+  cecho("<yellow>  nach status<white>          PG attivo, file, conteggio.\n")
+  cecho("<yellow>  nach pg <nome><white>       Mostra i dati di un altro toon.\n")
+  cecho("<grey>  Hotkey: Ctrl+Shift+A. File: ndashboard/achievement/<PG>.lua\n")
+end
+
+function NebbieDash.cmdAch(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$") or ""
+  local mode, rest = argStr:match("^(%S+)%s*(.-)%s*$")
+  mode = (mode or ""):lower()
+  rest = rest or ""
+  if mode == "" or mode == "toggle" or mode == "on" or mode == "show" then
+    NebbieDash.achToggle()
+    return
+  end
+  if mode == "help" or mode == "?" then
+    NebbieDash.printAchHelp()
+    return
+  end
+  if mode == "off" or mode == "hide" then
+    local st = NebbieDash.achState()
+    if st.visible then NebbieDash.achToggle() end
+    return
+  end
+  if mode == "refresh" or mode == "update" or mode == "reload" then
+    local pg = NebbieDash.achActivePg()
+    if not pg then
+      cecho("<orange>[NebbieDash] Ach: nessun PG attivo.\n")
+      return
+    end
+    if not NebbieDash.achState().visible then
+      NebbieDash.initAchWindow()
+    end
+    NebbieDash.achRequestRefresh()
+    cecho("<green>[NebbieDash] Ach: chiedo achievements all per <yellow>" .. pg .. "\n")
+    return
+  end
+  if mode == "status" or mode == "info" then
+    local st = NebbieDash.achState()
+    local pg = NebbieDash.achActivePg() or "(nessuno)"
+    local view = st.vista.pg or "(nessuno)"
+    local n = 0
+    if st.vista.pg and st.dati[st.vista.pg] and st.dati[st.vista.pg].lista then
+      for _ in pairs(st.dati[st.vista.pg].lista) do n = n + 1 end
+    elseif st.vista.pg then
+      local d = NebbieDash.achLoad(st.vista.pg)
+      for _ in pairs(d.lista or {}) do n = n + 1 end
+    end
+    cecho(string.format(
+      "<green>[NebbieDash] Ach: attivo=<white>%s<green> vista=<white>%s<green> voci=%d visible=%s\n",
+      tostring(pg), tostring(view), n, tostring(st.visible)))
+    cecho("<grey>[NebbieDash] Dir: " .. NebbieDash.achDir() .. "\n")
+    return
+  end
+  if mode == "pg" or mode == "char" or mode == "toon" then
+    if rest == "" then
+      cecho("<orange>[NebbieDash] Uso: nach pg <nome>\n")
+      return
+    end
+    NebbieDash.achSetVistaPg(rest)
+    if not NebbieDash.achState().visible then
+      NebbieDash.achToggle()
+    end
+    return
+  end
+  NebbieDash.printAchHelp()
+end
+
 
 -- ---------------------------------------------------------------------------
 -- Finestra floating gestione archivio identify (nidentui).
@@ -5616,6 +6329,12 @@ NebbieDash.HELP_TEXT = {
 
   { section = "Chat" },
   { "nchat [on|off|clear]", "Finestra chat (say/gt/tell/send/telep/think/sign/…)." },
+
+  { section = "Achievement" },
+  { "nach / nachievements", "Finestra achievement per toon (Ctrl+Shift+A)." },
+  { "nach pg <nome>", "Mostra i dati di un altro toon." },
+  { "nach refresh", "Manda achievements all e memorizza (PG attivo)." },
+  { "nach status", "PG attivo, vista, conteggio, cartella file." },
 
   { section = "Identify e know" },
   { "nidentbatch …", "Batch identify admin (oload + identify; profilo Sirio)." },
@@ -13533,6 +14252,9 @@ function NebbieDash.teardownTriggers()
   if type(NebbieDash.teardownDigAutomineTriggers) == "function" then
     NebbieDash.teardownDigAutomineTriggers()
   end
+  if type(NebbieDash.teardownAchTriggers) == "function" then
+    NebbieDash.teardownAchTriggers()
+  end
 end
 
 function NebbieDash.installTriggers()
@@ -13675,6 +14397,9 @@ function NebbieDash.installTriggers()
   NebbieDash.installTextHighlightTriggers()
   NebbieDash.installDigAutomineTriggers()
   NebbieDash.installChatTriggers()
+  if type(NebbieDash.installAchTriggers) == "function" then
+    NebbieDash.installAchTriggers()
+  end
   -- Speedwalk: conferma stanza (Uscite:/buio) e fail espliciti.
   NebbieDash._swRunTrigs = {}
   local function swTrig(id)
@@ -14429,6 +15154,34 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nchat (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-ach</name>
+   <script><![CDATA[NebbieDash.cmdAch("")]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nach$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-ach-args</name>
+   <script><![CDATA[NebbieDash.cmdAch(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nach (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-achievements</name>
+   <script><![CDATA[NebbieDash.cmdAch("")]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nachievements$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-achievements-args</name>
+   <script><![CDATA[NebbieDash.cmdAch(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nachievements (.+)$</regex>
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-dash-package-update</name>

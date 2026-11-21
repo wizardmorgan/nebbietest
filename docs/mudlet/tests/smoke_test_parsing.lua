@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.32+",
+check("package version 1.16.33+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.32"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.33"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2837,7 +2837,55 @@ do
   check("help: elenca ndig", joined:find("ndig", 1, true) ~= nil)
   check("help: elenca ndigloot", joined:find("ndigloot", 1, true) ~= nil)
   check("help: elenca nchat", joined:find("nchat", 1, true) ~= nil)
+  check("help: elenca nach", joined:find("nach", 1, true) ~= nil)
   check("help: elenca nidentsync", joined:find("nidentsync", 1, true) ~= nil)
+end
+
+-- Achievement (nach): parse lista / live / scalini per toon.
+do
+  check("ach: fmt num", NebbieDash.achFmtNum(16968497) == "16.968.497")
+  check("ach: parse num punti", NebbieDash.achParseNum("1.680") == 1680)
+  local k1 = NebbieDash.achCounterKey("Race", "umani uccisi")
+  local k2 = NebbieDash.achCounterKey("Race", "umani ucciso")
+  check("ach: counter key plurale", k1 == k2)
+  local st = { cat = "", lista = {}, nuove = 0 }
+  local okCat = NebbieDash.achParseListLine(
+    "----- Race Achievements -----", st)
+  check("ach: parse header cat", okCat and st.cat == "Race")
+  local okRow = NebbieDash.achParseListLine(
+    "[  50] Ma due hobbit valgono uno o due?        1680/2500   umanoidi uccisi", st)
+  check("ach: parse riga lista", okRow and st.lista["Ma due hobbit valgono uno o due?"] ~= nil)
+  local row = st.lista["Ma due hobbit valgono uno o due?"]
+  check("ach: riga campi",
+    row and row.prog == 1680 and row.max == 2500 and row.cat == "Race"
+      and row.cont == "umanoidi uccisi")
+  NebbieDash.currentChar = "NomiyaMaki"
+  NebbieDash.achState().dati = {}
+  local d = NebbieDash.achLoad("NomiyaMaki")
+  d.lista = {
+    ["A"] = { nome = "A", cat = "Race", cont = "orchi uccisi", prog = 900, max = 1000, t = 1 },
+    ["B"] = { nome = "B", cat = "Race", cont = "orchi ucciso", prog = 900, max = 10000, t = 1 },
+    ["C"] = { nome = "C", cat = "Boss", cont = "", prog = 5, max = 5, t = 1 },
+  }
+  NebbieDash.achState().vista.completi = false
+  NebbieDash.achState().vista.cat = "Tutte"
+  local rows = NebbieDash.achBuildRows("NomiyaMaki")
+  local foundA, foundC = false, false
+  for _, r in ipairs(rows) do
+    if r.v.nome == "A" then foundA = true end
+    if r.v.nome == "C" then foundC = true end
+  end
+  check("ach: scalino mostra prossimo", foundA == true)
+  check("ach: nasconde completati", foundC == false)
+  NebbieDash.achUpdateLive("Skill", "Inserisco la spina", 223, 300)
+  local live = NebbieDash.achState().dati["NomiyaMaki"].lista["Inserisco la spina"]
+  check("ach: live update su toon attivo",
+    live and live.prog == 223 and live.max == 300 and live.cat == "Skill")
+  NebbieDash.currentChar = "Altro"
+  NebbieDash.achUpdateLive("Skill", "Altro skill", 1, 10)
+  check("ach: toon separati",
+    NebbieDash.achState().dati["NomiyaMaki"].lista["Altro skill"] == nil
+      and NebbieDash.achState().dati["Altro"].lista["Altro skill"] ~= nil)
 end
 
 -- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).
