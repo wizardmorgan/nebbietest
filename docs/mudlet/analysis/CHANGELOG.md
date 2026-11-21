@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.31 — 2026-11-21
+
+- **ndig**: se `dig` non attivava `active` (sysDataSendRequest assente / dig
+  via script), ora: alias `^dig$`, attivazione al primo feedback MUD se
+  `armed`, registrazione additiva di `sysDataSendRequest`.
+
 ## 1.16.30 — 2026-11-21
 
 - **nchat**: think non piu' duplicato (un solo trigger `:: '` / `|| '`).

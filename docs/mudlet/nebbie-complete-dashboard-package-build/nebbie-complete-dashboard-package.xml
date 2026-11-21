@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.30"
+local PKG_VER = "1.16.31"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -6228,10 +6228,16 @@ function NebbieDash.onRentPensionLine()
   end
 end
 
+function NebbieDash.isDigCommand(cmd)
+  local c = tostring(cmd or ""):gsub("[\r\n]+$", "")
+  c = c:match("^%s*(.-)%s*$") or ""
+  return c:lower() == "dig"
+end
+
 function NebbieDash.onDataSendRequest(_, cmd)
   do
-    local c = (cmd or ""):match("^%s*(.-)%s*$") or ""
-    if c:lower() == "dig" and type(NebbieDash.digAutoActivateFromDigCommand) == "function" then
+    if NebbieDash.isDigCommand(cmd)
+        and type(NebbieDash.digAutoActivateFromDigCommand) == "function" then
       NebbieDash.digAutoActivateFromDigCommand()
     end
   end
@@ -11002,6 +11008,16 @@ function NebbieDash.digAutoActivateFromDigCommand()
   end
 end
 
+-- Se armed ma active non e' partito (sysDataSendRequest assente / dig via
+-- send() script), attiva al primo feedback dig dal MUD.
+function NebbieDash.digAutoEnsureActiveFromWorld()
+  local st = NebbieDash.digAutoState()
+  if st.active then return true end
+  if not st.armed then return false end
+  NebbieDash.digAutoActivateFromDigCommand()
+  return st.active == true
+end
+
 -- opts.handsEmpty: mani vuote (frantumi) → solo get+wield, niente rem/put.
 -- opts.putAwayKw: keyword da rimuovere e rimettere in zaino (stile dadomud
 -- config.armaattuale). Se assente, ricava dall'eq cache (puo' fallire se
@@ -11178,15 +11194,15 @@ function NebbieDash.digAutoOnAttribFinished()
   end
 end
 
--- --- Trigger handlers (solo se dig active) ---
+-- --- Trigger handlers (active, oppure armed→active al primo feedback MUD) ---
 
 function NebbieDash.onDigGataLine()
-  if not NebbieDash.digAutoState().active then return end
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
   NebbieDash.digAutoScheduleRetry()
 end
 
 function NebbieDash.onDigVeinDoneLine()
-  if not NebbieDash.digAutoState().active then return end
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
   NebbieDash.digAutoCancelRetry()
   NebbieDash.playSystemOrConfiguredSound("dig_done", "dig_done")
   if type(NebbieDash.armGoldSpendExpected) == "function" then
@@ -11197,8 +11213,8 @@ function NebbieDash.onDigVeinDoneLine()
 end
 
 function NebbieDash.onDigHumberInLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
   local st = NebbieDash.digAutoState()
-  if not st.active then return end
   NebbieDash.digAutoCancelRetry()
   NebbieDash.playSystemOrConfiguredSound("humber", "humber")
   local combat = NebbieDash.digCombatKeyword()
@@ -11217,8 +11233,8 @@ function NebbieDash.onDigHumberInLine()
 end
 
 function NebbieDash.onDigHumberOutLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
   local st = NebbieDash.digAutoState()
-  if not st.active then return end
   local who = NebbieDash.currentChar or ""
   if who ~= "" then
     send("cast 'heal' " .. who, false)
@@ -11242,15 +11258,14 @@ function NebbieDash.onDigHumberOutLine()
 end
 
 function NebbieDash.onDigSancGoneLine()
-  local st = NebbieDash.digAutoState()
-  if not st.active then return end
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
   NebbieDash.digAutoCancelRetry()
   NebbieDash.playSystemOrConfiguredSound("sanc_gone", "dig_warn")
   NebbieDash.digAutoRequestSanctuaryCheck()
 end
 
 function NebbieDash.onDigRefreshWarnLine()
-  if not NebbieDash.digAutoState().active then return end
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
   local who = NebbieDash.currentChar or ""
   if who ~= "" then
     send("cast 'refresh' " .. who, false)
@@ -11258,7 +11273,7 @@ function NebbieDash.onDigRefreshWarnLine()
 end
 
 function NebbieDash.onDigTrueSightGoneLine()
-  if not NebbieDash.digAutoState().active then return end
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
   local who = NebbieDash.currentChar or ""
   if who ~= "" then
     send("cast 'true sight' " .. who, false)
@@ -11303,8 +11318,8 @@ function NebbieDash.onDigNoToolLine()
 end
 
 function NebbieDash.onDigPickBrokenLine()
+  if not NebbieDash.digAutoEnsureActiveFromWorld() then return end
   local st = NebbieDash.digAutoState()
-  if not st.active then return end
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
   local tool = NebbieDash.digToolKeyword()
   if not NebbieDash.digLineLooksLikeBrokenTool(text, tool) then
@@ -11335,44 +11350,57 @@ function NebbieDash.teardownDigAutomineTriggers()
     if id then pcall(function() killTrigger(id) end) end
   end
   NebbieDash._digTrigIds = {}
+  if NebbieDash._digAliasId then
+    pcall(function() killAlias(NebbieDash._digAliasId) end)
+    NebbieDash._digAliasId = nil
+  end
 end
 
 function NebbieDash.installDigAutomineTriggers()
   NebbieDash.teardownDigAutomineTriggers()
   NebbieDash._digTrigIds = {}
-  if type(tempTrigger) ~= "function" then return end
-  local function add(pat, code)
-    local id = tempTrigger(pat, code)
-    if id then table.insert(NebbieDash._digTrigIds, id) end
+  if type(tempTrigger) == "function" then
+    local function add(pat, code)
+      local id = tempTrigger(pat, code)
+      if id then table.insert(NebbieDash._digTrigIds, id) end
+    end
+    add("Fai una mossa maldestra e non riesci a scavare.",
+      [[NebbieDash.onDigGataLine()]])
+    add("fondo trovi qualcosa.",
+      [[NebbieDash.onDigGataLine()]])
+    add("Qui non si riesce piu' a scavare, il filone sembra esaurito!",
+      [[NebbieDash.onDigVeinDoneLine()]])
+    add("ACCIDENTI!!! Qualcosa si muove nel punto in cui hai scavato!",
+      [[NebbieDash.onDigHumberInLine()]])
+    add("Il tuo sangue si gela al grido di morte di Un umber hulk.",
+      [[NebbieDash.onDigHumberOutLine()]])
+    add("L'aura bianca che ti circondava svanisce.",
+      [[NebbieDash.onDigSancGoneLine()]])
+    add("L'aura bianca che ti circonda inizia a diventare meno intensa.",
+      [[NebbieDash.onDigRefreshWarnLine()]])
+    add("La tua visione torna normale.",
+      [[NebbieDash.onDigTrueSightGoneLine()]])
+    -- skills.cpp do_miner senza tool in mano
+    add("Forse usando l'attrezzo adatto",
+      [[NebbieDash.onDigNoToolLine()]])
+    -- fight.cpp MakeScrap: "$p cade a terra in frantumi." (Piccone / A mining pick / …)
+    add("cade a terra in frantumi",
+      [[NebbieDash.onDigPickBrokenLine()]])
   end
-  add("Fai una mossa maldestra e non riesci a scavare.",
-    [[NebbieDash.onDigGataLine()]])
-  add("fondo trovi qualcosa.",
-    [[NebbieDash.onDigGataLine()]])
-  add("Qui non si riesce piu' a scavare, il filone sembra esaurito!",
-    [[NebbieDash.onDigVeinDoneLine()]])
-  add("ACCIDENTI!!! Qualcosa si muove nel punto in cui hai scavato!",
-    [[NebbieDash.onDigHumberInLine()]])
-  add("Il tuo sangue si gela al grido di morte di Un umber hulk.",
-    [[NebbieDash.onDigHumberOutLine()]])
-  add("L'aura bianca che ti circondava svanisce.",
-    [[NebbieDash.onDigSancGoneLine()]])
-  add("L'aura bianca che ti circonda inizia a diventare meno intensa.",
-    [[NebbieDash.onDigRefreshWarnLine()]])
-  add("La tua visione torna normale.",
-    [[NebbieDash.onDigTrueSightGoneLine()]])
-  -- skills.cpp do_miner senza tool in mano
-  add("Forse usando l'attrezzo adatto",
-    [[NebbieDash.onDigNoToolLine()]])
-  -- fight.cpp MakeScrap: "$p cade a terra in frantumi." (Piccone / A mining pick / …)
-  add("cade a terra in frantumi",
-    [[NebbieDash.onDigPickBrokenLine()]])
+  -- Alias dedicato: send() da script/altri alias spesso NON alza
+  -- sysDataSendRequest, quindi active restava false dopo un dig "riuscito".
+  if type(tempAlias) == "function" then
+    NebbieDash._digAliasId = tempAlias([[^dig$]], [[
+      NebbieDash.digAutoActivateFromDigCommand()
+      send("dig", false)
+    ]])
+  end
 end
 
 function NebbieDash.printDigHelp()
   cecho("<cyan>[NebbieDash] ndig — automine (dig / miniera)\n")
   cecho("<yellow>  ndig<white>                 Impugna dig_tool dallo zaino (armed).\n")
-  cecho("<yellow>  dig<white>                  Prima volta: attiva automine (retry, umber, sanc…).\n")
+  cecho("<yellow>  dig<white>                  Attiva automine (alias/send/feedback MUD).\n")
   cecho("<yellow>  ndig off<white>             Ferma automine e ripristina dig_combat.\n")
   cecho("<yellow>  ndig status<white>          Stato, tool, combat, suoni.\n")
   cecho("<yellow>  ndig tool <kw><white>       Keyword attrezzo (default: pic).\n")
@@ -13572,23 +13600,43 @@ function NebbieDash.installTriggers()
   swTrig(tempTrigger("Non vedi nient'altro che stelle", [[NebbieDash.onSpeedwalkGameLine()]]))
   if NebbieDash._groupSoloTrig then pcall(disableTrigger, NebbieDash._groupSoloTrig) end
   if NebbieDash._groupHeaderTrig then pcall(disableTrigger, NebbieDash._groupHeaderTrig) end
-  -- Gli anonymous event handler restano registrati una volta sola (a
-  -- differenza dei trigger sopra, qui non c'e' un modo affidabile per
-  -- "smontarli" per nome/funzione): non serve comunque rifarli ad ogni
-  -- reinstall perche' le funzioni target (onConnectionEvent/onWindowResize)
-  -- sono idempotenti — vengono chiamate per nome ad ogni evento, quindi
-  -- eseguono sempre la versione PIU' RECENTE del codice anche senza essere
-  -- re-registrate.
-  if type(registerAnonymousEventHandler) == "function" and not NebbieDash._eventHandlersRegistered then
-    registerAnonymousEventHandler("sysConnectionEvent", "NebbieDash.onConnectionEvent")
-    registerAnonymousEventHandler("sysWindowResizeEvent", "NebbieDash.onWindowResize")
-    registerAnonymousEventHandler("sysInstallPackage", "NebbieDash.onInstallPackageEvent")
-    registerAnonymousEventHandler("sysUninstallPackage", "NebbieDash.onUninstallPackageEvent")
-    registerAnonymousEventHandler("sysDataSendRequest", "NebbieDash.onDataSendRequest")
+  -- Anonymous event handler: registrazione additiva per (evento, handler).
+  -- Chiamati per nome → sempre la versione piu' recente del codice. Evita il
+  -- buco in cui `_eventHandlersRegistered=true` da un package vecchio saltava
+  -- handler aggiunti dopo (es. sysDataSendRequest per dig/gold).
+  if type(registerAnonymousEventHandler) == "function" then
+    NebbieDash._anonHandlerKeys = NebbieDash._anonHandlerKeys or {}
+    if NebbieDash._eventHandlersRegistered and not NebbieDash._anonHandlersSeeded then
+      -- Migrazione: marchia solo i handler "vecchi" per evitare doppioni.
+      -- NON marchiare sysDataSendRequest/gmcp: potevano mancare se il flag
+      -- era true da un package precedente all'aggiunta dig/gold.
+      local legacy = {
+        "sysConnectionEvent::NebbieDash.onConnectionEvent",
+        "sysWindowResizeEvent::NebbieDash.onWindowResize",
+        "sysInstallPackage::NebbieDash.onInstallPackageEvent",
+        "sysUninstallPackage::NebbieDash.onUninstallPackageEvent",
+      }
+      for _, k in ipairs(legacy) do
+        NebbieDash._anonHandlerKeys[k] = true
+      end
+      NebbieDash._anonHandlersSeeded = true
+    end
+    local function ensureAnon(event, handlerName)
+      local key = event .. "::" .. handlerName
+      if NebbieDash._anonHandlerKeys[key] then return end
+      registerAnonymousEventHandler(event, handlerName)
+      NebbieDash._anonHandlerKeys[key] = true
+    end
+    ensureAnon("sysConnectionEvent", "NebbieDash.onConnectionEvent")
+    ensureAnon("sysWindowResizeEvent", "NebbieDash.onWindowResize")
+    ensureAnon("sysInstallPackage", "NebbieDash.onInstallPackageEvent")
+    ensureAnon("sysUninstallPackage", "NebbieDash.onUninstallPackageEvent")
+    ensureAnon("sysDataSendRequest", "NebbieDash.onDataSendRequest")
     -- GMCP char.base.gold (server lowercase; Mudlet puo' capitalizzare)
-    registerAnonymousEventHandler("gmcp.char.base", "NebbieDash.onGmcpCharBase")
-    registerAnonymousEventHandler("gmcp.Char.Base", "NebbieDash.onGmcpCharBase")
+    ensureAnon("gmcp.char.base", "NebbieDash.onGmcpCharBase")
+    ensureAnon("gmcp.Char.Base", "NebbieDash.onGmcpCharBase")
     NebbieDash._eventHandlersRegistered = true
+    NebbieDash._anonHandlersSeeded = true
   end
   NebbieDash.installSpellShortcutTriggers()
 end

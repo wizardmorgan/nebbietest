@@ -2858,6 +2858,23 @@ do
   check("dig: primo dig attiva active", st.active == true)
   NebbieDash.digAutoStop(nil)
   check("dig: stop spegne armed/active", st.armed == false and st.active == false)
+  check("dig: isDigCommand dig", NebbieDash.isDigCommand("dig") == true)
+  check("dig: isDigCommand trim", NebbieDash.isDigCommand("  DIG\n") == true)
+  check("dig: isDigCommand no args", NebbieDash.isDigCommand("dig vena") == false)
+  st.armed = true
+  st.active = false
+  check("dig: ensureActiveFromWorld da armed",
+    NebbieDash.digAutoEnsureActiveFromWorld() == true and st.active == true)
+  st.armed = false
+  st.active = false
+  check("dig: ensureActiveFromWorld senza armed",
+    NebbieDash.digAutoEnsureActiveFromWorld() == false and st.active == false)
+  -- onDataSendRequest attiva se armed
+  st.armed = true
+  st.active = false
+  NebbieDash.onDataSendRequest(nil, "dig")
+  check("dig: onDataSendRequest attiva", st.active == true)
+  NebbieDash.digAutoStop(nil)
   local osname = NebbieDash.detectHostOs()
   check("dig: detectHostOs noto",
     osname == "linux" or osname == "windows" or osname == "macos")
