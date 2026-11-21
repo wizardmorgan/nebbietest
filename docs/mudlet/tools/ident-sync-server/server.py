@@ -11,9 +11,12 @@ Endpoints:
   GET  /v1/config/files
   GET  /v1/config?file=NAME&page=1&page_size=40
   POST /v1/config/merge  body: {"files": {name: {"entries": {key: value}}}}
+  GET  /v1/ach?toon=NAME&page=1&page_size=30
+  POST /v1/ach/merge     body: {"toons": {name: {"lista": {...}, "aggiornato": "..."}}}
 
 Ident merge: higher lastAt wins; byCharacter unioned.
 Config merge: **additive only** — insert missing keys, never overwrite values.
+Ach merge: per-toon lista; higher prog wins (tie → higher t).
 """
 from __future__ import annotations
 
@@ -35,17 +38,26 @@ CONFIG_DATA_PATH = Path(
         str(DATA_PATH.parent / "config-db.json"),
     )
 ).resolve()
+ACH_DATA_PATH = Path(
+    os.environ.get(
+        "NEBBIE_ACH_DATA",
+        str(DATA_PATH.parent / "ach-db.json"),
+    )
+).resolve()
 HOST = os.environ.get("NEBBIE_IDENT_HOST", "127.0.0.1")
 PORT = int(os.environ.get("NEBBIE_IDENT_PORT", "8787"))
 PAGE_SIZE_DEFAULT = int(os.environ.get("NEBBIE_IDENT_PAGE_SIZE", "5"))
 PAGE_SIZE_MAX = int(os.environ.get("NEBBIE_IDENT_PAGE_SIZE_MAX", "15"))
 CONFIG_PAGE_SIZE_DEFAULT = int(os.environ.get("NEBBIE_CONFIG_PAGE_SIZE", "40"))
 CONFIG_PAGE_SIZE_MAX = int(os.environ.get("NEBBIE_CONFIG_PAGE_SIZE_MAX", "80"))
+ACH_PAGE_SIZE_DEFAULT = int(os.environ.get("NEBBIE_ACH_PAGE_SIZE", "30"))
+ACH_PAGE_SIZE_MAX = int(os.environ.get("NEBBIE_ACH_PAGE_SIZE_MAX", "60"))
 # Keep Mudlet getHTTP response under ~10k chars.
 MAX_RESPONSE_CHARS = int(os.environ.get("NEBBIE_IDENT_MAX_RESPONSE_CHARS", "9000"))
 
 _lock = threading.RLock()
 _config_lock = threading.RLock()
+_ach_lock = threading.RLock()
 
 
 def _empty_db() -> dict[str, Any]:
@@ -54,6 +66,196 @@ def _empty_db() -> dict[str, Any]:
 
 def _empty_config_db() -> dict[str, Any]:
     return {"files": {}, "updated_at": 0}
+
+
+def _empty_ach_db() -> dict[str, Any]:
+    return {"toons": {}, "updated_at": 0}
+
+
+def _ach_int(v: Any, default: int = 0) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def normalize_ach_entry(entry: Any) -> dict[str, Any] | None:
+    if not isinstance(entry, dict):
+        return None
+    nome = str(entry.get("nome") or "").strip()
+    if nome == "":
+        return None
+    return {
+        "num": _ach_int(entry.get("num"), 0),
+        "nome": nome,
+        "cat": str(entry.get("cat") or ""),
+        "prog": _ach_int(entry.get("prog"), 0),
+        "max": _ach_int(entry.get("max"), 0),
+        "cont": str(entry.get("cont") or ""),
+        "t": _ach_int(entry.get("t"), 0),
+    }
+
+
+def merge_ach_entry(
+    existing: Any, incoming: Any
+) -> tuple[dict[str, Any] | None, str]:
+    a = normalize_ach_entry(existing)
+    b = normalize_ach_entry(incoming)
+    if a is None and b is None:
+        return None, "skip"
+    if a is None:
+        return b, "inserted"
+    if b is None:
+        return a, "unchanged"
+    if b["prog"] > a["prog"] or (b["prog"] == a["prog"] and b["t"] > a["t"]):
+        out = dict(b)
+        out["max"] = max(a["max"], b["max"])
+        if out["cat"] == "" and a["cat"]:
+            out["cat"] = a["cat"]
+        if out["cont"] == "" and a["cont"]:
+            out["cont"] = a["cont"]
+        return out, "updated"
+    out = dict(a)
+    out["max"] = max(a["max"], b["max"])
+    if out["cat"] == "" and b["cat"]:
+        out["cat"] = b["cat"]
+    if out["cont"] == "" and b["cont"]:
+        out["cont"] = b["cont"]
+    return out, "unchanged"
+
+
+def merge_ach_toon(
+    existing: Any, incoming: Any
+) -> tuple[dict[str, Any], dict[str, int]]:
+    cur = existing if isinstance(existing, dict) else {}
+    inc = incoming if isinstance(incoming, dict) else {}
+    cur_lista = cur.get("lista") if isinstance(cur.get("lista"), dict) else {}
+    inc_lista = inc.get("lista") if isinstance(inc.get("lista"), dict) else {}
+    out_lista: dict[str, Any] = dict(cur_lista)
+    stats = {"inserted": 0, "updated": 0, "unchanged": 0}
+    for key, entry in inc_lista.items():
+        name = str(key or "").strip()
+        if name == "":
+            continue
+        merged, status = merge_ach_entry(out_lista.get(name), entry)
+        if merged is None:
+            continue
+        if status == "inserted":
+            stats["inserted"] += 1
+        elif status == "updated":
+            stats["updated"] += 1
+        else:
+            stats["unchanged"] += 1
+        out_lista[name] = merged
+    aggiornato = str(inc.get("aggiornato") or cur.get("aggiornato") or "")
+    # Prefer incoming aggiornato if any progress changed or incoming has stamp.
+    if stats["inserted"] or stats["updated"]:
+        if not aggiornato:
+            aggiornato = str(inc.get("aggiornato") or cur.get("aggiornato") or "")
+        elif inc.get("aggiornato"):
+            aggiornato = str(inc.get("aggiornato"))
+    updated_at = max(_ach_int(cur.get("updated_at")), _ach_int(inc.get("updated_at")), int(time.time()) if (stats["inserted"] or stats["updated"]) else 0)
+    if not (stats["inserted"] or stats["updated"]):
+        updated_at = max(_ach_int(cur.get("updated_at")), _ach_int(inc.get("updated_at")))
+    return {
+        "lista": out_lista,
+        "aggiornato": aggiornato,
+        "updated_at": updated_at,
+    }, stats
+
+
+def merge_ach_toons(
+    server_toons: dict[str, Any], incoming_toons: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, int]]:
+    out = dict(server_toons)
+    totals = {"inserted": 0, "updated": 0, "unchanged": 0, "toons_touched": 0}
+    for name, blob in incoming_toons.items():
+        toon = str(name or "").strip()
+        if toon == "" or not isinstance(blob, dict):
+            continue
+        merged, stats = merge_ach_toon(out.get(toon), blob)
+        if stats["inserted"] or stats["updated"]:
+            totals["toons_touched"] += 1
+        totals["inserted"] += stats["inserted"]
+        totals["updated"] += stats["updated"]
+        totals["unchanged"] += stats["unchanged"]
+        out[toon] = merged
+    return out, totals
+
+
+def load_ach_db() -> dict[str, Any]:
+    with _ach_lock:
+        if not ACH_DATA_PATH.exists():
+            return _empty_ach_db()
+        try:
+            raw = json.loads(ACH_DATA_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return _empty_ach_db()
+        if not isinstance(raw, dict):
+            return _empty_ach_db()
+        toons_in = raw.get("toons")
+        if not isinstance(toons_in, dict):
+            toons_in = {}
+        toons: dict[str, Any] = {}
+        for name, blob in toons_in.items():
+            if not isinstance(name, str) or name == "" or not isinstance(blob, dict):
+                continue
+            lista_in = blob.get("lista") if isinstance(blob.get("lista"), dict) else {}
+            lista: dict[str, Any] = {}
+            for k, e in lista_in.items():
+                ne = normalize_ach_entry(e)
+                if ne:
+                    lista[str(k)] = ne
+            toons[name] = {
+                "lista": lista,
+                "aggiornato": str(blob.get("aggiornato") or ""),
+                "updated_at": _ach_int(blob.get("updated_at")),
+            }
+        return {"toons": toons, "updated_at": _ach_int(raw.get("updated_at"))}
+
+
+def save_ach_db(db: dict[str, Any]) -> None:
+    with _ach_lock:
+        ACH_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = ACH_DATA_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(db, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        tmp.replace(ACH_DATA_PATH)
+
+
+def ach_page_payload(
+    toon_blob: dict[str, Any], toon: str, page: int, page_size: int
+) -> dict[str, Any]:
+    lista = toon_blob.get("lista") if isinstance(toon_blob, dict) else {}
+    if not isinstance(lista, dict):
+        lista = {}
+    keys = sorted(lista.keys())
+    total = len(keys)
+    pages = max(1, (total + page_size - 1) // page_size) if total else 1
+    page = max(1, page)
+    if page > pages:
+        page = pages
+    start = (page - 1) * page_size
+    end = start + page_size
+    slice_keys = keys[start:end]
+    slice_lista = {k: lista[k] for k in slice_keys}
+    while True:
+        payload = {
+            "ok": True,
+            "toon": toon,
+            "page": page,
+            "page_size": page_size,
+            "pages": pages,
+            "total": total,
+            "aggiornato": str(toon_blob.get("aggiornato") or "") if isinstance(toon_blob, dict) else "",
+            "updated_at": _ach_int(toon_blob.get("updated_at")) if isinstance(toon_blob, dict) else 0,
+            "lista": slice_lista,
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        if len(encoded) <= MAX_RESPONSE_CHARS or len(slice_lista) <= 1:
+            return payload
+        last = next(reversed(slice_lista))
+        del slice_lista[last]
+        page_size = max(1, len(slice_lista))
 
 
 def load_db() -> dict[str, Any]:
@@ -363,9 +565,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             db = load_db()
             cfg = load_config_db()
+            ach = load_ach_db()
             cfg_entries = sum(
                 len((blob.get("entries") or {}))
                 for blob in (cfg.get("files") or {}).values()
+                if isinstance(blob, dict)
+            )
+            ach_entries = sum(
+                len((blob.get("lista") or {}))
+                for blob in (ach.get("toons") or {}).values()
                 if isinstance(blob, dict)
             )
             self._send(
@@ -378,6 +586,9 @@ class Handler(BaseHTTPRequestHandler):
                     "config_files": len(cfg.get("files") or {}),
                     "config_entries": cfg_entries,
                     "config_updated_at": cfg.get("updated_at") or 0,
+                    "ach_toons": len(ach.get("toons") or {}),
+                    "ach_entries": ach_entries,
+                    "ach_updated_at": ach.get("updated_at") or 0,
                 },
             )
             return
@@ -452,6 +663,33 @@ class Handler(BaseHTTPRequestHandler):
             }
             self._send(200, config_page_payload(blob, file_name, page, page_size))
             return
+        if path == "/v1/ach":
+            if not self._check_auth():
+                return
+            qs = parse_qs(parsed.query)
+            toon = ((qs.get("toon") or [""])[0] or "").strip()
+            if toon == "":
+                self._send(400, {"ok": False, "error": "missing_toon"})
+                return
+            try:
+                page = int((qs.get("page") or ["1"])[0])
+            except ValueError:
+                page = 1
+            try:
+                page_size = int(
+                    (qs.get("page_size") or [str(ACH_PAGE_SIZE_DEFAULT)])[0]
+                )
+            except ValueError:
+                page_size = ACH_PAGE_SIZE_DEFAULT
+            page_size = max(1, min(page_size, ACH_PAGE_SIZE_MAX))
+            ach = load_ach_db()
+            blob = (ach.get("toons") or {}).get(toon) or {
+                "lista": {},
+                "aggiornato": "",
+                "updated_at": 0,
+            }
+            self._send(200, ach_page_payload(blob, toon, page, page_size))
+            return
         self._send(404, {"ok": False, "error": "not_found"})
 
     def do_POST(self) -> None:  # noqa: N802
@@ -511,6 +749,34 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
             return
+        if path == "/v1/ach/merge":
+            if not self._check_auth():
+                return
+            body = self._read_json()
+            if not isinstance(body, dict) or not isinstance(body.get("toons"), dict):
+                self._send(400, {"ok": False, "error": "invalid_body"})
+                return
+            with _ach_lock:
+                ach = load_ach_db()
+                merged_toons, stats = merge_ach_toons(ach.get("toons") or {}, body["toons"])
+                ach = {
+                    "toons": merged_toons,
+                    "updated_at": int(time.time()),
+                }
+                save_ach_db(ach)
+            self._send(
+                200,
+                {
+                    "ok": True,
+                    "inserted": stats["inserted"],
+                    "updated": stats["updated"],
+                    "unchanged": stats["unchanged"],
+                    "toons_touched": stats["toons_touched"],
+                    "toons": len(merged_toons),
+                    "updated_at": ach["updated_at"],
+                },
+            )
+            return
         self._send(404, {"ok": False, "error": "not_found"})
 
 
@@ -526,10 +792,13 @@ def main() -> int:
     CONFIG_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not CONFIG_DATA_PATH.exists():
         save_config_db(_empty_config_db())
+    ACH_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not ACH_DATA_PATH.exists():
+        save_ach_db(_empty_ach_db())
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     sys.stderr.write(
-        "nebbie-ident-sync listening on http://%s:%s  ident=%s  config=%s\n"
-        % (HOST, PORT, DATA_PATH, CONFIG_DATA_PATH)
+        "nebbie-ident-sync listening on http://%s:%s  ident=%s  config=%s  ach=%s\n"
+        % (HOST, PORT, DATA_PATH, CONFIG_DATA_PATH, ACH_DATA_PATH)
     )
     try:
         httpd.serve_forever()

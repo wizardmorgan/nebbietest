@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.33+",
+check("package version 1.16.34+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.33"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.34"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2886,6 +2886,19 @@ do
   check("ach: toon separati",
     NebbieDash.achState().dati["NomiyaMaki"].lista["Altro skill"] == nil
       and NebbieDash.achState().dati["Altro"].lista["Altro skill"] ~= nil)
+  local merged, stM = NebbieDash.achMergeEntryLocal(
+    { nome = "X", prog = 10, max = 100, t = 1 },
+    { nome = "X", prog = 40, max = 100, t = 2 })
+  check("ach: merge local higher prog", stM == "updated" and merged.prog == 40)
+  local ins, upd = NebbieDash.achMergeListaIntoLocal("MergePG", {
+    ["Y"] = { nome = "Y", prog = 5, max = 10, cat = "Boss", t = 3 },
+  }, { aggiornato = "test" })
+  check("ach: merge lista insert",
+    ins == 1 and NebbieDash.achState().dati["MergePG"].lista["Y"].prog == 5)
+  check("ach: sync helpers presenti",
+    type(NebbieDash.achSyncPullToon) == "function"
+      and type(NebbieDash.achLoginPipeline) == "function"
+      and type(NebbieDash.achStartSilentRefresh) == "function")
 end
 
 -- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).

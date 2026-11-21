@@ -382,13 +382,19 @@ Finestra floating con gli achievement **separati per toon** (file
 nach                 # mostra / nasconde (anche Ctrl+Shift+A)
 nach refresh         # achievements all + paginazione automatica
 nach pg Nome         # guarda un altro toon gia' salvato
+nach sync|pull|push  # hub VPS (stesso token di nidentsync)
 nach status
 ```
+
+Preferenze (`nebbie-dash-preferences.txt`):
+- `ach_auto_refresh = on` — al login del toon: pull VPS + `achievements all` silenzioso
+- `ach_sync = on` — abilita pull/push (serve `ident_sync_token`)
 
 In finestra: filtro Race/Boss/Skill/Quest/Other, ordine % o "mancano",
 scalini sullo stesso contatore (solo il prossimo), aggiornamento live dalle
 righe `Race Achievement #N '…' p/m`.
 
+Sul VPS va aggiornato `tools/ident-sync-server` (endpoint `/v1/ach`).
 Disattiva lo script standalone "Nebbie Achievement" se lo avevi: altrimenti
 doppi trigger / doppia finestra.
 

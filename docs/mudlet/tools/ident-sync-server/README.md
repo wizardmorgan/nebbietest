@@ -35,6 +35,8 @@ curl -s http://127.0.0.1:8787/health
 | GET | `/v1/config/files` | Bearer | elenco file config syncati |
 | GET | `/v1/config?file=NAME&page=1` | Bearer | pagine entry di un file |
 | POST | `/v1/config/merge` | Bearer | body `{"files":{name:{"entries":{…}}}}` |
+| GET | `/v1/ach?toon=NAME&page=1` | Bearer | pagine lista achievement di un toon |
+| POST | `/v1/ach/merge` | Bearer | body `{"toons":{name:{"lista":{…}}}}` |
 
 Header: `Authorization: Bearer <token>` oppure `X-Nebbie-Token: <token>`.
 
@@ -43,6 +45,9 @@ Header: `Authorization: Bearer <token>` oppure `X-Nebbie-Token: <token>`.
 **Config merge**: **solo additivo** — inserisce chiavi mancanti, non
 sovrascrive valori già presenti. Dati in `NEBBIE_CONFIG_DATA` (default:
 stessa cartella di `ident-db.json` → `config-db.json`).
+
+**Ach merge**: per toon, per achievement; vince il `prog` più alto (pari → `t`
+più alto). Dati in `NEBBIE_ACH_DATA` (default `ach-db.json`).
 
 ## TLS / ufficio / Tailscale
 

@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.34 — 2026-11-21
+
+- **nach sync VPS**: `/v1/ach` sull'hub ident (stesso token); pull/push per
+  toon (merge per `prog`). Al login del toon: pull + `achievements all`
+  silenzioso (`ach_auto_refresh` / `ach_sync`). Richiede aggiornamento
+  `tools/ident-sync-server` sul VPS.
+
 ## 1.16.33 — 2026-11-21
 
 - **nach / nachievements**: finestra achievement per toon (port Nebbie

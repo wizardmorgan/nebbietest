@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.33"
+local PKG_VER = "1.16.34"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -717,6 +717,8 @@ function NebbieDash.ensurePreferencesFile()
     "ident_sync_on_boot = off\n" ..
     "ident_sync_skip_prompt = off\n" ..
     "ident_exclude_chars = Sirio\n" ..
+    "ach_auto_refresh = on\n" ..
+    "ach_sync = on\n" ..
     "auto_install_convert_to_userwindow = on\n"
   )
   f:close()
@@ -744,6 +746,8 @@ function NebbieDash.loadPreferences()
     ident_sync_on_boot = false,
     ident_sync_skip_prompt = false,
     ident_exclude_chars = "Sirio",
+    ach_auto_refresh = true,
+    ach_sync = true,
     auto_install_convert_to_userwindow = true,
   }
   local path = NebbieDash.preferencesPath()
@@ -784,6 +788,10 @@ function NebbieDash.loadPreferences()
             NebbieDash.prefs.ident_sync_skip_prompt = NebbieDash.parsePreferencesBool(val)
           elseif key == "ident_exclude_chars" then
             NebbieDash.prefs.ident_exclude_chars = val
+          elseif key == "ach_auto_refresh" then
+            NebbieDash.prefs.ach_auto_refresh = NebbieDash.parsePreferencesBool(val)
+          elseif key == "ach_sync" then
+            NebbieDash.prefs.ach_sync = NebbieDash.parsePreferencesBool(val)
           elseif key == "auto_install_convert_to_userwindow" then
             NebbieDash.prefs.auto_install_convert_to_userwindow = NebbieDash.parsePreferencesBool(val)
           end
@@ -802,6 +810,12 @@ function NebbieDash.loadPreferences()
   end
   if NebbieDash.prefs.ident_exclude_chars == nil or NebbieDash.prefs.ident_exclude_chars == "" then
     NebbieDash.prefs.ident_exclude_chars = "Sirio"
+  end
+  if NebbieDash.prefs.ach_auto_refresh == nil then
+    NebbieDash.prefs.ach_auto_refresh = true
+  end
+  if NebbieDash.prefs.ach_sync == nil then
+    NebbieDash.prefs.ach_sync = true
   end
   if NebbieDash.prefs.auto_install_convert_to_userwindow == nil then
     NebbieDash.prefs.auto_install_convert_to_userwindow = true
@@ -829,6 +843,8 @@ function NebbieDash.savePreferencesFile()
     "ident_sync_on_boot = " .. ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_on_boot) and "on" or "off") .. "\n" ..
     "ident_sync_skip_prompt = " .. ((NebbieDash.prefs and NebbieDash.prefs.ident_sync_skip_prompt) and "on" or "off") .. "\n" ..
     "ident_exclude_chars = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_exclude_chars) or "Sirio") .. "\n" ..
+    "ach_auto_refresh = " .. ((NebbieDash.prefs and NebbieDash.prefs.ach_auto_refresh ~= false) and "on" or "off") .. "\n" ..
+    "ach_sync = " .. ((NebbieDash.prefs and NebbieDash.prefs.ach_sync ~= false) and "on" or "off") .. "\n" ..
     "auto_install_convert_to_userwindow = " ..
       ((NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow ~= false) and "on" or "off") .. "\n"
   )
@@ -1061,6 +1077,9 @@ function NebbieDash.onConnectionEvent()
   NebbieDash.resetGoldAlertBaseline(nil)
   NebbieDash._awaitingPromptAfterConnect = true
   NebbieDash._sanityNeqForChar = {}
+  if NebbieDash._ach then
+    NebbieDash._ach.autoDone = {}
+  end
   NebbieDash.refreshDashboard()
   -- Avviso update: al connect (throttled 6h); reminder se gia' noto che sei indietro.
   tempTimer(2.5, function()
@@ -3753,17 +3772,22 @@ function NebbieDash.achBeginRead()
   local st = NebbieDash.achState()
   local pg = NebbieDash.achActivePg()
   if not pg then
-    cecho("<orange>[NebbieDash] Ach: nessun PG attivo — attendi il prompt o nchar.\n")
+    if not st.silentRefresh then
+      cecho("<orange>[NebbieDash] Ach: nessun PG attivo — attendi il prompt o nchar.\n")
+    end
     st.lettura = nil
+    st.silentRefresh = false
     return
   end
-  st.lettura = { pg = pg, cat = "", lista = {}, nuove = 0 }
+  st.lettura = { pg = pg, cat = "", lista = {}, nuove = 0, silent = st.silentRefresh and true or false }
 end
 
 function NebbieDash.achFinishRead()
   local st = NebbieDash.achState()
   local r = st.lettura
+  local wasSilent = st.silentRefresh or (r and r.silent)
   st.lettura = nil
+  st.silentRefresh = false
   if st.endTimer and type(killTimer) == "function" then
     pcall(killTimer, st.endTimer)
   end
@@ -3774,10 +3798,18 @@ function NebbieDash.achFinishRead()
   NebbieDash.achSave(r.pg)
   local n = 0
   for _ in pairs(r.lista) do n = n + 1 end
-  cecho(string.format(
-    "\n<cyan>[NebbieDash] Ach: <yellow>%s<cyan>: %d achievement memorizzati.\n",
-    r.pg, n))
+  if wasSilent then
+    cecho(string.format(
+      "<grey>[NebbieDash] Ach: %s aggiornato in silenzio (%d).\n", r.pg, n))
+  else
+    cecho(string.format(
+      "\n<cyan>[NebbieDash] Ach: <yellow>%s<cyan>: %d achievement memorizzati.\n",
+      r.pg, n))
+  end
   if st.visible then NebbieDash.achDraw() end
+  if type(NebbieDash.achSyncPushToon) == "function" then
+    NebbieDash.achSyncPushToon(r.pg, { quiet = true })
+  end
 end
 
 function NebbieDash.achUpdateLive(cat, nome, prog, maxv)
@@ -3805,6 +3837,32 @@ function NebbieDash.achUpdateLive(cat, nome, prog, maxv)
   end
   NebbieDash.achSave(pg)
   if st.visible then NebbieDash.achDraw() end
+  if type(NebbieDash.achScheduleSyncPush) == "function" then
+    NebbieDash.achScheduleSyncPush(pg)
+  end
+end
+
+function NebbieDash.achScheduleSyncPush(pg)
+  if not pg or pg == "" then return end
+  if type(NebbieDash.achSyncEnabled) ~= "function" or not NebbieDash.achSyncEnabled() then
+    return
+  end
+  local st = NebbieDash.achState()
+  st.pushPending = pg
+  if st.pushTimer and type(killTimer) == "function" then
+    pcall(killTimer, st.pushTimer)
+  end
+  if type(tempTimer) ~= "function" then
+    NebbieDash.achSyncPushToon(pg, { quiet = true })
+    return
+  end
+  st.pushTimer = tempTimer(20, function()
+    local s = NebbieDash.achState()
+    s.pushTimer = nil
+    local who = s.pushPending
+    s.pushPending = nil
+    if who then NebbieDash.achSyncPushToon(who, { quiet = true }) end
+  end)
 end
 
 function NebbieDash.achOnPrompt()
@@ -3820,11 +3878,15 @@ end
 
 function NebbieDash.achOnCharacterChanged(name)
   local st = NebbieDash.achState()
-  if not st.visible then return end
   if name and name ~= "" then
-    st.vista.pg = name
-    NebbieDash.achLoad(name)
-    NebbieDash.achDraw()
+    if st.visible then
+      st.vista.pg = name
+      NebbieDash.achLoad(name)
+      NebbieDash.achDraw()
+    end
+    if type(NebbieDash.achMaybeAutoOnLogin) == "function" then
+      NebbieDash.achMaybeAutoOnLogin(name, "char")
+    end
   end
 end
 
@@ -4192,7 +4254,9 @@ function NebbieDash.printAchHelp()
   cecho("<yellow>  nach refresh<white>         Manda achievements all (PG attivo).\n")
   cecho("<yellow>  nach status<white>          PG attivo, file, conteggio.\n")
   cecho("<yellow>  nach pg <nome><white>       Mostra i dati di un altro toon.\n")
+  cecho("<yellow>  nach sync|pull|push<white>  Sync VPS (stesso token di nidentsync).\n")
   cecho("<grey>  Hotkey: Ctrl+Shift+A. File: ndashboard/achievement/<PG>.lua\n")
+  cecho("<grey>  Al login: pull VPS + refresh silenzioso (ach_auto_refresh / ach_sync).\n")
 end
 
 function NebbieDash.cmdAch(argStr)
@@ -4254,7 +4318,369 @@ function NebbieDash.cmdAch(argStr)
     end
     return
   end
+  if mode == "sync" then
+    local pg = NebbieDash.achActivePg()
+    if not pg then
+      cecho("<orange>[NebbieDash] Ach: nessun PG attivo.\n")
+      return
+    end
+    NebbieDash.achSyncPullToon(pg, function()
+      NebbieDash.achSyncPushToon(pg, { quiet = false })
+    end)
+    return
+  end
+  if mode == "pull" then
+    local pg = NebbieDash.achActivePg() or rest
+    if not pg or pg == "" then
+      cecho("<orange>[NebbieDash] Ach: nessun PG.\n")
+      return
+    end
+    NebbieDash.achSyncPullToon(pg)
+    return
+  end
+  if mode == "push" then
+    local pg = NebbieDash.achActivePg() or rest
+    if not pg or pg == "" then
+      cecho("<orange>[NebbieDash] Ach: nessun PG.\n")
+      return
+    end
+    NebbieDash.achSyncPushToon(pg, { quiet = false })
+    return
+  end
   NebbieDash.printAchHelp()
+end
+
+
+-- ---------------------------------------------------------------------------
+-- Achievement VPS sync (/v1/ach) + refresh silenzioso al login toon.
+-- Stesso hub/token di nidentsync. Merge: prog piu' alto vince.
+-- ---------------------------------------------------------------------------
+NebbieDash.ACH_SYNC_PAGE_SIZE = 30
+
+function NebbieDash.achSyncEnabled()
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  if NebbieDash.prefs.ach_sync == false then return false end
+  return NebbieDash.identSyncConfigured() and true or false
+end
+
+function NebbieDash.achSyncBusy()
+  return NebbieDash._achSync and NebbieDash._achSync.active and true or false
+end
+
+function NebbieDash.achSyncAbort(msg)
+  if NebbieDash._achSync then NebbieDash._achSync.active = false end
+  if msg and msg ~= "" then
+    cecho("<orange>[NebbieDash] Ach sync: " .. tostring(msg) .. "\n")
+  end
+end
+
+function NebbieDash.ensureAchSyncHttpHandlers()
+  if NebbieDash._achSyncHttpHandlers then return end
+  if type(registerAnonymousEventHandler) ~= "function" then return end
+  registerAnonymousEventHandler("sysGetHttpDone", "NebbieDash.onAchSyncGetDone")
+  registerAnonymousEventHandler("sysGetHttpError", "NebbieDash.onAchSyncGetError")
+  registerAnonymousEventHandler("sysPostHttpDone", "NebbieDash.onAchSyncPostDone")
+  registerAnonymousEventHandler("sysPostHttpError", "NebbieDash.onAchSyncPostError")
+  NebbieDash._achSyncHttpHandlers = true
+end
+
+function NebbieDash.achSyncIsOurUrl(url)
+  local st = NebbieDash._achSync
+  if not (st and st.base and type(url) == "string") then return false end
+  return url:find(st.base, 1, true) ~= nil and url:find("/v1/ach", 1, true) ~= nil
+end
+
+function NebbieDash.achNormalizeEntry(e)
+  if type(e) ~= "table" then return nil end
+  local nome = NebbieDash.achTrim(e.nome or "")
+  if nome == "" then return nil end
+  return {
+    num = tonumber(e.num) or 0,
+    nome = nome,
+    cat = tostring(e.cat or ""),
+    prog = tonumber(e.prog) or 0,
+    max = tonumber(e.max) or 0,
+    cont = tostring(e.cont or ""),
+    t = tonumber(e.t) or 0,
+  }
+end
+
+function NebbieDash.achMergeEntryLocal(existing, incoming)
+  local a = NebbieDash.achNormalizeEntry(existing)
+  local b = NebbieDash.achNormalizeEntry(incoming)
+  if not a and not b then return nil, "skip" end
+  if not a then return b, "inserted" end
+  if not b then return a, "unchanged" end
+  if b.prog > a.prog or (b.prog == a.prog and b.t > a.t) then
+    local out = b
+    out.max = math.max(a.max, b.max)
+    if out.cat == "" and a.cat ~= "" then out.cat = a.cat end
+    if out.cont == "" and a.cont ~= "" then out.cont = a.cont end
+    return out, "updated"
+  end
+  local out = a
+  out.max = math.max(a.max, b.max)
+  if out.cat == "" and b.cat ~= "" then out.cat = b.cat end
+  if out.cont == "" and b.cont ~= "" then out.cont = b.cont end
+  return out, "unchanged"
+end
+
+function NebbieDash.achMergeListaIntoLocal(pg, remoteLista, meta)
+  if not pg or type(remoteLista) ~= "table" then return 0, 0 end
+  local d = NebbieDash.achLoad(pg)
+  d.lista = d.lista or {}
+  local ins, upd = 0, 0
+  for nome, entry in pairs(remoteLista) do
+    local key = NebbieDash.achTrim(nome)
+    if key ~= "" then
+      local merged, status = NebbieDash.achMergeEntryLocal(d.lista[key], entry)
+      if merged then
+        if status == "inserted" then ins = ins + 1
+        elseif status == "updated" then upd = upd + 1 end
+        d.lista[key] = merged
+      end
+    end
+  end
+  if meta and meta.aggiornato and meta.aggiornato ~= "" then
+    if not d.aggiornato or d.aggiornato == "" or ins > 0 or upd > 0 then
+      d.aggiornato = meta.aggiornato
+    end
+  end
+  if ins > 0 or upd > 0 then
+    NebbieDash.achSave(pg)
+  end
+  return ins, upd
+end
+
+function NebbieDash.achExportToonPayload(pg)
+  local d = NebbieDash.achLoad(pg)
+  local lista = {}
+  for nome, e in pairs(d.lista or {}) do
+    local ne = NebbieDash.achNormalizeEntry(e)
+    if ne then lista[nome] = ne end
+  end
+  return {
+    aggiornato = d.aggiornato or "",
+    updated_at = os.time(),
+    lista = lista,
+  }
+end
+
+function NebbieDash.achStartSilentRefresh(pg)
+  local st = NebbieDash.achState()
+  if st.lettura then return end
+  if NebbieDash.achActivePg() ~= pg then return end
+  st.silentRefresh = true
+  send("achievements all", false)
+end
+
+function NebbieDash.achMaybeAutoOnLogin(pg, reason)
+  if not pg or pg == "" then return end
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  if NebbieDash.prefs.ach_auto_refresh == false then return end
+  local st = NebbieDash.achState()
+  st.autoDone = st.autoDone or {}
+  if st.autoDone[pg] then return end
+  if st.lettura then return end
+  st.autoDone[pg] = true
+  if type(tempTimer) ~= "function" then
+    NebbieDash.achLoginPipeline(pg)
+    return
+  end
+  tempTimer(3.0, function()
+    if NebbieDash.achActivePg() ~= pg then return end
+    NebbieDash.achLoginPipeline(pg)
+  end)
+end
+
+function NebbieDash.achLoginPipeline(pg)
+  local function afterPull()
+    NebbieDash.achStartSilentRefresh(pg)
+  end
+  if NebbieDash.achSyncEnabled() then
+    NebbieDash.achSyncPullToon(pg, afterPull, { quiet = true })
+  else
+    afterPull()
+  end
+end
+
+function NebbieDash.achSyncPullToon(pg, onDone, opts)
+  opts = opts or {}
+  if not pg or pg == "" then
+    if onDone then onDone(false) end
+    return
+  end
+  if not NebbieDash.achSyncEnabled() then
+    if not opts.quiet then
+      cecho("<orange>[NebbieDash] Ach sync: token/URL assenti (nidentsync) o ach_sync=off.\n")
+    end
+    if onDone then onDone(false) end
+    return
+  end
+  if NebbieDash.achSyncBusy() then
+    if not opts.quiet then
+      cecho("<orange>[NebbieDash] Ach sync: gia' in corso.\n")
+    end
+    if onDone then onDone(false) end
+    return
+  end
+  local okCfg, base = NebbieDash.identSyncConfigured()
+  if not okCfg then
+    if onDone then onDone(false) end
+    return
+  end
+  NebbieDash.ensureAchSyncHttpHandlers()
+  NebbieDash._achSync = {
+    active = true,
+    mode = "pull",
+    base = base,
+    pg = pg,
+    page = 1,
+    inserted = 0,
+    updated = 0,
+    onDone = onDone,
+    quiet = opts.quiet and true or false,
+  }
+  if not opts.quiet then
+    cecho("<grey>[NebbieDash] Ach: pull VPS per <white>" .. pg .. "<grey>...\n")
+  end
+  NebbieDash.achSyncRequestPage(pg, 1)
+end
+
+function NebbieDash.achSyncRequestPage(pg, page)
+  local st = NebbieDash._achSync
+  if not (st and st.active) then return end
+  local url = string.format(
+    "%s/v1/ach?toon=%s&page=%d&page_size=%d",
+    st.base,
+    (tostring(pg):gsub("[^%w_%-]", function(c)
+      return string.format("%%%02X", string.byte(c))
+    end)),
+    page,
+    NebbieDash.ACH_SYNC_PAGE_SIZE or 30)
+  st.expectUrl = url
+  local headers = NebbieDash.identSyncHeaders()
+  if type(getHTTP) ~= "function" then
+    NebbieDash.achSyncAbort("getHTTP non disponibile")
+    if st.onDone then st.onDone(false) end
+    return
+  end
+  local ok, err = pcall(getHTTP, url, headers)
+  if not ok then
+    NebbieDash.achSyncAbort("getHTTP fallita: " .. tostring(err))
+    if st.onDone then st.onDone(false) end
+  end
+end
+
+function NebbieDash.onAchSyncGetDone(event, url, body)
+  if not NebbieDash.achSyncIsOurUrl(url) then return end
+  local st = NebbieDash._achSync
+  if not (st and st.active and st.mode == "pull") then return end
+  local data = NebbieDash.jsonDecode(body or "")
+  if type(data) ~= "table" or data.ok == false then
+    NebbieDash.achSyncAbort("risposta pull non valida")
+    if st.onDone then st.onDone(false) end
+    return
+  end
+  local ins, upd = NebbieDash.achMergeListaIntoLocal(
+    st.pg, data.lista or {}, { aggiornato = data.aggiornato })
+  st.inserted = (st.inserted or 0) + (ins or 0)
+  st.updated = (st.updated or 0) + (upd or 0)
+  local page = tonumber(data.page) or 1
+  local pages = tonumber(data.pages) or 1
+  if page < pages then
+    NebbieDash.achSyncRequestPage(st.pg, page + 1)
+    return
+  end
+  st.active = false
+  if not st.quiet then
+    cecho(string.format(
+      "<green>[NebbieDash] Ach pull %s: +%d nuovi, %d aggiornati.\n",
+      st.pg, st.inserted or 0, st.updated or 0))
+  end
+  local cb = st.onDone
+  st.onDone = nil
+  if NebbieDash.achState().visible then NebbieDash.achDraw() end
+  if cb then cb(true) end
+end
+
+function NebbieDash.onAchSyncGetError(event, url, err)
+  if url and not NebbieDash.achSyncIsOurUrl(url) then return end
+  local st = NebbieDash._achSync
+  if not (st and st.active and st.mode == "pull") then return end
+  NebbieDash.achSyncAbort("errore GET: " .. tostring(err))
+  if st.onDone then st.onDone(false) end
+end
+
+function NebbieDash.achSyncPushToon(pg, opts)
+  opts = opts or {}
+  if not pg or pg == "" then return end
+  if not NebbieDash.achSyncEnabled() then
+    if not opts.quiet then
+      cecho("<orange>[NebbieDash] Ach sync: non configurato.\n")
+    end
+    return
+  end
+  if type(postHTTP) ~= "function" then
+    if not opts.quiet then
+      cecho("<orange>[NebbieDash] Ach sync: postHTTP non disponibile.\n")
+    end
+    return
+  end
+  local okCfg, base = NebbieDash.identSyncConfigured()
+  if not okCfg then return end
+  NebbieDash.ensureAchSyncHttpHandlers()
+  local payload = {
+    toons = {
+      [pg] = NebbieDash.achExportToonPayload(pg),
+    },
+  }
+  local body = NebbieDash.jsonEncode(payload)
+  if not body then
+    if not opts.quiet then
+      cecho("<orange>[NebbieDash] Ach sync: JSON encode fallita.\n")
+    end
+    return
+  end
+  NebbieDash._achSync = {
+    active = true,
+    mode = "push",
+    base = base,
+    pg = pg,
+    quiet = opts.quiet and true or false,
+  }
+  local url = base .. "/v1/ach/merge"
+  local headers = NebbieDash.identSyncHeaders()
+  local ok, err = pcall(postHTTP, body, url, headers)
+  if not ok then
+    NebbieDash.achSyncAbort("postHTTP fallita: " .. tostring(err))
+  elseif not opts.quiet then
+    cecho("<grey>[NebbieDash] Ach: push VPS <white>" .. pg .. "<grey>...\n")
+  end
+end
+
+function NebbieDash.onAchSyncPostDone(event, url, body)
+  if not NebbieDash.achSyncIsOurUrl(url) then return end
+  local st = NebbieDash._achSync
+  if not (st and st.active and st.mode == "push") then return end
+  st.active = false
+  local data = NebbieDash.jsonDecode(body or "")
+  if not st.quiet then
+    if type(data) == "table" and data.ok then
+      cecho(string.format(
+        "<green>[NebbieDash] Ach push ok (+%s / ~%s).\n",
+        tostring(data.inserted or 0), tostring(data.updated or 0)))
+    else
+      cecho("<orange>[NebbieDash] Ach push: risposta anomala.\n")
+    end
+  end
+end
+
+function NebbieDash.onAchSyncPostError(event, url, err)
+  if url and not NebbieDash.achSyncIsOurUrl(url) then return end
+  local st = NebbieDash._achSync
+  if not (st and st.active and st.mode == "push") then return end
+  NebbieDash.achSyncAbort("errore POST: " .. tostring(err))
 end
 
 
@@ -6335,6 +6761,7 @@ NebbieDash.HELP_TEXT = {
   { "nach pg <nome>", "Mostra i dati di un altro toon." },
   { "nach refresh", "Manda achievements all e memorizza (PG attivo)." },
   { "nach status", "PG attivo, vista, conteggio, cartella file." },
+  { "nach sync|pull|push", "Sync achievement VPS (stesso token nidentsync)." },
 
   { section = "Identify e know" },
   { "nidentbatch …", "Batch identify admin (oload + identify; profilo Sirio)." },
