@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.41"
+local PKG_VER = "1.16.42"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -4411,8 +4411,7 @@ function NebbieDash.onAchLiveUpdateLine()
   NebbieDash.achUpdateLive(cat, nome, NebbieDash.achParseNum(p), NebbieDash.achParseNum(m))
 end
 
-function NebbieDash.achHotkeyLabel()
-  -- Su macOS Control (ctrl) != Command (cmd = Meta in Mudlet/Qt).
+function NebbieDash.achIsMacOs()
   local osName = ""
   if type(NebbieDash.detectHostOs) == "function" then
     osName = tostring(NebbieDash.detectHostOs() or "")
@@ -4421,8 +4420,14 @@ function NebbieDash.achHotkeyLabel()
     if ok then osName = tostring(v or "") end
   end
   osName = osName:lower()
-  if osName:find("mac", 1, true) or osName:find("darwin", 1, true) then
-    return "Ctrl+Shift+A oppure Cmd+Shift+A"
+  return osName:find("mac", 1, true) ~= nil or osName:find("darwin", 1, true) ~= nil
+end
+
+function NebbieDash.achHotkeyLabel()
+  -- Cmd+Shift+A su macOS e' del sistema (Search man Page Index) — non usarlo.
+  -- Control = tasto ctrl fisico; su Mac anche Option+Shift+A.
+  if NebbieDash.achIsMacOs() then
+    return "Control+Shift+A oppure Option+Shift+A"
   end
   return "Ctrl+Shift+A"
 end
@@ -4477,15 +4482,17 @@ function NebbieDash.installAchTriggers()
     addTrig(tempTrigger("Achievement #",
       [[NebbieDash.onAchLiveUpdateLine()]]))
   end
-  -- Hotkey: Control+Shift+A (Win/Linux/Mac Control) e Meta+Shift+A (Cmd su Mac).
+  -- Hotkey: Control+Shift+A ovunque.
+  -- Su Mac NON usiamo Cmd+Shift+A (conflitto macOS: Search man Page Index).
+  -- Alternativa Mac: Option+Shift+A (Alt+Shift+A in Mudlet).
   if type(tempKey) == "function" and mudlet and mudlet.keymodifier and mudlet.key then
-    local modsCtrl = mudlet.keymodifier.Control + mudlet.keymodifier.Shift
-    local modsCmd = mudlet.keymodifier.Meta + mudlet.keymodifier.Shift
     local keyA = mudlet.key.A
     local cb = function() NebbieDash.cmdAch("") end
-    addKey(tempKey(modsCtrl, keyA, cb))
-    if mudlet.keymodifier.Meta then
-      addKey(tempKey(modsCmd, keyA, cb))
+    addKey(tempKey(
+      mudlet.keymodifier.Control + mudlet.keymodifier.Shift, keyA, cb))
+    if NebbieDash.achIsMacOs() and mudlet.keymodifier.Alt then
+      addKey(tempKey(
+        mudlet.keymodifier.Alt + mudlet.keymodifier.Shift, keyA, cb))
     end
   end
 end
@@ -7006,7 +7013,7 @@ NebbieDash.HELP_TEXT = {
   { "nchat [on|off|clear]", "Finestra chat (say/gt/tell/send/telep/think/sign/…)." },
 
   { section = "Achievement" },
-  { "nach / nachievements", "Finestra achievement per toon (Ctrl/Cmd+Shift+A)." },
+  { "nach / nachievements", "Finestra achievement per toon (Ctrl+Shift+A; Mac anche Option+Shift+A)." },
   { "nach pg <nome>", "Mostra i dati di un altro toon." },
   { "nach refresh", "Manda achievements all e memorizza (PG attivo)." },
   { "nach status", "PG attivo, vista, conteggio, cartella file." },

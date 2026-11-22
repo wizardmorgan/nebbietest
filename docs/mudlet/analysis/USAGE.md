@@ -379,7 +379,7 @@ Finestra floating con gli achievement **separati per toon** (file
 `getMudletHomeDir()/achievement/`, vengono migrati alla prima lettura.
 
 ```
-nach                 # mostra / nasconde (Ctrl+Shift+A; su Mac anche Cmd+Shift+A)
+nach                 # mostra / nasconde (Ctrl+Shift+A; su Mac anche Option+Shift+A)
 nach refresh         # achievements all + paginazione automatica
 nach pg Nome         # guarda un altro toon gia' salvato
 nach sync|pull|push  # hub VPS (stesso token di nidentsync)

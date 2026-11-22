@@ -1,9 +1,16 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.42 — 2026-11-22
+
+- **nach hotkey Mac**: tolto **Cmd+Shift+A** (su macOS apre “Search man
+  Page Index in Terminal”). Resta **Control+Shift+A**; su Mac anche
+  **Option+Shift+A**.
+
 ## 1.16.41 — 2026-11-22
 
 - **nach hotkey Mac**: oltre a Control+Shift+A, anche **Cmd+Shift+A**
   (`Meta` in Mudlet). Su macOS Control e Command sono tasti diversi.
+  *(superseded da 1.16.42)*
 
 ## 1.16.40 — 2026-11-22
 
