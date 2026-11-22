@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.37+",
+check("package version 1.16.38+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.37"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.38"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2911,19 +2911,25 @@ do
 end
 
 
--- Font dashboard (nfont) indipendente da Mudlet main.
+-- Font dashboard (nfont) in preferenze font_size.
 do
-  NebbieDash.fontSize = 11
-  NebbieDash.uiState = NebbieDash.uiState or {}
+  NebbieDash.fontSize = 15
+  NebbieDash.prefs = NebbieDash.prefs or {}
   NebbieDash.persistEnabled = false
+  local oldSave = NebbieDash.savePreferencesFile
+  NebbieDash.savePreferencesFile = function() end
   NebbieDash.applyFontSizeToAllWindows(14)
-  check("font: applyFontSizeToAllWindows", NebbieDash.fontSize == 14)
+  check("font: applyFontSizeToAllWindows", NebbieDash.fontSize == 14
+    and NebbieDash.prefs.font_size == 14)
   NebbieDash.cmdSetFont("+")
   check("font: nfont +", NebbieDash.fontSize == 15)
   NebbieDash.cmdSetFont("-")
   check("font: nfont -", NebbieDash.fontSize == 14)
-  NebbieDash.cmdSetFont("11")
-  check("font: nfont 11", NebbieDash.fontSize == 11)
+  NebbieDash.cmdSetFont("15")
+  check("font: nfont 15", NebbieDash.fontSize == 15
+    and NebbieDash.prefs.font_size == 15)
+  check("font: default 15", (NebbieDash.prefs.font_size or 0) == 15)
+  NebbieDash.savePreferencesFile = oldSave
 end
 
 

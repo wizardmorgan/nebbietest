@@ -109,7 +109,7 @@ quando si aggiunge un alias.
 | `nchar <nome>` | Forza il personaggio attivo (es. `nchar NomiyaMaki`). |
 | `nclanslot <on\|off>` | Mostra/nasconde lo slot simbolo del clan. |
 | `neq` | Invia solo `eq` e aggiorna il pannello equip. |
-| `nfont [N\|+\|-]` | Font **dashboard** (equip/chat/nach/ident/…; default 11). Indipendente dal font Mudlet del main. Persistente. |
+| `nfont [N\|+\|-]` | Font **dashboard** (equip/chat/nach/ident/…; default **15**). In `nebbie-dash-preferences.txt` come `font_size`. Indipendente dal font Mudlet. |
 | `ngui` | Mostra/nasconde il pannello Equip. |
 | `nitemlen <n>` | Caratteri max descrizione oggetto prima di "…" (10–300). |
 | `nlayout` | Ripristina larghezza/font di default. |

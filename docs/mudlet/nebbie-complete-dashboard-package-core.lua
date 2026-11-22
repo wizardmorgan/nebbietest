@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.37"
+local PKG_VER = "1.16.38"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -713,6 +713,8 @@ function NebbieDash.ensurePreferencesFile()
     "ident_exclude_chars = Sirio\n" ..
     "ach_auto_refresh = on\n" ..
     "ach_sync = on\n" ..
+    "# font_size = 15            # font MiniConsole dashboard (nfont; non sync VPS)\n" ..
+    "font_size = 15\n" ..
     "auto_install_convert_to_userwindow = on\n"
   )
   f:close()
@@ -742,6 +744,7 @@ function NebbieDash.loadPreferences()
     ident_exclude_chars = "Sirio",
     ach_auto_refresh = true,
     ach_sync = true,
+    font_size = 15,
     auto_install_convert_to_userwindow = true,
   }
   local path = NebbieDash.preferencesPath()
@@ -786,6 +789,9 @@ function NebbieDash.loadPreferences()
             NebbieDash.prefs.ach_auto_refresh = NebbieDash.parsePreferencesBool(val)
           elseif key == "ach_sync" then
             NebbieDash.prefs.ach_sync = NebbieDash.parsePreferencesBool(val)
+          elseif key == "font_size" then
+            local n = tonumber(val)
+            if n and n >= 6 and n <= 24 then NebbieDash.prefs.font_size = math.floor(n) end
           elseif key == "auto_install_convert_to_userwindow" then
             NebbieDash.prefs.auto_install_convert_to_userwindow = NebbieDash.parsePreferencesBool(val)
           end
@@ -814,6 +820,20 @@ function NebbieDash.loadPreferences()
   if NebbieDash.prefs.auto_install_convert_to_userwindow == nil then
     NebbieDash.prefs.auto_install_convert_to_userwindow = true
   end
+  -- Migrazione one-shot da nebbie-dash-ui.lua (1.16.37) se prefs non ha font_size.
+  if NebbieDash.prefs.font_size == nil then
+    local legacy = NebbieDash.uiState and tonumber(NebbieDash.uiState.fontSize)
+    if legacy and legacy >= 6 and legacy <= 24 then
+      NebbieDash.prefs.font_size = math.floor(legacy)
+    else
+      NebbieDash.prefs.font_size = 15
+    end
+  end
+  local fs = tonumber(NebbieDash.prefs.font_size) or 15
+  if fs < 6 then fs = 6 end
+  if fs > 24 then fs = 24 end
+  NebbieDash.prefs.font_size = math.floor(fs)
+  NebbieDash.fontSize = NebbieDash.prefs.font_size
 end
 
 function NebbieDash.savePreferencesFile()
@@ -821,6 +841,9 @@ function NebbieDash.savePreferencesFile()
   local path = NebbieDash.preferencesPath()
   local f = io.open(path, "w")
   if not f then return end
+  local fontSize = tonumber(NebbieDash.fontSize)
+    or tonumber(NebbieDash.prefs and NebbieDash.prefs.font_size)
+    or 15
   f:write(
     "# NebbieDash — preferenze (npreferencesreload)\n" ..
     "sidebar_mode = " .. tostring(NebbieDash.sidebarMode or NebbieDash.prefs.sidebar_mode or "float") .. "\n" ..
@@ -839,6 +862,7 @@ function NebbieDash.savePreferencesFile()
     "ident_exclude_chars = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_exclude_chars) or "Sirio") .. "\n" ..
     "ach_auto_refresh = " .. ((NebbieDash.prefs and NebbieDash.prefs.ach_auto_refresh ~= false) and "on" or "off") .. "\n" ..
     "ach_sync = " .. ((NebbieDash.prefs and NebbieDash.prefs.ach_sync ~= false) and "on" or "off") .. "\n" ..
+    "font_size = " .. tostring(math.floor(fontSize)) .. "\n" ..
     "auto_install_convert_to_userwindow = " ..
       ((NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow ~= false) and "on" or "off") .. "\n"
   )
@@ -960,10 +984,7 @@ function NebbieDash.loadUiStore()
   if NebbieDash.uiState.showClanSlot == true then
     NebbieDash.showClanSlot = true
   end
-  local fs = tonumber(NebbieDash.uiState.fontSize)
-  if fs and fs >= 6 and fs <= 24 then
-    NebbieDash.fontSize = fs
-  end
+  -- font_size vive in nebbie-dash-preferences.txt (caricato dopo).
 end
 
 function NebbieDash.persistGuiRatios()
@@ -976,15 +997,19 @@ function NebbieDash.persistGuiRatios()
 end
 
 function NebbieDash.persistFontSize()
-  NebbieDash.uiState = NebbieDash.uiState or {}
-  NebbieDash.uiState.fontSize = NebbieDash.fontSize
-  NebbieDash.saveUiStore()
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  NebbieDash.prefs.font_size = NebbieDash.fontSize
+  if type(NebbieDash.savePreferencesFile) == "function" then
+    pcall(NebbieDash.savePreferencesFile)
+  end
 end
 
 -- Font delle MiniConsole NebbieDash (indipendente dal font del main Mudlet).
 function NebbieDash.applyFontSizeToAllWindows(size)
-  size = tonumber(size) or NebbieDash.fontSize or 11
+  size = tonumber(size) or NebbieDash.fontSize or 15
   NebbieDash.fontSize = size
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  NebbieDash.prefs.font_size = size
   local names = {}
   for _, win in ipairs(NebbieDash.GUI_WINDOWS or {}) do
     names[#names + 1] = win
@@ -2556,7 +2581,7 @@ end
 -- Dashboard: bordo sinistro = solo Equip. Speedwalk → finestra floating `nswui`.
 NebbieDash.guiWidthEquip = 260
 NebbieDash.guiWidthRight = 0
-NebbieDash.fontSize = 11
+NebbieDash.fontSize = 15
 -- Le descrizioni oggetto sono spesso lunghe (es. "Un tubino rinforzato con
 -- una grossa Union Jack (in condizioni eccellenti)") e vanno quasi sempre a
 -- capo in un pannello laterale stretto; le tronchiamo per un colpo d'occhio
@@ -6798,7 +6823,7 @@ NebbieDash.HELP_TEXT = {
   { "nchar <nome>", "Forza il personaggio attivo (es. nchar Sirio)." },
   { "nclanslot <on|off>", "Mostra/nascondi lo slot simbolo del clan." },
   { "neq", "Invia eq e aggiorna il pannello equip." },
-  { "nfont [N|+|-]", "Font dashboard (equip/chat/nach/…; 6-24, persistente)." },
+  { "nfont [N|+|-]", "Font dashboard (prefs font_size; 6-24; default 15)." },
   { "ngui", "Mostra/nascondi il pannello Equip." },
   { "nitemlen <n>", "Lunghezza max descrizioni oggetti in equip." },
   { "nlayout", "Ripristina larghezza/font di default." },
@@ -6958,13 +6983,13 @@ end
 function NebbieDash.resetLayout()
   NebbieDash.guiWidthEquip = 260
   NebbieDash.guiWidthRight = 0
-  NebbieDash.fontSize = 11
+  NebbieDash.fontSize = 15
   NebbieDash.autoWidthEquip = true
   NebbieDash.autoWidthRight = true
   NebbieDash.guiRatios = { equip = 0.5, manualEquip = false }
   NebbieDash.persistGuiRatios()
+  NebbieDash.applyFontSizeToAllWindows(15)
   NebbieDash.persistFontSize()
-  NebbieDash.applyFontSizeToAllWindows(11)
   if NebbieDash._guiCreated then
     NebbieDash.applySidebarBorder()
     setBorderRight(0)
@@ -6972,16 +6997,17 @@ function NebbieDash.resetLayout()
     NebbieDash.positionGUI()
     NebbieDash.refreshDashboard()
   end
-  cecho("<green>[NebbieDash] Layout ripristinato: larghezza auto, Equip/Speedwalk proporzionali al testo, font 11.\n")
+  cecho("<green>[NebbieDash] Layout ripristinato: larghezza auto, Equip/Speedwalk proporzionali al testo, font 15.\n")
 end
 
 function NebbieDash.cmdSetFont(sizeStr)
   sizeStr = (sizeStr or ""):match("^%s*(.-)%s*$") or ""
-  local cur = tonumber(NebbieDash.fontSize) or 11
+  local cur = tonumber(NebbieDash.fontSize) or 15
   local size = nil
   if sizeStr == "" or sizeStr == "?" or sizeStr:lower() == "status" then
     cecho("<green>[NebbieDash] Font dashboard: <white>" .. cur ..
-      "<green> (Mudlet main e' separato). Uso: <yellow>nfont <6-24><green> | <yellow>nfont +<green> | <yellow>nfont -<green>\n")
+      "<green> (prefs <yellow>font_size<green>; Mudlet main separato). "
+      .. "Uso: <yellow>nfont <6-24><green> | <yellow>nfont +<green> | <yellow>nfont -<green>\n")
     return
   end
   if sizeStr == "+" or sizeStr:lower() == "up" or sizeStr:lower() == "bigger" then

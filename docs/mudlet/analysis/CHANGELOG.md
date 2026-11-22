@@ -1,10 +1,15 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.38 — 2026-11-22
+
+- **nfont / font_size**: default **15**; salvato in
+  `nebbie-dash-preferences.txt` (`font_size = …`), non in ui.lua e non in
+  ncfgsync (per-macchina).
+
 ## 1.16.37 — 2026-11-22
 
 - **nfont**: regola il font di tutte le finestre dashboard (equip, chat,
-  nach, ident, …), indipendente dal font Mudlet; `nfont +` / `nfont -`;
-  salvato in `nebbie-dash-ui.lua`.
+  nach, ident, …), indipendente dal font Mudlet; `nfont +` / `nfont -`.
 
 ## 1.16.36 — 2026-11-22
 
