@@ -391,7 +391,7 @@ Preferenze (`nebbie-dash-preferences.txt`):
 - `ach_sync = on` — abilita pull/push (serve `ident_sync_token`)
 
 In finestra: filtro Race/Boss/Skill/Quest/Other, ordine % o "mancano",
-scalini sullo stesso contatore (solo il prossimo), **pagine da 30** con
+scalini sullo stesso contatore (solo il prossimo), **pagine da 20** con
 link prec/succ, barre `█░`, aggiornamento live dalle righe
 `Race Achievement #N '…' p/m`.
 

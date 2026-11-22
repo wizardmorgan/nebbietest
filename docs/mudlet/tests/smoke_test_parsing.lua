@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.35+",
+check("package version 1.16.36+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.35"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.36"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2904,7 +2904,7 @@ do
     type(bar) == "string" and bar:find("█", 1, true) ~= nil
       and bar:find("░", 1, true) ~= nil
       and bar:find("#", 1, true) == nil)
-  check("ach: page size 30", (NebbieDash.ACH_PAGE_SIZE or 0) == 30)
+  check("ach: page size 20", (NebbieDash.ACH_PAGE_SIZE or 0) == 20)
   check("ach: goto/page helpers",
     type(NebbieDash.achGotoPage) == "function"
       and type(NebbieDash.achPage) == "function")

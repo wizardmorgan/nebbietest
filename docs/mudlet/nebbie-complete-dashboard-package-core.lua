@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.35"
+local PKG_VER = "1.16.36"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3582,7 +3582,7 @@ NebbieDash._ach = NebbieDash._ach or {
 }
 
 NebbieDash.ACH_CATEGORIES = { "Tutte", "Race", "Boss", "Skill", "Quest", "Other" }
-NebbieDash.ACH_PAGE_SIZE = 30
+NebbieDash.ACH_PAGE_SIZE = 20
 
 function NebbieDash.achState()
   NebbieDash._ach = NebbieDash._ach or {
@@ -4136,7 +4136,7 @@ function NebbieDash.achDraw()
     return
   end
   local lista, d = NebbieDash.achBuildRows(pg)
-  local pageSize = NebbieDash.ACH_PAGE_SIZE or 30
+  local pageSize = NebbieDash.ACH_PAGE_SIZE or 20
   local pages = math.max(1, math.ceil(#lista / pageSize))
   st.vista.page = st.vista.page or 1
   if st.vista.page > pages then st.vista.page = pages end
