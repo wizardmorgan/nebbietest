@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.42+",
+check("package version 1.16.43+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.42"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.43"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2946,6 +2946,15 @@ do
   check("ach: hotkey no Cmd+Shift+A",
     NebbieDash.achHotkeyLabel():find("Cmd", 1, true) == nil)
   check("ach: achIsMacOs helper", type(NebbieDash.achIsMacOs) == "function")
+  check("ach: gag silent helpers",
+    type(NebbieDash.achGagIfSilent) == "function"
+      and type(NebbieDash.achIsSilentRead) == "function")
+  local stGag = NebbieDash.achState()
+  stGag.silentRefresh = true
+  check("ach: isSilentRead flag", NebbieDash.achIsSilentRead() == true)
+  stGag.silentRefresh = false
+  check("ach: gag senza deleteLine non crasha",
+    NebbieDash.achGagIfSilent() == false)
 end
 
 -- Preferenze: ach_page_size in nebbie-dash-preferences.txt

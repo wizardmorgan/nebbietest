@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.43 — 2026-11-22
+
+- **nach refresh silenzioso**: al login nasconde davvero lo scroll di
+  `achievements all` (`deleteLine` sulle righe lista/pager). Prima il
+  messaggio diceva “in silenzio” ma l’output restava visibile.
+
 ## 1.16.42 — 2026-11-22
 
 - **nach hotkey Mac**: tolto **Cmd+Shift+A** (su macOS apre “Search man

@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.42"
+local PKG_VER = "1.16.43"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3861,6 +3861,24 @@ function NebbieDash.achParseListLine(rawLine, state)
   return false
 end
 
+-- Durante refresh silenzioso (login): togli la riga corrente dal main.
+-- Prima il messaggio diceva "in silenzio" ma lo scroll restava visibile.
+function NebbieDash.achIsSilentRead()
+  local st = NebbieDash.achState()
+  if st.silentRefresh then return true end
+  if st.lettura and st.lettura.silent then return true end
+  return false
+end
+
+function NebbieDash.achGagIfSilent()
+  if not NebbieDash.achIsSilentRead() then return false end
+  if type(deleteLine) == "function" then
+    pcall(deleteLine)
+    return true
+  end
+  return false
+end
+
 function NebbieDash.achBeginRead()
   local st = NebbieDash.achState()
   local pg = NebbieDash.achActivePg()
@@ -3893,7 +3911,7 @@ function NebbieDash.achFinishRead()
   for _ in pairs(r.lista) do n = n + 1 end
   if wasSilent then
     cecho(string.format(
-      "<grey>[NebbieDash] Ach: %s aggiornato in silenzio (%d).\n", r.pg, n))
+      "<grey>[NebbieDash] Ach: %s aggiornato (%d), output nascosto.\n", r.pg, n))
   else
     cecho(string.format(
       "\n<cyan>[NebbieDash] Ach: <yellow>%s<cyan>: %d achievement memorizzati.\n",
@@ -4370,6 +4388,7 @@ end
 
 function NebbieDash.onAchListHeaderLine()
   NebbieDash.achBeginRead()
+  NebbieDash.achGagIfSilent()
 end
 
 function NebbieDash.onAchPagerLine()
@@ -4379,6 +4398,7 @@ function NebbieDash.onAchPagerLine()
     r.nuove = 0
     send("", false)
   end
+  NebbieDash.achGagIfSilent()
 end
 
 function NebbieDash.onAchListBodyLine()
@@ -4386,6 +4406,7 @@ function NebbieDash.onAchListBodyLine()
   if not st.lettura then return end
   local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
   NebbieDash.achParseListLine(text, st.lettura)
+  NebbieDash.achGagIfSilent()
   if st.endTimer and type(killTimer) == "function" then
     pcall(killTimer, st.endTimer)
   end
@@ -4500,7 +4521,7 @@ function NebbieDash.printAchHelp()
   cecho("<yellow>  nach sync|pull|push<white>  Sync VPS (stesso token di nidentsync).\n")
   cecho("<grey>  Hotkey: " .. NebbieDash.achHotkeyLabel() ..
     ". File: ndashboard/achievement/<PG>.lua\n")
-  cecho("<grey>  Al login: pull VPS + refresh silenzioso (ach_auto_refresh / ach_sync).\n")
+  cecho("<grey>  Al login: pull VPS + refresh con output nascosto (ach_auto_refresh).\n")
   cecho("<grey>  Prefs: ach_page_size (default 15), font_size — npreferencesreload.\n")
 end
 

@@ -387,7 +387,8 @@ nach status
 ```
 
 Preferenze (`nebbie-dash-preferences.txt`):
-- `ach_auto_refresh = on` — al login del toon: pull VPS + `achievements all` silenzioso
+- `ach_auto_refresh = on` — al login del toon: pull VPS + `achievements all`
+  con output nascosto (righe lista/pager cancellate dal main)
 - `ach_sync = on` — abilita pull/push (serve `ident_sync_token`)
 - `ach_page_size = 15` — max voci per pagina in `nach` (5–50; come `font_size`,
   locale, non sync VPS). Dopo modifica: `npreferencesreload`.
