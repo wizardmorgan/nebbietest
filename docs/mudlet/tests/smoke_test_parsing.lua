@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.39+",
+check("package version 1.16.40+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.39"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.40"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2928,10 +2928,36 @@ do
     type(bar) == "string" and bar:find("█", 1, true) ~= nil
       and bar:find("░", 1, true) ~= nil
       and bar:find("#", 1, true) == nil)
-  check("ach: page size 20", (NebbieDash.ACH_PAGE_SIZE or 0) == 20)
+  check("ach: page size default 15", (NebbieDash.ACH_PAGE_SIZE or 0) == 15)
+  check("ach: achPageSize helper",
+    type(NebbieDash.achPageSize) == "function" and NebbieDash.achPageSize() == 15)
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  NebbieDash.prefs.ach_page_size = 12
+  check("ach: achPageSize da prefs", NebbieDash.achPageSize() == 12)
+  NebbieDash.prefs.ach_page_size = 15
+  NebbieDash.ACH_PAGE_SIZE = 15
   check("ach: goto/page helpers",
     type(NebbieDash.achGotoPage) == "function"
       and type(NebbieDash.achPage) == "function")
+end
+
+-- Preferenze: ach_page_size in nebbie-dash-preferences.txt
+do
+  local oldPath = NebbieDash.preferencesPath
+  local tmp = os.tmpname()
+  local f = io.open(tmp, "w")
+  f:write("ach_page_size = 18\nfont_size = 15\n")
+  f:close()
+  NebbieDash.preferencesPath = function() return tmp end
+  NebbieDash.prefs = {}
+  NebbieDash.loadPreferences()
+  check("prefs: ach_page_size caricato",
+    (NebbieDash.prefs.ach_page_size or 0) == 18
+      and (NebbieDash.ACH_PAGE_SIZE or 0) == 18)
+  NebbieDash.prefs.ach_page_size = 15
+  NebbieDash.ACH_PAGE_SIZE = 15
+  NebbieDash.preferencesPath = oldPath
+  os.remove(tmp)
 end
 
 

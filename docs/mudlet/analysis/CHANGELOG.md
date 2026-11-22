@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.40 — 2026-11-22
+
+- **nach**: `ach_page_size` in `nebbie-dash-preferences.txt` (default **15**,
+  range 5–50); quante voci per pagina. Ricarica con `npreferencesreload`.
+
 ## 1.16.39 — 2026-11-22
 
 - **nach UI**: selettore **soglia** (Tutte / 1 / 10 / 100 / …) — raggruppa

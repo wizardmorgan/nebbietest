@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.39"
+local PKG_VER = "1.16.40"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -719,6 +719,8 @@ function NebbieDash.ensurePreferencesFile()
     "ident_exclude_chars = Sirio\n" ..
     "ach_auto_refresh = on\n" ..
     "ach_sync = on\n" ..
+    "# ach_page_size = 15        # max achievement per pagina in nach (5-50)\n" ..
+    "ach_page_size = 15\n" ..
     "# font_size = 15            # font MiniConsole dashboard (nfont; non sync VPS)\n" ..
     "font_size = 15\n" ..
     "auto_install_convert_to_userwindow = on\n"
@@ -750,61 +752,63 @@ function NebbieDash.loadPreferences()
     ident_exclude_chars = "Sirio",
     ach_auto_refresh = true,
     ach_sync = true,
+    ach_page_size = 15,
     font_size = 15,
     auto_install_convert_to_userwindow = true,
   }
   local path = NebbieDash.preferencesPath()
-  if type(io.exists) == "function" and io.exists(path) then
-    local f = io.open(path, "r")
-    if f then
-      for line in f:lines() do
-        local key, val = line:match("^%s*([%w_]+)%s*=%s*(.+)%s*$")
-        if key and val and not key:match("^#") then
-          val = val:gsub("%s*#.*$", ""):match("^%s*(.-)%s*$")
-          if key == "sidebar_mode" and (val == "float" or val == "dock") then
-            NebbieDash.prefs.sidebar_mode = val
-          elseif key == "weapon_swap_delay" then
-            local n = tonumber(val)
-            if n and n >= 0.1 and n <= 3 then NebbieDash.prefs.weapon_swap_delay = n end
-          elseif key == "sanity_neq_on_login" then
-            NebbieDash.prefs.sanity_neq_on_login = NebbieDash.parsePreferencesBool(val)
-          elseif key == "text_highlights" then
-            NebbieDash.prefs.text_highlights = NebbieDash.parsePreferencesBool(val)
-          elseif key == "chat_window" then
-            NebbieDash.prefs.chat_window = NebbieDash.parsePreferencesBool(val)
-          elseif key == "gold_alert" then
-            NebbieDash.prefs.gold_alert = NebbieDash.parsePreferencesBool(val)
-          elseif key == "dig_tool" then
-            NebbieDash.prefs.dig_tool = val
-          elseif key == "dig_combat" then
-            NebbieDash.prefs.dig_combat = val
-          elseif key == "dig_retry_sec" then
-            local n = tonumber(val)
-            if n and n >= 5 and n <= 120 then NebbieDash.prefs.dig_retry_sec = n end
-          elseif key == "ident_sync_url" then
-            NebbieDash.prefs.ident_sync_url = val:gsub("/+$", "")
-          elseif key == "ident_sync_token" then
-            NebbieDash.prefs.ident_sync_token = val
-          elseif key == "ident_sync_on_boot" then
-            NebbieDash.prefs.ident_sync_on_boot = NebbieDash.parsePreferencesBool(val)
-          elseif key == "ident_sync_skip_prompt" then
-            NebbieDash.prefs.ident_sync_skip_prompt = NebbieDash.parsePreferencesBool(val)
-          elseif key == "ident_exclude_chars" then
-            NebbieDash.prefs.ident_exclude_chars = val
-          elseif key == "ach_auto_refresh" then
-            NebbieDash.prefs.ach_auto_refresh = NebbieDash.parsePreferencesBool(val)
-          elseif key == "ach_sync" then
-            NebbieDash.prefs.ach_sync = NebbieDash.parsePreferencesBool(val)
-          elseif key == "font_size" then
-            local n = tonumber(val)
-            if n and n >= 6 and n <= 24 then NebbieDash.prefs.font_size = math.floor(n) end
-          elseif key == "auto_install_convert_to_userwindow" then
-            NebbieDash.prefs.auto_install_convert_to_userwindow = NebbieDash.parsePreferencesBool(val)
-          end
+  local fPrefs = io.open(path, "r")
+  if fPrefs then
+    for line in fPrefs:lines() do
+      local key, val = line:match("^%s*([%w_]+)%s*=%s*(.+)%s*$")
+      if key and val and not key:match("^#") then
+        val = val:gsub("%s*#.*$", ""):match("^%s*(.-)%s*$")
+        if key == "sidebar_mode" and (val == "float" or val == "dock") then
+          NebbieDash.prefs.sidebar_mode = val
+        elseif key == "weapon_swap_delay" then
+          local n = tonumber(val)
+          if n and n >= 0.1 and n <= 3 then NebbieDash.prefs.weapon_swap_delay = n end
+        elseif key == "sanity_neq_on_login" then
+          NebbieDash.prefs.sanity_neq_on_login = NebbieDash.parsePreferencesBool(val)
+        elseif key == "text_highlights" then
+          NebbieDash.prefs.text_highlights = NebbieDash.parsePreferencesBool(val)
+        elseif key == "chat_window" then
+          NebbieDash.prefs.chat_window = NebbieDash.parsePreferencesBool(val)
+        elseif key == "gold_alert" then
+          NebbieDash.prefs.gold_alert = NebbieDash.parsePreferencesBool(val)
+        elseif key == "dig_tool" then
+          NebbieDash.prefs.dig_tool = val
+        elseif key == "dig_combat" then
+          NebbieDash.prefs.dig_combat = val
+        elseif key == "dig_retry_sec" then
+          local n = tonumber(val)
+          if n and n >= 5 and n <= 120 then NebbieDash.prefs.dig_retry_sec = n end
+        elseif key == "ident_sync_url" then
+          NebbieDash.prefs.ident_sync_url = val:gsub("/+$", "")
+        elseif key == "ident_sync_token" then
+          NebbieDash.prefs.ident_sync_token = val
+        elseif key == "ident_sync_on_boot" then
+          NebbieDash.prefs.ident_sync_on_boot = NebbieDash.parsePreferencesBool(val)
+        elseif key == "ident_sync_skip_prompt" then
+          NebbieDash.prefs.ident_sync_skip_prompt = NebbieDash.parsePreferencesBool(val)
+        elseif key == "ident_exclude_chars" then
+          NebbieDash.prefs.ident_exclude_chars = val
+        elseif key == "ach_auto_refresh" then
+          NebbieDash.prefs.ach_auto_refresh = NebbieDash.parsePreferencesBool(val)
+        elseif key == "ach_sync" then
+          NebbieDash.prefs.ach_sync = NebbieDash.parsePreferencesBool(val)
+        elseif key == "ach_page_size" then
+          local n = tonumber(val)
+          if n and n >= 5 and n <= 50 then NebbieDash.prefs.ach_page_size = math.floor(n) end
+        elseif key == "font_size" then
+          local n = tonumber(val)
+          if n and n >= 6 and n <= 24 then NebbieDash.prefs.font_size = math.floor(n) end
+        elseif key == "auto_install_convert_to_userwindow" then
+          NebbieDash.prefs.auto_install_convert_to_userwindow = NebbieDash.parsePreferencesBool(val)
         end
       end
-      f:close()
     end
+    fPrefs:close()
   end
   NebbieDash.sidebarMode = NebbieDash.prefs.sidebar_mode
   NebbieDash.weaponSwapDelay = NebbieDash.prefs.weapon_swap_delay or NebbieDash.weaponSwapDelay
@@ -840,6 +844,12 @@ function NebbieDash.loadPreferences()
   if fs > 24 then fs = 24 end
   NebbieDash.prefs.font_size = math.floor(fs)
   NebbieDash.fontSize = NebbieDash.prefs.font_size
+  -- nach: righe per pagina (prefs ach_page_size; default 15).
+  local aps = tonumber(NebbieDash.prefs.ach_page_size) or 15
+  if aps < 5 then aps = 5 end
+  if aps > 50 then aps = 50 end
+  NebbieDash.prefs.ach_page_size = math.floor(aps)
+  NebbieDash.ACH_PAGE_SIZE = NebbieDash.prefs.ach_page_size
 end
 
 function NebbieDash.savePreferencesFile()
@@ -850,6 +860,11 @@ function NebbieDash.savePreferencesFile()
   local fontSize = tonumber(NebbieDash.fontSize)
     or tonumber(NebbieDash.prefs and NebbieDash.prefs.font_size)
     or 15
+  local achPage = tonumber(NebbieDash.prefs and NebbieDash.prefs.ach_page_size)
+    or tonumber(NebbieDash.ACH_PAGE_SIZE)
+    or 15
+  if achPage < 5 then achPage = 5 end
+  if achPage > 50 then achPage = 50 end
   f:write(
     "# NebbieDash — preferenze (npreferencesreload)\n" ..
     "sidebar_mode = " .. tostring(NebbieDash.sidebarMode or NebbieDash.prefs.sidebar_mode or "float") .. "\n" ..
@@ -868,6 +883,7 @@ function NebbieDash.savePreferencesFile()
     "ident_exclude_chars = " .. tostring((NebbieDash.prefs and NebbieDash.prefs.ident_exclude_chars) or "Sirio") .. "\n" ..
     "ach_auto_refresh = " .. ((NebbieDash.prefs and NebbieDash.prefs.ach_auto_refresh ~= false) and "on" or "off") .. "\n" ..
     "ach_sync = " .. ((NebbieDash.prefs and NebbieDash.prefs.ach_sync ~= false) and "on" or "off") .. "\n" ..
+    "ach_page_size = " .. tostring(math.floor(achPage)) .. "\n" ..
     "font_size = " .. tostring(math.floor(fontSize)) .. "\n" ..
     "auto_install_convert_to_userwindow = " ..
       ((NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow ~= false) and "on" or "off") .. "\n"
@@ -3659,7 +3675,17 @@ NebbieDash._ach = NebbieDash._ach or {
 }
 
 NebbieDash.ACH_CATEGORIES = { "Tutte", "Race", "Boss", "Skill", "Quest", "Other" }
-NebbieDash.ACH_PAGE_SIZE = 20
+-- Default; sovrascritto da prefs ach_page_size in loadPreferences (default 15).
+NebbieDash.ACH_PAGE_SIZE = 15
+
+function NebbieDash.achPageSize()
+  local n = tonumber(NebbieDash.prefs and NebbieDash.prefs.ach_page_size)
+    or tonumber(NebbieDash.ACH_PAGE_SIZE)
+    or 15
+  if n < 5 then n = 5 end
+  if n > 50 then n = 50 end
+  return math.floor(n)
+end
 
 function NebbieDash.achState()
   NebbieDash._ach = NebbieDash._ach or {
@@ -4267,7 +4293,7 @@ function NebbieDash.achDraw()
     return
   end
   local lista, d = NebbieDash.achBuildRows(pg)
-  local pageSize = NebbieDash.ACH_PAGE_SIZE or 20
+  local pageSize = NebbieDash.achPageSize()
   local pages = math.max(1, math.ceil(#lista / pageSize))
   st.vista.page = st.vista.page or 1
   if st.vista.page > pages then st.vista.page = pages end
@@ -4440,6 +4466,7 @@ function NebbieDash.printAchHelp()
   cecho("<yellow>  nach sync|pull|push<white>  Sync VPS (stesso token di nidentsync).\n")
   cecho("<grey>  Hotkey: Ctrl+Shift+A. File: ndashboard/achievement/<PG>.lua\n")
   cecho("<grey>  Al login: pull VPS + refresh silenzioso (ach_auto_refresh / ach_sync).\n")
+  cecho("<grey>  Prefs: ach_page_size (default 15), font_size — npreferencesreload.\n")
 end
 
 function NebbieDash.cmdAch(argStr)
@@ -7153,11 +7180,19 @@ function NebbieDash.cmdReloadPreferences()
     NebbieDash.teardownChatTriggers()
     NebbieDash.hideChatWindow()
   end
+  if type(NebbieDash.applyFontSizeToAllWindows) == "function" then
+    pcall(function() NebbieDash.applyFontSizeToAllWindows(NebbieDash.fontSize) end)
+  end
+  if NebbieDash._ach and NebbieDash._ach.visible and type(NebbieDash.achDraw) == "function" then
+    pcall(NebbieDash.achDraw)
+  end
   cecho("<green>[NebbieDash] Preferenze ricaricate da <white>" .. NebbieDash.preferencesPath() ..
     "<green> (sidebar=" .. tostring(NebbieDash.effectiveSidebarMode()) ..
     ", weapon_swap_delay=" .. tostring(NebbieDash.weaponSwapDelay) ..
     ", text_highlights=" .. ((NebbieDash.textHighlights ~= false) and "on" or "off") ..
-    ", chat_window=" .. ((NebbieDash.chatEnabled ~= false) and "on" or "off") .. ").\n")
+    ", chat_window=" .. ((NebbieDash.chatEnabled ~= false) and "on" or "off") ..
+    ", ach_page_size=" .. tostring(NebbieDash.achPageSize()) ..
+    ", font_size=" .. tostring(NebbieDash.fontSize or 15) .. ").\n")
 end
 
 function NebbieDash.cmdSetSidebar(modeStr)

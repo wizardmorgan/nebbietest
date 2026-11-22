@@ -389,11 +389,13 @@ nach status
 Preferenze (`nebbie-dash-preferences.txt`):
 - `ach_auto_refresh = on` — al login del toon: pull VPS + `achievements all` silenzioso
 - `ach_sync = on` — abilita pull/push (serve `ident_sync_token`)
+- `ach_page_size = 15` — max voci per pagina in `nach` (5–50; come `font_size`,
+  locale, non sync VPS). Dopo modifica: `npreferencesreload`.
 
 In finestra: filtro Race/Boss/Skill/Quest/Other, **soglia** (Tutte / 1 /
 10 / 100 / … = obiettivo `max` dello scalino), ordine % o "mancano",
-scalini sullo stesso contatore (solo il prossimo), **pagine da 20** con
-link prec/succ, barre `█░`, aggiornamento live dalle righe
+scalini sullo stesso contatore (solo il prossimo), **pagine** (`ach_page_size`,
+default 15) con link prec/succ, barre `█░`, aggiornamento live dalle righe
 `Race Achievement #N '…' p/m`.
 
 Sul VPS va aggiornato `tools/ident-sync-server` (endpoint `/v1/ach`).
