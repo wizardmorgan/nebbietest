@@ -390,7 +390,8 @@ Preferenze (`nebbie-dash-preferences.txt`):
 - `ach_auto_refresh = on` — al login del toon: pull VPS + `achievements all` silenzioso
 - `ach_sync = on` — abilita pull/push (serve `ident_sync_token`)
 
-In finestra: filtro Race/Boss/Skill/Quest/Other, ordine % o "mancano",
+In finestra: filtro Race/Boss/Skill/Quest/Other, **soglia** (Tutte / 1 /
+10 / 100 / … = obiettivo `max` dello scalino), ordine % o "mancano",
 scalini sullo stesso contatore (solo il prossimo), **pagine da 20** con
 link prec/succ, barre `█░`, aggiornamento live dalle righe
 `Race Achievement #N '…' p/m`.

@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.38"
+local PKG_VER = "1.16.39"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3649,7 +3649,7 @@ end
 -- ---------------------------------------------------------------------------
 NebbieDash._ach = NebbieDash._ach or {
   dati = {},
-  vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false, page = 1 },
+  vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false, page = 1, soglia = nil },
   lettura = nil,
   visible = false,
   created = false,
@@ -3664,12 +3664,12 @@ NebbieDash.ACH_PAGE_SIZE = 20
 function NebbieDash.achState()
   NebbieDash._ach = NebbieDash._ach or {
     dati = {},
-    vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false, page = 1 },
+    vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false, page = 1, soglia = nil },
     lettura = nil, visible = false, created = false, trigIds = {},
   }
   local st = NebbieDash._ach
   st.dati = st.dati or {}
-  st.vista = st.vista or { pg = nil, cat = "Tutte", ordine = "perc", completi = false, page = 1 }
+  st.vista = st.vista or { pg = nil, cat = "Tutte", ordine = "perc", completi = false, page = 1, soglia = nil }
   if st.vista.page == nil then st.vista.page = 1 end
   st.trigIds = st.trigIds or {}
   return st
@@ -3964,7 +3964,9 @@ function NebbieDash.achOnCharacterChanged(name)
 end
 
 -- Un elemento per contatore: prossimo scalino.
-function NebbieDash.achBuildRows(pg)
+-- opts.ignoreSoglia: non filtrare per vista.soglia (serve per elenco bottoni).
+function NebbieDash.achBuildRows(pg, opts)
+  opts = opts or {}
   local st = NebbieDash.achState()
   local d = st.dati[pg] or NebbieDash.achLoad(pg)
   local gruppi = {}
@@ -3974,6 +3976,10 @@ function NebbieDash.achBuildRows(pg)
     local g = gruppi[k] or { voci = {} }
     gruppi[k] = g
     g.voci[#g.voci + 1] = v
+  end
+  local sogliaFiltro = nil
+  if not opts.ignoreSoglia then
+    sogliaFiltro = tonumber(st.vista.soglia)
   end
   local out = {}
   for _, g in pairs(gruppi) do
@@ -3989,14 +3995,18 @@ function NebbieDash.achBuildRows(pg)
     local v = prossimo or g.voci[#g.voci]
     if v and (st.vista.cat == "Tutte" or v.cat == st.vista.cat)
         and (prossimo or st.vista.completi) then
-      out[#out + 1] = {
-        v = v,
-        scalino = fatti + (prossimo and 1 or 0),
-        tot = #g.voci,
-        completo = not prossimo,
-        perc = (v.max or 0) > 0 and math.min((v.prog or 0) / v.max, 1) or 0,
-        mancano = math.max((v.max or 0) - (v.prog or 0), 0),
-      }
+      if sogliaFiltro and (tonumber(v.max) or 0) ~= sogliaFiltro then
+        -- skip: altra soglia
+      else
+        out[#out + 1] = {
+          v = v,
+          scalino = fatti + (prossimo and 1 or 0),
+          tot = #g.voci,
+          completo = not prossimo,
+          perc = (v.max or 0) > 0 and math.min((v.prog or 0) / v.max, 1) or 0,
+          mancano = math.max((v.max or 0) - (v.prog or 0), 0),
+        }
+      end
     end
   end
   table.sort(out, function(a, b)
@@ -4009,6 +4019,21 @@ function NebbieDash.achBuildRows(pg)
     return tostring(a.v.nome) < tostring(b.v.nome)
   end)
   return out, d
+end
+
+-- Soglie (max) presenti nella vista corrente (cat/completi), ordinate.
+function NebbieDash.achListSoglie(pg)
+  local rows = NebbieDash.achBuildRows(pg, { ignoreSoglia = true })
+  local seen, out = {}, {}
+  for _, r in ipairs(rows) do
+    local m = tonumber(r.v and r.v.max) or 0
+    if m > 0 and not seen[m] then
+      seen[m] = true
+      out[#out + 1] = m
+    end
+  end
+  table.sort(out)
+  return out
 end
 
 function NebbieDash.achBar(perc, larg)
@@ -4128,6 +4153,7 @@ function NebbieDash.achSetVistaPg(pg)
   local st = NebbieDash.achState()
   st.vista.pg = pg
   st.vista.page = 1
+  -- Soglia puo' non esistere sul nuovo PG: tornera' a Tutte in draw se serve.
   NebbieDash.achLoad(pg)
   NebbieDash.achDraw()
 end
@@ -4142,6 +4168,17 @@ end
 function NebbieDash.achSetVistaOrdine(ord)
   local st = NebbieDash.achState()
   st.vista.ordine = ord
+  st.vista.page = 1
+  NebbieDash.achDraw()
+end
+
+function NebbieDash.achSetVistaSoglia(soglia)
+  local st = NebbieDash.achState()
+  if soglia == nil or soglia == "" or soglia == "Tutte" or soglia == "tutte" then
+    st.vista.soglia = nil
+  else
+    st.vista.soglia = tonumber(soglia)
+  end
   st.vista.page = 1
   NebbieDash.achDraw()
 end
@@ -4191,6 +4228,23 @@ function NebbieDash.achDraw()
   for _, c in ipairs(NebbieDash.ACH_CATEGORIES) do
     NebbieDash.achButton(c, st.vista.cat == c,
       string.format("NebbieDash.achSetVistaCat(%q)", c))
+  end
+  -- Soglie disponibili (max dello scalino mostrato), derivate dai dati.
+  local soglie = pg and NebbieDash.achListSoglie(pg) or {}
+  if st.vista.soglia then
+    local okS = false
+    for _, m in ipairs(soglie) do
+      if m == st.vista.soglia then okS = true; break end
+    end
+    if not okS then st.vista.soglia = nil end
+  end
+  NebbieDash.achCecho("\n<grey>soglia: ")
+  NebbieDash.achButton("Tutte", st.vista.soglia == nil,
+    [[NebbieDash.achSetVistaSoglia(nil)]], "tutte le soglie")
+  for _, m in ipairs(soglie) do
+    NebbieDash.achButton(NebbieDash.achFmtNum(m), st.vista.soglia == m,
+      string.format("NebbieDash.achSetVistaSoglia(%d)", m),
+      "solo achievement con obiettivo " .. NebbieDash.achFmtNum(m))
   end
   NebbieDash.achCecho("\n<grey>ordine: ")
   NebbieDash.achButton("% completamento", st.vista.ordine == "perc",
@@ -4430,9 +4484,10 @@ function NebbieDash.cmdAch(argStr)
       local d = NebbieDash.achLoad(st.vista.pg)
       for _ in pairs(d.lista or {}) do n = n + 1 end
     end
+    local sogliaTxt = st.vista.soglia and NebbieDash.achFmtNum(st.vista.soglia) or "Tutte"
     cecho(string.format(
-      "<green>[NebbieDash] Ach: attivo=<white>%s<green> vista=<white>%s<green> voci=%d visible=%s\n",
-      tostring(pg), tostring(view), n, tostring(st.visible)))
+      "<green>[NebbieDash] Ach: attivo=<white>%s<green> vista=<white>%s<green> soglia=<white>%s<green> voci=%d visible=%s\n",
+      tostring(pg), tostring(view), sogliaTxt, n, tostring(st.visible)))
     cecho("<grey>[NebbieDash] Dir: " .. NebbieDash.achDir() .. "\n")
     return
   end

@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.39 — 2026-11-22
+
+- **nach UI**: selettore **soglia** (Tutte / 1 / 10 / 100 / …) — raggruppa
+  gli achievement per obiettivo (`max`) dello scalino mostrato. I bottoni
+  si aggiornano dai dati del toon/filtro tipo.
+
 ## 1.16.38 — 2026-11-22
 
 - **nfont / font_size**: default **15**; salvato in

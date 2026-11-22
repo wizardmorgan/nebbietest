@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.38+",
+check("package version 1.16.39+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.38"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.39"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2866,9 +2866,12 @@ do
     ["A"] = { nome = "A", cat = "Race", cont = "orchi uccisi", prog = 900, max = 1000, t = 1 },
     ["B"] = { nome = "B", cat = "Race", cont = "orchi ucciso", prog = 900, max = 10000, t = 1 },
     ["C"] = { nome = "C", cat = "Boss", cont = "", prog = 5, max = 5, t = 1 },
+    ["D"] = { nome = "D", cat = "Skill", cont = "spine", prog = 1, max = 10, t = 1 },
+    ["E"] = { nome = "E", cat = "Quest", cont = "foo", prog = 0, max = 1, t = 1 },
   }
   NebbieDash.achState().vista.completi = false
   NebbieDash.achState().vista.cat = "Tutte"
+  NebbieDash.achState().vista.soglia = nil
   local rows = NebbieDash.achBuildRows("NomiyaMaki")
   local foundA, foundC = false, false
   for _, r in ipairs(rows) do
@@ -2877,6 +2880,27 @@ do
   end
   check("ach: scalino mostra prossimo", foundA == true)
   check("ach: nasconde completati", foundC == false)
+  local soglie = NebbieDash.achListSoglie("NomiyaMaki")
+  local has1, has10, has1000 = false, false, false
+  for _, m in ipairs(soglie) do
+    if m == 1 then has1 = true end
+    if m == 10 then has10 = true end
+    if m == 1000 then has1000 = true end
+  end
+  check("ach: list soglie da dati", has1 and has10 and has1000)
+  NebbieDash.achState().vista.soglia = 10
+  local rows10 = NebbieDash.achBuildRows("NomiyaMaki")
+  local onlyD = (#rows10 == 1 and rows10[1].v.nome == "D")
+  check("ach: filtro soglia 10", onlyD == true)
+  NebbieDash.achSetVistaSoglia(1)
+  check("ach: setVistaSoglia 1", NebbieDash.achState().vista.soglia == 1)
+  local rows1 = NebbieDash.achBuildRows("NomiyaMaki")
+  check("ach: filtro soglia 1", #rows1 == 1 and rows1[1].v.nome == "E")
+  NebbieDash.achSetVistaSoglia(nil)
+  check("ach: setVistaSoglia Tutte", NebbieDash.achState().vista.soglia == nil)
+  check("ach: soglia helpers",
+    type(NebbieDash.achListSoglie) == "function"
+      and type(NebbieDash.achSetVistaSoglia) == "function")
   NebbieDash.achUpdateLive("Skill", "Inserisco la spina", 223, 300)
   local live = NebbieDash.achState().dati["NomiyaMaki"].lista["Inserisco la spina"]
   check("ach: live update su toon attivo",
