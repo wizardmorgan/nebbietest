@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.40"
+local PKG_VER = "1.16.41"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -4364,7 +4364,8 @@ function NebbieDash.achToggle()
   st.vista.pg = st.vista.pg or NebbieDash.achActivePg()
   if st.vista.pg then NebbieDash.achLoad(st.vista.pg) end
   NebbieDash.achDraw()
-  cecho("<green>[NebbieDash] Ach: finestra aperta (<yellow>nach refresh<green> / Ctrl+Shift+A).\n")
+  cecho("<green>[NebbieDash] Ach: finestra aperta (<yellow>nach refresh<green> / "
+    .. NebbieDash.achHotkeyLabel() .. ").\n")
 end
 
 function NebbieDash.onAchListHeaderLine()
@@ -4404,16 +4405,35 @@ function NebbieDash.onAchLiveUpdateLine()
   NebbieDash.achUpdateLive(cat, nome, NebbieDash.achParseNum(p), NebbieDash.achParseNum(m))
 end
 
+function NebbieDash.achHotkeyLabel()
+  -- Su macOS Control (ctrl) != Command (cmd = Meta in Mudlet/Qt).
+  local osName = ""
+  if type(NebbieDash.detectHostOs) == "function" then
+    osName = tostring(NebbieDash.detectHostOs() or "")
+  elseif type(getOS) == "function" then
+    local ok, v = pcall(getOS)
+    if ok then osName = tostring(v or "") end
+  end
+  osName = osName:lower()
+  if osName:find("mac", 1, true) or osName:find("darwin", 1, true) then
+    return "Ctrl+Shift+A oppure Cmd+Shift+A"
+  end
+  return "Ctrl+Shift+A"
+end
+
 function NebbieDash.teardownAchTriggers()
   local st = NebbieDash.achState()
   for _, id in ipairs(st.trigIds or {}) do
     if id then pcall(function() killTrigger(id) end) end
   end
   st.trigIds = {}
-  if st.keyId then
-    pcall(function() killKey(st.keyId) end)
-    st.keyId = nil
+  local keyIds = st.keyIds or {}
+  if st.keyId then keyIds[#keyIds + 1] = st.keyId end
+  for _, id in ipairs(keyIds) do
+    if id then pcall(function() killKey(id) end) end
   end
+  st.keyId = nil
+  st.keyIds = {}
   if st.endTimer and type(killTimer) == "function" then
     pcall(killTimer, st.endTimer)
     st.endTimer = nil
@@ -4424,8 +4444,16 @@ function NebbieDash.installAchTriggers()
   NebbieDash.teardownAchTriggers()
   local st = NebbieDash.achState()
   st.trigIds = {}
+  st.keyIds = {}
   local function addTrig(id)
     if id then table.insert(st.trigIds, id) end
+  end
+  local function addKey(id)
+    if id then
+      table.insert(st.keyIds, id)
+      -- Compat: primo id anche in keyId (status / vecchio teardown).
+      if not st.keyId then st.keyId = id end
+    end
   end
   if type(tempRegexTrigger) == "function" then
     addTrig(tempRegexTrigger([[^Ecco tutti i tuoi achievements:]],
@@ -4443,11 +4471,16 @@ function NebbieDash.installAchTriggers()
     addTrig(tempTrigger("Achievement #",
       [[NebbieDash.onAchLiveUpdateLine()]]))
   end
+  -- Hotkey: Control+Shift+A (Win/Linux/Mac Control) e Meta+Shift+A (Cmd su Mac).
   if type(tempKey) == "function" and mudlet and mudlet.keymodifier and mudlet.key then
-    st.keyId = tempKey(
-      mudlet.keymodifier.Control + mudlet.keymodifier.Shift,
-      mudlet.key.A,
-      [[NebbieDash.cmdAch("")]])
+    local modsCtrl = mudlet.keymodifier.Control + mudlet.keymodifier.Shift
+    local modsCmd = mudlet.keymodifier.Meta + mudlet.keymodifier.Shift
+    local keyA = mudlet.key.A
+    local cb = function() NebbieDash.cmdAch("") end
+    addKey(tempKey(modsCtrl, keyA, cb))
+    if mudlet.keymodifier.Meta then
+      addKey(tempKey(modsCmd, keyA, cb))
+    end
   end
 end
 
@@ -4458,7 +4491,8 @@ function NebbieDash.printAchHelp()
   cecho("<yellow>  nach status<white>          PG attivo, file, conteggio.\n")
   cecho("<yellow>  nach pg <nome><white>       Mostra i dati di un altro toon.\n")
   cecho("<yellow>  nach sync|pull|push<white>  Sync VPS (stesso token di nidentsync).\n")
-  cecho("<grey>  Hotkey: Ctrl+Shift+A. File: ndashboard/achievement/<PG>.lua\n")
+  cecho("<grey>  Hotkey: " .. NebbieDash.achHotkeyLabel() ..
+    ". File: ndashboard/achievement/<PG>.lua\n")
   cecho("<grey>  Al login: pull VPS + refresh silenzioso (ach_auto_refresh / ach_sync).\n")
   cecho("<grey>  Prefs: ach_page_size (default 15), font_size — npreferencesreload.\n")
 end
@@ -4506,9 +4540,13 @@ function NebbieDash.cmdAch(argStr)
       for _ in pairs(d.lista or {}) do n = n + 1 end
     end
     local sogliaTxt = st.vista.soglia and NebbieDash.achFmtNum(st.vista.soglia) or "Tutte"
+    local nKeys = #(st.keyIds or {})
+    if nKeys == 0 and st.keyId then nKeys = 1 end
     cecho(string.format(
       "<green>[NebbieDash] Ach: attivo=<white>%s<green> vista=<white>%s<green> soglia=<white>%s<green> voci=%d visible=%s\n",
       tostring(pg), tostring(view), sogliaTxt, n, tostring(st.visible)))
+    cecho("<grey>[NebbieDash] Hotkey: " .. NebbieDash.achHotkeyLabel() ..
+      " (bind=" .. tostring(nKeys) .. ")\n")
     cecho("<grey>[NebbieDash] Dir: " .. NebbieDash.achDir() .. "\n")
     return
   end
@@ -6962,7 +7000,7 @@ NebbieDash.HELP_TEXT = {
   { "nchat [on|off|clear]", "Finestra chat (say/gt/tell/send/telep/think/sign/…)." },
 
   { section = "Achievement" },
-  { "nach / nachievements", "Finestra achievement per toon (Ctrl+Shift+A)." },
+  { "nach / nachievements", "Finestra achievement per toon (Ctrl/Cmd+Shift+A)." },
   { "nach pg <nome>", "Mostra i dati di un altro toon." },
   { "nach refresh", "Manda achievements all e memorizza (PG attivo)." },
   { "nach status", "PG attivo, vista, conteggio, cartella file." },

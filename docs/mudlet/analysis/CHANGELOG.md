@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.41 — 2026-11-22
+
+- **nach hotkey Mac**: oltre a Control+Shift+A, anche **Cmd+Shift+A**
+  (`Meta` in Mudlet). Su macOS Control e Command sono tasti diversi.
+
 ## 1.16.40 — 2026-11-22
 
 - **nach**: `ach_page_size` in `nebbie-dash-preferences.txt` (default **15**,

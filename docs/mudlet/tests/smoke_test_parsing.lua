@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.40+",
+check("package version 1.16.41+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.40"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.41"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2939,6 +2939,10 @@ do
   check("ach: goto/page helpers",
     type(NebbieDash.achGotoPage) == "function"
       and type(NebbieDash.achPage) == "function")
+  check("ach: hotkey label helper",
+    type(NebbieDash.achHotkeyLabel) == "function"
+      and type(NebbieDash.achHotkeyLabel()) == "string"
+      and NebbieDash.achHotkeyLabel():find("Shift%+A") ~= nil)
 end
 
 -- Preferenze: ach_page_size in nebbie-dash-preferences.txt
