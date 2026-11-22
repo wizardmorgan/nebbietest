@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.34+",
+check("package version 1.16.35+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.34"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.35"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2899,6 +2899,15 @@ do
     type(NebbieDash.achSyncPullToon) == "function"
       and type(NebbieDash.achLoginPipeline) == "function"
       and type(NebbieDash.achStartSilentRefresh) == "function")
+  local bar = NebbieDash.achBar(0.5, 10)
+  check("ach: barra blocchi pieni",
+    type(bar) == "string" and bar:find("█", 1, true) ~= nil
+      and bar:find("░", 1, true) ~= nil
+      and bar:find("#", 1, true) == nil)
+  check("ach: page size 30", (NebbieDash.ACH_PAGE_SIZE or 0) == 30)
+  check("ach: goto/page helpers",
+    type(NebbieDash.achGotoPage) == "function"
+      and type(NebbieDash.achPage) == "function")
 end
 
 -- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).

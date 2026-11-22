@@ -1,5 +1,10 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.35 — 2026-11-22
+
+- **nach UI**: elenco a pagine da 30 (link prec/succ); barre progresso a
+  blocchi pieni (`█`/`░`) al posto di `#`/`-`. Filtri cat/ordine invariati.
+
 ## 1.16.34 — 2026-11-21
 
 - **nach sync VPS**: `/v1/ach` sull'hub ident (stesso token); pull/push per

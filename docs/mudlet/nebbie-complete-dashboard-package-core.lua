@@ -9,7 +9,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.34"
+local PKG_VER = "1.16.35"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -3572,7 +3572,7 @@ end
 -- ---------------------------------------------------------------------------
 NebbieDash._ach = NebbieDash._ach or {
   dati = {},
-  vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false },
+  vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false, page = 1 },
   lettura = nil,
   visible = false,
   created = false,
@@ -3582,16 +3582,18 @@ NebbieDash._ach = NebbieDash._ach or {
 }
 
 NebbieDash.ACH_CATEGORIES = { "Tutte", "Race", "Boss", "Skill", "Quest", "Other" }
+NebbieDash.ACH_PAGE_SIZE = 30
 
 function NebbieDash.achState()
   NebbieDash._ach = NebbieDash._ach or {
     dati = {},
-    vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false },
+    vista = { pg = nil, cat = "Tutte", ordine = "perc", completi = false, page = 1 },
     lettura = nil, visible = false, created = false, trigIds = {},
   }
   local st = NebbieDash._ach
   st.dati = st.dati or {}
-  st.vista = st.vista or { pg = nil, cat = "Tutte", ordine = "perc", completi = false }
+  st.vista = st.vista or { pg = nil, cat = "Tutte", ordine = "perc", completi = false, page = 1 }
+  if st.vista.page == nil then st.vista.page = 1 end
   st.trigIds = st.trigIds or {}
   return st
 end
@@ -3934,9 +3936,12 @@ end
 
 function NebbieDash.achBar(perc, larg)
   larg = larg or 20
-  local pieni = math.floor(perc * larg + 0.5)
+  local pieni = math.floor((perc or 0) * larg + 0.5)
+  if pieni < 0 then pieni = 0 end
+  if pieni > larg then pieni = larg end
   local col = perc >= 0.75 and "<green>" or (perc >= 0.4 and "<gold>" or "<grey>")
-  return col .. string.rep("#", pieni) .. "<dim_grey>" .. string.rep("-", larg - pieni) .. "<reset>"
+  -- Blocchi pieni/vuoti (leggibili in MiniConsole Mudlet).
+  return col .. string.rep("█", pieni) .. "<dim_grey>" .. string.rep("░", larg - pieni) .. "<reset>"
 end
 
 function NebbieDash.canUseAchWindow()
@@ -4045,23 +4050,41 @@ end
 function NebbieDash.achSetVistaPg(pg)
   local st = NebbieDash.achState()
   st.vista.pg = pg
+  st.vista.page = 1
   NebbieDash.achLoad(pg)
   NebbieDash.achDraw()
 end
 
 function NebbieDash.achSetVistaCat(cat)
-  NebbieDash.achState().vista.cat = cat
+  local st = NebbieDash.achState()
+  st.vista.cat = cat
+  st.vista.page = 1
   NebbieDash.achDraw()
 end
 
 function NebbieDash.achSetVistaOrdine(ord)
-  NebbieDash.achState().vista.ordine = ord
+  local st = NebbieDash.achState()
+  st.vista.ordine = ord
+  st.vista.page = 1
   NebbieDash.achDraw()
 end
 
 function NebbieDash.achToggleCompleti()
   local st = NebbieDash.achState()
   st.vista.completi = not st.vista.completi
+  st.vista.page = 1
+  NebbieDash.achDraw()
+end
+
+function NebbieDash.achGotoPage(n)
+  local st = NebbieDash.achState()
+  st.vista.page = math.max(1, tonumber(n) or 1)
+  NebbieDash.achDraw()
+end
+
+function NebbieDash.achPage(delta)
+  local st = NebbieDash.achState()
+  st.vista.page = math.max(1, (st.vista.page or 1) + (tonumber(delta) or 0))
   NebbieDash.achDraw()
 end
 
@@ -4113,23 +4136,50 @@ function NebbieDash.achDraw()
     return
   end
   local lista, d = NebbieDash.achBuildRows(pg)
+  local pageSize = NebbieDash.ACH_PAGE_SIZE or 30
+  local pages = math.max(1, math.ceil(#lista / pageSize))
+  st.vista.page = st.vista.page or 1
+  if st.vista.page > pages then st.vista.page = pages end
+  if st.vista.page < 1 then st.vista.page = 1 end
+  local from = (st.vista.page - 1) * pageSize + 1
+  local to = math.min(#lista, st.vista.page * pageSize)
   NebbieDash.achCecho(string.format(
-    "<dim_grey>%s, aggiornato: %s<reset>\n\n", pg, d.aggiornato or "mai"))
+    "<dim_grey>%s, aggiornato: %s — <white>%d<dim_grey> voci, pag. <white>%d/%d<reset>\n",
+    pg, d.aggiornato or "mai", #lista, st.vista.page, pages))
+  if pages > 1 then
+    if st.vista.page > 1 then
+      NebbieDash.achCechoLink("<cyan>[<< inizio]", "NebbieDash.achGotoPage(1)", "Prima pagina")
+      NebbieDash.achCecho(" ")
+      NebbieDash.achCechoLink("<cyan>[< prec]", "NebbieDash.achPage(-1)", "Pagina precedente")
+      NebbieDash.achCecho(" ")
+    end
+    if st.vista.page < pages then
+      NebbieDash.achCechoLink("<cyan>[succ >]", "NebbieDash.achPage(1)", "Pagina successiva")
+      NebbieDash.achCecho(" ")
+      NebbieDash.achCechoLink(
+        "<cyan>[fine >>]",
+        string.format("NebbieDash.achGotoPage(%d)", pages),
+        "Ultima pagina")
+    end
+    NebbieDash.achCecho("\n")
+  end
+  NebbieDash.achCecho("\n")
   if #lista == 0 then
     local tip = (pg == active)
       and " Premi [aggiorna] o scrivi achievements all.\n" or "\n"
     NebbieDash.achCecho("<grey>Niente da mostrare." .. tip)
     return
   end
-  for _, r in ipairs(lista) do
+  for i = from, to do
+    local r = lista[i]
     local v = r.v
     NebbieDash.achCecho(string.format(
-      "<white>%s <dim_grey>[%s]%s%s<reset>\n",
-      v.nome, v.cat or "?",
+      "<grey>%2d. <white>%s <dim_grey>[%s]%s%s<reset>\n",
+      i, v.nome, v.cat or "?",
       (v.cont and v.cont ~= "") and (" " .. v.cont) or "",
       r.tot > 1 and string.format(" · scalino %d/%d", r.scalino, r.tot) or ""))
     NebbieDash.achCecho(string.format(
-      "  %s <white>%3d%%  <grey>%s/%s",
+      "    %s <white>%3d%%  <grey>%s/%s",
       NebbieDash.achBar(r.perc, 20), math.floor(r.perc * 100),
       NebbieDash.achFmtNum(v.prog), NebbieDash.achFmtNum(v.max)))
     if r.completo then
@@ -4138,6 +4188,14 @@ function NebbieDash.achDraw()
       NebbieDash.achCecho("  <yellow>mancano " .. NebbieDash.achFmtNum(r.mancano))
     end
     NebbieDash.achCecho("<reset>\n")
+  end
+  if pages > 1 and st.vista.page < pages then
+    NebbieDash.achCecho("\n")
+    NebbieDash.achCechoLink(
+      "<cyan>[succ >] pagina successiva",
+      "NebbieDash.achPage(1)",
+      "Mostra i prossimi " .. tostring(pageSize))
+    NebbieDash.achCecho("\n")
   end
 end
 
