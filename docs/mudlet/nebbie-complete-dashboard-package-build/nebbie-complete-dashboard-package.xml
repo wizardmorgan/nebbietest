@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.43"
+local PKG_VER = "1.16.44"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -721,6 +721,8 @@ function NebbieDash.ensurePreferencesFile()
     "ach_sync = on\n" ..
     "# ach_page_size = 15        # max achievement per pagina in nach (5-50)\n" ..
     "ach_page_size = 15\n" ..
+    "# ach_port = 4000           # raccogli achievement solo su questa porta (0 = tutte)\n" ..
+    "ach_port = 4000\n" ..
     "# font_size = 15            # font MiniConsole dashboard (nfont; non sync VPS)\n" ..
     "font_size = 15\n" ..
     "auto_install_convert_to_userwindow = on\n"
@@ -753,6 +755,7 @@ function NebbieDash.loadPreferences()
     ach_auto_refresh = true,
     ach_sync = true,
     ach_page_size = 15,
+    ach_port = 4000,
     font_size = 15,
     auto_install_convert_to_userwindow = true,
   }
@@ -797,15 +800,19 @@ function NebbieDash.loadPreferences()
           NebbieDash.prefs.ach_auto_refresh = NebbieDash.parsePreferencesBool(val)
         elseif key == "ach_sync" then
           NebbieDash.prefs.ach_sync = NebbieDash.parsePreferencesBool(val)
-        elseif key == "ach_page_size" then
-          local n = tonumber(val)
-          if n and n >= 5 and n <= 50 then NebbieDash.prefs.ach_page_size = math.floor(n) end
-        elseif key == "font_size" then
-          local n = tonumber(val)
-          if n and n >= 6 and n <= 24 then NebbieDash.prefs.font_size = math.floor(n) end
-        elseif key == "auto_install_convert_to_userwindow" then
-          NebbieDash.prefs.auto_install_convert_to_userwindow = NebbieDash.parsePreferencesBool(val)
-        end
+          elseif key == "ach_page_size" then
+            local n = tonumber(val)
+            if n and n >= 5 and n <= 50 then NebbieDash.prefs.ach_page_size = math.floor(n) end
+          elseif key == "ach_port" then
+            local n = tonumber(val)
+            -- 0 = qualsiasi porta; altrimenti 1-65535.
+            if n and n >= 0 and n <= 65535 then NebbieDash.prefs.ach_port = math.floor(n) end
+          elseif key == "font_size" then
+            local n = tonumber(val)
+            if n and n >= 6 and n <= 24 then NebbieDash.prefs.font_size = math.floor(n) end
+          elseif key == "auto_install_convert_to_userwindow" then
+            NebbieDash.prefs.auto_install_convert_to_userwindow = NebbieDash.parsePreferencesBool(val)
+          end
       end
     end
     fPrefs:close()
@@ -850,6 +857,12 @@ function NebbieDash.loadPreferences()
   if aps > 50 then aps = 50 end
   NebbieDash.prefs.ach_page_size = math.floor(aps)
   NebbieDash.ACH_PAGE_SIZE = NebbieDash.prefs.ach_page_size
+  -- nach: solo porta di produzione (default 4000; 0 = qualsiasi).
+  local aport = tonumber(NebbieDash.prefs.ach_port)
+  if aport == nil then aport = 4000 end
+  if aport < 0 then aport = 0 end
+  if aport > 65535 then aport = 65535 end
+  NebbieDash.prefs.ach_port = math.floor(aport)
 end
 
 function NebbieDash.savePreferencesFile()
@@ -865,6 +878,10 @@ function NebbieDash.savePreferencesFile()
     or 15
   if achPage < 5 then achPage = 5 end
   if achPage > 50 then achPage = 50 end
+  local achPort = tonumber(NebbieDash.prefs and NebbieDash.prefs.ach_port)
+  if achPort == nil then achPort = 4000 end
+  if achPort < 0 then achPort = 0 end
+  if achPort > 65535 then achPort = 65535 end
   f:write(
     "# NebbieDash — preferenze (npreferencesreload)\n" ..
     "sidebar_mode = " .. tostring(NebbieDash.sidebarMode or NebbieDash.prefs.sidebar_mode or "float") .. "\n" ..
@@ -884,6 +901,7 @@ function NebbieDash.savePreferencesFile()
     "ach_auto_refresh = " .. ((NebbieDash.prefs and NebbieDash.prefs.ach_auto_refresh ~= false) and "on" or "off") .. "\n" ..
     "ach_sync = " .. ((NebbieDash.prefs and NebbieDash.prefs.ach_sync ~= false) and "on" or "off") .. "\n" ..
     "ach_page_size = " .. tostring(math.floor(achPage)) .. "\n" ..
+    "ach_port = " .. tostring(math.floor(achPort)) .. "\n" ..
     "font_size = " .. tostring(math.floor(fontSize)) .. "\n" ..
     "auto_install_convert_to_userwindow = " ..
       ((NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow ~= false) and "on" or "off") .. "\n"
@@ -3677,6 +3695,8 @@ NebbieDash._ach = NebbieDash._ach or {
 NebbieDash.ACH_CATEGORIES = { "Tutte", "Race", "Boss", "Skill", "Quest", "Other" }
 -- Default; sovrascritto da prefs ach_page_size in loadPreferences (default 15).
 NebbieDash.ACH_PAGE_SIZE = 15
+-- Porta su cui e' lecito raccogliere achievement (prefs ach_port; 0 = tutte).
+NebbieDash.ACH_COLLECT_PORT = 4000
 
 function NebbieDash.achPageSize()
   local n = tonumber(NebbieDash.prefs and NebbieDash.prefs.ach_page_size)
@@ -3685,6 +3705,49 @@ function NebbieDash.achPageSize()
   if n < 5 then n = 5 end
   if n > 50 then n = 50 end
   return math.floor(n)
+end
+
+-- Porta richiesta per raccogliere (default 4000). 0 = nessuna restrizione.
+function NebbieDash.achCollectPort()
+  local n = tonumber(NebbieDash.prefs and NebbieDash.prefs.ach_port)
+  if n == nil then n = tonumber(NebbieDash.ACH_COLLECT_PORT) or 4000 end
+  if n < 0 then n = 0 end
+  if n > 65535 then n = 65535 end
+  return math.floor(n)
+end
+
+-- host, port, connected da Mudlet getConnectionInfo (se disponibile).
+function NebbieDash.achGetConnectionInfo()
+  if type(getConnectionInfo) ~= "function" then
+    return nil, nil, nil
+  end
+  local ok, host, port, connected = pcall(getConnectionInfo)
+  if not ok then return nil, nil, nil end
+  return host, tonumber(port), connected
+end
+
+-- true solo se la connessione corrente e' sulla porta ammessa (es. 4000).
+-- Porta 4002 (test) e altre: niente collect/refresh/live/parse.
+function NebbieDash.achCollectAllowed()
+  local want = NebbieDash.achCollectPort()
+  if want == 0 then return true, 0, "any" end
+  local host, port = NebbieDash.achGetConnectionInfo()
+  if port == nil then
+    return false, nil, "unknown"
+  end
+  if port == want then
+    return true, port, host
+  end
+  return false, port, host
+end
+
+function NebbieDash.achRefuseCollectMsg(action)
+  local want = NebbieDash.achCollectPort()
+  local _, port = NebbieDash.achGetConnectionInfo()
+  local cur = port and tostring(port) or "?"
+  cecho(string.format(
+    "<orange>[NebbieDash] Ach: %s solo su porta <yellow>%d<orange> (ora: <white>%s<orange>). Prefs: ach_port.\n",
+    tostring(action or "raccolta"), want, cur))
 end
 
 function NebbieDash.achState()
@@ -3888,6 +3951,12 @@ end
 function NebbieDash.achBeginRead()
   local st = NebbieDash.achState()
   local pg = NebbieDash.achActivePg()
+  if not NebbieDash.achCollectAllowed() then
+    -- Non memorizzare dump da porte non ammesse (es. 4002).
+    st.lettura = nil
+    st.silentRefresh = false
+    return
+  end
   if not pg then
     if not st.silentRefresh then
       cecho("<orange>[NebbieDash] Ach: nessun PG attivo — attendi il prompt o nchar.\n")
@@ -3930,6 +3999,7 @@ function NebbieDash.achFinishRead()
 end
 
 function NebbieDash.achUpdateLive(cat, nome, prog, maxv)
+  if not NebbieDash.achCollectAllowed() then return end
   local pg = NebbieDash.achActivePg()
   if not pg then return end
   nome = NebbieDash.achTrim(nome)
@@ -4247,7 +4317,12 @@ function NebbieDash.achPage(delta)
 end
 
 function NebbieDash.achRequestRefresh()
+  if not NebbieDash.achCollectAllowed() then
+    NebbieDash.achRefuseCollectMsg("refresh")
+    return false
+  end
   send("achievements all", false)
+  return true
 end
 
 function NebbieDash.achDraw()
@@ -4528,7 +4603,8 @@ function NebbieDash.printAchHelp()
   cecho("<grey>  Hotkey: " .. NebbieDash.achHotkeyLabel() ..
     ". File: ndashboard/achievement/<PG>.lua\n")
   cecho("<grey>  Al login: pull VPS + refresh con output nascosto (ach_auto_refresh).\n")
-  cecho("<grey>  Prefs: ach_page_size (default 15), font_size — npreferencesreload.\n")
+  cecho("<grey>  Raccolta solo su porta ach_port (default 4000; 0=tutte). Non su 4002.\n")
+  cecho("<grey>  Prefs: ach_page_size, ach_port, font_size — npreferencesreload.\n")
 end
 
 function NebbieDash.cmdAch(argStr)
@@ -4555,11 +4631,16 @@ function NebbieDash.cmdAch(argStr)
       cecho("<orange>[NebbieDash] Ach: nessun PG attivo.\n")
       return
     end
+    if not NebbieDash.achCollectAllowed() then
+      NebbieDash.achRefuseCollectMsg("refresh")
+      return
+    end
     if not NebbieDash.achState().visible then
       NebbieDash.initAchWindow()
     end
-    NebbieDash.achRequestRefresh()
-    cecho("<green>[NebbieDash] Ach: chiedo achievements all per <yellow>" .. pg .. "\n")
+    if NebbieDash.achRequestRefresh() then
+      cecho("<green>[NebbieDash] Ach: chiedo achievements all per <yellow>" .. pg .. "\n")
+    end
     return
   end
   if mode == "status" or mode == "info" then
@@ -4576,9 +4657,16 @@ function NebbieDash.cmdAch(argStr)
     local sogliaTxt = st.vista.soglia and NebbieDash.achFmtNum(st.vista.soglia) or "Tutte"
     local nKeys = #(st.keyIds or {})
     if nKeys == 0 and st.keyId then nKeys = 1 end
+    local okPort, curPort = NebbieDash.achCollectAllowed()
+    local wantPort = NebbieDash.achCollectPort()
+    local portTxt = (curPort and tostring(curPort)) or "?"
+    local collectTxt = okPort and "si" or "no"
     cecho(string.format(
       "<green>[NebbieDash] Ach: attivo=<white>%s<green> vista=<white>%s<green> soglia=<white>%s<green> voci=%d visible=%s\n",
       tostring(pg), tostring(view), sogliaTxt, n, tostring(st.visible)))
+    cecho(string.format(
+      "<grey>[NebbieDash] Porta: <white>%s<grey> (ach_port=%d) raccolta=<white>%s\n",
+      portTxt, wantPort, collectTxt))
     cecho("<grey>[NebbieDash] Hotkey: " .. NebbieDash.achHotkeyLabel() ..
       " (bind=" .. tostring(nKeys) .. ")\n")
     cecho("<grey>[NebbieDash] Dir: " .. NebbieDash.achDir() .. "\n")
@@ -4747,6 +4835,10 @@ function NebbieDash.achStartSilentRefresh(pg)
   local st = NebbieDash.achState()
   if st.lettura then return end
   if NebbieDash.achActivePg() ~= pg then return end
+  if not NebbieDash.achCollectAllowed() then
+    st.silentRefresh = false
+    return
+  end
   st.silentRefresh = true
   send("achievements all", false)
 end
@@ -4755,6 +4847,8 @@ function NebbieDash.achMaybeAutoOnLogin(pg, reason)
   if not pg or pg == "" then return end
   NebbieDash.prefs = NebbieDash.prefs or {}
   if NebbieDash.prefs.ach_auto_refresh == false then return end
+  -- Su porte non ammesse (es. 4002) non schedulare raccolta.
+  if not NebbieDash.achCollectAllowed() then return end
   local st = NebbieDash.achState()
   st.autoDone = st.autoDone or {}
   if st.autoDone[pg] then return end
@@ -4766,15 +4860,19 @@ function NebbieDash.achMaybeAutoOnLogin(pg, reason)
   end
   tempTimer(3.0, function()
     if NebbieDash.achActivePg() ~= pg then return end
+    if not NebbieDash.achCollectAllowed() then return end
     NebbieDash.achLoginPipeline(pg)
   end)
 end
 
 function NebbieDash.achLoginPipeline(pg)
+  if not NebbieDash.achCollectAllowed() then return end
   local function afterPull()
     NebbieDash.achStartSilentRefresh(pg)
   end
   if NebbieDash.achSyncEnabled() then
+    -- Pull VPS ok anche per avere dati di produzione in sola lettura;
+    -- il refresh dal MUD resta gated in achStartSilentRefresh.
     NebbieDash.achSyncPullToon(pg, afterPull, { quiet = true })
   else
     afterPull()

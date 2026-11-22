@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.43+",
+check("package version 1.16.44+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.43"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.44"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2843,6 +2843,9 @@ end
 
 -- Achievement (nach): parse lista / live / scalini per toon.
 do
+  -- Stub porta 4000: senza getConnectionInfo la raccolta e' bloccata.
+  local _achOldGCI = rawget(_G, "getConnectionInfo")
+  getConnectionInfo = function() return "127.0.0.1", 4000, true end
   check("ach: fmt num", NebbieDash.achFmtNum(16968497) == "16.968.497")
   check("ach: parse num punti", NebbieDash.achParseNum("1.680") == 1680)
   local k1 = NebbieDash.achCounterKey("Race", "umani uccisi")
@@ -2955,6 +2958,43 @@ do
   stGag.silentRefresh = false
   check("ach: gag senza deleteLine non crasha",
     NebbieDash.achGagIfSilent() == false)
+  check("ach: collect port helpers",
+    type(NebbieDash.achCollectPort) == "function"
+      and type(NebbieDash.achCollectAllowed) == "function"
+      and type(NebbieDash.achGetConnectionInfo) == "function")
+  NebbieDash.prefs = NebbieDash.prefs or {}
+  NebbieDash.prefs.ach_port = 4000
+  check("ach: collect port default 4000", NebbieDash.achCollectPort() == 4000)
+  -- Senza getConnectionInfo: raccolta rifiutata (sicurezza).
+  getConnectionInfo = nil
+  local okNoApi = NebbieDash.achCollectAllowed()
+  check("ach: senza getConnectionInfo no collect", okNoApi == false)
+  getConnectionInfo = function() return "127.0.0.1", 4002, true end
+  local ok4002, p4002 = NebbieDash.achCollectAllowed()
+  check("ach: porta 4002 rifiutata", ok4002 == false and p4002 == 4002)
+  getConnectionInfo = function() return "127.0.0.1", 4000, true end
+  local ok4000, p4000 = NebbieDash.achCollectAllowed()
+  check("ach: porta 4000 ammessa", ok4000 == true and p4000 == 4000)
+  NebbieDash.prefs.ach_port = 0
+  check("ach: ach_port 0 = tutte", NebbieDash.achCollectAllowed() == true)
+  NebbieDash.prefs.ach_port = 4000
+  -- Live update non scrive su porta sbagliata.
+  getConnectionInfo = function() return "h", 4002, true end
+  NebbieDash.currentChar = "PortTest"
+  NebbieDash.achState().dati["PortTest"] = { lista = {}, aggiornato = "" }
+  NebbieDash.achUpdateLive("Skill", "NoSave", 1, 10)
+  check("ach: live bloccato su 4002",
+    NebbieDash.achState().dati["PortTest"].lista["NoSave"] == nil)
+  getConnectionInfo = function() return "h", 4000, true end
+  NebbieDash.achUpdateLive("Skill", "YesSave", 2, 10)
+  check("ach: live ok su 4000",
+    NebbieDash.achState().dati["PortTest"].lista["YesSave"] ~= nil
+      and NebbieDash.achState().dati["PortTest"].lista["YesSave"].prog == 2)
+  if _achOldGCI ~= nil then
+    getConnectionInfo = _achOldGCI
+  else
+    getConnectionInfo = nil
+  end
 end
 
 -- Preferenze: ach_page_size in nebbie-dash-preferences.txt

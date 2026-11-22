@@ -392,6 +392,9 @@ Preferenze (`nebbie-dash-preferences.txt`):
 - `ach_sync = on` — abilita pull/push (serve `ident_sync_token`)
 - `ach_page_size = 15` — max voci per pagina in `nach` (5–50; come `font_size`,
   locale, non sync VPS). Dopo modifica: `npreferencesreload`.
+- `ach_port = 4000` — raccoglie achievement **solo** se il profilo e' collegato
+  a questa porta (`getConnectionInfo`). Es. 4002 (test) viene ignorato.
+  `0` = qualsiasi porta. La finestra `nach` resta usabile in sola lettura.
 
 In finestra: filtro Race/Boss/Skill/Quest/Other, **soglia** (Tutte / 1 /
 10 / 100 / … = obiettivo `max` dello scalino), ordine % o "mancano",

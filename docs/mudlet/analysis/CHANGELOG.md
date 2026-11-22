@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.44 — 2026-11-22
+
+- **nach raccolta solo porta 4000**: prefs `ach_port = 4000` (0 = tutte).
+  Su altre porte (es. 4002) niente refresh automatico, `nach refresh`,
+  parse lista né update live — cosi' i dati di produzione non si
+  mescolano con il test.
+
 ## 1.16.43 — 2026-11-22
 
 - **nach refresh silenzioso**: al login nasconde davvero lo scroll di
