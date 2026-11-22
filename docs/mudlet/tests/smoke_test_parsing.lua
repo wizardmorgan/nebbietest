@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.36+",
+check("package version 1.16.37+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.36"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.37"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -2909,6 +2909,23 @@ do
     type(NebbieDash.achGotoPage) == "function"
       and type(NebbieDash.achPage) == "function")
 end
+
+
+-- Font dashboard (nfont) indipendente da Mudlet main.
+do
+  NebbieDash.fontSize = 11
+  NebbieDash.uiState = NebbieDash.uiState or {}
+  NebbieDash.persistEnabled = false
+  NebbieDash.applyFontSizeToAllWindows(14)
+  check("font: applyFontSizeToAllWindows", NebbieDash.fontSize == 14)
+  NebbieDash.cmdSetFont("+")
+  check("font: nfont +", NebbieDash.fontSize == 15)
+  NebbieDash.cmdSetFont("-")
+  check("font: nfont -", NebbieDash.fontSize == 14)
+  NebbieDash.cmdSetFont("11")
+  check("font: nfont 11", NebbieDash.fontSize == 11)
+end
+
 
 -- Dig automine: stato + keyword + OS sound resolver (senza Mudlet).
 do

@@ -1,5 +1,11 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.37 — 2026-11-22
+
+- **nfont**: regola il font di tutte le finestre dashboard (equip, chat,
+  nach, ident, …), indipendente dal font Mudlet; `nfont +` / `nfont -`;
+  salvato in `nebbie-dash-ui.lua`.
+
 ## 1.16.36 — 2026-11-22
 
 - **nach UI**: pagine da **20** (era 30).

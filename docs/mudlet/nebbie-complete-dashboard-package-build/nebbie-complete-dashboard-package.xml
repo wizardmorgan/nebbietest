@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.36"
+local PKG_VER = "1.16.37"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -966,6 +966,10 @@ function NebbieDash.loadUiStore()
   if NebbieDash.uiState.showClanSlot == true then
     NebbieDash.showClanSlot = true
   end
+  local fs = tonumber(NebbieDash.uiState.fontSize)
+  if fs and fs >= 6 and fs <= 24 then
+    NebbieDash.fontSize = fs
+  end
 end
 
 function NebbieDash.persistGuiRatios()
@@ -975,6 +979,48 @@ function NebbieDash.persistGuiRatios()
     manualEquip = NebbieDash.guiRatios and NebbieDash.guiRatios.manualEquip,
   }
   NebbieDash.saveUiStore()
+end
+
+function NebbieDash.persistFontSize()
+  NebbieDash.uiState = NebbieDash.uiState or {}
+  NebbieDash.uiState.fontSize = NebbieDash.fontSize
+  NebbieDash.saveUiStore()
+end
+
+-- Font delle MiniConsole NebbieDash (indipendente dal font del main Mudlet).
+function NebbieDash.applyFontSizeToAllWindows(size)
+  size = tonumber(size) or NebbieDash.fontSize or 11
+  NebbieDash.fontSize = size
+  local names = {}
+  for _, win in ipairs(NebbieDash.GUI_WINDOWS or {}) do
+    names[#names + 1] = win
+  end
+  for _, win in ipairs({
+    "NebbieDashChat",
+    "NebbieDashAch",
+    "NebbieDashHelpWin",
+    "NebbieDashSwUi",
+  }) do
+    names[#names + 1] = win
+  end
+  if NebbieDash.IDENT_UI_CONSOLE then
+    names[#names + 1] = NebbieDash.IDENT_UI_CONSOLE
+  end
+  if type(setMiniConsoleFontSize) == "function" then
+    for _, win in ipairs(names) do
+      pcall(setMiniConsoleFontSize, win, size)
+    end
+  end
+  -- Geyser MiniConsole API (alcune finestre floating)
+  local geyserTargets = {
+    NebbieDash._chatGeyser,
+    NebbieDash._ach and NebbieDash._ach.console,
+  }
+  for _, g in ipairs(geyserTargets) do
+    if g and type(g.setFontSize) == "function" then
+      pcall(function() g:setFontSize(size) end)
+    end
+  end
 end
 
 function NebbieDash.saveUiStore()
@@ -6758,7 +6804,7 @@ NebbieDash.HELP_TEXT = {
   { "nchar <nome>", "Forza il personaggio attivo (es. nchar Sirio)." },
   { "nclanslot <on|off>", "Mostra/nascondi lo slot simbolo del clan." },
   { "neq", "Invia eq e aggiorna il pannello equip." },
-  { "nfont <6-24>", "Font del pannello Equip." },
+  { "nfont [N|+|-]", "Font dashboard (equip/chat/nach/…; 6-24, persistente)." },
   { "ngui", "Mostra/nascondi il pannello Equip." },
   { "nitemlen <n>", "Lunghezza max descrizioni oggetti in equip." },
   { "nlayout", "Ripristina larghezza/font di default." },
@@ -6923,10 +6969,9 @@ function NebbieDash.resetLayout()
   NebbieDash.autoWidthRight = true
   NebbieDash.guiRatios = { equip = 0.5, manualEquip = false }
   NebbieDash.persistGuiRatios()
+  NebbieDash.persistFontSize()
+  NebbieDash.applyFontSizeToAllWindows(11)
   if NebbieDash._guiCreated then
-    for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
-      setMiniConsoleFontSize(win, NebbieDash.fontSize)
-    end
     NebbieDash.applySidebarBorder()
     setBorderRight(0)
     NebbieDash.applyAutoWidth()
@@ -6937,18 +6982,34 @@ function NebbieDash.resetLayout()
 end
 
 function NebbieDash.cmdSetFont(sizeStr)
-  local size = tonumber(sizeStr)
-  if not size or size < 6 or size > 24 then
-    cecho("<orange>[NebbieDash] Uso: nfont <numero tra 6 e 24> (attuale: " .. NebbieDash.fontSize .. ")\n")
+  sizeStr = (sizeStr or ""):match("^%s*(.-)%s*$") or ""
+  local cur = tonumber(NebbieDash.fontSize) or 11
+  local size = nil
+  if sizeStr == "" or sizeStr == "?" or sizeStr:lower() == "status" then
+    cecho("<green>[NebbieDash] Font dashboard: <white>" .. cur ..
+      "<green> (Mudlet main e' separato). Uso: <yellow>nfont <6-24><green> | <yellow>nfont +<green> | <yellow>nfont -<green>\n")
     return
   end
-  NebbieDash.fontSize = size
-  if NebbieDash._guiCreated then
-    for _, win in ipairs(NebbieDash.GUI_WINDOWS) do
-      setMiniConsoleFontSize(win, size)
-    end
+  if sizeStr == "+" or sizeStr:lower() == "up" or sizeStr:lower() == "bigger" then
+    size = math.min(24, cur + 1)
+  elseif sizeStr == "-" or sizeStr:lower() == "down" or sizeStr:lower() == "smaller" then
+    size = math.max(6, cur - 1)
+  else
+    size = tonumber(sizeStr)
   end
-  cecho("<green>[NebbieDash] Font pannello impostato a " .. size .. ".\n")
+  if not size or size < 6 or size > 24 then
+    cecho("<orange>[NebbieDash] Uso: nfont <6-24> | nfont + | nfont -  (attuale: " .. cur .. ")\n")
+    return
+  end
+  size = math.floor(size)
+  NebbieDash.applyFontSizeToAllWindows(size)
+  NebbieDash.persistFontSize()
+  if NebbieDash._guiCreated then
+    NebbieDash.applyAutoWidth()
+    NebbieDash.positionGUI()
+    NebbieDash.refreshDashboard()
+  end
+  cecho("<green>[NebbieDash] Font dashboard (equip/chat/nach/ident/…) impostato a <white>" .. size .. "\n")
 end
 
 -- Larghezza bordo sinistro (colonna Equip).
@@ -15166,6 +15227,13 @@ end]]></script>
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-dash-font</name>
+   <script><![CDATA[NebbieDash.cmdSetFont("")]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^nfont$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-font-args</name>
    <script><![CDATA[NebbieDash.cmdSetFont(matches[2])]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>

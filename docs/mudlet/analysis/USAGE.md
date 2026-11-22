@@ -109,7 +109,7 @@ quando si aggiunge un alias.
 | `nchar <nome>` | Forza il personaggio attivo (es. `nchar NomiyaMaki`). |
 | `nclanslot <on\|off>` | Mostra/nasconde lo slot simbolo del clan. |
 | `neq` | Invia solo `eq` e aggiorna il pannello equip. |
-| `nfont <6-24>` | Font del pannello Equip (default 11). |
+| `nfont [N\|+\|-]` | Font **dashboard** (equip/chat/nach/ident/…; default 11). Indipendente dal font Mudlet del main. Persistente. |
 | `ngui` | Mostra/nasconde il pannello Equip. |
 | `nitemlen <n>` | Caratteri max descrizione oggetto prima di "…" (10–300). |
 | `nlayout` | Ripristina larghezza/font di default. |
