@@ -63,7 +63,7 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   `weapon_swap_delay`, `sanity_neq_on_login` (`npreferencesreload`).
 - **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
   **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
-- Layout: larghezza colonna Equip `nwidth` / `nwidth auto`.
+- Layout: larghezza colonna Equip trascinando il bordo, oppure `nwidth` / `nwidth auto`.
 - Tasto **"? Comandi"** in cima allo schermo: apre/chiude un elenco di tutti
   i comandi disponibili (anche `nhelp`).
 - Numero di riga tra parentesi quadre nel pannello equip, come nel testo di

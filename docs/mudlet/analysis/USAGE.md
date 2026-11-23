@@ -114,7 +114,7 @@ quando si aggiunge un alias.
 | `nitemlen <n>` | Caratteri max descrizione oggetto prima di "…" (10–300). |
 | `nlayout` | Ripristina larghezza/font di default. |
 | `nresync` | Invia `eq` + `attrib`; **usalo dopo ogni login**. |
-| `nwidth <px\|auto>` | Larghezza colonna Equip (150–900) oppure `auto`. |
+| `nwidth <px\|auto>` | Larghezza colonna Equip (150–900) oppure `auto`. Oppure trascina il bordo destro della colonna. |
 
 ### Spell e cast
 
@@ -1092,16 +1092,18 @@ regolare quanto spazio va all'uno o all'altro, vedi `nheights` sotto).
 
 ## Larghezza automatica dei pannelli
 
-Di default (`nwidth equip auto` / `nwidth right auto`, entrambe attive fin dall'installazione) ogni
-colonna si allarga o restringe da sola in base al contenuto più lungo attualmente visibile
-(posizione/oggetto per l'equip; nome spell e descrizione+direzioni speedwalk per la destra), così
-non c'è più testo che va a capo inutilmente quando ci starebbe su una riga sola, e niente può mai
-"uscire" dal bordo dello schermo (la larghezza calcolata non supera mai il 60% della larghezza della
-finestra di Mudlet). Se preferisci una larghezza fissa scelta da te, usa `nwidth equip <numero>` o
-`nwidth right <numero>` (150–900): disattiva l'automatismo per quella colonna finché non digiti di
-nuovo `nwidth <equip|right> auto`. Senza indicare `equip`/`right` il comando agisce sulla colonna
-destra (compatibilità con la sintassi precedente). `nlayout` (reset) torna sempre alla modalità
-automatica per entrambe.
+Di default (`nwidth auto`, attiva fin dall'installazione) la colonna Equip si allarga o restringe
+da sola in base al contenuto più lungo attualmente visibile (posizione/oggetto), così non c'è più
+testo che va a capo inutilmente quando ci starebbe su una riga sola, e niente può mai "uscire" dal
+bordo dello schermo (la larghezza calcolata non supera mai circa il 38% della finestra di Mudlet).
+
+Se preferisci una larghezza fissa:
+
+- trascina il **bordo destro** della colonna Equip (maniglia verticale sottile), oppure
+- usa `nwidth <numero>` (150–900).
+
+Entrambe le azioni disattivano l'automatismo e salvano la scelta in `nebbie-dash-ui.lua`.
+`nwidth auto` o `nlayout` tornano alla modalità automatica.
 
 ## Altezza Spell attivi / Speedwalk
 

@@ -1178,3 +1178,7 @@ OK. Versione alzata a 1.9.0. Aggiornati USAGE.md, CHANGELOG.md.
 ---
 
 (continua...)
+
+## 2026-11-22 — Equip edge drag resize (1.16.45)
+
+Maniglia verticale `NebbieDashEquipEdge` sul bordo destro della colonna Equip: drag orizzontale → `guiWidthEquip`, disattiva auto-width, persiste in `nebbie-dash-ui.lua`. Comandi `nwidth`/`nlayout` invariati.

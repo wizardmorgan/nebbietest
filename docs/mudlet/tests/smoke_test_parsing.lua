@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.44+",
+check("package version 1.16.47+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.44"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.47"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -3014,6 +3014,23 @@ do
   NebbieDash.ACH_PAGE_SIZE = 15
   NebbieDash.preferencesPath = oldPath
   os.remove(tmp)
+end
+
+-- Equip edge drag helpers (barra grigia / larghezza colonna).
+do
+  check("equip: clamp/edge helpers",
+    type(NebbieDash.clampEquipWidth) == "function"
+      and type(NebbieDash.onEquipEdgePress) == "function"
+      and type(NebbieDash.startEquipWidthDragPoll) == "function"
+      and type(NebbieDash.stopEquipWidthDragPoll) == "function")
+  check("equip: clamp min/max",
+    NebbieDash.clampEquipWidth(10) == 150
+      and NebbieDash.clampEquipWidth(9999) == 900
+      and NebbieDash.clampEquipWidth(320) == 320)
+  NebbieDash._equipWidthDrag = true
+  NebbieDash.stopEquipWidthDragPoll()
+  NebbieDash._equipWidthDrag = nil
+  check("equip: stop drag poll senza timer", true)
 end
 
 
