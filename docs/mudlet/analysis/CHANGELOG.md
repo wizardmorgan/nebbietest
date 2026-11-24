@@ -1,5 +1,268 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.48 — 2026-11-24
+
+- **ngroupfollow**: segue il capo gruppo in portal/pool. Il capo e' chi
+  ha `(Head of group)` nell'output di `group` (si aggiorna da solo).
+  Portal → `enter portal`; piscina → `enter pool`. Prefs `group_follow`
+  (default on). Non scatta se sei tu il capo.
+
+## 1.16.47 — 2026-11-23
+
+- **Fix drag barra Equip**: `enableClickthrough(...)` abilitava il
+  pass-through dei click (barra grigia ma non trascinabile). Ora
+  `disableClickthrough` + `createLabel(..., 0)`. Durante il drag un poll
+  aggiorna la larghezza anche quando il mouse esce dalla maniglia (8px).
+
+## 1.16.46 — 2026-11-22
+
+- **Maniglia Equip visibile**: la MiniConsole non copre piu' il bordo di
+  drag (lascia 8px liberi); barra grigio-blu ben visibile e cliccabile.
+  Prima (1.16.45) la maniglia restava sotto il pannello e non si vedeva.
+
+## 1.16.45 — 2026-11-22
+
+- **Larghezza Equip trascinabile**: sul bordo destro della colonna Equip
+  c'e' una maniglia verticale; trascinala per cambiare la larghezza
+  (150–900 px). Disattiva l'auto-width e salva in `nebbie-dash-ui.lua`
+  (come `nwidth`). `nwidth auto` / `nlayout` ripristinano l'automatico.
+
+## 1.16.44 — 2026-11-22
+
+- **nach raccolta solo porta 4000**: prefs `ach_port = 4000` (0 = tutte).
+  Su altre porte (es. 4002) niente refresh automatico, `nach refresh`,
+  parse lista né update live — cosi' i dati di produzione non si
+  mescolano con il test.
+
+## 1.16.43 — 2026-11-22
+
+- **nach refresh silenzioso**: al login nasconde davvero lo scroll di
+  `achievements all` (`deleteLine` sulle righe lista/pager). Prima il
+  messaggio diceva “in silenzio” ma l’output restava visibile.
+
+## 1.16.42 — 2026-11-22
+
+- **nach hotkey Mac**: tolto **Cmd+Shift+A** (su macOS apre “Search man
+  Page Index in Terminal”). Resta **Control+Shift+A**; su Mac anche
+  **Option+Shift+A**.
+
+## 1.16.41 — 2026-11-22
+
+- **nach hotkey Mac**: oltre a Control+Shift+A, anche **Cmd+Shift+A**
+  (`Meta` in Mudlet). Su macOS Control e Command sono tasti diversi.
+  *(superseded da 1.16.42)*
+
+## 1.16.40 — 2026-11-22
+
+- **nach**: `ach_page_size` in `nebbie-dash-preferences.txt` (default **15**,
+  range 5–50); quante voci per pagina. Ricarica con `npreferencesreload`.
+
+## 1.16.39 — 2026-11-22
+
+- **nach UI**: selettore **soglia** (Tutte / 1 / 10 / 100 / …) — raggruppa
+  gli achievement per obiettivo (`max`) dello scalino mostrato. I bottoni
+  si aggiornano dai dati del toon/filtro tipo.
+
+## 1.16.38 — 2026-11-22
+
+- **nfont / font_size**: default **15**; salvato in
+  `nebbie-dash-preferences.txt` (`font_size = …`), non in ui.lua e non in
+  ncfgsync (per-macchina).
+
+## 1.16.37 — 2026-11-22
+
+- **nfont**: regola il font di tutte le finestre dashboard (equip, chat,
+  nach, ident, …), indipendente dal font Mudlet; `nfont +` / `nfont -`.
+
+## 1.16.36 — 2026-11-22
+
+- **nach UI**: pagine da **20** (era 30).
+
+## 1.16.35 — 2026-11-22
+
+- **nach UI**: elenco a pagine (link prec/succ); barre progresso a
+  blocchi pieni (`█`/`░`) al posto di `#`/`-`. Filtri cat/ordine invariati.
+
+## 1.16.34 — 2026-11-21
+
+- **nach sync VPS**: `/v1/ach` sull'hub ident (stesso token); pull/push per
+  toon (merge per `prog`). Al login del toon: pull + `achievements all`
+  silenzioso (`ach_auto_refresh` / `ach_sync`). Richiede aggiornamento
+  `tools/ident-sync-server` sul VPS.
+
+## 1.16.33 — 2026-11-21
+
+- **nach / nachievements**: finestra achievement per toon (port Nebbie
+  Achievement). File `ndashboard/achievement/<PG>.lua`, migrazione da
+  `~/…/achievement/`, update live, scalini, Ctrl+Shift+A, `nach refresh`.
+
+## 1.16.32 — 2026-11-21
+
+- **suoni macOS**: gli `.aiff` di sistema non partivano con `playSoundFile`
+  (SDL) → fallback `afplay`; `ndig testsound [humber|dig_done|dig_warn]`.
+
+## 1.16.31 — 2026-11-21
+
+- **ndig**: se `dig` non attivava `active` (sysDataSendRequest assente / dig
+  via script), ora: alias `^dig$`, attivazione al primo feedback MUD se
+  `armed`, registrazione additiva di `sysDataSendRequest`.
+
+## 1.16.30 — 2026-11-21
+
+- **nchat**: think non piu' duplicato (un solo trigger `:: '` / `|| '`).
+
+## 1.16.29 — 2026-11-21
+
+- **nchat**: cattura anche **think** immortali (`Tu pensi :: '…'`,
+  `::Nome:: '…'`) e think superni (`||`).
+
+## 1.16.28 — 2026-11-20
+
+- **ncfgsync**: sync dei file di config `ndashboard` sullo stesso hub/token
+  di `nidentsync`. Merge **additivo** (aggiunge chiavi/righe mancanti, non
+  sovrascrive). Include shortcut, cast-spells, speedwalks, hunger macros,
+  item-keywords, dig-loot, preferenze whitelist, batch. Esclusi sounds e
+  cache PG/UI. Server: `GET/POST /v1/config*` in `tools/ident-sync-server`.
+  Comandi: `ncfgsync` / `ncfgpull` / `ncfgpush` / `ncfgsync list`.
+
+## 1.16.27 — 2026-11-20
+
+- **ndig off**: ripristina l'arma `dig_combat` (umber) e ripone `dig_tool`
+  nello zaino. Se combat e' gia' in mano, non rifa lo swap.
+
+## 1.16.26 — 2026-11-20
+
+- **ndig umber**: allo swap combat/dig_tool fa sempre `rem`+`put` dell'arma
+  da riporre (`dig_tool` / `dig_combat`), anche se l'eq cache non ha
+  «impugnato» aggiornato — prima poteva mancare il put nello zaino.
+
+## 1.16.25 — 2026-11-20
+
+- **ndig**: a filone esaurito, dopo loot zaino torna anche `drop 1 coin`
+  (marca stanza, come dadomud). Se lo zaino manca, droppa comunque la moneta.
+
+## 1.16.24 — 2026-11-20
+
+- **nhelp**: comandi divisi per sezione (ordine alfabetico in ciascuna);
+  include ndig/ndigloot e alias mancanti. `ndig help` con riassunto.
+  La finestra help si aggiorna a ogni riapertura.
+
+## 1.16.23 — 2026-11-20
+
+- **ndig**: trigger frantumi generico (`cade a terra in frantumi`) — cattura
+  anche `A mining pick …`, non solo `Piccone …`. Su `Forse usando l'attrezzo
+  adatto` riprende `dig_tool` invece di spegnere. Fame/sete e cambio dig non
+  si pestano sullo zaino (coda reciproca).
+
+## 1.16.22 — 2026-11-20
+
+- **ndig**: se il piccone cade in frantumi, lo script prende un nuovo `dig_tool`
+  dallo zaino **senza** `rem`/`put` dell'arma cache (mani gia' vuote). Evita
+  `Non lo stai usando` / `Non hai nessun piccone` dopo la rottura.
+
+## 1.16.21 — 2026-11-20
+
+- **ndig loot**: a filone esaurito, dopo `inv` mette in zaino i keep e droppa
+  il resto (file `nebbie-dig-loot.txt`: `keep`/`exclude`/`drop`). Default:
+  oro/mithril/acciaio + pietre (no carbone). `ndigloot` / `ndig loot`.
+
+## 1.16.20 — 2026-11-20
+
+- **ndig**: default `dig_tool = pic` (matcha piccone e pick).
+
+## 1.16.19 — 2026-11-20
+
+- **ndig / automine** (da dadomud): `ndig` impugna piccone dallo zaino;
+  al primo `dig` partono retry 24s, swap umber, ripresa dopo sanc/piccone
+  rotto, filone esaurito (`inv`+`drop 1 coin`), refresh/true sight.
+  `ndig off|tool|combat|status`. Suoni: file in `nebbie-dash-sounds.txt`
+  oppure fallback suoni di sistema (Linux/Windows/macOS).
+
+## 1.16.18 — 2026-11-18
+
+- **nchat**: cattura anche **sign** (`Tu hai detto '…'`,
+  `[Nome], con i segni, dice '…'`).
+
+## 1.16.17 — 2026-11-18
+
+- **nchat**: cattura anche **telepathy** (`Tu mandi a … il pensiero '…'`,
+  `[Nome] ti manda il pensiero '…'`).
+
+## 1.16.16 — 2026-11-18
+
+- **nchat**: cattura anche skill **sending** / messenger (`Mandi a … il
+  messaggio '…'`, `[Nome] ti manda il messaggio '…'`).
+
+## 1.16.15 — 2026-11-18
+
+- **nidentdb**: se un toon re-identa un pezzo già in DB assegnato a un altro
+  toon, il **possesso passa** a chi identa (messaggio in console; filtro PG
+  usa il detentore attuale, non lo storico `byCharacter`).
+- **Sync VPS**: resta **manuale** (`nidentsync`) salvo `ident_sync_on_boot =
+  on` all’apertura profilo — non parte da solo a ogni identify.
+
+## 1.16.14 — 2026-11-18
+
+- **ngoldalert**: non segnala più come furto `account buy …` (cassetta
+  account / Platino) né l’echo `Hai pagato N monete.` (importo in coda).
+
+## 1.16.13 — 2026-11-18
+
+- **nidentui archivio**: dopo conferma resta su **stesso tab e stessa pagina**
+  (non salta più ad Archiviati / pagina 1).
+- **nidentui pagine**: tasti `[«« inizio]` e `[fine »»]`.
+- **Slot manuali**: eq/resync/rebuild **non** riaggiungono slot se
+  `wearSlotsManual`; repair al load se un tag manuale aveva N>1 slot
+  (effetto del bug precedente).
+
+## 1.16.12 — 2026-11-18
+
+- **nidentui**: gli **archiviati** restano **solo** in `[Archiviati]` (niente
+  più tab Tutti; Attivi non li mostra). `isIdentArchived` più robusto;
+  reset filtri torna ad Attivi.
+
+## 1.16.11 — 2026-11-18
+
+- **nidentui lista**: numerazione **progressiva** tra le pagine (pag.2 continua
+  da 13…, non riparte da 1).
+
+## 1.16.10 — 2026-11-18
+
+- **nidentui**: riattivato doppio-clic **convertToUserWindow** (stacca fuori /
+  rientra in Mudlet). Era disabilitato in 1.16.8 per le shell vuote; con il
+  fix di `openUserWindow` non serve più bloccarlo.
+
+## 1.16.9 — 2026-11-18
+
+- **nidentui rebuild**: sincrono (niente `tempTimer` — non resta più appeso
+  e non apre una seconda finestra se rilanci `nidentui`); non chiama più
+  `closeUserWindow` sul nome Adjustable (poteva freezare); nuovo nome
+  container `NebbieDashIdentUiPanel` per evitare collisioni con shell OS
+  legacy; chiude solo orfani CTUW/legacy.
+- **Slot**: rimosso **`incoccata`** da equip/picker (resta `come luce`).
+
+## 1.16.8 — 2026-11-18
+
+- **nidentui**: fix finestre OS **vuote/duplicate** — su Adjustable `show()`
+  non chiama più `openUserWindow` (creava shell vuote omonime); su rebuild
+  chiude gli orfani; disabilita doppio-clic CTUW su nidentui; migra via da
+  UserWindow nativo / CTUW staccato verso Adjustable dentro Mudlet.
+
+## 1.16.7 — 2026-11-18
+
+- **nidentui**: dopo impostazione manuale dello slot torna alla **lista**
+  (non al dettaglio). Picker: link `[« lista]`.
+- **nidentui create/rebuild**: preferisce **Adjustable.Container** (dentro
+  Mudlet, ancorato a destra come `nswui`); UserWindow OS solo come fallback.
+  Continua a **non** chiamare `:load()` (evita UI invisibile con CTUW).
+
+## 1.16.6 — 2026-11-18
+
+- **nidentui rebuild**: fix crash Mudlet — teardown UserWindow nativo senza
+  combinare `:delete` + `deleteWindow` + `closeUserWindow` (double-free Qt);
+  niente detach CTUW su backend `userwindow`; ricrea deferred (`tempTimer 0.2`);
+  geometria sempre in `"Npx"`.
+
 ## 1.16.5 — 2026-11-18
 
 - **nidentui**: size/pos di default `560x480` @ `(80,80)` su create/rebuild;

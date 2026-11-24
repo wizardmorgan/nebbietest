@@ -35,6 +35,26 @@ def test_merge_logic() -> None:
     check("older incoming unchanged body", status2 == "unchanged" and merged2["lastAt"] == 20)
     check("older still unions byCharacter", "C" in merged2["byCharacter"])
 
+    # Config: additive only
+    base = {"he": "he = heal"}
+    merged_cfg, st_cfg = server.merge_config_entries(
+        base, {"he": "he = OTHER", "ts": "ts = true sight"}
+    )
+    check("config insert new key", st_cfg["inserted"] == 1 and "ts" in merged_cfg)
+    check("config never overwrite", merged_cfg["he"] == "he = heal" and st_cfg["unchanged"] == 1)
+
+    # Ach: higher prog wins
+    a_ach = {"nome": "A", "cat": "Race", "prog": 10, "max": 100, "cont": "x", "t": 1}
+    b_ach = {"nome": "A", "cat": "Race", "prog": 50, "max": 100, "cont": "x", "t": 2}
+    m_ach, st_ach = server.merge_ach_entry(a_ach, b_ach)
+    check("ach higher prog wins", st_ach == "updated" and m_ach["prog"] == 50)
+    m_old, st_old = server.merge_ach_entry(m_ach, a_ach)
+    check("ach older prog unchanged", st_old == "unchanged" and m_old["prog"] == 50)
+    toon_a = {"lista": {"A": a_ach}, "aggiornato": "old"}
+    toon_b = {"lista": {"A": b_ach, "B": {"nome": "B", "prog": 1, "max": 5, "t": 3}}, "aggiornato": "new"}
+    mt, stt = server.merge_ach_toon(toon_a, toon_b)
+    check("ach toon insert+update", stt["inserted"] == 1 and stt["updated"] == 1 and "B" in mt["lista"])
+
 
 def http_json(url: str, method: str = "GET", body: dict | None = None, token: str | None = None):
     data = None
@@ -124,6 +144,104 @@ def test_http() -> None:
             ent = page["entries"]["anello prova"]
             check("name kept newer", ent["objectName"] == "Anello Prova")
             check("byCharacter union Sirio", "Sirio" in ent["byCharacter"] and "Mirari" in ent["byCharacter"])
+
+            # --- config sync additive ---
+            cfg_payload = {
+                "files": {
+                    "nebbie-spell-shortcuts.txt": {
+                        "entries": {"he": "he = heal", "ts": "ts = true sight"}
+                    }
+                }
+            }
+            st, cfg_merge = http_json(
+                base + "/v1/config/merge", method="POST", body=cfg_payload, token=token
+            )
+            check(
+                "config merge insert",
+                st == 200 and cfg_merge["inserted"] == 2 and cfg_merge["ok"] is True,
+            )
+            st, files = http_json(base + "/v1/config/files", token=token)
+            check(
+                "config files list",
+                st == 200
+                and len(files["files"]) == 1
+                and files["files"][0]["file"] == "nebbie-spell-shortcuts.txt",
+            )
+            st, cfg_page = http_json(
+                base + "/v1/config?file=nebbie-spell-shortcuts.txt&page=1", token=token
+            )
+            check("config page has he", st == 200 and "he" in cfg_page["entries"])
+            # overwrite attempt must leave original
+            overwrite = {
+                "files": {
+                    "nebbie-spell-shortcuts.txt": {
+                        "entries": {"he": "he = OVERWRITE", "wo": "wo = word of recall"}
+                    }
+                }
+            }
+            st, cfg_merge2 = http_json(
+                base + "/v1/config/merge", method="POST", body=overwrite, token=token
+            )
+            check("config additive insert wo", cfg_merge2["inserted"] == 1)
+            st, cfg_page = http_json(
+                base + "/v1/config?file=nebbie-spell-shortcuts.txt&page=1", token=token
+            )
+            check("config he not overwritten", cfg_page["entries"]["he"] == "he = heal")
+            check("config wo present", cfg_page["entries"].get("wo") == "wo = word of recall")
+
+            # --- achievement sync ---
+            ach_payload = {
+                "toons": {
+                    "NomiyaMaki": {
+                        "aggiornato": "2026-11-21",
+                        "lista": {
+                            "Hobbit": {
+                                "nome": "Hobbit",
+                                "cat": "Race",
+                                "prog": 100,
+                                "max": 2500,
+                                "cont": "umanoidi",
+                                "t": 10,
+                            }
+                        },
+                    }
+                }
+            }
+            st, ach_merge = http_json(
+                base + "/v1/ach/merge", method="POST", body=ach_payload, token=token
+            )
+            check(
+                "ach merge insert",
+                st == 200 and ach_merge["inserted"] == 1 and ach_merge["ok"] is True,
+            )
+            st, ach_page = http_json(
+                base + "/v1/ach?toon=NomiyaMaki&page=1", token=token
+            )
+            check("ach page has Hobbit", st == 200 and "Hobbit" in ach_page["lista"])
+            older_ach = {
+                "toons": {
+                    "NomiyaMaki": {
+                        "lista": {
+                            "Hobbit": {
+                                "nome": "Hobbit",
+                                "cat": "Race",
+                                "prog": 50,
+                                "max": 2500,
+                                "cont": "umanoidi",
+                                "t": 1,
+                            }
+                        }
+                    }
+                }
+            }
+            st, ach_merge2 = http_json(
+                base + "/v1/ach/merge", method="POST", body=older_ach, token=token
+            )
+            check("ach older unchanged", ach_merge2["unchanged"] == 1)
+            st, ach_page = http_json(
+                base + "/v1/ach?toon=NomiyaMaki&page=1", token=token
+            )
+            check("ach prog kept newer", ach_page["lista"]["Hobbit"]["prog"] == 100)
         finally:
             proc.terminate()
             try:

@@ -63,7 +63,7 @@ profilo Mudlet, più personaggi, cambio automatico rilevato dal prompt).
   `weapon_swap_delay`, `sanity_neq_on_login` (`npreferencesreload`).
 - **Shortcut spell globali** (`nebbie-spell-shortcuts.txt`, stile zMUD) +
   **`c`/`r`/`m <spell> [bersaglio]`** con bersaglio sempre esplicito al MUD.
-- Layout: larghezza colonna Equip `nwidth` / `nwidth auto`.
+- Layout: larghezza colonna Equip trascinando il bordo, oppure `nwidth` / `nwidth auto`.
 - Tasto **"? Comandi"** in cima allo schermo: apre/chiude un elenco di tutti
   i comandi disponibili (anche `nhelp`).
 - Numero di riga tra parentesi quadre nel pannello equip, come nel testo di
@@ -166,7 +166,8 @@ ALIASES = [
     ("nebbie-dash-gui", "^ngui$", "NebbieDash.toggleGUI()"),
     ("nebbie-dash-layout", "^nlayout$", "NebbieDash.resetLayout()"),
     ("nebbie-dash-char", "^nchar (.+)$", "NebbieDash.cmdSetCharacter(matches[2])"),
-    ("nebbie-dash-font", "^nfont (.+)$", "NebbieDash.cmdSetFont(matches[2])"),
+    ("nebbie-dash-font", "^nfont$", "NebbieDash.cmdSetFont(\"\")"),
+    ("nebbie-dash-font-args", "^nfont (.+)$", "NebbieDash.cmdSetFont(matches[2])"),
     ("nebbie-dash-width", "^nwidth (.+)$", "NebbieDash.cmdSetWidth(matches[2])"),
     ("nebbie-dash-itemlen", "^nitemlen (.+)$", "NebbieDash.cmdSetItemLen(matches[2])"),
     ("nebbie-dash-quickcast", "^([crm]) (.+)$", "NebbieDash.cmdQuickCast(matches[2], matches[3])"),
@@ -184,6 +185,9 @@ ALIASES = [
     ("nebbie-dash-leftheights", "^nleftheights (.+)$", "NebbieDash.cmdSetLeftHeights(matches[2])"),
     ("nebbie-dash-clanslot", "^nclanslot (.+)$", "NebbieDash.cmdSetClanSlot(matches[2])"),
     ("nebbie-dash-usa", "^usa (.+)$", "NebbieDash.cmdUsa(matches[2])"),
+    ("nebbie-dash-dig", "^ndig$", "NebbieDash.cmdDig(\"\")"),
+    ("nebbie-dash-dig-args", "^ndig (.+)$", "NebbieDash.cmdDig(matches[2])"),
+    ("nebbie-dash-dig-loot", "^ndigloot$", "NebbieDash.cmdReloadDigLoot()"),
     ("nebbie-dash-configdir", "^nconfigdir$", "NebbieDash.cmdConfigDir(\"\")"),
     ("nebbie-dash-sidebar", "^nsidebar (.+)$", "NebbieDash.cmdSetSidebar(matches[2])"),
     ("nebbie-dash-preferences-reload", "^npreferencesreload$", "NebbieDash.cmdReloadPreferences()"),
@@ -192,6 +196,8 @@ ALIASES = [
     ("nebbie-dash-help", "^nhelp$", "NebbieDash.toggleHelp()"),
     ("nebbie-dash-loot", "^nloot$", "NebbieDash.cmdLoot()"),
     ("nebbie-dash-autosplit", "^nautosplit (.+)$", "NebbieDash.cmdSetAutoSplit(matches[2])"),
+    ("nebbie-dash-groupfollow", "^ngroupfollow$", "NebbieDash.cmdGroupFollow(\"\")"),
+    ("nebbie-dash-groupfollow-args", "^ngroupfollow (.+)$", "NebbieDash.cmdGroupFollow(matches[2])"),
     ("nebbie-dash-gold-alert", "^ngoldalert$", "NebbieDash.cmdSetGoldAlert(\"\")"),
     ("nebbie-dash-gold-alert-args", "^ngoldalert (.+)$", "NebbieDash.cmdSetGoldAlert(matches[2])"),
     ("nebbie-dash-groupcmd", "^ngroupcmd$", "NebbieDash.cmdGroupCmd(\"\")"),
@@ -220,6 +226,10 @@ ALIASES = [
     ("nebbie-dash-ident-sync-args", "^nidentsync (.+)$", "NebbieDash.cmdIdentSync(matches[2])"),
     ("nebbie-dash-ident-pull", "^nidentpull$", "NebbieDash.cmdIdentPull()"),
     ("nebbie-dash-ident-push", "^nidentpush$", "NebbieDash.cmdIdentPush()"),
+    ("nebbie-dash-cfg-sync", "^ncfgsync$", "NebbieDash.cmdCfgSync(\"\")"),
+    ("nebbie-dash-cfg-sync-args", "^ncfgsync (.+)$", "NebbieDash.cmdCfgSync(matches[2])"),
+    ("nebbie-dash-cfg-pull", "^ncfgpull$", "NebbieDash.cmdCfgPull()"),
+    ("nebbie-dash-cfg-push", "^ncfgpush$", "NebbieDash.cmdCfgPush()"),
     ("nebbie-dash-ident-ui", "^nidentui$", "NebbieDash.cmdIdentUi(\"\")"),
     ("nebbie-dash-ident-ui-args", "^nidentui (.+)$", "NebbieDash.cmdIdentUi(matches[2])"),
     ("nebbie-dash-know-db", "^nknowdb$", "NebbieDash.cmdKnowDb(\"\")"),
@@ -227,6 +237,10 @@ ALIASES = [
     ("nebbie-dash-know-db-reload", "^nknowdbreload$", "NebbieDash.cmdReloadKnowDb()"),
     ("nebbie-dash-chat", "^nchat$", "NebbieDash.cmdChat(\"\")"),
     ("nebbie-dash-chat-args", "^nchat (.+)$", "NebbieDash.cmdChat(matches[2])"),
+    ("nebbie-dash-ach", "^nach$", "NebbieDash.cmdAch(\"\")"),
+    ("nebbie-dash-ach-args", "^nach (.+)$", "NebbieDash.cmdAch(matches[2])"),
+    ("nebbie-dash-achievements", "^nachievements$", "NebbieDash.cmdAch(\"\")"),
+    ("nebbie-dash-achievements-args", "^nachievements (.+)$", "NebbieDash.cmdAch(matches[2])"),
     ("nebbie-dash-package-update", "^npackageupdate(?: (force|forza))?$",
      "NebbieDash.cmdPackageUpdate(matches[2])"),
     ("nebbie-dash-package-check", "^npackagecheck$",

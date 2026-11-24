@@ -29,13 +29,25 @@ curl -s http://127.0.0.1:8787/health
 
 | Metodo | Path | Auth | Note |
 |--------|------|------|------|
-| GET | `/health` | no | stato + conteggio entry |
+| GET | `/health` | no | stato + conteggio entry (+ config) |
 | GET | `/v1/ident?page=1&page_size=5` | Bearer | pagine piccole (limite Mudlet ~10k sul body GET) |
 | POST | `/v1/ident/merge` | Bearer | body `{"entries":{...}}`; risposta compatta |
+| GET | `/v1/config/files` | Bearer | elenco file config syncati |
+| GET | `/v1/config?file=NAME&page=1` | Bearer | pagine entry di un file |
+| POST | `/v1/config/merge` | Bearer | body `{"files":{name:{"entries":{…}}}}` |
+| GET | `/v1/ach?toon=NAME&page=1` | Bearer | pagine lista achievement di un toon |
+| POST | `/v1/ach/merge` | Bearer | body `{"toons":{name:{"lista":{…}}}}` |
 
 Header: `Authorization: Bearer <token>` oppure `X-Nebbie-Token: <token>`.
 
-Merge: vince l’entry con `lastAt` più alto; `byCharacter` viene unito.
+**Ident merge**: vince l’entry con `lastAt` più alto; `byCharacter` viene unito.
+
+**Config merge**: **solo additivo** — inserisce chiavi mancanti, non
+sovrascrive valori già presenti. Dati in `NEBBIE_CONFIG_DATA` (default:
+stessa cartella di `ident-db.json` → `config-db.json`).
+
+**Ach merge**: per toon, per achievement; vince il `prog` più alto (pari → `t`
+più alto). Dati in `NEBBIE_ACH_DATA` (default `ach-db.json`).
 
 ## TLS / ufficio / Tailscale
 
@@ -73,13 +85,18 @@ ident_sync_skip_prompt = off
 
 Comandi:
 
-- `nidentsync` — pull a pagine + merge + push
+- `nidentsync` — pull a pagine + merge + push (identify DB)
 - `nidentpull` / `nidentpush`
 - `nidentsync token <segreto>` — salva token (+ sync)
 - `nidentsync skip` / `setup` — non chiedere all’avvio / ripropone
 - `nidentsync status` — URL mascherato + stato
+- `ncfgsync` / `ncfgpull` / `ncfgpush` / `ncfgsync list` — sync file
+  config `ndashboard` (merge additivo; stesso token)
 
 Non condividere il token; non finisce nei log del package (solo URL base).
+
+Dopo un aggiornamento del server, riavvia il servizio systemd (nuovo file
+`config-db.json` creato al primo merge).
 
 ## systemd (esempio)
 
