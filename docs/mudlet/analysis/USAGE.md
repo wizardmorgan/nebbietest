@@ -153,6 +153,7 @@ quando si aggiunge un alias.
 | `nautoloot <on\|off>` | Loot monete automatico a fine fight (default on). |
 | `nautosplit <on\|off>` | Split automatico col gruppo dopo loot (default on). |
 | `ngoldalert [on\|off\|status]` | Allarme se `G:` scende senza spesa volontaria. |
+| `ngroupfollow [on\|off\|status\|refresh]` | Segui il capo (`Head of group`) in portal/pool. |
 | `nloot` | Prende monete dal cadavere (`corp` / `pile`). |
 | `nsplit <n>` | Split manuale col gruppo. |
 
@@ -514,6 +515,25 @@ sovrapposizione (evita split inviati/non inviati in base al controllo sbagliato)
 I due automatismi sono indipendenti: puoi disattivare solo il loot (`nautoloot off`, es. se preferisci
 farlo tu a mano con `nloot` quando vuoi) o solo lo split (`nautosplit off`, usando poi `nsplit
 <numero>` quando ti serve), oppure entrambi.
+
+## Group follow (portal / piscina) — da 1.16.48
+
+Il capo non e' un nome fisso: e' sempre il toon con `(Head of group)` nell'output di `group`
+(anche dopo che il capo cambia). Preferenza `group_follow = on` (default).
+
+```
+ngroupfollow              # stato (on/off + capo noto)
+ngroupfollow on|off
+ngroupfollow refresh      # manda group per aggiornare il capo
+```
+
+Quando il capo entra in un portale o in una piscina, il client invia da solo:
+
+- `Cataklisma enters a misty portal, and vanishes!` → `enter portal`
+- `Cataklisma entra nella piscina. …` → `enter pool`
+
+Se sei tu il capo, non parte. Digita `group` almeno una volta (o aspetta l'autosplit che
+gia' lo manda) cosi' il capo viene memorizzato.
 
 ## Rialzarsi e recupero arma automatici
 

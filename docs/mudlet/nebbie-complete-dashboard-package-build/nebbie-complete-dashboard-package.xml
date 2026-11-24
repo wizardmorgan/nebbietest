@@ -15,7 +15,7 @@
 -- docs/mudlet/analysis/RECOMMENDATION.md. Pattern prompt/eq basati su dati reali
 -- forniti dall'utente (docs/mudlet/analysis/Q&A.md, Round 3).
 
-local PKG_VER = "1.16.47"
+local PKG_VER = "1.16.48"
 local PKG_REPO = "wizardmorgan/nebbie-mudlet-dashboard"
 local PKG_FILE = "nebbie-complete-dashboard-package.mpackage"
 -- @main su jsDelivr puo' restare stale (osservato: restava 1.15.56 mentre tip
@@ -723,6 +723,8 @@ function NebbieDash.ensurePreferencesFile()
     "ach_page_size = 15\n" ..
     "# ach_port = 4000           # raccogli achievement solo su questa porta (0 = tutte)\n" ..
     "ach_port = 4000\n" ..
+    "# group_follow = on         # segui capo (Head of group) in portal/pool\n" ..
+    "group_follow = on\n" ..
     "# font_size = 15            # font MiniConsole dashboard (nfont; non sync VPS)\n" ..
     "font_size = 15\n" ..
     "auto_install_convert_to_userwindow = on\n"
@@ -756,6 +758,7 @@ function NebbieDash.loadPreferences()
     ach_sync = true,
     ach_page_size = 15,
     ach_port = 4000,
+    group_follow = true,
     font_size = 15,
     auto_install_convert_to_userwindow = true,
   }
@@ -807,6 +810,8 @@ function NebbieDash.loadPreferences()
             local n = tonumber(val)
             -- 0 = qualsiasi porta; altrimenti 1-65535.
             if n and n >= 0 and n <= 65535 then NebbieDash.prefs.ach_port = math.floor(n) end
+          elseif key == "group_follow" then
+            NebbieDash.prefs.group_follow = NebbieDash.parsePreferencesBool(val)
           elseif key == "font_size" then
             local n = tonumber(val)
             if n and n >= 6 and n <= 24 then NebbieDash.prefs.font_size = math.floor(n) end
@@ -863,6 +868,10 @@ function NebbieDash.loadPreferences()
   if aport < 0 then aport = 0 end
   if aport > 65535 then aport = 65535 end
   NebbieDash.prefs.ach_port = math.floor(aport)
+  if NebbieDash.prefs.group_follow == nil then
+    NebbieDash.prefs.group_follow = true
+  end
+  NebbieDash.groupFollow = NebbieDash.prefs.group_follow ~= false
 end
 
 function NebbieDash.savePreferencesFile()
@@ -902,6 +911,7 @@ function NebbieDash.savePreferencesFile()
     "ach_sync = " .. ((NebbieDash.prefs and NebbieDash.prefs.ach_sync ~= false) and "on" or "off") .. "\n" ..
     "ach_page_size = " .. tostring(math.floor(achPage)) .. "\n" ..
     "ach_port = " .. tostring(math.floor(achPort)) .. "\n" ..
+    "group_follow = " .. ((NebbieDash.groupFollow ~= false) and "on" or "off") .. "\n" ..
     "font_size = " .. tostring(math.floor(fontSize)) .. "\n" ..
     "auto_install_convert_to_userwindow = " ..
       ((NebbieDash.prefs and NebbieDash.prefs.auto_install_convert_to_userwindow ~= false) and "on" or "off") .. "\n"
@@ -1675,6 +1685,7 @@ NebbieDash.SHORTCUT_RESERVED = {
   nlayout = true, nchar = true, nclass = true, nfont = true, nwidth = true, nitemlen = true,
   nspellwarn = true, nspeedwalks = true, nspeeddelay = true, nheights = true, nleftheights = true,
   nclanslot = true, nloot = true, nautoloot = true, nautosplit = true, nsplit = true,
+  ngroupfollow = true,
   nautostand = true, nautodisarm = true, nautofeed = true, nhungermacros = true, nitemkeywords = true,
   nforgetspell = true, nbatch = true, nbatchreload = true, nbatchverify = true,
   nidentbatch = true, nidentbatchreload = true, nspellaliases = true, nspellaliasesreload = true,
@@ -7328,6 +7339,7 @@ NebbieDash.HELP_TEXT = {
   { "nautosplit <on|off>", "Split automatico col gruppo dopo loot (default on)." },
   { "ngoldalert [on|off|status]", "Allarme se G: scende senza spesa volontaria." },
   { "ngroupcmd …", "Comando di gruppo (vedi USAGE)." },
+  { "ngroupfollow [on|off|status|refresh]", "Segui il capo (Head of group) in portal/pool." },
   { "nloot", "Prende monete dal cadavere (corp / pile of bones)." },
   { "nsplit <n>", "Split manuale col gruppo." },
 
@@ -7556,6 +7568,7 @@ function NebbieDash.cmdReloadPreferences()
   NebbieDash.loadSoundsConfig()
   NebbieDash.weaponSwapDelay = NebbieDash.prefs.weapon_swap_delay or NebbieDash.weaponSwapDelay
   NebbieDash.chatEnabled = NebbieDash.prefs.chat_window ~= false
+  NebbieDash.groupFollow = NebbieDash.prefs.group_follow ~= false
   NebbieDash.installTextHighlightTriggers()
   NebbieDash.installDigAutomineTriggers()
   if NebbieDash.chatEnabled then
@@ -7576,6 +7589,7 @@ function NebbieDash.cmdReloadPreferences()
     ", weapon_swap_delay=" .. tostring(NebbieDash.weaponSwapDelay) ..
     ", text_highlights=" .. ((NebbieDash.textHighlights ~= false) and "on" or "off") ..
     ", chat_window=" .. ((NebbieDash.chatEnabled ~= false) and "on" or "off") ..
+    ", group_follow=" .. ((NebbieDash.groupFollow ~= false) and "on" or "off") ..
     ", ach_page_size=" .. tostring(NebbieDash.achPageSize()) ..
     ", font_size=" .. tostring(NebbieDash.fontSize or 15) .. ").\n")
 end
@@ -14044,6 +14058,168 @@ function NebbieDash.cmdSetAutoSplit(argStr)
   cecho("<green>[NebbieDash] Split automatico dopo loot: " .. (NebbieDash.autoSplit and "on" or "off") .. ".\n")
 end
 
+-- ---------------------------------------------------------------------------
+-- Group follow: segui il capo (riga con "(Head of group)") in portal / pool.
+-- Capo aggiornato da ogni listing `group`; non dipende dal nome fisso.
+-- Portal:  "<Nome> enters a misty portal, and vanishes!" → enter portal
+-- Pool:    "<Nome> entra nella piscina. ..." → enter pool
+-- ---------------------------------------------------------------------------
+NebbieDash.groupFollow = true
+NebbieDash.groupLeader = nil
+
+-- "    Cataklisma      (Head of group) HP:99% ..."
+function NebbieDash.parseGroupLeaderName(text)
+  text = NebbieDash.stripColors(text or "")
+  text = text:match("^%s*(.-)%s*$") or ""
+  -- Capo = primo token della riga che contiene (Head of group).
+  local name = text:match("^(%S+).-%([Hh]ead of [Gg]roup%)")
+  if name and name ~= "" then return name end
+  return nil
+end
+
+function NebbieDash.setGroupLeader(name, quiet)
+  name = tostring(name or ""):match("^%s*(.-)%s*$") or ""
+  if name == "" then
+    NebbieDash.groupLeader = nil
+    return
+  end
+  local prev = NebbieDash.groupLeader
+  NebbieDash.groupLeader = name
+  if not quiet and prev ~= name then
+    cecho("<grey>[NebbieDash] Group follow: capo =<white>" .. name .. "\n")
+  end
+end
+
+function NebbieDash.clearGroupLeader(quiet)
+  if NebbieDash.groupLeader and not quiet then
+    cecho("<grey>[NebbieDash] Group follow: nessun capo (fuori dal gruppo).\n")
+  end
+  NebbieDash.groupLeader = nil
+end
+
+function NebbieDash.groupFollowEnabled()
+  return NebbieDash.groupFollow ~= false
+end
+
+function NebbieDash.groupFollowIsSelf(leader)
+  local me = NebbieDash.currentChar
+  if not me or me == "" or not leader then return false end
+  return tostring(me):lower() == tostring(leader):lower()
+end
+
+function NebbieDash.groupFollowCanFire(leader)
+  if not NebbieDash.groupFollowEnabled() then return false end
+  if not leader or leader == "" then return false end
+  if NebbieDash.groupFollowIsSelf(leader) then return false end
+  local now = os.time()
+  if NebbieDash._groupFollowAt and (now - NebbieDash._groupFollowAt) < 2 then
+    return false
+  end
+  return true
+end
+
+function NebbieDash.groupFollowSend(cmd, leader, kind)
+  if not NebbieDash.groupFollowCanFire(leader) then return false end
+  NebbieDash._groupFollowAt = os.time()
+  send(cmd, false)
+  cecho(string.format(
+    "<green>[NebbieDash] Group follow: <yellow>%s<green> (dopo <white>%s<green>, %s).\n",
+    cmd, tostring(leader), tostring(kind or "?")))
+  return true
+end
+
+function NebbieDash.onGroupLeaderSeenLine()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  local name = NebbieDash.parseGroupLeaderName(text)
+  if not name then return end
+  NebbieDash.setGroupLeader(name, true)
+end
+
+function NebbieDash.onGroupFollowSoloLine()
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  if not NebbieDash.isGroupSoloLine(text) then return end
+  NebbieDash.clearGroupLeader(true)
+end
+
+-- "<Nome> enters a misty portal, and vanishes!"
+function NebbieDash.isGroupFollowPortalLine(text, leader)
+  text = NebbieDash.stripColors(text or "")
+  text = text:match("^%s*(.-)%s*$") or ""
+  if not leader or leader == "" then return false end
+  local esc = tostring(leader):gsub("(%W)", "%%%1")
+  return text:match("^" .. esc .. " enters a misty portal, and vanishes!") ~= nil
+end
+
+-- "<Nome> entra nella piscina. Le acque colorate lo/la avvolgono inghiottendolo/a."
+function NebbieDash.isGroupFollowPoolLine(text, leader)
+  text = NebbieDash.stripColors(text or "")
+  text = text:match("^%s*(.-)%s*$") or ""
+  if not leader or leader == "" then return false end
+  local esc = tostring(leader):gsub("(%W)", "%%%1")
+  if text:match("^" .. esc .. " entra nella piscina%.") then return true end
+  if text:find(leader, 1, true) and text:find("entra nella piscina", 1, true) then
+    return true
+  end
+  return false
+end
+
+function NebbieDash.onGroupFollowPortalLine()
+  local leader = NebbieDash.groupLeader
+  if not leader then return end
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  if not NebbieDash.isGroupFollowPortalLine(text, leader) then return end
+  NebbieDash.groupFollowSend("enter portal", leader, "portal")
+end
+
+function NebbieDash.onGroupFollowPoolLine()
+  local leader = NebbieDash.groupLeader
+  if not leader then return end
+  local text = line or (type(getCurrentLine) == "function" and getCurrentLine()) or ""
+  if not NebbieDash.isGroupFollowPoolLine(text, leader) then return end
+  NebbieDash.groupFollowSend("enter pool", leader, "pool")
+end
+
+function NebbieDash.cmdGroupFollow(argStr)
+  argStr = (argStr or ""):match("^%s*(.-)%s*$") or ""
+  local mode = (argStr:match("^(%S+)") or ""):lower()
+  if mode == "" or mode == "status" or mode == "info" then
+    cecho(string.format(
+      "<green>[NebbieDash] Group follow: <white>%s<green> capo=<white>%s\n",
+      NebbieDash.groupFollowEnabled() and "on" or "off",
+      tostring(NebbieDash.groupLeader or "(sconosciuto — digita group)")))
+    cecho("<grey>  Portal → enter portal; piscina → enter pool. Capo = (Head of group).\n")
+    return
+  end
+  if mode == "on" then
+    NebbieDash.groupFollow = true
+    NebbieDash.prefs = NebbieDash.prefs or {}
+    NebbieDash.prefs.group_follow = true
+    if type(NebbieDash.savePreferencesFile) == "function" then
+      pcall(NebbieDash.savePreferencesFile)
+    end
+    cecho("<green>[NebbieDash] Group follow: on"
+      .. (NebbieDash.groupLeader and (" (capo " .. NebbieDash.groupLeader .. ")") or " (digita group per il capo)")
+      .. ".\n")
+    return
+  end
+  if mode == "off" then
+    NebbieDash.groupFollow = false
+    NebbieDash.prefs = NebbieDash.prefs or {}
+    NebbieDash.prefs.group_follow = false
+    if type(NebbieDash.savePreferencesFile) == "function" then
+      pcall(NebbieDash.savePreferencesFile)
+    end
+    cecho("<green>[NebbieDash] Group follow: off.\n")
+    return
+  end
+  if mode == "refresh" or mode == "group" then
+    send("group", false)
+    cecho("<green>[NebbieDash] Group follow: chiedo group per aggiornare il capo.\n")
+    return
+  end
+  cecho("<orange>[NebbieDash] Uso: ngroupfollow [on|off|status|refresh]\n")
+end
+
 function NebbieDash.cmdSplit(argStr)
   local amount = tonumber((argStr or ""):match("^%s*(%d+)%s*$"))
   if not amount then
@@ -15264,7 +15440,10 @@ function NebbieDash.teardownTriggers()
     NebbieDash._eqOpenTrig, NebbieDash._attribOpenTrig,
     NebbieDash._eqLineTrig, NebbieDash._attribLineTrig, NebbieDash._lootLineTrig,
     NebbieDash._lootLineTrig2, NebbieDash._lootLineTrig3,
-    NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig, NebbieDash._combatEndTrig,
+    NebbieDash._groupSoloTrig, NebbieDash._groupHeaderTrig,
+    NebbieDash._groupLeaderTrig, NebbieDash._groupFollowSoloTrig,
+    NebbieDash._groupFollowPortalTrig, NebbieDash._groupFollowPoolTrig,
+    NebbieDash._combatEndTrig,
     NebbieDash._combatEndTrig2,
     NebbieDash._goldHaiDivisoTrig, NebbieDash._goldDaiMonetaTrig, NebbieDash._goldDaiMoneteTrig,
     NebbieDash._goldPosiMonetaTrig, NebbieDash._goldPosiMoneteTrig, NebbieDash._goldPaghiTrig,
@@ -15396,6 +15575,15 @@ function NebbieDash.installTriggers()
   --   $c0015Your group consists of:   (senza nome gruppo — prima non matchava)
   NebbieDash._groupSoloTrig = tempTrigger("But you are a member of no group", [[NebbieDash.onGroupSoloLine()]])
   NebbieDash._groupHeaderTrig = tempTrigger("Your group", [[NebbieDash.onGroupHeaderLine()]])
+  -- Group follow: capo da "(Head of group)"; portal/pool → enter portal|pool.
+  NebbieDash._groupLeaderTrig = tempTrigger("Head of group",
+    [[NebbieDash.onGroupLeaderSeenLine()]])
+  NebbieDash._groupFollowSoloTrig = tempTrigger("But you are a member of no group",
+    [[NebbieDash.onGroupFollowSoloLine()]])
+  NebbieDash._groupFollowPortalTrig = tempTrigger("enters a misty portal, and vanishes!",
+    [[NebbieDash.onGroupFollowPortalLine()]])
+  NebbieDash._groupFollowPoolTrig = tempTrigger("entra nella piscina",
+    [[NebbieDash.onGroupFollowPoolLine()]])
   NebbieDash._combatEndTrig = tempTrigger("La tua parte di esperienza", [[NebbieDash.onCombatEndLine()]])
   NebbieDash._combatEndTrig2 = tempTrigger("La tua esperienza e' aumentata di", [[NebbieDash.onCombatEndLine()]])
   NebbieDash._fallTrig = tempTrigger("Inciampi e cadi per terra.", [[NebbieDash.onFallLine()]])
@@ -15935,6 +16123,20 @@ end]]></script>
    <command></command>
    <packageName>nebbie-complete-dashboard-package</packageName>
    <regex>^nautosplit (.+)$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-groupfollow</name>
+   <script><![CDATA[NebbieDash.cmdGroupFollow("")]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^ngroupfollow$</regex>
+  </Alias>
+  <Alias isActive="yes" isFolder="no">
+   <name>nebbie-dash-groupfollow-args</name>
+   <script><![CDATA[NebbieDash.cmdGroupFollow(matches[2])]]></script>
+   <command></command>
+   <packageName>nebbie-complete-dashboard-package</packageName>
+   <regex>^ngroupfollow (.+)$</regex>
   </Alias>
   <Alias isActive="yes" isFolder="no">
    <name>nebbie-dash-gold-alert</name>

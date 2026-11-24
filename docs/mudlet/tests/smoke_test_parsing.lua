@@ -2762,9 +2762,9 @@ check("identui: prefer Adjustable (ancoraggio destro)",
   NebbieDash.IDENT_UI_ADJ_X == "-580px")
 check("identui: container Panel (no collisioni legacy)",
   NebbieDash.IDENT_UI_CONTAINER == "NebbieDashIdentUiPanel")
-check("package version 1.16.47+",
+check("package version 1.16.48+",
   type(NebbieDash.version) == "string"
-    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.47"))
+    and not NebbieDash.versionLessThan(NebbieDash.version, "1.16.48"))
 
 -- Config sync: export/merge additivo locale (senza HTTP).
 do
@@ -3031,6 +3031,51 @@ do
   NebbieDash.stopEquipWidthDragPoll()
   NebbieDash._equipWidthDrag = nil
   check("equip: stop drag poll senza timer", true)
+end
+
+-- Group follow: capo da (Head of group), portal/pool.
+do
+  check("groupfollow: helpers",
+    type(NebbieDash.parseGroupLeaderName) == "function"
+      and type(NebbieDash.isGroupFollowPortalLine) == "function"
+      and type(NebbieDash.isGroupFollowPoolLine) == "function"
+      and type(NebbieDash.cmdGroupFollow) == "function")
+  check("groupfollow: parse Head of group",
+    NebbieDash.parseGroupLeaderName(
+      "    Cataklisma      (Head of group) HP:99% MANA:100% MV:99%") == "Cataklisma")
+  check("groupfollow: parse ignora membro",
+    NebbieDash.parseGroupLeaderName(
+      "    NomiyaMaki                      HP:100% MANA:99% MV:97%") == nil)
+  NebbieDash.groupFollow = true
+  NebbieDash.groupLeader = "Cataklisma"
+  NebbieDash.currentChar = "NomiyaMaki"
+  NebbieDash._groupFollowAt = nil
+  check("groupfollow: portal line",
+    NebbieDash.isGroupFollowPortalLine(
+      "Cataklisma enters a misty portal, and vanishes!", "Cataklisma") == true)
+  check("groupfollow: portal altro nome",
+    NebbieDash.isGroupFollowPortalLine(
+      "Chunli enters a misty portal, and vanishes!", "Cataklisma") == false)
+  check("groupfollow: pool line",
+    NebbieDash.isGroupFollowPoolLine(
+      "Cataklisma entra nella piscina. Le acque colorate lo avvolgono inghiottendolo.",
+      "Cataklisma") == true)
+  check("groupfollow: pool femmina",
+    NebbieDash.isGroupFollowPoolLine(
+      "Cataklisma entra nella piscina. Le acque colorate la avvolgono inghiottendola.",
+      "Cataklisma") == true)
+  check("groupfollow: non se sei capo",
+    NebbieDash.groupFollowIsSelf("NomiyaMaki") == true)
+  check("groupfollow: canFire ok",
+    NebbieDash.groupFollowCanFire("Cataklisma") == true)
+  NebbieDash.currentChar = "Cataklisma"
+  check("groupfollow: canFire self no",
+    NebbieDash.groupFollowCanFire("Cataklisma") == false)
+  NebbieDash.currentChar = "NomiyaMaki"
+  NebbieDash.groupFollow = false
+  check("groupfollow: canFire off",
+    NebbieDash.groupFollowCanFire("Cataklisma") == false)
+  NebbieDash.groupFollow = true
 end
 
 

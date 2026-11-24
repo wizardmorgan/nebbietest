@@ -1,5 +1,12 @@
 # CHANGELOG — nebbie-complete-dashboard-package
 
+## 1.16.48 — 2026-11-24
+
+- **ngroupfollow**: segue il capo gruppo in portal/pool. Il capo e' chi
+  ha `(Head of group)` nell'output di `group` (si aggiorna da solo).
+  Portal → `enter portal`; piscina → `enter pool`. Prefs `group_follow`
+  (default on). Non scatta se sei tu il capo.
+
 ## 1.16.47 — 2026-11-23
 
 - **Fix drag barra Equip**: `enableClickthrough(...)` abilitava il
