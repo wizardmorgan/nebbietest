@@ -8668,17 +8668,8 @@ std::unordered_map<struct char_data*, EditPoolPending> g_editpool_pending;
 	return pool.overedit_hp;
 }
 
-/**
- * Listino ufficiale (nebbiearcane.it / obj_value.cpp), costo per unita' raw.
- * rune_num/rune_den: rune = units * num / den (es. mana 3/2 -> 1.5 a unita').
- * Valori da configure editpool (edit_pool_balance).
- */
-[[nodiscard]] bool editpool_listino_unit(EditPoolField field, long& xp_per_unit,
-										 int& rune_num, int& rune_den) noexcept {
-	return edit_pool_balance_listino_unit(field, xp_per_unit, rune_num, rune_den);
-}
-
-/** Moltiplicatore listino mono/bi/tri (come obj_value / sito). */
+/** Moltiplicatore listino mono/bi/tri (come obj_value / sito).
+ *  Prezzi unita': editpool_cost_for_units_n in edit_pool.cpp (listino DB / balance). */
 [[nodiscard]] double editpool_class_mult(struct char_data* vict) noexcept {
 	if(vict == nullptr) {
 		return 1.0;
