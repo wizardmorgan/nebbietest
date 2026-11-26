@@ -36,6 +36,7 @@ services:
         container_name: mudcompiler
         platform: ${DOCKER_PLATFORM:-linux/amd64}
         user: "${LOCAL_UID}:${LOCAL_GID}"
+        init: true
         entrypoint: ["/bin/bash", "/app/scripts/docker-entrypoint-mudcompiler.sh"]
         command: []
         stdin_open: true

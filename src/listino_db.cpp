@@ -39,12 +39,16 @@ struct AffectRowLive {
 	int max_total = 0;
 	long pos_unit_raw = 0;
 	long neg_unit_raw = 0;
+	int rune_num = 0;
+	int rune_den = 1;
+	std::string cap_group;
 };
 
 std::mutex g_mu;
 std::vector<AffectRowLive> g_affect;
 std::unordered_map<int, std::size_t> g_by_loc;
 std::unordered_map<std::string, ListinoPoolRow> g_pool;
+std::unordered_map<std::string, ListinoCapGroupRow> g_cap_groups;
 std::unordered_map<std::string, double> g_params;
 std::string g_seed_tag;
 bool g_ready = false;
@@ -53,6 +57,7 @@ void clear_cache_unlocked() {
 	g_affect.clear();
 	g_by_loc.clear();
 	g_pool.clear();
+	g_cap_groups.clear();
 	g_params.clear();
 	g_seed_tag.clear();
 	g_ready = false;
@@ -100,6 +105,9 @@ bool ensure_schema(MYSQL* h) {
 		"  max_total INT NOT NULL DEFAULT 0,"
 		"  pos_unit_raw BIGINT NOT NULL DEFAULT 0,"
 		"  neg_unit_raw BIGINT NOT NULL DEFAULT 0,"
+		"  rune_num INT NOT NULL DEFAULT 0,"
+		"  rune_den INT NOT NULL DEFAULT 1,"
+		"  cap_group VARCHAR(32) NULL,"
 		"  enabled TINYINT NOT NULL DEFAULT 1,"
 		"  PRIMARY KEY (id),"
 		"  UNIQUE KEY uq_listino_affect_location (location)"
@@ -121,12 +129,35 @@ bool ensure_schema(MYSQL* h) {
 		"  param_value DOUBLE NOT NULL,"
 		"  PRIMARY KEY (param_key)"
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+		"CREATE TABLE IF NOT EXISTS listino_cap_group ("
+		"  group_key VARCHAR(32) NOT NULL,"
+		"  label VARCHAR(64) NOT NULL,"
+		"  max_piece INT NOT NULL DEFAULT 0,"
+		"  max_character INT NOT NULL DEFAULT 0,"
+		"  enabled TINYINT NOT NULL DEFAULT 1,"
+		"  PRIMARY KEY (group_key)"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 	};
 	for(const char* sql : ddl) {
 		if(!mysql_exec(h, sql)) {
 			return false;
 		}
 	}
+	auto ensure_col = [&](const char* table, const char* col, const char* ddl_tail) {
+		std::string probe = std::string("SELECT ") + col + " FROM " + table + " LIMIT 0";
+		if(mysql_query(h, probe.c_str()) == 0) {
+			if(MYSQL_RES* res = mysql_store_result(h)) {
+				mysql_free_result(res);
+			}
+			return true;
+		}
+		std::string alter =
+			std::string("ALTER TABLE ") + table + " ADD COLUMN " + col + " " + ddl_tail;
+		return mysql_exec(h, alter.c_str());
+	};
+	(void)ensure_col("listino_affect", "rune_num", "INT NOT NULL DEFAULT 0");
+	(void)ensure_col("listino_affect", "rune_den", "INT NOT NULL DEFAULT 1");
+	(void)ensure_col("listino_affect", "cap_group", "VARCHAR(32) NULL");
 	return true;
 }
 
@@ -198,6 +229,27 @@ bool seed_if_empty(MYSQL* h) {
 			return false;
 		}
 	}
+	(void)mysql_exec(
+		h, "INSERT IGNORE INTO listino_cap_group "
+		   "(group_key, label, max_piece, max_character, enabled) VALUES "
+		   "('dam_sp', 'Damroll + Spellpower', 2, 30, 1)");
+	(void)mysql_exec(
+		h, "UPDATE listino_affect SET cap_group='dam_sp' WHERE id IN "
+		   "('damroll','spellpower','hitndam','hitnsp') AND "
+		   "(cap_group IS NULL OR cap_group='')");
+	return true;
+}
+
+/** Cap group + colonne affect di default (idempotente). */
+bool ensure_cap_groups(MYSQL* h) {
+	(void)mysql_exec(
+		h, "INSERT IGNORE INTO listino_cap_group "
+		   "(group_key, label, max_piece, max_character, enabled) VALUES "
+		   "('dam_sp', 'Damroll + Spellpower', 2, 30, 1)");
+	(void)mysql_exec(
+		h, "UPDATE listino_affect SET cap_group='dam_sp' WHERE id IN "
+		   "('damroll','spellpower','hitndam','hitnsp') AND "
+		   "(cap_group IS NULL OR cap_group='')");
 	return true;
 }
 
@@ -231,8 +283,8 @@ bool load_cache(MYSQL* h) {
 
 	if(mysql_query(h,
 				   "SELECT id, label, location, step, min_total, max_total, "
-				   "pos_unit_raw, neg_unit_raw FROM listino_affect WHERE enabled = 1 "
-				   "ORDER BY id") != 0) {
+				   "pos_unit_raw, neg_unit_raw, rune_num, rune_den, cap_group "
+				   "FROM listino_affect WHERE enabled = 1 ORDER BY id") != 0) {
 		mudlog(LOG_SYSERR, "listino_db load affect: %s", mysql_error(h));
 		return false;
 	}
@@ -247,8 +299,35 @@ bool load_cache(MYSQL* h) {
 			a.max_total = row[5] ? std::atoi(row[5]) : 0;
 			a.pos_unit_raw = row[6] ? std::strtol(row[6], nullptr, 10) : 0;
 			a.neg_unit_raw = row[7] ? std::strtol(row[7], nullptr, 10) : 0;
+			a.rune_num = row[8] ? std::atoi(row[8]) : 0;
+			a.rune_den = row[9] ? std::atoi(row[9]) : 1;
+			if(a.rune_den <= 0) {
+				a.rune_den = 1;
+			}
+			a.cap_group = row[10] ? row[10] : "";
 			g_by_loc[a.location] = g_affect.size();
 			g_affect.push_back(std::move(a));
+		}
+		mysql_free_result(res);
+	}
+
+	if(mysql_query(h,
+				   "SELECT group_key, label, max_piece, max_character, enabled "
+				   "FROM listino_cap_group") != 0) {
+		mudlog(LOG_SYSERR, "listino_db load cap_group: %s", mysql_error(h));
+		return false;
+	}
+	if(MYSQL_RES* res = mysql_store_result(h)) {
+		while(MYSQL_ROW row = mysql_fetch_row(res)) {
+			ListinoCapGroupRow g;
+			g.group_key = row[0] ? row[0] : "";
+			g.label = row[1] ? row[1] : "";
+			g.max_piece = row[2] ? std::atoi(row[2]) : 0;
+			g.max_character = row[3] ? std::atoi(row[3]) : 0;
+			g.enabled = !(row[4] && std::atoi(row[4]) == 0);
+			if(!g.group_key.empty()) {
+				g_cap_groups[g.group_key] = std::move(g);
+			}
 		}
 		mysql_free_result(res);
 	}
@@ -367,6 +446,9 @@ void listino_db_init() {
 		if(!ensure_seed_params(h)) {
 			return false;
 		}
+		if(!ensure_cap_groups(h)) {
+			return false;
+		}
 		return load_cache(h);
 	});
 #else
@@ -409,6 +491,40 @@ bool listino_db_affect_by_location(int location, ObjEditListinoSpec& out) noexce
 		return false;
 	}
 	fill_spec(g_affect[it->second], out);
+	return true;
+}
+
+bool listino_db_affect_rune(int location, int& rune_num, int& rune_den) noexcept {
+	std::lock_guard<std::mutex> lock(g_mu);
+	const auto it = g_by_loc.find(location);
+	if(it == g_by_loc.end()) {
+		return false;
+	}
+	const AffectRowLive& a = g_affect[it->second];
+	rune_num = a.rune_num;
+	rune_den = a.rune_den > 0 ? a.rune_den : 1;
+	return true;
+}
+
+std::string listino_db_affect_cap_group(int location) {
+	std::lock_guard<std::mutex> lock(g_mu);
+	const auto it = g_by_loc.find(location);
+	if(it == g_by_loc.end()) {
+		return {};
+	}
+	return g_affect[it->second].cap_group;
+}
+
+bool listino_db_cap_group(const char* group_key, ListinoCapGroupRow& out) noexcept {
+	if(!group_key || !*group_key) {
+		return false;
+	}
+	std::lock_guard<std::mutex> lock(g_mu);
+	const auto it = g_cap_groups.find(group_key);
+	if(it == g_cap_groups.end() || !it->second.enabled) {
+		return false;
+	}
+	out = it->second;
 	return true;
 }
 

@@ -165,8 +165,8 @@ struct ObjEditListinoSpec {
 
 /**
  * Costo listino (scala storage, come diff.valore) di un singolo delta affect
- * sull'oggetto: AffectSlotValue * scale * class_mult * 1.5 artifact
- * (sempre, come editpool / AnalyzeObjEditAgainst).
+ * sull'oggetto: AffectSlotValue * scale * class_mult, e * artifact_mult solo
+ * se il pezzo e' Artifact (ITEM_IMMUNE), come listino ufficiale.
  * delta_mod: quantita' numerica oppure bitmask aggiunta (bitfield APPLY_*).
  */
 [[nodiscard]] long EditAffectDeltaListinoCost(struct obj_data* obj, int location,

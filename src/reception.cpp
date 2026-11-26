@@ -33,6 +33,7 @@
 #include "utility.hpp"
 #include "object_instance.hpp"
 #include "edit_pool.hpp"
+#include "character_edit_affect.hpp"
 #include "clan_symbol.hpp"
 #include "legacy_loader.hpp"
 #include "legacy_import.hpp"
@@ -1444,6 +1445,7 @@ void load_char_objs(struct char_data* ch, bool ghost) {
 		}
 #endif
 		edit_pool_migrate_char(ch);
+		character_edit_affect_apply_to_char(ch);
 		clan_symbol_enforce_single(ch);
 	}
 	else {
@@ -1459,6 +1461,7 @@ void load_char_objs(struct char_data* ch, bool ghost) {
 #endif
 		ZeroRent(GET_NAME(ch));
 		edit_pool_migrate_char(ch);
+		character_edit_affect_apply_to_char(ch);
 		clan_symbol_enforce_single(ch);
 	}
 

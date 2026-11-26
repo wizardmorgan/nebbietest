@@ -45,6 +45,11 @@ bool edit_system_config_save_json(const std::string& json_text, std::string& err
 
 [[nodiscard]] bool edit_system_resistance_enabled(unsigned damage_type) noexcept;
 
+/** Target per affect listino (APPLY location). Default object. */
+[[nodiscard]] EditSystemTarget edit_system_affect_target(int location) noexcept;
+
+[[nodiscard]] bool edit_system_affect_enabled(int location) noexcept;
+
 /** Categoria portale: slug e_item_type senza ITEM_. */
 [[nodiscard]] bool edit_system_portal_category_enabled(const char* category) noexcept;
 

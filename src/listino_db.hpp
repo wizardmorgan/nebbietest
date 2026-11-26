@@ -46,6 +46,24 @@ bool listino_db_reload();
 [[nodiscard]] bool listino_db_affect_by_location(int location,
 												 ObjEditListinoSpec& out) noexcept;
 
+/** Rune listino affect (per quote su toon). false se location assente. */
+[[nodiscard]] bool listino_db_affect_rune(int location, int& rune_num,
+										  int& rune_den) noexcept;
+
+/** Chiave cap_group per location (stringa vuota se nessuna). */
+[[nodiscard]] std::string listino_db_affect_cap_group(int location);
+
+struct ListinoCapGroupRow {
+	std::string group_key;
+	std::string label;
+	int max_piece = 0;
+	int max_character = 0;
+	bool enabled = true;
+};
+
+[[nodiscard]] bool listino_db_cap_group(const char* group_key,
+										ListinoCapGroupRow& out) noexcept;
+
 [[nodiscard]] bool listino_db_pool(const char* field_key, ListinoPoolRow& out) noexcept;
 
 [[nodiscard]] double listino_db_param(const char* key, double fallback) noexcept;

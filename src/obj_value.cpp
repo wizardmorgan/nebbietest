@@ -48,6 +48,10 @@ namespace {
 }
 
 [[nodiscard]] std::map<int, long> SumAffectsByLocation(const struct obj_data* obj);
+[[nodiscard]] bool IsCombatChannelApply(int loc) noexcept;
+[[nodiscard]] long CombatEffHr(const std::map<int, long>& m);
+[[nodiscard]] long CombatEffDam(const std::map<int, long>& m);
+[[nodiscard]] long CombatEffSp(const std::map<int, long>& m);
 
 [[nodiscard]] bool is_bitfield_apply(int loc) noexcept {
 	return loc == APPLY_AFF2 || loc == APPLY_IMMUNE || loc == APPLY_M_IMMUNE ||
@@ -317,6 +321,15 @@ namespace {
 			++ib;
 		}
 
+		/*
+		 * Combat (HR/DAM/SP/HITNDAM/HITNSP): non per location.
+		 * Accorpamento proto-DAM → HITNDAM altrimenti faceva pagare 145 MXP
+		 * (intero Hit-n-dam) al posto del solo +1 hitroll (45 MXP).
+		 */
+		if(IsCombatChannelApply(loc)) {
+			continue;
+		}
+
 		if(is_bitfield_apply(loc)) {
 			const unsigned added =
 				or_affect_bits(edited, loc) & ~or_affect_bits(baseline, loc);
@@ -339,6 +352,20 @@ namespace {
 		if(delta > 0) {
 			valore += AffectSlotValue(loc, static_cast<int>(delta));
 		}
+	}
+
+	/* Canali combat effective: solo i delta netti vs baseline. */
+	const long d_hr = CombatEffHr(a) - CombatEffHr(b);
+	const long d_dam = CombatEffDam(a) - CombatEffDam(b);
+	const long d_sp = CombatEffSp(a) - CombatEffSp(b);
+	if(d_hr > 0) {
+		valore += AffectSlotValue(APPLY_HITROLL, static_cast<int>(d_hr));
+	}
+	if(d_dam > 0) {
+		valore += AffectSlotValue(APPLY_DAMROLL, static_cast<int>(d_dam));
+	}
+	if(d_sp > 0) {
+		valore += AffectSlotValue(APPLY_SPELLPOWER, static_cast<int>(d_sp));
 	}
 	return valore;
 }
@@ -836,16 +863,33 @@ ObjEditAnalysis AnalyzeObjEditAgainst(struct obj_data* obj, const struct obj_dat
 	report.owner_name = ResolveEditOwnerName(obj);
 	report.owner_classes = ResolveOwnerClassCount(report.owner_name);
 	report.class_mult = ClassMultFromCount(report.owner_classes);
+	if(listino_db_ready()) {
+		if(report.owner_classes >= 3) {
+			report.class_mult =
+				listino_db_param("class_mult_tri", kObjValueClassMultTri);
+		}
+		else if(report.owner_classes == 2) {
+			report.class_mult =
+				listino_db_param("class_mult_bi", kObjValueClassMultBi);
+		}
+		else {
+			report.class_mult = 1.0;
+		}
+	}
 	if(report.class_mult != 1.0 && report.diff.valore > 0) {
 		report.diff.valore =
 			static_cast<long>(std::llround(static_cast<double>(report.diff.valore) *
 										   report.class_mult));
 	}
 
-	/* Edit PG: listino ufficiale + sempre +50% artifact (come editpool),
-	 * indipendente dal flag ITEM_IMMUNE sull'istanza. */
-	if(report.diff.valore > 0) {
-		report.diff.valore = (report.diff.valore * 3) / 2;
+	/* +50% Artifact solo se pezzo Artifact (o pending_artifact gia' settato
+	 * su ITEM_IMMUNE dal caller quote/apply). Listino ufficiale. */
+	if(report.diff.valore > 0 && IS_OBJ_STAT(obj, ITEM_IMMUNE)) {
+		const double art = listino_db_ready()
+							   ? listino_db_param("artifact_mult", 1.5)
+							   : 1.5;
+		report.diff.valore = static_cast<long>(
+			std::llround(static_cast<double>(report.diff.valore) * art));
 	}
 
 	report.changes = DescribeStructuralDiff(obj, baseline);
@@ -1033,12 +1077,13 @@ long EditAffectDeltaListinoCost(struct obj_data* obj, int location, int delta_mo
 			std::llround(static_cast<double>(scaled) * mult));
 	}
 
-	/* Sempre +artifact_mult sul listino edit (default 1.5), anche senza IMMUNE. */
-	if(scaled > 0) {
+	/* +50% solo se pezzo Artifact (ITEM_IMMUNE), come listino ufficiale. */
+	if(scaled > 0 && IS_OBJ_STAT(obj, ITEM_IMMUNE)) {
 		const double art = listino_db_ready()
 							   ? listino_db_param("artifact_mult", 1.5)
 							   : 1.5;
-		scaled = static_cast<long>(std::llround(static_cast<double>(scaled) * art));
+		scaled = static_cast<long>(
+			std::llround(static_cast<double>(scaled) * art));
 	}
 	return scaled;
 }

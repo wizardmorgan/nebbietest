@@ -35,6 +35,7 @@
 #include "constants.hpp"
 #include "db.hpp"
 #include "edit_pool.hpp"
+#include "character_edit_affect.hpp"
 #include "edit_system_config.hpp"
 #include "listino_db.hpp"
 #include "handler.hpp"
@@ -2071,7 +2072,8 @@ struct ToonInventoryEditScan {
 	const char_edit_pool_data& pool_used =
 		pool_on_character ? pool_db : pool_from_eq;
 
-	auto pool_field = [&](const char* key, int used, int cap) {
+	auto pool_field = [&](const char* key, EditPoolField field, int used) {
+		const int cap = edit_pool_field_cap(field);
 		Json f;
 		f["key"] = key;
 		f["used"] = std::max(0, used);
@@ -2080,9 +2082,12 @@ struct ToonInventoryEditScan {
 		return f;
 	};
 	Json pool = Json::object();
-	pool["source"] = pool_on_character ? "character" : "objects";
+	/* Sempre "sul PG": e' l'editpool del personaggio (come comando editpool). */
+	pool["source"] = "character";
+	pool["on_character"] = pool_on_character;
 	pool["migrated"] = pool_on_character ? 1 : 0;
-	pool["residual_on_objects"] = residual_on_objects && pool_on_character;
+	pool["values_from"] = pool_on_character ? "character" : "objects";
+	pool["residual_on_objects"] = residual_on_objects;
 	{
 		Json residual_list = Json::array();
 		for(const PoolResidualPiece& p : scan.pool_residuals) {
@@ -2102,19 +2107,27 @@ struct ToonInventoryEditScan {
 	}
 	if(pool_on_character && residual_on_objects) {
 		pool["warning"] =
-			"Pool migrato sul PG ma restano delta HIT/MANA/MOVE/regen su oggetti "
-			"EDIT: stato misto anomalo (migrazione incompleta).";
+			"Pool sul PG (migrato) ma restano ancora HIT/MANA/MOVE/regen in "
+			"eccesso su oggetti EDIT: stato misto (migrazione incompleta).";
+	}
+	else if(!pool_on_character && residual_on_objects) {
+		pool["warning"] =
+			"Pool non ancora migrato sul PG: i valori sotto sono ancora sugli "
+			"oggetti EDIT (verranno sul personaggio con la migrazione).";
 	}
 	Json fields = Json::array();
-	fields.push_back(pool_field("hit", pool_used.edit_hp, kEditPoolMaxHit));
-	fields.push_back(pool_field("mana", pool_used.edit_mana, kEditPoolMaxMana));
-	fields.push_back(pool_field("move", pool_used.edit_move, kEditPoolMaxMove));
 	fields.push_back(
-		pool_field("hit_regen", pool_used.edit_hp_regen, kEditPoolMaxHitRegen));
+		pool_field("hit", EditPoolField::Hp, pool_used.edit_hp));
 	fields.push_back(
-		pool_field("mana_regen", pool_used.edit_mana_regen, kEditPoolMaxManaRegen));
+		pool_field("mana", EditPoolField::Mana, pool_used.edit_mana));
 	fields.push_back(
-		pool_field("move_regen", pool_used.edit_move_regen, kEditPoolMaxMoveRegen));
+		pool_field("move", EditPoolField::Move, pool_used.edit_move));
+	fields.push_back(pool_field("hit_regen", EditPoolField::HpRegen,
+								pool_used.edit_hp_regen));
+	fields.push_back(pool_field("mana_regen", EditPoolField::ManaRegen,
+								pool_used.edit_mana_regen));
+	fields.push_back(pool_field("move_regen", EditPoolField::MoveRegen,
+								pool_used.edit_move_regen));
 	pool["fields"] = fields;
 
 	Json main = Json::object();
@@ -2333,8 +2346,61 @@ struct ToonInventoryEditScan {
 						out["max"] = 100;
 						out["step"] = 25;
 					}
+					if(kind == "affect") {
+						const int loc = e.value("location", 0);
+						ObjEditListinoSpec spec {};
+						if(loc != 0 && obj_edit_listino_spec(loc, spec)) {
+							out["step"] = spec.step;
+							out["min"] = spec.min_total;
+							out["max"] = spec.max_total;
+							out["cap"] = spec.max_total;
+							out["cap_group"] = listino_db_affect_cap_group(loc);
+							const auto [xp, pq] =
+								character_edit_affect_quote_paid(loc, spec.step != 0 ? spec.step : 1, 1);
+							out["mxp_per_step"] = xp / 1000000L;
+							out["pq_per_step"] = pq;
+						}
+					}
 					entries.push_back(out);
 				}
+			}
+			/* Affect listino presenti in DB ma non ancora in edit_system.json. */
+			const int n_aff = listino_db_affect_count();
+			for(int i = 0; i < n_aff; ++i) {
+				ObjEditListinoSpec spec {};
+				if(!listino_db_affect_at(i, spec)) {
+					continue;
+				}
+				bool already = false;
+				for(const auto& e : entries) {
+					if(e.value("kind", "") == "affect" &&
+					   e.value("location", 0) == spec.location) {
+						already = true;
+						break;
+					}
+				}
+				if(already) {
+					continue;
+				}
+				if(!edit_system_affect_enabled(spec.location)) {
+					continue;
+				}
+				Json out;
+				out["id"] = std::string("affect.") + (spec.id ? spec.id : "x");
+				out["kind"] = "affect";
+				out["location"] = spec.location;
+				out["label"] = spec.label ? spec.label : "";
+				out["target"] = edit_system_affect_target(spec.location) ==
+										EditSystemTarget::Character
+									? "character"
+									: "object";
+				out["enabled"] = true;
+				out["step"] = spec.step;
+				out["min"] = spec.min_total;
+				out["max"] = spec.max_total;
+				out["cap"] = spec.max_total;
+				out["cap_group"] = listino_db_affect_cap_group(spec.location);
+				entries.push_back(out);
 			}
 			Json d;
 			d["entries"] = entries;
@@ -2390,6 +2456,19 @@ struct ToonInventoryEditScan {
 				}
 			}
 
+			Json char_affects = Json::array();
+			{
+				std::vector<CharEditAffectRow> aff_rows;
+				if(character_edit_affect_load(toon_id, aff_rows)) {
+					for(const auto& ar : aff_rows) {
+						Json a;
+						a["location"] = ar.location;
+						a["value"] = ar.value;
+						char_affects.push_back(a);
+					}
+				}
+			}
+
 			Json d;
 			d["toon_id"] = toon_id;
 			d["name"] = toon_name_by_id(toon_id);
@@ -2402,6 +2481,7 @@ struct ToonInventoryEditScan {
 			d["prince_reserve_mxp"] = prince_reserve / 1000000L;
 			d["pool"] = pool_to_json(pool);
 			d["resistances"] = resistances;
+			d["char_affects"] = char_affects;
 			d["stats_missing"] = !has_stats;
 			{
 				const int n_classes = class_count_for_toon(toon_id);
@@ -2704,6 +2784,22 @@ struct ToonInventoryEditScan {
 				if(kind == "scalar") {
 					const int loc = e.value("location", 0);
 					e["current"] = object_edit_display_current(obj, loc);
+					/* Alias UI: stesso floor gia' in catalog (value_floor). */
+					if(e.find("value_floor") != e.end()) {
+						e["combat_floor"] = e["value_floor"];
+					}
+					if(loc == APPLY_HITNDAM) {
+						e["combat_hr"] =
+							object_edit_display_current(obj, APPLY_HITROLL);
+						e["combat_dam"] =
+							object_edit_display_current(obj, APPLY_DAMROLL);
+					}
+					else if(loc == APPLY_HITNSP) {
+						e["combat_hr"] =
+							object_edit_display_current(obj, APPLY_HITROLL);
+						e["combat_sp"] =
+							object_edit_display_current(obj, APPLY_SPELLPOWER);
+					}
 				}
 				else if(kind == "immune" || kind == "m_immune") {
 					const unsigned bit =
@@ -3424,6 +3520,108 @@ struct ToonInventoryEditScan {
 				400);
 		}
 
+		if(path == "/internal/quote-char-affect" || path == "/internal/apply-char-affect") {
+			const bool is_apply = path == "/internal/apply-char-affect";
+			const unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
+			const int location = parse_json_int(req, "location", 0);
+			const int req_pay_xp = parse_json_int(req, "pay_xp", 0);
+			const int req_pay_rune = parse_json_int(req, "pay_rune", 0);
+			const std::string target_name = toon_name_by_id(target_toon_id);
+
+			auto fail_ca = [&](const char* msg, int code) -> std::string {
+				if(is_apply) {
+					return portal_audit_fail(req, msg, code, target_toon_id,
+											 target_name.c_str(), 0);
+				}
+				return json_error(msg, code);
+			};
+			if(target_toon_id == 0 || target_name.empty()) {
+				return fail_ca("toon target non trovato", 404);
+			}
+			if(location == 0) {
+				return fail_ca("location richiesta", 400);
+			}
+			if(!edit_system_affect_enabled(location)) {
+				return fail_ca("affect disabilitato in edit_system", 400);
+			}
+			if(edit_system_affect_target(location) != EditSystemTarget::Character) {
+				return fail_ca("affect configurato sull'oggetto — usa apply-affect", 400);
+			}
+			ObjEditListinoSpec spec {};
+			if(!obj_edit_listino_spec(location, spec)) {
+				return fail_ca("location non in listino", 400);
+			}
+			if(is_apply && is_toon_online_by_name(target_name)) {
+				return fail_ca("il toon target e collegato al mud", 409);
+			}
+
+			const int current = character_edit_affect_get(target_toon_id, location);
+			const int requested = req.find("new_value") != req.end()
+									  ? parse_json_int(req, "new_value", current)
+									  : current + parse_json_int(req, "delta", 0);
+			const int lo = spec.min_total;
+			const int hi = spec.max_total;
+			int target = requested;
+			if(hi >= lo) {
+				target = std::max(lo, std::min(hi, requested));
+			}
+			/* Solo aumento come pool (no riduzione edit pagato). */
+			if(target < current) {
+				return fail_ca(
+					"non puoi ridurre l'affect sul PG (solo aumentare rispetto all'attuale)",
+					400);
+			}
+			const int delta = target - current;
+			const int max_level = max_level_for_toon(target_toon_id);
+			const int n_classes = class_count_for_toon(target_toon_id);
+			const bool free_edit = max_level >= DIO_MINORE;
+			const auto [xp_raw, pq] =
+				free_edit || delta == 0
+					? std::pair<long, int>{0, 0}
+					: character_edit_affect_quote_paid(location, delta, n_classes);
+
+			if(!is_apply) {
+				Json d = quote_xp_json(xp_raw, pq);
+				d["payment_model"] = "editpool";
+				d["location"] = location;
+				d["current"] = current;
+				d["target"] = target;
+				d["delta"] = delta;
+				d["cap_group"] = listino_db_affect_cap_group(location);
+				return json_ok(d);
+			}
+			if(delta == 0) {
+				return fail_ca("nessuna modifica", 400);
+			}
+			int xp_cost = 0;
+			int rune_cost = 0;
+			std::string pay_cover_err;
+			if(!free_edit) {
+				if(!resolve_editpool_payment(req_pay_xp, req_pay_rune, xp_raw, pq, xp_cost,
+											 rune_cost, pay_cover_err)) {
+					return fail_ca(pay_cover_err.c_str(), 400);
+				}
+			}
+			std::string pay_err;
+			if(!free_edit &&
+			   !deduct_payment(target_toon_id, xp_cost, rune_cost, max_level, pay_err)) {
+				return fail_ca(pay_err.c_str(), 402);
+			}
+			std::string set_err;
+			if(!character_edit_affect_set(target_toon_id, location, target, set_err)) {
+				return fail_ca(set_err.c_str(), 500);
+			}
+			Json d;
+			d["location"] = location;
+			d["previous"] = current;
+			d["new_value"] = target;
+			d["paid_xp"] = xp_cost;
+			d["paid_rune"] = rune_cost;
+			portal_audit_event(req, "apply.char_affect", "info", "apply.char_affect", &d,
+							   target_toon_id, target_name.c_str(), 0, 0);
+			return json_ok(d);
+		}
+
 		if(path == "/internal/apply-pool") {
 			const unsigned long long target_toon_id = parse_json_ull(req, "target_toon_id");
 			const std::string field = req.value("field", "");
@@ -3702,7 +3900,7 @@ struct ToonInventoryEditScan {
 			return json_ok(d);
 		}
 
-		if(path == "/internal/listino-status") {
+		if(path == "/internal/edit-capabilities" || path == "/internal/listino-status") {
 			Json d;
 			d["ready"] = listino_db_ready();
 			d["affect_count"] = listino_db_affect_count();
@@ -3712,6 +3910,54 @@ struct ToonInventoryEditScan {
 			d["artifact_mult"] = listino_db_param("artifact_mult", 1.5);
 			d["artifact_cost_raw"] =
 				listino_db_param("artifact_cost_raw", 10000.0);
+			d["pq_per_mega_xp"] = kEditPoolPqPerMegaXp;
+			d["listino_revision"] = listino_db_seed_tag();
+
+			/* Manifest tender: solo questi possono pagare. Mix sempre valuta+rune. */
+			Json tenders = Json::array();
+			{
+				Json xp;
+				xp["id"] = "xp";
+				xp["slug"] = "mxp";
+				xp["label"] = "MXP";
+				xp["api_field"] = "pay_xp";
+				xp["is_rune"] = false;
+				xp["can_pay"] = true;
+				xp["mix_with_rune"] = true;
+				/* object: rune coprono XP a 1 MXP = 1 rune (= pq_per_mega_xp raw). */
+				xp["object_mix"] = "cover_xp";
+				xp["rune_per_mega_xp"] = kEditPoolPqPerMegaXp;
+				/* editpool: % sullo listino XP e % sullo listino rune (paralleli). */
+				xp["editpool_mix"] = "parallel_pct";
+				tenders.push_back(xp);
+			}
+			{
+				Json rn;
+				rn["id"] = "rune";
+				rn["slug"] = "rune";
+				rn["label"] = "Rune degli eroi";
+				rn["api_field"] = "pay_rune";
+				rn["is_rune"] = true;
+				rn["can_pay"] = true;
+				rn["mix_with_rune"] = false;
+				tenders.push_back(rn);
+			}
+			d["tenders"] = tenders;
+
+			Json routes = Json::array();
+			auto add_route = [&](const char* kind, const char* path_s, const char* pay_model) {
+				Json r;
+				r["kind"] = kind;
+				r["path"] = path_s;
+				r["payment_model"] = pay_model;
+				routes.push_back(r);
+			};
+			add_route("pool", "/internal/apply-pool", "editpool");
+			add_route("object_affect", "/internal/apply-affect", "object");
+			add_route("char_affect", "/internal/apply-char-affect", "editpool");
+			add_route("resistance", "/internal/apply-resistance", "object");
+			d["apply_routes"] = routes;
+			d["supported_pay_fields"] = Json::array({"pay_xp", "pay_rune"});
 			return json_ok(d);
 		}
 
@@ -4189,6 +4435,7 @@ void edit_portal_init() {
 #if USE_MYSQL
 	edit_system_config_init();
 	portal_audit_ensure_tables();
+	character_edit_affect_ensure_schema();
 	mudlog(LOG_CHECK, "edit_portal: API listening on port %d (%s=%d)",
 		   api_port(), kEditPortalApiVersionTag, kEditPortalApiVersion);
 	g_portal_running = true;

@@ -30,6 +30,7 @@ struct Entry {
 	std::string kind;
 	std::string pool_field;
 	unsigned damage_type = 0;
+	int location = 0;
 	EditSystemTarget target = EditSystemTarget::Object;
 	bool enabled = true;
 	std::string label;
@@ -315,6 +316,7 @@ void parse_entries_json(const Json& root) {
 		e.kind = item.value("kind", "");
 		e.pool_field = item.value("pool_field", "");
 		e.damage_type = static_cast<unsigned>(item.value("damage_type", 0));
+		e.location = item.value("location", 0);
 		e.target = parse_target(item.value("target", "object"));
 		e.enabled = item.value("enabled", true);
 		e.label = item.value("label", "");
@@ -341,6 +343,9 @@ void parse_entries_json(const Json& root) {
 		}
 		if(e.damage_type != 0) {
 			item["damage_type"] = e.damage_type;
+		}
+		if(e.location != 0) {
+			item["location"] = e.location;
 		}
 		item["target"] = target_str(e.target);
 		item["enabled"] = e.enabled;
@@ -431,6 +436,29 @@ struct ResistanceLookup {
 	std::lock_guard<std::mutex> lock(g_mutex);
 	for(const auto& e : g_entries) {
 		if(e.kind == "resistance" && e.damage_type == damage_type) {
+			out.found = true;
+			out.enabled = e.enabled;
+			out.target = e.target;
+			return out;
+		}
+	}
+	return out;
+}
+
+struct AffectLookup {
+	bool found = false;
+	bool enabled = true;
+	EditSystemTarget target = EditSystemTarget::Object;
+};
+
+[[nodiscard]] AffectLookup lookup_affect(int location) {
+	AffectLookup out;
+	if(location == 0) {
+		return out;
+	}
+	std::lock_guard<std::mutex> lock(g_mutex);
+	for(const auto& e : g_entries) {
+		if(e.kind == "affect" && e.location == location) {
 			out.found = true;
 			out.enabled = e.enabled;
 			out.target = e.target;
@@ -551,6 +579,49 @@ bool edit_system_config_save_json(const std::string& json_text, std::string& err
 	}
 }
 
+EditSystemTarget edit_system_pool_target(const char* pool_field) noexcept {
+	const PoolLookup lk = lookup_pool(pool_field);
+	if(!lk.found || !lk.enabled) {
+		return EditSystemTarget::Character;
+	}
+	return lk.target;
+}
+
+bool edit_system_pool_enabled(const char* pool_field) noexcept {
+	const PoolLookup lk = lookup_pool(pool_field);
+	return lk.found && lk.enabled;
+}
+
+EditSystemTarget edit_system_resistance_target(unsigned damage_type) noexcept {
+	const ResistanceLookup lk = lookup_resistance(damage_type);
+	if(!lk.found || !lk.enabled) {
+		return EditSystemTarget::Object;
+	}
+	return lk.target;
+}
+
+bool edit_system_resistance_enabled(unsigned damage_type) noexcept {
+	const ResistanceLookup lk = lookup_resistance(damage_type);
+	return lk.found && lk.enabled;
+}
+
+EditSystemTarget edit_system_affect_target(int location) noexcept {
+	const AffectLookup lk = lookup_affect(location);
+	if(!lk.found || !lk.enabled) {
+		return EditSystemTarget::Object;
+	}
+	return lk.target;
+}
+
+bool edit_system_affect_enabled(int location) noexcept {
+	const AffectLookup lk = lookup_affect(location);
+	/* Se non in config, resta editabile sull'oggetto se nel listino. */
+	if(!lk.found) {
+		return true;
+	}
+	return lk.enabled;
+}
+
 bool edit_system_blocked_on_object(int location, int modifier) noexcept {
 	if(edit_pool_is_pool_apply(location)) {
 		const char* field = nullptr;
@@ -585,33 +656,11 @@ bool edit_system_blocked_on_object(int location, int modifier) noexcept {
 	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE || location == APPLY_SUSC) {
 		return resistance_bits_blocked_on_object(static_cast<unsigned>(modifier));
 	}
+	if(edit_system_affect_enabled(location) &&
+	   edit_system_affect_target(location) == EditSystemTarget::Character) {
+		return true;
+	}
 	return false;
-}
-
-EditSystemTarget edit_system_pool_target(const char* pool_field) noexcept {
-	const PoolLookup lk = lookup_pool(pool_field);
-	if(!lk.found || !lk.enabled) {
-		return EditSystemTarget::Character;
-	}
-	return lk.target;
-}
-
-bool edit_system_pool_enabled(const char* pool_field) noexcept {
-	const PoolLookup lk = lookup_pool(pool_field);
-	return lk.found && lk.enabled;
-}
-
-EditSystemTarget edit_system_resistance_target(unsigned damage_type) noexcept {
-	const ResistanceLookup lk = lookup_resistance(damage_type);
-	if(!lk.found || !lk.enabled) {
-		return EditSystemTarget::Object;
-	}
-	return lk.target;
-}
-
-bool edit_system_resistance_enabled(unsigned damage_type) noexcept {
-	const ResistanceLookup lk = lookup_resistance(damage_type);
-	return lk.found && lk.enabled;
 }
 
 bool edit_system_portal_type_always_hidden(const char* category) noexcept {

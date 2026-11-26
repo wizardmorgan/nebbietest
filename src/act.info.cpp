@@ -423,6 +423,55 @@ void EmitDangerSenseAdjacentDeath(struct char_data* ch) {
 		}
 	}
 }
+
+/* Fasce condizione eq: current vs max (armor AC, weapon dice sides). */
+void AppendWearConditionSuffix(std::string& output, int current, int maxv,
+							   bool isSingular) {
+	if(maxv <= 0) {
+		return;
+	}
+	const auto appendSingularPlural = [&output, isSingular](const char* singularText,
+															const char* pluralText) {
+		output += isSingular ? singularText : pluralText;
+	};
+	if(current < (maxv / 4)) {
+		appendSingularPlural("$c0009 (distrutto)$c0007",
+							 "$c0009 (sono distrutti)$c0007");
+	}
+	else if(current < (maxv / 3)) {
+		appendSingularPlural("$c0009 (ha bisogno di essere riparato)$c0007",
+							 "$c0009 (hanno bisogno di essere riparati)$c0007");
+	}
+	else if(current < (maxv / 2)) {
+		output += "$c0011 (in buone condizioni)$c0007";
+	}
+	else if(current < maxv) {
+		output += "$c0010 (in ottime condizioni)$c0007";
+	}
+	else {
+		output += "$c0010 (in condizioni eccellenti)$c0007";
+	}
+}
+
+[[nodiscard]] int WeaponProtoDiceSides(const struct obj_data* object) {
+	if(!object || object->item_number < 0 || object->item_number >= top_of_objt) {
+		return 0;
+	}
+	const int rnum = object->item_number;
+	if(obj_index[rnum].data) {
+		const auto* proto =
+			static_cast<const struct obj_data*>(obj_index[rnum].data);
+		return proto->obj_flags.value[2];
+	}
+	/* Stesso fallback del RepairGuy: proto non ancora in cache. */
+	struct obj_data* loaded = read_object(rnum, REAL);
+	if(!loaded) {
+		return 0;
+	}
+	const int sides = loaded->obj_flags.value[2];
+	extract_obj(loaded);
+	return sides;
+}
 } // namespace
 
 
@@ -463,27 +512,12 @@ void show_obj_to_char(struct obj_data* object, struct char_data* ch, int mode) {
 			                     "$c0008 (emettono un forte ronzio)$c0007");
 		}
 		if(object->obj_flags.type_flag == ITEM_ARMOR) {
-			if(object->obj_flags.value[ 0 ] <
-					(object->obj_flags.value[ 1 ] / 4)) {
-				appendSingularPlural("$c0009 (distrutto)$c0007",
-				                     "$c0009 (sono distrutti)$c0007");
-			}
-			else if(object->obj_flags.value[ 0 ] <
-					(object->obj_flags.value[ 1 ] / 3)) {
-				appendSingularPlural("$c0009 (ha bisogno di essere riparato)$c0007",
-				                     "$c0009 (hanno bisogno di essere riparati)$c0007");
-			}
-			else if(object->obj_flags.value[ 0 ] <
-					(object->obj_flags.value[ 1 ] / 2)) {
-				output += "$c0011 (in buone condizioni)$c0007";
-			}
-			else if(object->obj_flags.value[ 0 ] <
-					object->obj_flags.value[1]) {
-				output += "$c0010 (in ottime condizioni)$c0007";
-			}
-			else {
-				output += "$c0010 (in condizioni eccellenti)$c0007";
-			}
+			AppendWearConditionSuffix(output, object->obj_flags.value[0],
+									  object->obj_flags.value[1], isSingular);
+		}
+		else if(object->obj_flags.type_flag == ITEM_WEAPON) {
+			AppendWearConditionSuffix(output, object->obj_flags.value[2],
+									  WeaponProtoDiceSides(object), isSingular);
 		}
 	}
 	if(!output.empty()) {
@@ -2084,6 +2118,15 @@ ACTION_FUNC(do_exits) {
 	else {
 		send_to_char("$c0009Nessuna!\n\r", ch);
 	}
+}
+
+ACTION_FUNC(do_edits) {
+	if(ch == nullptr) {
+		mudlog(LOG_SYSERR, "ch==nullptr in do_edits (act.info.cpp)");
+		return;
+	}
+	/* Solo sul proprio toon: argomenti ignorati (no spiare altri). */
+	object_instance_show_own_edits(ch);
 }
 
 ACTION_FUNC(do_status) {

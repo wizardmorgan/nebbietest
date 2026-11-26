@@ -310,16 +310,28 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	if(free_slots > 0) {
 		return true;
 	}
+	/*
+	 * Senza slot liberi: solo merge su uno slot combat gia' presente.
+	 * Usare i totali aggregati (combat_*_total) e' sbagliato: HITNDAM conta
+	 * come hr>0 e apriva SPELLPOWER anche a pezzo pieno (niente slot, niente
+	 * HITROLL dedicato da convertire in HITNSP). Stessa trappola per DAMROLL
+	 * se c'e' solo HITNSP. Contano solo gli assi sullo slot dedicato.
+	 */
+	const int hr_slot = sum_location_mod(obj, APPLY_HITROLL);
+	const int dr_slot = sum_location_mod(obj, APPLY_DAMROLL);
 	const int hr = combat_hitroll_total(obj);
 	const int dr = combat_damroll_total(obj);
 	const int sp = combat_spellpower_total(obj);
-	if(location == APPLY_DAMROLL && hr > 0 && dr == 0) {
+	/* hitroll dedicato + niente dam → si puo' unire in hit-n-dam */
+	if(location == APPLY_DAMROLL && hr_slot > 0 && dr == 0) {
 		return true;
 	}
-	if(location == APPLY_HITROLL && dr > 0 && hr == 0) {
+	/* damroll dedicato + niente hit → si puo' unire in hit-n-dam */
+	if(location == APPLY_HITROLL && dr_slot > 0 && hr == 0) {
 		return true;
 	}
-	if(location == APPLY_SPELLPOWER && hr > 0 && sp == 0) {
+	/* hitroll dedicato + niente sp → si puo' unire in hit-n-sp */
+	if(location == APPLY_SPELLPOWER && hr_slot > 0 && sp == 0) {
 		return true;
 	}
 	if(location == APPLY_HITNDAM && hr > 0 && dr > 0) {
@@ -390,6 +402,61 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	return v;
 }
 
+/**
+ * Proto usato per il delta listino. Hit-n-dam / hit-n-sp: se il proto ha
+ * hit/dam (o hit/sp) separati e nessuno slot combinato, il proto "vero" e'
+ * il max degli assi — altrimenti +1 sul combinato partiva da 0 e poteva
+ * settare sotto i bonus proto.
+ */
+[[nodiscard]] static int listino_proto_base_for_delta(const struct obj_data* obj,
+													 int location) noexcept {
+	const int slot_proto = prototype_display_current(obj, location);
+	if(location == APPLY_HITNDAM) {
+		const int hr = prototype_display_current(obj, APPLY_HITROLL);
+		const int dr = prototype_display_current(obj, APPLY_DAMROLL);
+		return std::max(slot_proto, std::max(hr, dr));
+	}
+	if(location == APPLY_HITNSP) {
+		const int hr = prototype_display_current(obj, APPLY_HITROLL);
+		const int sp = prototype_display_current(obj, APPLY_SPELLPOWER);
+		return std::max(slot_proto, std::max(hr, sp));
+	}
+	return slot_proto;
+}
+
+/**
+ * Minimo totale assoluto consentito in apply (solo aumentare / unire).
+ * Hit-n-dam/sp: max degli assi effettivi gia' presenti sul pezzo.
+ */
+[[nodiscard]] static int object_edit_apply_floor(const struct obj_data* obj,
+												int location) noexcept {
+	if(!obj) {
+		return 0;
+	}
+	switch(location) {
+	case APPLY_HITNDAM:
+		return std::max(combat_hitroll_total(obj), combat_damroll_total(obj));
+	case APPLY_HITNSP:
+		return std::max(combat_hitroll_total(obj), combat_spellpower_total(obj));
+	case APPLY_HITROLL:
+		return combat_hitroll_total(obj);
+	case APPLY_DAMROLL:
+		return combat_damroll_total(obj);
+	case APPLY_SPELLPOWER:
+		return combat_spellpower_total(obj);
+	case APPLY_AC:
+	case APPLY_SPELLFAIL:
+		/* Lower-is-better: gestito da listino_target_worsens_bonus. */
+		return object_edit_display_current(obj, location);
+	default:
+		return object_edit_display_current(obj, location);
+	}
+}
+
+[[nodiscard]] static bool listino_higher_is_better(int location) noexcept {
+	return location != APPLY_AC && location != APPLY_SPELLFAIL;
+}
+
 [[nodiscard]] static bool listino_target_allowed(const struct obj_data* obj,
 												 const ObjEditListinoSpec& spec,
 												 int target_modifier,
@@ -404,7 +471,7 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 		return true;
 	}
 
-	const int proto_val = prototype_display_current(obj, spec.location);
+	const int proto_val = listino_proto_base_for_delta(obj, spec.location);
 	const int delta = target_modifier - proto_val;
 	const int abs_step = std::abs(spec.step) > 0 ? std::abs(spec.step) : 1;
 
@@ -882,12 +949,20 @@ static void portal_force_paid_malus(struct obj_data* obj) noexcept {
 	}
 
 	const int current_total = object_edit_display_current(obj, location);
+	const int apply_floor = object_edit_apply_floor(obj, location);
 	/*
-	 * Bonus gia' pagati: non si dial-down (es. armor −10→0 o STR 2→1).
-	 * Solo «Rimuovi slot» (gratis) oppure migliorare.
+	 * Bonus gia' presenti: solo aumentare (o «Rimuovi slot»).
+	 * Floor combat include assi su slot separati (hitndam current=0 ma hr/dam=3).
 	 */
 	if(listino_target_worsens_bonus(location, current_total, target_modifier)) {
 		err = "non puoi ridurre un bonus: usa «Rimuovi slot» (gratis) oppure migliora";
+		return false;
+	}
+	if(listino_higher_is_better(location) && target_modifier < apply_floor) {
+		err = std::string("non puoi sovrascrivere un bonus gia' presente (floor ")
+			  + std::to_string(apply_floor) + ", richiesto "
+			  + std::to_string(target_modifier)
+			  + "): scegli un totale >= floor oppure «Rimuovi slot»";
 		return false;
 	}
 
@@ -1229,12 +1304,14 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["min"] = spec.min_total;
 		j["max"] = spec.max_total;
 		j["proto"] = proto_total;
+		j["proto_effective"] = listino_proto_base_for_delta(obj, spec.location);
 		j["relative"] = relative;
 		j["kind"] = "scalar";
 		j["has_affect"] = has_affect;
 		j["occupied_slot"] = occupied_slot;
 		j["can_add"] = can_edit && !has_affect;
 		j["can_edit"] = can_edit;
+		j["value_floor"] = object_edit_apply_floor(obj, spec.location);
 		{
 			/* Solo bonus positivi: «Rimuovi slot» gratis. Malus → selettore a 0. */
 			const bool clear_positive =
