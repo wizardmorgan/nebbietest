@@ -265,6 +265,7 @@ void heal_v2_create_s1_tables(DB* db) {
 		"  `description` VARCHAR(256) NOT NULL DEFAULT '',"
 		"  `wear_pos` TINYINT UNSIGNED NOT NULL DEFAULT 0,"
 		"  `depth` TINYINT UNSIGNED NOT NULL DEFAULT 0,"
+		"  `wear_flags` INT NOT NULL DEFAULT -1,"
 		"  `parent_inventory_id` BIGINT UNSIGNED NULL,"
 		"  `deleted` TINYINT(1) NOT NULL DEFAULT 0,"
 		"  `deleted_on` DATETIME NULL,"
@@ -371,6 +372,8 @@ void heal_v2_s1_incrementals(DB* db) {
 	ensure_column(db, "character_inventory", "parent_inventory_id", "BIGINT UNSIGNED NULL");
 	ensure_column(db, "character_inventory", "deleted", "TINYINT(1) NOT NULL DEFAULT 0");
 	ensure_column(db, "character_inventory", "deleted_on", "DATETIME NULL");
+	/* Wear flags diversi dal prototipo (-1 = prototipo); idempotente a ogni boot. */
+	ensure_column(db, "character_inventory", "wear_flags", "INT NOT NULL DEFAULT -1");
 	ensure_column(db, "character_inventory", "deleted_for",
 				  "ENUM('DEATH','RENT_EXPIRED','NUKE','TRAP','MANUAL','SCRAP') NULL");
 	exec_ignore_exists(db, "ALTER TABLE `character_inventory` DROP INDEX `uq_inventory_toon_index`");
@@ -1012,11 +1015,79 @@ void heal_v15_combat_view(DB* db) {
 	ensure_column(db, "character_core", "combat_view", "INT NOT NULL DEFAULT 0");
 }
 
+/* KV balance dispel / spellpower seconda chance (WIZ dispelconf). */
+void heal_v15_spell_balance(DB* db) {
+	exec_ignore_exists(
+		db,
+		"CREATE TABLE IF NOT EXISTS `spell_balance` ("
+		"  `conf_key` varchar(64) NOT NULL PRIMARY KEY,"
+		"  `conf_value` varchar(64) NOT NULL,"
+		"  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP "
+		"ON UPDATE CURRENT_TIMESTAMP"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+/* Cap/prezzi editpool (configure editpool). */
+void heal_v15_edit_pool_balance(DB* db) {
+	exec_ignore_exists(
+		db,
+		"CREATE TABLE IF NOT EXISTS `edit_pool_balance` ("
+		"  `conf_key` varchar(64) NOT NULL PRIMARY KEY,"
+		"  `conf_value` varchar(64) NOT NULL,"
+		"  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP "
+		"ON UPDATE CURRENT_TIMESTAMP"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+/* Prezzi derent / disincanta (configure derent|disincanta). */
+void heal_v15_service_balance(DB* db) {
+	exec_ignore_exists(
+		db,
+		"CREATE TABLE IF NOT EXISTS `service_balance` ("
+		"  `conf_key` varchar(64) NOT NULL PRIMARY KEY,"
+		"  `conf_value` varchar(64) NOT NULL,"
+		"  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP "
+		"ON UPDATE CURRENT_TIMESTAMP"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+/* Fotografia del pg a ogni morte (refund nome death N pg): una riga per morte,
+ * died_at = deleted_on degli oggetti DEATH della stessa morte. Colonne *_before/_after
+ * in testo "colonna=valore;..." (character_stats + spells_to_learn, livelli per classe). */
+void heal_v15_death_history(DB* db) {
+	exec_ignore_exists(
+		db,
+		"CREATE TABLE IF NOT EXISTS `character_death_history` ("
+		"  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,"
+		"  `toon_id` BIGINT UNSIGNED NOT NULL,"
+		"  `died_at` DATETIME NOT NULL,"
+		"  `killer` VARCHAR(128) NOT NULL DEFAULT '',"
+		"  `killed_by_type` INT NOT NULL DEFAULT 0,"
+		"  `room` INT NOT NULL DEFAULT 0,"
+		"  `exp_before` BIGINT NOT NULL DEFAULT 0,"
+		"  `exp_after` BIGINT NULL,"
+		"  `runes_before` INT NOT NULL DEFAULT 0,"
+		"  `runes_after` INT NULL,"
+		"  `levels_before` VARCHAR(128) NOT NULL DEFAULT '',"
+		"  `levels_after` VARCHAR(128) NULL,"
+		"  `stats_before` TEXT NOT NULL,"
+		"  `stats_after` TEXT NULL,"
+		"  `level_hp` TEXT NULL,"
+		"  `pg_restored_at` DATETIME NULL,"
+		"  `pg_restored_by` VARCHAR(32) NULL,"
+		"  PRIMARY KEY (`id`),"
+		"  KEY `idx_death_history_toon_died` (`toon_id`, `died_at`),"
+		"  CONSTRAINT `fk_death_history_toon` FOREIGN KEY (`toon_id`) REFERENCES `toon` (`id`)"
+		"  ON DELETE CASCADE ON UPDATE CASCADE"
+		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
 void heal_v15(DB* db) {
 	/* v15: vault (raw SQL), colonne key_* -> senza prefisso, achievements.paid_level,
 	 * character_core.load_room INT, character_level_hp, edit_portal_* audit,
 	 * inventory overflow, edit_pool_event, toon_name_history,
-	 * character_core.combat_view. */
+	 * character_core.combat_view, spell_balance, edit_pool_balance,
+	 * service_balance, character_death_history. */
 	heal_v15_vault_plans(db);
 	heal_v15_unprefix_composite_keys(db);
 	heal_v15_achie_paid_level(db);
@@ -1027,6 +1098,10 @@ void heal_v15(DB* db) {
 	heal_v15_edit_pool_event(db);
 	heal_v15_toon_name_history(db);
 	heal_v15_combat_view(db);
+	heal_v15_spell_balance(db);
+	heal_v15_edit_pool_balance(db);
+	heal_v15_service_balance(db);
+	heal_v15_death_history(db);
 }
 
 using HealStepFn = void (*)(DB*);
@@ -1051,7 +1126,7 @@ constexpr HealStepFn kHealByVersion[] = {
 	heal_v12, /* 12 */
 	heal_v13, /* 13 — object_instance_extradesc */
 	heal_v14, /* 14 — character_item_loss */
-	heal_v15, /* 15 — vault*, paid_level, load_room INT, inventory overflow, edit_pool_event, toon_name_history, combat_view */
+	heal_v15, /* 15 — vault*, paid_level, load_room INT, inventory overflow, edit_pool_event, toon_name_history, combat_view, spell_balance */
 };
 
 constexpr odb::schema_version kHealStepsMax =

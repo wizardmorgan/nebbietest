@@ -487,16 +487,10 @@ namespace Alarmud {
 #define CMD_MERCY               475
 #define CMD_FIND_ORIGINAL       476
 #define CMD_INCASTONA           477
-//  free 478-479
-#define CMD_DMANAGE             480
-#define CMD_DRESTRICT           481
-#define CMD_DLINK               482
-#define CMD_DUNLINK             483
-#define CMD_DLIST               484
-#define CMD_DWHO                485
-#define CMD_DGOSSIP             486
-#define CMD_DTELL               487
-#define CMD_DTHINK              488
+#define CMD_ZRESET              478
+#define CMD_DISPELCONF          479 /* dispelconf: alias di configure dispel */
+#define CMD_CONFIGURE           480 /* configure: dispatcher balance/listino DB */
+//  free 481-488
 #define CMD_SEND                489
 #define CMD_MESSENGER           490
 #define CMD_PROMPT              491

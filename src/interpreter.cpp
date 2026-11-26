@@ -52,6 +52,8 @@
 #include "act.wizard.hpp"
 #include "procarea.hpp"
 #include "procarea_fatigue.hpp"
+#include "configure.hpp"
+#include "dispel_balance.hpp"
 #include "multiclass.hpp"	//aggiunto per la nuova gestiopne del salvataggio pwd toon alla creazione
 #include "breath.hpp"
 #include "comm.hpp"
@@ -960,6 +962,8 @@ void assign_command_pointers() {
 	AddCommand( "look",                 do_look,            CMD_LOOK,                   POSITION_RESTING,   TUTTI                   );  /*   15 */
 	AddCommand( "score",                do_score,           CMD_SCORE,                  POSITION_DEAD,      TUTTI                   );
 	AddCommand( "edits",                do_edits,           CMD_EDITS,                  POSITION_DEAD,      TUTTI                   );
+	AddCommand( "configure",            do_configure,       CMD_CONFIGURE,              POSITION_DEAD,      QUESTMASTER             );
+	AddCommand( "dispelconf",           do_dispelconf,      CMD_DISPELCONF,             POSITION_DEAD,      QUESTMASTER             ); /* alias → configure dispel */
 	AddCommand( "say",                  do_new_say,         CMD_SAY,                    POSITION_RESTING,   TUTTI                   );
 	AddCommand( "shout",                do_shout,           CMD_SHOUT,                  POSITION_RESTING,   2                       );
 	AddCommand( "tell",                 do_tell,            CMD_TELL,                   POSITION_RESTING,   TUTTI                   );
@@ -1028,7 +1032,7 @@ void assign_command_pointers() {
 	AddCommand( "oload",                do_oload,           CMD_OLOAD,                  POSITION_DEAD,      QUESTMASTER             );
 	AddCommand( "purge",                do_purge,           CMD_PURGE,                  POSITION_DEAD,      DIO_MINORE              );
 	AddCommand( "shutdown",             do_shutdown,        CMD_SHUTDOWN,               POSITION_DEAD,      CREATORE                );
-	AddCommand( "reboottime",           do_reboottime,      CMD_REBOOTTIME,             POSITION_DEAD,      CREATORE                );
+	AddCommand( "reboottime",           do_reboottime,      CMD_REBOOTTIME,             POSITION_DEAD,      QUESTMASTER             ); /* alias → configure reboot */
 	AddCommand( "idea",                 do_idea_new,        CMD_IDEA,                   POSITION_DEAD,      TUTTI                   );  /*   80 */
 	AddCommand( "typo",                 do_typo,            CMD_TYPO,                   POSITION_DEAD,      TUTTI                   );
 	AddCommand( "bug",                  do_bug_new,         CMD_BUG,                    POSITION_DEAD,      TUTTI                   );
@@ -1344,9 +1348,10 @@ void assign_command_pointers() {
 	AddCommand( "turn",                 do_open_exit,       CMD_TURN,                   POSITION_STANDING,  TUTTI                   );
 	AddCommand( "lift",                 do_open_exit,       CMD_LIFT,                   POSITION_STANDING,  TUTTI                   );
 	AddCommand( "push",                 do_open_exit,       CMD_PUSH,                   POSITION_STANDING,  TUTTI                   );
-  //AddCommand("zload",                 do_zload,           CMD_ZLOAD,                  POSITION_STANDING,  MAESTRO_DEGLI_DEI       );  /*  375 */
+	AddCommand( "zload",                do_zload,           CMD_ZLOAD,                  POSITION_STANDING,  MAESTRO_DEGLI_DEI       );  /*  375 */
 	AddCommand( "zsave",                do_zsave,           CMD_ZSAVE,                  POSITION_STANDING,  MAESTRO_DEGLI_DEI       );
 	AddCommand( "zclean",               do_zclean,          CMD_ZCLEAN,                 POSITION_STANDING,  MAESTRO_DEGLI_DEI       );
+	AddCommand( "zreset",               do_zreset,          CMD_ZRESET,                 POSITION_STANDING,  MAESTRO_DEGLI_DEI       );
 	AddCommand( "wrebuild",             do_WorldSave,       CMD_WREBUILD,               POSITION_STANDING,  IMMENSO                 );
 	AddCommand( "gwho",                 list_groups,        CMD_GWHO,                   POSITION_DEAD,      TUTTI                   );
 	AddCommand( "mforce",               do_mforce,          CMD_MFORCE,                 POSITION_DEAD,      DIO_MINORE              );  /*  380 */
@@ -1449,23 +1454,7 @@ void assign_command_pointers() {
 	AddCommand( "refund",				do_refund,			CMD_REFUND,					POSITION_DEAD,		MAESTRO_DEL_CREATO		);
 	AddCommand( "mercy",				do_mercy,			CMD_MERCY,					POSITION_DEAD,		QUESTMASTER				);	/*	475	*/
 	AddCommand( "findoriginal",			do_find_original,	CMD_FIND_ORIGINAL,			POSITION_DEAD,		QUESTMASTER				);
-	/*          Liberi 478-479 (-488)*/
-  //            DIMD stuff
-  // AddCommand( "dmanage",              do_dmanage,         CMD_DMANAGE,
-  // POSITION_RESTING,   MAESTRO_DEL_CREATO      );  /*  480 */ AddCommand(
-  // "drestrict",            do_drestrict,       CMD_DRESTRICT,
-  // POSITION_RESTING,   DIO_MINORE              ); AddCommand( "dlink",
-  // do_dgossip,         CMD_DLINK,                  POSITION_RESTING,
-  // DIO_MINORE              ); AddCommand( "dunlink",              do_dgossip,
-  // CMD_DUNLINK,                POSITION_RESTING,   DIO_MINORE              );
-  // AddCommand( "dlist",                do_dlist,           CMD_DLIST,
-  // POSITION_RESTING,   2                       ); AddCommand( "dwho", do_dwho,
-  // CMD_DWHO,                   POSITION_RESTING,   2                       );
-  // /*  485 */ AddCommand( "dgossip",              do_dgossip, CMD_DGOSSIP,
-  // POSITION_RESTING,   MAESTRO_DEL_CREATO      ); AddCommand( "dtell",
-  // do_dtell,           CMD_DTELL,                  POSITION_RESTING,
-  // MAESTRO_DEL_CREATO      ); AddCommand( "dthink",               do_dthink,
-  // CMD_DTHINK,                 POSITION_RESTING,   MAESTRO_DEL_CREATO      );
+  /*          Liberi 479-488 (DIMD rimosso; configure usa 479-480) */
   AddCommand("sending", do_sending, CMD_SEND, POSITION_STANDING, TUTTI);
   AddCommand("messenger", do_sending, CMD_MESSENGER, POSITION_STANDING,
              TUTTI); /*  490 */

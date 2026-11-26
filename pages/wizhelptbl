@@ -396,8 +396,11 @@ MySQL), names. Asterisco = file edit in objects/ senza prototipo in memoria.
 
 $c0015show edits <nome>$c0007
   Riepilogo compatto listino: pezzi 0/21, pool e over, cap
-  DAM+SP/HR/SF/AC (delta vs proto), stats, resi/imm/spell e
-  mancanti, warn per pezzo fuori limite. Esclusi simboli clan.
+  DAM+SP/HR/SF/AC (delta vs proto), stats, resistenze, imm/spell
+  e warn per pezzo fuori limite. Esclusi simboli clan.
+  Resi, Imm e Spell: ciascuno ha "totali" (OR attuale sui
+  pezzi, con le mancanti rispetto al listino) e "da edit"
+  (solo i bit aggiunti rispetto al proto, senza mancanti).
   Funziona anche offline.
 
 show db elenca solo gli edit attivi (non soft-deleted).
@@ -666,6 +669,7 @@ Comandi con livello minimo uguale a questo rank
   stat
   zclean
   zload
+  zreset
   zsave
 
 $c0013Vedi anche$c0007: WIZHELP, 54, 56
@@ -887,7 +891,16 @@ Per elencarli: show db | show db deleted
 Storico audit: show db history <n> | show db history deleted <n>
 Owner: personalize <obj> <pg> [force] | personalize <obj> none
 
-$c0013Vedi anche$c0007: OLOAD, OSAVE, SHOW, OEDIT
+Su un mob caricato da un reset di zona compare la riga "Posto reset":
+  zona #n (nome) comando c, serie s   la riga del .zon che l'ha caricato
+  capo serie s                        il capo a cui appartiene (seguaci)
+  punto di spawn vivi/max             righe uniche con max sopra 1
+  orfano                              il capo e' morto: lo adottera'
+                                      il prossimo capo al reset
+"nessuno" = mob non caricato da un reset (mload, spec proc, ...).
+Il posto si libera solo quando il mob muore o viene tolto.
+
+$c0013Vedi anche$c0007: OLOAD, OSAVE, SHOW, OEDIT, ZLOAD
 
 
 #
@@ -895,9 +908,20 @@ $c0013Vedi anche$c0007: OLOAD, OSAVE, SHOW, OEDIT
 
 $c0014Livello minimo$c0007: 55 (Maestro degli Dei)
 
-Comando wizard zclean.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
+Ripulisce una zona: toglie tutti i mob (non i polymorph) e tutti gli
+oggetti a terra dalle sue stanze. Non ricarica niente: i mob tornano al
+prossimo reset della zona, nei posti rimasti liberi.
+Per far rinascere subito cio' che manca, senza pulire, usa zreset.
+
+Sintassi:
+  zclean <indice zona>
+
+L'indice e' la posizione nella tabella delle zone (non il numero #).
+La zona 0 (Void) non si puo' pulire.
+Sotto il livello 56 puoi agire solo sulla tua zona di permesso.
+$c0013Nota$c0007: risparmia i corpi dei PG, i pet, i charmati e le cavalcature dei PG.
+
+$c0013Vedi anche$c0007: ZLOAD, ZRESET, WRESET
 
 
 #
@@ -905,9 +929,40 @@ o aggiorna questo help dopo aver verificato il comportamento.
 
 $c0014Livello minimo$c0007: 55 (Maestro degli Dei)
 
-Comando wizard zload.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
+Reset forzato di una zona: la ripulisce come zclean e ne rifa' subito
+il reset completo (come al primo avvio), senza rileggere il file.
+Utile per provare i posti del reset e i punti di spawn.
+Per un reset senza pulizia (rinasce solo cio' che manca) usa zreset.
+
+Sintassi:
+  zload <indice zona>
+
+L'indice e' la posizione nella tabella delle zone (non il numero #).
+Sotto il livello 56 puoi agire solo sulla tua zona di permesso.
+$c0013Nota$c0007: risparmia i corpi dei PG, i pet, i charmati e le cavalcature dei PG.
+Il comando viene registrato nel log.
+
+$c0013Vedi anche$c0007: ZCLEAN, ZRESET, WRESET, STAT
+
+
+#
+"ZRESET"
+
+$c0014Livello minimo$c0007: 55 (Maestro degli Dei)
+
+Reset non distruttivo di una zona: chiama solo reset_zone, senza
+pulire e senza azzerare start. Rinasce solo cio' che manca; i mob
+vivi non si duplicano. Se la zona non e' ancora partita, la
+inizializza.
+
+Sintassi:
+  zreset <indice zona>
+
+L'indice e' la posizione nella tabella delle zone (non il numero #).
+Sotto il livello 56 puoi agire solo sulla tua zona di permesso.
+Il comando viene registrato nel log.
+
+$c0013Vedi anche$c0007: ZLOAD, ZCLEAN, WRESET
 
 
 #
@@ -928,20 +983,11 @@ Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
 
   ?
-  dimensione densita
-  dimensione premi
-  dimensione kit
-  dimensione scorta
-  dimensione densita esempi
-  dimensione premi esempi
-  dimensione kit esempi
-  reboottime
   shutdown
   switch
   wreset
 
 $c0013Vedi anche$c0007: WIZHELP, 55, 57
-
 
 #
 "?"
@@ -952,44 +998,345 @@ Comando wizard ?.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
 
+#
+"SHUTDOWN"
+
+$c0014Livello minimo$c0007: 56 (Creatore)
+
+Spegne o riavvia il mud subito (Creatore+).
+
+  $c0014shutdown$c0007
+    Ferma il mud: messaggio a tutti, flag di shutdown, il processo esce.
+    Non riparte da solo.
+
+  $c0014shutdown reboot$c0007
+    Come sopra, ma con flag di reboot: lo script che avvolge il mud
+    puo' rilanciare il processo dopo l'uscita.
+
+  $c0014shutdown crash$c0007
+    Crash controllato (assert) per emergenza o debug.
+
+Sotto Creatore serve la password in $c0015lib/shutpass$c0007 e al
+massimo un giocatore connesso.
+
+$c0013Vedi anche$c0007: REBOOTTIME
+
+#
+"SWITCH"
+
+$c0014Livello minimo$c0007: 56 (Creatore)
+
+Comando wizard switch.
+Documentazione da completare: chiedi a uno staff piu' esperto
+o aggiorna questo help dopo aver verificato il comportamento.
+
+#
+"WRESET"
+
+$c0014Livello minimo$c0007: 56 (Creatore)
+
+Fa il primo reset di tutte le zone non ancora inizializzate (quelle in
+cui non e' ancora entrato nessun PG dall'avvio). Le zone gia' attive
+non vengono toccate: per un reset senza pulizia usa zreset, per uno
+completo (con pulizia) usa zload.
+
+Sintassi:
+  wreset
+
+Alla fine dice quante zone ha inizializzato e quante erano gia' attive.
+Il comando viene registrato nel log.
+
+$c0013Vedi anche$c0007: ZLOAD, ZCLEAN, ZRESET
+
+#
+"57" "QUESTMASTER" "LIVELLO 57"
+
+$c0014Livello 57$c0007 - Questmaster
+
+Comandi con livello minimo uguale a questo rank
+(chi e' a questo livello o superiore puo' usarli):
+
+  #
+  clone
+  cloneoriginal
+  create
+  findoriginal
+  forcerent
+  freeze
+  medit
+  mercy
+  oedit
+  editpool
+  odust
+  dbexport
+  motd (set)
+  news (admin)
+  oload
+  osave
+  pquest
+  snoop
+  system
+  transfer
+  vaultinfo
+  configure
+  configure dispel
+  configure dispel esempi
+  configure editpool
+  configure derent
+  configure disincanta
+  dimensione densita
+  dimensione premi
+  dimensione cristalli
+  dimensione kit
+  dimensione scorta
+  dimensione densita esempi
+  dimensione premi esempi
+  dimensione kit esempi
+  reboottime
+  vaultplan
+
+$c0013Vedi anche$c0007: WIZHELP, 56, 58
+
+#
+"CONFIGURE" "CONFIG"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Dispatcher unico per i topic di config runtime. Digita
+$c0014configure$c0007 per l'elenco.
+
+  $c0014configure dimensione densita|premi|livelli|kit|scorta$c0007
+    Balance Dimensione Effimera (DB $c0015procarea_balance$c0007).
+
+  $c0014configure dispel$c0007
+    Balance dispel / spellpower (DB $c0015spell_balance$c0007).
+
+  $c0014configure editpool$c0007
+    Cap, prezzi e over editpool (DB $c0015edit_pool_balance$c0007).
+
+  $c0014configure derent$c0007
+    Prezzi RentEditor (DB $c0015service_balance$c0007).
+
+  $c0014configure disincanta$c0007
+    Prezzi AffectSlotRemover (DB $c0015service_balance$c0007).
+
+  $c0014configure vault$c0007
+    Listino cassette (DB $c0015vault_plan$c0007).
+
+  $c0014configure reboot$c0007
+    Orari reboot automatici (file $c0015REBOOT.SCHEDULE$c0007).
+
+Alias ancora validi: $c0015dimensione densita|?$c0007, $c0015dispelconf$c0007,
+$c0015vaultplan$c0007, $c0015reboottime$c0007.
+
+$c0013Vedi anche$c0007: CONFIGURE DISPEL, CONFIGURE EDITPOOL, CONFIGURE DERENT,
+CONFIGURE DISINCANTA, DIMENSIONE DENSITA, REBOOTTIME
+
+#
+"CONFIGURE DISPEL" "DISPELCONF" "DISPEL BALANCE" "SPELL BALANCE"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Bilanciamento di $c0014dispel magic$c0007 in base allo spellpower.
+Persistenza ODB tabella $c0015spell_balance$c0007 (sopravvive al reboot).
+
+$c0014Chi puo' usare il balance$c0007: solo caster puri ($c0015IS_CASTER_N$c0007:
+mono magici o multi solo tra classi magiche, es. cl-mu).
+Un cl-wa / mk-mu non entra in questo sistema.
+
+$c0014Mono$c0007 (mu/cl/dr/psi/so single, con mono_band on):
+  - un tiro a fasce SP una volta per cast (auto-dispel);
+  - se fallisce: niente save 1d20, solo seconda chance %.
+
+$c0014Multi caster$c0007 (es. cl-mu):
+  - auto se vittima <= tuo livello;
+  - altrimenti save spell della vittima, poi stessa seconda chance %.
+
+$c0014Seconda chance$c0007 (soft on di default):
+  over = SP - sp_baseline; diff = lv_vittima - lv_caster;
+  pct = min(pct_cap, over / (diff/2+1)); se vittima >= high_level: * high_level_pct/100.
+
+  $c0014configure dispel$c0007
+    Mostra i valori attivi.
+
+  $c0014configure dispel help$c0007
+    Elenco chiavi.
+
+  $c0014configure dispel set <chiave> <valore>$c0007
+    Seconda chance: soft, sp_baseline, pct_cap, level_bonus_cap,
+    high_level, high_level_pct.
+    Mono fasce: mono_band, mono_soft_pct, mono_max_bonus,
+    mono_t1 mono_t2 mono_t3 mono_t4
+    (default T = 30/61/92/122; a T-1 = mono_soft_pct%, default 85).
+
+  $c0014configure dispel reset$c0007
+    Torna ai default e salva su DB.
+
+Alias: $c0015dispelconf$c0007.
+
+Esempi comando-per-comando: $c0014wizhelp configure dispel esempi$c0007
+
+$c0013Vedi anche$c0007: CONFIGURE DISPEL ESEMPI, CONFIGURE, DIMENSIONE PREMI
+
+#
+"CONFIGURE DISPEL ESEMPI" "DISPELCONF ESEMPI" "ESEMPI DISPEL" "DISPEL ESEMPI"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Esempi pronti da copiare per $c0014configure dispel$c0007.
+Ogni riga e' un comando. Effetto immediato sui cast successivi.
+
+$c0014Dump / reset$c0007:
+  configure dispel
+  configure dispel help
+  configure dispel reset
+
+$c0014Seconda chance$c0007:
+  configure dispel set soft 1
+  configure dispel set soft 0
+  configure dispel set sp_baseline 10
+  configure dispel set sp_baseline 0
+  configure dispel set pct_cap 50
+  configure dispel set pct_cap 30
+  configure dispel set high_level 56
+  configure dispel set high_level_pct 50
+  configure dispel set high_level_pct 100
+  configure dispel set level_bonus_cap 5
+
+$c0014Mono a fasce$c0007:
+  configure dispel set mono_band 1
+  configure dispel set mono_band 0
+  configure dispel set mono_soft_pct 85
+  configure dispel set mono_soft_pct 70
+  configure dispel set mono_max_bonus 4
+  configure dispel set mono_t1 30
+  configure dispel set mono_t2 61
+  configure dispel set mono_t3 92
+  configure dispel set mono_t4 122
+
+$c0014Mini ricetta$c0007 "mono un filo piu' forti":
+  1) configure dispel set mono_soft_pct 90
+  2) configure dispel set mono_t1 25
+  3) configure dispel set mono_t2 55
+
+$c0014Mini ricetta$c0007 "seconda chance piu' dura sui 56+":
+  1) configure dispel set high_level 56
+  2) configure dispel set high_level_pct 25
+  3) configure dispel set pct_cap 40
+
+$c0013Vedi anche$c0007: CONFIGURE DISPEL, CONFIGURE
+
+#
+"CONFIGURE EDITPOOL" "EDITPOOL BALANCE" "EDIT POOL CAP"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Cap, prezzi per unita' e parametri $c0014over$c0007 del listino
+$c0014editpool$c0007. Persistenza tabella $c0015edit_pool_balance$c0007
+(heal_v15 + CREATE al boot).
+
+  $c0014configure editpool$c0007
+  $c0014configure editpool set <chiave> <valore>$c0007
+  $c0014configure editpool reset$c0007
+
+$c0014Cap$c0007: max_hp max_mana max_move max_hp_regen max_mana_regen
+max_move_regen (alias: hp mana move hp_regen mana_regen move_regen).
+Default: 100 / 150 / 100 / 50 / 50 / 50.
+
+$c0014Prezzo per unita'$c0007: <campo>_xp, <campo>_rune_num, <campo>_rune_den
+con campo = hp|mana|move|hp_regen|mana_regen|move_regen.
+Rune = unita' * num / den. Default ufficiali (es. mana 1.5M xp, rune 3/2).
+
+$c0014Over$c0007 (credito oltre cap): max_over_* e over_<campo>_xp|rune_num|rune_den.
+Valore $c0015-1$c0007 = non configurato (nessun cap/prezzo dedicato all'over;
+resta il comportamento attuale). Reset rimette tutti gli over a -1.
+
+Esempi:
+  configure editpool set max_mana 180
+  configure editpool set mana_xp 1600000
+  configure editpool set mana_rune_num 3
+  configure editpool set mana_rune_den 2
+  configure editpool set max_over_hp 50
+  configure editpool set over_hp_xp 5000000
+  configure editpool set max_over_hp -1
+
+$c0013Vedi anche$c0007: CONFIGURE, EDITPOOL
+
+#
+"CONFIGURE DERENT" "DERENT" "RENTEDITOR PREZZI"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Prezzi del mob $c0014RentEditor$c0007 (diminuire affitto oggetto).
+Persistenza tabella $c0015service_balance$c0007 (heal_v15 + CREATE al boot).
+Il tipo di pagamento (rune/exp/gold) resta sullo special del mob.
+
+  $c0014configure derent$c0007
+  $c0014configure derent set <chiave> <valore>$c0007
+  $c0014configure derent reset$c0007
+
+Chiavi: rune exp gold. Default: 1 / 2.000.000 / 300.000.
+Valori: cifre, punti migliaia o suffisso k/m (es. 300k, 2m).
+
+$c0013Vedi anche$c0007: CONFIGURE, CONFIGURE DISINCANTA
+
+#
+"CONFIGURE DISINCANTA" "DISINCANTA" "AFFECTSLOT"
+
+$c0014Livello minimo$c0007: 57 (Questmaster)
+
+Prezzi del mob $c0014AffectSlotRemover$c0007 (disincanta uno slot affect).
+Persistenza tabella $c0015service_balance$c0007 (heal_v15 + CREATE al boot).
+
+  $c0014configure disincanta$c0007
+  $c0014configure disincanta set <chiave> <valore>$c0007
+  $c0014configure disincanta reset$c0007
+
+Chiavi: rune exp coins. Default: 1 / 0 / 300.000.
+Valori: cifre, punti migliaia o suffisso k/m (es. 300k, 2m).
+Se exp e' 0 non viene addebitata esperienza.
+
+$c0013Vedi anche$c0007: CONFIGURE, CONFIGURE DERENT
 
 #
 "DIMENSIONE DENSITA" "DENSITA" "PROCAREA DENSITA"
 
-$c0014Livello minimo$c0007: 56 (Creatore)
+$c0014Livello minimo$c0007: 57 (Questmaster)
 
 Configura a runtime densita' e lunghezza della Dimensione Effimera
 (gruppo e solitaria). I cambiamenti valgono solo per le
 $c0010istanze nuove$c0007; quelle gia' aperte restano come generate.
 Persistenza ODB tabella $c0015procarea_balance$c0007 (sopravvive al reboot).
 
-  $c0014dimensione densita$c0007
+Comando preferito: $c0014configure dimensione densita ?$c0007
+(alias: $c0015dimensione densita ?$c0007).
+
+  $c0014configure dimensione densita$c0007
     Mostra i valori attivi (profilo MID + bias + solo_*).
 
-  $c0014dimensione densita help$c0007
+  $c0014configure dimensione densita help$c0007
     Elenco chiavi e sintassi.
 
-  $c0014dimensione densita bias <0.5-1.5>$c0007
+  $c0014configure dimensione densita bias <0.5-1.5>$c0007
     Moltiplicatore globale (stanze/spawn). Esempio: bias 0.9 ~ -10%.
 
-  $c0014dimensione densita set <chiave> <valore>$c0007
+  $c0014configure dimensione densita set <chiave> <valore>$c0007
     Ritocca un parametro. Chiavi tipiche:
     rooms_min_lo/hi, rooms_max_lo/hi, corr_lo/hi, tes_lo/hi,
     adds_lo/hi, depth_lo/hi, br_lo/hi, bc_lo/hi,
     sec_corr, sec_tre, sec_trap, solo_* (modificatori solitaria).
 
-  $c0014dimensione densita reset$c0007
+  $c0014configure dimensione densita reset$c0007
     Torna al profilo MID di default e salva su DB.
 
 Esempi comando-per-comando: $c0014wizhelp dimensione densita esempi$c0007
 
-$c0013Vedi anche$c0007: DIMENSIONE DENSITA ESEMPI, DIMENSIONE PREMI, DIMENSIONE EFFIMERA
-
+$c0013Vedi anche$c0007: CONFIGURE, DIMENSIONE DENSITA ESEMPI, DIMENSIONE PREMI, DIMENSIONE EFFIMERA
 
 #
 "DIMENSIONE DENSITA ESEMPI" "DENSITA ESEMPI" "ESEMPI DENSITA"
 
-$c0014Livello minimo$c0007: 56 (Creatore)
+$c0014Livello minimo$c0007: 57 (Questmaster)
 
 Esempi pronti da copiare per $c0014dimensione densita$c0007.
 Ogni riga e' un comando. Vale dalle $c0010prossime$c0007 istanze.
@@ -1059,11 +1406,10 @@ $c0014Mini ricetta$c0007 "ancora troppo lunga":
 
 $c0013Vedi anche$c0007: DIMENSIONE DENSITA, DIMENSIONE PREMI ESEMPI
 
-
 #
 "DIMENSIONE PREMI" "PREMI DIMENSIONE" "PROCAREA PREMI"
 
-$c0014Livello minimo$c0007: 56 (Creatore)
+$c0014Livello minimo$c0007: 57 (Questmaster)
 
 Configura a runtime i premi $c0010numerici$c0007 della Dimensione Effimera
 (%, moltiplicatori, conversione frammenti). Non e' un editor di oggetti.
@@ -1096,7 +1442,7 @@ $c0013Vedi anche$c0007: DIMENSIONE PREMI ESEMPI, DIMENSIONE CRISTALLI, DIMENSION
 #
 "DIMENSIONE CRISTALLI" "DIMENSIONE CRISTALLO" "CRISTALLI" "PROCAREA CRISTALLI"
 
-$c0014Livello minimo$c0007: 56 (Creatore)
+$c0014Livello minimo$c0007: 57 (Questmaster)
 
 Parametri del cristallo di sintonia scelto all'ingresso della Dimensione
 Effimera (il capogruppo fa $c0014touch <colore>$c0007). Si leggono con
@@ -1155,11 +1501,10 @@ Esempi: $c0014dimensione premi set crystal_blu_xp 1.5$c0007
 
 $c0013Vedi anche$c0007: DIMENSIONE PREMI, DIMENSIONE PREMI ESEMPI, DIMENSIONE EFFIMERA
 
-
 #
 "DIMENSIONE PREMI ESEMPI" "PREMI ESEMPI" "ESEMPI PREMI"
 
-$c0014Livello minimo$c0007: 56 (Creatore)
+$c0014Livello minimo$c0007: 57 (Questmaster)
 
 Esempi pronti da copiare per $c0014dimensione premi$c0007.
 Ogni riga e' un comando. N = tier fatigue 0..5 (0 = prime run piene).
@@ -1256,11 +1601,10 @@ $c0014Mini ricetta$c0007 "meno frammenti":
 
 $c0013Vedi anche$c0007: DIMENSIONE PREMI, DIMENSIONE DENSITA ESEMPI
 
-
 #
 "DIMENSIONE KIT" "KIT" "PROCAREA KIT" "SOLO KIT"
 
-$c0014Livello minimo$c0007: 56 (Creatore)
+$c0014Livello minimo$c0007: 57 (Questmaster)
 
 Bilanciamento $c0010solitaria$c0007 per kit PG (cl/mk = baseline 1.00 = oggi).
 La $c0014fascia$c0007 resta dall'indice eq; kit ritocca solo durezza mob e mix
@@ -1286,11 +1630,10 @@ Esempi comando-per-comando: $c0014wizhelp dimensione kit esempi$c0007
 
 $c0013Vedi anche$c0007: DIMENSIONE KIT ESEMPI, DIMENSIONE DENSITA
 
-
 #
 "DIMENSIONE KIT ESEMPI" "KIT ESEMPI"
 
-$c0014Livello minimo$c0007: 56 (Creatore)
+$c0014Livello minimo$c0007: 57 (Questmaster)
 
 Esempi pronti da copiare per $c0014dimensione kit$c0007.
 
@@ -1328,11 +1671,10 @@ $c0014Mini ricetta$c0007 "psi piu' facile":
 
 $c0013Vedi anche$c0007: DIMENSIONE KIT, DIMENSIONE DENSITA ESEMPI
 
-
 #
 "DIMENSIONE SCORTA" "SCORTA" "HIRELING" "ASSOLDA CONFIG"
 
-$c0014Livello minimo$c0007: 56 (Creatore)
+$c0014Livello minimo$c0007: 57 (Questmaster)
 
 Policy $c0014assolda$c0007 (scorta tank solitaria). Persistenza ODB
 $c0015procarea_balance$c0007 (prefisso h_).
@@ -1358,112 +1700,35 @@ Alias wiz: hireling | assolda.
 
 $c0013Vedi anche$c0007: DIMENSIONE KIT
 
-
 #
-"REBOOTTIME"
+"REBOOTTIME" "CONFIGURE REBOOT"
 
-$c0014Livello minimo$c0007: 56 (Creatore)
+$c0014Livello minimo$c0007: 57 (Questmaster)
 
 Mostra e modifica gli orari dei reboot automatici giornalieri
 (file $c0015lib/REBOOT.SCHEDULE$c0007).
 
-  $c0014reboottime$c0007
+Comando preferito: $c0014configure reboot ?$c0007 (alias: $c0015reboottime ?$c0007).
+
+  $c0014configure reboot$c0007
     Elenca gli orari e lo stato di oggi (fatto / in attesa / in ritardo).
 
-  $c0014reboottime set HH:MM [HH:MM ...]$c0007
+  $c0014configure reboot set HH:MM [HH:MM ...]$c0007
     Sostituisce tutti gli orari (max 8). Esempio:
-    reboottime set 04:00 11:00 18:00
+    configure reboot set 04:00 11:00 18:00
 
-  $c0014reboottime reset$c0007
+  $c0014configure reboot reset$c0007
     Ripristina i default 04:00 11:00 18:00.
 
-  $c0014reboottime clear$c0007
+  $c0014configure reboot clear$c0007
     Cancella REBOOT.DONE cosi' gli slot di oggi tornano eseguibili.
 
-  $c0014reboottime off$c0007
+  $c0014configure reboot off$c0007
     Disattiva i reboot automatici (equivalente a set off).
 
 Per un reboot immediato: $c0014shutdown reboot$c0007.
 
-$c0013Vedi anche$c0007: SHUTDOWN, SHUTDOWN REBOOT
-
-
-#
-"SHUTDOWN"
-
-$c0014Livello minimo$c0007: 56 (Creatore)
-
-Spegne o riavvia il mud subito (Creatore+).
-
-  $c0014shutdown$c0007
-    Ferma il mud: messaggio a tutti, flag di shutdown, il processo esce.
-    Non riparte da solo.
-
-  $c0014shutdown reboot$c0007
-    Come sopra, ma con flag di reboot: lo script che avvolge il mud
-    puo' rilanciare il processo dopo l'uscita.
-
-  $c0014shutdown crash$c0007
-    Crash controllato (assert) per emergenza o debug.
-
-Sotto Creatore serve la password in $c0015lib/shutpass$c0007 e al
-massimo un giocatore connesso.
-
-$c0013Vedi anche$c0007: REBOOTTIME
-
-
-#
-"SWITCH"
-
-$c0014Livello minimo$c0007: 56 (Creatore)
-
-Comando wizard switch.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
-
-
-#
-"WRESET"
-
-$c0014Livello minimo$c0007: 56 (Creatore)
-
-Comando wizard wreset.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
-
-#
-"57" "QUESTMASTER" "LIVELLO 57"
-
-$c0014Livello 57$c0007 - Questmaster
-
-Comandi con livello minimo uguale a questo rank
-(chi e' a questo livello o superiore puo' usarli):
-
-  #
-  clone
-  cloneoriginal
-  create
-  findoriginal
-  forcerent
-  freeze
-  medit
-  mercy
-  oedit
-  editpool
-  odust
-  dbexport
-  motd (set)
-  news (admin)
-  oload
-  osave
-  pquest
-  snoop
-  system
-  transfer
-  vaultinfo
-  vaultplan
-
-$c0013Vedi anche$c0007: WIZHELP, 56, 58
+$c0013Vedi anche$c0007: CONFIGURE, SHUTDOWN, SHUTDOWN REBOOT
 
 #
 "DBEXPORT"
@@ -1522,8 +1787,8 @@ $c0013Vedi anche$c0007: SHOW, OSAVE, EDITPOOL
 $c0014Livello minimo$c0007: 57 (Questmaster)
 
 Gestisce il $c0015listino edit$c0007 sul personaggio (hp/mana/move e regen),
-non sull'equipaggiamento. Cap listino: hp 100, mana 150, move 100, regen 50.
-L'overedit e' solo contabile (nessun bonus in gioco).
+non sull'equipaggiamento. I cap attuali li stampa il comando (da
+$c0015configure editpool$c0007). L'overedit e' solo contabile (nessun bonus in gioco).
 
 Flusso: anteprima -> conferma pagamento -> applica. Paga il PG editato
 (listino ufficiale +50% artifact; XP=(x mult)/n_classi, rune=ceil(x mult)).
@@ -1632,7 +1897,6 @@ $c0013Esempi$c0007:
 
 $c0013Vedi anche$c0007: OSAVE, OEDIT, SHOW, STAT, ODELETE
 
-
 #
 "ODELETE"
 
@@ -1673,7 +1937,6 @@ $c0013Esempi$c0007:
 
 $c0013Vedi anche$c0007: OLOAD, OSAVE, SHOW
 
-
 #
 "WHERE"
 
@@ -1690,7 +1953,6 @@ $c0015Uso$c0007:
 
 $c0013Vedi anche$c0007: SHOW, OLOAD, OSAVE, ODELETE
 
-
 #
 "TRANSFER"
 
@@ -1701,7 +1963,6 @@ stessa stanza del wizard. Puo' essere usato anche per trasferire
 mostri, ma stai attento nel farlo con mostri aggressivi. Far uccidere
 un giocatore non e' cosa buona.
 
-
 #
 "#"
 
@@ -1710,7 +1971,6 @@ $c0014Livello minimo$c0007: 57 (Questmaster)
 Comando wizard #.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
-
 
 #
 "CLONE"
@@ -1755,7 +2015,6 @@ cloneoriginal.
 
 $c0013Vedi anche$c0007: CLONEORIGINAL, OEDIT, OLOAD
 
-
 #
 "CLONEORIGINAL"
 
@@ -1779,7 +2038,6 @@ c'e' niente dell'edit da copiare, quindi cloneoriginal li clona sempre
 
 $c0013Vedi anche$c0007: CLONE, OLOAD
 
-
 #
 "CREATE"
 
@@ -1788,7 +2046,6 @@ $c0014Livello minimo$c0007: 57 (Questmaster)
 Comando wizard create.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
-
 
 #
 "FINDORIGINAL"
@@ -1799,7 +2056,6 @@ Comando wizard findoriginal.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
 
-
 #
 "FORCERENT"
 
@@ -1808,7 +2064,6 @@ $c0014Livello minimo$c0007: 57 (Questmaster)
 Comando wizard forcerent.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
-
 
 #
 "FREEZE"
@@ -1819,7 +2074,6 @@ Comando wizard freeze.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
 
-
 #
 "MEDIT"
 
@@ -1829,7 +2083,6 @@ Comando wizard medit.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
 
-
 #
 "MERCY"
 
@@ -1838,7 +2091,6 @@ $c0014Livello minimo$c0007: 57 (Questmaster)
 Comando wizard mercy.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
-
 
 #
 "OEDIT"
@@ -1882,7 +2134,6 @@ $c0015Premi Dimensione Effimera$c0007 (loot rolled, 65100-65325):
   Vedi: wizhelp OSAVE, wizhelp dimensione premi
 
 $c0013Vedi anche$c0007: OSAVE, STAT, PERSONALIZE, SHOW, EDITPOOL
-
 
 #
 "OSAVE"
@@ -1943,7 +2194,6 @@ $c0013Esempi$c0007:
 
 $c0013Vedi anche$c0007: OEDIT, OLOAD, SHOW, STAT, dimensione premi
 
-
 #
 "PQUEST"
 
@@ -1952,7 +2202,6 @@ $c0014Livello minimo$c0007: 57 (Questmaster)
 Comando wizard pquest.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
-
 
 #
 "SNOOP"
@@ -1963,7 +2212,6 @@ Comando wizard snoop.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
 
-
 #
 "SYSTEM"
 
@@ -1972,7 +2220,6 @@ $c0014Livello minimo$c0007: 57 (Questmaster)
 Comando wizard system.
 Documentazione da completare: chiedi a uno staff piu' esperto
 o aggiorna questo help dopo aver verificato il comportamento.
-
 
 #
 "MOTD"
@@ -2004,19 +2251,20 @@ nel body del commit; MOTD_HEADLINE a compile-time e' override raro.
 
 $c0013Vedi anche$c0007: NEWS, WIZMOTD, WIZNEWS
 
-
 #
-"VAULTPLAN"
+"VAULTPLAN" "CONFIGURE VAULT"
 
 $c0014Livello minimo$c0007: 57 (Questmaster)
 
 Gestisce il listino delle cassette di sicurezza (tabella MySQL
 $c0015vault_plan$c0007): per ogni tipo e piano capienza, prezzi, canoni e rune.
 
+Comando preferito: $c0014configure vault ?$c0007 (alias: $c0015vaultplan ?$c0007).
+
 Uso:
-  vaultplan list [personale|account|clan]
-  vaultplan set <personale|account|clan> <1-5|piano> <campo> <valore>
-  vaultplan reload
+  configure vault list [personale|account|clan]
+  configure vault set <personale|account|clan> <1-5|piano> <campo> <valore>
+  configure vault reload
 
 Tipi: personale, account, clan (bastano le abbreviazioni).
 Piani: 1-5 oppure bronzo, argento, oro, platino, mithril.
@@ -2039,11 +2287,11 @@ ricrea solo le righe mancanti dal listino base (non tocca quelle esistenti).
 Ogni set e reload finisce nel log (LOG_PLAYERS) con il nome di chi l'ha fatto.
 
 Esempi:
-  vaultplan list clan
-  vaultplan set personale oro capacity 600
-  vaultplan set account 3 affitto 50000
+  configure vault list clan
+  configure vault set personale oro capacity 600
+  configure vault set account 3 affitto 50000
 
-$c0013Vedi anche$c0007: 57, CASSETTA, VAULTINFO
+$c0013Vedi anche$c0007: CONFIGURE, 57, CASSETTA, VAULTINFO
 
 #
 "VAULTINFO"
@@ -2176,9 +2424,6 @@ Comandi con livello minimo uguale a questo rank
 (chi e' a questo livello o superiore puo' usarli):
 
   devaccess
-  dgossip
-  dmanage
-  dthink
   force
   ghost
   legacyimport
@@ -2225,36 +2470,6 @@ $c0013list$c0007 elenca gli account attualmente abilitati e quelli revocati
 Senza enable/off mostra lo stato dell'account (ON / OFF / REVOKED).
 $c0013Nota$c0007: gli account disabilitati prima di questo tracking restano OFF
 e non compaiono tra i revocati.
-
-
-#
-"DGOSSIP"
-
-$c0014Livello minimo$c0007: 58 (Maestro del Creato)
-
-Comando wizard dgossip.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
-
-
-#
-"DMANAGE"
-
-$c0014Livello minimo$c0007: 58 (Maestro del Creato)
-
-Comando wizard dmanage.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
-
-
-#
-"DTHINK"
-
-$c0014Livello minimo$c0007: 58 (Maestro del Creato)
-
-Comando wizard dthink.
-Documentazione da completare: chiedi a uno staff piu' esperto
-o aggiorna questo help dopo aver verificato il comportamento.
 
 
 #

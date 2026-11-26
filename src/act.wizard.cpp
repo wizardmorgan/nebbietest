@@ -38,6 +38,7 @@
 #include <initializer_list>
 #include <string_view>
 #include <limits>
+#include <map>
 #include <stdexcept>
 #include <unordered_map>
 /***************************  General include ************************************/
@@ -84,6 +85,7 @@
 #include "toon_rename.hpp"
 #include "spec_bank.hpp"
 #include "edit_pool.hpp"
+#include "edit_pool_balance.hpp"
 #include "Sql.hpp"
 #include "odb/account-odb.hxx" // Header generato da ODB per le query
 #if USE_MYSQL
@@ -98,6 +100,7 @@
 #include "obj_value.hpp"
 #include "object_instance.hpp"
 #include "character_item_loss.hpp"
+#include "zone_slots.hpp"
 namespace Alarmud {
 
 char EasySummon = true;
@@ -1008,82 +1011,97 @@ ACTION_FUNC(do_zsave) {
 
 }
 
-ACTION_FUNC(do_zload) {
-	int zone;
-	FILE* fp;
+namespace {
 
-	if(IS_NPC(ch)) {
-		return;
+/**
+ * Legge l'indice della zona per zload/zclean e fa i controlli comuni.
+ * Restituisce l'indice valido o std::nullopt (il messaggio al dio e' gia'
+ * stato mandato).
+ */
+[[nodiscard]] std::optional<int> wiz_zone_arg(char_data* ch,
+											 const char* arg,
+											 std::string_view usage) {
+	const std::vector<int> nums =
+		parse_leading_ints(arg != nullptr ? arg : "", 1);
+	if(nums.empty() || nums.front() < 1) {
+		send_to_char(std::string(usage).c_str(), ch);
+		return std::nullopt;
 	}
-
-	/*
-	 *   read in parameters (room #s)
-	 */
-	zone = -1;
-	sscanf(arg, "%d", &zone);
-
-	if(zone < 1) {
-		send_to_char("Zload <zone_number>\n\r", ch);
-		return;
-	}
-
+	const int zone = nums.front();
 	if(zone > top_of_zone_table) {
-		send_to_char("Invalid zone number\r\n", ch);
-		return;
+		send_to_char(("Zona non valida: l'ultima e' la " +
+					  std::to_string(top_of_zone_table) + ".\r\n").c_str(), ch);
+		return std::nullopt;
 	}
-	/* make some permission checks */
-	if(GetMaxLevel(ch) < 56 && zone != GET_ZONE(ch)) {
-		send_to_char("Sorry, you are not authorized to load this zone.\n\r",
-					 ch);
-		return;
+	if(GetMaxLevel(ch) < CREATORE && zone != GET_ZONE(ch)) {
+		send_to_char("Non hai il permesso di agire su questa zona.\n\r", ch);
+		return std::nullopt;
 	}
-
-	fp = (FILE*) OpenZoneFile(ch, zone);
-
-	if(!fp) {
-		send_to_char("Couldn't open zone file..\n\r", ch);
-		return;
-	}
-
-	/* oh well, do some things with that zone */
-	CleanZone(zone);
-	LoadZoneFile(fp, zone);
-	fclose(fp);
-	renum_zone_table(zone);
-	zone_table[zone].start = 0;
-	reset_zone(zone);
-
-	send_to_char("Ok\r\n", ch);
+	return zone;
 }
 
-ACTION_FUNC(do_zclean) {
-	int zone = -1;
-	struct room_data* rp;
+} // namespace
 
+/**
+ * zload <zona>: ripulisce la zona e ne rifa' subito il reset completo,
+ * senza rileggere il file (le zone stanno tutte in myst.zon).
+ */
+ACTION_FUNC(do_zload) {
 	if(IS_NPC(ch)) {
 		return;
 	}
-
-	sscanf(arg, "%d", &zone);
-
-	if(zone < 1) {
-		send_to_char(
-			"Zclean <zone_number> (and don't even think about cleaning Void)\n\r",
-			ch);
+	const std::optional<int> zone =
+		wiz_zone_arg(ch, arg, "Zload <indice zona>\n\r");
+	if(!zone) {
 		return;
 	}
 
-	/* make some permission checks */
-	rp = real_roomp(ch->in_room);
-	if(GetMaxLevel(ch) < 56 && rp->zone != GET_ZONE(ch)) {
-		send_to_char("Sorry, you are not authorized to clean this zone.\n\r",
-					 ch);
+	CleanZone(*zone);
+	zone_table[*zone].start = 0;
+	reset_zone(*zone);
+
+	mudlog(LOG_CHECK, "zload of zone %d (%s) by %s.",
+		   zone_table[*zone].num, zone_table[*zone].name, GET_NAME(ch));
+	send_to_char("Ok, zona ripulita e ricaricata.\r\n", ch);
+}
+
+/** zclean <zona>: toglie mob e oggetti a terra dalla zona, senza reset. */
+ACTION_FUNC(do_zclean) {
+	if(IS_NPC(ch)) {
+		return;
+	}
+	const std::optional<int> zone = wiz_zone_arg(
+		ch, arg,
+		"Zclean <indice zona> (e non pensare nemmeno di ripulire il Void)\n\r");
+	if(!zone) {
 		return;
 	}
 
-	CleanZone(zone);
+	CleanZone(*zone);
 
 	send_to_char("4 3 2 1 0, Boom!\r\n", ch);
+}
+
+/**
+ * zreset <zona>: rifa' il reset della zona senza pulirla prima.
+ * Rinasce solo cio' che manca; i mob vivi non si duplicano.
+ * Se la zona non e' ancora partita, la inizializza.
+ */
+ACTION_FUNC(do_zreset) {
+	if(IS_NPC(ch)) {
+		return;
+	}
+	const std::optional<int> zone =
+		wiz_zone_arg(ch, arg, "Zreset <indice zona>\n\r");
+	if(!zone) {
+		return;
+	}
+
+	reset_zone(*zone);
+
+	mudlog(LOG_CHECK, "zreset of zone %d (%s) by %s.",
+		   zone_table[*zone].num, zone_table[*zone].name, GET_NAME(ch));
+	send_to_char("Ok, zona resettata: rinasce solo cio' che manca.\n\r", ch);
 }
 
 ACTION_FUNC(do_highfive) {
@@ -2267,6 +2285,33 @@ void stat_character(struct char_data* ch, struct char_data* k, int cmd) {
 		if(IS_NPC(k)) {
 			stat_send(ch, (boost::format("$c0005Start room: $c0014%ld\n\r")
 				% k->lStartRoom).str());
+			/* posto del reset di zona (riga M/C) che ha caricato il mob */
+			std::string slot("nessuno");
+			if(k->reset_serial != 0) {
+				const std::optional<zone_slots::SlotLocation> loc =
+					zone_slots::find(k->reset_serial);
+				const std::string serial = std::to_string(k->reset_serial);
+				if(loc && loc->zone >= 0) {
+					const zone_data& z = zone_table[loc->zone];
+					const std::string_view name = z.name != nullptr ? z.name : "?";
+					slot = "zona #" + std::to_string(z.num) + " (" + std::string(name) +
+						   ") comando " + std::to_string(loc->cmd) + ", serie " + serial;
+				}
+				else {
+					slot = "serie " + serial;
+				}
+				if(loc && loc->master != 0) {
+					slot += ", capo serie " + std::to_string(loc->master);
+				}
+				if(loc && loc->orphan) {
+					slot += ", orfano";
+				}
+				else if(loc && loc->max > 1) {
+					slot += ", punto di spawn " + std::to_string(loc->alive) + "/" +
+							std::to_string(loc->max);
+				}
+			}
+			stat_send(ch, "$c0005Posto reset: $c0014" + slot + "\n\r");
 		}
 
 		if(k->specials.affected_by) {
@@ -6755,6 +6800,8 @@ struct RefundRequest {
 	int type_flags = 0;
 	bool sql_direct = false;
 	bool auto_mode = false;
+	std::vector<int> picks;   /* death N / scrap N N ...: numeri dell'elenco */
+	bool pg_restore = false;  /* death N pg */
 };
 
 struct RefundAutoHit {
@@ -6923,14 +6970,26 @@ std::string refund_shell_quote(const fs::path& path) {
 void refund_send_usage(struct char_data* ch) {
 	send_to_char("Hai dimenticato qualcosa!\n\r", ch);
 	send_to_char("La sintassi corretta e':\n\r", ch);
-	send_to_char("$c0015refund nome_pg data($c0009aaaammgg$c0015) orario($c0009m$c0015/$c0009p$c0015/$c0009s$c0015) "
-				 "$c0009all$c0015/$c0009eq$c0015/$c0009pg$c0015/$c0009achie$c0007\n\r",
+	send_to_char("$c0015refund nome_pg $c0009death$c0007"
+				 "  elenco numerato delle ultime morti (1 = la piu' recente)\n\r",
 				 ch);
-	send_to_char("$c0015refund nome_pg $c0009death$c0015/$c0009rent$c0015/$c0009scrap$c0007"
-				 " (solo SQL, ultimo snapshot per causa)\n\r",
+	send_to_char("$c0015refund nome_pg $c0009death$c0015 N [$c0009pg$c0015]$c0007"
+				 "  oggetti mancanti della morte N; con $c0009pg$c0007 anche XP, livelli"
+				 " e rune (solo pg offline)\n\r",
+				 ch);
+	send_to_char("$c0015refund nome_pg $c0009rent$c0007"
+				 "  oggetti mancanti dell'ultimo rent scaduto\n\r",
+				 ch);
+	send_to_char("$c0015refund nome_pg $c0009scrap$c0015 [N N ...]$c0007"
+				 "  senza numeri elenco degli oggetti rotti negli ultimi 30 giorni,"
+				 " con i numeri rida' quegli oggetti\n\r",
+				 ch);
+	send_to_char("$c0015refund nome_pg data($c0009aaaammgg$c0015) orario($c0009m$c0015/$c0009p$c0015/$c0009s$c0015) "
+				 "$c0009all$c0015/$c0009eq$c0015/$c0009pg$c0015/$c0009achie$c0007"
+				 " (da backup, solo pg offline)\n\r",
 				 ch);
 	send_to_char("$c0015refund nome_pg $c0009auto$c0015 [$c0009eq$c0015]"
-				 " (ultimo rent vestito: eq+pg+.aux; $c0009eq$c0015 = solo inventario)\n\r",
+				 " (ultimo rent vestito: eq+pg+.aux; $c0009eq$c0015 = solo inventario; solo pg offline)\n\r",
 				 ch);
 }
 
@@ -6958,6 +7017,7 @@ bool refund_parse_request(const char* arg, struct char_data* ch, RefundRequest& 
 
 	arg = one_argument(arg, name);
 	arg = one_argument(arg, second);
+	const std::string after_second = arg != nullptr ? arg : "";
 	arg = one_argument(arg, third);
 	only_argument(arg, fourth);
 
@@ -6975,7 +7035,36 @@ bool refund_parse_request(const char* arg, struct char_data* ch, RefundRequest& 
 		request.sql_cause = sql_cause;
 		request.name = name;
 		request.name_lower = refund_to_lower(request.name);
-		mudlog(LOG_PLAYERS, "do_refund: direct SQL mode cause=%s", request.sql_cause.c_str());
+		/* Resto della riga: numeri dell'elenco e, per death, "pg". */
+		std::istringstream rest(after_second);
+		std::string token;
+		while(rest >> token) {
+			if(!str_cmp(token.c_str(), "pg")) {
+				request.pg_restore = true;
+				continue;
+			}
+			if(token.size() <= 4 &&
+			   std::all_of(token.begin(), token.end(),
+						   [](unsigned char c) { return std::isdigit(c) != 0; })) {
+				request.picks.push_back(std::stoi(token));
+				continue;
+			}
+			send_to_char(("Argomento non valido: $c0009" + token + "$c0007\n\r").c_str(), ch);
+			refund_send_usage(ch);
+			return false;
+		}
+		const bool is_death = request.sql_cause == "DEATH";
+		const bool is_scrap = request.sql_cause == "SCRAP";
+		if((!is_death && request.pg_restore) || (is_death && request.picks.size() > 1) ||
+		   (is_death && request.pg_restore && request.picks.empty()) ||
+		   (!is_death && !is_scrap && !request.picks.empty())) {
+			refund_send_usage(ch);
+			mudlog(LOG_PLAYERS, "do_refund: invalid arguments for cause %s: %s",
+				   request.sql_cause.c_str(), after_second.c_str());
+			return false;
+		}
+		mudlog(LOG_PLAYERS, "do_refund: direct SQL mode cause=%s picks=%zu pg=%d",
+			   request.sql_cause.c_str(), request.picks.size(), request.pg_restore ? 1 : 0);
 		return true;
 	}
 
@@ -7078,6 +7167,383 @@ bool refund_verify_toon_exists(struct char_data* ch, const std::string& name) {
 		return false;
 	}
 	return true;
+}
+
+/* Dove si trova il pg del refund: decide DB diretto, caricamento in gioco o rifiuto. */
+enum class RefundPresence {
+	Offline,     /* non collegato: si scrive nel DB */
+	InGame,      /* in gioco (anche linkdead): oggetti direttamente in inventario */
+	Polymorphed, /* in gioco ma polimorfato: niente refund finche' non torna normale */
+	AtMenu       /* collegato ma non in gioco (menu): oggetti nel DB, pg/backup no */
+};
+
+RefundPresence refund_presence(const std::string& name, struct char_data*& pc_out) {
+	pc_out = nullptr;
+	const auto same_name = [&name](const struct char_data* c) {
+		return c != nullptr && !IS_NPC(c) && GET_NAME(c) != nullptr &&
+			   !str_cmp(GET_NAME(c), name.c_str());
+	};
+	for(struct descriptor_data* d = descriptor_list; d != nullptr; d = d->next) {
+		if(same_name(d->original)) {
+			pc_out = d->original;
+			return RefundPresence::Polymorphed;
+		}
+	}
+	for(struct char_data* i = character_list; i != nullptr; i = i->next) {
+		if(same_name(i)) {
+			pc_out = i;
+			return RefundPresence::InGame;
+		}
+	}
+	for(struct descriptor_data* d = descriptor_list; d != nullptr; d = d->next) {
+		if(same_name(d->character)) {
+			return RefundPresence::AtMenu;
+		}
+	}
+	return RefundPresence::Offline;
+}
+
+void refund_send_must_quit(struct char_data* ch, const char* what) {
+	send_to_char(("$c0009Il pg e' connesso:$c0007 " + std::string(what) +
+				  ", fallo uscire prima (quit o rent) e riprova.\n\r")
+					 .c_str(),
+				 ch);
+}
+
+std::string refund_format_time(long long epoch) {
+	if(epoch <= 0) {
+		return "-";
+	}
+	const std::time_t when = static_cast<std::time_t>(epoch);
+	std::tm local {};
+	localtime_r(&when, &local);
+	std::ostringstream out;
+	out << std::put_time(&local, "%d/%m/%Y %H:%M:%S");
+	return out.str();
+}
+
+/* "classe=livello;..." -> classe -> livello. */
+std::map<int, int> refund_parse_levels(const std::string& text) {
+	std::map<int, int> out;
+	std::istringstream in(text);
+	std::string item;
+	while(std::getline(in, item, ';')) {
+		const std::size_t eq = item.find('=');
+		if(eq == std::string::npos || eq == 0) {
+			continue;
+		}
+		const int cls = std::atoi(item.substr(0, eq).c_str());
+		if(cls >= 0 && cls < MAX_CLASS) {
+			out[cls] = std::atoi(item.c_str() + eq + 1);
+		}
+	}
+	return out;
+}
+
+std::string refund_levels_label(const std::string& before, const std::string& after) {
+	const std::map<int, int> lv_before = refund_parse_levels(before);
+	const std::map<int, int> lv_after = refund_parse_levels(after);
+	std::ostringstream out;
+	bool first = true;
+	for(const auto& [cls, lvl] : lv_before) {
+		out << (first ? "" : ", ") << pc_class_types[cls] << ' ' << lvl;
+		first = false;
+		const auto a = lv_after.find(cls);
+		if(!after.empty() && a != lv_after.end() && a->second != lvl) {
+			out << "->$c0009" << a->second << "$c0007";
+		}
+	}
+	return out.str();
+}
+
+/* Oggetti da non ridare di solito: attrezzi che si consumano lavorando e pepite. */
+constexpr std::array<int, 4> kRefundScrapSkipVnums = {
+	4240,  /* piccone */
+	3006,  /* pala */
+	19500, /* pepita di rame */
+	19501  /* pepita di piombo */
+};
+
+/* Pozioni, pergamene, cibo, bevande, luci e la lista sopra: asterisco nell'elenco. */
+bool refund_scrap_not_recommended(int vnum, std::unordered_map<int, bool>& cache) {
+	if(std::find(kRefundScrapSkipVnums.begin(), kRefundScrapSkipVnums.end(), vnum) !=
+	   kRefundScrapSkipVnums.end()) {
+		return true;
+	}
+	if(const auto cached = cache.find(vnum); cached != cache.end()) {
+		return cached->second;
+	}
+	int type = ITEM_NONE;
+	const int rnum = real_object(vnum);
+	if(rnum >= 0 && rnum < top_of_objt) {
+		if(obj_index[rnum].data != nullptr) {
+			type = ITEM_TYPE(static_cast<const struct obj_data*>(obj_index[rnum].data));
+		}
+		else if(struct obj_data* proto = read_object(rnum, REAL)) {
+			type = ITEM_TYPE(proto);
+			extract_obj(proto);
+		}
+	}
+	const bool skip = type == ITEM_POTION || type == ITEM_SCROLL || type == ITEM_FOOD ||
+					  type == ITEM_DRINKCON || type == ITEM_LIGHT;
+	cache[vnum] = skip;
+	return skip;
+}
+
+void refund_page(struct char_data* ch, const std::string& text) {
+	if(ch->desc != nullptr) {
+		page_string(ch->desc, text.c_str(), true);
+	}
+	else {
+		send_to_char(text.c_str(), ch);
+	}
+}
+
+void refund_show_death_list(struct char_data* ch, const std::string& name,
+							const std::vector<RefundDeathEvent>& events) {
+	if(events.empty()) {
+		send_to_char(("Nessuna morte in archivio per $c0015" + name + "$c0007.\n\r").c_str(), ch);
+		return;
+	}
+	std::ostringstream out;
+	out << "$c0015Morti di " << name << "$c0007 (ultime " << REFUND_DEATH_KEEP
+		<< ", 1 = la piu' recente):\n\r";
+	for(std::size_t i = 0; i < events.size(); ++i) {
+		const RefundDeathEvent& ev = events[i];
+		out << "$c0011" << std::setw(2) << (i + 1) << "$c0007) " << refund_format_time(ev.epoch);
+		if(ev.history_id != 0) {
+			out << "  ucciso da $c0009" << (ev.killer.empty() ? "?" : ev.killer)
+				<< "$c0007  stanza " << ev.room;
+		}
+		out << "  oggetti da ridare $c0011" << ev.item_count << "$c0007\n\r";
+		if(ev.history_id == 0) {
+			out << "     (nessuna fotografia del pg: solo oggetti)\n\r";
+			continue;
+		}
+		out << "     XP " << format_thousands(ev.exp_before);
+		if(ev.exp_after >= 0) {
+			out << " -> $c0009" << format_thousands(ev.exp_after) << "$c0007";
+		}
+		out << "  rune " << ev.runes_before;
+		if(ev.runes_after >= 0 && ev.runes_after != ev.runes_before) {
+			out << " -> $c0009" << ev.runes_after << "$c0007";
+		}
+		out << "  livelli " << refund_levels_label(ev.levels_before, ev.levels_after);
+		if(ev.pg_restored) {
+			out << "  $c0010[pg gia' ridato]$c0007";
+		}
+		out << "\n\r";
+	}
+	out << "Usa $c0009refund " << name << " death N$c0007 per gli oggetti, $c0009refund " << name
+		<< " death N pg$c0007 anche per XP, livelli e rune.\n\r";
+	refund_page(ch, out.str());
+}
+
+void refund_show_scrap_list(struct char_data* ch, const std::string& name,
+							const std::vector<RefundScrapEntry>& entries) {
+	if(entries.empty()) {
+		send_to_char(("Nessun oggetto rotto negli ultimi " + std::to_string(REFUND_SCRAP_DAYS) +
+					  " giorni per $c0015" + name + "$c0007.\n\r")
+						 .c_str(),
+					 ch);
+		return;
+	}
+	std::unordered_map<int, bool> skip_cache;
+	std::ostringstream out;
+	out << "$c0015Oggetti rotti di " << name << "$c0007 negli ultimi " << REFUND_SCRAP_DAYS
+		<< " giorni (1 = il piu' recente, $c0009*$c0007 = refund sconsigliato):\n\r";
+	for(std::size_t i = 0; i < entries.size(); ++i) {
+		const RefundScrapEntry& e = entries[i];
+		const bool skip = refund_scrap_not_recommended(e.vnum, skip_cache);
+		out << (skip ? "$c0009*$c0007" : " ") << "$c0011" << std::setw(3) << (i + 1) << "$c0007) "
+			<< refund_format_time(e.epoch) << "  [" << std::setw(5) << e.vnum << "] "
+			<< (e.short_desc.empty() ? "?" : e.short_desc) << "$c0007"
+			<< (e.worn ? "  $c0014(indossato)$c0007" : "") << "\n\r";
+	}
+	out << "Usa $c0009refund " << name << " scrap N [N ...]$c0007 per ridare gli oggetti scelti.\n\r";
+	refund_page(ch, out.str());
+}
+
+int refund_count_objs(const struct obj_data* obj) {
+	int count = 0;
+	for(; obj != nullptr; obj = obj->next_content) {
+		count += 1 + refund_count_objs(obj->contains);
+	}
+	return count;
+}
+
+/* Riattiva le righe e, col pg in gioco, gli mette gli oggetti in inventario.
+ * Ritorna gli oggetti ridati, -1 = errore. */
+long refund_apply_items(struct char_data* ch, const std::string& name, RefundRestoreSpec spec,
+						struct char_data* victim, const std::string& label) {
+	spec.online = (victim != nullptr);
+	if(victim != nullptr) {
+		/* Il DB deve rispecchiare quello che ha addosso adesso: il merge confronta li'. */
+		do_save(victim, "", 0);
+	}
+	long restored = 0;
+	std::vector<inventory_mysql_row> rows;
+	if(!refund_restore_selection_mysql(name.c_str(), spec, restored, rows)) {
+		send_to_char(("Refund " + label + " fallito: vedi log.\n\r").c_str(), ch);
+		mudlog(LOG_PLAYERS, "do_refund: %s refund failed for %s (cause=%s)", label.c_str(),
+			   name.c_str(), spec.cause.c_str());
+		return -1;
+	}
+	if(restored == 0) {
+		send_to_char(("Refund " + label + ": niente da ridare, il pg ha gia' tutto.\n\r").c_str(),
+					 ch);
+		return 0;
+	}
+	std::ostringstream msg;
+	if(victim != nullptr) {
+		const int before = refund_count_objs(victim->carrying);
+		obj_store_to_char_by_parent(victim, rows, nullptr);
+		const int given = refund_count_objs(victim->carrying) - before;
+		do_save(victim, "", 0);
+		msg << "Refund " << label << ": $c0011" << given << "$c0007 oggetti messi nell'inventario di $c0015"
+			<< name << "$c0007 (in gioco)";
+		if(given < restored) {
+			msg << ", $c0009" << (restored - given) << " non creati$c0007 (vedi log)";
+		}
+		msg << ".\n\r";
+		send_to_char("$c0011Gli dei ti hanno restituito alcuni oggetti: controlla l'inventario.$c0007\n\r",
+					 victim);
+	}
+	else {
+		msg << "Refund " << label << ": $c0011" << restored << "$c0007 oggetti ripristinati nel DB di $c0015"
+			<< name << "$c0007.\n\r";
+	}
+	send_to_char(msg.str().c_str(), ch);
+	mudlog(LOG_PLAYERS, "do_refund: %s refunded %ld %s items to %s (%s)", GET_NAME(ch), restored,
+		   spec.cause.c_str(), name.c_str(), victim != nullptr ? "online" : "offline");
+	return restored;
+}
+
+void refund_sql_death(struct char_data* ch, const RefundRequest& request, RefundPresence presence,
+					  struct char_data* victim) {
+	std::vector<RefundDeathEvent> events;
+	if(!refund_list_death_events_mysql(request.name.c_str(), events)) {
+		send_to_char("Errore nel leggere lo storico delle morti: vedi log.\n\r", ch);
+		return;
+	}
+	if(request.picks.empty()) {
+		refund_show_death_list(ch, request.name, events);
+		return;
+	}
+	const int number = request.picks.front();
+	if(number < 1 || static_cast<std::size_t>(number) > events.size()) {
+		send_to_char(("Morte numero " + std::to_string(number) + " inesistente: usa $c0009refund " +
+					  request.name + " death$c0007 per l'elenco.\n\r")
+						 .c_str(),
+					 ch);
+		return;
+	}
+	const RefundDeathEvent& ev = events[static_cast<std::size_t>(number - 1)];
+	if(request.pg_restore) {
+		if(presence != RefundPresence::Offline) {
+			refund_send_must_quit(ch, "XP, livelli e rune si ridanno solo col pg offline");
+			return;
+		}
+		if(ev.history_id == 0) {
+			send_to_char(("Per la morte " + std::to_string(number) +
+						  " non c'e' la fotografia del pg: posso ridare solo gli oggetti.\n\r")
+							 .c_str(),
+						 ch);
+			return;
+		}
+	}
+	const std::string label = "morte " + std::to_string(number) + " (" + refund_format_time(ev.epoch) + ")";
+	if(ev.item_count > 0 && !ev.from_time.empty()) {
+		RefundRestoreSpec spec;
+		spec.cause = "DEATH";
+		spec.from_time = ev.from_time;
+		spec.to_time = ev.to_time;
+		spec.merge = true;
+		refund_apply_items(ch, request.name, spec,
+						   presence == RefundPresence::InGame ? victim : nullptr, label);
+	}
+	else {
+		send_to_char(("Refund " + label + ": nessun oggetto da ridare.\n\r").c_str(), ch);
+	}
+	if(request.pg_restore) {
+		std::string result;
+		if(refund_restore_death_pg_mysql(request.name.c_str(), ev.history_id, GET_NAME(ch), result)) {
+			send_to_char(("Pg ridato com'era prima della " + label + ": " + result + "\n\r").c_str(),
+						 ch);
+		}
+		else {
+			send_to_char(("Pg non ridato: " + (result.empty() ? std::string("vedi log.") : result) +
+						  "\n\r")
+							 .c_str(),
+						 ch);
+		}
+	}
+}
+
+void refund_sql_scrap(struct char_data* ch, const RefundRequest& request, RefundPresence presence,
+					  struct char_data* victim) {
+	std::vector<RefundScrapEntry> entries;
+	if(!refund_list_scrap_mysql(request.name.c_str(), entries)) {
+		send_to_char("Errore nel leggere gli oggetti rotti: vedi log.\n\r", ch);
+		return;
+	}
+	if(request.picks.empty()) {
+		refund_show_scrap_list(ch, request.name, entries);
+		return;
+	}
+	RefundRestoreSpec spec;
+	spec.cause = "SCRAP";
+	for(const int number : request.picks) {
+		if(number < 1 || static_cast<std::size_t>(number) > entries.size()) {
+			send_to_char(("Numero " + std::to_string(number) + " non in elenco: usa $c0009refund " +
+						  request.name + " scrap$c0007 per vederlo.\n\r")
+							 .c_str(),
+						 ch);
+			return;
+		}
+		const unsigned long long id = entries[static_cast<std::size_t>(number - 1)].id;
+		if(std::find(spec.ids.begin(), spec.ids.end(), id) == spec.ids.end()) {
+			spec.ids.push_back(id);
+		}
+	}
+	refund_apply_items(ch, request.name, spec,
+					   presence == RefundPresence::InGame ? victim : nullptr, "scrap");
+}
+
+void refund_sql_rent(struct char_data* ch, const RefundRequest& request, RefundPresence presence,
+					 struct char_data* victim) {
+	RefundRestoreSpec spec;
+	spec.cause = "RENT_EXPIRED";
+	spec.merge = true;
+	int count = 0;
+	if(!refund_latest_rent_event_mysql(request.name.c_str(), spec.from_time, spec.to_time, count)) {
+		send_to_char(("Nessun rent scaduto da ridare per $c0015" + request.name + "$c0007.\n\r").c_str(),
+					 ch);
+		return;
+	}
+	refund_apply_items(ch, request.name, spec,
+					   presence == RefundPresence::InGame ? victim : nullptr,
+					   "rent scaduto (" + std::to_string(count) + " righe)");
+}
+
+/* refund nome death|rent|scrap [...]: solo SQL, niente backup. */
+void refund_handle_sql(struct char_data* ch, const RefundRequest& request) {
+	struct char_data* victim = nullptr;
+	const RefundPresence presence = refund_presence(request.name, victim);
+	if(presence == RefundPresence::Polymorphed) {
+		send_to_char("$c0009Il pg e' polimorfato:$c0007 aspetta che torni normale e riprova.\n\r",
+					 ch);
+		return;
+	}
+	if(request.sql_cause == "DEATH") {
+		refund_sql_death(ch, request, presence, victim);
+	}
+	else if(request.sql_cause == "SCRAP") {
+		refund_sql_scrap(ch, request, presence, victim);
+	}
+	else {
+		refund_sql_rent(ch, request, presence, victim);
+	}
 }
 
 /* Backup reali: {pg|rent}YYYYMMDD.HHMM.zip (HHMM = orario del dump).
@@ -7884,7 +8350,9 @@ bool refund_apply_auto_equip(struct char_data* ch, const RefundRequest& request,
 } // namespace
 
 // sintassi: refund nome_pg data(aaaammgg) orario(m/p/s) all/eq/pg/achie
-//           refund nome_pg death/rent/scrap
+//           refund nome_pg death [N [pg]]
+//           refund nome_pg rent
+//           refund nome_pg scrap [N N ...]
 //           refund nome_pg auto [eq|all]
 ACTION_FUNC(do_refund) {
 	if(ch == nullptr || cmd == 0) {
@@ -7901,22 +8369,20 @@ ACTION_FUNC(do_refund) {
 	}
 
 	if(request.sql_direct) {
-		std::string matched_cause;
-		if(refund_restore_inventory_by_cause_mysql(request.name.c_str(), request.sql_cause.c_str(),
-												   &matched_cause)) {
-			mudlog(LOG_PLAYERS, "do_refund: direct SQL restore OK for %s (cause=%s)",
-				   request.name.c_str(), matched_cause.c_str());
-			std::string msg = "Refund SQL inventario (";
-			msg += matched_cause;
-			msg += ") completato.\n\r";
-			send_to_char(msg.c_str(), ch);
-		}
-		else {
-			send_to_char("Nessuno snapshot SQL trovato per la causa richiesta.\n\r", ch);
-			mudlog(LOG_PLAYERS, "do_refund: direct SQL restore failed for %s (cause=%s)",
-				   request.name.c_str(), request.sql_cause.c_str());
-		}
+		refund_handle_sql(ch, request);
 		return;
+	}
+
+	/* Backup e auto riscrivono file e DB del pg: col pg collegato il prossimo
+	 * salvataggio li sovrascriverebbe. */
+	{
+		struct char_data* online = nullptr;
+		if(refund_presence(request.name, online) != RefundPresence::Offline) {
+			refund_send_must_quit(ch, "i refund da backup riscrivono file e DB del pg");
+			mudlog(LOG_PLAYERS, "do_refund: backup refund refused, %s is connected",
+				   request.name.c_str());
+			return;
+		}
 	}
 
 	if(request.auto_mode) {
@@ -8202,7 +8668,17 @@ std::unordered_map<struct char_data*, EditPoolPending> g_editpool_pending;
 	return pool.overedit_hp;
 }
 
-/** Moltiplicatore listino mono/bi/tri (come edit_pool_class_mult). */
+/**
+ * Listino ufficiale (nebbiearcane.it / obj_value.cpp), costo per unita' raw.
+ * rune_num/rune_den: rune = units * num / den (es. mana 3/2 -> 1.5 a unita').
+ * Valori da configure editpool (edit_pool_balance).
+ */
+[[nodiscard]] bool editpool_listino_unit(EditPoolField field, long& xp_per_unit,
+										 int& rune_num, int& rune_den) noexcept {
+	return edit_pool_balance_listino_unit(field, xp_per_unit, rune_num, rune_den);
+}
+
+/** Moltiplicatore listino mono/bi/tri (come obj_value / sito). */
 [[nodiscard]] double editpool_class_mult(struct char_data* vict) noexcept {
 	if(vict == nullptr) {
 		return 1.0;
@@ -8227,17 +8703,28 @@ editpool_cost_for_units(EditPoolField field, int units, struct char_data* vict) 
 }
 
 void send_editpool_usage(struct char_data* ch) {
-	send_to_char(
-		"Uso:\n\r"
-		"  editpool <nome>\n\r"
-		"  editpool <nome> <campo> <n>          (n!=0, delta listino)\n\r"
-		"  editpool <nome> over <campo> <n>     (+ inutile; - rimborso)\n\r"
-		"  editpool ok xp|rune|misto <xp%> <rune%>\n\r"
-		"  editpool ok                          (solo se edit gratis, liv>=53)\n\r"
-		"  editpool no\n\r"
-		"Campi: hp mana move hpregen manaregen moveregen\n\r"
-		"Cap listino: hp 100, mana 150, move 100, regen 50.\n\r",
-		ch);
+	const auto& caps = edit_pool_balance_config();
+	std::ostringstream os;
+	os << "Uso:\n\r"
+	   << "  editpool <nome>\n\r"
+	   << "  editpool <nome> <campo> <n>          (n!=0, delta listino)\n\r"
+	   << "  editpool <nome> over <campo> <n>     (+ inutile; - rimborso)\n\r"
+	   << "  editpool ok xp|rune|misto <xp%> <rune%>\n\r"
+	   << "  editpool ok                          (solo se edit gratis, liv>=53)\n\r"
+	   << "  editpool no\n\r"
+	   << "Campi: hp mana move hpregen manaregen moveregen\n\r"
+	   << "Cap listino: hp " << caps.max_hp << ", mana " << caps.max_mana
+	   << ", move " << caps.max_move;
+	if(caps.max_hp_regen == caps.max_mana_regen &&
+	   caps.max_mana_regen == caps.max_move_regen) {
+		os << ", regen " << caps.max_hp_regen << ".\n\r";
+	}
+	else {
+		os << ", hpregen " << caps.max_hp_regen << ", manaregen "
+		   << caps.max_mana_regen << ", moveregen " << caps.max_move_regen
+		   << ".\n\r";
+	}
+	send_to_char(os.str().c_str(), ch);
 }
 
 void send_editpool_show(struct char_data* ch, struct char_data* vict) {
@@ -8253,12 +8740,15 @@ void send_editpool_show(struct char_data* ch, struct char_data* vict) {
 		"$c0005Hit/Mana/Move attuali: $c0014%d$c0005/$c0015%d$c0005  "
 		"$c0014%d$c0005/$c0015%d$c0005  $c0014%d$c0005/$c0015%d$c0007\n\r");
 	fmt % GET_NAME(vict) % static_cast<int>(p.migrated) %
-		p.edit_hp % kEditPoolMaxHit % p.overedit_hp %
-		p.edit_mana % kEditPoolMaxMana % p.overedit_mana %
-		p.edit_move % kEditPoolMaxMove % p.overedit_move %
-		p.edit_hp_regen % kEditPoolMaxHitRegen % p.overedit_hp_regen %
-		p.edit_mana_regen % kEditPoolMaxManaRegen % p.overedit_mana_regen %
-		p.edit_move_regen % kEditPoolMaxMoveRegen % p.overedit_move_regen %
+		p.edit_hp % edit_pool_field_cap(EditPoolField::Hp) % p.overedit_hp %
+		p.edit_mana % edit_pool_field_cap(EditPoolField::Mana) % p.overedit_mana %
+		p.edit_move % edit_pool_field_cap(EditPoolField::Move) % p.overedit_move %
+		p.edit_hp_regen % edit_pool_field_cap(EditPoolField::HpRegen) %
+			p.overedit_hp_regen %
+		p.edit_mana_regen % edit_pool_field_cap(EditPoolField::ManaRegen) %
+			p.overedit_mana_regen %
+		p.edit_move_regen % edit_pool_field_cap(EditPoolField::MoveRegen) %
+			p.overedit_move_regen %
 		GET_HIT(vict) % hit_limit(vict) %
 		GET_MANA(vict) % mana_limit(vict) %
 		GET_MOVE(vict) % move_limit(vict);
@@ -11819,6 +12309,10 @@ ACTION_FUNC(do_osave) {
 //	write_obj_to_file(obj, f);
 	write_obj_to_file(obj, f, vnum2);
 	fclose(f);
+	InvalidateWeaponProtoDiceCache(static_cast<int>(vnum));
+	if(vnum2 > 0 && vnum2 != vnum) {
+		InvalidateWeaponProtoDiceCache(static_cast<int>(vnum2));
+	}
 
 	/* check for valid VNUM period */
 	if(real_object(vnum) != -1)
@@ -12034,42 +12528,31 @@ ACTION_FUNC(do_odelete) {
 }
 
 ACTION_FUNC(do_wreset) { // SALVO aggiunto comando wreset
-	int i, c = 0, z = 0;
-	char buf[80];
-
-	if(!IS_PC(ch)) {
+	if(ch == nullptr || !IS_PC(ch)) {
 		return;
 	}
 
-	mudlog(LOG_CHECK, "Comando wreset eseguito da %s su %d zone.",
-		   ((ch!=NULL) ? GET_NAME(ch) : "(null)"), (top_of_zone_table + 1));
-	for(i = 0; i <= top_of_zone_table; i++) {
-		if(zone_table[i].start == 0) {
-			char* s;
-			int d, e;
-			s = zone_table[i].name;
-			d = (i ? (zone_table[i - 1].top + 1) : 0);
-			zone_table[i].bottom = d;
-			e = zone_table[i].top;
-
-			mudlog(LOG_CHECK,
-				   "Performing GOD boot-time init of %d:%s (rooms %d-%d).",
-				   zone_table[i].num, s, d, e);
-			reset_zone(i);
-			c++;
+	mudlog(LOG_CHECK, "Command wreset run by %s on %d zones.", GET_NAME(ch),
+		   top_of_zone_table + 1);
+	int initialized = 0;
+	int already = 0;
+	for(int i = 0; i <= top_of_zone_table; ++i) {
+		zone_data& zd = zone_table[i];
+		if(zd.start != 0) {
+			++already;
+			continue;
 		}
-		else {
-			z++;
-		}
+		zd.bottom = i != 0 ? zone_table[i - 1].top + 1 : 0;
+		const std::string_view name = zd.name != nullptr ? zd.name : "?";
+		mudlog(LOG_CHECK, "Performing GOD boot-time init of %d:%s (rooms %d-%d).",
+			   zd.num, std::string(name), zd.bottom, zd.top);
+		reset_zone(i);
+		++initialized;
 	}
-	sprintf(buf, "wreset ha inizializzato %d zone, %d gia' init, su %d.", c,
-			z, top_of_zone_table + 1);
-	if(ch != NULL) {
-		send_to_char(buf, ch);
-	}
-	else {
-		mudlog(LOG_CHECK, buf);
-	}
+	const std::string msg = "wreset ha inizializzato " + std::to_string(initialized) +
+							" zone, " + std::to_string(already) + " gia' attive, su " +
+							std::to_string(top_of_zone_table + 1) + ".\n\r";
+	send_to_char(msg.c_str(), ch);
 }
 
 ACTION_FUNC(do_personalize)
@@ -13051,10 +13534,12 @@ void wiz_list(struct char_data* ch, int scope) {
 
 void wiz_usage(struct char_data* ch) {
 	send_to_char(
-		"Uso: vaultplan list [personale|account|clan]\n\r"
-		"     vaultplan set <personale|account|clan> <1-5|piano> <campo> <valore>\n\r"
-		"     vaultplan reload\n\r"
+		"Uso: configure vault list [personale|account|clan]\n\r"
+		"     configure vault set <personale|account|clan> <1-5|piano> <campo> <valore>\n\r"
+		"     configure vault reload\n\r"
+		"(alias: vaultplan …)\n\r"
 		"Campi: capacity unico affitto acquisto canone rune_unico rune_canone tassa\n\r"
+		"Valori: cifre, punti migliaia o k/m (es. 50k, 1.500.000).\n\r"
 		"(0 = formula non disponibile). Le modifiche valgono subito: il listino\n\r"
 		"e' letto dal DB a ogni uso. reload crea le righe mancanti dal listino base.\n\r",
 		ch);
@@ -13126,7 +13611,8 @@ ACTION_FUNC(do_vaultplan) {
 				return;
 			}
 			if(a4[0] && !parsed) {
-				send_str(ch, fmt("Valore '%s' non valido: serve un numero intero non negativo.\n\r", a4));
+				send_str(ch, fmt("Valore '%s' non valido: intero >= 0, punti migliaia o k/m.\n\r",
+				                 a4));
 				return;
 			}
 			if(scope < 0 || tier < 1 || !col || !parsed) {
@@ -13642,7 +14128,7 @@ void info_edit(struct char_data* ch, const std::string& name, const InfoEdit& e)
 			}
 			const std::optional<VaultPlan> np = load_plan(c.scope, e.tier);
 			if(!np) {
-				send_str(ch, fmt("Il piano %s non esiste nel listino (vedi vaultplan list).\n\r",
+				send_str(ch, fmt("Il piano %s non esiste nel listino (vedi configure vault list).\n\r",
 				                 tier_name(e.tier)));
 				return;
 			}
