@@ -24,6 +24,7 @@
 #include "toon_migration.hpp"
 #include "utility.hpp"
 #include "autoenums.hpp"
+#include "listino_db.hpp"
 
 #if USE_MYSQL
 #include <mysql/mysql.h>
@@ -34,6 +35,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
@@ -1380,7 +1382,57 @@ long overflow_mining_market(int vnum, int type_flag, long proto_cost) {
  * Fee = mercato / divisor (min), × limited.
  * Type/cost: snap persistito, poi proto in RAM se disponibile.
  */
-long overflow_claim_fee_one(const OvDbSnap& s, const OvAffectArr* aff) {
+/**
+ * Moltiplicatore classi del proprietario (regole edit_listino class_mult_1/2/3:
+ * mono 1, bi 3/2, tri 2), come il listino edit. 1.0 se non risolvibile.
+ */
+double overflow_owner_class_mult(const std::string& toon_id) {
+	int classes = 1;
+	DB* db = Sql::getMysql();
+	if(db && !toon_id.empty() && toon_id.find_first_not_of("0123456789") == std::string::npos) {
+		try {
+			odb::connection_ptr cp(db->connection());
+			auto& mc = static_cast<odb::mysql::connection&>(*cp);
+			MYSQL* h = mc.handle();
+			const std::string sql =
+				"SELECT COUNT(*) FROM character_classes WHERE toon_id = " + toon_id +
+				" AND level > 0";
+			if(mysql_query(h, sql.c_str()) == 0) {
+				if(MYSQL_RES* res = mysql_store_result(h)) {
+					MYSQL_ROW row = mysql_fetch_row(res);
+					const int n = row && row[0] ? std::atoi(row[0]) : 0;
+					classes = n > 0 ? n : 1;
+					mysql_free_result(res);
+				}
+			}
+		}
+		catch(...) {
+			classes = 1;
+		}
+	}
+	const bool ready = listino_db_ready();
+	if(classes >= 3) {
+		return ready ? listino_db_param("class_mult_tri", 2.0) : 2.0;
+	}
+	if(classes == 2) {
+		return ready ? listino_db_param("class_mult_bi", 1.5) : 1.5;
+	}
+	return ready ? listino_db_param("class_mult_1", 1.0) : 1.0;
+}
+
+/** Mega del flag Artifact: regola artifact_cost_xp (fallback kArtifactFlagMega)
+ *  x moltiplicatore classi del proprietario (mono 100, bi 150, tri 200). */
+long overflow_artifact_flag_mega(double class_mult) {
+	const double base_xp =
+		listino_db_ready()
+			? listino_db_param("artifact_cost_xp",
+							   static_cast<double>(OvListino::kArtifactFlagMega) * 1000000.0)
+			: static_cast<double>(OvListino::kArtifactFlagMega) * 1000000.0;
+	const double mult = class_mult > 0.0 ? class_mult : 1.0;
+	return static_cast<long>(std::llround(base_xp * mult / 1000000.0));
+}
+
+long overflow_claim_fee_one(const OvDbSnap& s, const OvAffectArr* aff, double class_mult = 1.0) {
 	const int rnum = real_object(s.item_number);
 	int type_flag = s.type_flag;
 	long proto_cost = s.cost > 0 ? static_cast<long>(s.cost) : 0;
@@ -1431,7 +1483,7 @@ long overflow_claim_fee_one(const OvDbSnap& s, const OvAffectArr* aff) {
 
 	/* ITEM_IMMUNE = flag ARTIFACT in game (immune to scrap). */
 	if(IS_SET(extra_flags, ITEM_IMMUNE)) {
-		built += overflow_mega_to_coin(OvListino::kArtifactFlagMega);
+		built += overflow_mega_to_coin(overflow_artifact_flag_mega(class_mult));
 	}
 
 	long market = built;
@@ -1639,6 +1691,7 @@ bool inventory_overflow_list(struct char_data* actor,
 	if(resolved_owner_out) {
 		*resolved_owner_out = owner_label;
 	}
+	const double owner_class_mult = overflow_owner_class_mult(toon_id);
 	DB* db = Sql::getMysql();
 	if(!db) {
 		return false;
@@ -1691,7 +1744,7 @@ bool inventory_overflow_list(struct char_data* actor,
 			}
 			item.short_desc = base.short_desc.empty() ? base.obj_name : base.short_desc;
 			item.item_count = static_cast<int>(item.overflow_ids.size());
-			item.price = overflow_claim_fee_one(base, &base_aff);
+			item.price = overflow_claim_fee_one(base, &base_aff, owner_class_mult);
 			item.is_limited = overflow_snap_is_limited(base);
 			out.push_back(std::move(item));
 		}
@@ -1715,6 +1768,7 @@ long inventory_overflow_claim_price(struct char_data* actor, unsigned long long 
 		return 0;
 	}
 	(void)staff_other;
+	const double owner_class_mult = overflow_owner_class_mult(toon_id);
 	DB* db = Sql::getMysql();
 	if(!db) {
 		return 0;
@@ -1741,7 +1795,7 @@ long inventory_overflow_claim_price(struct char_data* actor, unsigned long long 
 		if(ait != aff.end()) {
 			ap = &ait->second;
 		}
-		return overflow_claim_fee_one(it->second, ap);
+		return overflow_claim_fee_one(it->second, ap, owner_class_mult);
 	}
 	catch(const odb::exception& e) {
 		mudlog(LOG_SYSERR, "inventory_overflow_claim_price(%s): %s", owner_label.c_str(),
@@ -1768,6 +1822,7 @@ bool inventory_overflow_claim(struct char_data* actor,
 		send_to_char("Non ho nulla in deposito a quel nome.\n\r", actor);
 		return false;
 	}
+	const double owner_class_mult = overflow_owner_class_mult(toon_id);
 	DB* db = Sql::getMysql();
 	if(!db) {
 		return false;
@@ -1818,7 +1873,7 @@ bool inventory_overflow_claim(struct char_data* actor,
 		if(ait != aff.end()) {
 			ap = &ait->second;
 		}
-		unit_price += overflow_claim_fee_one(snap[id], ap);
+		unit_price += overflow_claim_fee_one(snap[id], ap, owner_class_mult);
 	}
 	const long price = staff_other ? 0 : unit_price;
 	if(!staff_other && GET_GOLD(actor) < price) {

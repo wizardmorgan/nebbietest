@@ -1635,3 +1635,16 @@ body.payment-dock-open {
   border: 1px dashed var(--border);
   min-height: 1.6em;
 }
+
+/* Staff: listino edit_listino */
+.listino-table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+.listino-table { border-collapse: collapse; font-size: 0.8rem; }
+.listino-table th, .listino-table td { padding: 2px 4px; border-bottom: 1px solid rgba(127,127,127,0.25); white-space: nowrap; }
+.listino-table input[type="number"] { width: 6.5em; }
+.listino-table input[type="text"] { width: 8em; }
+.listino-add-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(9em, 1fr)); gap: 4px 8px; margin-bottom: 6px; }
+.listino-add-form input[type="number"], .listino-add-form input[type="text"] { width: 100%; }
+.listino-rule-row { margin: 2px 0; }
+.listino-rule-row input { width: 9em; }
+.badge-ok { color: #2e8b57; font-size: 0.75rem; }
+.badge-warn { color: #c0392b; font-weight: 600; font-size: 0.75rem; }

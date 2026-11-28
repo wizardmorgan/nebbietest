@@ -9,6 +9,7 @@ const unixpass = require('unixpass');
 
 const fs = require('fs');
 const portalAudit = require('./lib/portal-audit');
+const listinoStore = require('./lib/listino-store');
 
 const PORT = parseInt(process.env.EDIT_WEB_PORT || '3080', 10);
 const SESSION_SECRET = process.env.EDIT_SESSION_SECRET || 'nebbie-edit-session-dev';
@@ -1005,6 +1006,129 @@ router.post('/api/staff/system-config', requireAuth, requireSessionToon, async (
   }
   const result = await mystPost('/internal/set-system-config', { config });
   res.status(result.ok ? 200 : 400).json(result);
+});
+
+/* ---- Listino unico edit_listino (staff): lettura, aggiunta/modifica voci, regole ---- */
+
+function requireStaffRole(req, res) {
+  if (req.session.role !== 'staff') {
+    res.status(403).json({ ok: false, error: 'solo staff' });
+    return false;
+  }
+  return true;
+}
+
+/** Dopo una scrittura: ricarica la cache listino di myst e registra l'evento. */
+async function afterListinoWrite(req, kind, detail, message) {
+  const reload = await mystPost('/internal/listino-reload', {}, auditCtxFromReq(req));
+  const ctx = auditCtxFromReq(req);
+  try {
+    await portalAudit.logEvent(dbPool, {
+      sessionKey: ctx ? ctx.sessionKey : null,
+      kind,
+      severity: 'info',
+      actorToonId: ctx ? ctx.actorToonId : req.session.sessionToonId || null,
+      actorName: ctx ? ctx.actorName : req.session.sessionToonName || null,
+      detail: { ...detail, myst_reload: reload.ok ? reload.data : { error: reload.error } },
+      message,
+    });
+  } catch (err) {
+    console.warn('[portal-audit] logEvent:', err.message || err);
+  }
+  return reload;
+}
+
+/** Stato listino da myst: revisione + supporto MUD per riga (null se offline). */
+async function mystListinoStatus() {
+  const st = await mystPost('/internal/listino-status', {});
+  if (!st.ok) return { ok: false, error: st.error || 'myst non raggiungibile' };
+  const d = st.data || st;
+  return { ok: true, revision: d.listino_revision || d.seed_tag || '', rows: d.rows || null, data: d };
+}
+
+/** Revisione listino per tutti i client: la UI la confronta per riallinearsi
+ *  quando il listino cambia dal MUD (configure editpool) o dal portale. */
+router.get('/api/listino-status', requireAuth, async (_req, res) => {
+  const st = await mystListinoStatus();
+  if (!st.ok) return res.status(502).json({ ok: false, error: st.error });
+  res.json({ ok: true, data: { revision: st.revision, reloaded: !!st.data.reloaded } });
+});
+
+router.get('/api/staff/listino', requireAuth, requireSessionToon, async (req, res) => {
+  if (!requireStaffRole(req, res)) return;
+  try {
+    const st = await mystListinoStatus();
+    const data = await listinoStore.listListino(dbPool, st.ok ? st.rows : null);
+    data.revision = st.ok ? st.revision : null;
+    data.myst_error = st.ok ? null : st.error;
+    res.json({ ok: true, data });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: `edit_listino non leggibile: ${err.message || err}` });
+  }
+});
+
+router.post('/api/staff/listino', requireAuth, requireSessionToon, async (req, res) => {
+  if (!requireStaffRole(req, res)) return;
+  const item = req.body && (req.body.item || req.body);
+  let result;
+  try {
+    const st = await mystListinoStatus();
+    result = await listinoStore.upsertItem(dbPool, item, st.ok ? st.rows : null);
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message || String(err) });
+  }
+  const reload = await afterListinoWrite(
+    req,
+    result.created ? 'node.listino.create' : 'node.listino.update',
+    { code: result.code, item },
+    `listino ${result.created ? 'nuova voce' : 'modifica'} ${result.code}`
+  );
+  res.json({
+    ok: true,
+    data: { ...result, myst_reload_ok: reload.ok, myst_reload_error: reload.ok ? null : reload.error },
+  });
+});
+
+/** Sync manuale: myst rilegge edit_listino* (stessa cosa del controllo periodico). */
+router.post('/api/staff/listino-sync', requireAuth, requireSessionToon, async (req, res) => {
+  if (!requireStaffRole(req, res)) return;
+  const reload = await afterListinoWrite(req, 'node.listino.sync', {}, 'listino sync manuale');
+  if (!reload.ok) return res.status(502).json({ ok: false, error: reload.error || 'reload myst fallito' });
+  const st = await mystListinoStatus();
+  res.json({ ok: true, data: { reload: reload.data || null, revision: st.ok ? st.revision : null } });
+});
+
+router.post('/api/staff/listino-cap-group', requireAuth, requireSessionToon, async (req, res) => {
+  if (!requireStaffRole(req, res)) return;
+  let result;
+  try {
+    result = await listinoStore.setCapGroupLabel(dbPool, req.body?.code, req.body?.label);
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message || String(err) });
+  }
+  const reload = await afterListinoWrite(req, 'node.listino.cap_group', result, `listino gruppo ${result.code}`);
+  res.json({ ok: true, data: { ...result, myst_reload_ok: reload.ok } });
+});
+
+router.post('/api/staff/listino-rule', requireAuth, requireSessionToon, async (req, res) => {
+  if (!requireStaffRole(req, res)) return;
+  const { conf_key: confKey, num, den } = req.body || {};
+  let result;
+  try {
+    result = await listinoStore.setRule(dbPool, confKey, num, den == null ? 1 : den);
+  } catch (err) {
+    return res.status(400).json({ ok: false, error: err.message || String(err) });
+  }
+  const reload = await afterListinoWrite(
+    req,
+    'node.listino.rule',
+    result,
+    `listino regola ${result.conf_key}=${result.num}/${result.den}`
+  );
+  res.json({
+    ok: true,
+    data: { ...result, myst_reload_ok: reload.ok, myst_reload_error: reload.ok ? null : reload.error },
+  });
 });
 
 router.get('/api/staff/instances', requireAuth, requireSessionToon, async (req, res) => {

@@ -196,6 +196,8 @@ object_edit_combat_wiz_caps(const struct obj_data* obj) noexcept;
 /** Bit APPLY_M_IMMUNE (immunità concesse listino: drain/charm/poison). */
 [[nodiscard]] int object_m_immune_current_bits(const struct obj_data* obj) noexcept;
 
+[[nodiscard]] int object_susc_current_bits(const struct obj_data* obj) noexcept;
+
 [[nodiscard]] int object_spell_current_bits(const struct obj_data* obj) noexcept;
 
 [[nodiscard]] int object_aff2_current_bits(const struct obj_data* obj) noexcept;

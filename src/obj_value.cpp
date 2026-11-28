@@ -55,7 +55,7 @@ namespace {
 
 [[nodiscard]] bool is_bitfield_apply(int loc) noexcept {
 	return loc == APPLY_AFF2 || loc == APPLY_IMMUNE || loc == APPLY_M_IMMUNE ||
-		   loc == APPLY_SPELL;
+		   loc == APPLY_SPELL || loc == APPLY_SUSC;
 }
 
 [[nodiscard]] unsigned or_affect_bits(const struct obj_data* obj, int loc) {
@@ -76,12 +76,26 @@ namespace {
 	/* Se il listino DB e' in RAM, usa quelle unita' per le voci editabili
 	 * (tranne SPELLFAIL: CheckValueObj storicamente lascia 0; resta cosi'). */
 	if(listino_db_ready() && location != APPLY_SPELLFAIL) {
-		ObjEditListinoSpec spec;
-		if(listino_db_affect_by_location(location, spec)) {
-			if(location == APPLY_AC) {
-				return -static_cast<long>(mod) * spec.positive_unit_raw;
+		if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE ||
+		   location == APPLY_SUSC) {
+			unsigned leftover = static_cast<unsigned>(mod);
+			const long from_db = listino_db_take_bit_raw(location, leftover);
+			if(leftover == 0U) {
+				return from_db;
 			}
-			return SignedAffectCost(mod, spec.positive_unit_raw, spec.negative_unit_raw);
+			if(from_db != 0) {
+				/* Bit non in cache (voce spenta): prezzi hardcoded sotto. */
+				return from_db + AffectSlotValue(location, static_cast<int>(leftover));
+			}
+		}
+		else {
+			ObjEditListinoSpec spec;
+			if(listino_db_affect_by_location(location, spec)) {
+				if(location == APPLY_AC) {
+					return -static_cast<long>(mod) * spec.positive_unit_raw;
+				}
+				return SignedAffectCost(mod, spec.positive_unit_raw, spec.negative_unit_raw);
+			}
 		}
 	}
 
@@ -1001,6 +1015,10 @@ constexpr int kObjEditListinoCount =
 
 } // namespace
 
+bool obj_edit_listino_builtin_known(int location) noexcept {
+	return find_listino_row_builtin(location) != nullptr;
+}
+
 bool obj_edit_listino_spec(int location, ObjEditListinoSpec& out) noexcept {
 	if(listino_db_ready() && listino_db_affect_by_location(location, out)) {
 		return true;
@@ -1092,21 +1110,26 @@ long EditArtifactFlagListinoCost(struct obj_data* obj) {
 	if(obj == nullptr) {
 		return 0;
 	}
-	const double raw_d =
-		listino_db_ready() ? listino_db_param("artifact_cost_raw", 10000.0) : 10000.0;
-	const long raw = static_cast<long>(std::llround(raw_d));
-	if(raw <= 0) {
-		return 0;
-	}
+	/* Regola edit_listino_rules.artifact_cost_xp (xp per classe, default 100M).
+	 * Fallback: vecchio artifact_cost_raw * storage_scale. */
 	const double scale_d =
 		listino_db_ready()
 			? listino_db_param("storage_scale",
 							   static_cast<double>(kObjValueStorageScale))
 			: static_cast<double>(kObjValueStorageScale);
-	const long scale =
-		std::max(1L, static_cast<long>(std::llround(scale_d)));
-	long scaled = raw * scale;
+	const double raw_d =
+		listino_db_ready() ? listino_db_param("artifact_cost_raw", 10000.0) : 10000.0;
+	const double base_d =
+		listino_db_ready() ? listino_db_param("artifact_cost_xp", raw_d * scale_d)
+						   : raw_d * scale_d;
+	const long base = static_cast<long>(std::llround(base_d));
+	if(base <= 0) {
+		return 0;
+	}
 
+	/* Costo x moltiplicatore classi (regole class_mult_1/2/3: mono 1, bi 3/2,
+	 * tri 2) => 100M / 150M / 200M. Niente artifact_mult (+50%) su questa voce:
+	 * il 3/2 artifact vale solo sugli edit del pezzo. */
 	const std::string owner = ResolveEditOwnerName(obj);
 	const int classes = ResolveOwnerClassCount(owner);
 	double mult = ClassMultFromCount(classes);
@@ -1118,15 +1141,10 @@ long EditArtifactFlagListinoCost(struct obj_data* obj) {
 			mult = listino_db_param("class_mult_bi", kObjValueClassMultBi);
 		}
 		else {
-			mult = 1.0;
+			mult = listino_db_param("class_mult_1", 1.0);
 		}
 	}
-	/* Solo class_mult: il prezzo artifact non prende anche artifact_mult. */
-	if(mult != 1.0 && scaled > 0) {
-		scaled = static_cast<long>(
-			std::llround(static_cast<double>(scaled) * mult));
-	}
-	return scaled;
+	return static_cast<long>(std::llround(static_cast<double>(base) * mult));
 }
 
 } // namespace Alarmud

@@ -840,48 +840,11 @@ void heal_v15_edit_portal_audit(DB* db) {
 				  "TIMESTAMP NULL DEFAULT NULL AFTER `closed_at`");
 	ensure_index(db, "edit_portal_session", "idx_edit_portal_session_status_exp",
 				 "`status`, `expires_at`");
-	/* listino_* : seed runtime in listino_db_init (listino_seed.inc). */
-	exec_ignore_exists(db,
-					   "CREATE TABLE IF NOT EXISTS `listino_meta` ("
-					   "`meta_key` VARCHAR(64) NOT NULL,"
-					   "`meta_value` VARCHAR(255) NOT NULL,"
-					   "`updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP "
-					   "ON UPDATE CURRENT_TIMESTAMP,"
-					   "PRIMARY KEY (`meta_key`)"
-					   ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-	exec_ignore_exists(db,
-					   "CREATE TABLE IF NOT EXISTS `listino_affect` ("
-					   "`id` VARCHAR(32) NOT NULL,"
-					   "`label` VARCHAR(64) NOT NULL,"
-					   "`location` INT NOT NULL,"
-					   "`step` INT NOT NULL DEFAULT 1,"
-					   "`min_total` INT NOT NULL DEFAULT 0,"
-					   "`max_total` INT NOT NULL DEFAULT 0,"
-					   "`pos_unit_raw` BIGINT NOT NULL DEFAULT 0,"
-					   "`neg_unit_raw` BIGINT NOT NULL DEFAULT 0,"
-					   "`enabled` TINYINT NOT NULL DEFAULT 1,"
-					   "PRIMARY KEY (`id`),"
-					   "UNIQUE KEY `uq_listino_affect_location` (`location`)"
-					   ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-	exec_ignore_exists(db,
-					   "CREATE TABLE IF NOT EXISTS `listino_pool` ("
-					   "`field_key` VARCHAR(32) NOT NULL,"
-					   "`label` VARCHAR(64) NOT NULL,"
-					   "`cap` INT NOT NULL DEFAULT 0,"
-					   "`step` INT NOT NULL DEFAULT 1,"
-					   "`unit_valore` BIGINT NOT NULL DEFAULT 0,"
-					   "`xp_per_unit` BIGINT NOT NULL DEFAULT 0,"
-					   "`rune_num` INT NOT NULL DEFAULT 0,"
-					   "`rune_den` INT NOT NULL DEFAULT 1,"
-					   "`enabled` TINYINT NOT NULL DEFAULT 1,"
-					   "PRIMARY KEY (`field_key`)"
-					   ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-	exec_ignore_exists(db,
-					   "CREATE TABLE IF NOT EXISTS `listino_param` ("
-					   "`param_key` VARCHAR(64) NOT NULL,"
-					   "`param_value` DOUBLE NOT NULL,"
-					   "PRIMARY KEY (`param_key`)"
-					   ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+	/* Listino: le vecchie tabelle listino_affect/pool/param/cap_group/meta non
+	 * si creano piu'. Lo store e' `edit_listino` + `edit_listino_rules` (schema
+	 * del MUD Server, heal_v15_edit_listino), creato/seminato a runtime da
+	 * listino_db_init (listino_seed.inc, INSERT IGNORE). Se una tabella legacy
+	 * esiste ancora non viene toccata: listino_db copia solo broker_fee_percent. */
 }
 
 /*

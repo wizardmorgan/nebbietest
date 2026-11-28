@@ -842,13 +842,95 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 }
 
 /**
- * Listino: la parte MXP (quote_xp) si paga in XP e/o Rune (1 MXP = 1 Rune =
- * kObjEditRunePerMegaXp XP raw). quote_pq sono rune “rent” aggiuntive obbligatorie.
+ * Rune listino (prezzo alternativo all'XP, come sul sito) per un quote oggetto
+ * sulla location: stesso rapporto rune/xp della riga edit_listino, quindi
+ * eredita artifact, class_mult e malus 2x gia' nel quote XP.
+ * 0 = nessuna riga con rune (resta la conversione 1 MXP = 1 rune).
+ */
+[[nodiscard]] int object_listino_rune_for_quote(int location, long quote_xp,
+											   unsigned long apply_bit = 0) {
+	if(quote_xp <= 0 || !listino_db_ready()) {
+		return 0;
+	}
+	const double scale =
+		listino_db_param("storage_scale", static_cast<double>(kObjValueStorageScale));
+	double xp_per_unit = 0.0;
+	int rune_num = 0;
+	int rune_den = 1;
+	if((location == APPLY_IMMUNE || location == APPLY_M_IMMUNE ||
+		location == APPLY_SUSC) &&
+	   apply_bit != 0UL) {
+		long raw_sum = 0;
+		long r_num = 0;
+		long r_den = 1;
+		bool any = false;
+		for(unsigned long b = 1UL; b != 0UL; b <<= 1) {
+			if((apply_bit & b) == 0UL) {
+				continue;
+			}
+			ObjEditListinoSpec spec {};
+			int rn = 0;
+			int rd = 1;
+			if(!listino_db_affect_by_bit(location, b, spec) ||
+			   spec.positive_unit_raw <= 0 ||
+			   !listino_db_affect_rune_bit(location, b, rn, rd) || rn <= 0 ||
+			   rd <= 0) {
+				continue;
+			}
+			raw_sum += spec.positive_unit_raw;
+			const long nn = r_num * static_cast<long>(rd) + static_cast<long>(rn) * r_den;
+			const long dd = r_den * static_cast<long>(rd);
+			long a = nn < 0 ? -nn : nn;
+			long d = dd < 0 ? -dd : dd;
+			while(d != 0) {
+				const long t = a % d;
+				a = d;
+				d = t;
+			}
+			const long g = a > 0 ? a : 1;
+			r_num = nn / g;
+			r_den = dd / g;
+			any = true;
+		}
+		if(!any || raw_sum <= 0 || r_num <= 0 || r_den <= 0) {
+			return 0;
+		}
+		xp_per_unit = static_cast<double>(raw_sum) * scale;
+		rune_num = static_cast<int>(r_num);
+		rune_den = static_cast<int>(r_den);
+	}
+	else {
+		ObjEditListinoSpec spec {};
+		if(!listino_db_affect_by_location(location, spec) ||
+		   spec.positive_unit_raw <= 0) {
+			return 0;
+		}
+		if(!listino_db_affect_rune(location, rune_num, rune_den) || rune_num <= 0 ||
+		   rune_den <= 0) {
+			return 0;
+		}
+		xp_per_unit = static_cast<double>(spec.positive_unit_raw) * scale;
+	}
+	if(xp_per_unit <= 0.0) {
+		return 0;
+	}
+	const double rune = static_cast<double>(quote_xp) * static_cast<double>(rune_num) /
+						(static_cast<double>(rune_den) * xp_per_unit);
+	return std::max(0, static_cast<int>(std::ceil(rune - 1e-9)));
+}
+
+/**
+ * Listino oggetto. quote_pq sono rune "rent" aggiuntive obbligatorie.
+ * La parte listino si paga:
+ *  - se quote_rune_listino > 0 (riga edit_listino con rune): XP e rune sono
+ *    prezzi paralleli come sul sito; ok se pay_xp/quote_xp +
+ *    (pay_rune - pq)/quote_rune_listino >= 1 (slider % rune);
+ *  - altrimenti XP e/o Rune con 1 MXP = 1 Rune (kObjEditRunePerMegaXp).
  * Non forzare mai max(pay_xp, quote_xp): spezzerebbe il pagamento solo-rune.
  */
 [[nodiscard]] bool resolve_object_edit_payment(int pay_xp, int pay_rune, long quote_xp,
 											  int quote_pq, int& xp_cost, int& rune_cost,
-											  std::string& err) {
+											  std::string& err, int quote_rune_listino = 0) {
 	if(pay_xp < 0 || pay_rune < 0) {
 		err = "[portal:pay] pagamento non valido";
 		return false;
@@ -858,6 +940,19 @@ void ensure_portal_listino_owner(struct obj_data* obj, const std::string& toon_n
 	if(pay_rune < pq) {
 		err = "[portal:pay] rune componente listino insufficienti";
 		return false;
+	}
+	if(quote_rune_listino > 0 && quote_xp_i > 0) {
+		const long double frac_xp =
+			static_cast<long double>(pay_xp) / static_cast<long double>(quote_xp_i);
+		const long double frac_rune = static_cast<long double>(pay_rune - pq) /
+									  static_cast<long double>(quote_rune_listino);
+		if(frac_xp + frac_rune < 1.0L - 1e-9L) {
+			err = "[portal:pay] copertura XP/Rune insufficiente rispetto al listino";
+			return false;
+		}
+		xp_cost = pay_xp;
+		rune_cost = pay_rune;
+		return true;
 	}
 	const long long rune_cover_xp =
 		static_cast<long long>(pay_rune - pq) * kObjEditRunePerMegaXp;
@@ -3024,7 +3119,7 @@ struct ToonInventoryEditScan {
 				d["inventory_id"] = inventory_id;
 				d["note"] =
 					target && !current
-						? "Artifact: costo listino (artifact_cost_raw x class_mult); "
+						? "Artifact: costo listino (artifact_cost_xp x class_mult); "
 						  "senza +50% artifact_mult, senza ITEM2_EDIT, senza cost 20001"
 						: (current ? "Artifact gia' presente"
 								   : "Artifact invariato");
@@ -3071,10 +3166,13 @@ struct ToonInventoryEditScan {
 
 			int current = 0;
 			int target = target_modifier;
-			if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE) {
+			if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE ||
+			   location == APPLY_SUSC) {
 				const int bits = (location == APPLY_M_IMMUNE)
 									 ? object_m_immune_current_bits(obj)
-									 : object_immune_current_bits(obj);
+									 : (location == APPLY_SUSC)
+										   ? object_susc_current_bits(obj)
+										   : object_immune_current_bits(obj);
 				current = (bits & target_modifier) ? 1 : 0;
 				target = clear_slot ? 0 : (current ? 1 : (target_modifier != 0 ? 1 : 0));
 			}
@@ -3094,6 +3192,15 @@ struct ToonInventoryEditScan {
 
 			Json d = quote_xp_json(xp_raw, pq);
 			d["location"] = location;
+			/* Prezzo rune alternativo (listino): lo slider % rune lo usa al posto
+			 * della conversione 1 MXP = 1 rune. pq resta rent aggiuntivo. */
+			d["payment_model"] = "object";
+			d["rune_listino"] = object_listino_rune_for_quote(
+				location, xp_raw,
+				(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE ||
+				 location == APPLY_SUSC)
+					? static_cast<unsigned long>(target_modifier)
+					: 0UL);
 			/* Su clear bit (resi/imm/spell) serve il bit in target_modifier. */
 			d["target_modifier"] = target_modifier;
 			d["clear_slot"] = clear_slot ? 1 : 0;
@@ -3393,7 +3500,14 @@ struct ToonInventoryEditScan {
 			int rune_cost = 0;
 			std::string pay_resolve_err;
 			if(!resolve_object_edit_payment(pay_xp, pay_rune, quote_xp, quote_pq, xp_cost,
-										   rune_cost, pay_resolve_err)) {
+										   rune_cost, pay_resolve_err,
+										   object_listino_rune_for_quote(
+											   location, quote_xp,
+											   (location == APPLY_IMMUNE ||
+												location == APPLY_M_IMMUNE ||
+												location == APPLY_SUSC)
+												   ? static_cast<unsigned long>(target_modifier)
+												   : 0UL))) {
 				extract_obj(after);
 				return fail_affect(pay_resolve_err.c_str(), 402);
 			}
@@ -3901,7 +4015,10 @@ struct ToonInventoryEditScan {
 		}
 
 		if(path == "/internal/edit-capabilities" || path == "/internal/listino-status") {
+			/* Revisione della cache gia' in RAM (boot o /internal/listino-reload).
+			 * Nessun controllo periodico: il ricarico e' solo esplicito. */
 			Json d;
+			d["reloaded"] = false;
 			d["ready"] = listino_db_ready();
 			d["affect_count"] = listino_db_affect_count();
 			d["seed_tag"] = listino_db_seed_tag();
@@ -3910,6 +4027,10 @@ struct ToonInventoryEditScan {
 			d["artifact_mult"] = listino_db_param("artifact_mult", 1.5);
 			d["artifact_cost_raw"] =
 				listino_db_param("artifact_cost_raw", 10000.0);
+			d["artifact_cost_xp"] =
+				listino_db_param("artifact_cost_xp", 100000000.0);
+			d["artifact_cost_mult"] = "class_mult";
+			d["listino_source"] = "edit_listino";
 			d["pq_per_mega_xp"] = kEditPoolPqPerMegaXp;
 			d["listino_revision"] = listino_db_seed_tag();
 
@@ -3958,6 +4079,21 @@ struct ToonInventoryEditScan {
 			add_route("resistance", "/internal/apply-resistance", "object");
 			d["apply_routes"] = routes;
 			d["supported_pay_fields"] = Json::array({"pay_xp", "pay_rune"});
+			if(path == "/internal/listino-status") {
+				/* Supporto MUD per riga: il portale non permette enabled=1 sulle
+				 * voci che questo MUD non sa ancora usare. */
+				Json rows = Json::object();
+				for(const auto& st : listino_db_row_status()) {
+					Json r;
+					r["kind"] = st.kind;
+					r["enabled"] = st.enabled;
+					r["supported"] = st.supported;
+					r["active"] = st.active;
+					r["reason"] = st.reason;
+					rows[st.code] = r;
+				}
+				d["rows"] = rows;
+			}
 			return json_ok(d);
 		}
 

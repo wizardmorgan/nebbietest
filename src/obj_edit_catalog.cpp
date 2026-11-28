@@ -18,6 +18,7 @@
 #include "handler.hpp"
 #include "object_instance.hpp"
 #include "obj_value.hpp"
+#include "listino_db.hpp"
 #include "clan_symbol.hpp"
 #include "procarea.hpp"
 #include "spell_parser.hpp"
@@ -27,6 +28,9 @@
 #include "utils.hpp"
 
 namespace Alarmud {
+
+static void catalog_apply_listino_bit_prices(Json& j, int location, unsigned long bit,
+											 long mxp_fallback, long rune_fallback);
 
 /**
  * Copia di lavoro per quote/apply portal: a differenza di clone_obj() (solo
@@ -783,7 +787,7 @@ bool object_edit_recovers_listino_malus(const struct obj_data* obj, int location
 	}
 	/* Bitfield: rimozione gratis via clear_slot, non "recupero malus" listino. */
 	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE || location == APPLY_SPELL
-	   || location == APPLY_AFF2) {
+	   || location == APPLY_AFF2 || location == APPLY_SUSC) {
 		return false;
 	}
 	ObjEditListinoSpec spec;
@@ -866,7 +870,7 @@ static void portal_force_paid_malus(struct obj_data* obj) noexcept {
 	}
 
 	if(location == APPLY_IMMUNE || location == APPLY_M_IMMUNE
-	   || location == APPLY_SPELL || location == APPLY_AFF2) {
+	   || location == APPLY_SPELL || location == APPLY_AFF2 || location == APPLY_SUSC) {
 		/*
 		 * Listino: rimozione effetto positivo gratis.
 		 * clear_slot + bit in target_modifier: spegne quel bit; se lo slot
@@ -1433,8 +1437,7 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["can_edit"] = has_affect || can_add;
 		/* Resistenza presente: rimozione gratis (stesso listino dei bonus). */
 		j["can_clear_slot"] = has_affect;
-		j["mxp_per_step"] = r.mxp;
-		j["rune_per_step"] = r.rune;
+		catalog_apply_listino_bit_prices(j, APPLY_IMMUNE, r.bit, r.mxp, r.rune);
 		entries.push_back(j);
 	}
 
@@ -1467,8 +1470,7 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		j["can_add"] = can_add;
 		j["can_edit"] = has_affect || can_add;
 		j["can_clear_slot"] = has_affect;
-		j["mxp_per_step"] = r.mxp;
-		j["rune_per_step"] = r.rune;
+		catalog_apply_listino_bit_prices(j, APPLY_M_IMMUNE, r.bit, r.mxp, r.rune);
 		entries.push_back(j);
 	}
 
@@ -1515,7 +1517,7 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		entries.push_back(j);
 	}
 
-	/* Flag ARTIFACT: costo listino artifact_cost_raw x class_mult (no +50%
+	/* Flag ARTIFACT: costo listino artifact_cost_xp x class_mult (no +50%
 	 * su questa voce); non marca ITEM2_EDIT ne' cost 20001. Non rimovibile. */
 	{
 		const bool is_artifact = IS_OBJ_STAT(obj, ITEM_IMMUNE);
@@ -1572,12 +1574,40 @@ int object_edit_display_current(const struct obj_data* obj, int location) noexce
 	}
 }
 
+static void catalog_apply_listino_bit_prices(Json& j, int location, unsigned long bit,
+											 long mxp_fallback, long rune_fallback) {
+	j["mxp_per_step"] = mxp_fallback;
+	j["rune_per_step"] = rune_fallback;
+	if(!listino_db_ready()) {
+		return;
+	}
+	ObjEditListinoSpec spec {};
+	if(!listino_db_affect_by_bit(location, bit, spec) || spec.positive_unit_raw <= 0) {
+		return;
+	}
+	const double scale = listino_db_param("storage_scale",
+										  static_cast<double>(kObjValueStorageScale));
+	const long xp = static_cast<long>(
+		std::llround(static_cast<double>(spec.positive_unit_raw) * scale));
+	j["mxp_per_step"] = xp / 1000000L;
+	int rn = 0;
+	int rd = 1;
+	if(listino_db_affect_rune_bit(location, bit, rn, rd) && rn > 0 && rd > 0) {
+		j["rune_per_step"] =
+			static_cast<long>(std::llround(static_cast<double>(rn) / static_cast<double>(rd)));
+	}
+}
+
 int object_immune_current_bits(const struct obj_data* obj) noexcept {
 	return sum_location_mod(obj, APPLY_IMMUNE);
 }
 
 int object_m_immune_current_bits(const struct obj_data* obj) noexcept {
 	return sum_location_mod(obj, APPLY_M_IMMUNE);
+}
+
+int object_susc_current_bits(const struct obj_data* obj) noexcept {
+	return sum_location_mod(obj, APPLY_SUSC);
 }
 
 int object_spell_current_bits(const struct obj_data* obj) noexcept {

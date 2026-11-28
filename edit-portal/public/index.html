@@ -195,6 +195,45 @@
             </div>
           </details>
 
+          <details class="card-inner collapse-panel" id="listino-admin-panel">
+            <summary class="collapse-summary">
+              <span>Listino edit (edit_listino)</span>
+              <span class="collapse-hint">prezzi, cap, nuove voci, regole</span>
+            </summary>
+            <div class="collapse-body">
+              <p class="hint">
+                Listino unico condiviso con il MUD (<code>edit_listino</code> /
+                <code>edit_listino_rules</code>). Prezzi <strong>base</strong> per slot di
+                <code>step</code> unità, senza Artifact/classi. <code>sign</code> −1 = meglio se
+                negativo (AC). <strong>Attiva</strong> = interruttore della voce;
+                <code>on_obj</code>/<code>on_pc</code> = dove si vende. Le voci nuove nascono
+                <strong>spente</strong>; quelle che il MUD non sa ancora usare sono marcate
+                «non supportato dal MUD» e non si possono attivare finché il MUD non le supporta.
+                Il listino si riallinea da solo (controllo periodico) o con «Sync».
+              </p>
+              <div class="btn-row">
+                <input id="listino-filter" placeholder="filtra code / label / categoria" />
+                <button id="btn-listino-load" class="btn-secondary" type="button">Ricarica listino</button>
+                <button id="btn-listino-sync" class="btn-secondary" type="button" title="Fa rileggere edit_listino a myst/MUD">Sync</button>
+              </div>
+              <div class="listino-table-wrap"><table id="listino-table" class="listino-table"></table></div>
+              <h4>Aggiungi voce</h4>
+              <div id="listino-add-form" class="listino-add-form"></div>
+              <button id="btn-listino-add" class="btn-secondary" type="button">Aggiungi voce</button>
+              <h4>Gruppi cap</h4>
+              <div id="listino-cap-groups" class="listino-rules"></div>
+              <h4>Regole</h4>
+              <div id="listino-rules" class="listino-rules"></div>
+              <div class="btn-row">
+                <input id="listino-rule-key" placeholder="conf_key (es. broker_fee_percent)" />
+                <input id="listino-rule-num" type="number" placeholder="num" />
+                <input id="listino-rule-den" type="number" placeholder="den" value="1" min="1" />
+                <button id="btn-listino-rule-add" class="btn-secondary" type="button">Salva regola</button>
+              </div>
+              <p id="listino-result" class="msg"></p>
+            </div>
+          </details>
+
           <div class="card-inner">
             <h3>Consultazione object_instance</h3>
             <p class="hint">
@@ -250,6 +289,6 @@
 
     </section>
   </main>
-  <script src="app.js?v=52"></script>
+  <script src="app.js?v=55"></script>
 </body>
 </html>

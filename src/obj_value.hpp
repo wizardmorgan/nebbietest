@@ -127,6 +127,10 @@ struct ObjEditListinoSpec {
 
 [[nodiscard]] bool obj_edit_listino_spec(int location, ObjEditListinoSpec& out) noexcept;
 
+/** true se questo MUD sa editare la location sull'oggetto (tabella builtin
+ *  kObjEditListino): serve al portale per marcare le voci "supportate". */
+[[nodiscard]] bool obj_edit_listino_builtin_known(int location) noexcept;
+
 /** Numero di voci listino oggetto (scalar) esposte al portale. */
 [[nodiscard]] int obj_edit_listino_scalar_count() noexcept;
 
@@ -177,8 +181,9 @@ struct ObjEditListinoSpec {
 											  int delta_mod);
 
 /**
- * Costo listino del solo flag ARTIFACT (scala storage): artifact_cost_raw *
- * storage_scale * class_mult. Senza artifact_mult (+50%) e senza toccare
+ * Costo listino (xp) del solo flag ARTIFACT: regola edit_listino_rules
+ * artifact_cost_xp (default 100M) x moltiplicatore classi (class_mult_1/2/3:
+ * mono 100M, bi 150M, tri 200M). Senza artifact_mult (+50%) e senza toccare
  * ITEM2_EDIT / cost monete.
  */
 [[nodiscard]] long EditArtifactFlagListinoCost(struct obj_data* obj);

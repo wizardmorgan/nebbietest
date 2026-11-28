@@ -6,7 +6,7 @@ const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 const TOOLS_OPEN_KEY = 'nebbie-edit-tools-open';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 52;
+const EDIT_PORTAL_UI_BUILD = 54;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
@@ -361,30 +361,60 @@ function canPayMxp() {
   return session && (session.role === 'staff' || Number(session.maxLevel || 0) >= PRINCE_LEVEL);
 }
 
+/**
+ * Piano di pagamento per UN quote (slider % rune).
+ * Tre modelli, allineati ai resolver di edit_portal.cpp:
+ *  - editpool (pool / affect PG, quote.payment_model='editpool'): XP e rune
+ *    listino sono prezzi paralleli: XP = floor(xp*(100-%)/100),
+ *    rune = floor(pq*%/100)  (resolve_editpool_payment, match esatto).
+ *  - object con quote.rune_listino>0 (riga edit_listino con rune, es. stat):
+ *    prezzi paralleli come sul sito: XP = ceil(xp*(100-%)/100),
+ *    rune = ceil(rune_listino*%/100) + rent pq (resolve_object_edit_payment).
+ *  - object senza rune listino (bit resi/spell, artifact, quote vecchi):
+ *    rune coprono XP a 1 MXP = 1 rune, + rent pq.
+ */
 function buildPaymentPlan(quote, mode, runePct) {
-  const xpRaw = Number(quote.xp_raw || quote.diff_xp_raw || 0);
-  const runeListino = Number(quote.diff_rune || 0);
+  const q = quote || {};
+  const xpRaw = Number(q.xp_raw || q.diff_xp_raw || 0);
   const runePerMega = Number(editCatalog?.pq_per_mega_xp || PQ_PER_MEGA_XP);
   const { mega, frac, raw } = quoteMxpFromRaw(xpRaw);
+  const pct = mode === 'mxp' ? 0 : mode === 'runes' ? 100 : Math.max(0, Math.min(100, Number(runePct) || 0));
 
+  if (q.payment_model === 'editpool') {
+    const pq = Number(q.pq || 0);
+    return {
+      payXp: Math.floor((raw * (100 - pct)) / 100),
+      payRune: Math.floor((pq * pct) / 100),
+      displayMxp: formatMxp(mega, frac),
+      xpRaw,
+      runeListino: 0,
+      runeAlt: pq,
+    };
+  }
+
+  /* Rent (cost_per_day): rune aggiuntive obbligatorie. */
+  const runeRent = Number(q.diff_rune != null ? q.diff_rune : q.payment_model === 'object' ? q.pq || 0 : 0);
+  const runeAlt = Number(q.rune_listino || 0);
   let payXp = 0;
   let payRune = 0;
-
-  if (mode === 'mxp') {
+  if (runeAlt > 0 && raw > 0) {
+    payXp = Math.ceil((raw * (100 - pct)) / 100);
+    payRune = runeRent + Math.ceil((runeAlt * pct) / 100);
+  } else if (mode === 'mxp') {
     payXp = raw;
-    payRune = runeListino;
+    payRune = runeRent;
   } else if (mode === 'runes') {
     const runesFromMxp = raw > 0 ? Math.ceil(raw / runePerMega) : 0;
     payXp = 0;
-    payRune = runesFromMxp + runeListino;
+    payRune = runesFromMxp + runeRent;
   } else {
-    const runeMega = (mega * runePct) / 100;
-    const runeFrac = (frac * runePct) / 100;
+    const runeMega = (mega * pct) / 100;
+    const runeFrac = (frac * pct) / 100;
     const runeMegaTotal = runeMega + runeFrac / 100;
     const runesFromMxp = Math.ceil(runeMegaTotal);
     const xpCovered = runesFromMxp * runePerMega;
     payXp = Math.max(0, raw - xpCovered);
-    payRune = runeListino + runesFromMxp;
+    payRune = runeRent + runesFromMxp;
   }
 
   return {
@@ -392,8 +422,28 @@ function buildPaymentPlan(quote, mode, runePct) {
     payRune,
     displayMxp: formatMxp(mega, frac),
     xpRaw,
-    runeListino,
+    runeListino: runeRent,
+    runeAlt,
   };
+}
+
+/** Piano per il pending: somma dei piani per voce (carrello), cosi' il totale
+ *  mostrato coincide con quello che viene addebitato voce per voce. */
+function buildPendingPaymentPlan(pending, mode, runePct) {
+  const items = Array.isArray(pending?.items) && pending.items.length ? pending.items : null;
+  if (!items) return buildPaymentPlan(pending?.quote, mode, runePct);
+  const total = { payXp: 0, payRune: 0, xpRaw: 0, runeListino: 0, runeAlt: 0 };
+  items.forEach((it) => {
+    const p = buildPaymentPlan(it.quote, mode, runePct);
+    total.payXp += p.payXp;
+    total.payRune += p.payRune;
+    total.xpRaw += p.xpRaw;
+    total.runeListino += p.runeListino;
+    total.runeAlt += p.runeAlt || 0;
+  });
+  const { mega, frac } = quoteMxpFromRaw(total.xpRaw);
+  total.displayMxp = formatMxp(mega, frac);
+  return total;
 }
 
 function formatQuoteCostShort(quote) {
@@ -577,7 +627,7 @@ function updatePaymentUI() {
   $('pay-rune-pct-label').textContent = `${runePct}%`;
   $('rune-pct-wrap').classList.toggle('hidden', mode !== 'mix');
 
-  const plan = buildPaymentPlan(pendingEdit.quote, mode, runePct);
+  const plan = buildPendingPaymentPlan(pendingEdit, mode, runePct);
   const check = validatePayment(plan);
   document.body.classList.toggle('payment-insufficient', !check.ok);
   panel.classList.toggle('payment-dock--insufficient', !check.ok);
@@ -617,7 +667,8 @@ function updatePaymentUI() {
     <div class="payment-queue-list">${labelHtml}</div>
     <div class="payment-cost-line">
       Costo listino: <strong>${plan.displayMxp}</strong>
-      ${plan.runeListino ? ` (+ ${plan.runeListino} ${currencyLabel('rune')} listino)` : ''}
+      ${plan.runeAlt ? ` oppure <strong>${plan.runeAlt} ${currencyLabel('rune')}</strong>` : ''}
+      ${plan.runeListino ? ` (+ ${plan.runeListino} ${currencyLabel('rune')} rent)` : ''}
     </div>
     ${
       pendingEdit.quote?.note
@@ -3662,6 +3713,300 @@ $('btn-save-config').onclick = async () => {
   await loadEditCatalog();
   await loadCharacterState();
 };
+
+/* ---- Staff: listino unico edit_listino (lettura, modifica, nuove voci, regole) ---- */
+
+const LISTINO_EDIT_COLS = [
+  ['enabled', 'Attiva', 'checkbox'],
+  ['label', 'Label', 'text'],
+  ['category', 'Cat.', 'text'],
+  ['xp', 'XP/slot', 'number'],
+  ['rune_num', 'Rune n', 'number'],
+  ['rune_den', 'Rune d', 'number'],
+  ['sign', 'Sign', 'number'],
+  ['step', 'Step', 'number'],
+  ['cap_obj', 'Cap pezzo', 'number'],
+  ['cap_pc', 'Cap PG', 'number'],
+  ['cap_group', 'Gruppo', 'text'],
+  ['on_obj', 'Obj', 'checkbox'],
+  ['on_pc', 'PG', 'checkbox'],
+  ['buy_step', 'Passo acq.', 'number'],
+];
+/* Voce nuova: niente interruttori (nasce sempre spenta, enabled/on_obj/on_pc = 0). */
+const LISTINO_OFF_ON_CREATE = ['enabled', 'on_obj', 'on_pc'];
+const LISTINO_ADD_COLS = [
+  ['code', 'Code', 'text'],
+  ...LISTINO_EDIT_COLS.filter(([col]) => !LISTINO_OFF_ON_CREATE.includes(col)),
+  ['apply_loc', 'APPLY', 'number'],
+  ['apply_bit', 'Bit', 'text'],
+  ['over_cap', 'Over cap', 'number'],
+  ['over_step', 'Over step', 'number'],
+  ['over_xp', 'Over XP', 'number'],
+  ['over_gold', 'Over oro', 'number'],
+  ['over_rune', 'Over rune', 'number'],
+  ['over_inc_pct', 'Over +%', 'number'],
+];
+let listinoData = null;
+
+function listinoInput(col, type, value, disabled = false) {
+  if (type === 'checkbox') {
+    return `<input type="checkbox" data-col="${col}" ${Number(value) ? 'checked' : ''} ${disabled ? 'disabled' : ''} />`;
+  }
+  return `<input type="${type}" data-col="${col}" value="${escapeHtml(value ?? '')}" />`;
+}
+
+function listinoReadRow(container, cols) {
+  const out = {};
+  cols.forEach(([col, , type]) => {
+    const el = container.querySelector(`[data-col="${col}"]`);
+    if (!el) return;
+    if (type === 'checkbox') out[col] = el.checked ? 1 : 0;
+    else if (el.value !== '') out[col] = type === 'number' ? Number(el.value) : el.value;
+  });
+  return out;
+}
+
+function renderListinoTable() {
+  const table = $('listino-table');
+  if (!table || !listinoData) return;
+  const q = ($('listino-filter')?.value || '').trim().toLowerCase();
+  const rows = listinoData.items.filter(
+    (it) =>
+      !q ||
+      String(it.code).includes(q) ||
+      String(it.label || '').toLowerCase().includes(q) ||
+      String(it.category || '').toLowerCase().includes(q),
+  );
+  const head =
+    '<tr><th>Code</th>' +
+    LISTINO_EDIT_COLS.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join('') +
+    '<th>APPLY/bit</th><th>MUD</th><th>Portale</th><th></th></tr>';
+  const body = rows
+    .map((it) => {
+      const p = it.portal || {};
+      const view =
+        p.kind === 'affect'
+          ? `affect ${p.id} step ${p.step} [${p.min_total}..${p.max_total}] raw ${p.pos_unit_raw}/${p.neg_unit_raw}`
+          : p.kind === 'pool'
+            ? `pool ${p.pool_field} cap ${p.cap} xp/u ${p.xp_per_unit}`
+            : p.kind;
+      const mud = it.mud || {};
+      /* Non attivabile se il MUD non la supporta (o stato ignoto) e oggi e' spenta. */
+      const lockEnable = mud.supported !== true && !Number(it.enabled);
+      const mudCell =
+        mud.supported === true
+          ? `<span class="badge-ok">supportato${mud.active === false && Number(it.enabled) ? ' (non attivo)' : ''}</span>`
+          : mud.supported === false
+            ? `<span class="badge-warn" title="${escapeHtml(mud.reason || '')}">non supportato dal MUD</span>`
+            : `<span class="hint" title="${escapeHtml(mud.reason || '')}">?</span>`;
+      return (
+        `<tr data-code="${escapeHtml(it.code)}"><td><code>${escapeHtml(it.code)}</code></td>` +
+        LISTINO_EDIT_COLS.map(
+          ([col, , type]) =>
+            `<td>${listinoInput(col, type, it[col], col === 'enabled' && lockEnable)}</td>`,
+        ).join('') +
+        `<td>${escapeHtml(it.apply_loc)}/${escapeHtml(it.apply_bit)}</td>` +
+        `<td>${mudCell}</td>` +
+        `<td class="hint">${escapeHtml(view)}</td>` +
+        '<td><button type="button" class="btn-secondary" data-act="save">Salva</button></td></tr>'
+      );
+    })
+    .join('');
+  table.innerHTML = head + body;
+  table.querySelectorAll('button[data-act="save"]').forEach((btn) => {
+    btn.onclick = async () => {
+      const tr = btn.closest('tr');
+      const item = { code: tr.dataset.code, ...listinoReadRow(tr, LISTINO_EDIT_COLS) };
+      await saveListinoItem(item);
+    };
+  });
+}
+
+function renderListinoRules() {
+  const box = $('listino-rules');
+  if (!box || !listinoData) return;
+  const rules = listinoData.rules || {};
+  box.innerHTML = Object.keys(rules)
+    .sort()
+    .map(
+      (k) =>
+        `<div class="listino-rule-row" data-key="${escapeHtml(k)}"><code>${escapeHtml(k)}</code> ` +
+        `<input type="number" data-r="num" value="${escapeHtml(rules[k].num)}" /> / ` +
+        `<input type="number" data-r="den" min="1" value="${escapeHtml(rules[k].den)}" /> ` +
+        '<button type="button" class="btn-secondary" data-act="rule">Salva</button></div>',
+    )
+    .join('');
+  box.querySelectorAll('button[data-act="rule"]').forEach((btn) => {
+    btn.onclick = async () => {
+      const row = btn.closest('.listino-rule-row');
+      await saveListinoRule(
+        row.dataset.key,
+        Number(row.querySelector('[data-r="num"]').value),
+        Number(row.querySelector('[data-r="den"]').value || 1),
+      );
+    };
+  });
+}
+
+function renderListinoAddForm() {
+  const form = $('listino-add-form');
+  if (!form || form.dataset.ready) return;
+  /* Nessun interruttore acceso di default: la voce nasce spenta (lato server forzato). */
+  const defaults = { rune_den: 1, sign: 1, step: 1, buy_step: 1 };
+  form.innerHTML = LISTINO_ADD_COLS.map(
+    ([col, label, type]) =>
+      `<label class="field-label">${escapeHtml(label)} ${listinoInput(col, type, defaults[col] ?? '')}</label>`,
+  ).join('');
+  form.dataset.ready = '1';
+}
+
+async function loadListinoAdmin() {
+  const res = $('listino-result');
+  const data = await api('/api/staff/listino');
+  if (!data.ok) {
+    if (res) res.textContent = data.error || 'errore listino';
+    return;
+  }
+  listinoData = data.data;
+  if (listinoData.revision) listinoRevision = listinoData.revision;
+  renderListinoAddForm();
+  renderListinoTable();
+  renderListinoRules();
+  renderListinoCapGroups();
+  if (res) {
+    res.textContent =
+      `${listinoData.items.length} voci da ${listinoData.source}; broker fee ${listinoData.broker_fee_percent}%` +
+      (listinoData.myst_error ? ` — myst: ${listinoData.myst_error} (supporto MUD sconosciuto)` : '');
+  }
+}
+
+async function afterListinoSave(data, okMsg) {
+  const res = $('listino-result');
+  if (!data.ok) {
+    if (res) res.textContent = data.error || 'errore';
+    return;
+  }
+  const warn = data.data?.myst_reload_ok ? '' : ` (attenzione: reload myst fallito: ${data.data?.myst_reload_error || '?'})`;
+  if (res) res.textContent = okMsg + warn;
+  await loadListinoAdmin();
+  await loadEditCatalog();
+}
+
+async function saveListinoItem(item) {
+  const data = await api('/api/staff/listino', { method: 'POST', body: JSON.stringify({ item }) });
+  await afterListinoSave(data, `Voce ${item.code} salvata.`);
+}
+
+async function saveListinoRule(confKey, num, den) {
+  const data = await api('/api/staff/listino-rule', {
+    method: 'POST',
+    body: JSON.stringify({ conf_key: confKey, num, den }),
+  });
+  await afterListinoSave(data, `Regola ${confKey} = ${num}/${den} salvata.`);
+}
+
+function renderListinoCapGroups() {
+  const box = $('listino-cap-groups');
+  if (!box || !listinoData) return;
+  const labels = listinoData.cap_group_labels || {};
+  const keys = new Set([...Object.keys(labels), ...(listinoData.cap_groups || []).map((g) => g.group_key)]);
+  box.innerHTML = [...keys]
+    .sort()
+    .map((k) => {
+      const g = (listinoData.cap_groups || []).find((x) => x.group_key === k);
+      const caps = g ? ` (pezzo ${g.max_piece}, PG ${g.max_character}: ${g.members.join(', ')})` : '';
+      return (
+        `<div class="listino-rule-row" data-key="${escapeHtml(k)}"><code>${escapeHtml(k)}</code> ` +
+        `<input type="text" data-r="label" value="${escapeHtml(labels[k] || '')}" /> ` +
+        `<button type="button" class="btn-secondary" data-act="cg">Salva</button>` +
+        `<span class="hint">${escapeHtml(caps)}</span></div>`
+      );
+    })
+    .join('');
+  box.querySelectorAll('button[data-act="cg"]').forEach((btn) => {
+    btn.onclick = async () => {
+      const row = btn.closest('.listino-rule-row');
+      const data = await api('/api/staff/listino-cap-group', {
+        method: 'POST',
+        body: JSON.stringify({ code: row.dataset.key, label: row.querySelector('[data-r="label"]').value }),
+      });
+      await afterListinoSave(data, `Gruppo ${row.dataset.key} salvato.`);
+    };
+  });
+}
+
+/* Revisione della cache myst (seed_tag). GET economico: myst non ricarica
+ * il listino da qui (solo boot o /internal/listino-reload da save/Sync).
+ * Se la revisione cambia (altro staff ha fatto Sync, myst riavviato) la UI
+ * riallinea catalogo e, se aperto, il pannello listino. */
+let listinoRevision = null;
+async function checkListinoRevision() {
+  if (!session) return;
+  let data;
+  try {
+    data = await api('/api/listino-status');
+  } catch {
+    return;
+  }
+  if (!data || !data.ok) return;
+  const rev = data.data?.revision || '';
+  if (listinoRevision !== null && rev && rev !== listinoRevision) {
+    listinoRevision = rev;
+    await loadEditCatalog();
+    if (listinoData) await loadListinoAdmin();
+    const res = $('listino-result');
+    if (res) res.textContent = 'Listino cambiato (MUD o altro staff): riallineato.';
+    return;
+  }
+  listinoRevision = rev || listinoRevision;
+}
+setInterval(checkListinoRevision, 30000);
+
+if ($('btn-listino-sync')) {
+  $('btn-listino-sync').onclick = async () => {
+    const data = await api('/api/staff/listino-sync', { method: 'POST', body: '{}' });
+    const res = $('listino-result');
+    if (!data.ok) {
+      if (res) res.textContent = data.error || 'sync fallito';
+      return;
+    }
+    listinoRevision = data.data?.revision || listinoRevision;
+    await loadListinoAdmin();
+    await loadEditCatalog();
+    if (res) res.textContent = 'Sync eseguito: myst ha riletto edit_listino.';
+  };
+}
+
+if ($('btn-listino-load')) $('btn-listino-load').onclick = () => loadListinoAdmin();
+if ($('listino-filter')) $('listino-filter').oninput = () => renderListinoTable();
+if ($('listino-admin-panel')) {
+  $('listino-admin-panel').addEventListener('toggle', (ev) => {
+    if (ev.target.open && !listinoData) loadListinoAdmin();
+  });
+}
+if ($('btn-listino-add')) {
+  $('btn-listino-add').onclick = async () => {
+    const item = listinoReadRow($('listino-add-form'), LISTINO_ADD_COLS);
+    if (!item.code) {
+      $('listino-result').textContent = 'code richiesto';
+      return;
+    }
+    item.create_only = true;
+    LISTINO_OFF_ON_CREATE.forEach((col) => {
+      item[col] = 0;
+    });
+    const data = await api('/api/staff/listino', { method: 'POST', body: JSON.stringify({ item }) });
+    await afterListinoSave(data, `Voce ${item.code} aggiunta.`);
+  };
+}
+if ($('btn-listino-rule-add')) {
+  $('btn-listino-rule-add').onclick = () =>
+    saveListinoRule(
+      $('listino-rule-key').value,
+      Number($('listino-rule-num').value),
+      Number($('listino-rule-den').value || 1),
+    );
+}
 
 $('btn-inst-search').onclick = async () => {
   const q = $('inst-search').value;
