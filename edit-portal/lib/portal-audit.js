@@ -10,9 +10,15 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const PLACEHOLDER_TOKEN = 'REPLACE_ME_TELEGRAM_BOT_TOKEN';
 const PLACEHOLDER_CHAT = 'REPLACE_ME_TELEGRAM_CHAT_ID';
+/** Stesso path di myst (EDIT_PORTAL_AUDIT_LOG). Una riga per azione. */
+const AUDIT_LOG_PATH = String(
+  process.env.EDIT_PORTAL_AUDIT_LOG || '/app/edit-portal-audit.log',
+).trim();
 
 const TELEGRAM_BOT_TOKEN = String(
   process.env.EDIT_TELEGRAM_BOT_TOKEN || PLACEHOLDER_TOKEN,
@@ -21,6 +27,16 @@ const TELEGRAM_CHAT_ID = String(
   process.env.EDIT_TELEGRAM_CHAT_ID || PLACEHOLDER_CHAT,
 ).trim();
 const TELEGRAM_ENABLED = process.env.EDIT_TELEGRAM_ENABLED === '1';
+/**
+ * TTL sessione edit (minuti). Default 5: se il giocatore chiude il browser
+ * senza Logout, la sessione edit scade e myst torna a permettere il login
+ * in-game. Finche' la UI e' aperta, il keepalive (/api/session/touch ogni
+ * ~2 min) rinnova expires_at. Override: EDIT_SESSION_TTL_MINUTES.
+ */
+const SESSION_TTL_MINUTES = Math.max(
+  1,
+  parseInt(process.env.EDIT_SESSION_TTL_MINUTES || '5', 10) || 5,
+);
 
 function telegramConfigured() {
   if (!TELEGRAM_ENABLED) return false;
@@ -42,6 +58,7 @@ async function ensureTables(pool) {
       session_key VARCHAR(64) NOT NULL,
       opened_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       closed_at TIMESTAMP NULL DEFAULT NULL,
+      expires_at TIMESTAMP NULL DEFAULT NULL,
       actor_account_id BIGINT UNSIGNED NULL,
       actor_email VARCHAR(255) NULL,
       actor_toon_id BIGINT UNSIGNED NULL,
@@ -55,9 +72,19 @@ async function ensureTables(pool) {
       PRIMARY KEY (id),
       UNIQUE KEY uq_edit_portal_session_key (session_key),
       KEY idx_edit_portal_session_actor (actor_toon_id),
-      KEY idx_edit_portal_session_opened (opened_at)
+      KEY idx_edit_portal_session_opened (opened_at),
+      KEY idx_edit_portal_session_status_exp (status, expires_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+  try {
+    await pool.query(
+      'ALTER TABLE edit_portal_session ADD COLUMN expires_at TIMESTAMP NULL DEFAULT NULL AFTER closed_at',
+    );
+  } catch (err) {
+    if (!/Duplicate column|1060/i.test(String(err && err.message))) {
+      /* ignore missing-table race; CREATE above covers fresh installs */
+    }
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS edit_portal_event (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -83,6 +110,48 @@ async function ensureTables(pool) {
   `);
 }
 
+function appendAuditFileLine({
+  kind,
+  severity = 'info',
+  actorName = null,
+  targetName = null,
+  inventoryId = null,
+  instanceId = null,
+  sessionKey = null,
+  message = null,
+  detail = null,
+}) {
+  if (!AUDIT_LOG_PATH || !kind) return;
+  try {
+    const ts = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const parts = [
+      ts,
+      String(severity || 'info'),
+      String(kind),
+      `actor=${actorName || '-'}`,
+      `target=${targetName || '-'}`,
+    ];
+    if (inventoryId) parts.push(`inv=${inventoryId}`);
+    if (instanceId) parts.push(`inst=${instanceId}`);
+    if (sessionKey) parts.push(`sess=${String(sessionKey).slice(0, 12)}`);
+    if (message) parts.push(`msg=${String(message).replace(/[\r\n]+/g, ' ').slice(0, 512)}`);
+    if (detail != null) {
+      let d =
+        typeof detail === 'string' ? detail : JSON.stringify(detail);
+      d = String(d).replace(/[\r\n]+/g, ' ');
+      if (d.length > 400) d = `${d.slice(0, 400)}...`;
+      parts.push(`detail=${d}`);
+    }
+    const dir = path.dirname(AUDIT_LOG_PATH);
+    if (dir && dir !== '.' && dir !== '/') {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.appendFileSync(AUDIT_LOG_PATH, `${parts.join(' ')}\n`, { encoding: 'utf8' });
+  } catch (err) {
+    console.warn('[portal-audit] file log:', err.message || err);
+  }
+}
+
 async function logEvent(pool, {
   sessionKey = null,
   sessionId = null,
@@ -99,6 +168,17 @@ async function logEvent(pool, {
   notifyTelegram = false,
 } = {}) {
   if (!kind) return null;
+  appendAuditFileLine({
+    kind,
+    severity,
+    actorName,
+    targetName,
+    inventoryId,
+    instanceId,
+    sessionKey,
+    message,
+    detail,
+  });
   const detailJson =
     detail == null ? null : typeof detail === 'string' ? detail : JSON.stringify(detail);
   const msg = message == null ? null : String(message).slice(0, 512);
@@ -143,13 +223,127 @@ async function logEvent(pool, {
   return eventId;
 }
 
+async function expireStaleSessions(pool) {
+  /* Non scadere se ci sono job pending/running (apply ancora in volo). */
+  await pool.query(
+    `UPDATE edit_portal_session s
+     SET s.status = 'closed', s.closed_at = CURRENT_TIMESTAMP,
+         s.summary_json = '{"reason":"ttl_expired"}'
+     WHERE s.status = 'open'
+       AND (s.expires_at IS NULL OR s.expires_at < NOW())
+       AND NOT EXISTS (
+         SELECT 1 FROM edit_portal_job j
+         WHERE j.session_key = s.session_key
+           AND j.status IN ('pending', 'running')
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM edit_portal_job j2
+         WHERE j2.toon_id = s.actor_toon_id
+           AND j2.status IN ('pending', 'running')
+       )`,
+  );
+}
+
+async function closeOpenSessionsForToon(pool, toonId, { reason = 'replaced' } = {}) {
+  if (!toonId) return 0;
+  const [result] = await pool.query(
+    `UPDATE edit_portal_session
+     SET status = 'closed', closed_at = CURRENT_TIMESTAMP,
+         summary_json = ?
+     WHERE status = 'open' AND actor_toon_id = ?`,
+    [JSON.stringify({ reason }), toonId],
+  );
+  return result.affectedRows || 0;
+}
+
+/**
+ * Prolunga la sessione edit se ancora open.
+ * @returns {{ ok: true, ttlMinutes: number } | { ok: false, error: string, code: string }}
+ */
+async function touchSession(pool, sessionKey, { ttlMinutes = SESSION_TTL_MINUTES } = {}) {
+  if (!sessionKey) {
+    return {
+      ok: false,
+      code: 'SESSION_MISSING',
+      error:
+        'Sessione edit assente: seleziona di nuovo il personaggio di sessione (il login web non basta).',
+    };
+  }
+  const ttl = Math.max(1, Number(ttlMinutes) || SESSION_TTL_MINUTES);
+  const [result] = await pool.query(
+    `UPDATE edit_portal_session
+     SET expires_at = DATE_ADD(NOW(), INTERVAL ? MINUTE)
+     WHERE session_key = ? AND status = 'open'`,
+    [ttl, sessionKey],
+  );
+  if (result.affectedRows > 0) {
+    return { ok: true, ttlMinutes: ttl };
+  }
+  const [rows] = await pool.query(
+    `SELECT status, expires_at, summary_json, closed_at
+     FROM edit_portal_session WHERE session_key = ? LIMIT 1`,
+    [sessionKey],
+  );
+  if (!rows.length) {
+    return {
+      ok: false,
+      code: 'SESSION_MISSING',
+      error:
+        'Sessione edit non trovata in database: riseleziona il personaggio di sessione (login web ancora valido).',
+    };
+  }
+  const row = rows[0];
+  let reason = '';
+  try {
+    const summary = row.summary_json ? JSON.parse(row.summary_json) : {};
+    reason = summary.reason ? String(summary.reason) : '';
+  } catch {
+    reason = '';
+  }
+  if (row.status !== 'open') {
+    const why =
+      reason === 'ttl_expired'
+        ? `scaduta per inattivita (TTL ${SESSION_TTL_MINUTES} min)`
+        : reason
+          ? `chiusa (${reason})`
+          : 'chiusa';
+    return {
+      ok: false,
+      code: 'SESSION_CLOSED',
+      error: `Sessione edit ${why}. Il login al portale e ancora valido: riseleziona il personaggio di sessione e riprova.`,
+    };
+  }
+  return {
+    ok: false,
+    code: 'SESSION_EXPIRED',
+    error: `Sessione edit scaduta (expires_at=${row.expires_at || 'null'}). Riseleziona il personaggio di sessione e riprova.`,
+  };
+}
+
 async function openSession(pool, meta = {}) {
+  await expireStaleSessions(pool);
+  if (meta.actorToonId) {
+    const [busy] = await pool.query(
+      `SELECT id FROM edit_portal_job
+       WHERE toon_id = ? AND status IN ('pending', 'running') LIMIT 1`,
+      [meta.actorToonId],
+    );
+    if (busy.length) {
+      const err = new Error(
+        'c\'e ancora un salvataggio edit in corso per questo personaggio: attendi e riprova',
+      );
+      err.code = 'JOB_BUSY';
+      throw err;
+    }
+    await closeOpenSessionsForToon(pool, meta.actorToonId, { reason: 'replaced_by_new_session' });
+  }
   const sessionKey = newSessionKey();
+  const ttl = Math.max(1, Number(meta.ttlMinutes) || SESSION_TTL_MINUTES);
   const [result] = await pool.query(
     `INSERT INTO edit_portal_session
       (session_key, actor_account_id, actor_email, actor_toon_id, actor_toon_name,
-       actor_role, actor_max_level, client_ip, auth_via, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')`,
+       actor_role, actor_max_level, client_ip, auth_via, status, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
     [
       sessionKey,
       meta.actorAccountId || null,
@@ -160,6 +354,7 @@ async function openSession(pool, meta = {}) {
       meta.actorMaxLevel != null ? Number(meta.actorMaxLevel) : null,
       meta.clientIp ? String(meta.clientIp).slice(0, 64) : null,
       meta.authVia ? String(meta.authVia).slice(0, 32) : null,
+      ttl,
     ],
   );
   const sessionId = result.insertId;
@@ -175,9 +370,10 @@ async function openSession(pool, meta = {}) {
       email: meta.actorEmail || null,
       authVia: meta.authVia || null,
       clientIp: meta.clientIp || null,
+      ttlMinutes: ttl,
     },
   });
-  return { sessionKey, sessionId };
+  return { sessionKey, sessionId, ttlMinutes: ttl };
 }
 
 async function buildSessionDigest(pool, sessionKey) {
@@ -213,16 +409,48 @@ async function buildSessionDigest(pool, sessionKey) {
   };
 }
 
-async function closeSession(pool, sessionKey, { reason = 'closed' } = {}) {
+async function closeSession(pool, sessionKey, { reason = 'closed', force = false } = {}) {
   if (!sessionKey) return null;
   const [sessions] = await pool.query(
-    `SELECT id, actor_toon_name, actor_email, actor_role, status
+    `SELECT id, actor_toon_name, actor_email, actor_role, status, actor_toon_id, summary_json
      FROM edit_portal_session WHERE session_key = ? LIMIT 1`,
     [sessionKey],
   );
   if (!sessions.length) return null;
   const sess = sessions[0];
-  if (sess.status !== 'open') return sess;
+  if (sess.status !== 'open') return { ...sess, drained: false };
+
+  if (!force) {
+    const [jobRows] = await pool.query(
+      `SELECT COUNT(*) AS c FROM edit_portal_job
+       WHERE status IN ('pending', 'running')
+         AND (session_key = ? OR toon_id = ?)`,
+      [sessionKey, sess.actor_toon_id || 0],
+    );
+    const openJobs = Number(jobRows[0]?.c || 0);
+    if (openJobs > 0) {
+      const drainSummary = {
+        close_after_jobs: true,
+        close_reason: reason,
+        openJobs,
+        requestedAt: new Date().toISOString(),
+      };
+      await pool.query(
+        `UPDATE edit_portal_session SET summary_json = ? WHERE session_key = ? AND status = 'open'`,
+        [JSON.stringify(drainSummary), sessionKey],
+      );
+      await logEvent(pool, {
+        sessionKey,
+        sessionId: sess.id,
+        kind: 'session.drain',
+        severity: 'info',
+        actorName: sess.actor_toon_name || null,
+        message: `logout richiesto: attendo ${openJobs} job prima di chiudere la sessione`,
+        detail: drainSummary,
+      });
+      return { ...sess, draining: true, openJobs, status: 'open' };
+    }
+  }
 
   const digest = await buildSessionDigest(pool, sessionKey);
   const summary = { reason, ...digest, closedAt: new Date().toISOString() };
@@ -373,10 +601,14 @@ module.exports = {
   TELEGRAM_BOT_TOKEN,
   TELEGRAM_CHAT_ID,
   TELEGRAM_ENABLED,
+  SESSION_TTL_MINUTES,
   telegramConfigured,
   ensureTables,
   openSession,
   closeSession,
+  touchSession,
+  expireStaleSessions,
+  closeOpenSessionsForToon,
   logEvent,
   sendTelegram,
   flushPendingTelegram,

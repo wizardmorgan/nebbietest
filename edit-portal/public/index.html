@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="edit-base" content="" />
   <title>Nebbie — Portale Edit</title>
-  <link rel="stylesheet" href="style.css?v=52" />
+  <link rel="stylesheet" href="style.css?v=68" />
   <script src="config.js"></script>
 </head>
 <body>
@@ -23,13 +23,11 @@
 
   <main class="app-main">
     <section id="login-panel" class="panel card">
-      <h2>Accesso account</h2>
+      <h2>Nebbie Arcane</h2>
       <div id="sso-login-block" class="sso-login-block hidden">
         <p class="hint">
-          Accedi con lo stesso account del sito WordPress.
-          L'email del sito deve coincidere con l'account Mud (tabella <code>user</code>).
-          Dopo il login usi i personaggi di quell'account con i livelli di utilizzo già definiti
-          (limited / player / staff).
+          Benvenuto sul Portale Edit.
+          Accedi con lo stesso account del sito per gestire i tuoi personaggi.
         </p>
         <p class="btn-row">
           <a id="sso-wp-link" class="btn-primary" href="#">Accedi dal sito WordPress</a>
@@ -37,7 +35,7 @@
         <p id="sso-login-hint" class="hint"></p>
       </div>
       <div id="password-login-block">
-        <p class="hint">Usa l'email e la password dell'<strong>account</strong> (tabella <code>user</code>), non la password del singolo personaggio.</p>
+        <p class="hint">Benvenuto sul Portale Edit di Nebbie Arcane.</p>
         <form id="login-form" class="form-grid">
           <label>Email <input type="email" id="login-email" required autocomplete="username" /></label>
           <label>Password <input type="password" id="login-password" required autocomplete="current-password" /></label>
@@ -61,11 +59,94 @@
       <div id="online-warn" class="alert alert-warn hidden"></div>
       <div id="api-warn" class="alert alert-error hidden"></div>
 
-      <div class="work-toolbar">
-        <button id="btn-toggle-tools" class="btn-secondary btn-tools-toggle hidden" type="button" aria-pressed="false" title="Mostra o nascondi categorie, valute e strumenti staff">
+      <div class="work-toolbar" role="toolbar" aria-label="Controlli staff">
+        <div id="staff-view-wrap" class="work-toolbar-group staff-view-wrap hidden">
+          <label class="work-toolbar-label" for="staff-view-select">Vista staff</label>
+          <select id="staff-view-select" class="work-toolbar-control" title="Cambia area di lavoro staff">
+            <option value="edit">Edit (inventario / PG)</option>
+            <option value="economy">Economia: valute e listino</option>
+            <option value="ops">Operazioni sistema</option>
+          </select>
+        </div>
+        <button id="btn-toggle-tools" class="btn-secondary btn-tools-toggle work-toolbar-control hidden" type="button" aria-pressed="false" title="Mostra o nascondi la colonna operazioni sistema">
           Opzioni sistema
         </button>
       </div>
+
+      <section id="staff-economy-page" class="staff-economy-page card hidden" aria-label="Economia e listino staff">
+        <div class="staff-economy-header">
+          <h2>Economia portale</h2>
+          <p class="hint">
+            Valute (cosa compare nel pagamento) e listino MySQL + routing oggetto/toon.
+            Layout a tutta larghezza per tabelle leggibili. Le sole valute che addebitano
+            oggi in myst sono <strong>MXP</strong> e <strong>Rune</strong>; le altre sono
+            solo UI finche' non c'e' codice di addebito dedicato.
+          </p>
+          <div class="staff-economy-tabs" role="tablist">
+            <button type="button" class="staff-economy-tab is-active" data-econ-tab="currencies" role="tab" aria-selected="true">Valute di pagamento</button>
+            <button type="button" class="staff-economy-tab" data-econ-tab="listino" role="tab" aria-selected="false">Listino e routing</button>
+          </div>
+        </div>
+
+        <div id="staff-econ-currencies" class="staff-econ-pane" role="tabpanel">
+          <div class="portal-currencies card-inner">
+            <h3>Valute di pagamento</h3>
+            <p class="hint">
+              «Visibile ai giocatori» controlla solo la UI.
+              <code>pays_listino</code> e' consentito solo per i tender dichiarati da myst
+              (<code>/internal/edit-capabilities</code>). Ogni valuta pagabile si miscela
+              solo con le rune (bilanciamento dedicato per valuta).
+            </p>
+            <p id="portal-capabilities-hint" class="hint"></p>
+            <div id="portal-currency-toggles" class="currency-config-list currency-config-wide"></div>
+            <button id="btn-save-portal-currencies" class="btn-secondary" type="button">Salva valute</button>
+            <p id="portal-currency-result" class="msg"></p>
+          </div>
+        </div>
+
+        <div id="staff-econ-listino" class="staff-econ-pane hidden" role="tabpanel">
+          <div class="card-inner" id="staff-listino-panel">
+            <h3>Listino e routing oggetto/toon</h3>
+            <p class="hint">
+              Prezzi in MySQL + dove va ogni edit. Nuove voci affect usano un codice
+              <code>APPLY_*</code> gia' gestito da myst: senza quel codice in C++ non c'e'
+              effetto in gioco. Dopo Salva: reload myst automatico.
+            </p>
+            <div class="btn-row">
+              <button id="btn-listino-admin-load" class="btn-secondary" type="button">Carica</button>
+              <button id="btn-listino-admin-save" class="btn-secondary" type="button">Salva tutto</button>
+            </div>
+            <p id="listino-admin-result" class="msg" aria-live="polite"></p>
+            <h4>Cap di gruppo</h4>
+            <div id="listino-cap-groups" class="listino-admin-table listino-admin-wide"></div>
+            <div class="btn-row">
+              <button id="btn-listino-add-cap-group" class="btn-secondary" type="button">+ Cap gruppo</button>
+            </div>
+            <h4>Affect (prezzi + routing)</h4>
+            <div id="listino-affect-admin" class="listino-admin-table listino-admin-wide"></div>
+            <div class="btn-row">
+              <button id="btn-listino-add-affect" class="btn-secondary" type="button">+ Nuovo affect</button>
+            </div>
+            <h4>Pool PG</h4>
+            <div id="listino-pool-admin" class="listino-admin-table listino-admin-wide"></div>
+            <h4>Parametri globali</h4>
+            <div id="listino-param-admin" class="listino-admin-table listino-admin-wide"></div>
+            <details class="collapse-panel" id="routing-edit-panel">
+              <summary class="collapse-summary">
+                <span>JSON grezzo edit_system (avanzato)</span>
+              </summary>
+              <div class="collapse-body">
+                <textarea id="system-config-editor" rows="8" spellcheck="false"></textarea>
+                <div class="btn-row">
+                  <button id="btn-load-config" class="btn-secondary" type="button">Ricarica JSON</button>
+                  <button id="btn-save-config" class="btn-secondary" type="button">Salva JSON</button>
+                </div>
+                <p id="config-result" class="msg"></p>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
 
       <div class="layout" id="work-layout">
         <aside class="sidebar">
@@ -153,6 +234,43 @@
             <h2>Staff — configurazione sistema</h2>
           </div>
 
+          <div id="lab-panel" class="card-inner lab-panel hidden">
+            <h3>Lab test (lv 58+)</h3>
+            <p class="hint">
+              Prepara XP, Rune e oggetti sul personaggio target (deve essere offline)
+              per testare il portale. Ogni azione e' registrata nell'audit.
+            </p>
+            <p id="lab-target-stats" class="hint">Seleziona un target per vedere XP/Rune.</p>
+            <div class="lab-form">
+              <label>XP
+                <input id="lab-exp" class="no-spin" type="number" min="0" max="2000000000" inputmode="numeric" placeholder="es. 50000000" />
+              </label>
+              <p id="lab-exp-preview" class="lab-preview hint">Disponibili per edit: —</p>
+              <label>Rune
+                <input id="lab-rune" class="no-spin" type="number" min="0" max="2000000000" inputmode="numeric" placeholder="es. 50" />
+              </label>
+              <p id="lab-rune-preview" class="lab-preview hint">Rune disponibili per edit: —</p>
+              <button id="btn-lab-set-stats" class="btn-secondary" type="button">Applica XP/Rune</button>
+              <p class="hint">Massimo XP/Rune Lab: 2.000.000.000</p>
+              <p id="lab-result" class="msg" aria-live="polite"></p>
+            </div>
+            <div class="lab-form">
+              <label>Cerca oggetto (name)
+                <input id="lab-obj-search" type="search" placeholder="Digita almeno 2 lettere…" autocomplete="off" />
+              </label>
+              <ul id="lab-obj-results" class="lab-obj-results"></ul>
+              <p id="lab-obj-selected" class="hint">Nessun oggetto selezionato.</p>
+              <label>Quantita
+                <input id="lab-qty" class="no-spin" type="number" min="1" max="20" value="1" inputmode="numeric" />
+              </label>
+              <button id="btn-lab-give-vnum" class="btn-secondary" type="button">Dai oggetto</button>
+              <p class="hint">
+                I pezzi Lab vengono personalizzati sul target (EDIT + istanza) cosi'
+                compaiono in inventario anche se prototipo trash/other/RARO.
+              </p>
+            </div>
+          </div>
+
           <div class="portal-categories card-inner">
             <h3>Categorie oggetto nel portale</h3>
             <p class="hint">Spunta = tipo visibile e editabile al primo edit. Senza spunta = nascosto (pezzi in DB edits / EDIT+ED* restano, anche RARO). TAN/HAS-GEMS/simbolo sempre esclusi. Edit da indossato consentito (PG offline).</p>
@@ -161,78 +279,6 @@
             <button id="btn-save-portal-cats" class="btn-secondary" type="button">Salva categorie</button>
             <p id="portal-cat-result" class="msg"></p>
           </div>
-
-          <div class="portal-currencies card-inner">
-            <h3>Valute di pagamento</h3>
-            <p class="hint">
-              Al momento il pagamento listino usa solo MXP/Rune. Le altre valute stanno
-              in una sezione collassata: restano <strong>nascoste ai giocatori</strong>
-              finché non attivi «Visibile ai giocatori».
-            </p>
-            <div id="portal-currency-toggles" class="currency-config-list"></div>
-            <button id="btn-save-portal-currencies" class="btn-secondary" type="button">Salva valute</button>
-            <p id="portal-currency-result" class="msg"></p>
-          </div>
-
-          <details class="card-inner collapse-panel" id="routing-edit-panel">
-            <summary class="collapse-summary">
-              <span>Routing edit: oggetto vs personaggio</span>
-              <span class="collapse-hint">avanzato — JSON di sistema</span>
-            </summary>
-            <div class="collapse-body">
-              <p class="hint">
-                Questo JSON (<code>edit_system.json</code>) decide <strong>dove</strong> va ogni tipo di edit:
-                <code>target: "object"</code> = affect sull'equipaggiamento;
-                <code>target: "character"</code> = valore sul PG (pool hit/mana/move o resistenza in tabella).
-                Non è l'inventario: è la regola di sistema. Di solito lo lasci così e usi le checkbox categorie sopra.
-              </p>
-              <textarea id="system-config-editor" rows="12" spellcheck="false"></textarea>
-              <div class="btn-row">
-                <button id="btn-load-config" class="btn-secondary" type="button">Ricarica JSON</button>
-                <button id="btn-save-config" class="btn-secondary" type="button">Salva JSON</button>
-              </div>
-              <p id="config-result" class="msg"></p>
-            </div>
-          </details>
-
-          <details class="card-inner collapse-panel" id="listino-admin-panel">
-            <summary class="collapse-summary">
-              <span>Listino edit (edit_listino)</span>
-              <span class="collapse-hint">prezzi, cap, nuove voci, regole</span>
-            </summary>
-            <div class="collapse-body">
-              <p class="hint">
-                Listino unico condiviso con il MUD (<code>edit_listino</code> /
-                <code>edit_listino_rules</code>). Prezzi <strong>base</strong> per slot di
-                <code>step</code> unità, senza Artifact/classi. <code>sign</code> −1 = meglio se
-                negativo (AC). <strong>Attiva</strong> = interruttore della voce;
-                <code>on_obj</code>/<code>on_pc</code> = dove si vende. Le voci nuove nascono
-                <strong>spente</strong>; quelle che il MUD non sa ancora usare sono marcate
-                «non supportato dal MUD» e non si possono attivare finché il MUD non le supporta.
-                Il listino si riallinea da solo (controllo periodico) o con «Sync».
-              </p>
-              <div class="btn-row">
-                <input id="listino-filter" placeholder="filtra code / label / categoria" />
-                <button id="btn-listino-load" class="btn-secondary" type="button">Ricarica listino</button>
-                <button id="btn-listino-sync" class="btn-secondary" type="button" title="Fa rileggere edit_listino a myst/MUD">Sync</button>
-              </div>
-              <div class="listino-table-wrap"><table id="listino-table" class="listino-table"></table></div>
-              <h4>Aggiungi voce</h4>
-              <div id="listino-add-form" class="listino-add-form"></div>
-              <button id="btn-listino-add" class="btn-secondary" type="button">Aggiungi voce</button>
-              <h4>Gruppi cap</h4>
-              <div id="listino-cap-groups" class="listino-rules"></div>
-              <h4>Regole</h4>
-              <div id="listino-rules" class="listino-rules"></div>
-              <div class="btn-row">
-                <input id="listino-rule-key" placeholder="conf_key (es. broker_fee_percent)" />
-                <input id="listino-rule-num" type="number" placeholder="num" />
-                <input id="listino-rule-den" type="number" placeholder="den" value="1" min="1" />
-                <button id="btn-listino-rule-add" class="btn-secondary" type="button">Salva regola</button>
-              </div>
-              <p id="listino-result" class="msg"></p>
-            </div>
-          </details>
 
           <div class="card-inner">
             <h3>Consultazione object_instance</h3>
@@ -249,6 +295,10 @@
               <input id="inst-search" placeholder="cerca owner / descrizione / id istanza" />
               <button id="btn-inst-search" class="btn-secondary" type="button">Cerca istanze</button>
             </div>
+            <p class="hint lab-clone-hint hidden" id="lab-clone-hint">
+              Con Lab attivo: usa «Clona sul target» per copiare un'istanza EDIT
+              sull'inventario del personaggio target selezionato.
+            </p>
             <ul id="inst-list" class="inst-list"></ul>
           </div>
         </aside>
@@ -262,26 +312,33 @@
                 <h2>Pagamento edit</h2>
                 <span id="payment-queue-count" class="payment-queue-count hidden"></span>
               </div>
-              <p class="hint payment-dock-hint">Costo sul <strong>personaggio target</strong> (MXP / Rune degli eroi).</p>
+              <p class="hint payment-dock-hint">Coda globale (piu pezzi / PG). Un solo Applica. Costo sul <strong>personaggio target</strong>.</p>
               <div id="payment-summary" class="payment-summary"></div>
               <div id="payment-breakdown" class="payment-breakdown"></div>
               <p id="apply-result" class="msg"></p>
             </div>
             <div class="payment-dock-controls">
               <div class="payment-controls">
-                <label class="field-label">Metodo
-                  <select id="pay-mode">
-                    <option value="mxp">Solo MXP (exp)</option>
-                    <option value="runes">Solo Rune degli eroi</option>
-                    <option value="mix">Misto MXP + Rune</option>
+                <label class="field-label">Valuta
+                  <select id="pay-tender">
+                    <option value="xp">MXP</option>
                   </select>
                 </label>
-                <label id="rune-pct-wrap" class="field-label hidden">% copertura con Rune
+                <label id="rune-pct-wrap" class="field-label">% con Rune
                   <input type="range" id="pay-rune-pct" min="0" max="100" step="5" value="0" />
                   <span id="pay-rune-pct-label">0%</span>
                 </label>
+                <!-- Compat: mode derivato da % rune (0=valuta, 100=solo rune). -->
+                <select id="pay-mode" class="hidden" aria-hidden="true">
+                  <option value="mxp">mxp</option>
+                  <option value="runes">runes</option>
+                  <option value="mix">mix</option>
+                </select>
               </div>
-              <button id="btn-pay-edit" class="btn-primary btn-pay-dock" type="button">Paga edit</button>
+              <div class="payment-dock-actions">
+                <button id="btn-pay-edit" class="btn-primary btn-pay-dock" type="button">Applica tutto</button>
+                <button id="btn-pay-edit-logout" class="btn-secondary btn-pay-dock" type="button">Applica e logout</button>
+              </div>
             </div>
           </div>
         </div>
@@ -289,6 +346,6 @@
 
     </section>
   </main>
-  <script src="app.js?v=55"></script>
+  <script src="app.js?v=101"></script>
 </body>
 </html>

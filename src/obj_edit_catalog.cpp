@@ -70,6 +70,12 @@ static void catalog_apply_listino_bit_prices(Json& j, int location, unsigned lon
 	ocopy->char_vnum = obj->char_vnum;
 	ocopy->sector = obj->sector;
 	/*
+	 * Owner listino (class_mult): senza questa copia i quote/apply usano solo
+	 * ED* nel name; pezzi con owner solo in personal_owner restavano monoclasse.
+	 */
+	std::memcpy(ocopy->personal_owner, obj->personal_owner, sizeof(ocopy->personal_owner));
+	ocopy->personal_owner[sizeof(ocopy->personal_owner) - 1] = '\0';
+	/*
 	 * Conserva db_instance_id: serve a object_edit_load_baseline (create-baseline
 	 * premi procarea). Non collegare l'inventario (scratch di analisi).
 	 */
@@ -305,6 +311,25 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	if(!obj) {
 		return false;
 	}
+	/*
+	 * Hit-n-dam / Hit-n-sp: solo se lo slot combinato e' gia' sul pezzo
+	 * (proto o edit precedente). Non si "aggiunge" dal menu: l'accorpamento
+	 * avviene dal popup quando si editano hit/dam/sp separati.
+	 */
+	if(location == APPLY_HITNDAM || location == APPLY_HITNSP) {
+		return find_affect_slot_for_location(obj, location) >= 0
+			   || sum_location_mod(obj, location) != 0;
+	}
+	/* Gia' accorpato: hit/dam si editano solo via Hit-n-dam. */
+	if((location == APPLY_HITROLL || location == APPLY_DAMROLL)
+	   && sum_location_mod(obj, APPLY_HITNDAM) != 0) {
+		return false;
+	}
+	/* Gia' accorpato: hit/sp si editano solo via Hit-n-sp. */
+	if((location == APPLY_HITROLL || location == APPLY_SPELLPOWER)
+	   && sum_location_mod(obj, APPLY_HITNSP) != 0) {
+		return false;
+	}
 	if(find_affect_slot_for_location(obj, location) >= 0) {
 		return true;
 	}
@@ -336,12 +361,6 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	}
 	/* hitroll dedicato + niente sp → si puo' unire in hit-n-sp */
 	if(location == APPLY_SPELLPOWER && hr_slot > 0 && sp == 0) {
-		return true;
-	}
-	if(location == APPLY_HITNDAM && hr > 0 && dr > 0) {
-		return true;
-	}
-	if(location == APPLY_HITNSP && hr > 0 && sp > 0) {
 		return true;
 	}
 	return false;
@@ -429,8 +448,9 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 }
 
 /**
- * Minimo totale assoluto consentito in apply (solo aumentare / unire).
- * Hit-n-dam/sp: max degli assi effettivi gia' presenti sul pezzo.
+ * Minimo totale assoluto consentito in apply (solo aumentare).
+ * Hit-n-dam/sp: solo lo slot combinato reale (non max degli assi separati:
+ * altrimenti hr+2 dam+1 mostrava «2 unisci» su Hit-n-dam assente).
  */
 [[nodiscard]] static int object_edit_apply_floor(const struct obj_data* obj,
 												int location) noexcept {
@@ -439,9 +459,9 @@ void object_compact_edit_affects(struct obj_data* obj) noexcept {
 	}
 	switch(location) {
 	case APPLY_HITNDAM:
-		return std::max(combat_hitroll_total(obj), combat_damroll_total(obj));
+		return sum_location_mod(obj, APPLY_HITNDAM);
 	case APPLY_HITNSP:
-		return std::max(combat_hitroll_total(obj), combat_spellpower_total(obj));
+		return sum_location_mod(obj, APPLY_HITNSP);
 	case APPLY_HITROLL:
 		return combat_hitroll_total(obj);
 	case APPLY_DAMROLL:
@@ -995,6 +1015,27 @@ static void portal_force_paid_malus(struct obj_data* obj) noexcept {
 	}
 
 	if(is_combat_edit_location(location)) {
+		const int hnd_slot = sum_location_mod(obj, APPLY_HITNDAM);
+		const int hnsp_slot = sum_location_mod(obj, APPLY_HITNSP);
+		/* Nuovo Hit-n-dam/sp solo via merge da hit/dam/sp + conferma UI. */
+		if(location == APPLY_HITNDAM && hnd_slot == 0) {
+			err = "Hit-n-dam si ottiene solo accorpando hitroll e damroll "
+				  "(conferma nel portale); non e' un bonus da aggiungere a parte";
+			return false;
+		}
+		if(location == APPLY_HITNSP && hnsp_slot == 0) {
+			err = "Hit-n-sp si ottiene solo accorpando hitroll e spellpower "
+				  "(conferma nel portale); non e' un bonus da aggiungere a parte";
+			return false;
+		}
+		if((location == APPLY_HITROLL || location == APPLY_DAMROLL) && hnd_slot != 0) {
+			err = "su questo pezzo hit e dam sono gia' in Hit-n-dam: edita quello";
+			return false;
+		}
+		if((location == APPLY_HITROLL || location == APPLY_SPELLPOWER) && hnsp_slot != 0) {
+			err = "su questo pezzo hit e spellpower sono gia' in Hit-n-sp: edita quello";
+			return false;
+		}
 		int hitroll = combat_hitroll_total(obj);
 		int damroll = combat_damroll_total(obj);
 		int spellpower = combat_spellpower_total(obj);
@@ -1019,7 +1060,7 @@ static void portal_force_paid_malus(struct obj_data* obj) noexcept {
 		default:
 			break;
 		}
-		/* Hit-n-dam / Hit-n-sp scelti esplicitamente = merge voluto.
+		/* Hit-n-dam / Hit-n-sp gia' presenti: alza il combinato.
 		 * Hit/dam/sp separati: merge solo con conferma UI (allow_combat_merge). */
 		const bool merge =
 			!clear_slot
@@ -1299,6 +1340,23 @@ Json object_edit_catalog_json(const struct obj_data* obj) {
 		const int proto_total = prototype_display_current(obj, spec.location);
 		const bool relative = listino_uses_proto_relative_range(spec.location);
 		const bool has_affect = occupied_slot >= 0 || current_total != 0;
+		/*
+		 * Hit-n-dam/sp assenti: non in catalogo (merge solo da popup su hr/dam/sp).
+		 * Con Hit-n-dam presente: niente hitroll/damroll separati; con Hit-n-sp:
+		 * niente hitroll/spellpower separati.
+		 */
+		if((spec.location == APPLY_HITNDAM || spec.location == APPLY_HITNSP)
+		   && !has_affect) {
+			continue;
+		}
+		if((spec.location == APPLY_HITROLL || spec.location == APPLY_DAMROLL)
+		   && sum_location_mod(obj, APPLY_HITNDAM) != 0) {
+			continue;
+		}
+		if((spec.location == APPLY_HITROLL || spec.location == APPLY_SPELLPOWER)
+		   && sum_location_mod(obj, APPLY_HITNSP) != 0) {
+			continue;
+		}
 		const bool can_edit = scalar_can_edit(obj, spec.location, free_slots);
 		Json j;
 		j["id"] = spec.id;

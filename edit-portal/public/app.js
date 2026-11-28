@@ -6,11 +6,17 @@ const LOGIN_STORAGE_KEY = 'nebbie-edit-login';
 const INVENTORY_SORT_KEY = 'nebbie-edit-inventory-sort';
 const TOOLS_OPEN_KEY = 'nebbie-edit-tools-open';
 /** Bump insieme a index.html ?v= e a kEditPortalApiVersion (marker UI deploy). */
-const EDIT_PORTAL_UI_BUILD = 54;
+const EDIT_PORTAL_UI_BUILD = 101;
+/** Keepalive sessione edit DB (TTL server, default 30 min). */
+let editSessionTouchTimer = null;
+/** Allineato a kLabExpCap in edit_portal.cpp (Lab set XP/Rune). */
+const LAB_EXP_CAP = 2000000000;
 const PRINCE_SORT_KEY = 'nebbie-edit-prince-sort';
 
 /** Catalogo valute (staff). Solo visible+enabled compaiono in pagamento. */
 let portalCurrencies = null;
+/** Manifest myst: tender pagabili + route apply. */
+let editCapabilities = null;
 
 const DEFAULT_CURRENCIES = [
   { slug: 'mxp', label: 'MXP', enabled: true, visible: true, pays_listino: true },
@@ -59,6 +65,119 @@ function currencyVisibleEnabled(slug) {
   const list = portalCurrencies || DEFAULT_CURRENCIES;
   const row = list.find((c) => c.slug === slug);
   return !!(row && row.enabled && row.visible);
+}
+
+function payableTenderSlugs() {
+  const caps = editCapabilities;
+  if (!caps || !Array.isArray(caps.tenders)) {
+    return new Set(['mxp', 'rune']);
+  }
+  return new Set(caps.tenders.filter((t) => t.can_pay !== false).map((t) => t.slug));
+}
+
+function primaryPayTenders() {
+  const caps = editCapabilities;
+  const tenders = Array.isArray(caps?.tenders) ? caps.tenders : [];
+  const fromCaps = tenders.filter(
+    (t) => t.can_pay !== false && !t.is_rune && t.mix_with_rune
+  );
+  if (fromCaps.length) return fromCaps;
+  return [
+    {
+      id: 'xp',
+      slug: 'mxp',
+      label: currencyLabel('mxp'),
+      api_field: 'pay_xp',
+      mix_with_rune: true,
+    },
+  ];
+}
+
+/** % rune → mode legacy usato da buildPaymentPlan. */
+function payModeFromRunePct(pct) {
+  const n = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+  if (n <= 0) return 'mxp';
+  if (n >= 100) return 'runes';
+  return 'mix';
+}
+
+function syncPayModeFromSlider() {
+  const pct = Number($('pay-rune-pct')?.value || 0);
+  const mode = payModeFromRunePct(pct);
+  const payMode = $('pay-mode');
+  if (payMode) payMode.value = mode;
+  return mode;
+}
+
+async function loadEditCapabilities(force = false) {
+  const q = force ? '?refresh=1' : '';
+  const data = await api(`/api/edit-capabilities${q}`);
+  if (data.ok && data.data) {
+    editCapabilities = data.data;
+    if (data.data.pq_per_mega_xp && editCatalog) {
+      editCatalog.pq_per_mega_xp = data.data.pq_per_mega_xp;
+    }
+  } else if (!editCapabilities) {
+    editCapabilities = {
+      tenders: [
+        {
+          id: 'xp',
+          slug: 'mxp',
+          label: 'MXP',
+          api_field: 'pay_xp',
+          is_rune: false,
+          can_pay: true,
+          mix_with_rune: true,
+        },
+        {
+          id: 'rune',
+          slug: 'rune',
+          label: 'Rune degli eroi',
+          api_field: 'pay_rune',
+          is_rune: true,
+          can_pay: true,
+        },
+      ],
+      supported_pay_fields: ['pay_xp', 'pay_rune'],
+      source: 'fallback',
+    };
+  }
+  rebuildPayTenderSelect();
+  updateCapabilitiesStaffHint();
+  return editCapabilities;
+}
+
+function rebuildPayTenderSelect() {
+  const sel = $('pay-tender');
+  if (!sel) return;
+  const tenders = primaryPayTenders();
+  const prev = sel.value;
+  sel.innerHTML = '';
+  tenders.forEach((t) => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = currencyLabel(t.slug) || t.label || t.id;
+    opt.dataset.slug = t.slug;
+    sel.appendChild(opt);
+  });
+  if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+  else if (sel.options.length) sel.selectedIndex = 0;
+}
+
+function updateCapabilitiesStaffHint() {
+  const el = $('portal-capabilities-hint');
+  if (!el) return;
+  const caps = editCapabilities;
+  if (!caps) {
+    el.textContent = 'Capabilities myst: non caricate.';
+    return;
+  }
+  const pay = (caps.tenders || [])
+    .filter((t) => t.can_pay !== false)
+    .map((t) => t.slug)
+    .join(', ');
+  const src = caps.source === 'myst' ? 'myst' : caps.source || '?';
+  el.textContent = `Tender pagabili (${src}): ${pay || 'nessuno'}. Mix: ogni valuta non-rune solo con rune.`;
 }
 
 
@@ -143,8 +262,23 @@ let selectedObjectOptions = null;
 let pendingEdit = null;
 /** Ultima lista inventario grezza (per ri-ordinare senza ricaricare). */
 let inventoryItemsCache = [];
-/** Coda edit oggetto: più campi insieme (stesso pezzo) → somma costi listino. */
+/** Coda edit oggetto corrente (stesso pezzo). */
 let objectEditCart = new Map();
+/** Generazione requote: evita che un requote async rimetta voci gia' tolte. */
+let objectCartRequoteGen = 0;
+/**
+ * Carrelli oggetto per inventory_id: restano al cambio pezzo finche' non
+ * «Applica tutto» / reset. Valore = Map(entryId -> item).
+ */
+let objectCartsByInv = new Map();
+/** Cache options pezzo (evita re-fetch myst a ogni select). */
+let objectOptionsCache = new Map();
+/** Bozze name/short/long per pezzo (persiste al cambio oggetto). */
+let objectTextDraftsByInv = new Map();
+/** Snapshot listino MySQL (quote locali es. Artifact). */
+let listinoSnapshot = null;
+/** Snapshot inventario/affects/pool MySQL (fase A). */
+let toonEditSnapshot = null;
 /** Coda edit personaggio: più voci pool/resistenze insieme → somma costi. */
 let characterEditCart = new Map();
 
@@ -322,16 +456,156 @@ function persistLogin(email, password, remember) {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(portalUrl(path), {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(opts.headers || {}),
-    },
-  });
-  const data = await res.json().catch(() => ({ ok: false, error: 'Risposta non valida dal server' }));
+  let res;
+  try {
+    res = await fetch(portalUrl(path), {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(opts.headers || {}),
+      },
+    });
+  } catch (err) {
+    const msg = err && err.message ? String(err.message) : String(err);
+    return {
+      ok: false,
+      error: /abort|timeout/i.test(msg)
+        ? 'Timeout di rete verso il portale. Ricarica e verifica se l\'operazione e\' stata applicata.'
+        : `Rete non raggiungibile: ${msg}`,
+    };
+  }
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    const raw = String(text || '');
+    const pre = raw.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+    const snippet = (pre ? pre[1] : raw)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 160);
+    return {
+      ok: false,
+      error: snippet
+        ? `Risposta non JSON dal portale (HTTP ${res.status}): ${snippet}`
+        : `Risposta vuota dal portale (HTTP ${res.status}). Riprova; se era un Lab XP/rune, ricarica lo stato del PG.`,
+    };
+  }
   if (!res.ok && data.ok === undefined) data.ok = false;
   return data;
+}
+
+function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Da result_json del job: payload myst reale (singolo apply) o wrapper batch.
+ */
+function mystFromJobResult(parsed) {
+  if (!parsed || typeof parsed !== 'object') return null;
+  if (parsed.myst && typeof parsed.myst === 'object') {
+    const m = parsed.myst;
+    if (
+      m.data &&
+      Array.isArray(m.data.steps) &&
+      m.data.steps.length === 1 &&
+      m.data.steps[0] &&
+      m.data.steps[0].myst &&
+      typeof m.data.steps[0].myst === 'object'
+    ) {
+      return m.data.steps[0].myst;
+    }
+    return m;
+  }
+  if (
+    Array.isArray(parsed.steps) &&
+    parsed.steps.length === 1 &&
+    parsed.steps[0] &&
+    parsed.steps[0].myst &&
+    typeof parsed.steps[0].myst === 'object'
+  ) {
+    return parsed.steps[0].myst;
+  }
+  return null;
+}
+
+/**
+ * Attende esito job myst_apply (B2). Restituisce il payload myst se presente.
+ */
+async function waitForJob(
+  jobId,
+  { timeoutMs = 120000, label = 'Salvataggio', statusEl = null } = {},
+) {
+  const t0 = Date.now();
+  const el = statusEl || $('apply-result');
+  while (Date.now() - t0 < timeoutMs) {
+    if (el) {
+      el.textContent = `${label} in corso (job #${jobId})… non chiudere la pagina.`;
+      el.classList.remove('warn');
+    }
+    const data = await api(`/api/jobs/${jobId}`);
+    if (!data.ok) {
+      return { ok: false, error: data.error || 'job non leggibile' };
+    }
+    const job = data.job || {};
+    if (job.status === 'done') {
+      let parsed = {};
+      try {
+        parsed = job.result_json ? JSON.parse(job.result_json) : {};
+      } catch {
+        parsed = {};
+      }
+      const myst = mystFromJobResult(parsed);
+      if (myst) {
+        return { ...myst, jobId, async: true };
+      }
+      return { ok: true, data: parsed, jobId, async: true };
+    }
+    if (job.status === 'failed') {
+      let parsed = {};
+      try {
+        parsed = job.result_json ? JSON.parse(job.result_json) : {};
+      } catch {
+        parsed = {};
+      }
+      const myst = mystFromJobResult(parsed);
+      if (myst) {
+        return {
+          ...myst,
+          ok: false,
+          error: myst.error || job.error_message || 'apply fallito',
+          jobId,
+        };
+      }
+      return {
+        ok: false,
+        error: job.error_message || 'job fallito',
+        jobId,
+      };
+    }
+    await sleepMs(400);
+  }
+  return {
+    ok: false,
+    error:
+      'Timeout in attesa del salvataggio. Se hai chiuso il browser, aspetta comunque qualche minuto prima di entrare in gioco.',
+    jobId,
+  };
+}
+
+/** POST apply/lab: se risponde con jobId, attende il worker. */
+async function apiApply(path, body, label, opts = {}) {
+  const enq = await api(path, { method: 'POST', body: JSON.stringify(body) });
+  if (!enq.ok) return enq;
+  if (enq.jobId) {
+    return waitForJob(enq.jobId, {
+      label: label || 'Salvataggio edit',
+      statusEl: opts.statusEl || null,
+    });
+  }
+  return enq;
 }
 
 function show(id) {
@@ -361,60 +635,60 @@ function canPayMxp() {
   return session && (session.role === 'staff' || Number(session.maxLevel || 0) >= PRINCE_LEVEL);
 }
 
-/**
- * Piano di pagamento per UN quote (slider % rune).
- * Tre modelli, allineati ai resolver di edit_portal.cpp:
- *  - editpool (pool / affect PG, quote.payment_model='editpool'): XP e rune
- *    listino sono prezzi paralleli: XP = floor(xp*(100-%)/100),
- *    rune = floor(pq*%/100)  (resolve_editpool_payment, match esatto).
- *  - object con quote.rune_listino>0 (riga edit_listino con rune, es. stat):
- *    prezzi paralleli come sul sito: XP = ceil(xp*(100-%)/100),
- *    rune = ceil(rune_listino*%/100) + rent pq (resolve_object_edit_payment).
- *  - object senza rune listino (bit resi/spell, artifact, quote vecchi):
- *    rune coprono XP a 1 MXP = 1 rune, + rent pq.
- */
 function buildPaymentPlan(quote, mode, runePct) {
-  const q = quote || {};
-  const xpRaw = Number(q.xp_raw || q.diff_xp_raw || 0);
+  const xpRaw = Number(quote.xp_raw || quote.diff_xp_raw || 0);
+  const runeListino = Number(quote.diff_rune || 0);
+  const pqAlt = Number(quote.pq || 0);
   const runePerMega = Number(editCatalog?.pq_per_mega_xp || PQ_PER_MEGA_XP);
   const { mega, frac, raw } = quoteMxpFromRaw(xpRaw);
-  const pct = mode === 'mxp' ? 0 : mode === 'runes' ? 100 : Math.max(0, Math.min(100, Number(runePct) || 0));
+  /* Pool PG (editpool): pq = costo rune completo alternativo, non additivo. */
+  const editpoolPay =
+    quote.payment_model === 'editpool' ||
+    (pqAlt > 0 && runeListino === 0 && quote.free_edit !== 1 && quote.free_edit !== true);
 
-  if (q.payment_model === 'editpool') {
-    const pq = Number(q.pq || 0);
+  let payXp = 0;
+  let payRune = 0;
+
+  if (Number(quote.free_edit) === 1 || quote.free_edit === true) {
     return {
-      payXp: Math.floor((raw * (100 - pct)) / 100),
-      payRune: Math.floor((pq * pct) / 100),
-      displayMxp: formatMxp(mega, frac),
-      xpRaw,
+      payXp: 0,
+      payRune: 0,
+      displayMxp: 'gratis',
+      xpRaw: 0,
       runeListino: 0,
-      runeAlt: pq,
+      editpoolPay: false,
     };
   }
 
-  /* Rent (cost_per_day): rune aggiuntive obbligatorie. */
-  const runeRent = Number(q.diff_rune != null ? q.diff_rune : q.payment_model === 'object' ? q.pq || 0 : 0);
-  const runeAlt = Number(q.rune_listino || 0);
-  let payXp = 0;
-  let payRune = 0;
-  if (runeAlt > 0 && raw > 0) {
-    payXp = Math.ceil((raw * (100 - pct)) / 100);
-    payRune = runeRent + Math.ceil((runeAlt * pct) / 100);
-  } else if (mode === 'mxp') {
+  if (mode === 'mxp') {
+    /* Slider rune a 0%: solo XP, nessuna rune (né listino né conversione). */
     payXp = raw;
-    payRune = runeRent;
+    payRune = 0;
   } else if (mode === 'runes') {
-    const runesFromMxp = raw > 0 ? Math.ceil(raw / runePerMega) : 0;
-    payXp = 0;
-    payRune = runesFromMxp + runeRent;
+    if (editpoolPay) {
+      payXp = 0;
+      payRune = pqAlt;
+    } else {
+      const runesFromMxp = raw > 0 ? Math.ceil(raw / runePerMega) : 0;
+      payXp = 0;
+      payRune = runesFromMxp + runeListino;
+    }
+  } else if (editpoolPay) {
+    /* Misto come editpool ok misto: % su listino XP e % su listino rune. */
+    const pctRune = Math.max(0, Math.min(100, Math.round(Number(runePct) || 0)));
+    const pctXp = 100 - pctRune;
+    payXp = Math.floor((raw * pctXp) / 100);
+    payRune = Math.floor((pqAlt * pctRune) / 100);
   } else {
-    const runeMega = (mega * pct) / 100;
-    const runeFrac = (frac * pct) / 100;
+    /* Oggetti: % dello MXP convertito in rune; rune listino solo se % rune > 0. */
+    const pctRune = Math.max(0, Math.min(100, Math.round(Number(runePct) || 0)));
+    const runeMega = (mega * pctRune) / 100;
+    const runeFrac = (frac * pctRune) / 100;
     const runeMegaTotal = runeMega + runeFrac / 100;
     const runesFromMxp = Math.ceil(runeMegaTotal);
     const xpCovered = runesFromMxp * runePerMega;
     payXp = Math.max(0, raw - xpCovered);
-    payRune = runeRent + runesFromMxp;
+    payRune = (pctRune > 0 ? runeListino : 0) + runesFromMxp;
   }
 
   return {
@@ -422,28 +696,40 @@ function buildPaymentPlan(quote, mode, runePct) {
     payRune,
     displayMxp: formatMxp(mega, frac),
     xpRaw,
-    runeListino: runeRent,
-    runeAlt,
+    /* Solo le rune che si stanno davvero pagando, non il listino "alternativo". */
+    runeListino: payRune,
+    editpoolPay,
   };
 }
 
-/** Piano per il pending: somma dei piani per voce (carrello), cosi' il totale
- *  mostrato coincide con quello che viene addebitato voce per voce. */
+/** Piano pagamento: in coda somma i piani per voce (editpool vs oggetti restano distinti). */
 function buildPendingPaymentPlan(pending, mode, runePct) {
-  const items = Array.isArray(pending?.items) && pending.items.length ? pending.items : null;
-  if (!items) return buildPaymentPlan(pending?.quote, mode, runePct);
-  const total = { payXp: 0, payRune: 0, xpRaw: 0, runeListino: 0, runeAlt: 0 };
-  items.forEach((it) => {
-    const p = buildPaymentPlan(it.quote, mode, runePct);
-    total.payXp += p.payXp;
-    total.payRune += p.payRune;
-    total.xpRaw += p.xpRaw;
-    total.runeListino += p.runeListino;
-    total.runeAlt += p.runeAlt || 0;
-  });
-  const { mega, frac } = quoteMxpFromRaw(total.xpRaw);
-  total.displayMxp = formatMxp(mega, frac);
-  return total;
+  const items = Array.isArray(pending?.items) ? pending.items : null;
+  if (items && items.length) {
+    let payXp = 0;
+    let payRune = 0;
+    let xpRaw = 0;
+    let runeListino = 0;
+    let anyEditpool = false;
+    for (const it of items) {
+      const p = buildPaymentPlan(it.quote || {}, mode, runePct);
+      payXp += Number(p.payXp || 0);
+      payRune += Number(p.payRune || 0);
+      xpRaw += Number(p.xpRaw || 0);
+      runeListino += Number(p.runeListino || 0);
+      if (p.editpoolPay) anyEditpool = true;
+    }
+    const { mega, frac } = quoteMxpFromRaw(xpRaw);
+    return {
+      payXp,
+      payRune,
+      displayMxp: formatMxp(mega, frac),
+      xpRaw,
+      runeListino,
+      editpoolPay: anyEditpool,
+    };
+  }
+  return buildPaymentPlan(pending?.quote || {}, mode, runePct);
 }
 
 function formatQuoteCostShort(quote) {
@@ -458,20 +744,500 @@ function formatQuoteCostShort(quote) {
   return parts.join(' + ');
 }
 
+function formatMxpRaw(xpRaw) {
+  const raw = Math.max(0, Math.floor(Number(xpRaw) || 0));
+  const { mega, frac } = quoteMxpFromRaw(raw);
+  return formatMxp(mega, frac);
+}
+
+function mxpNumberString(xpRaw) {
+  const raw = Math.max(0, Math.floor(Number(xpRaw) || 0));
+  const { mega, frac } = quoteMxpFromRaw(raw);
+  if (!frac) return String(mega);
+  return `${mega},${String(frac).padStart(2, '0')}`;
+}
+
+function quoteNClasses(quote) {
+  const n = Number(
+    quote?.n_classes ||
+      selectedObjectOptions?.owner_classes ||
+      charState?.n_classes ||
+      charState?.owner_classes ||
+      1
+  );
+  return Math.max(1, Number.isFinite(n) && n > 0 ? Math.floor(n) : 1);
+}
+
+function quoteClassMultValue(quote, classes) {
+  const m = Number(quote?.class_mult);
+  if (Number.isFinite(m) && m > 0) return m;
+  if (classes >= 3) return listinoParamNumber('class_mult_tri', 2);
+  if (classes === 2) return listinoParamNumber('class_mult_bi', 1.5);
+  return resolveListinoClassMult(selectedObjectOptions || charState || {});
+}
+
+function quoteIsEditpool(quote) {
+  if (!quote) return false;
+  if (quote.payment_model === 'editpool') return true;
+  const pq = Number(quote.pq || 0);
+  const runeListino = Number(quote.diff_rune || 0);
+  return (
+    pq > 0 &&
+    runeListino === 0 &&
+    quote.free_edit !== 1 &&
+    quote.free_edit !== true
+  );
+}
+
+function quoteAppliesArtifactMult(quote) {
+  if (!quote) return false;
+  if (quoteIsEditpool(quote)) return true;
+  if (quote.apply_artifact != null) {
+    return !!(Number(quote.apply_artifact) || quote.apply_artifact === true);
+  }
+  if (quote.artifact_bundled) return true;
+  return !!(Number(quote.artifact) || Number(quote.pending_artifact));
+}
+
+/**
+ * Note tecniche da quote locale/myst: non mostrarle a parte — il dettaglio
+ * costo e' gia' in formatQuoteCostDetail (stesso testo ovunque).
+ */
+function isRedundantCostNote(note) {
+  const n = String(note || '');
+  if (!n) return true;
+  if (/^Dettaglio costo:/i.test(n)) return true;
+  if (/^Listino:\s*delta/i.test(n)) return true;
+  if (/class_mult/i.test(n)) return true;
+  if (/maggiorazione Artifact/i.test(n)) return true;
+  if (/Include maggiorazione/i.test(n)) return true;
+  if (/senza Artifact/i.test(n) && /listino/i.test(n)) return true;
+  return false;
+}
+
+/**
+ * Visualizzazione costi (formato editpool):
+ * - riga principale = MXP che si addebitano (oggetti: totale listino×mult×art;
+ *   pool: gia' ÷ n_classi come editpool)
+ * - dettaglio = "Dettaglio costo: base × mult (bi|tri|mono) [× art (artifact)]"
+ * Niente "per classe" fittizio sugli oggetti (fuorviante: si paga il totale).
+ */
+function quoteCostBreakdown(quote) {
+  const xpRaw = Math.max(0, Math.floor(Number(quote?.xp_raw || quote?.diff_xp_raw || 0)));
+  const rune = Math.max(0, Math.floor(Number(quote?.diff_rune || 0)));
+  const pq = Math.max(0, Math.floor(Number(quote?.pq || 0)));
+  const free =
+    Number(quote?.free_edit) === 1 ||
+    quote?.free_edit === true ||
+    (xpRaw <= 0 && rune <= 0 && pq <= 0);
+  if (free) {
+    return {
+      free: true,
+      classes: quoteNClasses(quote),
+      chargeRaw: 0,
+      runeAlt: 0,
+      pq: 0,
+      editpool: quoteIsEditpool(quote),
+    };
+  }
+  const classes = quoteNClasses(quote);
+  const classMult = quoteClassMultValue(quote, classes);
+  const artMult = listinoParamNumber('artifact_mult', 1.5);
+  const editpool = quoteIsEditpool(quote);
+  const withArt = quoteAppliesArtifactMult(quote);
+  let chargeRaw;
+  let baseRaw;
+  if (editpool) {
+    /* xp_raw = (listino x art x mult) / n_classes — cifra ufficiale editpool */
+    chargeRaw = xpRaw;
+    const productRaw = xpRaw * classes;
+    const denom = artMult * classMult;
+    baseRaw = denom > 0 ? Math.round(productRaw / denom) : productRaw;
+  } else {
+    /* oggetti: xp_raw = listino x mult [x art] — totale da addebitare */
+    chargeRaw = xpRaw;
+    let denom = classMult;
+    if (withArt) denom *= artMult;
+    baseRaw = denom > 0 ? Math.round(xpRaw / denom) : xpRaw;
+  }
+  return {
+    free: false,
+    editpool,
+    classes,
+    classMult,
+    artMult,
+    withArt,
+    baseRaw,
+    chargeRaw,
+    runeAlt: editpool ? pq : 0,
+    pq,
+  };
+}
+
+function classCountWord(classes) {
+  if (classes >= 3) return 'tri';
+  if (classes === 2) return 'bi';
+  return 'mono';
+}
+
+/** Fattori: "50 × 1.5 (bi) × 1.5 (artifact)" */
+function formatCostFactors(b) {
+  const bits = [
+    mxpNumberString(b.baseRaw),
+    `× ${b.classMult} (${classCountWord(b.classes)})`,
+  ];
+  if (b.withArt) bits.push(`× ${b.artMult} (artifact)`);
+  return bits.join(' ');
+}
+
+/** Solo i fattori; l'importo in evidenza e' gia' l'addebito. */
+function formatQuoteCostDetail(b) {
+  if (!b || b.free) return '';
+  let detail = `Dettaglio costo: ${formatCostFactors(b)}`;
+  if (b.editpool && b.runeAlt > 0) {
+    detail += ` · oppure ${b.runeAlt} ${currencyLabel('rune')}`;
+  }
+  return detail;
+}
+
+function formatQuoteCostCartHtml(quote) {
+  const b = quoteCostBreakdown(quote);
+  if (b.free) {
+    return {
+      html: '<span class="edit-cart-cost-main">gratis</span>',
+      chargeRaw: 0,
+      classes: b.classes,
+      editpool: b.editpool,
+    };
+  }
+  /* Importo = quanto si addebita (totale oggetti / cifra editpool sul pool). */
+  const main = formatMxpRaw(b.chargeRaw);
+  const detail = formatQuoteCostDetail(b);
+  const html = detail
+    ? `<span class="edit-cart-cost-main">${escapeHtml(main)}</span><span class="edit-cart-cost-detail">${escapeHtml(detail)}</span>`
+    : `<span class="edit-cart-cost-main">${escapeHtml(main)}</span>`;
+  return {
+    html,
+    chargeRaw: b.chargeRaw,
+    classes: b.classes,
+    editpool: b.editpool,
+  };
+}
+
+function formatCartItemsTotalHtml(items) {
+  let chargeRaw = 0;
+  for (const it of items) {
+    const b = quoteCostBreakdown(it.quote);
+    chargeRaw += b.chargeRaw || 0;
+  }
+  const main = chargeRaw > 0 ? formatMxpRaw(chargeRaw) : 'gratis';
+  const html = `<span class="edit-cart-cost-main">${escapeHtml(main)}</span>`;
+  return { html, chargeRaw, main };
+}
+
 function isObjectPendingType(type) {
-  return type === 'object' || type === 'object-batch' || type === 'object-text';
+  return (
+    type === 'object' ||
+    type === 'object-batch' ||
+    type === 'object-text' ||
+    type === 'checkout-batch'
+  );
 }
 
 function isCharacterPendingType(type) {
-  return type === 'pool' || type === 'resistance' || type === 'character-batch';
+  return (
+    type === 'pool' ||
+    type === 'resistance' ||
+    type === 'char-affect' ||
+    type === 'character-batch' ||
+    type === 'checkout-batch'
+  );
+}
+
+function inventoryShortLabel(inventoryId) {
+  const it = inventoryItemsCache.find(
+    (row) => Number(row.inventory_id) === Number(inventoryId)
+  );
+  if (!it) return `pezzo #${inventoryId}`;
+  return stripMudColorCodes(it.short_desc || it.name || `pezzo #${inventoryId}`);
+}
+
+function stashCurrentObjectCart() {
+  if (!selectedInventoryId) return;
+  const invId = Number(selectedInventoryId);
+  if (objectEditCart.size) {
+    objectCartsByInv.set(invId, new Map(objectEditCart));
+  } else {
+    objectCartsByInv.delete(invId);
+  }
+  const draft = getObjectTextDraft();
+  if (draft && objectTextDraftIsDirty(draft)) {
+    objectTextDraftsByInv.set(invId, { ...draft });
+  } else if (!objectEditCart.size) {
+    objectTextDraftsByInv.delete(invId);
+  }
+}
+
+function restoreObjectCart(inventoryId) {
+  const invId = Number(inventoryId);
+  const saved = objectCartsByInv.get(invId);
+  objectEditCart = saved ? new Map(saved) : new Map();
+}
+
+function clearAllObjectCarts({ resetSelectors = false } = {}) {
+  objectCartRequoteGen += 1;
+  if (resetSelectors) {
+    objectEditCart.forEach((it) => {
+      if (it.selectEl && it.selectEl.dataset.current != null) {
+        it.selectEl.value = it.selectEl.dataset.current;
+      }
+    });
+  }
+  objectEditCart.clear();
+  objectCartsByInv.clear();
+  objectTextDraftsByInv.clear();
+}
+
+function collectGlobalCheckoutItems() {
+  stashCurrentObjectCart();
+  const items = [];
+  for (const [invId, cart] of objectCartsByInv.entries()) {
+    const piece = inventoryShortLabel(invId);
+    const opts = objectOptionsCache.get(Number(invId));
+    const entries = Array.isArray(opts?.entries) ? opts.entries : [];
+    const artEntry = entries.find((e) => e.kind === 'flag' && e.flag === 'artifact');
+    const alreadyArt = Number(artEntry?.current || 0) === 1;
+    const useArt =
+      alreadyArt ||
+      [...cart.values()].some(
+        (it) => it.flag === 'artifact' && Number(it.targetModifier) === 1
+      );
+    for (const it of cart.values()) {
+      items.push({
+        ...it,
+        type: 'object',
+        inventoryId: Number(invId),
+        usesArtifactPricing: it.flag !== 'artifact' && useArt,
+        label: `${piece}: ${it.label}`,
+        pieceLabel: piece,
+      });
+    }
+  }
+  for (const it of characterEditCart.values()) {
+    items.push({ ...it, pieceLabel: 'PG' });
+  }
+  return items;
+}
+
+function rebuildGlobalPendingFromCarts() {
+  const items = collectGlobalCheckoutItems();
+  if (!items.length) {
+    pendingEdit = null;
+    updateObjectCartUI();
+    updateCharacterCartUI();
+    updatePaymentUI();
+    markInventoryQueued();
+    return;
+  }
+  const totals = sumQuotes(items);
+  const labels = items.map((it) => it.label);
+  const notes = [];
+  items.forEach((it) => {
+    const n = String(it.quote?.note || '');
+    if (n && !isRedundantCostNote(n)) notes.push(n);
+  });
+  const objCount = items.filter((it) => it.type === 'object' || it.inventoryId).length;
+  const charCount = items.length - objCount;
+  let note = notes.find((n) => /malus|rimuovi|spezzat|gratis|baseline/i.test(String(n)));
+  if (!note && items.length > 1) {
+    const parts = [];
+    if (objCount) parts.push(`${objCount} edit oggetto`);
+    if (charCount) parts.push(`${charCount} edit personaggio`);
+    note = `${parts.join(' + ')} — un solo Applica tutto`;
+  }
+  pendingEdit = {
+    type: 'checkout-batch',
+    entryId: 'checkout-batch',
+    label: labels.join('\n'),
+    quote: { ...totals, note },
+    items,
+  };
+  updateObjectCartUI();
+  updateCharacterCartUI();
+  updatePaymentUI();
+  markInventoryQueued();
+}
+
+function markInventoryQueued() {
+  const queued = new Set(
+    [...objectCartsByInv.keys()].map((id) => Number(id)).filter((id) => {
+      const cart = objectCartsByInv.get(id);
+      return cart && cart.size > 0;
+    })
+  );
+  if (selectedInventoryId && objectEditCart.size) {
+    queued.add(Number(selectedInventoryId));
+  }
+  document.querySelectorAll('#inventory-list .item').forEach((li) => {
+    const inv = Number(li.title?.match(/inventory_id (\d+)/)?.[1] || 0);
+    /* title e' "inventory_id N" solo se editable — fallback via onclick closure non disponibile */
+    li.classList.toggle('item-queued', false);
+  });
+  /* Usa cache inventario + dataset per marcare le li in ordine */
+  const list = $('inventory-list');
+  if (!list) return;
+  const lis = [...list.querySelectorAll('.item')];
+  const sorted = sortInventoryItems(inventoryItemsCache, getInventorySortMode());
+  sorted.forEach((it, idx) => {
+    const li = lis[idx];
+    if (!li) return;
+    li.classList.toggle(
+      'item-queued',
+      queued.has(Number(it.inventory_id))
+    );
+  });
+}
+
+function listinoParamNumber(key, fallback) {
+  const rows = listinoSnapshot?.params;
+  if (!Array.isArray(rows)) return fallback;
+  const row = rows.find((r) => r.param_key === key);
+  const n = row != null ? Number(row.param_value) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Metadati class_mult / artifact sulle quote oggetto (anche da myst). */
+function enrichObjectQuoteMeta(qd, opts = {}) {
+  if (!qd || typeof qd !== 'object') return qd;
+  const classes = quoteNClasses(qd);
+  if (qd.n_classes == null) qd.n_classes = classes;
+  if (qd.class_mult == null) qd.class_mult = quoteClassMultValue(qd, classes);
+  if (qd.apply_artifact == null) {
+    const pending = !!(opts.pendingArtifact || opts.pending_artifact);
+    qd.apply_artifact =
+      pending ||
+      objectAlreadyArtifact() ||
+      !!Number(qd.artifact) ||
+      !!Number(qd.pending_artifact)
+        ? 1
+        : 0;
+  }
+  return qd;
+}
+
+/** class_mult listino Artifact/affect: bi 1.5 / tri 2 (mai 1 se il PG e' bi/tri). */
+function resolveListinoClassMult(opts) {
+  const classes = Number(
+    opts?.owner_classes || charState?.n_classes || charState?.owner_classes || 0
+  );
+  if (classes >= 3) return listinoParamNumber('class_mult_tri', 2);
+  if (classes === 2) return listinoParamNumber('class_mult_bi', 1.5);
+  const fromOpts = Number(opts?.class_mult);
+  if (Number.isFinite(fromOpts) && fromOpts > 0) return fromOpts;
+  const fromChar = Number(charState?.class_mult);
+  if (Number.isFinite(fromChar) && fromChar > 0) return fromChar;
+  return 1;
+}
+
+/**
+ * Quote Artifact da solo: artifact_cost_raw * storage_scale * class_mult
+ * (come EditArtifactFlagListinoCost). Mai artifact_mult su questa voce.
+ */
+function localArtifactQuote(opts, entry) {
+  const raw = listinoParamNumber('artifact_cost_raw', 10000);
+  const scale = listinoParamNumber('storage_scale', 10000);
+  const classMult = resolveListinoClassMult(opts);
+  const xpRaw = Math.round(raw * scale * classMult);
+  return {
+    xp_raw: xpRaw,
+    diff_xp_raw: xpRaw,
+    mxp: Math.floor(xpRaw / PQ_PER_MEGA_XP),
+    mxp_frac: Math.floor((xpRaw % PQ_PER_MEGA_XP) / 10000),
+    diff_rune: 0,
+    current: Number(entry?.current || 0),
+    target: 1,
+    note: `Artifact da solo: ${Math.floor(
+      xpRaw / PQ_PER_MEGA_XP
+    )} MXP (100 x class_mult ${classMult}, senza +50%)`,
+    artifact_bundled: false,
+  };
+}
+
+/** Affect pagati in coda (escluso flag Artifact e clear gratis). */
+function objectCartHasPaidNonArtifact(cart = objectEditCart) {
+  return [...cart.values()].some((it) => {
+    if (it.flag === 'artifact') return false;
+    if (it.clearSlot) return false;
+    const xp = Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
+    const rune = Number(it.quote?.diff_rune || it.quote?.pq || 0);
+    return xp > 0 || rune > 0;
+  });
+}
+
+/**
+ * Regola portale (non broker): Artifact da solo = listino flag;
+ * Artifact + altri edit sullo stesso pezzo = voce Artifact a 0 (il +50%
+ * e' gia' nel listino affect / AnalyzeObjEditAgainst).
+ */
+function syncArtifactLineInCart(cart = objectEditCart) {
+  let artKey = null;
+  let art = null;
+  for (const [k, it] of cart.entries()) {
+    if (it.flag === 'artifact') {
+      artKey = k;
+      art = it;
+      break;
+    }
+  }
+  if (!art) return;
+  const baseLabel = String(art.label || 'Artifact: No → Sì')
+    .replace(/\s*\(pacchetto[^)]*\)/gi, '')
+    .trim();
+  if (objectCartHasPaidNonArtifact(cart)) {
+    art.artifactBundled = true;
+    art.quote = {
+      xp_raw: 0,
+      diff_xp_raw: 0,
+      mxp: 0,
+      mxp_frac: 0,
+      diff_rune: 0,
+      current: Number(art.quote?.current ?? art.entry?.current ?? 0),
+      target: 1,
+      note: 'Artifact in pacchetto: senza costo proprio; gli affect usano listino con +50%',
+      artifact_bundled: true,
+    };
+    art.label = `${baseLabel} (pacchetto: gratis)`;
+  } else {
+    art.artifactBundled = false;
+    art.quote = localArtifactQuote(selectedObjectOptions, art.entry);
+    art.label = baseLabel;
+  }
+  cart.set(artKey, art);
+}
+
+async function ensureListinoSnapshot(force = false) {
+  if (listinoSnapshot && !force) return listinoSnapshot;
+  const data = await api('/api/listino');
+  if (!data.ok) return null;
+  listinoSnapshot = {
+    affect: data.affect || [],
+    pool: data.pool || [],
+    params: data.params || [],
+    meta: data.meta || [],
+    cap_groups: data.cap_groups || [],
+  };
+  return listinoSnapshot;
 }
 
 function sumQuotes(items) {
   let xpRaw = 0;
   let rune = 0;
   items.forEach((it) => {
-    xpRaw += Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
-    rune += Number(it.quote?.diff_rune || it.quote?.pq || 0);
+    /* Solo costi >= 0: niente crediti fantasma da quote stale. */
+    const xp = Number(it.quote?.xp_raw || it.quote?.diff_xp_raw || 0);
+    const r = Number(it.quote?.diff_rune || it.quote?.pq || 0);
+    if (Number.isFinite(xp) && xp > 0) xpRaw += xp;
+    if (Number.isFinite(r) && r > 0) rune += r;
   });
   return {
     xp_raw: xpRaw,
@@ -489,22 +1255,18 @@ function renderEditCartBox(el, items, emptyHint) {
     return;
   }
   const rows = items
-    .map(
-      (it) =>
-        `<div class="edit-cart-line"><span class="edit-cart-label">${escapeHtml(
-          it.label
-        )}</span><span class="edit-cart-cost">${escapeHtml(
-          formatQuoteCostShort(it.quote)
-        )}</span></div>`
-    )
+    .map((it) => {
+      const cost = formatQuoteCostCartHtml(it.quote);
+      return `<div class="edit-cart-line"><span class="edit-cart-label">${escapeHtml(
+        it.label
+      )}</span><span class="edit-cart-cost">${cost.html}</span></div>`;
+    })
     .join('');
-  const totals = sumQuotes(items);
+  const tot = formatCartItemsTotalHtml(items);
   el.innerHTML = `
     <div class="edit-cart-title">In coda (${items.length})</div>
     ${rows}
-    <div class="edit-cart-total">Totale listino: <strong>${escapeHtml(
-      formatQuoteCostShort(totals)
-    )}</strong></div>
+    <div class="edit-cart-total">Totale listino: <strong class="edit-cart-cost">${tot.html}</strong></div>
     <p class="hint edit-cart-hint">${escapeHtml(emptyHint || '')}</p>
   `;
   el.classList.remove('hidden');
@@ -517,19 +1279,24 @@ function updateCharacterCartUI() {
     items,
     'Costi aggiornati a ogni selettore. Paga dal pannello in basso.'
   );
-  document.querySelectorAll('#pool-edits .edit-row, #resistance-edits .edit-row').forEach((row) => {
-    const key = row.dataset.cartKey;
-    row.classList.toggle('edit-row--dirty', key && characterEditCart.has(key));
-  });
+  document
+    .querySelectorAll('#pool-edits .edit-row, #resistance-edits .edit-row')
+    .forEach((row) => {
+      const key = row.dataset.cartKey;
+      row.classList.toggle('edit-row--dirty', key && characterEditCart.has(key));
+    });
 }
 
 function updateObjectCartUI() {
   const items = [...objectEditCart.values()];
-  renderEditCartBox(
-    $('object-edit-cart'),
-    items,
-    'Costi aggiornati a ogni selettore. Paga dal pannello in basso.'
-  );
+  const otherPieces = [...objectCartsByInv.entries()].filter(
+    ([id, cart]) => Number(id) !== Number(selectedInventoryId) && cart.size
+  ).length;
+  const hint =
+    otherPieces > 0
+      ? `Altri ${otherPieces} pezzi in coda globale. Un solo «Applica tutto» in basso.`
+      : 'Coda pezzo corrente. Puoi cambiare oggetto e aggiungere altro prima di applicare.';
+  renderEditCartBox($('object-edit-cart'), items, hint);
   document.querySelectorAll('#object-edits .edit-row').forEach((row) => {
     const key = row.dataset.cartKey;
     row.classList.toggle('edit-row--dirty', key && objectEditCart.has(key));
@@ -545,53 +1312,16 @@ function clearCharacterEditCart({ resetSelectors = false } = {}) {
     });
   }
   characterEditCart.clear();
-  if (isCharacterPendingType(pendingEdit?.type)) {
-    pendingEdit = null;
-  }
-  updateCharacterCartUI();
-  updatePaymentUI();
+  rebuildGlobalPendingFromCarts();
 }
 
 function rebuildCharacterPendingFromCart() {
-  if (!characterEditCart.size) {
-    if (isCharacterPendingType(pendingEdit?.type)) {
-      pendingEdit = null;
-    }
-    updateCharacterCartUI();
-    updatePaymentUI();
-    return;
-  }
-  const items = [...characterEditCart.values()];
-  const totals = sumQuotes(items);
-  const labels = items.map((it) => it.label);
-  pendingEdit = {
-    type: 'character-batch',
-    entryId: 'character-batch',
-    label: labels.join('\n'),
-    quote: {
-      ...totals,
-      note:
-        items.length > 1
-          ? `${items.length} edit personaggio in coda (costi sommati)`
-          : undefined,
-    },
-    items,
-  };
-  updateCharacterCartUI();
-  updatePaymentUI();
+  rebuildGlobalPendingFromCarts();
 }
 
-function ensureCharacterCartExclusive() {
-  if (objectEditCart.size || isObjectPendingType(pendingEdit?.type)) {
-    clearObjectEditCart({ resetSelectors: true });
-  }
-}
-
-function ensureObjectCartExclusive() {
-  if (characterEditCart.size || isCharacterPendingType(pendingEdit?.type)) {
-    clearCharacterEditCart({ resetSelectors: true });
-  }
-}
+/** Carrello globale: oggetto e personaggio possono stare nello stesso pacchetto. */
+function ensureCharacterCartExclusive() {}
+function ensureObjectCartExclusive() {}
 
 function validatePayment(plan) {
   if (!charState) return { ok: false, reason: 'Stato PG non caricato' };
@@ -617,22 +1347,46 @@ function updatePaymentUI() {
     hide('payment-panel');
     document.body.classList.remove('payment-dock-open');
     document.body.classList.remove('payment-insufficient');
+    if ($('btn-pay-edit')) $('btn-pay-edit').disabled = true;
+    if ($('btn-pay-edit-logout')) $('btn-pay-edit-logout').disabled = true;
     return;
   }
   show('payment-panel');
   document.body.classList.add('payment-dock-open');
 
-  const mode = $('pay-mode').value;
   const runePct = Number($('pay-rune-pct').value);
+  const mode = syncPayModeFromSlider();
   $('pay-rune-pct-label').textContent = `${runePct}%`;
-  $('rune-pct-wrap').classList.toggle('hidden', mode !== 'mix');
+  const runePctWrap = $('rune-pct-wrap');
+  if (runePctWrap) runePctWrap.classList.remove('hidden');
+  refreshPayModeLabels();
 
   const plan = buildPendingPaymentPlan(pendingEdit, mode, runePct);
   const check = validatePayment(plan);
+  if (runePctWrap) {
+    const tenderLab =
+      $('pay-tender')?.selectedOptions?.[0]?.textContent || currencyLabel('mxp');
+    const mixHint = plan.editpoolPay
+      ? `% listino ${currencyLabel('rune')} (resto in ${tenderLab})`
+      : `% copertura con ${currencyLabel('rune')} (resto in ${tenderLab})`;
+    const first = runePctWrap.childNodes[0];
+    if (first && first.nodeType === Node.TEXT_NODE) {
+      first.textContent = `${mixHint} `;
+    }
+  }
   document.body.classList.toggle('payment-insufficient', !check.ok);
   panel.classList.toggle('payment-dock--insufficient', !check.ok);
 
-  const cartItems = Array.isArray(pendingEdit.items) ? pendingEdit.items : null;
+  /* Artifact in pacchetto (costo 0): non mostrarlo come riga a pagamento. */
+  const cartItems = Array.isArray(pendingEdit.items)
+    ? pendingEdit.items.filter(
+        (it) =>
+          !(
+            it.flag === 'artifact' &&
+            (it.artifactBundled || it.quote?.artifact_bundled)
+          )
+      )
+    : null;
   const lines = cartItems
     ? cartItems.map((it) => it.label)
     : String(pendingEdit.label || '')
@@ -652,27 +1406,32 @@ function updatePaymentUI() {
 
   const labelHtml = cartItems
     ? cartItems
-        .map(
-          (it) =>
-            `<div class="payment-cart-line"><span>${escapeHtml(
-              it.label
-            )}</span><span class="payment-cart-cost">${escapeHtml(
-              formatQuoteCostShort(it.quote)
-            )}</span></div>`
-        )
+        .map((it) => {
+          const cost = formatQuoteCostCartHtml(it.quote);
+          return `<div class="payment-cart-line"><span>${escapeHtml(
+            it.label
+          )}</span><span class="payment-cart-cost">${cost.html}</span></div>`;
+        })
         .join('')
     : lines.map((line) => escapeHtml(line)).join('<br>');
 
+  const cartTot = cartItems
+    ? formatCartItemsTotalHtml(cartItems)
+    : formatQuoteCostCartHtml(pendingEdit.quote || {});
+  const listinoBlock = `<div class="payment-cost-line"><span class="payment-cost-label">Costo listino</span><div class="edit-cart-cost payment-cost-value">${
+    cartTot.html || escapeHtml(plan.displayMxp)
+  }</div></div>`;
+
+  const specialNote =
+    pendingEdit.quote?.note && !isRedundantCostNote(pendingEdit.quote.note)
+      ? pendingEdit.quote.note
+      : '';
   $('payment-summary').innerHTML = `
     <div class="payment-queue-list">${labelHtml}</div>
-    <div class="payment-cost-line">
-      Costo listino: <strong>${plan.displayMxp}</strong>
-      ${plan.runeAlt ? ` oppure <strong>${plan.runeAlt} ${currencyLabel('rune')}</strong>` : ''}
-      ${plan.runeListino ? ` (+ ${plan.runeListino} ${currencyLabel('rune')} rent)` : ''}
-    </div>
+    ${listinoBlock}
     ${
-      pendingEdit.quote?.note
-        ? `<div class="slot-hint">${escapeHtml(pendingEdit.quote.note)}</div>`
+      specialNote
+        ? `<div class="slot-hint">${escapeHtml(specialNote)}</div>`
         : ''
     }
   `;
@@ -683,10 +1442,13 @@ function updatePaymentUI() {
       }${!check.okRune ? ` (${currencyLabel('rune')})` : ''}.</div>`
     : '';
 
+  const payRunePart =
+    Number(plan.payRune) > 0
+      ? ` + <strong>${plan.payRune} ${currencyLabel('rune')}</strong>`
+      : '';
   $('payment-breakdown').innerHTML = `
     <div class="payment-pay-line">
-      Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong>
-      + <strong>${plan.payRune} ${currencyLabel('rune')}</strong>
+      Pagherai: <strong>${plan.payXp.toLocaleString('it-IT')} XP</strong>${payRunePart}
     </div>
     <div class="payment-avail-line">
       Disponibili: ${formatMxp(charState.available_mxp || 0, charState.available_mxp_frac || 0)}
@@ -698,6 +1460,8 @@ function updatePaymentUI() {
   `;
 
   $('btn-pay-edit').disabled = !check.ok;
+  const btnLogout = $('btn-pay-edit-logout');
+  if (btnLogout) btnLogout.disabled = !check.ok;
   pendingEdit.plan = plan;
 }
 
@@ -705,12 +1469,22 @@ async function refreshMe() {
   const me = await api('/api/me');
   if (!me.ok) {
     session = null;
+    targetToonId = null;
     pendingEdit = null;
-    clearObjectEditCart();
-    clearCharacterEditCart();
+    clearAllObjectCarts();
+    characterEditCart.clear();
+    objectOptionsCache.clear();
+    listinoSnapshot = null;
+    toonEditSnapshot = null;
     document.body.classList.remove('payment-dock-open');
     document.body.classList.remove('payment-insufficient');
     applyLoginUiMode();
+    if ($('header-meta')) {
+      $('header-meta').textContent = `UI build ${EDIT_PORTAL_UI_BUILD}`;
+    }
+    if ($('toon-list')) $('toon-list').innerHTML = '';
+    if ($('char-stats')) $('char-stats').textContent = '';
+    if ($('apply-result')) $('apply-result').textContent = '';
     show('login-panel');
     hide('toon-panel');
     hide('work-panel');
@@ -943,12 +1717,12 @@ function resistLine(label, entry) {
   return `<li>${escapeHtml(label)} ${ynMark(present)}${origin}</li>`;
 }
 
-function meterLine(label, used, cap, remaining) {
+function meterLine(label, used, cap, remaining, remainWord = 'ancora') {
   const u = Number(used) || 0;
   const c = Number(cap) || 0;
   const r = remaining != null ? Number(remaining) : Math.max(0, c - u);
   return `<div class="ov-meter"><span class="ov-meter-label">${escapeHtml(label)}</span>` +
-    `<strong>${u}/${c}</strong><span class="ov-remain">ancora ${r}</span></div>`;
+    `<strong>${u}/${c}</strong><span class="ov-remain">${escapeHtml(remainWord)} ${r}</span></div>`;
 }
 
 function meterLineWithNote(label, entry) {
@@ -957,6 +1731,41 @@ function meterLineWithNote(label, entry) {
     ? `<div class="ov-meter-note">${escapeHtml(entry.note)}</div>`
     : '';
   return line + note;
+}
+
+/** Riepilogo DAM+SP: tetto condiviso 30 (non 30+30). */
+function damSpOverviewMeters(main) {
+  const shared = main?.dam_sp;
+  const dam = main?.dam || {};
+  const sp = main?.spellpower || {};
+  if (shared && shared.cap != null) {
+    const used = Number(shared.used) || 0;
+    const cap = Number(shared.cap) || 0;
+    const rem =
+      shared.remaining != null ? Number(shared.remaining) : Math.max(0, cap - used);
+    const damU =
+      shared.dam_used != null ? Number(shared.dam_used) : Number(dam.used) || 0;
+    const spU =
+      shared.sp_used != null ? Number(shared.sp_used) : Number(sp.used) || 0;
+    const note = shared.note
+      ? `<div class="ov-meter-note">${escapeHtml(shared.note)}</div>`
+      : '';
+    return (
+      meterLine('DAM+SP editato', used, cap, rem) +
+      `<div class="ov-meter-note">di cui Dam ${damU} · Spellpower ${spU}</div>` +
+      note
+    );
+  }
+  /* Fallback API vecchia: ricalcola remaining sul pool condiviso. */
+  const damU = Number(dam.used) || 0;
+  const spU = Number(sp.used) || 0;
+  const cap = Number(dam.cap || sp.cap || 30) || 30;
+  const used = damU + spU;
+  const rem = Math.max(0, cap - used);
+  return (
+    meterLine('DAM+SP editato', used, cap, rem) +
+    `<div class="ov-meter-note">di cui Dam ${damU} · Spellpower ${spU} (tetto condiviso)</div>`
+  );
 }
 
 function isToolsColumnOpen() {
@@ -974,7 +1783,7 @@ function syncToolsColumnUI() {
   if (btn) {
     btn.classList.toggle('btn-active', open);
     btn.setAttribute('aria-pressed', open ? 'true' : 'false');
-    btn.textContent = open ? 'Nascondi opzioni sistema' : 'Opzioni sistema';
+    btn.textContent = open ? 'Nascondi colonna' : 'Opzioni sistema';
   }
 }
 
@@ -985,13 +1794,399 @@ function setToolsColumnOpen(open) {
 
 function initStaffToolsColumn() {
   show('btn-toggle-tools');
+  show('staff-view-wrap');
   syncToolsColumnUI();
+  const sel = $('staff-view-select');
+  if (sel && !sel.dataset.bound) {
+    sel.dataset.bound = '1';
+    sel.addEventListener('change', () => setStaffView(sel.value));
+  }
+  document.querySelectorAll('.staff-economy-tab').forEach((btn) => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => setEconomyTab(btn.dataset.econTab));
+  });
+  setStaffView(sel?.value || 'edit');
 }
 
 function hideStaffToolsColumn() {
   hide('btn-toggle-tools');
+  hide('staff-view-wrap');
   hide('tools-column');
+  hide('staff-economy-page');
   $('work-layout')?.classList.remove('layout--tools-open');
+  $('work-layout')?.classList.remove('work-layout-economy-hidden');
+}
+
+function setEconomyTab(tab) {
+  const want = tab === 'listino' ? 'listino' : 'currencies';
+  document.querySelectorAll('.staff-economy-tab').forEach((btn) => {
+    const on = btn.dataset.econTab === want;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  $('staff-econ-currencies')?.classList.toggle('hidden', want !== 'currencies');
+  $('staff-econ-listino')?.classList.toggle('hidden', want !== 'listino');
+  if (want === 'listino' && !listinoAdminState) {
+    loadListinoAdmin().catch(() => {});
+  }
+}
+
+function setStaffView(view) {
+  const v = view === 'economy' || view === 'ops' ? view : 'edit';
+  const sel = $('staff-view-select');
+  if (sel && sel.value !== v) sel.value = v;
+
+  const economy = $('staff-economy-page');
+  const layout = $('work-layout');
+  const toolsBtn = $('btn-toggle-tools');
+
+  if (v === 'economy') {
+    show('staff-economy-page');
+    layout?.classList.add('work-layout-economy-hidden');
+    hide('tools-column');
+    layout?.classList.remove('layout--tools-open');
+    if (toolsBtn) toolsBtn.classList.add('hidden');
+    setEconomyTab(
+      document.querySelector('.staff-economy-tab.is-active')?.dataset.econTab ||
+        'currencies',
+    );
+    return;
+  }
+
+  hide('staff-economy-page');
+  layout?.classList.remove('work-layout-economy-hidden');
+  if (toolsBtn) toolsBtn.classList.remove('hidden');
+
+  if (v === 'ops') {
+    setToolsColumnOpen(true);
+  } else {
+    syncToolsColumnUI();
+  }
+}
+
+function syncLabPanelVisibility(me) {
+  const labOn = !!(me && (me.labEnabled || Number(me.maxLevel || 0) >= Number(me.labLevel || 58)));
+  if (labOn) {
+    show('lab-panel');
+    show('lab-clone-hint');
+  } else {
+    hide('lab-panel');
+    hide('lab-clone-hint');
+  }
+  refreshLabTargetStats();
+}
+
+const PRINCE_EXP_RESERVE = 400000000;
+let labSelectedObj = null;
+let labObjSearchTimer = null;
+
+function labPrinceReserveForTarget() {
+  const lvl = Number(charState?.max_level || 0);
+  return lvl >= PRINCE_LEVEL ? PRINCE_EXP_RESERVE : 0;
+}
+
+function formatLabMxp(availableXp) {
+  const v = Math.max(0, Number(availableXp) || 0);
+  const mega = Math.floor(v / 1000000);
+  const frac = Math.floor((v % 1000000) / 10000);
+  return `${mega},${String(frac).padStart(2, '0')} MXP`;
+}
+
+function refreshLabTargetStats() {
+  const el = $('lab-target-stats');
+  if (!el) return;
+  const tid = getTargetToonId();
+  if (!tid) {
+    el.textContent = 'Seleziona un target per vedere XP/Rune.';
+    updateLabStatPreviews();
+    return;
+  }
+  const s = charState;
+  if (!s) {
+    el.textContent = `Target #${tid}: carica lo stato PG per vedere XP/Rune.`;
+    updateLabStatPreviews();
+    return;
+  }
+  const exp = s.exp != null ? s.exp : '(n/d)';
+  const rune = s.rune != null ? s.rune : '(n/d)';
+  const reserve = labPrinceReserveForTarget();
+  const avail = s.exp != null ? Math.max(0, Number(s.exp) - reserve) : 0;
+  el.textContent =
+    `Target #${tid} ${s.name || ''}: XP ${exp} · Rune ${rune}` +
+    (s.exp != null ? ` · editabili ora ${formatLabMxp(avail)}` : '');
+  if ($('lab-exp') && ( $('lab-exp').value === '' || $('lab-exp').value == null) && s.exp != null) {
+    $('lab-exp').placeholder = String(s.exp);
+  }
+  if ($('lab-rune') && ($('lab-rune').value === '' || $('lab-rune').value == null) && s.rune != null) {
+    $('lab-rune').placeholder = String(s.rune);
+  }
+  updateLabStatPreviews();
+}
+
+/** Anteprima live: XP/Rune disponibili per edit dopo il valore digitato. */
+function updateLabStatPreviews() {
+  const expPrev = $('lab-exp-preview');
+  const runePrev = $('lab-rune-preview');
+  const reserve = labPrinceReserveForTarget();
+  const expRaw = $('lab-exp')?.value;
+  if (expPrev) {
+    if (expRaw === '' || expRaw == null) {
+      const cur = charState?.exp;
+      if (cur == null) {
+        expPrev.textContent = 'Disponibili per edit: —';
+      } else {
+        const avail = Math.max(0, Number(cur) - reserve);
+        expPrev.textContent =
+          `Disponibili per edit (attuale): -${avail.toLocaleString('it-IT')} XP` +
+          ` (${formatLabMxp(avail)})`;
+      }
+    } else {
+      const exp = Number(expRaw);
+      if (!Number.isFinite(exp) || exp < 0) {
+        expPrev.textContent = 'Disponibili per edit: valore non valido';
+      } else {
+        const avail = Math.max(0, exp - reserve);
+        const note =
+          reserve > 0
+            ? ` (riserva principi ${reserve.toLocaleString('it-IT')} XP)`
+            : '';
+        expPrev.textContent =
+          `Disponibili per edit: -${avail.toLocaleString('it-IT')} XP` +
+          ` (${formatLabMxp(avail)})${note}`;
+      }
+    }
+  }
+  if (runePrev) {
+    const runeRaw = $('lab-rune')?.value;
+    if (runeRaw === '' || runeRaw == null) {
+      const cur = charState?.rune;
+      runePrev.textContent =
+        cur == null
+          ? 'Rune disponibili per edit: —'
+          : `Rune disponibili per edit (attuale): ${Number(cur).toLocaleString('it-IT')}`;
+    } else {
+      const rune = Number(runeRaw);
+      runePrev.textContent =
+        !Number.isFinite(rune) || rune < 0
+          ? 'Rune disponibili per edit: valore non valido'
+          : `Rune disponibili per edit: ${rune.toLocaleString('it-IT')}`;
+    }
+  }
+}
+
+function labResult(msg, { isError = false } = {}) {
+  const el = $('lab-result');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.classList.toggle('warn', !!isError);
+  if (msg) {
+    try {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function renderLabObjSelected() {
+  const el = $('lab-obj-selected');
+  if (!el) return;
+  if (!labSelectedObj) {
+    el.textContent = 'Nessun oggetto selezionato.';
+    return;
+  }
+  el.textContent = `Selezionato: #${labSelectedObj.vnum} ${labSelectedObj.short_desc || labSelectedObj.name || ''}`;
+}
+
+async function labSearchObjects(q) {
+  const list = $('lab-obj-results');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!q || q.length < 2) return;
+  const data = await api(`/api/lab/search-objects?q=${encodeURIComponent(q)}`);
+  if (!data.ok) {
+    labResult(data.error || 'ricerca oggetti fallita');
+    return;
+  }
+  const rows = data.data?.results || [];
+  if (!rows.length) {
+    const li = document.createElement('li');
+    li.className = 'hint';
+    li.textContent = 'Nessun oggetto trovato';
+    list.appendChild(li);
+    return;
+  }
+  rows.forEach((r) => {
+    const li = document.createElement('li');
+    li.className = 'lab-obj-item';
+    const label = `${r.short_desc || r.name || '(senza nome)'} · vnum ${r.vnum}`;
+    li.innerHTML = `<button type="button" class="linkish">${escapeHtml(label)}</button>`;
+    const btn = li.querySelector('button');
+    btn.onclick = () => {
+      labSelectedObj = {
+        vnum: Number(r.vnum),
+        name: r.name || '',
+        short_desc: r.short_desc || '',
+      };
+      renderLabObjSelected();
+      list.innerHTML = '';
+      if ($('lab-obj-search')) $('lab-obj-search').value = r.name || r.short_desc || '';
+    };
+    list.appendChild(li);
+  });
+}
+
+async function labSetStats() {
+  const tid = getTargetToonId();
+  if (!tid) {
+    labResult('Seleziona un personaggio target', { isError: true });
+    return;
+  }
+  const body = { targetToonId: tid };
+  const exp = $('lab-exp')?.value;
+  const rune = $('lab-rune')?.value;
+  if (exp !== '' && exp != null) body.exp = Number(exp);
+  if (rune !== '' && rune != null) body.rune = Number(rune);
+  if (body.exp == null && body.rune == null) {
+    labResult('Compila XP e/o Rune', { isError: true });
+    return;
+  }
+  if (body.exp != null && (!Number.isFinite(body.exp) || body.exp < 0)) {
+    labResult('XP non valido', { isError: true });
+    return;
+  }
+  if (body.exp != null && body.exp > LAB_EXP_CAP) {
+    labResult(
+      `XP fuori range: richiesto ${body.exp}, massimo ${LAB_EXP_CAP}`,
+      { isError: true },
+    );
+    return;
+  }
+  if (body.rune != null && (!Number.isFinite(body.rune) || body.rune < 0)) {
+    labResult('Rune non valide', { isError: true });
+    return;
+  }
+  if (body.rune != null && body.rune > LAB_EXP_CAP) {
+    labResult(
+      `Rune fuori range: richiesto ${body.rune}, massimo ${LAB_EXP_CAP}`,
+      { isError: true },
+    );
+    return;
+  }
+  labResult('Applicazione XP/Rune…');
+  try {
+    const data = await apiApply('/api/lab/set-stats', body, 'Lab XP/Rune', {
+      statusEl: $('lab-result'),
+    });
+    if (!data.ok) {
+      const err = data.error || 'errore lab set-stats';
+      labResult(err, { isError: true });
+      window.alert(err);
+      return;
+    }
+    const expOut = data.data?.exp;
+    const runeOut = data.data?.rune;
+    labResult(
+      `OK — XP ${expOut != null ? Number(expOut).toLocaleString('it-IT') : '?'} · Rune ${
+        runeOut != null ? Number(runeOut).toLocaleString('it-IT') : '?'
+      }`,
+    );
+    if ($('lab-exp')) $('lab-exp').value = '';
+    if ($('lab-rune')) $('lab-rune').value = '';
+    await loadCharacterState();
+    refreshLabTargetStats();
+  } catch (err) {
+    const msg = err && err.message ? String(err.message) : String(err);
+    labResult(msg, { isError: true });
+    window.alert(msg);
+  }
+}
+
+async function labGiveVnum() {
+  const tid = getTargetToonId();
+  if (!tid) {
+    labResult('Seleziona un personaggio target');
+    return;
+  }
+  const vnum = Number(labSelectedObj?.vnum);
+  const qty = Number($('lab-qty')?.value || 1);
+  if (!Number.isFinite(vnum) || vnum <= 0) {
+    labResult('Seleziona un oggetto dalla ricerca');
+    return;
+  }
+  labResult(`Carico vnum ${vnum} x${qty}…`);
+  const data = await apiApply(
+    '/api/lab/give-vnum',
+    { targetToonId: tid, vnum, qty },
+    'Lab dai oggetto',
+    { statusEl: $('lab-result') },
+  );
+  if (!data.ok) {
+    const err = data.error || 'errore lab give-vnum';
+    labResult(err, { isError: true });
+    window.alert(err);
+    return;
+  }
+  const created = Array.isArray(data.data?.created) ? data.data.created : [];
+  const n = created.length || qty;
+  const ids = created
+    .map((r) => r?.inventory_id)
+    .filter((id) => id != null)
+    .slice(0, 5)
+    .join(', ');
+  labResult(
+    `OK: creati ${n} oggetti (vnum ${vnum}` +
+      (ids ? `, inv ${ids}${created.length > 5 ? '…' : ''}` : '') +
+      ') — personalizzati sul target, ricarico inventario…',
+  );
+  await loadInventory();
+  const found = (inventoryItemsCache || []).filter((it) =>
+    created.some((c) => Number(c.inventory_id) === Number(it.inventory_id)),
+  );
+  if (created.length && found.length === 0) {
+    labResult(
+      `Creati ${n} pezzi (vnum ${vnum}) ma non compaiono in lista inventario: ` +
+        `controlla filtri RARO/categorie o ricarica la pagina.`,
+      { isError: true },
+    );
+  } else if (found.length) {
+    labResult(
+      `OK: ${found.length}/${n} in inventario (vnum ${vnum}` +
+        (ids ? `, inv ${ids}` : '') +
+        ')',
+    );
+  }
+}
+
+async function labCloneInstance(instanceId) {
+  const tid = getTargetToonId();
+  if (!tid) {
+    labResult('Seleziona un personaggio target prima di clonare');
+    return;
+  }
+  const ok = window.confirm(
+    `Clonare istanza #${instanceId} sull'inventario del target #${tid}?`,
+  );
+  if (!ok) return;
+  labResult(`Clono istanza #${instanceId}…`);
+  const data = await apiApply(
+    '/api/lab/clone-instance',
+    { targetToonId: tid, instanceId: Number(instanceId) },
+    'Lab clone',
+    { statusEl: $('lab-result') },
+  );
+  if (!data.ok) {
+    const err = data.error || 'errore lab clone-instance';
+    labResult(err, { isError: true });
+    window.alert(err);
+    return;
+  }
+  labResult(
+    `OK clone: nuova istanza #${data.data?.new_instance_id ?? '?'} ` +
+      `(inv #${data.data?.inventory_id ?? '?'})`,
+  );
+  await loadInventory();
 }
 
 function formatCommandsDetails(summary, open = false) {
@@ -1062,6 +2257,7 @@ function makePrinceToonCard(t) {
   const title = String(t.title || '').trim();
   const mxp = s ? Number(s.available_mxp) || 0 : 0;
   const mxpFrac = s ? Number(s.available_mxp_frac) || 0 : 0;
+  const runeN = s && s.rune != null ? Number(s.rune) : null;
 
   const head = document.createElement('div');
   head.className = 'toon-overview-head toon-overview-head-stack';
@@ -1070,7 +2266,11 @@ function makePrinceToonCard(t) {
     `<span class="toon-overview-meta">lv ${t.maxLevel}` +
     (title ? ` · ${mudTextToHtml(title)}` : '') +
     (grade ? ` · ${escapeHtml(grade)}` : '') +
-    ` · ${escapeHtml(formatMxp(mxp, mxpFrac))} disponibili</span>` +
+    ` · ${escapeHtml(formatMxp(mxp, mxpFrac))} disponibili` +
+    (runeN != null && Number.isFinite(runeN)
+      ? ` · ${escapeHtml(String(Math.trunc(runeN)))} ${escapeHtml(currencyLabel('rune'))}`
+      : '') +
+    `</span>` +
     moneyMetaLine(s) +
     `</div>`;
   card.appendChild(head);
@@ -1094,12 +2294,76 @@ function makePrinceToonCard(t) {
   const main = s.main_edits || {};
   const clan = s.clan_symbol || {};
   const pool = s.pool || {};
-  const poolWarn = pool.residual_on_objects
-    ? `<p class="ov-warn">${escapeHtml(
-        pool.warning ||
-          'Pool migrato sul PG ma restano delta sugli oggetti EDIT (stato misto).',
-      )}</p>`
+  const stripMudColors = (t) =>
+    String(t || '')
+      .replace(/\$\$/g, '$')
+      .replace(/\$c[0-9]{4}/gi, '')
+      .replace(/\$[cC]/g, '');
+  const residualObjs = Array.isArray(pool.residual_objects)
+    ? pool.residual_objects
+    : [];
+  const residualBits = (o) =>
+    [
+      o.hit ? `HIT ${o.hit}` : '',
+      o.mana ? `MANA ${o.mana}` : '',
+      o.move ? `MOVE ${o.move}` : '',
+      o.hit_regen ? `HRgn ${o.hit_regen}` : '',
+      o.mana_regen ? `MRgn ${o.mana_regen}` : '',
+      o.move_regen ? `VRgn ${o.move_regen}` : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
+  const onPg = pool.on_character !== false && pool.values_from !== 'objects';
+  const isStaffViewer = session?.role === 'staff';
+  const poolMigrated =
+    Number(pool.edit_pool_migrated ?? pool.migrated ?? 0) === 1;
+  const poolSource = isStaffViewer
+    ? pool.values_from === 'objects'
+      ? 'sorgente: oggetti EDIT'
+      : poolMigrated
+        ? 'sorgente: character_stats · migrato=1'
+        : 'sorgente: character_stats · migrato=0'
     : '';
+  const poolWarn = pool.warning
+    ? `<p class="ov-warn">${escapeHtml(String(pool.warning))}</p>`
+    : '';
+  const poolStaffWarn =
+    isStaffViewer && pool.staff_warning
+      ? `<p class="ov-warn ov-warn-staff">${escapeHtml(String(pool.staff_warning))}</p>`
+      : '';
+  const residualList =
+    residualObjs.length > 0
+      ? `<p class="ov-meter-note">${
+          onPg
+            ? 'Ancora presenti su oggetti EDIT (da ripulire):'
+            : 'Dettaglio pezzi che portano ancora HIT/MANA/MOVE/regen:'
+        }</p>
+      <ul class="ov-checklist ov-residual-list">${residualObjs
+        .map(
+          (o) =>
+            `<li><code>#${escapeHtml(String(o.item_number || ''))}</code> ${escapeHtml(
+              stripMudColors(String(o.short_desc || 'oggetto')),
+            )} <span class="ov-source">(${escapeHtml(
+              residualBits(o) || 'delta',
+            )})</span></li>`,
+        )
+        .join('')}</ul>`
+      : '';
+  const clanLabel = !clan.present
+    ? '<span class="ov-no">No</span>'
+    : clan.label
+      ? `<span class="ov-yes">${escapeHtml(String(clan.label))}</span>`
+      : `<span class="ov-yes">SI - del clan di ${escapeHtml(
+          String(clan.owner_name || s.name || 'sconosciuto'),
+        )}</span>`;
+  const poolFieldLabel = {
+    hit: 'Hit',
+    mana: 'Mana',
+    move: 'Move',
+    hit_regen: 'Hit regen',
+    mana_regen: 'Mana regen',
+    move_regen: 'Move regen',
+  };
   const body = document.createElement('div');
   body.className = 'toon-overview-body';
   body.innerHTML = `
@@ -1111,44 +2375,34 @@ function makePrinceToonCard(t) {
           ${resistLine('Res. Pierce', main.res_pierce)}
           ${resistLine('Res. Blunt', main.res_blunt)}
         </ul>
-        ${meterLineWithNote('Dam editato', main.dam)}
-        ${meterLineWithNote('Spellpower', main.spellpower)}
+        ${damSpOverviewMeters(main)}
         ${meterLine('Hitroll editato', main.hitroll?.used, main.hitroll?.cap, main.hitroll?.remaining)}
         ${meterLine('Spellfail editato', main.spellfail?.used, main.spellfail?.cap, main.spellfail?.remaining)}
       </div>
     </details>
     <details class="ov-collapse">
-      <summary>Residuo pool <span class="ov-source">(${
-        pool.source === 'character' ? 'sul PG' : 'sugli oggetti'
-      })</span></summary>
+      <summary>Pool sul PG <span class="ov-source">(editpool · hit/mana/move/regen)</span></summary>
       <div class="ov-collapse-body">
+        ${poolSource ? `<p class="ov-meter-note">${escapeHtml(poolSource)}</p>` : ''}
         ${poolWarn}
+        ${poolStaffWarn}
         ${(pool.fields || [])
           .map((f) =>
             meterLine(
-              ({
-                hit: 'Hit',
-                mana: 'Mana',
-                move: 'Move',
-                hit_regen: 'Hit regen',
-                mana_regen: 'Mana regen',
-                move_regen: 'Move regen',
-              })[f.key] || f.key,
+              poolFieldLabel[f.key] || f.key,
               f.used,
               f.cap,
               f.remaining,
+              'ancora editabili',
             ),
           )
           .join('')}
+        ${residualList}
       </div>
     </details>
     <div class="ov-block ov-clan">
       <h4>Simbolo del clan</h4>
-      <p>${
-        clan.present
-          ? '<span class="ov-yes">Sì</span> (origine principe/toon: da definire)'
-          : '<span class="ov-no">No</span>'
-      }</p>
+      <p>${clanLabel}</p>
     </div>
   `;
   card.appendChild(body);
@@ -1171,7 +2425,43 @@ async function selectAccountToon(toonId) {
     alert(sel.error);
     return;
   }
+  toonEditSnapshot = sel.snapshot || null;
   await refreshMe();
+}
+
+async function ensureToonEditSnapshot(force = false) {
+  if (!force && toonEditSnapshot && Number(toonEditSnapshot.toonId) === Number(targetToonId)) {
+    return toonEditSnapshot;
+  }
+  if (!targetToonId) return null;
+  const data = await api(`/api/toon-snapshot/${targetToonId}?refresh=${force ? 1 : 0}`);
+  if (data.ok) toonEditSnapshot = data.snapshot || null;
+  return toonEditSnapshot;
+}
+
+function stopEditSessionTouch() {
+  if (editSessionTouchTimer) {
+    clearInterval(editSessionTouchTimer);
+    editSessionTouchTimer = null;
+  }
+}
+
+function startEditSessionTouch() {
+  stopEditSessionTouch();
+  const beat = async () => {
+    try {
+      const data = await api('/api/session/touch', { method: 'POST', body: '{}' });
+      if (!data.ok) {
+        stopEditSessionTouch();
+        console.warn('[edit-session]', data.error || 'touch fallito');
+      }
+    } catch (err) {
+      console.warn('[edit-session] touch', err && err.message ? err.message : err);
+    }
+  };
+  beat();
+  /* Ogni 2 min: resta sotto TTL (default 5 min). */
+  editSessionTouchTimer = setInterval(beat, 120000);
 }
 
 async function enterWorkMode() {
@@ -1180,31 +2470,40 @@ async function enterWorkMode() {
   const me = await api('/api/me');
   $('header-meta').textContent =
     `${me.email} — ${me.sessionToonName} (${me.role}, lv ${me.maxLevel}) · UI ${EDIT_PORTAL_UI_BUILD}`;
+  startEditSessionTouch();
 
-  const payMode = $('pay-mode');
+  await loadEditCapabilities();
+  const payTender = $('pay-tender');
+  const payRunePct = $('pay-rune-pct');
   if (canPayMxp()) {
-    payMode.value = 'mxp';
-    payMode.querySelector('option[value="mxp"]').disabled = false;
-    payMode.querySelector('option[value="mix"]').disabled = false;
-    payMode.querySelector('option[value="runes"]').disabled = false;
+    if (payTender) payTender.disabled = false;
+    if (payRunePct) {
+      payRunePct.disabled = false;
+      if (Number(payRunePct.value) === 100) payRunePct.value = 0;
+    }
   } else {
-    payMode.value = 'runes';
-    payMode.querySelector('option[value="mxp"]').disabled = true;
-    payMode.querySelector('option[value="mix"]').disabled = true;
+    if (payTender) payTender.disabled = true;
+    if (payRunePct) {
+      payRunePct.value = 100;
+      payRunePct.disabled = true;
+    }
   }
+  syncPayModeFromSlider();
   refreshPayModeLabels();
 
   if (me.role === 'staff') {
     initStaffToolsColumn();
+    syncLabPanelVisibility(me);
     show('target-toon-wrap');
     const hint = $('session-role-hint');
     if (hint) {
       hint.textContent =
-        `Sessione: ${me.sessionToonName} (staff). Cerca sotto il personaggio su cui vuoi lavorare.`;
+        `Sessione: ${me.sessionToonName} (staff). Cerca sotto il personaggio su cui vuoi lavorare. Usa «Vista staff» per Economia/listino.`;
     }
     loadSystemConfig();
   } else {
     hideStaffToolsColumn();
+    syncLabPanelVisibility(me);
     hide('target-toon-wrap');
     const hint = $('session-role-hint');
     if (hint) hint.textContent = `Personaggio: ${me.sessionToonName}`;
@@ -1360,10 +2659,12 @@ async function loadTargetToons() {
       targetToonId ? 'Caricamento personaggio…' : 'Personaggio non selezionato'
     );
     if (!targetToonId) return;
+    await ensureToonEditSnapshot(true);
     await loadCharacterState();
     await loadInventory();
   };
   clearTargetWorkspace('Caricamento personaggio…');
+  await ensureToonEditSnapshot(true);
   await loadCharacterState();
   await loadInventory();
 }
@@ -1379,8 +2680,11 @@ function hideApiWarn() {
 }
 
 function clearTargetWorkspace(message) {
-  clearObjectEditCart();
-  clearCharacterEditCart();
+  clearAllObjectCarts();
+  characterEditCart.clear();
+  objectOptionsCache.clear();
+  listinoSnapshot = null;
+  toonEditSnapshot = null;
   pendingEdit = null;
   selectedInventoryId = null;
   selectedObjectOptions = null;
@@ -1429,6 +2733,7 @@ async function loadCharacterState() {
     clearTargetWorkspace('Personaggio non selezionato');
     return;
   }
+  ensureListinoSnapshot().catch(() => {});
   const data = await api(`/api/character-state/${targetToonId}`);
   if (!data.ok) {
     charState = null;
@@ -1440,6 +2745,7 @@ async function loadCharacterState() {
   }
   charState = data.data;
   renderCharStats();
+  refreshLabTargetStats();
   if (charState.stats_missing) {
     if ($('pool-edits')) $('pool-edits').innerHTML = '';
     if ($('resistance-edits')) $('resistance-edits').innerHTML = '';
@@ -1537,7 +2843,9 @@ function renderCharacterEdits() {
     buildStepOptions(cap, step, current).forEach((v) => {
       const opt = document.createElement('option');
       opt.value = v;
-      opt.textContent = v;
+      const d = v - current;
+      opt.textContent =
+        d > 0 ? `${v} (+${d})` : d === 0 ? `${v} (attuale)` : String(v);
       if (v === current) opt.selected = true;
       select.appendChild(opt);
     });
@@ -1559,11 +2867,93 @@ function renderCharacterEdits() {
     row.innerHTML = `
       <div>
         <label class="effect-name">${entry.label || field}</label>
-        <div class="current">Attuale: ${current} / ${cap} (solo aumento)</div>
+        <div class="current">Attuale: ${current} / ${cap}</div>
       </div>
     `;
     row.appendChild(select);
     body.appendChild(row);
+    });
+    details.appendChild(body);
+    poolBox.appendChild(details);
+  }
+
+  const affEntries = catalogEntries('affect', 'character');
+  if (affEntries.length) {
+    const details = document.createElement('details');
+    details.className = 'edit-section';
+    details.open = true;
+    const summary = document.createElement('summary');
+    summary.className = 'edit-section-summary';
+    summary.innerHTML =
+      `<span class="edit-section-name">Affect personaggio</span>` +
+      `<span class="edit-section-count">${affEntries.length}</span>`;
+    details.appendChild(summary);
+    const body = document.createElement('div');
+    body.className = 'edit-section-body';
+    const byLoc = {};
+    for (const a of charState.char_affects || toonEditSnapshot?.char_affects || []) {
+      byLoc[Number(a.location)] = Number(a.value || 0);
+    }
+    affEntries.forEach((entry) => {
+      const location = Number(entry.location);
+      const cartKey = `char-affect:${location}`;
+      const cap = Number(entry.cap ?? entry.max ?? entry.max_total ?? 0);
+      const minT = Number(entry.min ?? entry.min_total ?? 0);
+      const step = Number(entry.step || 1);
+      const current = Number(byLoc[location] || 0);
+      const row = document.createElement('div');
+      row.className = 'edit-row';
+      row.dataset.cartKey = cartKey;
+      const select = document.createElement('select');
+      select.dataset.current = String(current);
+      const opts = [];
+      const start = Math.max(minT, current);
+      const end = cap >= minT ? cap : start;
+      for (let v = start; v <= end; v += Math.abs(step) || 1) opts.push(v);
+      if (!opts.includes(current)) opts.push(current);
+      opts.sort((a, b) => a - b);
+      opts.forEach((v) => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        const d = v - current;
+        opt.textContent =
+          d > 0 ? `${v} (+${d})` : d === 0 ? `${v} (attuale)` : String(v);
+        if (v === current) opt.selected = true;
+        select.appendChild(opt);
+      });
+      const queued = characterEditCart.get(cartKey);
+      if (queued && queued.newValue != null) {
+        select.value = String(queued.newValue);
+        if (queued.selectEl !== select) queued.selectEl = select;
+      }
+      select.addEventListener('change', () => {
+        if (Number(select.value) === current) {
+          if (characterEditCart.has(cartKey)) {
+            characterEditCart.delete(cartKey);
+            rebuildCharacterPendingFromCart();
+          }
+          return;
+        }
+        queueCharAffectQuote(
+          location,
+          Number(select.value),
+          entry.label || `loc ${location}`,
+          select,
+          cartKey,
+        );
+      });
+      const groupHint = entry.cap_group
+        ? `<div class="current">Gruppo cap: ${escapeHtml(entry.cap_group)}</div>`
+        : '';
+      row.innerHTML = `
+        <div>
+          <label class="effect-name">${escapeHtml(entry.label || String(location))}</label>
+          <div class="current">Attuale: ${current} / ${cap}</div>
+          ${groupHint}
+        </div>
+      `;
+      row.appendChild(select);
+      body.appendChild(row);
     });
     details.appendChild(body);
     poolBox.appendChild(details);
@@ -1653,6 +3043,32 @@ async function queuePoolQuote(field, newValue, label, selectEl, cartKey) {
     key,
     type: 'pool',
     field,
+    newValue,
+    label: `${label}: ${data.data.current} → ${data.data.target}`,
+    quote: data.data,
+    selectEl,
+  });
+  rebuildCharacterPendingFromCart();
+}
+
+async function queueCharAffectQuote(location, newValue, label, selectEl, cartKey) {
+  const requested = Number(selectEl.value);
+  const data = await api('/api/quote-char-affect', {
+    method: 'POST',
+    body: JSON.stringify({ targetToonId, location, newValue }),
+  });
+  if (Number(selectEl.value) !== requested) return;
+  if (!data.ok) {
+    alert(data.error || 'Quote affect PG fallita');
+    selectEl.value = selectEl.dataset.current || String(data.data?.current ?? selectEl.value);
+    return;
+  }
+  ensureCharacterCartExclusive();
+  const key = cartKey || `char-affect:${location}`;
+  characterEditCart.set(key, {
+    key,
+    type: 'char-affect',
+    location,
     newValue,
     label: `${label}: ${data.data.current} → ${data.data.target}`,
     quote: data.data,
@@ -1800,6 +3216,7 @@ function renderInventoryList(items) {
     }
     list.appendChild(li);
   });
+  markInventoryQueued();
 }
 
 async function loadInventory() {
@@ -1916,19 +3333,15 @@ async function loadInventory() {
   renderInventoryList(items);
 }
 
-async function selectItem(inventoryId, li) {
+async function selectItem(inventoryId, li, { forceRefresh = false } = {}) {
   document.querySelectorAll('#inventory-list .item').forEach((el) => el.classList.remove('selected'));
   if (li) li.classList.add('selected');
+
+  stashCurrentObjectCart();
   selectedInventoryId = inventoryId;
-  clearObjectEditCart();
+  restoreObjectCart(inventoryId);
   selectedObjectOptions = null;
-  if (characterEditCart.size) {
-    rebuildCharacterPendingFromCart();
-  } else {
-    pendingEdit = null;
-    updatePaymentUI();
-  }
-  updatePaymentUI();
+
   $('object-edits').innerHTML = '';
   if ($('object-massimali')) $('object-massimali').innerHTML = '';
   $('object-affect-slots').innerHTML = '';
@@ -1937,26 +3350,35 @@ async function selectItem(inventoryId, li) {
   if (textBox) textBox.innerHTML = '';
   $('quote-box').textContent = 'Caricamento…';
   setMainColumnSplit(true);
+  rebuildGlobalPendingFromCarts();
 
-  const opts = await api('/api/object-edit-options', {
-    method: 'POST',
-    body: JSON.stringify({ targetToonId, inventoryId }),
-  });
-
-  if (!opts.ok) {
-    $('quote-box').textContent = opts.error || 'Oggetto non editabile';
-    setMainColumnSplit(false);
-    return;
+  const cached = !forceRefresh ? objectOptionsCache.get(Number(inventoryId)) : null;
+  let d = cached || null;
+  if (!d) {
+    const opts = await api('/api/object-edit-options', {
+      method: 'POST',
+      body: JSON.stringify({ targetToonId, inventoryId }),
+    });
+    if (!opts.ok) {
+      $('quote-box').textContent = opts.error || 'Oggetto non editabile';
+      setMainColumnSplit(false);
+      return;
+    }
+    d = opts.data;
+    objectOptionsCache.set(Number(inventoryId), d);
   }
 
-  selectedObjectOptions = opts.data;
-  const d = opts.data;
+  /* Se e' cambiato pezzo mentre aspettavamo, non applicare. */
+  if (Number(selectedInventoryId) !== Number(inventoryId)) return;
+
+  selectedObjectOptions = d;
   const quoteEl = $('quote-box');
   const lines = [
     d.owner_name ? `Owner: ${d.owner_name} (${d.owner_classes} classi, x${d.class_mult})` : '',
     d.item_type ? `Tipo: ${d.item_type}` : '',
     `Costo attuale vs prototipo: ${formatMxp(d.diff_xp_mega || 0, d.diff_xp_frac || 0)}`,
     d.diff_rune ? `Rune componente listino: ${d.diff_rune}` : '',
+    cached ? 'Opzioni da cache locale (cambio pezzo senza re-fetch)' : '',
   ].filter(Boolean);
   quoteEl.innerHTML =
     `<div class="quote-name">${mudTextToHtml(d.short_desc || '')}</div>` +
@@ -1977,6 +3399,24 @@ async function selectItem(inventoryId, li) {
         'Gratuiti ma solo insieme al pagamento di un nuovo affect (stesso salvataggio).',
     }
   );
+  const savedText = objectTextDraftsByInv.get(Number(inventoryId));
+  if (savedText) {
+    const nameEl = $('obj-text-name');
+    const shortEl = $('obj-text-short');
+    const longEl = $('obj-text-long');
+    if (nameEl) {
+      nameEl.value = savedText.objName || '';
+      nameEl.dispatchEvent(new Event('input'));
+    }
+    if (shortEl) {
+      shortEl.value = savedText.shortDesc || '';
+      shortEl.dispatchEvent(new Event('input'));
+    }
+    if (longEl) {
+      longEl.value = savedText.description || '';
+      longEl.dispatchEvent(new Event('input'));
+    }
+  }
   renderObjectEdits(
     d.entries || [],
     d.dam_budget,
@@ -1984,6 +3424,7 @@ async function selectItem(inventoryId, li) {
     d.sf_budget,
     d.clan_symbol === true,
   );
+  rebuildGlobalPendingFromCarts();
 }
 
 function renderObjectAffectSlots(affectSlots) {
@@ -2005,9 +3446,13 @@ function renderObjectAffectSlots(affectSlots) {
 
   const summary = document.createElement('p');
   summary.className = 'affect-slots-summary';
-  summary.textContent =
-    `${used}/${maxSlots} occupati · ${freeCount} liberi — bonus combat uguali si accorpano (hitroll+damroll → hit-n-dam).`;
+  summary.textContent = `${used}/${maxSlots} occupati · ${freeCount} liberi`;
   box.appendChild(summary);
+  const mergeHint = document.createElement('p');
+  mergeHint.className = 'affect-slots-hint';
+  mergeHint.textContent =
+    'Hit-n-dam / Hit-n-sp compaiono solo se gia\' sul pezzo. Per crearli: porta hit e dam (o sp) allo stesso valore e conferma il popup di accorpamento (irreversibile).';
+  box.appendChild(mergeHint);
 
   const grid = document.createElement('div');
   grid.className = 'affect-slots-grid';
@@ -2042,6 +3487,413 @@ function renderObjectAffectSlots(affectSlots) {
   show('object-affect-slots');
 }
 
+/** Location APPLY_* combat (allineati a autoenums). */
+const APPLY_AC = 17;
+const APPLY_HITROLL = 18;
+const APPLY_DAMROLL = 19;
+const APPLY_HITNDAM = 40;
+const APPLY_SPELLPOWER = 65;
+const APPLY_HITNSP = 66;
+
+function isCombatAffectEntryId(id) {
+  return ['hitroll', 'damroll', 'spellpower', 'hitndam', 'hitnsp'].includes(String(id || ''));
+}
+
+function baseCombatTotalsFromCatalog() {
+  const entries = selectedObjectOptions?.entries || [];
+  const cur = (id) => Number(entries.find((e) => e.id === id)?.current || 0);
+  return {
+    hr: cur('hitroll'),
+    dr: cur('damroll'),
+    sp: cur('spellpower'),
+    hnd: cur('hitndam'),
+    hnsp: cur('hitnsp'),
+  };
+}
+
+/**
+ * Totali assoluti combat sul pezzo (come combat_*_total lato myst):
+ * hitroll/damroll/spellpower in catalogo espongono gia' i totali aggregati.
+ */
+function catalogCombatAbsTotals() {
+  const entries = selectedObjectOptions?.entries || [];
+  const cur = (id) => Number(entries.find((e) => e.id === id)?.current || 0);
+  return {
+    hr: cur('hitroll'),
+    dam: cur('damroll'),
+    sp: cur('spellpower'),
+  };
+}
+
+/** Applica una voce listino combat ai totali assoluti (switch di apply_listino). */
+function applyCombatListinoToAbs(totals, edit) {
+  if (!edit || !totals) return totals;
+  const id = String(edit.entryId || edit.id || '');
+  const loc = Number(edit.location || 0);
+  const t = Number(edit.targetModifier || 0);
+  const next = { hr: totals.hr, dam: totals.dam, sp: totals.sp };
+  const is = (name, applyLoc) => id === name || loc === applyLoc;
+  if (edit.clearSlot) {
+    if (is('hitroll', APPLY_HITROLL)) next.hr = 0;
+    else if (is('damroll', APPLY_DAMROLL)) next.dam = 0;
+    else if (is('spellpower', APPLY_SPELLPOWER)) next.sp = 0;
+    else if (is('hitndam', APPLY_HITNDAM)) {
+      next.hr = 0;
+      next.dam = 0;
+    } else if (is('hitnsp', APPLY_HITNSP)) {
+      next.hr = 0;
+      next.sp = 0;
+    }
+    return next;
+  }
+  if (is('hitroll', APPLY_HITROLL)) next.hr = t;
+  else if (is('damroll', APPLY_DAMROLL)) next.dam = t;
+  else if (is('spellpower', APPLY_SPELLPOWER)) next.sp = t;
+  else if (is('hitndam', APPLY_HITNDAM)) {
+    next.hr = t;
+    next.dam = t;
+  } else if (is('hitnsp', APPLY_HITNSP)) {
+    next.hr = t;
+    next.sp = t;
+  }
+  return next;
+}
+
+/** Proietta hr/dam/sp dopo il carrello (+ eventuale voce in aggiunta). */
+function projectCombatAbsWithCart(pendingEditItem) {
+  let tot = catalogCombatAbsTotals();
+  const pendingId = pendingEditItem
+    ? String(pendingEditItem.entryId || pendingEditItem.id || '')
+    : '';
+  for (const it of objectEditCart.values()) {
+    if (pendingId && it.entryId === pendingId) continue;
+    if (!isCombatAffectEntryId(it.entryId)) continue;
+    tot = applyCombatListinoToAbs(tot, it);
+  }
+  if (pendingEditItem && isCombatAffectEntryId(pendingId)) {
+    tot = applyCombatListinoToAbs(tot, pendingEditItem);
+  }
+  return tot;
+}
+
+/**
+ * Armor: extra oltre proto in −40…0 (step −10).
+ * Budget separato da combat/spellfail: in coda può stare insieme ad altri edit.
+ */
+function validateArmorForCartEdit(entry, targetModifier, clearSlot) {
+  const id = String(entry?.id || '');
+  const loc = Number(entry?.location || 0);
+  if (id !== 'armor' && loc !== APPLY_AC) return { ok: true };
+  if (clearSlot) return { ok: true };
+  const proto = Number(entry.proto);
+  const target = Number(targetModifier);
+  if (!Number.isFinite(proto) || !Number.isFinite(target)) return { ok: true };
+  const delta = target - proto;
+  const minExtra = -40;
+  if (delta > 0 || delta < minExtra) {
+    return {
+      ok: false,
+      error:
+        `Armor fuori tetto: extra ${delta} oltre proto ${proto} ` +
+        `(consentito ${minExtra}…0; es. proto −10 + edit −40 → totale −50).`,
+    };
+  }
+  if (delta !== 0 && delta % 10 !== 0) {
+    return {
+      ok: false,
+      error: `Armor: step −10 non rispettato (extra ${delta}).`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Spellfail: extra oltre proto in −100…0 (step −5); pezzo e personaggio
+ * usano la magnitudine editata (proto − current), max 100.
+ */
+function validateSpellfailForCartEdit(entry, targetModifier, clearSlot) {
+  const id = String(entry?.id || '');
+  if (id !== 'spellfail') return { ok: true };
+
+  const sfBudget = selectedObjectOptions?.sf_budget || {};
+  const proto = Number(
+    Number.isFinite(Number(entry.proto))
+      ? entry.proto
+      : sfBudget.piece_proto ?? 0,
+  );
+  let pieceDelta = 0;
+  if (!clearSlot) {
+    const target = Number(targetModifier);
+    if (!Number.isFinite(target)) return { ok: true };
+    const extra = target - proto;
+    const minExtra = -100;
+    if (extra > 0 || extra < minExtra) {
+      return {
+        ok: false,
+        error:
+          `Spellfail fuori tetto pezzo: extra ${extra} oltre proto ${proto} ` +
+          `(consentito ${minExtra}…0, step −5).`,
+      };
+    }
+    if (extra !== 0 && extra % 5 !== 0) {
+      return {
+        ok: false,
+        error: `Spellfail: step −5 non rispettato (extra ${extra}).`,
+      };
+    }
+    pieceDelta = Math.max(0, -extra);
+  }
+
+  const pieceMax = Math.abs(Number(sfBudget.piece_max ?? 100));
+  if (pieceDelta > pieceMax) {
+    return {
+      ok: false,
+      error: `Tetto pezzo spellfail superato con la coda: +${pieceDelta} (max ${pieceMax}).`,
+    };
+  }
+
+  const other = Number(sfBudget.other || 0);
+  const charMax = Number(sfBudget.char_max || 100);
+  const charTotal = other + pieceDelta;
+  if (charTotal > charMax) {
+    return {
+      ok: false,
+      error:
+        `Tetto personaggio spellfail superato con la coda: ${charTotal}/${charMax} ` +
+        `(altri +${other}, questo pezzo +${pieceDelta}).`,
+    };
+  }
+  return { ok: true, pieceDelta, charTotal };
+}
+
+/**
+ * Tetti combat dopo la coda (allineati a myst). Solo massimali:
+ * hit-n-sp + hitroll (o hit-n-dam + dam, ecc.) sono ammessi se il risultato
+ * proiettato rispetta i tetti. Nessun blocco per "stesso canale".
+ * - pezzo: dam_wiz+sp_wiz <= 2, hr_wiz <= 2 (broker escluso)
+ * - personaggio: dam_full+sp_full <= 30, hr_full <= 42
+ */
+function validateCombatCapsForCartEdit(entry, targetModifier, clearSlot) {
+  const id = String(entry?.id || '');
+  if (!isCombatAffectEntryId(id)) return { ok: true };
+
+  const damBudget = selectedObjectOptions?.dam_budget || {};
+  const spBudget = selectedObjectOptions?.sp_budget || {};
+  const hrBudget = selectedObjectOptions?.hr_budget || {};
+
+  const before = catalogCombatAbsTotals();
+  const after = projectCombatAbsWithCart({
+    entryId: id,
+    location: Number(entry.location || 0),
+    targetModifier: Number(targetModifier || 0),
+    clearSlot: !!clearSlot,
+  });
+  const dDam = after.dam - before.dam;
+  const dSp = after.sp - before.sp;
+  const dHr = after.hr - before.hr;
+
+  /* Pezzo: solo quota wiz (i trasferimenti broker non consumano il tetto pezzo). */
+  const curDamWiz = Number(
+    damBudget.piece_wiz != null ? damBudget.piece_wiz : damBudget.piece || 0,
+  );
+  const curSpWiz = Number(
+    spBudget.piece_wiz != null ? spBudget.piece_wiz : spBudget.piece || 0,
+  );
+  const curHrWiz = Number(
+    hrBudget.piece_wiz != null
+      ? hrBudget.piece_wiz
+      : Math.max(
+          0,
+          before.hr -
+            Number(
+              (selectedObjectOptions?.entries || []).find((e) => e.id === 'hitroll')
+                ?.proto || 0,
+            ),
+        ),
+  );
+  const damWiz = Math.max(0, curDamWiz + dDam);
+  const spWiz = Math.max(0, curSpWiz + dSp);
+  const hrWiz = Math.max(0, curHrWiz + dHr);
+
+  /* Personaggio: delta full vs baseline (come enforce_char_*), broker incluso. */
+  const curDamFull = Number(damBudget.piece_full ?? damBudget.piece ?? 0);
+  const curSpFull = Number(spBudget.piece_full ?? spBudget.piece ?? 0);
+  const curHrFull = Number(hrBudget.piece_full ?? hrBudget.piece ?? curHrWiz);
+  const damFull = Math.max(0, curDamFull + dDam);
+  const spFull = Math.max(0, curSpFull + dSp);
+  const hrFull = Math.max(0, curHrFull + dHr);
+
+  const pieceDamSpMax = Number(
+    damBudget.piece_dam_sp_max ?? spBudget.piece_dam_sp_max ?? 2,
+  );
+  const pieceHrMax = Number(damBudget.piece_hr_max ?? hrBudget.piece_max ?? 2);
+  const charDamSpMax = Number(
+    damBudget.char_dam_sp_max ?? spBudget.char_dam_sp_max ?? 30,
+  );
+  const charHrMax = Number(hrBudget.char_max ?? 42);
+  const otherDam = Number(damBudget.other || 0);
+  const otherSp = Number(spBudget.other || 0);
+  const otherHr = Number(hrBudget.other || 0);
+  const pieceDamSp = damWiz + spWiz;
+  const charDamSp = otherDam + otherSp + damFull + spFull;
+  const charHr = otherHr + hrFull;
+
+  if (pieceDamSp > pieceDamSpMax) {
+    return {
+      ok: false,
+      error:
+        `Tetto pezzo DAM+SP (wiz) superato con la coda: dam +${damWiz} + sp +${spWiz} = ${pieceDamSp} (max ${pieceDamSpMax}). ` +
+        `Ok: hit-n-sp 1 + dam 1; non ok: hit-n-sp 2 + dam 2 / hit-n-dam 2 + sp 1.`,
+    };
+  }
+  if (hrWiz > pieceHrMax) {
+    return {
+      ok: false,
+      error: `Tetto pezzo hitroll (wiz) superato con la coda: +${hrWiz} (max ${pieceHrMax}).`,
+    };
+  }
+  if (charDamSp > charDamSpMax) {
+    return {
+      ok: false,
+      error:
+        `Tetto personaggio DAM+SP superato con la coda: ${charDamSp}/${charDamSpMax} ` +
+        `(altri dam +${otherDam} sp +${otherSp}, questo pezzo dam +${damFull} sp +${spFull}).`,
+    };
+  }
+  if (hrBudget.char_max != null && charHr > charHrMax) {
+    return {
+      ok: false,
+      error:
+        `Tetto personaggio hitroll superato con la coda: ${charHr}/${charHrMax} ` +
+        `(altri +${otherHr}, questo pezzo +${hrFull}).`,
+    };
+  }
+  return {
+    ok: true,
+    damWiz,
+    spWiz,
+    hrWiz,
+    damFull,
+    spFull,
+    hrFull,
+    pieceDamSp,
+    charDamSp,
+  };
+}
+
+/** Validazione coda: armor, spellfail, combat — solo massimali. */
+function validateCartCapsForEdit(entry, targetModifier, clearSlot) {
+  const armor = validateArmorForCartEdit(entry, targetModifier, clearSlot);
+  if (!armor.ok) return armor;
+  const sf = validateSpellfailForCartEdit(entry, targetModifier, clearSlot);
+  if (!sf.ok) return sf;
+  return validateCombatCapsForCartEdit(entry, targetModifier, clearSlot);
+}
+
+/** Applica un edit combat ai totali previsti (stessa semantica di rewrite_combat_totals). */
+function applyCombatEditToTotals(state, edit) {
+  if (!edit) return state;
+  const id = String(edit.entryId || edit.id || '');
+  const loc = Number(edit.location || 0);
+  const t = Number(edit.targetModifier || 0);
+  const next = { ...state };
+  if (edit.clearSlot) {
+    if (id === 'hitroll' || loc === APPLY_HITROLL) next.hr = 0;
+    else if (id === 'damroll' || loc === APPLY_DAMROLL) next.dr = 0;
+    else if (id === 'spellpower' || loc === APPLY_SPELLPOWER) next.sp = 0;
+    else if (id === 'hitndam' || loc === APPLY_HITNDAM) {
+      next.hr = 0;
+      next.dr = 0;
+      next.hnd = 0;
+    } else if (id === 'hitnsp' || loc === APPLY_HITNSP) {
+      next.hr = 0;
+      next.sp = 0;
+      next.hnsp = 0;
+    }
+    return next;
+  }
+  if (id === 'hitroll' || loc === APPLY_HITROLL) next.hr = t;
+  else if (id === 'damroll' || loc === APPLY_DAMROLL) next.dr = t;
+  else if (id === 'spellpower' || loc === APPLY_SPELLPOWER) next.sp = t;
+  else if (id === 'hitndam' || loc === APPLY_HITNDAM) {
+    next.hr = t;
+    next.dr = t;
+    next.hnd = t;
+  } else if (id === 'hitnsp' || loc === APPLY_HITNSP) {
+    next.hr = t;
+    next.sp = t;
+    next.hnsp = t;
+  }
+  return next;
+}
+
+/**
+ * Se questo edit renderebbe hr==dr o hr==sp con slot ancora separati,
+ * restituisce 'hitndam' | 'hitnsp' (da chiedere conferma). Null altrimenti.
+ * Hit-n-dam / Hit-n-sp scelti esplicitamente non chiedono (già combinati).
+ *
+ * Nota: si puo' avere Hit-n-sp + dam (o Hit-n-dam + sp) entro i tetti pezzo;
+ * non serve che l'altro asse sia 0 per proporre l'accorpamento.
+ */
+function combatMergeOfferForEdit(entry, targetModifier, clearSlot) {
+  const id = String(entry?.id || '');
+  if (!isCombatAffectEntryId(id) || clearSlot) return null;
+  if (id === 'hitndam' || id === 'hitnsp') return null;
+
+  let state = baseCombatTotalsFromCatalog();
+  for (const it of objectEditCart.values()) {
+    if (it.entryId === id) continue;
+    if (!isCombatAffectEntryId(it.entryId)) continue;
+    state = applyCombatEditToTotals(state, it);
+  }
+  state = applyCombatEditToTotals(state, {
+    entryId: id,
+    location: Number(entry.location || 0),
+    targetModifier,
+    clearSlot: false,
+  });
+
+  const canHnd = state.hr > 0 && state.hr === state.dr && state.hnd <= 0;
+  const canHnsp = state.hr > 0 && state.hr === state.sp && state.hnsp <= 0;
+
+  /* Solo il lato che stai editando: evita di chiedere Hit-n-dam mentre alzi lo SP. */
+  if (id === 'damroll') return canHnd ? 'hitndam' : null;
+  if (id === 'spellpower') return canHnsp ? 'hitnsp' : null;
+  if (id === 'hitroll') {
+    if (canHnd && !canHnsp) return 'hitndam';
+    if (canHnsp && !canHnd) return 'hitnsp';
+    if (canHnd && canHnsp) {
+      /* hr==dam==sp: preferisci il lato che ha gia' lo slot dedicato. */
+      if (state.dr > 0 && state.sp <= 0) return 'hitndam';
+      if (state.sp > 0 && state.dr <= 0) return 'hitnsp';
+      return 'hitndam';
+    }
+  }
+  return null;
+}
+
+function confirmCombatMerge(kind) {
+  if (kind === 'hitndam') {
+    return confirm(
+      'Accorpare Hitroll e Damroll in un unico slot Hit-n-dam?\n\n' +
+        'L\'accorpamento libera uno slot affect ma NON è reversibile: ' +
+        'dopo non potrai più separarli.\n\n' +
+        'OK = accorpa (Hit-n-dam)\n' +
+        'Annulla = mantieni Hitroll e Damroll su slot distinti'
+    );
+  }
+  if (kind === 'hitnsp') {
+    return confirm(
+      'Accorpare Hitroll e Spellpower in un unico slot Hit-n-sp?\n\n' +
+        'L\'accorpamento libera uno slot affect ma NON è reversibile: ' +
+        'dopo non potrai più separarli.\n\n' +
+        'OK = accorpa (Hit-n-sp)\n' +
+        'Annulla = mantieni Hitroll e Spellpower su slot distinti'
+    );
+  }
+  return false;
+}
+
 function objectEntryAffectsDam(entry) {
   const id = String(entry?.id || '');
   return id === 'damroll' || id === 'hitndam';
@@ -2054,6 +3906,8 @@ function objectEntryAffectsSpellpower(entry) {
 
 function objectEditSection(id) {
   if (id === 'artifact' || id.startsWith('flag.')) return 'Artifact';
+  if (id.startsWith('reward.')) return 'Bonus nativi Dimensione';
+  if (id.startsWith('native.')) return 'Bonus nativi pezzo';
   if (id.startsWith('resist.') || id.startsWith('immune.')) {
     return 'Resistenze';
   }
@@ -2071,6 +3925,8 @@ function objectEditSection(id) {
 /** Ordine sezioni oggetto (listino / UI). */
 const OBJECT_EDIT_SECTION_ORDER = [
   'Artifact',
+  'Bonus nativi Dimensione',
+  'Bonus nativi pezzo',
   "Bonus all'Armatura/Cast",
   'Caratteristiche',
   'Bonus in Combattimento',
@@ -2078,6 +3934,12 @@ const OBJECT_EDIT_SECTION_ORDER = [
   'Resistenze',
   'Spell',
 ];
+
+/**
+ * Sezioni temporaneamente nascoste (WIP / non affidabili).
+ * Vuoto: hit/dam/spellpower di nuovo disponibili.
+ */
+const OBJECT_EDIT_SECTIONS_HIDDEN = new Set();
 
 function objectEditSectionRank(name) {
   const i = OBJECT_EDIT_SECTION_ORDER.indexOf(name);
@@ -2091,6 +3953,17 @@ function objectEditSectionRank(name) {
  * Con un bonus gia' presente non si offrono valori peggiorativi (solo migliorie
  * o «Rimuovi slot»); con un malus si puo' andare a 0 / verso il bonus.
  */
+function objectEntryValueFloor(entry) {
+  const floor = Number(entry?.value_floor ?? entry?.combat_floor);
+  return Number.isFinite(floor) ? floor : null;
+}
+
+function objectEntryProtoBase(entry) {
+  const pe = Number(entry?.proto_effective);
+  if (Number.isFinite(pe)) return pe;
+  return Number(entry?.proto || 0);
+}
+
 function buildObjectScalarOptions(entry) {
   const min = Number(entry.min);
   const max = Number(entry.max);
@@ -2099,14 +3972,20 @@ function buildObjectScalarOptions(entry) {
   const hi = Math.max(min, max);
   const opts = [];
   if (entry.relative) {
-    const proto = Number(entry.proto || 0);
+    /* Proto effettivo (hitndam: max assi proto, non solo slot combinato). */
+    const proto = objectEntryProtoBase(entry);
     for (let d = lo; d <= hi; d += absStep) {
       opts.push(proto + d);
     }
-    return opts;
+  } else {
+    for (let v = lo; v <= hi; v += absStep) {
+      opts.push(v);
+    }
   }
-  for (let v = lo; v <= hi; v += absStep) {
-    opts.push(v);
+  /* Solo add: niente totali sotto i bonus gia' presenti sul pezzo. */
+  const floor = objectEntryValueFloor(entry);
+  if (floor != null && !objectScalarLowerIsBetter(entry)) {
+    return opts.filter((v) => v >= floor);
   }
   return opts;
 }
@@ -2118,24 +3997,61 @@ function objectScalarLowerIsBetter(entry) {
 }
 
 function objectScalarIsPositiveBonus(entry, current) {
-  if (objectScalarLowerIsBetter(entry)) return current < 0;
-  return current > Number(entry.proto || 0);
+  const proto = objectEntryProtoBase(entry);
+  if (objectScalarLowerIsBetter(entry)) {
+    /* AC/spellfail: gia' al proto o meglio → niente dial-up verso il malus. */
+    return current <= proto;
+  }
+  return current > proto;
 }
 
 /** Filtra opzioni: niente dial-down di un bonus (serve «Rimuovi slot»). */
 function filterObjectScalarOptions(entry, values, current) {
-  if (!objectScalarIsPositiveBonus(entry, current)) {
+  const floor = objectEntryValueFloor(entry);
+  const effectiveCurrent =
+    floor != null && floor > Number(current || 0) ? floor : current;
+  if (!objectScalarIsPositiveBonus(entry, effectiveCurrent)) {
     return values;
   }
   const lowerBetter = objectScalarLowerIsBetter(entry);
   return values.filter((v) => {
-    if (v === current) return true;
-    return lowerBetter ? v < current : v > current;
+    if (v === current || v === effectiveCurrent) return true;
+    return lowerBetter ? v < effectiveCurrent : v > effectiveCurrent;
   });
 }
 
-function formatScalarOptionLabel(entry, absolute) {
-  /* Solo valore numerico (es. 0, -10, 2) — niente "nessuno (proto …)". */
+/**
+ * Combat: togli dal menu i totali che sforano i tetti pezzo/PG (es. SP +2
+ * con hit-n-dam gia' +1 → pezzo dam+sp wiz = 3 > 2).
+ */
+function filterCombatBudgetOptions(entry, values, current) {
+  const id = String(entry?.id || '');
+  if (!isCombatAffectEntryId(id)) return values;
+  return values.filter((v) => {
+    if (v === current) return true;
+    return validateCombatCapsForCartEdit(entry, v, false).ok;
+  });
+}
+
+function formatScalarOptionLabel(entry, absolute, currentForDelta) {
+  const cur =
+    currentForDelta != null
+      ? Number(currentForDelta)
+      : Number(entry?.current || 0);
+  const floor = objectEntryValueFloor(entry);
+  const base =
+    floor != null && floor > cur && !objectScalarLowerIsBetter(entry) ? floor : cur;
+  if (objectScalarLowerIsBetter(entry)) {
+    if (absolute === base) return `${absolute} (attuale)`;
+    const d = absolute - base;
+    if (d < 0) return `${absolute} (${d})`;
+    return String(absolute);
+  }
+  if (absolute === base) {
+    return `${absolute} (attuale)`;
+  }
+  const d = absolute - base;
+  if (d > 0) return `${absolute} (+${d})`;
   return String(absolute);
 }
 
@@ -2151,6 +4067,16 @@ function isYesNoObjectEntry(entry) {
 }
 
 function objectEntryCostHint(entry) {
+  if (entry.kind === 'flag' && entry.flag === 'artifact') {
+    const mxp = Number(entry.mxp || 0);
+    if (Number(entry.current || 0) === 1) {
+      return 'Artifact permanente (gia\' attivo)';
+    }
+    if (mxp > 0) {
+      return `Listino Artifact: ${mxp} ${currencyLabel('mxp')} (x class_mult, senza +50%)`;
+    }
+    return entry.hint || 'Costo listino Artifact';
+  }
   const mxp = Number(entry.mxp_per_step || 0);
   const rune = Number(entry.rune_per_step ?? mxp);
   const step = Number(entry.step) || 1;
@@ -2225,15 +4151,26 @@ function cartAddsArtifact() {
   );
 }
 
-/** Listino: +50% se Artifact gia' sul pezzo o in coda nello stesso pacchetto. */
+/**
+ * Maggiorazione artifact_mult sugli affect: pezzo gia' Artifact oppure
+ * Artifact in coda (la voce flag Artifact ha costo proprio, senza +50%).
+ */
 function objectPricingUsesArtifact() {
   return objectAlreadyArtifact() || cartAddsArtifact();
 }
 
 function clearObjectPending(entryId) {
+  objectCartRequoteGen += 1;
   const removed = objectEditCart.get(entryId);
   if (objectEditCart.has(entryId)) {
     objectEditCart.delete(entryId);
+  }
+  if (selectedInventoryId) {
+    if (objectEditCart.size) {
+      objectCartsByInv.set(Number(selectedInventoryId), new Map(objectEditCart));
+    } else {
+      objectCartsByInv.delete(Number(selectedInventoryId));
+    }
   }
   if (removed?.flag === 'artifact') {
     requoteObjectCartForArtifact();
@@ -2242,84 +4179,73 @@ function clearObjectPending(entryId) {
   rebuildObjectPendingFromCart();
 }
 
-function clearObjectEditCart({ resetSelectors = false } = {}) {
-  if (resetSelectors) {
-    objectEditCart.forEach((it) => {
-      if (it.selectEl && it.selectEl.dataset.current != null) {
-        it.selectEl.value = it.selectEl.dataset.current;
-      }
-    });
+function clearObjectEditCart({ resetSelectors = false, allPieces = false } = {}) {
+  if (allPieces) {
+    clearAllObjectCarts({ resetSelectors });
+  } else {
+    if (resetSelectors) {
+      objectEditCart.forEach((it) => {
+        if (it.selectEl && it.selectEl.dataset.current != null) {
+          it.selectEl.value = it.selectEl.dataset.current;
+        }
+      });
+    }
+    objectEditCart.clear();
+    if (selectedInventoryId) {
+      objectCartsByInv.delete(Number(selectedInventoryId));
+      objectTextDraftsByInv.delete(Number(selectedInventoryId));
+    }
   }
-  objectEditCart.clear();
-  if (isObjectPendingType(pendingEdit?.type)) {
-    pendingEdit = null;
-  }
-  updateObjectCartUI();
-  updatePaymentUI();
+  rebuildGlobalPendingFromCarts();
 }
 
 function rebuildObjectPendingFromCart() {
-  if (!objectEditCart.size) {
-    if (isObjectPendingType(pendingEdit?.type)) {
-      pendingEdit = null;
+  syncArtifactLineInCart(objectEditCart);
+  if (selectedInventoryId) {
+    if (objectEditCart.size) {
+      objectCartsByInv.set(Number(selectedInventoryId), new Map(objectEditCart));
+    } else {
+      objectCartsByInv.delete(Number(selectedInventoryId));
     }
-    updateObjectCartUI();
-    updatePaymentUI();
-    return;
   }
-  const items = [...objectEditCart.values()];
-  const totals = sumQuotes(items);
-  const labels = [];
-  const notes = [];
-  items.forEach((it) => {
-    labels.push(it.label);
-    if (it.quote?.note) notes.push(it.quote.note);
-  });
-  const artNote = objectPricingUsesArtifact()
-    ? 'Include maggiorazione Artifact +50% (listino)'
-    : undefined;
-  pendingEdit = {
-    type: 'object-batch',
-    entryId: 'object-batch',
-    label: labels.join('\n'),
-    quote: {
-      ...totals,
-      note:
-        notes.find((n) => /Artifact/i.test(String(n))) ||
-        artNote ||
-        notes[0] ||
-        (items.length > 1
-          ? `${items.length} edit in coda (costo sommato vs stato attuale del pezzo)`
-          : undefined),
-    },
-    items,
-  };
-  updateObjectCartUI();
-  updatePaymentUI();
+  rebuildGlobalPendingFromCarts();
 }
 
 async function requoteObjectCartForArtifact() {
+  await ensureListinoSnapshot();
+  const gen = ++objectCartRequoteGen;
   const useArt = objectPricingUsesArtifact();
-  const items = [...objectEditCart.values()];
-  for (const it of items) {
-    if (it.flag === 'artifact') continue;
+  const entryIds = [...objectEditCart.keys()];
+  for (const entryId of entryIds) {
+    if (gen !== objectCartRequoteGen) return;
+    const it = objectEditCart.get(entryId);
+    if (!it || it.flag === 'artifact') continue;
     const payload = {
       targetToonId,
       inventoryId: selectedInventoryId,
       location: Number(it.location || 0),
       targetModifier: it.targetModifier,
       pendingArtifact: useArt,
+      current: Number(it.quote?.current ?? it.entry?.current ?? 0),
     };
     if (it.clearSlot) payload.clearSlot = true;
+    if (it.allowCombatMerge) payload.allowCombatMerge = true;
     if (it.flag) payload.flag = it.flag;
     const data = await api('/api/quote-object-edit', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    if (gen !== objectCartRequoteGen) return;
+    if (!objectEditCart.has(entryId)) continue;
     if (!data.ok) continue;
-    it.quote = data.data;
-    objectEditCart.set(it.entryId, it);
+    const live = objectEditCart.get(entryId);
+    if (!live) continue;
+    enrichObjectQuoteMeta(data.data, { pendingArtifact: useArt });
+    live.quote = data.data;
+    objectEditCart.set(entryId, live);
   }
+  if (gen !== objectCartRequoteGen) return;
+  syncArtifactLineInCart(objectEditCart);
   rebuildObjectPendingFromCart();
 }
 
@@ -2499,58 +4425,68 @@ function renderMassimaliPanel(box, damBudget, spBudget, sfBudget, isClanSymbol) 
   const grid = document.createElement('div');
   grid.className = 'massimali-grid';
 
-  const damMutexNote =
-    'Su ogni pezzo: se c\'è dam o hit-n-dam, spellpower è bloccato finché non rimuovi quello slot (e viceversa).';
-  const spMutexNote =
-    'Su ogni pezzo: se c\'è spellpower o hit-n-sp, dam è bloccato finché non rimuovi quello slot (e viceversa).';
-
-  if (damBudget) {
+  if (damBudget || spBudget) {
     const card = document.createElement('div');
     card.className = 'massimale-card';
-    const total = Number(damBudget.char_total || 0);
-    const max = Number(damBudget.char_max || 30);
-    const pieceMax = Number(damBudget.piece_max || 2);
-    const pc = Number(damBudget.piece_current);
-    const pp = Number(damBudget.piece_proto);
-    const delta = Number(damBudget.piece || 0);
-    const usage = massimaleUsageClass(total, max);
-    let detail = `Max ${pieceMax} dam editati per pezzo`;
-    if (Number.isFinite(pc) && Number.isFinite(pp)) {
-      detail = `Questo pezzo: ${pc} vs proto ${pp} (delta +${delta}) · max ${pieceMax}/pezzo`;
+    const damTotal = Number(damBudget?.char_total || 0);
+    const spTotal = Number(spBudget?.char_total || 0);
+    const combined =
+      damBudget?.char_dam_sp_total != null
+        ? Number(damBudget.char_dam_sp_total)
+        : spBudget?.char_dam_sp_total != null
+          ? Number(spBudget.char_dam_sp_total)
+          : damTotal + spTotal;
+    const max = Number(
+      damBudget?.char_dam_sp_max ??
+        spBudget?.char_dam_sp_max ??
+        damBudget?.char_max ??
+        spBudget?.char_max ??
+        30,
+    );
+    const remaining =
+      damBudget?.char_remaining != null
+        ? Number(damBudget.char_remaining)
+        : spBudget?.char_remaining != null
+          ? Number(spBudget.char_remaining)
+          : Math.max(0, max - combined);
+    const usage = massimaleUsageClass(combined, max);
+    const pieceDamSpMax = Number(
+      damBudget?.piece_dam_sp_max ?? spBudget?.piece_dam_sp_max ?? 2,
+    );
+    const pieceMaxDam = Number(damBudget?.piece_max || 2);
+    const pieceMaxSp = Number(spBudget?.piece_max || 2);
+    const pcDam = Number(damBudget?.piece_current);
+    const ppDam = Number(damBudget?.piece_proto);
+    const deltaDam = Number(damBudget?.piece || 0);
+    const pcSp = Number(spBudget?.piece_current);
+    const deltaSp = Number(spBudget?.piece || 0);
+    const details = [];
+    details.push(
+      `Pool personaggio: Dam ${damTotal} + Spellpower ${spTotal} = ${combined}/${max} (ancora ${remaining})`,
+    );
+    if (damBudget && Number.isFinite(pcDam) && Number.isFinite(ppDam)) {
+      let d = `Dam pezzo: ${pcDam} vs proto ${ppDam} (delta +${deltaDam}) · max canale ${pieceMaxDam}/pezzo`;
       if (damBudget.piece_edit === false) {
-        detail += ' · non conteggiato (serve EDIT + owner; clan esclusi)';
+        d += ' · non conteggiato (serve EDIT + owner; clan esclusi)';
       }
+      details.push(d);
     }
-    const mutexNote =
-      damBudget.mutex_with_spellpower !== false ? damMutexNote : '';
-    card.innerHTML = `
-      <div class="massimale-label">Dam totale editato</div>
-      <div class="massimale-value ${usage}">${total}<span class="massimale-max"> / ${max}</span></div>
-      <div class="massimale-detail">${escapeHtml(detail)}</div>
-      ${mutexNote ? `<div class="massimale-note">${escapeHtml(mutexNote)}</div>` : ''}
-    `;
-    grid.appendChild(card);
-  }
-
-  if (spBudget) {
-    const card = document.createElement('div');
-    card.className = 'massimale-card';
-    const total = Number(spBudget.char_total || 0);
-    const max = Number(spBudget.char_max || 30);
-    const pieceMax = Number(spBudget.piece_max || 2);
-    const pc = Number(spBudget.piece_current);
-    const delta = Number(spBudget.piece || 0);
-    const usage = massimaleUsageClass(total, max);
-    let detail = `Max ${pieceMax} spellpower editati per pezzo`;
-    if (Number.isFinite(pc)) {
-      detail = `Questo pezzo: totale ${pc} (delta edit +${delta}) · max ${pieceMax}/pezzo`;
+    if (spBudget && Number.isFinite(pcSp)) {
+      details.push(
+        `Spellpower pezzo: totale ${pcSp} (delta edit +${deltaSp}) · max canale ${pieceMaxSp}/pezzo`,
+      );
     }
-    const mutexNote = spBudget.mutex_with_dam !== false ? spMutexNote : '';
+    details.push(
+      `Sul pezzo dam e spellpower possono coesistere: somma delta wiz <= ${pieceDamSpMax} (es. hit-n-sp 1 + dam 1).`,
+    );
+    const notes = [
+      `Tetti: pezzo dam+sp <= ${pieceDamSpMax}; personaggio dam+sp <= ${max}. La coda rispetta gli stessi limiti.`,
+    ];
     card.innerHTML = `
-      <div class="massimale-label">Spellpower totale editato</div>
-      <div class="massimale-value ${usage}">${total}<span class="massimale-max"> / ${max}</span></div>
-      <div class="massimale-detail">${escapeHtml(detail)}</div>
-      ${mutexNote ? `<div class="massimale-note">${escapeHtml(mutexNote)}</div>` : ''}
+      <div class="massimale-label">DAM+SP totale editato</div>
+      <div class="massimale-value ${usage}">${combined}<span class="massimale-max"> / ${max}</span></div>
+      <div class="massimale-detail">${details.map((t) => escapeHtml(t)).join('<br>')}</div>
+      ${notes.map((n) => `<div class="massimale-note">${escapeHtml(n)}</div>`).join('')}
     `;
     grid.appendChild(card);
   }
@@ -2640,21 +4576,15 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
     return;
   }
 
-  renderMassimaliPanel(box, damBudget, spBudget, sfBudget, !!isClanSymbol);
-
-  const damPiece = Number(damBudget?.piece || 0);
-  const spPiece = Number(spBudget?.piece || 0);
-  /* Mutex: presenza dam/sp sul pezzo (hit-n-dam incluso), non solo delta vs proto. */
-  const damPresent =
-    damBudget?.piece_has_dam === true ||
-    Number(damBudget?.piece_current || 0) > 0 ||
-    damPiece > 0;
-  const spPresent =
-    spBudget?.piece_has_spellpower === true ||
-    Number(spBudget?.piece_current || 0) > 0 ||
-    spPiece > 0;
-  const damMutexActive = damPresent && damBudget?.mutex_with_spellpower !== false;
-  const spMutexActive = spPresent && spBudget?.mutex_with_dam !== false;
+  /* Dam/SP massimali legati a «Bonus in Combattimento» (editing armi): nascosti se la sezione e' off. */
+  const combatHidden = OBJECT_EDIT_SECTIONS_HIDDEN.has('Bonus in Combattimento');
+  renderMassimaliPanel(
+    box,
+    combatHidden ? null : damBudget,
+    combatHidden ? null : spBudget,
+    sfBudget,
+    !!isClanSymbol,
+  );
 
   const editsWrap = document.createElement('div');
   editsWrap.className = 'object-edit-groups';
@@ -2677,11 +4607,46 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
     'Sezioni chiuse di default: aprine una o usa il filtro. Slot affect / String / Massimali restano a sinistra.';
   editsWrap.appendChild(filterHint);
 
+  const hasHitNDam = entries.some(
+    (e) =>
+      (e.id === 'hitndam' || Number(e.location) === APPLY_HITNDAM) &&
+      (e.has_affect || Number(e.current) !== 0)
+  );
+  const hasHitNSp = entries.some(
+    (e) =>
+      (e.id === 'hitnsp' || Number(e.location) === APPLY_HITNSP) &&
+      (e.has_affect || Number(e.current) !== 0)
+  );
+
   const grouped = new Map();
   entries.forEach((entry) => {
     /* CON non e' nel listino ufficiale — non mostrare anche se myst vecchio lo manda. */
     if (entry.id === 'con' || Number(entry.location) === 5) return;
+    const id = String(entry.id || '');
+    const loc = Number(entry.location || 0);
+    /* Hit-n-dam/sp: solo se gia' sul pezzo (proto o edit). Merge = popup su hr/dam/sp. */
+    if (
+      (id === 'hitndam' || loc === APPLY_HITNDAM) &&
+      !entry.has_affect &&
+      Number(entry.current) === 0
+    ) {
+      return;
+    }
+    if (
+      (id === 'hitnsp' || loc === APPLY_HITNSP) &&
+      !entry.has_affect &&
+      Number(entry.current) === 0
+    ) {
+      return;
+    }
+    if (hasHitNDam && (id === 'hitroll' || id === 'damroll' || loc === APPLY_HITROLL || loc === APPLY_DAMROLL)) {
+      return;
+    }
+    if (hasHitNSp && (id === 'hitroll' || id === 'spellpower' || loc === APPLY_HITROLL || loc === APPLY_SPELLPOWER)) {
+      return;
+    }
     const section = objectEditSection(entry.id || '');
+    if (OBJECT_EDIT_SECTIONS_HIDDEN.has(section)) return;
     if (!grouped.has(section)) grouped.set(section, []);
     grouped.get(section).push(entry);
   });
@@ -2759,10 +4724,31 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
             select.disabled = true;
           }
         }
+      } else if (entry.clear_only) {
+        const keep = document.createElement('option');
+        keep.value = String(current);
+        keep.textContent = formatScalarOptionLabel(entry, current);
+        keep.selected = true;
+        select.appendChild(keep);
+        if (entry.can_clear_slot && canEdit && session.role !== 'limited') {
+          const clearOpt = document.createElement('option');
+          clearOpt.value = '__clear__';
+          clearOpt.textContent = 'Rimuovi slot (gratis)';
+          select.appendChild(clearOpt);
+        }
       } else {
         let values = buildObjectScalarOptions(entry);
-        if (!values.includes(current)) values.push(current);
+        const floorKeep = objectEntryValueFloor(entry);
+        const canKeepCurrent =
+          objectScalarLowerIsBetter(entry) ||
+          floorKeep == null ||
+          current >= floorKeep;
+        if (!values.includes(current) && canKeepCurrent) values.push(current);
         values = filterObjectScalarOptions(entry, values, current);
+        if (!objectScalarLowerIsBetter(entry) && floorKeep != null) {
+          values = values.filter((v) => v >= floorKeep);
+        }
+        values = filterCombatBudgetOptions(entry, values, current);
         values.sort((a, b) => a - b);
         if (entry.can_clear_slot && canEdit && session.role !== 'limited') {
           const clearOpt = document.createElement('option');
@@ -2773,7 +4759,7 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
         values.forEach((v) => {
           const opt = document.createElement('option');
           opt.value = v;
-          opt.textContent = formatScalarOptionLabel(entry, v);
+          opt.textContent = formatScalarOptionLabel(entry, v, current);
           if (v === current) opt.selected = true;
           select.appendChild(opt);
         });
@@ -2781,17 +4767,6 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
 
       if (!canEdit) {
         select.disabled = true;
-      }
-
-      let mutexHint = '';
-      if (canEdit && damMutexActive && objectEntryAffectsSpellpower(entry)) {
-        select.disabled = true;
-        mutexHint =
-          'Su questo pezzo c\'è già dam editato: rimuovi prima quello slot per editare spellpower/hit-n-sp.';
-      } else if (canEdit && spMutexActive && objectEntryAffectsDam(entry)) {
-        select.disabled = true;
-        mutexHint =
-          'Su questo pezzo c\'è già spellpower editato: rimuovi prima quello slot per editare dam/hit-n-dam.';
       }
 
       const queuedObj = objectEditCart.get(entry.id);
@@ -2872,7 +4847,6 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
             ? `<div class="cost-hint">${escapeHtml(objectEntryCostHint(entry))}</div>`
             : ''
         }
-        ${mutexHint ? `<div class="slot-hint massimale-note">${escapeHtml(mutexHint)}</div>` : ''}
       `;
       row.appendChild(meta);
       row.appendChild(select);
@@ -2910,13 +4884,31 @@ function renderObjectEdits(entries, damBudget, spBudget, sfBudget, isClanSymbol)
 
 async function queueObjectQuote(entry, targetModifier, selectEl, opts = {}) {
   const clearSlot = !!opts.clearSlot;
+  const caps = validateCartCapsForEdit(entry, targetModifier, clearSlot);
+  if (!caps.ok) {
+    alert(caps.error || 'Tetto / coda non valida');
+    if (selectEl) {
+      selectEl.value = selectEl.dataset.current || String(Number(entry.current || 0));
+    }
+    return;
+  }
+  let allowCombatMerge = !!opts.allowCombatMerge;
+  if (opts.allowCombatMerge == null && !clearSlot) {
+    const mergeKind = combatMergeOfferForEdit(entry, targetModifier, clearSlot);
+    if (mergeKind) {
+      allowCombatMerge = confirmCombatMerge(mergeKind);
+    }
+  }
   const payload = {
     targetToonId,
     inventoryId: selectedInventoryId,
     location: Number(entry.location || 0),
     targetModifier,
+    /* Verita' display da opzioni myst: evita current=0 su pezzi solo-proto. */
+    current: Number(entry.current || 0),
   };
   if (clearSlot) payload.clearSlot = true;
+  if (allowCombatMerge) payload.allowCombatMerge = true;
   if (entry.kind === 'flag' && entry.flag) {
     payload.flag = entry.flag;
   }
@@ -2924,24 +4916,34 @@ async function queueObjectQuote(entry, targetModifier, selectEl, opts = {}) {
     entry.kind === 'flag' &&
     entry.flag === 'artifact' &&
     Number(targetModifier) === 1;
-  /* +50% se pezzo gia' Artifact o Artifact gia' in coda (non sulla voce flag). */
+  /* artifact_mult sugli affect se pezzo Artifact o Artifact in coda (non sulla voce flag). */
   if (!addingThisArtifact && (objectAlreadyArtifact() || cartAddsArtifact())) {
     payload.pendingArtifact = true;
   }
 
-  const data = await api('/api/quote-object-edit', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-  if (!data.ok) {
-    alert(data.error || 'Quote oggetto fallita');
-    if (selectEl) {
-      selectEl.value = selectEl.dataset.current || String(Number(entry.current || 0));
-    }
-    clearObjectPending(entry.id);
-    return;
+  let qd = null;
+  if (addingThisArtifact && !clearSlot) {
+    await ensureListinoSnapshot();
+    qd = localArtifactQuote(selectedObjectOptions, entry);
   }
-  const qd = data.data;
+  if (!qd) {
+    const data = await api('/api/quote-object-edit', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (!data.ok) {
+      alert(data.error || 'Quote oggetto fallita');
+      if (selectEl) {
+        selectEl.value = selectEl.dataset.current || String(Number(entry.current || 0));
+      }
+      clearObjectPending(entry.id);
+      return;
+    }
+    qd = data.data;
+  }
+  enrichObjectQuoteMeta(qd, {
+    pendingArtifact: !!payload.pendingArtifact,
+  });
   const yesNo = isYesNoObjectEntry(entry);
   const curLabel = yesNo
     ? qd.current
@@ -2959,6 +4961,15 @@ async function queueObjectQuote(entry, targetModifier, selectEl, opts = {}) {
       : entry.relative
         ? formatScalarOptionLabel(entry, Number(qd.target))
         : qd.target;
+  let label = `${entry.label}: ${curLabel} → ${tgtLabel}`;
+  if (qd.malus_split) {
+    const mXp = Number(qd.malus_part?.xp_raw || qd.malus_part?.diff_xp_raw || 0);
+    const bXp = Number(qd.bonus_part?.xp_raw || qd.bonus_part?.diff_xp_raw || 0);
+    label += ` [malus→0 ${formatQuoteCostShort({ xp_raw: mXp })} 2x + bonus ${formatQuoteCostShort({ xp_raw: bXp })}]`;
+  }
+  if (allowCombatMerge && isCombatAffectEntryId(entry.id)) {
+    label += ' (accorpamento combat)';
+  }
   ensureObjectCartExclusive();
   const wasAddingArtifact = cartAddsArtifact();
   objectEditCart.set(entry.id, {
@@ -2966,28 +4977,267 @@ async function queueObjectQuote(entry, targetModifier, selectEl, opts = {}) {
     location: Number(entry.location || 0),
     targetModifier,
     clearSlot,
+    allowCombatMerge,
     flag: entry.kind === 'flag' ? entry.flag : undefined,
-    label: `${entry.label}: ${curLabel} → ${tgtLabel}`,
+    label,
     quote: qd,
     selectEl,
     entry,
+    artifactBundled: false,
   });
   const nowAddingArtifact = cartAddsArtifact();
-  if (wasAddingArtifact !== nowAddingArtifact || nowAddingArtifact) {
+  if (wasAddingArtifact !== nowAddingArtifact || nowAddingArtifact || addingThisArtifact) {
     await requoteObjectCartForArtifact();
   } else {
+    syncArtifactLineInCart(objectEditCart);
     rebuildObjectPendingFromCart();
   }
 }
 
-async function confirmPayEdit() {
+/**
+ * Costruisce gli step /api/apply-batch da pendingEdit (checkout globale).
+ * Artifact per pezzo prima degli altri affect; testo pezzo sul primo affect pagato.
+ */
+function buildCheckoutBatchSteps(logoutAfter) {
+  stashCurrentObjectCart();
+  const runePct = Number($('pay-rune-pct').value);
+  const mode = syncPayModeFromSlider();
+  const items = Array.isArray(pendingEdit.items)
+    ? [...pendingEdit.items]
+    : pendingEdit.type === 'object' ||
+        pendingEdit.type === 'pool' ||
+        pendingEdit.type === 'resistance' ||
+        pendingEdit.type === 'char-affect'
+      ? [pendingEdit]
+      : [];
+  if (!items.length) return { ok: false, error: 'carrello vuoto' };
+
+  /* Valida bozze testo per ogni pezzo coinvolto. */
+  const byInv = new Map();
+  for (const item of items) {
+    if (item.type === 'pool' || item.type === 'resistance') continue;
+    const invId = Number(item.inventoryId || selectedInventoryId);
+    if (!byInv.has(invId)) byInv.set(invId, []);
+    byInv.get(invId).push(item);
+  }
+  for (const [invId, invItems] of byInv.entries()) {
+    let draft =
+      Number(invId) === Number(selectedInventoryId)
+        ? getObjectTextDraft()
+        : objectTextDraftsByInv.get(Number(invId)) || null;
+    if (!draft) continue;
+    const opts = objectOptionsCache.get(Number(invId));
+    const baseline = opts?.text_edit;
+    const dirty =
+      Number(invId) === Number(selectedInventoryId)
+        ? objectTextDraftIsDirty(draft)
+        : baseline
+          ? draft.objName !== String(baseline.name || '') ||
+            draft.shortDesc !== String(baseline.short_desc || '') ||
+            draft.description !== String(baseline.description || '')
+          : true;
+    if (!dirty) continue;
+    const nameMax = Number(draft.nameMax || baseline?.name_max || 128);
+    const shortMax = Number(draft.shortMax || baseline?.short_max || 128);
+    const longMax = Number(draft.longMax || baseline?.long_max || 256);
+    if (
+      String(draft.objName || '').length > nameMax ||
+      String(draft.shortDesc || '').length > shortMax ||
+      String(draft.description || '').length > longMax
+    ) {
+      return {
+        ok: false,
+        error: `Name/short/long troppo lunghi su ${inventoryShortLabel(invId)}`,
+      };
+    }
+    if (!objectCartHasPaidAffect(invItems)) {
+      return {
+        ok: false,
+        error: `Name/short/long su ${inventoryShortLabel(
+          invId
+        )}: serve un affect pagato nello stesso pacchetto (non solo Artifact).`,
+      };
+    }
+  }
+
+  const steps = [];
+  const textAttachedForInv = new Set();
+
+  const objectItems = items.filter(
+    (it) =>
+      it.type === 'object' ||
+      (it.type !== 'pool' &&
+        it.type !== 'resistance' &&
+        it.type !== 'char-affect' &&
+        (it.inventoryId != null || it.location != null))
+  );
+  const charItems = items.filter(
+    (it) => it.type === 'pool' || it.type === 'resistance' || it.type === 'char-affect'
+  );
+
+  /* Espandi malus→bonus in due step; Artifact prima, poi malus→0, poi resto. */
+  const phaseRank = (p) =>
+    p === 'artifact' ? 0 : p === 'malus' ? 1 : p === 'bonus' ? 2 : 3;
+  const expanded = [];
+  for (const item of objectItems) {
+    if (item.type === 'pool' || item.type === 'resistance') continue;
+    if (item.flag === 'artifact') {
+      expanded.push({ item, phase: 'artifact', target: item.targetModifier, quote: item.quote });
+    } else if (
+      item.quote?.malus_split &&
+      item.quote.malus_part &&
+      item.quote.bonus_part &&
+      !item.clearSlot
+    ) {
+      expanded.push({
+        item,
+        phase: 'malus',
+        target: 0,
+        quote: item.quote.malus_part,
+      });
+      expanded.push({
+        item,
+        phase: 'bonus',
+        target: item.targetModifier,
+        quote: item.quote.bonus_part,
+      });
+    } else {
+      expanded.push({
+        item,
+        phase: 'normal',
+        target: item.targetModifier,
+        quote: item.quote,
+      });
+    }
+  }
+  expanded.sort((a, b) => {
+    const ia = Number(a.item.inventoryId || 0);
+    const ib = Number(b.item.inventoryId || 0);
+    if (ia !== ib) return ia - ib;
+    return phaseRank(a.phase) - phaseRank(b.phase);
+  });
+
+  for (const { item, phase, target, quote: partQuote } of expanded) {
+    const invId = Number(item.inventoryId || selectedInventoryId);
+    const itemPlan = buildPaymentPlan(partQuote || item.quote, mode, runePct);
+    const affectBody = {
+      target_toon_id: targetToonId,
+      inventory_id: invId,
+      location: item.location,
+      target_modifier: target,
+      pay_xp: itemPlan.payXp,
+      pay_rune: itemPlan.payRune,
+    };
+    if (item.clearSlot && phase === 'normal') affectBody.clear_slot = 1;
+    if (item.allowCombatMerge) affectBody.allow_combat_merge = 1;
+    if (item.flag) affectBody.flag = item.flag;
+    if (item.flag === 'artifact' && (item.artifactBundled || item.quote?.artifact_bundled)) {
+      /* In pacchetto con affect: flag gratis; il +50% e' sugli affect. */
+      affectBody.waive_artifact_fee = 1;
+      affectBody.pay_xp = 0;
+      affectBody.pay_rune = 0;
+    }
+    if (item.flag !== 'artifact' && item.usesArtifactPricing) {
+      affectBody.pending_artifact = 1;
+    }
+    const isPaidAffect =
+      item.flag !== 'artifact' &&
+      (Number(partQuote?.xp_raw || partQuote?.diff_xp_raw || item.quote?.xp_raw || 0) > 0 ||
+        Number(partQuote?.diff_rune || partQuote?.pq || item.quote?.diff_rune || 0) > 0);
+    if (isPaidAffect && !textAttachedForInv.has(invId)) {
+      let draft =
+        Number(invId) === Number(selectedInventoryId)
+          ? getObjectTextDraft()
+          : objectTextDraftsByInv.get(Number(invId)) || null;
+      const opts = objectOptionsCache.get(Number(invId));
+      const baseline = opts?.text_edit;
+      const dirty = draft
+        ? Number(invId) === Number(selectedInventoryId)
+          ? objectTextDraftIsDirty(draft)
+          : baseline
+            ? draft.objName !== String(baseline.name || '') ||
+              draft.shortDesc !== String(baseline.short_desc || '') ||
+              draft.description !== String(baseline.description || '')
+            : true
+        : false;
+      if (dirty && draft) {
+        affectBody.obj_name = draft.objName;
+        affectBody.short_desc = draft.shortDesc;
+        affectBody.description = draft.description;
+        textAttachedForInv.add(invId);
+      }
+    }
+    const phaseLabel =
+      phase === 'malus'
+        ? `${item.label} [malus→0]`
+        : phase === 'bonus'
+          ? `${item.label} [bonus]`
+          : item.label;
+    steps.push({
+      path: 'affect',
+      body: affectBody,
+      label: phaseLabel,
+    });
+  }
+
+  for (const item of charItems) {
+    const itemPlan = buildPaymentPlan(item.quote, mode, runePct);
+    if (item.type === 'pool') {
+      steps.push({
+        path: 'pool',
+        body: {
+          target_toon_id: targetToonId,
+          field: item.field,
+          new_value: item.newValue,
+          pay_xp: itemPlan.payXp,
+          pay_rune: itemPlan.payRune,
+        },
+        label: item.label,
+      });
+    } else if (item.type === 'resistance') {
+      steps.push({
+        path: 'resistance',
+        body: {
+          target_toon_id: targetToonId,
+          damage_type: item.damageType,
+          value: item.value,
+          pay_xp: itemPlan.payXp,
+          pay_rune: itemPlan.payRune,
+        },
+        label: item.label,
+      });
+    } else if (item.type === 'char-affect') {
+      steps.push({
+        path: 'char-affect',
+        body: {
+          target_toon_id: targetToonId,
+          location: item.location,
+          new_value: item.newValue,
+          pay_xp: itemPlan.payXp,
+          pay_rune: itemPlan.payRune,
+        },
+        label: item.label,
+      });
+    }
+  }
+
+  if (!steps.length) return { ok: false, error: 'nessuno step da applicare' };
+  return { ok: true, steps, logoutAfter: !!logoutAfter };
+}
+
+async function confirmPayEdit(logoutAfter = false) {
   if (!pendingEdit || !pendingEdit.plan) return;
 
   const targetName = charState?.name || 'personaggio';
   const isStaffOnOther =
     session.role === 'staff' && Number(targetToonId) !== Number(session.sessionToonId);
 
-  const msg1 = `Confermi il pagamento per:\n${pendingEdit.label}\n\nTotale: ${pendingEdit.plan.payXp.toLocaleString('it-IT')} XP (MXP) + ${pendingEdit.plan.payRune} ${currencyLabel('rune')}`;
+  const actionLabel = logoutAfter ? 'Applica e logout' : 'Applica tutto';
+  const confirmRune =
+    Number(pendingEdit.plan.payRune) > 0
+      ? ` + ${pendingEdit.plan.payRune} ${currencyLabel('rune')}`
+      : '';
+  const msg1 = `${actionLabel} — confermi il pagamento per:\n${pendingEdit.label}\n\nTotale: ${pendingEdit.plan.payXp.toLocaleString('it-IT')} XP (MXP)${confirmRune}`;
   if (!confirm(msg1)) return;
 
   if (isStaffOnOther) {
@@ -2995,171 +5245,58 @@ async function confirmPayEdit() {
     if (!confirm(msg2)) return;
   }
 
-  const body = {
-    targetToonId,
-    payXp: pendingEdit.plan.payXp,
-    payRune: pendingEdit.plan.payRune,
-  };
-
-  const mode = $('pay-mode').value;
-  const runePct = Number($('pay-rune-pct').value);
-
-  let result;
-  if (pendingEdit.type === 'character-batch') {
-    const items = [...pendingEdit.items];
-    result = { ok: true };
-    for (const item of items) {
-      const itemPlan = buildPaymentPlan(item.quote, mode, runePct);
-      if (item.type === 'pool') {
-        result = await api('/api/apply-pool', {
-          method: 'POST',
-          body: JSON.stringify({
-            targetToonId,
-            field: item.field,
-            newValue: item.newValue,
-            payXp: itemPlan.payXp,
-            payRune: itemPlan.payRune,
-          }),
-        });
-      } else if (item.type === 'resistance') {
-        result = await api('/api/apply-resistance', {
-          method: 'POST',
-          body: JSON.stringify({
-            targetToonId,
-            damageType: item.damageType,
-            value: item.value,
-            payXp: itemPlan.payXp,
-            payRune: itemPlan.payRune,
-          }),
-        });
-      } else {
-        result = { ok: false, error: 'Voce carrello personaggio non valida' };
-      }
-      if (!result.ok) break;
-    }
-  } else if (pendingEdit.type === 'pool') {
-    result = await api('/api/apply-pool', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...body,
-        field: pendingEdit.field,
-        newValue: pendingEdit.newValue,
-      }),
-    });
-  } else if (pendingEdit.type === 'resistance') {
-    result = await api('/api/apply-resistance', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...body,
-        damageType: pendingEdit.damageType,
-        value: pendingEdit.value,
-      }),
-    });
-  } else if (pendingEdit.type === 'object-batch' || pendingEdit.type === 'object') {
-    /*
-     * Applica Artifact per primo (flag gratis), poi le voci pagate:
-     * cosi' AnalyzeObjEdit applica gia' il +50% listino sul pezzo.
-     * Name/short/long: solo insieme al primo affect pagato (stesso apply).
-     */
-    const items =
-      pendingEdit.type === 'object-batch'
-        ? [...pendingEdit.items]
-        : [pendingEdit];
-    items.sort((a, b) => {
-      const aa = a.flag === 'artifact' ? 1 : 0;
-      const bb = b.flag === 'artifact' ? 1 : 0;
-      return bb - aa;
-    });
-
-    const textDraft = getObjectTextDraft();
-    const textDirty = objectTextDraftIsDirty(textDraft);
-    if (textDirty) {
-      if (
-        textDraft.objName.length > textDraft.nameMax ||
-        textDraft.shortDesc.length > textDraft.shortMax ||
-        textDraft.description.length > textDraft.longMax
-      ) {
-        alert('Name/short/long troppo lunghi: correggi prima di pagare.');
-        return;
-      }
-      if (!objectCartHasPaidAffect(items)) {
-        alert(
-          'Name/short/long si salvano solo insieme al pagamento di un nuovo affect (non da soli, non con solo Artifact).'
-        );
-        return;
-      }
-    }
-
-    result = { ok: true };
-    let textAttached = false;
-    for (const item of items) {
-      const itemPlan = buildPaymentPlan(item.quote, mode, runePct);
-      const affectBody = {
-        targetToonId,
-        inventoryId: selectedInventoryId,
-        location: item.location,
-        targetModifier: item.targetModifier,
-        payXp: itemPlan.payXp,
-        payRune: itemPlan.payRune,
-      };
-      if (item.clearSlot) {
-        affectBody.clearSlot = true;
-      }
-      if (item.flag) {
-        affectBody.flag = item.flag;
-      }
-      /* Stesso +50% Artifact del quote (pezzo gia' Artifact o in coda). */
-      if (item.flag !== 'artifact' && objectPricingUsesArtifact()) {
-        affectBody.pendingArtifact = true;
-      }
-      const isPaidAffect =
-        item.flag !== 'artifact' &&
-        (Number(item.quote?.xp_raw || item.quote?.diff_xp_raw || 0) > 0 ||
-          Number(item.quote?.diff_rune || item.quote?.pq || 0) > 0);
-      if (textDirty && !textAttached && isPaidAffect) {
-        affectBody.objName = textDraft.objName;
-        affectBody.shortDesc = textDraft.shortDesc;
-        affectBody.description = textDraft.description;
-        textAttached = true;
-      }
-      result = await api('/api/apply-affect', {
-        method: 'POST',
-        body: JSON.stringify(affectBody),
-      });
-      if (!result.ok) {
-        break;
-      }
-    }
-  } else if (pendingEdit.type === 'object-text') {
+  if (pendingEdit.type === 'object-text') {
     alert(
       'Name/short/long non si salvano da soli: metti in coda un affect pagato e conferma il pagamento.'
     );
     return;
-  } else {
+  }
+
+  const built = buildCheckoutBatchSteps(logoutAfter);
+  if (!built.ok) {
+    alert(built.error || 'Pacchetto non valido');
     return;
   }
 
+  const result = await apiApply(
+    '/api/apply-batch',
+    {
+      targetToonId,
+      logoutAfter: !!logoutAfter,
+      steps: built.steps,
+    },
+    logoutAfter ? 'Applica e logout' : 'Applica tutto',
+  );
+
   if (result.ok) {
-    $('apply-result').textContent = 'Edit applicato con successo.';
-    const wasObject =
-      pendingEdit.type === 'object' ||
-      pendingEdit.type === 'object-batch' ||
-      pendingEdit.type === 'object-text';
-    const wasCharacter = isCharacterPendingType(pendingEdit.type);
+    const n = built.steps.length;
+    $('apply-result').textContent = logoutAfter
+      ? `Pacchetto applicato (${n} edit) — sessione edit chiusa.`
+      : `Pacchetto applicato (${n} edit).`;
     const invId = selectedInventoryId;
-    clearObjectEditCart();
-    clearCharacterEditCart();
+    clearAllObjectCarts();
+    characterEditCart.clear();
+    objectOptionsCache.clear();
     pendingEdit = null;
     updatePaymentUI();
+
+    if (logoutAfter) {
+      await api('/api/deselect-toon', { method: 'POST' }).catch(() => {});
+      targetToonId = null;
+      clearTargetWorkspace('');
+      await refreshMe();
+      return;
+    }
+
+    await ensureToonEditSnapshot(true);
     await loadCharacterState();
-    if (wasObject && invId) {
-      await loadInventory();
+    await loadInventory();
+    if (invId) {
       const li = document.querySelector('#inventory-list .item.selected');
-      if (li) await selectItem(invId, li);
-    } else if (wasCharacter) {
+      await selectItem(invId, li || null, { forceRefresh: true });
+    } else {
       renderCharacterEdits();
     }
-    /* Ricalcola riepilogo login per il PG appena editato (prossimo «Cambia personaggio»). */
     if (targetToonId) {
       api(`/api/toon-overview/${targetToonId}`).catch(() => {});
     }
@@ -3191,6 +5328,7 @@ $('login-form').addEventListener('submit', async (e) => {
 });
 
 $('btn-logout').onclick = async () => {
+  stopEditSessionTouch();
   await api('/api/logout', { method: 'POST' });
   targetToonId = null;
   const search = $('target-toon-search');
@@ -3204,6 +5342,7 @@ $('btn-logout').onclick = async () => {
 };
 
 $('btn-change-toon').onclick = async () => {
+  stopEditSessionTouch();
   await api('/api/deselect-toon', { method: 'POST' });
   pendingEdit = null;
   targetToonId = null;
@@ -3213,7 +5352,10 @@ $('btn-change-toon').onclick = async () => {
   await refreshMe();
 };
 
-$('btn-refresh-inv').onclick = () => loadInventory();
+$('btn-refresh-inv').onclick = () => {
+  objectOptionsCache.clear();
+  loadInventory();
+};
 
 (function initInventorySort() {
   const sel = $('inventory-sort');
@@ -3234,9 +5376,14 @@ $('btn-refresh-inv').onclick = () => loadInventory();
   };
 })();
 
-$('pay-mode').onchange = updatePaymentUI;
-$('pay-rune-pct').oninput = updatePaymentUI;
-$('btn-pay-edit').onclick = () => confirmPayEdit();
+if ($('pay-mode')) $('pay-mode').onchange = updatePaymentUI;
+if ($('pay-tender')) $('pay-tender').onchange = updatePaymentUI;
+if ($('pay-rune-pct')) $('pay-rune-pct').oninput = updatePaymentUI;
+$('btn-pay-edit').onclick = () => confirmPayEdit(false);
+const btnPayLogout = $('btn-pay-edit-logout');
+if (btnPayLogout) {
+  btnPayLogout.onclick = () => confirmPayEdit(true);
+}
 
 const btnResetChar = $('btn-reset-char-edits');
 if (btnResetChar) {
@@ -3246,7 +5393,7 @@ if (btnResetChar) {
   };
 }
 function resetObjectEditsToSelection() {
-  clearObjectEditCart({ resetSelectors: true });
+  clearObjectEditCart({ resetSelectors: true, allPieces: false });
   const t = selectedObjectOptions?.text_edit;
   if (t) {
     const nameEl = $('obj-text-name');
@@ -3354,6 +5501,7 @@ async function checkMystPortalVersion() {
 }
 
 async function loadSystemConfig() {
+  await loadEditCapabilities();
   const data = await api('/api/staff/system-config');
   if (!data.ok) {
     $('config-result').textContent = data.error || 'errore';
@@ -3422,13 +5570,29 @@ function applyCurrenciesToUI(currencies) {
       cb.type = 'checkbox';
       cb.dataset.field = field;
       cb.checked = !!row[field];
-      if ((row.slug === 'mxp' || row.slug === 'rune') && field === 'pays_listino') {
-        cb.checked = true;
+      const payable = payableTenderSlugs();
+      if (field === 'pays_listino') {
+        if (!payable.has(row.slug)) {
+          cb.checked = false;
+          cb.disabled = true;
+          labEl.title =
+            'Myst non dichiara questo tender in edit-capabilities: non puo pagare il listino.';
+        } else {
+          cb.checked = true;
+          cb.disabled = false;
+        }
       }
       labEl.appendChild(cb);
       labEl.appendChild(document.createTextNode(` ${lab}`));
       flags.appendChild(labEl);
     });
+    if (!payableTenderSlugs().has(row.slug)) {
+      const note = document.createElement('p');
+      note.className = 'hint currency-myst-note';
+      note.textContent =
+        'Solo UI: myst non scala questa valuta. Per abilitare pays_listino serve un tender in edit-capabilities.';
+      wrap.appendChild(note);
+    }
     wrap.appendChild(flags);
     host.appendChild(wrap);
   };
@@ -3449,7 +5613,7 @@ function applyCurrenciesToUI(currencies) {
   const hint = document.createElement('p');
   hint.className = 'hint';
   hint.textContent =
-    'Gold / Token / Credito edit: predisposte per il futuro. Restano invisibili ai PG finché non le segni visibili e abilitate.';
+    'Gold / Token / Credito: solo UI finche myst non le espone come tender. Quando arriveranno, il pagamento sara sempre valuta + rune (bilanciamento dedicato).';
   body.appendChild(hint);
   extras.forEach((row) => renderRow(row, body));
 
@@ -3542,6 +5706,7 @@ function applyCurrenciesToUI(currencies) {
 }
 
 function currenciesFromUI() {
+  const payable = payableTenderSlugs();
   const catalog = [];
   document.querySelectorAll('#portal-currency-toggles .currency-config-row').forEach((row) => {
     const slug = row.dataset.slug;
@@ -3555,36 +5720,38 @@ function currenciesFromUI() {
       label: (labelEl?.value || slug).trim() || slug,
       enabled: !!enabledEl?.checked,
       visible: !!visibleEl?.checked,
-      pays_listino: !!paysEl?.checked,
+      pays_listino: payable.has(slug) && !!paysEl?.checked,
     });
   });
   return {
     catalog,
     comment:
-      'Valute portale. visible=false = nascosta ai player. pays_listino riservato a MXP/Rune per ora.',
+      'Valute portale. visible=false = nascosta ai player. pays_listino solo se tender in edit-capabilities; mix sempre valuta+rune.',
   };
 }
 
 function refreshPayModeLabels() {
-  const payMode = $('pay-mode');
-  if (!payMode) return;
-  const mxp = currencyLabel('mxp');
+  rebuildPayTenderSelect();
+  const tenderSel = $('pay-tender');
   const rune = currencyLabel('rune');
-  const optMxp = payMode.querySelector('option[value="mxp"]');
-  const optRune = payMode.querySelector('option[value="runes"]');
-  const optMix = payMode.querySelector('option[value="mix"]');
-  if (optMxp) optMxp.textContent = `Solo ${mxp} (exp)`;
-  if (optRune) optRune.textContent = `Solo ${rune}`;
-  if (optMix) optMix.textContent = `Misto ${mxp} + ${rune}`;
-  const runePct = $('rune-pct-wrap');
-  if (runePct) {
-    const lab = runePct.querySelector('label, .field-label') || runePct;
-    /* Keep structure: first text node before input — update via data attribute on wrap. */
-  }
+  const tenderLab =
+    tenderSel?.selectedOptions?.[0]?.textContent || currencyLabel('mxp');
+  const pct = Number($('pay-rune-pct')?.value || 0);
   const hint = document.querySelector('.payment-dock-hint');
   if (hint) {
-    hint.innerHTML = `Costo sul <strong>personaggio target</strong> (${mxp} / ${rune}).`;
+    let payHint;
+    if (pct <= 0) {
+      payHint = escapeHtml(tenderLab);
+    } else if (pct >= 100) {
+      payHint = escapeHtml(rune);
+    } else {
+      payHint = `${escapeHtml(tenderLab)} + ${escapeHtml(rune)} (${pct}% ${escapeHtml(
+        rune
+      )})`;
+    }
+    hint.innerHTML = `Costo sul <strong>personaggio target</strong> (${payHint}).`;
   }
+  updateCapabilitiesStaffHint();
 }
 
 function applyPortalCategoriesToUI(portal) {
@@ -3714,313 +5881,23 @@ $('btn-save-config').onclick = async () => {
   await loadCharacterState();
 };
 
-/* ---- Staff: listino unico edit_listino (lettura, modifica, nuove voci, regole) ---- */
-
-const LISTINO_EDIT_COLS = [
-  ['enabled', 'Attiva', 'checkbox'],
-  ['label', 'Label', 'text'],
-  ['category', 'Cat.', 'text'],
-  ['xp', 'XP/slot', 'number'],
-  ['rune_num', 'Rune n', 'number'],
-  ['rune_den', 'Rune d', 'number'],
-  ['sign', 'Sign', 'number'],
-  ['step', 'Step', 'number'],
-  ['cap_obj', 'Cap pezzo', 'number'],
-  ['cap_pc', 'Cap PG', 'number'],
-  ['cap_group', 'Gruppo', 'text'],
-  ['on_obj', 'Obj', 'checkbox'],
-  ['on_pc', 'PG', 'checkbox'],
-  ['buy_step', 'Passo acq.', 'number'],
-];
-/* Voce nuova: niente interruttori (nasce sempre spenta, enabled/on_obj/on_pc = 0). */
-const LISTINO_OFF_ON_CREATE = ['enabled', 'on_obj', 'on_pc'];
-const LISTINO_ADD_COLS = [
-  ['code', 'Code', 'text'],
-  ...LISTINO_EDIT_COLS.filter(([col]) => !LISTINO_OFF_ON_CREATE.includes(col)),
-  ['apply_loc', 'APPLY', 'number'],
-  ['apply_bit', 'Bit', 'text'],
-  ['over_cap', 'Over cap', 'number'],
-  ['over_step', 'Over step', 'number'],
-  ['over_xp', 'Over XP', 'number'],
-  ['over_gold', 'Over oro', 'number'],
-  ['over_rune', 'Over rune', 'number'],
-  ['over_inc_pct', 'Over +%', 'number'],
-];
-let listinoData = null;
-
-function listinoInput(col, type, value, disabled = false) {
-  if (type === 'checkbox') {
-    return `<input type="checkbox" data-col="${col}" ${Number(value) ? 'checked' : ''} ${disabled ? 'disabled' : ''} />`;
-  }
-  return `<input type="${type}" data-col="${col}" value="${escapeHtml(value ?? '')}" />`;
-}
-
-function listinoReadRow(container, cols) {
-  const out = {};
-  cols.forEach(([col, , type]) => {
-    const el = container.querySelector(`[data-col="${col}"]`);
-    if (!el) return;
-    if (type === 'checkbox') out[col] = el.checked ? 1 : 0;
-    else if (el.value !== '') out[col] = type === 'number' ? Number(el.value) : el.value;
-  });
-  return out;
-}
-
-function renderListinoTable() {
-  const table = $('listino-table');
-  if (!table || !listinoData) return;
-  const q = ($('listino-filter')?.value || '').trim().toLowerCase();
-  const rows = listinoData.items.filter(
-    (it) =>
-      !q ||
-      String(it.code).includes(q) ||
-      String(it.label || '').toLowerCase().includes(q) ||
-      String(it.category || '').toLowerCase().includes(q),
-  );
-  const head =
-    '<tr><th>Code</th>' +
-    LISTINO_EDIT_COLS.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join('') +
-    '<th>APPLY/bit</th><th>MUD</th><th>Portale</th><th></th></tr>';
-  const body = rows
-    .map((it) => {
-      const p = it.portal || {};
-      const view =
-        p.kind === 'affect'
-          ? `affect ${p.id} step ${p.step} [${p.min_total}..${p.max_total}] raw ${p.pos_unit_raw}/${p.neg_unit_raw}`
-          : p.kind === 'pool'
-            ? `pool ${p.pool_field} cap ${p.cap} xp/u ${p.xp_per_unit}`
-            : p.kind;
-      const mud = it.mud || {};
-      /* Non attivabile se il MUD non la supporta (o stato ignoto) e oggi e' spenta. */
-      const lockEnable = mud.supported !== true && !Number(it.enabled);
-      const mudCell =
-        mud.supported === true
-          ? `<span class="badge-ok">supportato${mud.active === false && Number(it.enabled) ? ' (non attivo)' : ''}</span>`
-          : mud.supported === false
-            ? `<span class="badge-warn" title="${escapeHtml(mud.reason || '')}">non supportato dal MUD</span>`
-            : `<span class="hint" title="${escapeHtml(mud.reason || '')}">?</span>`;
-      return (
-        `<tr data-code="${escapeHtml(it.code)}"><td><code>${escapeHtml(it.code)}</code></td>` +
-        LISTINO_EDIT_COLS.map(
-          ([col, , type]) =>
-            `<td>${listinoInput(col, type, it[col], col === 'enabled' && lockEnable)}</td>`,
-        ).join('') +
-        `<td>${escapeHtml(it.apply_loc)}/${escapeHtml(it.apply_bit)}</td>` +
-        `<td>${mudCell}</td>` +
-        `<td class="hint">${escapeHtml(view)}</td>` +
-        '<td><button type="button" class="btn-secondary" data-act="save">Salva</button></td></tr>'
-      );
-    })
-    .join('');
-  table.innerHTML = head + body;
-  table.querySelectorAll('button[data-act="save"]').forEach((btn) => {
-    btn.onclick = async () => {
-      const tr = btn.closest('tr');
-      const item = { code: tr.dataset.code, ...listinoReadRow(tr, LISTINO_EDIT_COLS) };
-      await saveListinoItem(item);
-    };
-  });
-}
-
-function renderListinoRules() {
-  const box = $('listino-rules');
-  if (!box || !listinoData) return;
-  const rules = listinoData.rules || {};
-  box.innerHTML = Object.keys(rules)
-    .sort()
-    .map(
-      (k) =>
-        `<div class="listino-rule-row" data-key="${escapeHtml(k)}"><code>${escapeHtml(k)}</code> ` +
-        `<input type="number" data-r="num" value="${escapeHtml(rules[k].num)}" /> / ` +
-        `<input type="number" data-r="den" min="1" value="${escapeHtml(rules[k].den)}" /> ` +
-        '<button type="button" class="btn-secondary" data-act="rule">Salva</button></div>',
-    )
-    .join('');
-  box.querySelectorAll('button[data-act="rule"]').forEach((btn) => {
-    btn.onclick = async () => {
-      const row = btn.closest('.listino-rule-row');
-      await saveListinoRule(
-        row.dataset.key,
-        Number(row.querySelector('[data-r="num"]').value),
-        Number(row.querySelector('[data-r="den"]').value || 1),
-      );
-    };
-  });
-}
-
-function renderListinoAddForm() {
-  const form = $('listino-add-form');
-  if (!form || form.dataset.ready) return;
-  /* Nessun interruttore acceso di default: la voce nasce spenta (lato server forzato). */
-  const defaults = { rune_den: 1, sign: 1, step: 1, buy_step: 1 };
-  form.innerHTML = LISTINO_ADD_COLS.map(
-    ([col, label, type]) =>
-      `<label class="field-label">${escapeHtml(label)} ${listinoInput(col, type, defaults[col] ?? '')}</label>`,
-  ).join('');
-  form.dataset.ready = '1';
-}
-
-async function loadListinoAdmin() {
-  const res = $('listino-result');
-  const data = await api('/api/staff/listino');
-  if (!data.ok) {
-    if (res) res.textContent = data.error || 'errore listino';
-    return;
-  }
-  listinoData = data.data;
-  if (listinoData.revision) listinoRevision = listinoData.revision;
-  renderListinoAddForm();
-  renderListinoTable();
-  renderListinoRules();
-  renderListinoCapGroups();
-  if (res) {
-    res.textContent =
-      `${listinoData.items.length} voci da ${listinoData.source}; broker fee ${listinoData.broker_fee_percent}%` +
-      (listinoData.myst_error ? ` — myst: ${listinoData.myst_error} (supporto MUD sconosciuto)` : '');
-  }
-}
-
-async function afterListinoSave(data, okMsg) {
-  const res = $('listino-result');
-  if (!data.ok) {
-    if (res) res.textContent = data.error || 'errore';
-    return;
-  }
-  const warn = data.data?.myst_reload_ok ? '' : ` (attenzione: reload myst fallito: ${data.data?.myst_reload_error || '?'})`;
-  if (res) res.textContent = okMsg + warn;
-  await loadListinoAdmin();
-  await loadEditCatalog();
-}
-
-async function saveListinoItem(item) {
-  const data = await api('/api/staff/listino', { method: 'POST', body: JSON.stringify({ item }) });
-  await afterListinoSave(data, `Voce ${item.code} salvata.`);
-}
-
-async function saveListinoRule(confKey, num, den) {
-  const data = await api('/api/staff/listino-rule', {
-    method: 'POST',
-    body: JSON.stringify({ conf_key: confKey, num, den }),
-  });
-  await afterListinoSave(data, `Regola ${confKey} = ${num}/${den} salvata.`);
-}
-
-function renderListinoCapGroups() {
-  const box = $('listino-cap-groups');
-  if (!box || !listinoData) return;
-  const labels = listinoData.cap_group_labels || {};
-  const keys = new Set([...Object.keys(labels), ...(listinoData.cap_groups || []).map((g) => g.group_key)]);
-  box.innerHTML = [...keys]
-    .sort()
-    .map((k) => {
-      const g = (listinoData.cap_groups || []).find((x) => x.group_key === k);
-      const caps = g ? ` (pezzo ${g.max_piece}, PG ${g.max_character}: ${g.members.join(', ')})` : '';
-      return (
-        `<div class="listino-rule-row" data-key="${escapeHtml(k)}"><code>${escapeHtml(k)}</code> ` +
-        `<input type="text" data-r="label" value="${escapeHtml(labels[k] || '')}" /> ` +
-        `<button type="button" class="btn-secondary" data-act="cg">Salva</button>` +
-        `<span class="hint">${escapeHtml(caps)}</span></div>`
-      );
-    })
-    .join('');
-  box.querySelectorAll('button[data-act="cg"]').forEach((btn) => {
-    btn.onclick = async () => {
-      const row = btn.closest('.listino-rule-row');
-      const data = await api('/api/staff/listino-cap-group', {
-        method: 'POST',
-        body: JSON.stringify({ code: row.dataset.key, label: row.querySelector('[data-r="label"]').value }),
-      });
-      await afterListinoSave(data, `Gruppo ${row.dataset.key} salvato.`);
-    };
-  });
-}
-
-/* Revisione della cache myst (seed_tag). GET economico: myst non ricarica
- * il listino da qui (solo boot o /internal/listino-reload da save/Sync).
- * Se la revisione cambia (altro staff ha fatto Sync, myst riavviato) la UI
- * riallinea catalogo e, se aperto, il pannello listino. */
-let listinoRevision = null;
-async function checkListinoRevision() {
-  if (!session) return;
-  let data;
-  try {
-    data = await api('/api/listino-status');
-  } catch {
-    return;
-  }
-  if (!data || !data.ok) return;
-  const rev = data.data?.revision || '';
-  if (listinoRevision !== null && rev && rev !== listinoRevision) {
-    listinoRevision = rev;
-    await loadEditCatalog();
-    if (listinoData) await loadListinoAdmin();
-    const res = $('listino-result');
-    if (res) res.textContent = 'Listino cambiato (MUD o altro staff): riallineato.';
-    return;
-  }
-  listinoRevision = rev || listinoRevision;
-}
-setInterval(checkListinoRevision, 30000);
-
-if ($('btn-listino-sync')) {
-  $('btn-listino-sync').onclick = async () => {
-    const data = await api('/api/staff/listino-sync', { method: 'POST', body: '{}' });
-    const res = $('listino-result');
-    if (!data.ok) {
-      if (res) res.textContent = data.error || 'sync fallito';
-      return;
-    }
-    listinoRevision = data.data?.revision || listinoRevision;
-    await loadListinoAdmin();
-    await loadEditCatalog();
-    if (res) res.textContent = 'Sync eseguito: myst ha riletto edit_listino.';
-  };
-}
-
-if ($('btn-listino-load')) $('btn-listino-load').onclick = () => loadListinoAdmin();
-if ($('listino-filter')) $('listino-filter').oninput = () => renderListinoTable();
-if ($('listino-admin-panel')) {
-  $('listino-admin-panel').addEventListener('toggle', (ev) => {
-    if (ev.target.open && !listinoData) loadListinoAdmin();
-  });
-}
-if ($('btn-listino-add')) {
-  $('btn-listino-add').onclick = async () => {
-    const item = listinoReadRow($('listino-add-form'), LISTINO_ADD_COLS);
-    if (!item.code) {
-      $('listino-result').textContent = 'code richiesto';
-      return;
-    }
-    item.create_only = true;
-    LISTINO_OFF_ON_CREATE.forEach((col) => {
-      item[col] = 0;
-    });
-    const data = await api('/api/staff/listino', { method: 'POST', body: JSON.stringify({ item }) });
-    await afterListinoSave(data, `Voce ${item.code} aggiunta.`);
-  };
-}
-if ($('btn-listino-rule-add')) {
-  $('btn-listino-rule-add').onclick = () =>
-    saveListinoRule(
-      $('listino-rule-key').value,
-      Number($('listino-rule-num').value),
-      Number($('listino-rule-den').value || 1),
-    );
-}
-
 $('btn-inst-search').onclick = async () => {
   const q = $('inst-search').value;
   const data = await api(`/api/staff/instances?q=${encodeURIComponent(q)}`);
   const list = $('inst-list');
   list.innerHTML = '';
   if (!data.ok) return;
+  const labOn = !!session?.labEnabled || Number(session?.maxLevel || 0) >= 58;
   data.instances.forEach((i) => {
     const li = document.createElement('li');
     li.className = 'inst-item';
     li.innerHTML =
       `#${escapeHtml(i.id)} base ${escapeHtml(i.base_vnum)} owner ` +
       `<button type="button" class="linkish" data-owner="${escapeHtml(i.owner_name)}">${escapeHtml(i.owner_name)}</button>` +
-      ` — ${mudTextToHtml(i.short_desc)}`;
+      ` — ${mudTextToHtml(i.short_desc)}` +
+      (labOn
+        ? ` <button type="button" class="btn-secondary btn-lab-clone" data-iid="${escapeHtml(i.id)}">Clona sul target</button>`
+        : '');
     const btn = li.querySelector('button[data-owner]');
     if (btn) {
       btn.onclick = async () => {
@@ -4042,9 +5919,32 @@ $('btn-inst-search').onclick = async () => {
         }
       };
     }
+    const cloneBtn = li.querySelector('button.btn-lab-clone');
+    if (cloneBtn) {
+      cloneBtn.onclick = () => labCloneInstance(cloneBtn.dataset.iid);
+    }
     list.appendChild(li);
   });
 };
+
+const btnLabSetStats = $('btn-lab-set-stats');
+if (btnLabSetStats) btnLabSetStats.onclick = () => labSetStats();
+const btnLabGive = $('btn-lab-give-vnum');
+if (btnLabGive) btnLabGive.onclick = () => labGiveVnum();
+['lab-exp', 'lab-rune'].forEach((id) => {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener('input', updateLabStatPreviews);
+  el.addEventListener('change', updateLabStatPreviews);
+});
+const labObjSearch = $('lab-obj-search');
+if (labObjSearch) {
+  labObjSearch.addEventListener('input', () => {
+    const q = String(labObjSearch.value || '').trim();
+    if (labObjSearchTimer) clearTimeout(labObjSearchTimer);
+    labObjSearchTimer = setTimeout(() => labSearchObjects(q), 280);
+  });
+}
 
 const btnToggleTools = $('btn-toggle-tools');
 if (btnToggleTools) {
@@ -4055,3 +5955,380 @@ restoreSavedLogin();
 applyLoginUiMode();
 $('header-meta').textContent = `UI build ${EDIT_PORTAL_UI_BUILD}`;
 refreshMe();
+
+/* ========== Staff listino admin (prezzi + routing + nuovi valori) ========== */
+let listinoAdminState = null;
+
+function listinoAdminEscape(s) {
+  return escapeHtml(String(s ?? ''));
+}
+
+function renderListinoCapGroupsAdmin(groups) {
+  const host = $('listino-cap-groups');
+  if (!host) return;
+  const rows = (groups || [])
+    .map(
+      (g, i) => `
+    <tr data-idx="${i}">
+      <td><input data-f="group_key" type="text" value="${listinoAdminEscape(g.group_key)}" ${g._new ? '' : 'readonly'} /></td>
+      <td><input data-f="label" type="text" value="${listinoAdminEscape(g.label)}" /></td>
+      <td><input data-f="max_piece" class="narrow" type="number" value="${Number(g.max_piece) || 0}" /></td>
+      <td><input data-f="max_character" class="narrow" type="number" value="${Number(g.max_character) || 0}" /></td>
+      <td><input data-f="enabled" type="checkbox" ${Number(g.enabled) !== 0 ? 'checked' : ''} /></td>
+      <td><button type="button" class="btn-secondary btn-listino-del-cap" data-idx="${i}">Elimina</button></td>
+    </tr>`
+    )
+    .join('');
+  host.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Chiave</th><th>Nome</th><th>Cap pezzo</th><th>Cap PG</th><th>On</th><th></th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="6">Nessun gruppo</td></tr>'}</tbody>
+    </table>`;
+  host.querySelectorAll('.btn-listino-del-cap').forEach((btn) => {
+    btn.onclick = () => {
+      const idx = Number(btn.dataset.idx);
+      const g = listinoAdminState.cap_groups[idx];
+      if (!g) return;
+      if (!listinoAdminState.delete_cap_group_keys) listinoAdminState.delete_cap_group_keys = [];
+      if (!g._new) listinoAdminState.delete_cap_group_keys.push(g.group_key);
+      listinoAdminState.cap_groups.splice(idx, 1);
+      renderListinoCapGroupsAdmin(listinoAdminState.cap_groups);
+      renderListinoAffectAdmin(listinoAdminState.affect, listinoAdminState.routing);
+    };
+  });
+}
+
+function collectCapGroupsFromDom() {
+  const host = $('listino-cap-groups');
+  if (!host) return [];
+  return [...host.querySelectorAll('tbody tr[data-idx]')].map((tr) => {
+    const enabled = tr.querySelector('[data-f="enabled"]')?.checked;
+    return {
+      group_key: tr.querySelector('[data-f="group_key"]')?.value || '',
+      label: tr.querySelector('[data-f="label"]')?.value || '',
+      max_piece: Number(tr.querySelector('[data-f="max_piece"]')?.value || 0),
+      max_character: Number(tr.querySelector('[data-f="max_character"]')?.value || 0),
+      enabled: enabled ? 1 : 0,
+    };
+  });
+}
+
+function routingForAffectId(listinoId) {
+  const id = `affect.${listinoId}`;
+  const r = (listinoAdminState?.routing || []).find((x) => x.id === id);
+  return r || { id, kind: 'affect', target: 'object', enabled: true };
+}
+
+function renderListinoAffectAdmin(affect, routing) {
+  const host = $('listino-affect-admin');
+  if (!host) return;
+  const groups = collectCapGroupsFromDom().map((g) => g.group_key).filter(Boolean);
+  const groupOpts = (selected) =>
+    `<option value="">(nessuno)</option>` +
+    groups
+      .map(
+        (k) =>
+          `<option value="${listinoAdminEscape(k)}" ${k === selected ? 'selected' : ''}>${listinoAdminEscape(k)}</option>`
+      )
+      .join('');
+  const applyOpts = (loc) =>
+    (listinoAdminState.apply_catalog || [])
+      .map(
+        (a) =>
+          `<option value="${a.location}" ${Number(a.location) === Number(loc) ? 'selected' : ''}>${listinoAdminEscape(a.name)} (${a.location})</option>`
+      )
+      .join('');
+  const rows = (affect || [])
+    .map((a, i) => {
+      const rt = routingForAffectId(a.id);
+      return `
+    <tr data-idx="${i}" data-id="${listinoAdminEscape(a.id)}">
+      <td><input data-f="id" type="text" value="${listinoAdminEscape(a.id)}" ${a._new ? '' : 'readonly'} /></td>
+      <td><input data-f="label" type="text" value="${listinoAdminEscape(a.label)}" /></td>
+      <td><select data-f="location">${applyOpts(a.location)}</select></td>
+      <td><input data-f="step" class="narrow" type="number" value="${Number(a.step) || 1}" /></td>
+      <td><input data-f="min_total" class="narrow" type="number" value="${Number(a.min_total) || 0}" /></td>
+      <td><input data-f="max_total" class="narrow" type="number" value="${Number(a.max_total) || 0}" /></td>
+      <td><input data-f="pos_unit_raw" class="narrow" type="number" value="${Number(a.pos_unit_raw) || 0}" /></td>
+      <td><input data-f="neg_unit_raw" class="narrow" type="number" value="${Number(a.neg_unit_raw) || 0}" /></td>
+      <td><input data-f="rune_num" class="narrow" type="number" value="${Number(a.rune_num) || 0}" /></td>
+      <td><input data-f="rune_den" class="narrow" type="number" value="${Number(a.rune_den) || 1}" /></td>
+      <td><select data-f="cap_group">${groupOpts(a.cap_group || '')}</select></td>
+      <td><select data-f="target">
+        <option value="object" ${rt.target !== 'character' ? 'selected' : ''}>oggetto</option>
+        <option value="character" ${rt.target === 'character' ? 'selected' : ''}>toon</option>
+      </select></td>
+      <td><input data-f="enabled" type="checkbox" ${rt.enabled !== false && Number(a.enabled) !== 0 ? 'checked' : ''} /></td>
+      <td><button type="button" class="btn-secondary btn-listino-del-affect" data-idx="${i}">Elimina</button></td>
+    </tr>`;
+    })
+    .join('');
+  host.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>id</th><th>Nome</th><th>APPLY</th><th>step</th><th>min</th><th>max</th>
+        <th>pos_raw</th><th>neg_raw</th><th>rune_n</th><th>rune_d</th>
+        <th>cap gruppo</th><th>Dove</th><th>On</th><th></th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="14">Nessun affect</td></tr>'}</tbody>
+    </table>`;
+  host.querySelectorAll('.btn-listino-del-affect').forEach((btn) => {
+    btn.onclick = () => {
+      const idx = Number(btn.dataset.idx);
+      const a = listinoAdminState.affect[idx];
+      if (!a) return;
+      if (!listinoAdminState.delete_affect_ids) listinoAdminState.delete_affect_ids = [];
+      if (!a._new) listinoAdminState.delete_affect_ids.push(a.id);
+      listinoAdminState.affect.splice(idx, 1);
+      renderListinoAffectAdmin(listinoAdminState.affect, listinoAdminState.routing);
+    };
+  });
+}
+
+function renderListinoPoolAdmin(pool) {
+  const host = $('listino-pool-admin');
+  if (!host) return;
+  const rows = (pool || [])
+    .map((p, i) => {
+      const id = `pool.${p.field_key}`;
+      const rt =
+        (listinoAdminState.routing || []).find((x) => x.id === id) || {
+          target: 'character',
+          enabled: true,
+        };
+      return `
+    <tr data-idx="${i}">
+      <td>${listinoAdminEscape(p.field_key)}</td>
+      <td><input data-f="label" type="text" value="${listinoAdminEscape(p.label)}" /></td>
+      <td><input data-f="cap" class="narrow" type="number" value="${Number(p.cap) || 0}" /></td>
+      <td><input data-f="step" class="narrow" type="number" value="${Number(p.step) || 1}" /></td>
+      <td><input data-f="xp_per_unit" class="narrow" type="number" value="${Number(p.xp_per_unit) || 0}" /></td>
+      <td><input data-f="rune_num" class="narrow" type="number" value="${Number(p.rune_num) || 0}" /></td>
+      <td><input data-f="rune_den" class="narrow" type="number" value="${Number(p.rune_den) || 1}" /></td>
+      <td><select data-f="target">
+        <option value="character" ${rt.target !== 'object' ? 'selected' : ''}>toon</option>
+        <option value="object" ${rt.target === 'object' ? 'selected' : ''}>oggetto</option>
+      </select></td>
+      <td><input data-f="enabled" type="checkbox" ${rt.enabled !== false && Number(p.enabled) !== 0 ? 'checked' : ''} /></td>
+    </tr>`;
+    })
+    .join('');
+  host.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>campo</th><th>Nome</th><th>cap</th><th>step</th><th>xp/u</th><th>rune_n</th><th>rune_d</th><th>Dove</th><th>On</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderListinoParamAdmin(params) {
+  const host = $('listino-param-admin');
+  if (!host) return;
+  const rows = (params || [])
+    .map(
+      (p, i) => `
+    <tr data-idx="${i}">
+      <td>${listinoAdminEscape(p.param_key)}</td>
+      <td><input data-f="param_value" type="number" step="any" value="${Number(p.param_value)}" /></td>
+    </tr>`
+    )
+    .join('');
+  host.innerHTML = `
+    <table>
+      <thead><tr><th>param</th><th>valore</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderListinoAdminAll() {
+  if (!listinoAdminState) return;
+  renderListinoCapGroupsAdmin(listinoAdminState.cap_groups || []);
+  renderListinoAffectAdmin(listinoAdminState.affect || [], listinoAdminState.routing || []);
+  renderListinoPoolAdmin(listinoAdminState.pool || []);
+  renderListinoParamAdmin(listinoAdminState.params || []);
+}
+
+async function loadListinoAdmin() {
+  const el = $('listino-admin-result');
+  if (el) el.textContent = 'Caricamento…';
+  const data = await api('/api/staff/listino-admin');
+  if (!data.ok) {
+    if (el) el.textContent = data.error || 'Errore caricamento';
+    return;
+  }
+  listinoAdminState = {
+    affect: data.affect || [],
+    pool: data.pool || [],
+    params: data.params || [],
+    cap_groups: data.cap_groups || [],
+    routing: data.routing || [],
+    apply_catalog: data.apply_catalog || [],
+    delete_affect_ids: [],
+    delete_cap_group_keys: [],
+  };
+  renderListinoAdminAll();
+  if (el) el.textContent = `Caricato (affect=${listinoAdminState.affect.length}).`;
+}
+
+function collectListinoAdminPayload() {
+  const hostA = $('listino-affect-admin');
+  const affect = [...(hostA?.querySelectorAll('tbody tr[data-idx]') || [])].map((tr) => {
+    const id = tr.querySelector('[data-f="id"]')?.value || '';
+    return {
+      id,
+      label: tr.querySelector('[data-f="label"]')?.value || id,
+      location: Number(tr.querySelector('[data-f="location"]')?.value || 0),
+      step: Number(tr.querySelector('[data-f="step"]')?.value || 1),
+      min_total: Number(tr.querySelector('[data-f="min_total"]')?.value || 0),
+      max_total: Number(tr.querySelector('[data-f="max_total"]')?.value || 0),
+      pos_unit_raw: Number(tr.querySelector('[data-f="pos_unit_raw"]')?.value || 0),
+      neg_unit_raw: Number(tr.querySelector('[data-f="neg_unit_raw"]')?.value || 0),
+      rune_num: Number(tr.querySelector('[data-f="rune_num"]')?.value || 0),
+      rune_den: Number(tr.querySelector('[data-f="rune_den"]')?.value || 1),
+      cap_group: tr.querySelector('[data-f="cap_group"]')?.value || null,
+      enabled: tr.querySelector('[data-f="enabled"]')?.checked ? 1 : 0,
+      _target: tr.querySelector('[data-f="target"]')?.value || 'object',
+    };
+  });
+  const hostP = $('listino-pool-admin');
+  const pool = [...(hostP?.querySelectorAll('tbody tr[data-idx]') || [])].map((tr, i) => {
+    const base = listinoAdminState.pool[i] || {};
+    return {
+      field_key: base.field_key,
+      label: tr.querySelector('[data-f="label"]')?.value || base.field_key,
+      cap: Number(tr.querySelector('[data-f="cap"]')?.value || 0),
+      step: Number(tr.querySelector('[data-f="step"]')?.value || 1),
+      unit_valore: Number(base.unit_valore || 0),
+      xp_per_unit: Number(tr.querySelector('[data-f="xp_per_unit"]')?.value || 0),
+      rune_num: Number(tr.querySelector('[data-f="rune_num"]')?.value || 0),
+      rune_den: Number(tr.querySelector('[data-f="rune_den"]')?.value || 1),
+      enabled: tr.querySelector('[data-f="enabled"]')?.checked ? 1 : 0,
+      _target: tr.querySelector('[data-f="target"]')?.value || 'character',
+    };
+  });
+  const hostPar = $('listino-param-admin');
+  const params = [...(hostPar?.querySelectorAll('tbody tr[data-idx]') || [])].map((tr, i) => {
+    const base = listinoAdminState.params[i] || {};
+    return {
+      param_key: base.param_key,
+      param_value: Number(tr.querySelector('[data-f="param_value"]')?.value),
+    };
+  });
+  const cap_groups = collectCapGroupsFromDom();
+  const routing = [];
+  for (const a of affect) {
+    routing.push({
+      id: `affect.${a.id}`,
+      kind: 'affect',
+      location: a.location,
+      listino_id: a.id,
+      label: a.label,
+      target: a._target,
+      enabled: !!a.enabled,
+    });
+  }
+  for (const p of pool) {
+    routing.push({
+      id: `pool.${p.field_key}`,
+      kind: 'pool',
+      pool_field: p.field_key,
+      label: p.label,
+      target: p._target,
+      enabled: !!p.enabled,
+    });
+  }
+  for (const r of listinoAdminState.routing || []) {
+    if (r.kind === 'resistance') routing.push(r);
+  }
+  return {
+    affect,
+    pool,
+    params,
+    cap_groups,
+    routing,
+    delete_affect_ids: listinoAdminState.delete_affect_ids || [],
+    delete_cap_group_keys: listinoAdminState.delete_cap_group_keys || [],
+    reason: 'staff-listino-admin',
+  };
+}
+
+async function saveListinoAdmin() {
+  const el = $('listino-admin-result');
+  if (!listinoAdminState) {
+    if (el) el.textContent = 'Carica prima il listino.';
+    return;
+  }
+  if (el) el.textContent = 'Salvataggio…';
+  const body = collectListinoAdminPayload();
+  const data = await api('/api/staff/listino-admin', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!data.ok) {
+    if (el) el.textContent = data.error || 'Salvataggio fallito';
+    return;
+  }
+  listinoSnapshot = null;
+  editCatalog = null;
+  await loadListinoAdmin();
+  try {
+    await ensureListinoSnapshot(true);
+    const cat = await api('/api/edit-catalog');
+    if (cat.ok) editCatalog = cat.data;
+    if (charState && !charState.stats_missing) renderCharacterEdits();
+    objectOptionsCache.clear();
+  } catch (_) {
+    /* refresh best-effort */
+  }
+  if (el) el.textContent = 'Salvato e ricaricato su myst.';
+}
+
+if ($('btn-listino-admin-load')) {
+  $('btn-listino-admin-load').onclick = () => loadListinoAdmin();
+}
+if ($('btn-listino-admin-save')) {
+  $('btn-listino-admin-save').onclick = () => saveListinoAdmin();
+}
+if ($('btn-listino-add-cap-group')) {
+  $('btn-listino-add-cap-group').onclick = () => {
+    if (!listinoAdminState) return;
+    listinoAdminState.cap_groups.push({
+      group_key: `gruppo_${Date.now() % 100000}`,
+      label: 'Nuovo gruppo',
+      max_piece: 2,
+      max_character: 0,
+      enabled: 1,
+      _new: true,
+    });
+    renderListinoAdminAll();
+  };
+}
+if ($('btn-listino-add-affect')) {
+  $('btn-listino-add-affect').onclick = () => {
+    if (!listinoAdminState) return;
+    const used = new Set((listinoAdminState.affect || []).map((a) => Number(a.location)));
+    const pick =
+      (listinoAdminState.apply_catalog || []).find((a) => !used.has(Number(a.location))) ||
+      { location: 5, label: 'Costituzione', name: 'APPLY_CON' };
+    const id = `custom_${pick.location}`;
+    listinoAdminState.affect.push({
+      id,
+      label: pick.label || pick.name,
+      location: pick.location,
+      step: 1,
+      min_total: 0,
+      max_total: 3,
+      pos_unit_raw: 1500,
+      neg_unit_raw: 3000,
+      rune_num: 0,
+      rune_den: 1,
+      cap_group: null,
+      enabled: 1,
+      _new: true,
+    });
+    renderListinoAffectAdmin(listinoAdminState.affect, listinoAdminState.routing);
+  };
+}

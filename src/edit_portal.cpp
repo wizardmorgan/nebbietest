@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -2162,10 +2163,19 @@ struct ToonInventoryEditScan {
 
 	char_edit_pool_data pool_db {};
 	const bool has_pool_row = load_edit_pool_for_toon(toon_id, pool_db);
-	const bool pool_on_character = has_pool_row && pool_db.migrated != 0;
 	const bool residual_on_objects = pool_data_has_values(pool_from_eq);
-	const char_edit_pool_data& pool_used =
-		pool_on_character ? pool_db : pool_from_eq;
+	const bool db_has_pool = has_pool_row && pool_data_has_values(pool_db);
+	const bool flag_migrated = has_pool_row && pool_db.migrated != 0;
+	/*
+	 * Allineato a editpool in-game / get-character-state: se character_stats
+	 * ha valori (anche con edit_pool_migrated=0), mostra quelli.
+	 * Fallback oggetti EDIT solo quando il DB e' vuoto e restano delta su eq
+	 * (pre-migrazione). Prima: migrated==0 ⇒ sempre oggetti ⇒ Hayato a 0
+	 * nonostante 100/150 in character_stats.
+	 */
+	const bool use_db_pool =
+		has_pool_row && (flag_migrated || db_has_pool || !residual_on_objects);
+	const char_edit_pool_data& pool_used = use_db_pool ? pool_db : pool_from_eq;
 
 	auto pool_field = [&](const char* key, EditPoolField field, int used) {
 		const int cap = edit_pool_field_cap(field);
@@ -2179,9 +2189,10 @@ struct ToonInventoryEditScan {
 	Json pool = Json::object();
 	/* Sempre "sul PG": e' l'editpool del personaggio (come comando editpool). */
 	pool["source"] = "character";
-	pool["on_character"] = pool_on_character;
-	pool["migrated"] = pool_on_character ? 1 : 0;
-	pool["values_from"] = pool_on_character ? "character" : "objects";
+	pool["on_character"] = use_db_pool;
+	pool["migrated"] = flag_migrated ? 1 : 0;
+	pool["edit_pool_migrated"] = flag_migrated ? 1 : 0;
+	pool["values_from"] = use_db_pool ? "character" : "objects";
 	pool["residual_on_objects"] = residual_on_objects;
 	{
 		Json residual_list = Json::array();
@@ -2200,15 +2211,34 @@ struct ToonInventoryEditScan {
 		}
 		pool["residual_objects"] = residual_list;
 	}
-	if(pool_on_character && residual_on_objects) {
-		pool["warning"] =
-			"Pool sul PG (migrato) ma restano ancora HIT/MANA/MOVE/regen in "
-			"eccesso su oggetti EDIT: stato misto (migrazione incompleta).";
+	if(use_db_pool && residual_on_objects) {
+		if(flag_migrated) {
+			pool["warning"] =
+				"Pool sul PG ma restano ancora HIT/MANA/MOVE/regen in eccesso su "
+				"oggetti EDIT: stato misto (migrazione incompleta).";
+		}
+		else {
+			/* Dettaglio flag: solo staff (UI). Ai giocatori basta il misto. */
+			pool["warning"] =
+				"Pool sul PG ma restano ancora HIT/MANA/MOVE/regen in eccesso su "
+				"oggetti EDIT: stato misto (migrazione incompleta).";
+			pool["staff_warning"] =
+				"character_stats ha valori con edit_pool_migrated=0 e restano "
+				"delta HIT/MANA/MOVE/regen su oggetti EDIT.";
+		}
 	}
-	else if(!pool_on_character && residual_on_objects) {
+	else if(!use_db_pool && residual_on_objects) {
 		pool["warning"] =
-			"Pool non ancora migrato sul PG: i valori sotto sono ancora sugli "
-			"oggetti EDIT (verranno sul personaggio con la migrazione).";
+			"Pool non ancora sul personaggio: i valori sotto sono ancora sugli "
+			"oggetti EDIT (si spostano al login).";
+		pool["staff_warning"] =
+			"character_stats vuoto, edit_pool_migrated=0; valori da oggetti EDIT.";
+	}
+	else if(use_db_pool && !flag_migrated && db_has_pool) {
+		/* Diagnostica interna: non in warning giocatore. */
+		pool["staff_warning"] =
+			"Valori da character_stats (come editpool in-game); flag "
+			"edit_pool_migrated=0 (non ancora marcato migrato).";
 	}
 	Json fields = Json::array();
 	fields.push_back(
@@ -3241,7 +3271,8 @@ struct ToonInventoryEditScan {
 					"e Artifact se presenti";
 			}
 			else if(IS_OBJ_STAT(obj, ITEM_IMMUNE) && xp_raw > 0) {
-				d["note"] = "Include maggiorazione Artifact +50% (listino)";
+				/* Dettaglio fattori lo mostra l'UI (Dettaglio costo: … × artifact). */
+				d["note"] = "";
 			}
 			extract_obj(obj);
 			return json_ok(d);
@@ -4434,7 +4465,15 @@ void http_thread_main() {
 	const int port = api_port();
 	const int server_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if(server_fd < 0) {
-		mudlog(LOG_SYSERR, "edit_portal: socket() failed");
+		mudlog(LOG_SYSERR, "edit_portal: socket() failed: %s", std::strerror(errno));
+		return;
+	}
+
+	int reuse = 1;
+	if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+		mudlog(LOG_SYSERR, "edit_portal: setsockopt(SO_REUSEADDR) failed: %s",
+			   std::strerror(errno));
+		close(server_fd);
 		return;
 	}
 
@@ -4444,17 +4483,18 @@ void http_thread_main() {
 	addr.sin_port = htons(static_cast<uint16_t>(port));
 
 	if(bind(server_fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-		mudlog(LOG_SYSERR, "edit_portal: bind(%d) failed", port);
+		mudlog(LOG_SYSERR, "edit_portal: bind(%d) failed: %s", port, std::strerror(errno));
 		close(server_fd);
 		return;
 	}
 	if(listen(server_fd, 16) < 0) {
-		mudlog(LOG_SYSERR, "edit_portal: listen failed");
+		mudlog(LOG_SYSERR, "edit_portal: listen(%d) failed: %s", port, std::strerror(errno));
 		close(server_fd);
 		return;
 	}
 
-	mudlog(LOG_CHECK, "edit_portal: API listening on port %d", port);
+	mudlog(LOG_CHECK, "edit_portal: API listening on port %d (%s=%d)", port,
+		   kEditPortalApiVersionTag, kEditPortalApiVersion);
 	g_portal_running = true;
 
 	while(g_portal_running) {
@@ -4572,7 +4612,7 @@ void edit_portal_init() {
 	edit_system_config_init();
 	portal_audit_ensure_tables();
 	character_edit_affect_ensure_schema();
-	mudlog(LOG_CHECK, "edit_portal: API listening on port %d (%s=%d)",
+	mudlog(LOG_CHECK, "edit_portal: avvio API su porta %d (%s=%d)",
 		   api_port(), kEditPortalApiVersionTag, kEditPortalApiVersion);
 	g_portal_running = true;
 	g_worker_started = true;
